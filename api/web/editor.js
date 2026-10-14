@@ -6248,10 +6248,23 @@ function timerDefOf(bo) {
 // all three; a catch or interrupting boundary fires once, so they omit the
 // recurring cycle (ADR-0051/0054). Iteration order (duration, date, cycle) is
 // the detection precedence in timerScheduleOf.
+//
+// feel says what an fx expression in that kind must yield, with an example over the
+// instance's variables — the engine accepts a first-class FEEL temporal or the text
+// the literal parser would take (ADR-0057).
 const TIMER_KINDS = {
-  duration: { prop: "timeDuration", label: "Duration", placeholder: "PT30M" },
-  date: { prop: "timeDate", label: "Date & time", placeholder: "2026-08-01T09:00:00Z" },
-  cycle: { prop: "timeCycle", label: "Cycle", placeholder: "R/PT1H  ·  0 * * * *" },
+  duration: {
+    prop: "timeDuration", label: "Duration", placeholder: "PT30M",
+    feel: `a <b>duration</b> in days and time (not months or years, whose length depends on the calendar) or its ISO-8601 text — e.g. <b>= wartezeit</b> or <b>= duration("P" + string(tage) + "D")</b>`,
+  },
+  date: {
+    prop: "timeDate", label: "Date & time", placeholder: "2026-08-01T09:00:00Z",
+    feel: `a <b>date and time</b> (or a date, read as its midnight) or its RFC 3339 text — e.g. <b>= frist</b> or <b>= date and time(termin)</b>`,
+  },
+  cycle: {
+    prop: "timeCycle", label: "Cycle", placeholder: "R/PT1H  ·  0 * * * *",
+    feel: `the text of a repeating interval or a cron expression — e.g. <b>= "R/PT" + string(stunden) + "H"</b>`,
+  },
 };
 
 // timerScheduleOf reports which kind a timer currently holds and its expression
@@ -6265,8 +6278,11 @@ function timerScheduleOf(timer) {
 }
 
 // timerFieldsHTML renders the Type picker (restricted to the kinds valid in this
-// context) and the schedule-expression input, followed by a context note.
-function timerFieldsHTML(timer, kinds, note) {
+// context) and the schedule field, followed by a context note and what an expression
+// in it must yield. The field is a value-or-expression field: the implement tab gives
+// it the fx switch, and the compiler reads an '=' body as FEEL (ADR-0055/0056).
+// constant marks a timer start, whose expression has no instance to read from.
+function timerFieldsHTML(timer, kinds, note, { constant = false } = {}) {
   const detected = timerScheduleOf(timer);
   const kind = kinds.includes(detected.kind) ? detected.kind : kinds[0];
   const meta = TIMER_KINDS[kind];
@@ -6274,12 +6290,15 @@ function timerFieldsHTML(timer, kinds, note) {
   const opts = kinds
     .map((k) => `<option value="${k}" ${k === kind ? "selected" : ""}>${TIMER_KINDS[k].label}</option>`)
     .join("");
+  const feel = constant
+    ? `Switch on <b>fx</b> for a FEEL expression. A timer start has no instance yet, so the expression may read <b>no variables</b>; the deploy evaluates it once and refuses one that does not yield a valid ${esc(meta.label.toLowerCase())}.`
+    : `Switch on <b>fx</b> for a FEEL expression, evaluated when the timer is armed against the instance's variables. It must yield ${meta.feel}. If it yields neither, no timer is set: an incident is raised on the event, and resolving it once the data is fixed arms the timer again.`;
   return `<h3>Timer</h3>
     <label class="field"><span>Type</span>
       <select id="f-timerkind">${opts}</select></label>
     <label class="field"><span>${meta.label}</span>
-      <input type="text" id="f-timerval" value="${esc(body)}" placeholder="${esc(meta.placeholder)}"/></label>
-    <p class="muted" style="font-size:12px">${note}</p>`;
+      <textarea id="f-timerval" rows="1" spellcheck="false" placeholder="${esc(meta.placeholder)}">${esc(body)}</textarea></label>
+    <p class="muted" style="font-size:12px">${note} ${feel}</p>`;
 }
 
 // messageDefOf returns an event's bpmn:MessageEventDefinition, or null.
@@ -8364,7 +8383,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date"], `The event waits, then continues (ADR-0054).
             <b>Duration</b> waits that long (<b>PT30S</b>, <b>PT5M</b>, <b>P1DT2H</b>); <b>Date &amp; time</b> waits until that instant.
-            A catch fires once, so it has no cycle. A FEEL expression is allowed in either.`);
+            A catch fires once, so it has no cycle.`);
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
         } else if (sig) {
@@ -8430,7 +8449,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               : "A non-interrupting boundary may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R/PT1H</b>) or cron (<b>0 * * * *</b>) — firing a fresh token each time.";
             html += timerFieldsHTML(timer, kinds, `The event fires relative to the activity (ADR-0054).
               <b>Duration</b> fires that long after it starts (<b>PT30S</b>, <b>PT5M</b>); <b>Date &amp; time</b> at a fixed instant.
-              ${cycleNote} A FEEL expression is allowed in any type.`);
+              ${cycleNote}`);
           } else if (msg) {
             html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
           } else if (sig) {
@@ -8475,7 +8494,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               : "A non-interrupting timer may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R3/PT1H</b>) or cron (<b>0 * * * *</b>) — firing the handler each time.";
             html += timerFieldsHTML(timer, kinds, `The event subprocess fires on this schedule while its scope runs (ADR-0082).
               <b>Duration</b> fires that long after the scope is entered; <b>Date &amp; time</b> at a fixed instant.
-              ${cycleNote} A FEEL expression is allowed in any type.`);
+              ${cycleNote}`);
           } else if (msg) {
             html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
           } else if (sig) {
@@ -8495,8 +8514,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date", "cycle"], `A timer start event fires on this schedule with no incoming token (ADR-0051).
             <b>Duration</b> and <b>Date &amp; time</b> fire once — that long after deploy, or at that instant;
-            <b>Cycle</b> recurs, either an ISO-8601 repeating interval (<b>R/PT1H</b>, <b>R3/P1D</b>) or a cron expression (<b>0 * * * *</b>).
-            A FEEL expression is allowed in any type.`);
+            <b>Cycle</b> recurs, either an ISO-8601 repeating interval (<b>R/PT1H</b>, <b>R3/P1D</b>) or a cron expression (<b>0 * * * *</b>).`, { constant: true });
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
         } else if (sig) {
@@ -10296,6 +10314,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       for (const sel of ["#f-assignee", "#f-groups", "#f-due"]) {
         attachExpressionToggle(body.querySelector(sel), { variables: feelVars, validate });
       }
+      // A timer's schedule is one too (ADR-0055/0056). A timer start has no instance to
+      // read from — its expression must be constant — so it is offered no variables.
+      const timerStart = element.businessObject.$type === "bpmn:StartEvent" && !isEventSubStart(element);
+      attachExpressionToggle(body.querySelector("#f-timerval"), { variables: timerStart ? [] : feelVars, validate });
     }
   }
 

@@ -405,6 +405,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   - An `atlas.*` name that is no event, and a throw on an `atlas.*` name, are warned about.
   - The catalogue is asked for once. A catalogue that cannot be read leaves the picker as it
     was.
+- **`timer-fx-modeler.spec.mjs`** ([ADR-0055](../docs/adr/0055-feel-expression-timer-schedules.md)):
+  the **fx switch on a timer's schedule field**, driven through the real vendored bpmn-js.
+  - A literal duration opens as a literal and an `=` value as an expression; the switch flips
+    between the two, and the exported XML carries exactly what the field shows.
+  - An expression typed after the locked `=` is written into `timeDuration`, or into
+    `timeDate` once the type is switched, and the engine is asked about the bare expression.
+  - A boundary timer and a timer start carry the switch too, and a timer start's note says its
+    expression may read no variables.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 - **`catalog-publish-warnings.spec.mjs`** (ADR-0443): a
