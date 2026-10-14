@@ -19,6 +19,22 @@
 > optimisation for unbounded historical analysis, not a prerequisite. The decision it
 > produced is ADR-0309, and the front matter's open-question
 > lines came off with it rather than being left to expire.
+>
+> **As built (2026-10-14): the Console surface.** One of the slices the consequences
+> below name as not built — roadmap B8 — is: Panorama → Capabilities opens on the gap
+> report, with the capability list one tab away, a page per capability (coverage,
+> measurement over a chosen window, the confirmation) and Panorama → Value streams
+> (`api/web/capabilities.js`). It reads and confirms; creating and editing records stays
+> with the API and MCP. The screens speak through the catalogue
+> ([ADR-0267](0267-console-speaks-german-first.md)), so the gap report's sentences are
+> composed from each finding's kind and coordinates, never from its English `detail`; a
+> missing worker realization gained `workerRef` as a coordinate for that reason. German
+> says *Capability* rather than *Fähigkeit*, because the handbook already uses
+> *Fähigkeit* for what a Worker type offers. Tests: `api/capabilities_i18n_test.go`
+> (every finding kind, state and realization kind the subset publishes has words in both
+> locales, and every key the module asks for exists) and `e2e/capabilities.spec.mjs`.
+> The document-level exchange, the model-side declaration and editing in the Console are
+> still open, so the record stays `Partial`.
 
 ## Context and problem statement
 

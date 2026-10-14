@@ -734,6 +734,12 @@ const TOPNAV = {
     // against a real estate, and folding it in is a change of its own.
     { name: "Estate", route: "#/panorama/estate", role: "modeler" },
     { name: "Models", route: "#/panorama", role: "modeler" },
+    // The capability register and its value streams (ADR-0305, roadmap B8): what the
+    // organisation must be able to do, read against what this server runs. Beside the
+    // drawings because a drawn Capability binds a record here (ADR-0308); the gap
+    // report is the first thing the entry shows.
+    { name: "Capabilities", route: "#/panorama/capabilities", role: "modeler" },
+    { name: "Value streams", route: "#/panorama/value-streams", role: "modeler" },
   ],
   // The two altitudes of process data, and the reason the UML class diagram was the
   // right notation: Model is the type level — what an Order *is*, shared across
@@ -10297,6 +10303,30 @@ async function viewObjectDetail(modelId, className) {
   await mod.mountObjectDetail(view, { api, modelId, className });
 }
 
+// The business architecture (ADR-0305, roadmap B8) lives in its own module, read
+// against the catalogue rather than written in English here (ADR-0267): the gap report
+// as the landing view with the capability list one tab away, one capability with what
+// realizes it and what it measured, and the value streams with their stages.
+async function viewCapabilityMap() {
+  const mod = await import("./capabilities.js");
+  await mod.mountCapabilityMap(view, { api });
+}
+
+async function viewCapabilityDetail(key) {
+  const mod = await import("./capabilities.js");
+  await mod.mountCapabilityDetail(view, { api, toast, key });
+}
+
+async function viewValueStreams() {
+  const mod = await import("./capabilities.js");
+  await mod.mountValueStreams(view, { api });
+}
+
+async function viewValueStreamDetail(key) {
+  const mod = await import("./capabilities.js");
+  await mod.mountValueStreamDetail(view, { api, toast, key });
+}
+
 // viewInfoModel opens one model on the class canvas, which lives in its own module
 // so the shell stays small.
 async function viewInfoModel(id) {
@@ -11035,6 +11065,14 @@ async function route() {
     if (path === "#/panorama/starmap") return await viewPanoramaStarmap();
     if (path === "#/panorama/estate") return await viewPanoramaEstate();
     if (path === "#/panorama") return await viewPanoramaModels();
+    if (path === "#/panorama/capabilities") return await viewCapabilityMap();
+    if (path === "#/panorama/value-streams") return await viewValueStreams();
+    // A key is lowercase letters, digits and hyphens, so it never collides with a
+    // route segment; it is still decoded, because a link may carry it encoded.
+    const pcap = path.match(/^#\/panorama\/capabilities\/([^/]+)$/);
+    if (pcap) return await viewCapabilityDetail(decodeURIComponent(pcap[1]));
+    const pvs = path.match(/^#\/panorama\/value-streams\/([^/]+)$/);
+    if (pvs) return await viewValueStreamDetail(decodeURIComponent(pvs[1]));
     const pm = path.match(/^#\/panorama\/models\/(.+)$/);
     if (pm) return await viewPanoramaModel(decodeURIComponent(pm[1]));
     if (path === "#/data") return await viewInfoModels();
