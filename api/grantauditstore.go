@@ -20,7 +20,27 @@ const (
 	GrantActionUnshare    = "unshare"    // a member was revoked
 	GrantActionVisibility = "visibility" // visibility changed (From → To)
 	GrantActionTransfer   = "transfer"   // ownership moved (From owner → To owner)
+	// GrantActionConstants records a change to the constants an application holds on
+	// this installation — or, with no ApplicationID, the installation's own constants
+	// for every application (ADR-0456). Not an access-control
+	// change, but the same kind of record: an administrator's change to configuration
+	// every new instance starts from, which an auditor asks about the same way.
+	GrantActionConstants = "constants"
 )
+
+// constantChange is one name a "constants" event changed. Change is "added",
+// "removed" or "changed"; From/FromType are what was held before (empty when added),
+// To/ToType what is held after (empty when removed). Constants are identifiers, not
+// secrets (ADR-0453), so the values are kept: an audit that said only that something
+// changed could not answer what an instance on PROD started with.
+type constantChange struct {
+	Name     string `json:"name"`
+	Change   string `json:"change"`
+	From     string `json:"from,omitempty"`
+	FromType string `json:"fromType,omitempty"`
+	To       string `json:"to,omitempty"`
+	ToType   string `json:"toType,omitempty"`
+}
 
 // grantAudit is one immutable access-control event on a project. Everything is
 // snapshotted by value so later edits — a renamed user, a re-shared member — cannot
@@ -46,6 +66,8 @@ type grantAudit struct {
 	Role string `json:"role,omitempty"`
 	From string `json:"from,omitempty"`
 	To   string `json:"to,omitempty"`
+	// Constants is what a "constants" event changed, name by name.
+	Constants []constantChange `json:"constants,omitempty"`
 }
 
 // grantAuditStore is a durable store for grant-audit events, one JSON file per event

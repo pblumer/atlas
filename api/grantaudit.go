@@ -92,8 +92,9 @@ const (
 // the per-application endpoint, which an owner may read for their own application,
 // this spans applications the caller may not own, so it is gated like user and group
 // administration. Optional query filters narrow it: applicationId to one application,
-// action to one kind (share/unshare/visibility/transfer); limit caps the window
-// (default 200, max 1000). GET /api/v1/audit.
+// action to one kind (share/unshare/visibility/transfer/constants); limit caps the
+// window (default 200, max 1000). A "constants" event with no application is a change
+// to the installation's own constants. GET /api/v1/audit.
 func (s *Server) handleListAudit(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	appFilter := q.Get("applicationId")

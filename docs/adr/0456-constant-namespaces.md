@@ -193,3 +193,4 @@ the constants rather than showing an id.
 - relates to [ADR-0189](0189-panorama-architecture-modeling-and-live-overlays.md) (the node identity the server facts come from)
 - relates to [ADR-0177](0177-reload-skips-the-deploy-gate.md) (a rule gates a deploy, not a reload)
 - relates to [ADR-0105](0105-per-server-call-activity-target-overrides.md) (operator configuration pushed into the processor)
+- relates to [ADR-0184](0184-grant-audit-log.md) (a change to the constants an installation holds is in the audit log, amended 2026-10-14)

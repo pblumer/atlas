@@ -77,6 +77,43 @@ test("an empty log says so rather than rendering an empty table", async ({ page 
   installMock(page, listing([]));
   await openAudit(page);
 
-  await expect(page.locator("#audit-out")).toContainText("No access-control changes recorded yet");
+  await expect(page.locator("#audit-out")).toContainText("No changes recorded yet");
+  expect(errors).toEqual([]);
+});
+
+// A change to constants lists each name with what it was and became, and the
+// installation's own has no application: the row says it applies to every one
+// (ADR-0184, amended).
+test("a constants event shows each name before and after, and the installation's as the server's", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  installMock(page, listing([
+    {
+      at: 1_756_900_000_002, action: "constants", actorId: "usr-admin", actorName: "admin",
+      constants: [
+        { name: "MAX", change: "added", to: "20", toType: "number" },
+        { name: "REGION", change: "removed", from: "ch", fromType: "string" },
+        { name: "TENANT_ID", change: "changed", from: "contoso-int", fromType: "string", to: "contoso-prod", toType: "string" },
+      ],
+    },
+    {
+      at: 1_756_900_000_001, action: "constants", applicationId: "app-1", applicationName: "UCC",
+      actorId: "usr-admin", actorName: "admin",
+      constants: [{ name: "CLIENT_ID", change: "added", to: "app-1", toType: "string" }],
+    },
+  ]));
+  await openAudit(page);
+
+  const rows = page.locator('[data-dt-key="audit"] tbody tr');
+  await expect(rows).toHaveCount(2);
+  const server = rows.filter({ hasText: "TENANT_ID" });
+  await expect(server).toContainText("Server (every application)");
+  await expect(server).toContainText("MAX added: 20 number");
+  await expect(server).toContainText("REGION removed (was ch)");
+  await expect(server).toContainText("TENANT_ID contoso-int → contoso-prod");
+  const app = rows.filter({ hasText: "CLIENT_ID" });
+  await expect(app).toContainText("UCC");
+  await expect(app).toContainText("CLIENT_ID added: app-1");
+  await expect(page.locator('#audit-action option[value="constants"]')).toHaveCount(1);
   expect(errors).toEqual([]);
 });

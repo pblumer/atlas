@@ -2024,7 +2024,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("The row, now decided", tObject())}},
 
 		{"GET", "/api/v1/audit", s.handleListAudit, apiOp{
-			summary: "The access-control history across every application, newest first — the global admin audit view (ADR-0184). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer); limit caps the window (default 200, max 1000). Answers {items, total, totalExact, truncated}: total is how many events matched the filters, which this read counts in full, so a capped page still says how many there are", tag: "Audit", role: RoleAdmin, resp: jsonBody("Grant audit events", tPage())}},
+			summary: "The access-control history across every application, and the changes to the constants an application or this installation holds (action constants, each name with what it was and became; no applicationId for the installation's), newest first — the global admin audit view (ADR-0184, ADR-0456). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer|constants); limit caps the window (default 200, max 1000). Answers {items, total, totalExact, truncated}: total is how many events matched the filters, which this read counts in full, so a capped page still says how many there are", tag: "Audit", role: RoleAdmin, resp: jsonBody("Grant audit events", tPage())}},
 	})
 }
 
