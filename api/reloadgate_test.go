@@ -125,6 +125,76 @@ func TestDeployStillRefusesWhatReloadTolerates(t *testing.T) {
 	}
 }
 
+// namespaceWriteBPMN is a model 0.12.0 deployed: a constant bound to its application,
+// with a fallback so an instance starts on a server that files the process under none,
+// and a script task writing a variable called application. Then a bound constant was a
+// root variable of its own name; since ADR-0456 application is the namespace that
+// constant is read under, which a deploy refuses to let the model write.
+const namespaceWriteBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                    xmlns:atlas="http://atlas/schema/1.0">
+  <process id="namespace-write" isExecutable="true">
+    <extensionElements><atlas:constants>
+      <atlas:constant name="TENANT_ID" source="application" value="t-1"/>
+    </atlas:constants></extensionElements>
+    <startEvent id="start"/>
+    <scriptTask id="write">
+      <extensionElements><zeebe:script expression="= &quot;loan&quot;" resultVariable="application"/></extensionElements>
+    </scriptTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="write"/>
+    <sequenceFlow id="f2" sourceRef="write" targetRef="end"/>
+  </process>
+</definitions>`
+
+// A constant conflict the namespaces created is a deploy's refusal, never a reason for a
+// server not to start: the definition 0.12.0 deployed comes back, and its instance runs
+// with the namespace kept and the write that would replace it dropped (ADR-0393,
+// ADR-0456).
+func TestStoredDeploymentSurvivesAConstantNamespaceConflict(t *testing.T) {
+	dir := t.TempDir()
+	seedDeployment(t, dir, 1, "namespace-write", namespaceWriteBPMN)
+
+	s := boot(t, dir) // must not fail: the server comes up with the definition
+	defer s.shutdown()
+
+	code, body := doReq(t, s.ts, "POST", "/api/v1/processes/1/instances", "", "application/json")
+	if code != 200 {
+		t.Fatalf("create instance: status=%d body=%s", code, body)
+	}
+	var insts []struct {
+		Key   uint64 `json:"key"`
+		State string `json:"state"`
+	}
+	code, body = doReq(t, s.ts, "GET", "/api/v1/instances", "", "")
+	if code != 200 {
+		t.Fatalf("list instances: status=%d body=%s", code, body)
+	}
+	if err := json.Unmarshal(listRows(t, body), &insts); err != nil {
+		t.Fatalf("decode instances: %v (%s)", err, body)
+	}
+	if len(insts) != 1 || insts[0].State != "completed" {
+		t.Fatalf("instance = %+v, want one completed instance (%s)", insts, body)
+	}
+	code, body = doReq(t, s.ts, "GET", fmt.Sprintf("/api/v1/instances/%d/variables", insts[0].Key), "", "")
+	if code != 200 {
+		t.Fatalf("read variables: status=%d body=%s", code, body)
+	}
+	var vars map[string]any
+	if err := json.Unmarshal(body, &vars); err != nil {
+		t.Fatalf("decode variables: %v (%s)", err, body)
+	}
+	ns, ok := vars["application"].(map[string]any)
+	if !ok || ns["TENANT_ID"] != "t-1" {
+		t.Fatalf("application = %#v, want the namespace with TENANT_ID kept over the script's write", vars["application"])
+	}
+
+	code, body = doReq(t, s.ts, "POST", "/api/v1/deployments", namespaceWriteBPMN, "application/xml")
+	if code == 200 || !strings.Contains(string(body), "the namespace this process's application constants are read under") {
+		t.Fatalf("deploy of the same model: status=%d body=%s, want it refused", code, body)
+	}
+}
+
 // mixedDmnModel bundles a decision that compiles ("Menu") with one that no longer
 // does ("Broken", reading a variable nothing declares) — the DMN counterpart of a
 // BPMN model a rule added since the deploy would refuse.

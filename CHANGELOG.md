@@ -85,7 +85,12 @@ _Changed_ / _Removed_ for each version.
   id. **Breaking against 0.12.0:** a script that read `$TenantId` from a bound constant now
   reads `$application.TENANT_ID`, and constants saved through the 0.12.0 route must be
   saved again
-  ([ADR-0453](docs/adr/0453-application-values-per-installation.md), amended).
+  ([ADR-0453](docs/adr/0453-application-values-per-installation.md), amended). A
+  definition 0.12.0 deployed with a variable called `application` beside a bound constant,
+  or with a bound constant named `id`, `key` or `name`, still loads: the reload reports
+  `constant.conflict` instead of stopping the server, its instances keep the namespace and
+  drop the write that would replace it, and a deploy of the same model is refused
+  ([ADR-0456](docs/adr/0456-constant-namespaces.md)).
 - **A constant's name is written in capitals.** Every constant — the process's, an
   application's, the installation's — is named in letters A–Z, digits and underscores,
   starting with a letter (`TENANT_ID`). `APPLICATION` and `SERVER` are reserved for the

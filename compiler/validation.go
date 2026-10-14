@@ -207,6 +207,16 @@ const (
 	// amended). An error, reported rather than raised: the model ran under the name it
 	// has, and refusing it on a restart would take the server down for a spelling.
 	RuleConstantName = "constant.name"
+
+	// RuleConstantConflict marks a stored definition brought back across a reload although
+	// one of its constants contradicts the rest of it — a variable it asks for, declares
+	// personal or writes, or a fact the constant's namespace carries — which a deploy
+	// refuses (ADR-0454, ADR-0456). 0.12.0 deployed such models before the namespaces
+	// made a variable called application one of them. An error, reported rather than
+	// raised: the process still runs, its constant seeded first and the write that would
+	// replace it dropped, and refusing it on a restart would take the server down
+	// (ADR-0393).
+	RuleConstantConflict = "constant.conflict"
 )
 
 // Problem is one structured validation finding on a compiled process, shaped for

@@ -367,3 +367,69 @@ func TestALowerCaseConstantIsReportedOnReloadNotRefused(t *testing.T) {
 		t.Errorf("the reloaded definition lost its constant")
 	}
 }
+
+// A stored definition whose constants contradict the rest of it keeps loading: the reload
+// reports the conflict and brings the process back, where a deploy refuses it. 0.12.0
+// deployed every model here except the last, because a bound constant was then a root
+// variable of its own name and application an ordinary one; the namespaces of ADR-0456
+// turned a variable called application, and a bound constant called after a fact the
+// namespace now carries, into conflicts. The last is what 0.11.0 deployed, reading no
+// constants at all. Each still runs — the constant is seeded first and the engine drops
+// the write that would replace it — so none may keep a server from starting (ADR-0393).
+func TestAConstantConflictIsReportedOnReloadNotRefused(t *testing.T) {
+	bound := `<atlas:constant name="TENANT_ID" source="application"/>`
+	writes := `<startEvent id="s"/><scriptTask id="t"><extensionElements>
+        <zeebe:script expression="=1" resultVariable="r"/>
+        <zeebe:ioMapping><zeebe:output source="=r" target="application"/></zeebe:ioMapping></extensionElements></scriptTask><endEvent id="e"/>
+      <sequenceFlow id="f1" sourceRef="s" targetRef="t"/><sequenceFlow id="f2" sourceRef="t" targetRef="e"/>`
+	asks := func(constants, startVar string) string {
+		return `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
+  <process id="p" isExecutable="true"><extensionElements>
+    <atlas:constants>` + constants + `</atlas:constants>
+    <atlas:startForm><atlas:startVariable name="` + startVar + `"/></atlas:startForm>
+  </extensionElements><startEvent id="s"/><endEvent id="e"/><sequenceFlow id="f1" sourceRef="s" targetRef="e"/></process>
+</definitions>`
+	}
+	cases := map[string]struct {
+		model, refusal string
+		binds          bool
+	}{
+		"writes the namespace":   {constantsModel("", bound, writes), "the namespace this process's application constants are read under", true},
+		"asks for the namespace": {asks(bound, "application"), "name the start variable differently", true},
+		"namespace personal": {constantsModel(`atlas:personal="application" atlas:dataSubject="pnr"`, bound, ""),
+			"both personal and as a constant", true},
+		"namespace the data subject": {constantsModel(`atlas:personal="vorname" atlas:dataSubject="application"`, bound, ""),
+			"is the data subject and a constant", true},
+		"bound constant named after a fact": {constantsModel("", `<atlas:constant name="id" type="number" value="7" source="application"/>`, ""),
+			"declare it with type string", true},
+		"asks for a process constant": {asks(`<atlas:constant name="TENANT_ID" value="t-1"/>`, "TENANT_ID"),
+			"both as a start variable and as a constant", false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := ParseNamed(1, 1, strings.NewReader(tc.model), "p"); err == nil || !strings.Contains(err.Error(), tc.refusal) {
+				t.Fatalf("deploy: err = %v, want it refused with %q", err, tc.refusal)
+			}
+			cp, problems, err := ReloadNamed(1, 1, strings.NewReader(tc.model), "p")
+			if err != nil || cp == nil {
+				t.Fatalf("reload: %v, want the definition back", err)
+			}
+			if len(problems) != 1 || problems[0].Rule != RuleConstantConflict || !strings.Contains(problems[0].Message, tc.refusal) {
+				t.Fatalf("reload problems = %+v, want one %s saying %q", problems, RuleConstantConflict, tc.refusal)
+			}
+			if cp.Binds(ApplicationNamespace) != tc.binds || !cp.HasConstants() {
+				t.Errorf("the reloaded definition lost its constants: Binds(application) = %v, want %v", cp.Binds(ApplicationNamespace), tc.binds)
+			}
+		})
+	}
+
+	// The fact keeps the type of the text Atlas fills it with, so the engine seeds it the
+	// way it seeds every other fact.
+	cp, _, err := ReloadNamed(1, 1, strings.NewReader(cases["bound constant named after a fact"].model), "p")
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got := cp.Constants(); len(got) != 1 || !got[0].Info || got[0].Type != "string" {
+		t.Errorf("reloaded fact = %+v, want an Info member of type string", got)
+	}
+}

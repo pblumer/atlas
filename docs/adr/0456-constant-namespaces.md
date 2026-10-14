@@ -159,7 +159,13 @@ the constants rather than showing an id.
     longer deploys. A stored lower-case one keeps loading, reported.
   - **Reserved names.** A process that declares a member of a namespace cannot use a
     variable of that name (`application`, `server`). A process that declares none keeps
-    the name free.
+    the name free. 0.12.0 deployed such a variable beside a bound constant, and a bound
+    constant named `id`, `key` or `name` of any type. A reload keeps such a definition and
+    reports it as `constant.conflict`, as it does every conflict a constant has with its
+    process, so the server still starts
+    ([ADR-0393](0393-a-rule-added-later-is-a-gate-on-deploy.md)). Its instances keep the
+    namespace, the engine drops the write that would replace it, and a bound constant
+    named after a fact reads the fact.
   - **Python reads a member with brackets**, because the namespace arrives as a dict.
 - **Follow-ups / risks to watch:**
   - **Promotion pre-check.** Promotion could say before it ships which declared constants
