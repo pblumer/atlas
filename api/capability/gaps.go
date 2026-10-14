@@ -105,6 +105,10 @@ type Finding struct {
 	ApplicationKey string `json:"applicationKey,omitempty"`
 	ProcessID      string `json:"processId,omitempty"`
 	ElementID      string `json:"elementId,omitempty"`
+	// WorkerRef is the Worker a missing worker realization names. It is a coordinate
+	// like the process fields beside it, so a reader in another language can say which
+	// Worker is missing without parsing the English detail (ADR-0267).
+	WorkerRef string `json:"workerRef,omitempty"`
 	// Detail says what to do about it in one sentence. A finding that only names a
 	// coordinate makes the reader guess.
 	Detail string `json:"detail"`
@@ -221,7 +225,7 @@ func Gaps(caps []Capability, streams []ValueStream, land Landscape, now time.Tim
 				}
 			case RealizationWorker:
 				if _, ok := workers[r.WorkerRef]; !ok {
-					add(Finding{Kind: FindingRealizationMissing, CapabilityKey: c.Key,
+					add(Finding{Kind: FindingRealizationMissing, CapabilityKey: c.Key, WorkerRef: r.WorkerRef,
 						Detail: fmt.Sprintf("no Worker %q is configured on this server", r.WorkerRef)})
 				}
 			}

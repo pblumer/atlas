@@ -24,6 +24,23 @@ _Changed_ / _Removed_ for each version.
   the field says what the expression must yield, that one yielding nothing usable raises an
   incident when the timer is armed, and that a timer start's expression may read no
   variables.
+- **The business architecture has a screen.** The capability register, its value streams
+  and the gap report ([ADR-0305](docs/adr/0305-business-capabilities-and-value-streams.md))
+  had HTTP routes and MCP tools and no view, so they could only be read through curl or an
+  agent. Panorama → Capabilities opens on the gap report: what the map says the
+  organisation must be able to do against what this server runs, one card per finding kind
+  in the server's order and none ranked, because the report has no severity. One tab away
+  is every capability in the shared table, with the two questions the register exists for —
+  what does nothing realize, what has nobody confirmed — as one click each, and tags as the
+  only grouping. A capability's page says what realizes it with the deployed version and
+  running instances, what it measured over a window you pick, what it requires and what
+  requires it, and which value-stream stages it performs; Panorama → Value streams lists
+  the streams and flags a stage naming a capability the map does not have. The one write
+  is the confirmation (B10), on the detail page after the record, never from a list of
+  findings. The screens speak German first through the catalogue
+  ([ADR-0267](docs/adr/0267-console-speaks-german-first.md)): every sentence is composed
+  from the report's keys and coordinates rather than taken from its English detail, so a
+  missing-Worker finding now carries `workerRef` as a coordinate.
 
 ## [0.12.0] — 2026-10-13
 

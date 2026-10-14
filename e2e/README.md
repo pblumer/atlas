@@ -27,6 +27,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`capabilities.spec.mjs`** ([ADR-0305](../docs/adr/0305-business-capabilities-and-value-streams.md),
+  roadmap B8): the business-architecture screens against a stubbed API — the landing view
+  is the gap report, one card per finding kind in the server's order, each sentence composed
+  from the finding's coordinates in the catalogue's words and never the report's English
+  detail; the capability list is the shared table, with the unrealized backlog, the due
+  confirmations and a tag as filters; a capability's page reads its measurement over the
+  window picked and sends a confirmation with who was asked and what was found; a value
+  stream flags a stage naming a capability the map does not have; and English is the same
+  screen in other words.
 - **`feel-assistant.spec.mjs`** ([ADR-0445](../docs/adr/0445-feel-assistant.md)):
   the **FEEL assistant** against a stubbed API — Ctrl+Shift+E opens and closes it from anywhere;
   a message sends the whole conversation, the model's earlier turn as the reply it came with and

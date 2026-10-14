@@ -2007,9 +2007,14 @@ the method and how to work it with Atlas as it stands are in
   nobody authored. This is the one read in the area that runs off the run loop
   ([ADR-0239](docs/adr/0239-off-loop-queries.md))
   ([ADR-0309](docs/adr/0309-measuring-a-capability.md)).
-- 🔲 **B8 — The Console surface.** A capability list that is worth opening: filter by
+- ✅ **B8 — The Console surface.** A capability list that is worth opening: filter by
   tag, sort by realisation state, and the gap report as the landing view rather than a
   report somebody has to find. German first ([ADR-0267](docs/adr/0267-console-speaks-german-first.md)).
+  Built under Panorama → Capabilities and Value streams (`api/web/capabilities.js`): the
+  gap report grouped by kind and never ranked, the shared table with "nothing realizes
+  it" and "due for confirmation" as one click each, a capability's page with its
+  realizations, measurement over a chosen window, requirements and stages, and the
+  confirmation as the one write. Creating and editing records stays with the API and MCP.
 - 🔲 **B9 — Document-level exchange.** One JSON document holding the whole map, and an
   import that reports what it would do before doing it: reconciled by key rather than by
   position, with a `dryRun` naming what it would add, change and leave alone. The
