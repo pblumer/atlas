@@ -12,6 +12,56 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-10-13
+
+**A value that differs between DEV, INT and PROD lives on the installation, not in the
+model.** A process declares constants every instance starts with and nobody is asked for
+([ADR-0454](docs/adr/0454-process-constants.md)), and a constant bound to its application
+takes the value that application holds on the installation where the instance starts, set
+on the application's new **Values** tab or with `PUT /api/v1/applications/{id}/values`
+([ADR-0453](docs/adr/0453-application-values-per-installation.md)). A message published
+with `timeToLiveMs` now waits for the instance it is meant for instead of being lost, and
+an operator sees what waits under Operations → Messages
+([ADR-0370](docs/adr/0370-durable-message-buffer.md)). The Modeler names the version it
+shows and how it stands against the draft
+([ADR-0452](docs/adr/0452-modeler-shows-its-version.md)), and deploying from a draft saves
+it first. A declared start variable's default is now what every instance starts with when
+its start does not supply it, on every start path
+([ADR-0455](docs/adr/0455-start-variable-defaults.md)). Among the fixes, a start form no
+longer drops the declared start variables, and the Entra PowerShell example signs in with a
+certificate instead of a secret it never received.
+
+**Read this before upgrading from 0.11.0.** These act on an existing installation:
+
+- A declared start variable's default is seeded into every new instance whose start does
+  not name the variable — through the API, MCP, a public link, a CSV upload, a timer, a
+  message, a signal or a call activity — where 0.11.0 left it out. Every deployed
+  definition is compiled again at the first start, so this holds for models deployed under
+  0.11.0 from then on, and a model that tested for the variable's absence takes the other
+  branch. A start that names the variable keeps its value, null included, a fork adds
+  none, and instances already running keep what they started with. A default that is not
+  a literal of its type, or that sits on personal data or the data subject, is withheld
+  and the deploy warns; no definition stops loading over it.
+- A process that links a start form and declares start variables now asks, beneath the
+  form, for the declared variables the form does not bind, in Deploy & run and in the
+  Tasks app's Start, and a required one must be filled before the instance starts, where
+  0.11.0 started it without the value. The Live view's Start instance opens the same
+  dialog on such a definition. An optional field left empty takes the default.
+- Deploying from the Modeler saves the draft first, through the same path as Save, and a
+  save that fails deploys nothing; 0.11.0 deployed the canvas and left the draft as it was
+  last saved. A version opened read-only is still deployed without touching the draft.
+- A model with constants is meant for 0.12.0. 0.11.0 does not read `<atlas:constants>`
+  and deploys such a model without saying so, and its instances start without those
+  variables, so upgrade the installation an application is promoted to before promoting
+  one that uses constants.
+- Going back to 0.11.0 is not claimed. A message kept with `timeToLiveMs`, and the id
+  remembered beside it, ride `VTMessage` events that 0.11.0 decodes to no value and skips
+  on replay, so a data directory taken back loses what waits in the buffer without saying
+  so. Take a backup before upgrading.
+- 0.12.0 reads the data directory 0.11.0 wrote. Its first start seeds the counter of
+  buffered messages, which finds none, and no system process changed, so it deploys
+  nothing new. A publish without `timeToLiveMs` is lost when nothing matches, as before.
+
 ### Added
 
 - **An application holds its values per installation, and a constant binds to one.**
@@ -30,7 +80,8 @@ _Changed_ / _Removed_ for each version.
   Tasks app, a public link, a CSV upload or the API is refused with `409` until it is set;
   a timer, message or signal start is not refused, because nobody is there to answer. The
   Modeler's constants editor has a source select, and the process listing names a bound
-  constant's `source`.
+  constant's `source`. The MCP tool `atlas_application_values` reads the values and what
+  is required of them; setting them stays an administrator's.
 
 - **A process declares constants every instance starts with.** `<atlas:constant name type
   value/>` inside `<atlas:constants>` on the process states a value nobody is asked for —
@@ -55,6 +106,7 @@ _Changed_ / _Removed_ for each version.
   dropped, an unknown type reads as `string` — because a stored definition compiles again
   on every restart. An instance started without a declared value takes its default (see
   _Changed_).
+
 - **An operator sees what waits in the message buffer.** A message kept for an instance
   that has not reached its catch yet ([ADR-0370](docs/adr/0370-durable-message-buffer.md))
   was invisible until it arrived or expired. `GET /api/v1/messages/buffered` (operator)
@@ -82,7 +134,8 @@ _Changed_ / _Removed_ for each version.
   `--message-ttl-max` (default `168h`) bounds what a publish may ask for, and a message
   that may be kept may not carry a variable any deployed process declares personal (422),
   because nothing on the message path can seal it. The buffer is engine state rebuilt from
-  the log, so 0.11.0 cannot replay a data directory that has buffered a message.
+  the log, and 0.11.0 has no rule for its records: a data directory taken back to 0.11.0
+  loses the messages waiting in it.
 
 - **The Modeler says which version it shows.** The editor bar carries a chip naming what is
   open — the draft, or version N of M — and how it stands against the other record: a draft
@@ -147,6 +200,7 @@ _Changed_ / _Removed_ for each version.
   it. The Live view's Start instance had the opposite gap: it asked for the declaration and
   never showed the form. On a definition with a start form it now opens the same dialog. A
   public link still accepts only what its form submits.
+
 - **The Components palette in the form editor stays against the canvas when its column
   is resized.** The Design tab's palette column is resizable, but form-js pins the palette
   inside it to a fixed 270px and its tile groups to 236px — the defect the Properties
@@ -14501,7 +14555,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/pblumer/atlas/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/pblumer/atlas/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/pblumer/atlas/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/pblumer/atlas/compare/v0.9.1...v0.9.2
