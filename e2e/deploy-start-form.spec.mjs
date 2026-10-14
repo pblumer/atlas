@@ -77,7 +77,9 @@ test("a required field left empty refuses the send, and deploys nothing", async 
   await expect(page.locator(".startform-modal")).toBeVisible();
   await page.locator("[data-sf-send]").click();
 
-  await expect(page.locator("#sf-err")).toContainText("fix the highlighted fields");
+  // Not "fix the highlighted fields" — that asks the author to go find a colour. The
+  // refusal names the field, the way the form labels it.
+  await expect(page.locator("#sf-err")).toHaveText("Still to fill in: Vorname.");
   await expect(page.locator(".startform-modal")).toBeVisible(); // still open, values kept
   expect(await writes(page)).toEqual([]);
   expect(page.__errors).toEqual([]);

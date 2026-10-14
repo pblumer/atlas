@@ -41,7 +41,7 @@ import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./ta
 import { runImport } from "./infomodel-import.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
-import { loadFormViewer } from "./formviewer.js";
+import { formRefusalNames, loadFormViewer, scrollToFirstInvalidField } from "./formviewer.js";
 // A start form does not replace the start variables declared on the process: the ones
 // it does not ask for are asked beneath it, with the Modeler's typed fields.
 import { uncoveredStartVariables, extraStartFieldsHTML, wireStartJSONEditors, readTypedDeployBody, keepConstantNameInCapitals } from "./startvars.js";
@@ -8229,6 +8229,17 @@ const TASK_FOLDERS = [
   { id: "group", label: "Group tasks", match: (t) => !!t.candidateGroups },
 ];
 
+// formRefusalMessage is what the Tasks app says when a form refuses to submit: the
+// fields to go back to, named the way the form labels them. formviewer.js works out
+// which fields those are and how many did not fit; this puts the console's own words
+// around them (ADR-0267).
+function formRefusalMessage(form, errors) {
+  const { shown, rest } = formRefusalNames(form, errors);
+  let msg = tr("form.invalidFields", { fields: shown.join(", ") });
+  if (rest > 0) msg += " " + trPlural("form.invalidMore", rest);
+  return msg;
+}
+
 // wizardHistory remembers, per sitting of a wizard (ADR-0449), the titles of the screens
 // this tab has submitted, so a step can show where the person has come from. It is this
 // tab's memory and nothing more: a sitting continued in another tab starts its list
@@ -8737,7 +8748,7 @@ async function viewTasks(preselectKey) {
     let payload;
     if (state.mountedForm) {
       const { data, errors } = state.mountedForm.submit();
-      if (errors && Object.keys(errors).length > 0) { toast("Please fix the highlighted fields", "err"); return; }
+      if (errors && Object.keys(errors).length > 0) { refuseIncompleteForm(errors, t); return; }
       // A file field (form-js filepicker) holds the picked File client-side, not its
       // bytes, so completing the task has to do something with it. There are two
       // answers and the task's own variables choose between them.
@@ -8786,7 +8797,7 @@ async function viewTasks(preselectKey) {
         // `csvText` variable a CSV-import service task parses (ADR-0087). This keeps
         // that upload a normal user-task step rather than a side-channel endpoint.
         try { data.csvText = await picked.text(); }
-        catch (err) { toast("Datei konnte nicht gelesen werden: " + err.message, "err"); return; }
+        catch (err) { toast(tr("tasks.complete.fileUnreadable", { error: err.message }), "err"); return; }
       }
       payload = { variables: data };
     }
@@ -8818,6 +8829,24 @@ async function viewTasks(preselectKey) {
       toast("Complete failed: " + err.message, "err");
       if (btn) btn.disabled = false;
     }
+  }
+
+  // refuseIncompleteForm answers a submit the form itself rejected. form-js has
+  // already marked the offending fields; the two things it cannot do are what this
+  // adds.
+  //
+  // The first is where. The form stays mounted while the Process tab is showing —
+  // that is deliberate, it is how Complete has its data either way — so pressing
+  // Complete from there used to answer "please fix the highlighted fields" about
+  // fields on the pane the person was not looking at. Nothing was highlighted on
+  // their screen. So the refusal brings the form forward before it complains about
+  // it.
+  //
+  // The second is which — see formRefusalMessage, which the Start view shares.
+  function refuseIncompleteForm(errors, t) {
+    showDetailTab("form", t);
+    toast(formRefusalMessage(state.mountedForm, errors), "err");
+    scrollToFirstInvalidField("task-form");
   }
 
   // followWizard carries the person on through a wizard (ADR-0449). It records the
@@ -9408,24 +9437,33 @@ async function viewTasks(preselectKey) {
     // time its tab is opened; the chosen tab is kept across task selections.
     if (t.formId && !decidedHere(t)) mountForm(t);
     const dtabs = document.getElementById("task-dtabs");
-    const paneForm = document.getElementById("pane-form");
-    const paneProc = document.getElementById("pane-process");
     dtabs.addEventListener("click", (e) => {
       const b = e.target.closest("button[data-dtab]");
       if (!b) return;
-      const next = b.dataset.dtab;
-      if (next === state.detailTab) return;
-      state.detailTab = next;
-      for (const btn of dtabs.querySelectorAll("button")) {
-        const on = btn.dataset.dtab === next;
-        btn.classList.toggle("active", on);
-        btn.setAttribute("aria-selected", on ? "true" : "false");
-      }
-      paneForm.hidden = next !== "form";
-      paneProc.hidden = next !== "process";
-      if (next === "process" && !state.mountedProc) mountProc(t);
+      showDetailTab(b.dataset.dtab, t);
     });
     if (tab === "process") mountProc(t);
+  }
+
+  // showDetailTab moves the detail pane to one of its two tabs — the tab strip's
+  // click handler, factored out because Complete needs it too (see
+  // refuseIncompleteForm). Re-reads the panes from the document rather than closing
+  // over them, so it is safe to call from anywhere after a render.
+  function showDetailTab(next, t) {
+    if (next !== "form" && next !== "process") return;
+    if (next === state.detailTab) return;
+    state.detailTab = next;
+    const dtabs = document.getElementById("task-dtabs");
+    for (const btn of (dtabs ? dtabs.querySelectorAll("button[data-dtab]") : [])) {
+      const on = btn.dataset.dtab === next;
+      btn.classList.toggle("active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    }
+    const paneForm = document.getElementById("pane-form");
+    const paneProc = document.getElementById("pane-process");
+    if (paneForm) paneForm.hidden = next !== "form";
+    if (paneProc) paneProc.hidden = next !== "process";
+    if (next === "process" && t && !state.mountedProc) mountProc(t);
   }
 
   function renderAll() {
@@ -9788,7 +9826,13 @@ async function viewStartProcess() {
       let variables = {};
       if (state.form) {
         const { data, errors } = state.form.submit();
-        if (errors && Object.keys(errors).length > 0) { toast("Please fix the highlighted fields", "err"); return; }
+        if (errors && Object.keys(errors).length > 0) {
+          // One pane here, so there is nothing to bring forward — but "which field?"
+          // is the same question it was in the inbox, and it gets the same answer.
+          toast(formRefusalMessage(state.form, errors), "err");
+          scrollToFirstInvalidField("start-form");
+          return;
+        }
         // The declared half: a missing required value or malformed JSON stops the start
         // and says which. The form's data wins on a shared name, though by construction
         // the two bind different ones.
