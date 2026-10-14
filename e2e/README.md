@@ -56,7 +56,9 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   starting a sandbox sends the diagram *on screen* rather than a stored copy; a job waiting
   for a person becomes a Complete button, and completing it repaints the run onto the canvas
   with the runtime view's own markers; malformed start variables are reported instead of
-  posted; editing the diagram says the run no longer matches it; and leaving the editor
+  posted; editing the diagram says the run no longer matches it, and so do an applied XML source and
+  an auto-layout, which replace the canvas by an import and have the run painted back onto it, while a
+  refused source that the editor puts back is not reported as a change; and leaving the editor
   releases the server-side sandbox rather than leaving it to its TTL.
 
   And the **batch half**: the pool setup is read off the diagram (a row per task the
@@ -428,6 +430,27 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   version. The bar stays one row with the chip on it. Deploy from a draft saves it first and only
   once; a new diagram's first deploy saves it; a version opened read-only is deployed without a
   save, and the Deploy panel says the draft is left alone.
+- **`xml-source.spec.mjs`** ([ADR-draft-modeler-xml-source](../docs/adr/draft-modeler-xml-source.md)):
+  the **XML source** view in the process and decision editors (`xml-source-harness.html` mounts the
+  real `editor.js`; the decision editor runs in the Console against a stubbed server). The menu
+  offers it right after Export XML, and the text is the canvas as it is now, unsaved edits included,
+  highlighted and numbered; a three-thousand-line document draws only the lines in view, each on
+  the text area's line vertically and after a sideways scroll (`code-editor.js`'s `virtual` mode);
+  Apply puts a correction on the canvas; malformed XML is marked on its
+  line while typing and refused on Apply with the diagram untouched; a well-formed document the
+  modeler cannot read is rolled back rather than leaving an empty canvas; closing with an unapplied
+  edit asks first and closing an untouched one does not; F4 and F8 typed into the dialog do not
+  toggle Variables or run Auto-layout behind it, and do again once it is closed; an applied source
+  counts as an edit, so
+  leaving a deployment asks, Save writes it, and a collaborator's change arriving over the live
+  session (a fake `EventSource`) is deferred rather than pulled over it; Copy copies it. A document
+  that is BPMN but has nothing to draw — which bpmn-js refuses only after clearing the canvas — is
+  rolled back too. **Auto-layout** imports the same way and is held to the same: it counts as an
+  edit for leaving a deployment, a collaborator's change waits for it, and a re-flowed document that
+  cannot be drawn puts the diagram back. In the decision editor the views are rebuilt from the
+  applied document and Save keeps it, a document of another DMN version is refused naming both
+  versions, and a collaborator's change waits for an applied source and for an auto-layout. The form editor's schema tab says
+  **Source**, and an edit there is what Save writes.
 
 ## Rendering a conformance gallery diagram
 

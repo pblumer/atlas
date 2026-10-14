@@ -32,6 +32,9 @@ import { frozenMark } from "./frozen-decisions.js";
 // Which record the Modeler has open — the draft or version N — and who created and last
 // changed it (ADR-0452).
 import { attachShownVersion } from "./shown-version.js";
+// The document behind the diagram as text, corrected in place and applied back onto the
+// canvas — the bar menu's "XML source", shared with the decision editor.
+import { openXmlSource, closeXmlSource } from "./xml-source.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { openDecisionGraph } from "./decision-graph.js";
 // Documentation prose is Markdown (ADR-0250). The replay
@@ -267,6 +270,7 @@ export function cleanup() {
   if (shownVersion) { shownVersion.destroy(); shownVersion = null; }
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
+  closeXmlSource(); // the canvas it was showing is going away with the editor
   destroyObjectCanvas();
   destroyLifecycleCanvas();
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
@@ -717,9 +721,10 @@ async function markFrozenDeployment(root, api, key, gen) {
 // Left of the rule is what the bar *shows*: Variables, a two-state button whose look is
 // drawn from `aria-pressed` (F4). Right of it is what the bar *does*: Deploy, the only
 // filled button because it is the only one here that leaves the browser, and Save beside
-// it as the one pressed most. Token simulation, Auto-layout, Export XML and Documentation
-// are in the menu, where a toggle reads as on by its check rather than by a pressed
-// button. Every control kept its id, so what each one does is still wired where it was.
+// it as the one pressed most. Token simulation, Auto-layout, Export XML, XML source and
+// Documentation are in the menu, where a toggle reads as on by its check rather than by a
+// pressed button. Every control kept its id, so what each one does is still wired where
+// it was.
 export async function mountEditor(root, { api, toast, key, draftId, projectId, project, adopt }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
@@ -748,6 +753,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
             <button id="autolayout" type="button" title="Re-flow the diagram into a clean left-to-right layout (F8)"><span class="mi-icon">&#8649;</span>Auto-layout</button>
             <button id="savelayout" type="button" hidden title="Save this layout onto the deployed definition — the picture changes, the process does not: same key, same version, same running instances"><span class="mi-icon">&#128190;</span>Save layout to deployment</button>
             <button id="export" type="button" title="Download this diagram as BPMN XML"><span class="mi-icon">&#8595;</span>Export XML</button>
+            <button id="xmlsource" type="button" title="Show this diagram as BPMN XML, and correct it in place"><span class="mi-icon mi-code">&lt;/&gt;</span>XML source</button>
             <button id="docexport" type="button" title="Publish this process as a structured PDF — the diagram plus every element's documentation and notes — as a numbered version you can share (ADR-0143)"><span class="mi-icon">&#128196;</span>Documentation</button>
           </div>
         </div>
@@ -889,6 +895,11 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   // editable draft is the same process, so the collision is the point rather than an
   // accident — it is offered as an explicit overwrite instead of a flat refusal.
   const identity = { draftId: draftId != null ? draftId : null, fromDeployment: draftId == null && key != null };
+  // importedEdit says this session has replaced the canvas by importing a document of
+  // its own making — an applied XML source, an auto-layout. That is an edit the undo
+  // stack cannot see, because the import starts it afresh, so the question of whether
+  // leaving loses work reads it beside the stack (makeKeepEdits).
+  identity.importedEdit = false;
   // ownId is the id this session may save onto without colliding with somebody else:
   // the draft it opened, or — for a deployed definition being pulled back into a draft
   // — that process's own id, where landing on the existing draft is the point and is
@@ -10509,6 +10520,39 @@ function askStartForm(api, formId, declared, texts = {}) {
   });
 }
 
+// importOver replaces what the modeler shows with xml, keeping the author's viewport,
+// and resolves to the import's warnings. When the import fails it puts the diagram
+// that was there back before rethrowing. bpmn-js refuses a document that is not BPMN
+// while parsing it, with the canvas untouched, but one that is BPMN and has nothing it
+// can draw — no diagram, no process — only after it has cleared the canvas; a refused
+// import must not cost the diagram it was meant to change.
+async function importOver(modeler, xml) {
+  const { xml: before } = await modeler.saveXML({ format: true });
+  const canvas = modeler.get("canvas");
+  let vb = null;
+  try { vb = canvas.viewbox(); } catch { /* nothing drawn yet */ }
+  const keepView = () => { if (vb) { try { canvas.viewbox(vb); } catch { /* ignore */ } } };
+  try {
+    const { warnings } = await modeler.importXML(xml);
+    keepView();
+    return { warnings: warnings || [] };
+  } catch (e) {
+    // The document came out of this modeler a moment ago, so it reads back.
+    try { await modeler.importXML(before); keepView(); } catch { /* nothing better to restore */ }
+    throw e;
+  }
+}
+
+// markImportedEdit records that the canvas now holds work this session put there by an
+// import. An import is not a command: it starts the undo stack afresh and fires none of
+// the element events the live session listens to, so both are told explicitly — or the
+// editor would believe the diagram was nothing to lose, leaving without asking and
+// letting a collaborator's draft be pulled over it (ADR-0140).
+function markImportedEdit(identity) {
+  identity.importedEdit = true;
+  if (collab && collab.markDirty) collab.markDirty();
+}
+
 // makeKeepEdits builds the "may we leave this diagram now" question every action that
 // navigates away has to ask: true once this diagram's work is safe. A session that
 // addresses a draft saves it; one that does not has nowhere to put the edits without
@@ -10523,6 +10567,10 @@ function makeKeepEdits(modeler, identity, saveDraft, what, saveNew) {
   return async () => {
     let dirty = false;
     try { dirty = modeler.get("commandStack").canUndo(); } catch { /* no stack, nothing to lose */ }
+    // An applied XML source or an auto-layout replaced the canvas through an import,
+    // which starts the undo stack afresh — so the stack alone would call that diagram
+    // untouched.
+    if (identity.importedEdit) dirty = true;
     if (!dirty) return true;
     if (identity.draftId != null) return await saveDraft(false);
     if (saveNew && !identity.fromDeployment) return await saveDraft(false);
@@ -10617,7 +10665,11 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     try {
       const { xml } = await modeler.saveXML({ format: true });
       const relaid = await api("POST", "/api/v1/layout", xml, true);
-      await modeler.importXML(typeof relaid === "string" ? relaid : String(relaid));
+      // An import like the XML source's Apply, and so the same two consequences: a
+      // document the modeler cannot draw puts the diagram back rather than leaving an
+      // empty canvas, and a re-flowed one is unsaved work the editor has to know about.
+      await importOver(modeler, typeof relaid === "string" ? relaid : String(relaid));
+      markImportedEdit(identity);
       modeler.get("canvas").zoom("fit-viewport");
       toast("Diagram auto-laid out", "ok");
     } catch (e) {
@@ -10690,6 +10742,23 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       URL.revokeObjectURL(a.href);
     } catch (e) { toast("export failed: " + e.message, "err"); }
   });
+
+  // XML source: the diagram as BPMN XML, read off the canvas — so it is what the author
+  // is looking at, saved or not — and, once corrected, imported back onto it. What
+  // reaches the canvas goes through repairModel like any diagram opened from the
+  // server, so a hand-written dangling reference is declared rather than dropped, and
+  // it is marked as the unsaved edit it is (markImportedEdit).
+  root.querySelector("#xmlsource").addEventListener("click", () => openXmlSource({
+    kind: "BPMN",
+    subject: "diagram",
+    toast,
+    read: async () => (await modeler.saveXML({ format: true })).xml,
+    apply: async (text) => {
+      const res = await importOver(modeler, repairModel(text));
+      markImportedEdit(identity);
+      return res;
+    },
+  }));
 
   // Documentation (ADR-0143): publish the process as a structured PDF — the
   // diagram plus every element's prose — as an immutable numbered version, and

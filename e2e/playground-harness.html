@@ -202,6 +202,9 @@
         if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
         if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
         if (method === "GET" && /\/forms$/.test(url)) return [];
+        // Auto-layout hands back the diagram with one shape moved: a re-flowed picture
+        // of the same process, so the canvas no longer matches what a sandbox started.
+        if (method === "POST" && /\/layout$/.test(url)) return XML.replace('x="250" y="160"', 'x="250" y="300"');
         if (method === "POST" && /\/playground\/sessions$/.test(url)) {
           phase = "idle";
           return { id: SESSION, processId: "credit", seed: 4711,

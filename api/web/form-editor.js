@@ -7,7 +7,10 @@
 //                viewer, seeded from an editable Form Input (sample data), and
 //                the live result / validation errors show in Form Output. Its
 //                three areas can each be collapsed and resized independently.
-//   • Editor   — the raw schema as text in a JSON code editor.
+//   • Source   — the raw schema as text in a JSON code editor: a form's source is
+//                its form-js schema, as a diagram's is its XML. (The tab is keyed
+//                "editor" in the markup and the code; only its label says Source, so
+//                it reads as the BPMN and DMN editors' "XML source" does.)
 //
 // The three surfaces stay in sync through one canonical `schema` value: leaving
 // a tab commits its edits into it, entering a tab (re)loads it. Assets load
@@ -101,7 +104,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
         <div class="etabs" id="form-tabs">
           <button type="button" data-ftab="design" class="active" title="Build the form visually">Design</button>
           <button type="button" data-ftab="validate" title="Preview the form and check it for problems">Validate</button>
-          <button type="button" data-ftab="editor" title="Edit the form’s raw JSON schema">Editor</button>
+          <button type="button" data-ftab="editor" title="Show the form’s source — its JSON form-js schema — and correct it in place">Source</button>
         </div>
         <input id="form-name" class="form-name-input" placeholder="Form name" spellcheck="false" />
         <span class="chip" id="form-id-chip"></span>
@@ -303,7 +306,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
       try { parsed = JSON.parse(text); }
       catch (e) {
         // Keep the invalid text on screen and the last valid schema intact.
-        toast("Editor JSON is invalid — keeping the last valid schema (" + e.message + ")", "err");
+        toast("The source is not valid JSON — keeping the last valid schema (" + e.message + ")", "err");
         return;
       }
       if (JSON.stringify(parsed) !== JSON.stringify(schema)) { schema = parsed; rev++; schemaSource = "editor"; }
@@ -342,7 +345,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     Object.keys(panes).forEach((k) =>
       panes[k].el.classList.toggle("active", k === tab));
     await load(tab);
-    syncIdentity(); // the raw Editor can retype the id too, not just the Design panel
+    syncIdentity(); // the Source tab can retype the id too, not just the Design panel
   }
 
   root.querySelectorAll("#form-tabs button").forEach((b) =>
@@ -477,7 +480,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     }
   }
 
-  // ---- Editor pane ---------------------------------------------------------
+  // ---- Source pane ---------------------------------------------------------
   function buildEditor() {
     const p = panes.editor;
     p.built = true;
