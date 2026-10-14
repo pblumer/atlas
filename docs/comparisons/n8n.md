@@ -1,5 +1,7 @@
 # n8n and Atlas: an enterprise architecture decision guide
 
+> **Languages:** English (this document) · [Deutsch](n8n.de.md)
+>
 > **Purpose.** This document supports architecture and platform decisions when
 > one team has adopted n8n for automation and another evaluates Atlas for
 > business process automation. It is **not** a vendor ranking or a claim that
