@@ -346,11 +346,12 @@ export function openDevView(field, opts = {}) {
     if (tab === "vars") renderVars();
     let got = null;
     try { got = await opts.samples({ force: !!req.force, instanceKey: req.instanceKey }); }
-    catch { samples = { state: "error", instance: null, values: {}, instances: [] }; if (tab === "vars") renderVars(); return; }
+    catch { samples = { state: "error", instance: null, values: {}, instances: [] }; syncFill(); if (tab === "vars") renderVars(); return; }
     if (!document.contains(overlay)) return; // closed while we were waiting
     samples = got && got.instance
       ? { state: "ready", instance: got.instance, values: got.values || {}, instances: got.instances || [got.instance] }
       : { state: "none", instance: null, values: {}, instances: [] };
+    syncFill();
     if (tab === "vars") renderVars();
     // An empty Test box is filled with the real instance's variables — the sample a
     // developer would otherwise type by hand, only correct. A box the author has
@@ -365,9 +366,15 @@ export function openDevView(field, opts = {}) {
         lastFilled = JSON.stringify(sampleJSON(samples.values), null, 2);
         box.value = lastFilled;
       }
-      const fill = q(".dev-run-fill");
-      if (fill) fill.hidden = false;
     }
+  }
+
+  // syncFill offers "From instance" only while there is an instance to fill from. A
+  // reload that finds none, or fails, would otherwise leave a button behind that
+  // replaces the author's sample with an empty object.
+  function syncFill() {
+    const fill = canTest && q(".dev-run-fill");
+    if (fill) fill.hidden = samples.state !== "ready";
   }
 
   // sampleStripHTML is the Variables pane's header: which instance the values come
@@ -806,9 +813,24 @@ export function openDevView(field, opts = {}) {
     };
     const fillBtn = q(".dev-run-fill");
     fillBtn.title = "Replace the sample with this instance's actual variables";
+    // The box is prefilled from the instance as soon as the values arrive, so the
+    // first click usually finds nothing to change. It says so: a click with no
+    // visible effect reads as a broken button.
     fillBtn.addEventListener("click", () => {
-      lastFilled = JSON.stringify(sampleJSON(samples.values), null, 2);
-      q(".dev-run-vars").value = lastFilled;
+      const box = q(".dev-run-vars");
+      const sample = sampleJSON(samples.values);
+      const text = JSON.stringify(sample, null, 2);
+      const key = samples.instance ? samples.instance.key : "";
+      lastFilled = text;
+      if (box.value === text) {
+        setOut("", `The sample already holds the values of instance ${key}.`);
+        return;
+      }
+      box.value = text;
+      const n = Object.keys(sample).length;
+      setOut("", `Filled from instance ${key} · ${n} variable${n === 1 ? "" : "s"}.`);
+      // A result shown now would belong to the sample just replaced.
+      setDetail("", "");
     });
     q(".dev-run-btn").addEventListener("click", async () => {
       let vars = {};

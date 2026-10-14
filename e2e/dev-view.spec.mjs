@@ -248,6 +248,44 @@ test("the Test panel is prefilled from the instance, and can be refilled", async
   expect(JSON.parse(await page.evaluate(() => document.querySelector(".dev-run-vars").value)).amount).toBe(1250.5);
 });
 
+test("From instance says what it did, also when the sample already holds those values", async ({ page }) => {
+  await openFeel(page);
+  await page.locator(".dev-test-toggle").click();
+  const box = () => page.evaluate(() => document.querySelector(".dev-run-vars").value);
+  const prefilled = await box();
+
+  // Right after opening, the box already holds the instance's values, so a click
+  // changes nothing in it. Silence here reads as a broken button; it must say so.
+  await page.locator(".dev-run-fill").click();
+  expect(await box()).toBe(prefilled);
+  await expect(page.locator(".dev-run-out")).toHaveText("The sample already holds the values of instance 4711.");
+
+  // After an edit and a run, the click replaces the sample, names the instance, and
+  // drops the result that belonged to the old sample.
+  await page.locator(".dev-run-vars").fill('{ "amount": 1 }');
+  await page.locator(".dev-run-btn").click();
+  await expect(page.locator(".dev-run-detail")).toBeVisible();
+  await page.locator(".dev-run-fill").click();
+  expect(await box()).toBe(prefilled);
+  await expect(page.locator(".dev-run-out")).toHaveText("Filled from instance 4711 · 3 variables.");
+  await expect(page.locator(".dev-run-detail")).toBeHidden();
+});
+
+test("From instance is withdrawn once there is no instance to read", async ({ page }) => {
+  await openFeel(page);
+  await page.locator(".dev-test-toggle").click();
+  await expect(page.locator(".dev-run-fill")).toBeVisible();
+  await page.locator(".dev-run-vars").fill('{ "amount": 1 }');
+
+  // The instances are gone on the next read: the button must not stay behind and
+  // replace the author's sample with an empty object.
+  await page.evaluate(() => { window.__instances = []; });
+  await page.locator(".dev-sample-reload").click();
+  await expect(page.locator(".dev-sample-strip")).toContainText("No instance to read values from yet");
+  await expect(page.locator(".dev-run-fill")).toBeHidden();
+  expect(await page.evaluate(() => document.querySelector(".dev-run-vars").value)).toBe('{ "amount": 1 }');
+});
+
 test("a process that has never run says so instead of failing", async ({ page }) => {
   await page.evaluate(() => { window.__instances = []; });
   await openFeel(page);

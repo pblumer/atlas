@@ -12,6 +12,16 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **"From instance" in the Developer View says what it did.** The Test panel's sample is
+  filled from the instance as soon as its values arrive, so the button usually found
+  nothing to change and a click had no visible effect. It now reports that the sample
+  already holds the instance's values, or that it filled them and how many, and clears a
+  result that belonged to the replaced sample. The button is also withdrawn when a
+  reload finds no instance or fails, rather than replacing the author's sample with an
+  empty object.
+
 ## [0.13.0] — 2026-10-14
 
 **A constant says where its value comes from.** A constant the installation holds is read
