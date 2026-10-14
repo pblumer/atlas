@@ -166,13 +166,22 @@ func (s *Server) loadHeldConstants() error {
 // noteApplication tells the processor what the application namespace says about an
 // application. Run-loop goroutine (or startup): called wherever an application is saved
 // with a name or key that may have changed.
+//
+// A Server assembled without a processor — a store-level test — has nobody to tell, so
+// the three note helpers do nothing there.
 func (s *Server) noteApplication(app project) {
+	if s.proc == nil {
+		return
+	}
 	s.proc.SetApplicationInfo(app.ID, engine.ApplicationInfo{Key: app.Key, Name: app.Name})
 }
 
 // forgetApplication drops what the processor holds for a deleted application: its
 // constants and the facts its namespace reported. Run-loop goroutine only.
 func (s *Server) forgetApplication(id string) {
+	if s.proc == nil {
+		return
+	}
 	s.proc.SetApplicationConstants(id, nil)
 	s.proc.SetApplicationInfo(id, engine.ApplicationInfo{})
 }
@@ -180,6 +189,9 @@ func (s *Server) forgetApplication(id string) {
 // noteNode tells the processor what the server namespace says about this installation.
 // Run-loop goroutine (or startup): at startup and whenever an operator names the node.
 func (s *Server) noteNode(identity nodeIdentity) {
+	if s.proc == nil {
+		return
+	}
 	s.proc.SetServerInfo(engine.ServerInfo{ID: identity.ID, Name: identity.Name, Environment: identity.Environment})
 }
 
