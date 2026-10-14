@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas timer fx modeler e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, to verify
+         that a timer's schedule field — on a timer start, an intermediate catch and a
+         boundary — carries the fx switch, so a duration or an instant can be a FEEL
+         expression the engine evaluates when the timer is armed (ADR-0055). Mounted in
+         deployment mode (key set, draftId null) so no live collaboration SSE is attached. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      // Start_timer fires at a fixed instant; Catch_lit waits a literal 30 minutes;
+      // Catch_feel waits as long as the instance's wartezeit says; Boundary_t times out
+      // Task_1 after an hour.
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_timer" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="timerfx" name="Test Timer fx" isExecutable="true">
+    <bpmn:startEvent id="Start_timer" name="Start"><bpmn:outgoing>f0</bpmn:outgoing><bpmn:timerEventDefinition id="TED_start"><bpmn:timeDate>2026-08-01T09:00:00Z</bpmn:timeDate></bpmn:timerEventDefinition></bpmn:startEvent>
+    <bpmn:intermediateCatchEvent id="Catch_lit" name="Wait 30 min"><bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing><bpmn:timerEventDefinition id="TED_lit"><bpmn:timeDuration>PT30M</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="Catch_feel" name="Wait as asked"><bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing><bpmn:timerEventDefinition id="TED_feel"><bpmn:timeDuration>= wartezeit</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:intermediateCatchEvent>
+    <bpmn:userTask id="Task_1" name="Review"><bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f3</bpmn:outgoing></bpmn:userTask>
+    <bpmn:boundaryEvent id="Boundary_t" name="Too slow" attachedToRef="Task_1"><bpmn:outgoing>f4</bpmn:outgoing><bpmn:timerEventDefinition id="TED_b"><bpmn:timeDuration>PT1H</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:boundaryEvent>
+    <bpmn:endEvent id="End_1" name="Done"><bpmn:incoming>f3</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="End_2" name="Timed out"><bpmn:incoming>f4</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_timer" targetRef="Catch_lit"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Catch_lit" targetRef="Catch_feel"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="Catch_feel" targetRef="Task_1"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="Task_1" targetRef="End_1"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="Boundary_t" targetRef="End_2"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="timerfx">
+    <bpmndi:BPMNShape id="Start_timer_di" bpmnElement="Start_timer"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Catch_lit_di" bpmnElement="Catch_lit"><dc:Bounds x="280" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Catch_feel_di" bpmnElement="Catch_feel"><dc:Bounds x="400" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Task_1_di" bpmnElement="Task_1"><dc:Bounds x="500" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Boundary_t_di" bpmnElement="Boundary_t"><dc:Bounds x="532" y="160" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="680" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_2_di" bpmnElement="End_2"><dc:Bounds x="680" y="240" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="280" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="316" y="138"/><di:waypoint x="400" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="436" y="138"/><di:waypoint x="500" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="600" y="138"/><di:waypoint x="680" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><di:waypoint x="550" y="196"/><di:waypoint x="550" y="258"/><di:waypoint x="680" y="258"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // Every FEEL expression the panel asks the engine to check, so a test can see that
+      // the validator is handed the bare expression rather than its '=' storage form.
+      window.__validateCalls = [];
+      const api = async (method, url, body) => {
+        if (method === "POST" && /\/feel\/validate$/.test(url)) {
+          window.__validateCalls.push(body && body.expression);
+          return { ok: true };
+        }
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/processes$/.test(url)) return [];
+        if (method === "GET" && /\/drafts$/.test(url)) return [];
+        if (method === "GET" && /\/decisions/.test(url)) return [];
+        if (method === "GET" && /\/message-sources$/.test(url)) return [];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        return {};
+      };
+
+      window.__mount = () => mountEditor(view, { api, toast: noop, key: 42 });
+      window.__select = (id) =>
+        window.__atlasModeler.get("selection").select(window.__atlasModeler.get("elementRegistry").get(id));
+      // The exported XML is what the deploy sends, so the tests assert against it.
+      window.__xml = async () => (await window.__atlasModeler.saveXML({ format: true })).xml;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

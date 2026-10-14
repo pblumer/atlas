@@ -12,6 +12,19 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A timer's schedule can be a FEEL expression in the Modeler.** The Duration, Date &
+  time and Cycle field of a timer start, intermediate catch, boundary and event-subprocess
+  start carries the fx switch the other value-or-expression fields have: switched on, the
+  field becomes a FEEL editor with completion and live validation, and the value is stored
+  `=`-prefixed, which is how the engine has read a timer expression since
+  [ADR-0055](docs/adr/0055-feel-expression-timer-schedules.md). Until now the field was
+  plain text, and the only way to an expression was to know to type the `=`. The note under
+  the field says what the expression must yield, that one yielding nothing usable raises an
+  incident when the timer is armed, and that a timer start's expression may read no
+  variables.
+
 ## [0.12.0] — 2026-10-13
 
 **A value that differs between DEV, INT and PROD lives on the installation, not in the
