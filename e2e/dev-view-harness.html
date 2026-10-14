@@ -45,6 +45,11 @@
         { name: "amount", detail: "input mapping ← order.total", scope: "input" },
         { name: "gross", detail: "FEEL script result", scope: "output" },
         { name: "orderId", detail: "start variable", scope: "process" },
+        // Namespaced names (ADR-0456): listed by their path, held by the instance as
+        // one object under the namespace.
+        { name: "application.TENANT_ID", detail: "application constant", scope: "process" },
+        { name: "application.LIMITS.max", detail: "application constant", scope: "process" },
+        { name: "server.region", detail: "server constant", scope: "process" },
         { name: "email", detail: "form field · Antrag", scope: "form" },
         { name: "Beleg", detail: "data object", scope: "data" },
       ];

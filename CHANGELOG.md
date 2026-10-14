@@ -21,6 +21,13 @@ _Changed_ / _Removed_ for each version.
   result that belonged to the replaced sample. The button is also withdrawn when a
   reload finds no instance or fails, rather than replacing the author's sample with an
   empty object.
+- **The Developer View shows the value of a namespaced constant.** The Variables pane
+  lists a constant by its path, `application.TENANT_ID`, while the instance holds the
+  namespace as one object, `application`, so the row looked up a variable of the whole
+  name and showed no value. A dotted name the instance does not hold as such is now read
+  as a path into that object, through any depth, and a path the object does not hold
+  still shows nothing rather than a wrong value
+  ([ADR-0456](docs/adr/0456-constant-namespaces.md)).
 
 ## [0.13.0] — 2026-10-14
 

@@ -218,6 +218,43 @@ function sampleJSON(values) {
   return out;
 }
 
+// sampleFor finds the instance's value behind a listed name. A dotted name the instance
+// does not hold as such is a path into a JSON variable: the constant namespaces are
+// listed member by member (application.TENANT_ID) but held as one object (ADR-0456),
+// and a nested output mapping target reads the same way. The longest holding prefix
+// wins; a path the object does not hold yields nothing rather than a wrong value.
+const parsedSamples = new WeakMap(); // sample -> its parsed JSON, so a re-render does not re-parse
+function sampleFor(values, name) {
+  if (!values) return null;
+  if (values[name]) return values[name];
+  const parts = String(name).split(".");
+  for (let i = parts.length - 1; i > 0; i--) {
+    const root = values[parts.slice(0, i).join(".")];
+    if (!root) continue;
+    if (root.kind !== "json") return null;
+    if (!parsedSamples.has(root)) {
+      let v; try { v = JSON.parse(root.value); } catch { v = undefined; }
+      parsedSamples.set(root, v);
+    }
+    let v = parsedSamples.get(root);
+    for (const key of parts.slice(i)) {
+      if (!v || typeof v !== "object" || Array.isArray(v) || !Object.hasOwn(v, key)) return null;
+      v = v[key];
+    }
+    return typedSample(v);
+  }
+  return null;
+}
+
+// typedSample is a JSON value in the shape the server reports a variable in.
+function typedSample(v) {
+  if (v === null || v === undefined) return { value: "null", kind: "null" };
+  if (typeof v === "string") return { value: v, kind: "string" };
+  if (typeof v === "number") return { value: String(v), kind: "number" };
+  if (typeof v === "boolean") return { value: String(v), kind: "boolean" };
+  return { value: JSON.stringify(v), kind: "json" };
+}
+
 // instanceLabel names one instance in the picker: its key, whether it is still
 // running, and which version of the process it runs.
 function instanceLabel(i) {
@@ -418,7 +455,7 @@ export function openDevView(field, opts = {}) {
       if (!rows.length) continue;
       html += `<div class="dev-group"><h4 title="${esc(s.hint)}">${esc(s.title)}</h4>`;
       for (const v of rows) {
-        const sample = samples.values[v.name];
+        const sample = sampleFor(samples.values, v.name);
         const shown = sampleText(sample);
         html += `<button type="button" class="dev-item${shown ? " stacked" : ""}" draggable="true" data-insert="${esc(varInsert(lang.id, v.name))}" title="Insert this variable (or drag it into the code)">
           <span class="dev-item-head">

@@ -226,6 +226,32 @@ test("variables carry the value they hold in a real instance", async ({ page }) 
   expect(await page.evaluate(() => document.querySelector(".dev-ta").value)).toBe("amountorderId");
 });
 
+test("a namespaced name shows the value its object holds", async ({ page }) => {
+  // The instance carries a constant namespace as one JSON variable, while the pane
+  // lists each constant by its path (ADR-0456).
+  await page.evaluate(() => {
+    window.__instances = [{
+      key: 5, state: "completed", version: 1,
+      values: {
+        application: { value: '{"TENANT_ID":"1223455JHR","LIMITS":{"max":3}}', kind: "json" },
+        server: { value: '{"environment":"prod"}', kind: "json" },
+        orderId: { value: "A-1", kind: "string" },
+      },
+    }];
+  });
+  await openFeel(page);
+  const row = (name) => page.locator(".dev-pane-vars .dev-item", { hasText: name });
+  await expect(page.locator(".dev-sample-strip")).toContainText("5 · completed");
+
+  await expect(row("application.TENANT_ID").locator(".dev-item-value")).toHaveText('= "1223455JHR"');
+  // A path reaches through more than one level, and keeps the leaf's type.
+  await expect(row("application.LIMITS.max").locator(".dev-item-value")).toHaveText("= 3");
+  // A path the object does not hold has no value line, rather than a wrong one.
+  await expect(row("server.region").locator(".dev-item-value")).toHaveCount(0);
+  // A plain name still reads its own variable.
+  await expect(row("orderId").locator(".dev-item-value")).toHaveText('= "A-1"');
+});
+
 test("the Test panel is prefilled from the instance, and can be refilled", async ({ page }) => {
   await openFeel(page);
   await page.locator(".dev-test-toggle").click();
