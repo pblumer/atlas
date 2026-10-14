@@ -185,7 +185,12 @@ func constantsOf(procID string, decl []xmlConstant, g *feelGate) ([]Constant, er
 			k.Type = "string"
 		}
 		if k.Info && k.Type != "string" {
-			return nil, fmt.Errorf("compiler: process %q: %s.%s is text Atlas fills in; declare it with type string", procID, k.Namespace, name)
+			// 0.12.0 deployed a bound constant of any name and type, so a reload keeps
+			// one named after a fact as the fact it now is: text.
+			if err := g.constantConflict(fmt.Sprintf("process %q: %s.%s is text Atlas fills in; declare it with type string", procID, k.Namespace, name)); err != nil {
+				return nil, err
+			}
+			k.Type = "string"
 		}
 		// A bound constant's value is optional — it is the fallback — so an empty one
 		// means "none". A model constant's empty value is the empty string it says.
@@ -329,34 +334,48 @@ func constantSetOf(cs []Constant) map[string]struct{} {
 // As with the personal-data refusal, a write target is an interned index no reflection can
 // tell from any other int32, so this list has no completeness guard beyond reading it; the
 // engine's drop is the backstop for anything it misses.
-func (p *CompiledProcess) refuseConstantConflicts() error {
+//
+// Each conflict goes through the gate g: a deploy refuses it, a reload reports it and keeps
+// the process (RuleConstantConflict). A stored model can carry one — 0.12.0 deployed a
+// variable called application beside a bound constant, and 0.11.0 deployed constants it
+// never read — and the process still runs, so it must not stop a server from starting.
+func (p *CompiledProcess) refuseConstantConflicts(g *feelGate) error {
 	if len(p.constantSet) == 0 {
 		return nil
 	}
 	for _, sv := range p.startVars {
 		if (sv.Name == ApplicationNamespace || sv.Name == ServerNamespace) && p.IsConstant(sv.Name) {
-			return fmt.Errorf("compiler: %q is declared as a start variable, but it is the namespace this process's %s constants are read under; name the start variable differently (ADR-0456)", sv.Name, sv.Name)
+			if err := g.constantConflict(fmt.Sprintf("%q is declared as a start variable, but it is the namespace this process's %s constants are read under; name the start variable differently (ADR-0456)", sv.Name, sv.Name)); err != nil {
+				return err
+			}
+			continue
 		}
 		if p.IsConstant(sv.Name) {
-			return fmt.Errorf("compiler: %q is declared both as a start variable and as a constant — a start variable is asked for when an instance starts, a constant is fixed by the model; declare it as one or the other (ADR-0454)", sv.Name)
+			if err := g.constantConflict(fmt.Sprintf("%q is declared both as a start variable and as a constant — a start variable is asked for when an instance starts, a constant is fixed by the model; declare it as one or the other (ADR-0454)", sv.Name)); err != nil {
+				return err
+			}
 		}
 	}
 	for _, name := range p.personalVars {
 		if p.IsConstant(name) {
-			return fmt.Errorf("compiler: %q is declared both personal and as a constant — a constant's value is written in the model, in the clear, so it cannot be personal data (ADR-0314, ADR-0454)", name)
+			if err := g.constantConflict(fmt.Sprintf("%q is declared both personal and as a constant — a constant's value is written in the model, in the clear, so it cannot be personal data (ADR-0314, ADR-0454)", name)); err != nil {
+				return err
+			}
 		}
 	}
 	if p.dataSubjectVar != "" && p.IsConstant(p.dataSubjectVar) {
-		return fmt.Errorf("compiler: %q is the data subject and a constant — the data subject names the person an instance is about, and a constant is the same for every instance (ADR-0314, ADR-0454)", p.dataSubjectVar)
+		if err := g.constantConflict(fmt.Sprintf("%q is the data subject and a constant — the data subject names the person an instance is about, and a constant is the same for every instance (ADR-0314, ADR-0454)", p.dataSubjectVar)); err != nil {
+			return err
+		}
 	}
 	refuse := func(kind, name string) error {
 		if name == "" || !p.IsConstant(name) {
 			return nil
 		}
 		if name == ApplicationNamespace || name == ServerNamespace {
-			return fmt.Errorf("compiler: %s writes %q, the namespace this process's %s constants are read under — it is set when an instance starts and nothing in the run may replace it; write the value under another name (ADR-0456)", kind, name, name)
+			return g.constantConflict(fmt.Sprintf("%s writes %q, the namespace this process's %s constants are read under — it is set when an instance starts and nothing in the run may replace it; write the value under another name (ADR-0456)", kind, name, name))
 		}
-		return fmt.Errorf("compiler: %s writes %q, which the process declares as a constant — a constant is set when an instance starts and nothing in the run may replace it; write the value under another name (ADR-0454)", kind, name)
+		return g.constantConflict(fmt.Sprintf("%s writes %q, which the process declares as a constant — a constant is set when an instance starts and nothing in the run may replace it; write the value under another name (ADR-0454)", kind, name))
 	}
 	for i := range p.ioInputs {
 		m := &p.ioInputs[i]
@@ -419,5 +438,15 @@ func (p *CompiledProcess) refuseConstantConflicts() error {
 			return err
 		}
 	}
+	return nil
+}
+
+// constantConflict refuses a constant that contradicts its process, as a deploy does, or
+// — on a reload's gate — records it as a RuleConstantConflict and lets the compile go on.
+func (g *feelGate) constantConflict(msg string) error {
+	if !g.tolerate {
+		return fmt.Errorf("compiler: %s", msg)
+	}
+	g.found = append(g.found, Problem{Severity: SeverityError, Rule: RuleConstantConflict, Message: msg})
 	return nil
 }

@@ -3261,8 +3261,9 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 	}
 	// A constant is fixed by the model, so a model that also asks for it, declares it
 	// personal, or writes it does not deploy (ADR-0454). Here for the
-	// same reason as the personal-data rule: it reads the assembled mappings.
-	if err := p.refuseConstantConflicts(); err != nil {
+	// same reason as the personal-data rule: it reads the assembled mappings. A reload's
+	// gate keeps such a stored model and reports it instead (ADR-0393).
+	if err := p.refuseConstantConflicts(b.gate()); err != nil {
 		return nil, err
 	}
 	// And a start variable whose default would be refused as it is written — personal
