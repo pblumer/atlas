@@ -135,6 +135,45 @@ test("a constant's name is written in capitals as it is typed", async ({ page })
   expect(page.__errors).toEqual([]);
 });
 
+// Typing inside a name keeps the caret after what was typed, though the rewrite changes
+// the length of the text before it.
+test("a letter typed inside a name lands where it was typed", async ({ page }) => {
+  await openConstants(page, "plain");
+  await page.locator("#cv-add").click();
+  const name = page.locator("#cv-list .sv-row").last().locator(".sv-name");
+  await name.pressSequentially("tenant");
+  await name.press("Home");
+  await name.pressSequentially("ä-");
+  await name.pressSequentially("x");
+  await expect(name).toHaveValue("AE_XTENANT");
+  expect(page.__errors).toEqual([]);
+});
+
+// The caret is worked out from the value before the edit, not from the selection the
+// browser reports during it. An input method inserts and places the caret on its own
+// schedule; a caret taken from that report once put the next letter at the start of the
+// name. Both ways it can go wrong are staged here: the selection misreported while the
+// input event runs, and the caret moved after it.
+test("a caret the browser misplaces during an insertion does not decide where the next letter goes", async ({ page }) => {
+  await openConstants(page, "plain");
+  await page.locator("#cv-add").click();
+  const name = page.locator("#cv-list .sv-row").last().locator(".sv-name");
+  await name.pressSequentially("tenant-id gr");
+  const caret = await name.evaluate((el) => new Promise((resolve) => {
+    el.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "ö" }));
+    el.value += "ö";
+    el.setSelectionRange(1, 1); // misreported while the event runs
+    el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: "ö" }));
+    el.setSelectionRange(2, 2); // moved once the insertion returns
+    setTimeout(() => resolve(el.selectionStart), 20);
+  }));
+  await expect(name).toHaveValue("TENANT_ID_GROE");
+  expect(caret).toBe("TENANT_ID_GROE".length);
+  await name.pressSequentially("ße");
+  await expect(name).toHaveValue("TENANT_ID_GROESSE");
+  expect(page.__errors).toEqual([]);
+});
+
 // The installation's own constants are a third source beside the model and the
 // application: the select writes source="server".
 test("a constant read from the installation writes source server", async ({ page }) => {

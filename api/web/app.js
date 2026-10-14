@@ -44,7 +44,7 @@ import { runImport } from "./infomodel-import.js";
 import { loadFormViewer } from "./formviewer.js";
 // A start form does not replace the start variables declared on the process: the ones
 // it does not ask for are asked beneath it, with the Modeler's typed fields.
-import { uncoveredStartVariables, extraStartFieldsHTML, wireStartJSONEditors, readTypedDeployBody, constantNameOf } from "./startvars.js";
+import { uncoveredStartVariables, extraStartFieldsHTML, wireStartJSONEditors, readTypedDeployBody, keepConstantNameInCapitals } from "./startvars.js";
 import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML } from "./secret-shapes.js";
 // Giving an AI assistant access, as a screen (ADR-0200). Its own module because it
 // is a self-contained page and this file is long enough; it takes its dependencies
@@ -3756,16 +3756,7 @@ async function renderHeldConstants(host, o) {
     const del = e.target.closest(".hc-del");
     if (del) del.closest("tr").remove();
   });
-  tbody.addEventListener("input", (e) => {
-    const el = e.target.closest(".hc-name");
-    if (!el) return;
-    const fixed = constantNameOf(el.value);
-    if (fixed !== el.value) {
-      const at = el.selectionStart + (fixed.length - el.value.length);
-      el.value = fixed;
-      try { el.setSelectionRange(Math.max(0, at), Math.max(0, at)); } catch { /* not focused */ }
-    }
-  });
+  keepConstantNameInCapitals(tbody, ".hc-name");
   host.querySelector(`#${p}-add`).addEventListener("click", () => {
     tbody.insertAdjacentHTML("beforeend", rowHTML({ name: "", type: "string", value: "" }));
     tbody.querySelector("tr:last-child .hc-name").focus();

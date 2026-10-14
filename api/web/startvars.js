@@ -33,6 +33,55 @@ export function constantNameOf(raw) {
     .replace(/[^A-Z0-9_]/g, "");
 }
 
+// keepConstantNameInCapitals applies constantNameOf while a name is typed, to every field
+// under container that matches selector. The caret goes after what was just typed. It is
+// worked out from the value before the edit, not from the selection the browser reports
+// during it: a letter from an input method (an umlaut on many keyboards) is inserted, and
+// the caret placed, on the method's own schedule. A caret placed from that report once put
+// the next letter at the start of the name. For the same reason the caret is placed again
+// once the insertion has returned, unless the name has changed since.
+export function keepConstantNameInCapitals(container, selector) {
+  const before = new WeakMap(); // field → its value before the edit in progress
+  const fix = (el, prev) => {
+    const raw = el.value;
+    const fixed = constantNameOf(raw);
+    if (fixed === raw) return;
+    // Where the edit ends in raw: past the longest common prefix, before the longest
+    // common suffix the two values still share.
+    let end = el.selectionStart ?? raw.length;
+    if (prev != null) {
+      const max = Math.min(prev.length, raw.length);
+      let p = 0;
+      while (p < max && prev[p] === raw[p]) p++;
+      let s = 0;
+      while (s < max - p && prev[prev.length - 1 - s] === raw[raw.length - 1 - s]) s++;
+      end = raw.length - s;
+    }
+    const at = Math.min(fixed.length, constantNameOf(raw.slice(0, end)).length);
+    const place = () => { try { el.setSelectionRange(at, at); } catch { /* not focused */ } };
+    el.value = fixed;
+    place();
+    setTimeout(() => {
+      if (el.value === fixed && document.activeElement === el &&
+        el.selectionStart === el.selectionEnd && el.selectionStart !== at) place();
+    }, 0);
+  };
+  container.addEventListener("beforeinput", (e) => {
+    const el = e.target.closest?.(selector);
+    if (el) before.set(el, el.value);
+  });
+  container.addEventListener("input", (e) => {
+    const el = e.target.closest?.(selector);
+    // A composition still in progress is the input method's to change; it is applied
+    // when the composition ends.
+    if (el && !e.isComposing) fix(el, before.get(el));
+  });
+  container.addEventListener("compositionend", (e) => {
+    const el = e.target.closest?.(selector);
+    if (el) fix(el, null);
+  });
+}
+
 // NAMESPACE_INFO are the facts a namespace carries besides its constants, in lower case
 // so they never share a name with one (ADR-draft-constant-namespaces). The compiler's
 // namespaceInfo is the same list.

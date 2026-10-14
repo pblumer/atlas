@@ -24,7 +24,7 @@ import { formFieldKeys, formFieldTypes, loadFormViewer, withLoadDeadline } from 
 // form still asks for the declared start variables the form does not bind.
 import {
   START_VAR_TYPES, typedDeployFieldHTML, readTypedDeployBody, wireStartJSONEditors,
-  uncoveredStartVariables, extraStartFieldsHTML, constantNameOf, NAMESPACE_INFO, isNamespaceInfo,
+  uncoveredStartVariables, extraStartFieldsHTML, keepConstantNameInCapitals, NAMESPACE_INFO, isNamespaceInfo,
 } from "./startvars.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
@@ -7247,17 +7247,7 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn(), d
   });
   // A constant's name is written in capitals (ADR-0454, amended): applied while it is
   // typed, so what is saved is what the server accepts.
-  if (decl.constant) listEl.addEventListener("input", (e) => {
-    const el = e.target.closest(".sv-const-name");
-    if (!el) return;
-    const fixed = constantNameOf(el.value);
-    if (fixed !== el.value) {
-      const at = el.selectionStart;
-      const delta = fixed.length - el.value.length;
-      el.value = fixed;
-      try { el.setSelectionRange(Math.max(0, at + delta), Math.max(0, at + delta)); } catch { /* not focused */ }
-    }
-  });
+  if (decl.constant) keepConstantNameInCapitals(listEl, ".sv-const-name");
   listEl.addEventListener("click", (e) => {
     const del = e.target.closest(".sv-del");
     if (del) {
