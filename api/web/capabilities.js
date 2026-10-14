@@ -22,7 +22,7 @@
 //     never taken from the report's English detail.
 
 import { enhanceTable } from "./table.js";
-import { t, plural } from "./i18n.js";
+import { t, plural, locale } from "./i18n.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c]));
@@ -36,7 +36,9 @@ const tx = (key, html) => esc(t(key)).replace(/\{(\w+)\}/g, (m, name) => (name i
 export const capabilityHref = (key) => `#/panorama/capabilities/${enc(key)}`;
 export const valueStreamHref = (key) => `#/panorama/value-streams/${enc(key)}`;
 
-const fmtDate = (unix) => (unix ? new Date(unix * 1000).toLocaleDateString() : "");
+// Dates follow the catalogue's language rather than the browser's, so a German screen
+// does not carry an American date because of a setting nobody made (ADR-0267).
+const fmtDate = (unix) => (unix ? new Date(unix * 1000).toLocaleDateString(locale()) : "");
 const code = (s) => `<code>${esc(s)}</code>`;
 const stateLabel = (s) => t(`ba.state.${s}`);
 const tagChips = (tags) => (tags || []).map((g) => `<span class="chip ba-tag">${esc(g)}</span>`).join(" ");
@@ -319,10 +321,13 @@ export async function mountCapabilityDetail(root, { api, toast, key }) {
     return `<li>${kind} ${target} ${facts ? `<span class="muted">${facts}</span>` : ""}${r.note ? `<div class="muted">${esc(r.note)}</div>` : ""}</li>`;
   };
 
-  const dependency = (d) => `<li><a href="${capabilityHref(d.key)}"><b>${esc(d.name || d.key)}</b></a> ${code(d.key)}
-    ${!d.known ? `<span class="pill warn">${esc(t("ba.detail.notInMap"))}</span>` : ""}
+  // A requirement the map does not have is only a key: there is no record to link to and
+  // no name to show beside it.
+  const dependency = (d) => (!d.known
+    ? `<li>${code(d.key)} <span class="pill warn">${esc(t("ba.detail.notInMap"))}</span></li>`
+    : `<li><a href="${capabilityHref(d.key)}"><b>${esc(d.name || d.key)}</b></a> ${code(d.key)}
     ${d.known && d.state ? `<span class="chip ba-state ${esc(d.state)}">${esc(stateLabel(d.state))}</span>` : ""}
-    ${d.known && !d.realized ? `<span class="pill warn">${esc(t("ba.detail.notRealized"))}</span>` : ""}</li>`;
+    ${d.known && !d.realized ? `<span class="pill warn">${esc(t("ba.detail.notRealized"))}</span>` : ""}</li>`);
   const dependent = (d) => `<li><a href="${capabilityHref(d.key)}"><b>${esc(d.name || d.key)}</b></a> ${code(d.key)}</li>`;
   const stream = (s) => `<li><a href="${valueStreamHref(s.key)}"><b>${esc(s.name || s.key)}</b></a> ›
     ${(s.stages || []).map((st) => esc(st.name || st.key)).join(", ")}</li>`;

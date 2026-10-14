@@ -6959,6 +6959,7 @@ button.im-problem:hover { background: var(--accent-soft); }
    order. The list is the shared table (ADR-0286); the detail page is a sequence of
    statements, like the business-object page beside it. */
 .ba-root { padding: 18px 22px 26px; }
+.ba-root .between > .btn { flex: none; white-space: nowrap; }
 .ba-tabs { display: flex; gap: 4px; margin: 16px 0 0; border-bottom: 1px solid var(--border); }
 .ba-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; font: inherit; color: var(--muted); cursor: pointer; }
 .ba-tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
