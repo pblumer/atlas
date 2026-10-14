@@ -4385,18 +4385,21 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             und ist genau deshalb der, bei dem du dir jede Zeile selbst absichern musst.</p>
           <p data-l="de">Ein Skript erhält weder die Umgebung seines Workers noch den Tresor. Das Beispiel meldet
             sich deshalb app-only mit einem <b>Zertifikat aus dem Zertifikatsspeicher des Worker-Kontos</b> an und
-            wählt es über seinen Antragsteller aus – eine Erneuerung braucht in Atlas keine Änderung. Tenant,
-            Client-ID und Zertifikats-Antragsteller sind <b>Konstanten mit der Quelle <i>application</i></b>: Jede
-            Installation setzt sie im Tab <i>Values</i> der Applikation, und bis Tenant und Client-ID gesetzt
-            sind, wird ein Start abgelehnt.</p>
+            wählt es über seinen Antragsteller aus – eine Erneuerung braucht in Atlas keine Änderung. Der Tenant ist
+            eine <b>Serverkonstante</b> (<code>server.ENTRA_TENANT_ID</code>, gesetzt unter Admin → Engine → Server
+            constants), Client-ID und Zertifikats-Antragsteller sind <b>Applikationskonstanten</b>
+            (<code>application.ENTRA_CLIENT_ID</code>, gesetzt im Tab <i>Constants</i> der Applikation) – jede
+            Installation setzt ihre eigenen, und bis Tenant und Client-ID gesetzt sind, wird ein Start abgelehnt.</p>
           <p data-l="en">Beside it lies <code>entra-create-account.bpmn</code> – the same job as a PowerShell
             <code>jobScript</code>. The comparison is worth making: the script route can do everything PowerShell can,
             and for exactly that reason it is the one where every line is yours to secure.</p>
           <p data-l="en">A script receives neither its worker's environment nor the vault. So the example signs in
             app-only with a <b>certificate from the worker account's certificate store</b>, picked by its subject – a
-            renewal needs no change in atlas. The tenant, the client id and the certificate subject are
-            <b>constants with the source <i>application</i></b>: each installation sets them on the application's
-            <i>Values</i> tab, and a start is refused until the tenant and the client id are set.</p>
+            renewal needs no change in atlas. The tenant is a <b>server constant</b> (<code>server.ENTRA_TENANT_ID</code>,
+            set under Admin → Engine → Server constants), the client id and the certificate subject are
+            <b>application constants</b> (<code>application.ENTRA_CLIENT_ID</code>, set on the application's
+            <i>Constants</i> tab) – each installation sets its own, and a start is refused until the tenant and the
+            client id are set.</p>
         </details>
       </div>
 
@@ -5570,7 +5573,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         kann eine Konstante ersetzen – ein gleichnamiger Startwert, ein Worker-Ergebnis oder eine Message wird
         verworfen, und ein Modell, das sie selbst beschreibt, wird beim Deploy abgelehnt. Nur eine Korrektur durch
         einen Operator geht durch und steht im Audit. Eine Konstante steht im Modell und in jeder Instanz; für
-        Geheimnisse ist sie nicht gedacht.</p>
+        Geheimnisse ist sie nicht gedacht. Ihr Name wird <b>gross geschrieben</b> – Buchstaben A–Z, Ziffern und
+        Unterstriche, z.&nbsp;B. <code>DOMAIN_SUFFIX</code>; das Panel schreibt ihn beim Tippen um, und so erkennt man
+        eine Konstante in jedem Ausdruck auf einen Blick.</p>
       <p data-l="en"><b>Constants instead of start variables nobody enters.</b> A value every instance needs and
         nobody should be asked for – a domain suffix, a language, an app id – belongs under <i>Constants</i> in the
         same panel. Atlas writes constants as ordinary variables when it creates an instance, on every start path: the
@@ -5578,24 +5583,42 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         scripts and workers read them like any variable; nobody is ever asked for one. Nothing in the run can replace
         a constant – a start value, a worker's result or a message of the same name is dropped, and a model that
         writes one itself is refused at deploy. Only an operator's correction goes through, and it is audited. A
-        constant is in the model and in every instance; it is no place for a secret.</p>
-      <p data-l="de"><b>Werte pro Umgebung.</b> Unterscheidet sich ein Wert zwischen DEV, INT und PROD – ein
-        Tenant, eine App-ID –, steht er nicht im Modell. Die Konstante erhält im Panel die Quelle
-        <i>application</i> und übernimmt dann den Wert, den ihre Applikation auf der jeweiligen Installation hält;
-        ein Wert im Modell ist nur noch der Fallback. Gesetzt werden die Werte auf der Applikationsseite im Tab
-        <i>Values</i>, pro Installation; dort steht auch, welche Werte die deployten Prozesse brauchen und welche
-        hier fehlen. Ein Deploy warnt, wenn ein Wert fehlt, und ein Start aus Modeler, Tasks-App, öffentlichem Link
-        oder API wird abgelehnt, bis er gesetzt ist. Eine Instanz behält den Wert, mit dem sie gestartet ist; eine
-        Änderung gilt für die danach gestarteten. Bei einer Promotion reisen die Werte nicht mit – jede Installation
-        hält ihre eigenen.</p>
-      <p data-l="en"><b>Values per environment.</b> A value that differs between DEV, INT and PROD – a tenant, an
-        app id – does not belong in the model. Give the constant the source <i>application</i> in the panel and it
-        takes the value its application holds on each installation; a value in the model is then only the fallback.
-        The values are set on the application page's <i>Values</i> tab, per installation, which also lists what the
-        deployed processes need and what is missing here. A deploy warns when a value is missing, and a start from the
-        Modeler, the Tasks app, a public link or the API is refused until it is set. An instance keeps the value it
-        started with; a change reaches the instances started afterwards. A promotion does not carry the values – each
-        installation holds its own.</p>
+        constant is in the model and in every instance; it is no place for a secret. Its name is written <b>in
+        capitals</b> – letters A–Z, digits and underscores, such as <code>DOMAIN_SUFFIX</code>; the panel rewrites it as
+        you type, and a constant reads as one in every expression at a glance.</p>
+      <p data-l="de"><b>Konstanten pro Umgebung: <code>application.</code> und <code>server.</code></b> Unterscheidet
+        sich ein Wert zwischen DEV, INT und PROD – ein Tenant, eine App-ID –, steht er nicht im Modell. Die Konstante
+        erhält im Panel die Quelle <i>application</i> oder <i>server</i> und wird dann unter diesem Namensraum
+        gelesen: <code>application.TENANT_ID</code> ist die Konstante, die ihre Applikation auf der jeweiligen
+        Installation hält (gesetzt im Tab <i>Constants</i> der Applikation), <code>server.TENANT_ID</code> die, die die
+        Installation für alle Applikationen hält (gesetzt unter Admin → Engine → <i>Server constants</i>). In FEEL
+        schreibt man <code>application.TENANT_ID</code>, in PowerShell <code>$application.TENANT_ID</code>, in Python
+        <code>application["TENANT_ID"]</code>. Ein Wert im Modell ist nur noch der Fallback. Beide Seiten zeigen,
+        welche Konstanten die deployten Prozesse lesen und welche hier fehlen; ein Deploy warnt, und ein Start aus
+        Modeler, Tasks-App, öffentlichem Link oder API wird abgelehnt, bis sie gesetzt sind. Eine Instanz behält den
+        Wert, mit dem sie gestartet ist; bei einer Promotion reisen die Konstanten nicht mit.</p>
+      <p data-l="de"><b>Was Atlas selbst weiss.</b> Dieselben Namensräume tragen klein geschriebene Fakten:
+        <code>server.environment</code>, <code>server.name</code> und <code>server.id</code> aus der Identität des
+        Nodes, <code>application.name</code>, <code>application.key</code> und <code>application.id</code> aus der
+        Applikation. Ein Prozess liest nur, was er deklariert – das Variables-Panel listet unter den Variablen, was
+        er lesen könnte, mit einem Knopf <i>Declare</i>, und die Vervollständigung bietet dasselbe an und deklariert
+        es beim Auswählen.</p>
+      <p data-l="en"><b>Constants per environment: <code>application.</code> and <code>server.</code></b> A value that
+        differs between DEV, INT and PROD – a tenant, an app id – does not belong in the model. Give the constant the
+        source <i>application</i> or <i>server</i> in the panel and it is read under that namespace:
+        <code>application.TENANT_ID</code> is the constant its application holds on each installation (set on the
+        application's <i>Constants</i> tab), <code>server.TENANT_ID</code> the one the installation holds for every
+        application (set under Admin → Engine → <i>Server constants</i>). FEEL writes
+        <code>application.TENANT_ID</code>, PowerShell <code>$application.TENANT_ID</code>, Python
+        <code>application["TENANT_ID"]</code>. A value in the model is then only the fallback. Both pages list what
+        the deployed processes read and what is missing here; a deploy warns, and a start from the Modeler, the Tasks
+        app, a public link or the API is refused until it is set. An instance keeps the value it started with; a
+        promotion does not carry the constants.</p>
+      <p data-l="en"><b>What Atlas knows itself.</b> The same namespaces carry facts in lower case:
+        <code>server.environment</code>, <code>server.name</code> and <code>server.id</code> from the node's identity,
+        <code>application.name</code>, <code>application.key</code> and <code>application.id</code> from the
+        application. A process reads only what it declares – the Variables panel lists, below the variables, what it
+        could read, each with a <i>Declare</i> button, and completion offers the same and declares it when picked.</p>
 
       <h4 data-l="de">Ein Formular schreiben lassen</h4><h4 data-l="en">Letting the AI Worker write one</h4>
       <p data-l="de">Ist ein <b>KI-Worker</b> eingerichtet (Console &rsaquo; Workers, Typ <code>agent</code>), geht das

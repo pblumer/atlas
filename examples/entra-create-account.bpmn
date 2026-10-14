@@ -9,15 +9,18 @@
   <bpmn:process id="entra-create-account" name="Create EntraID Account" isExecutable="true">
 
     <!-- Which tenant, which app registration and which certificate differ between DEV, INT and
-         PROD, so the model states none of them: each is a constant bound to the application
-         (ADR-0453), and every installation sets its own on
-         the application's Values tab. A start is refused until the tenant and the client id are
-         set there; the certificate subject has a fallback. None of them is a secret. -->
+         PROD, so the model states none of them (ADR-0456). The tenant is
+         the same for every application on an installation: a server constant, read as
+         server.ENTRA_TENANT_ID and set under Admin → Engine → Server constants. The app
+         registration and its certificate belong to this application: application constants,
+         read as application.ENTRA_CLIENT_ID and set on the application's Constants tab. A start
+         is refused until the tenant and the client id are set; the certificate subject has a
+         fallback. None of them is a secret. -->
     <bpmn:extensionElements>
       <atlas:constants>
-        <atlas:constant name="EntraTenantId" type="string" source="application"/>
-        <atlas:constant name="EntraClientId" type="string" source="application"/>
-        <atlas:constant name="EntraCertificateSubject" type="string" source="application" value="CN=atlas-entra-provisioning"/>
+        <atlas:constant name="ENTRA_TENANT_ID" type="string" source="server"/>
+        <atlas:constant name="ENTRA_CLIENT_ID" type="string" source="application"/>
+        <atlas:constant name="ENTRA_CERTIFICATE_SUBJECT" type="string" source="application" value="CN=atlas-entra-provisioning"/>
       </atlas:constants>
     </bpmn:extensionElements>
 
@@ -33,15 +36,16 @@ Set-StrictMode -Version Latest
 # No secret passes through atlas: a script never receives the worker's environment or the
 # vault (ADR-0047), and it needs neither. The private key stays in the worker host's
 # certificate store; the script picks the newest valid certificate by its subject, so a
-# renewed certificate is used without changing anything in atlas. The tenant, the client
-# id and the subject are the application's values on this installation (constants above).
+# renewed certificate is used without changing anything in atlas. The tenant is the
+# installation's constant, the client id and the subject the application's (above).
+$subject = $application.ENTRA_CERTIFICATE_SUBJECT
 $cert = Get-ChildItem Cert:\CurrentUser\My |
-    Where-Object { $_.Subject -eq $EntraCertificateSubject -and $_.NotAfter -gt (Get-Date) } |
+    Where-Object { $_.Subject -eq $subject -and $_.NotAfter -gt (Get-Date) } |
     Sort-Object NotAfter -Descending | Select-Object -First 1
 if (-not $cert) {
-    throw "no valid certificate with subject '$EntraCertificateSubject' in Cert:\CurrentUser\My of the worker account"
+    throw "no valid certificate with subject '$subject' in Cert:\CurrentUser\My of the worker account"
 }
-Connect-MgGraph -TenantId $EntraTenantId -ClientId $EntraClientId -CertificateThumbprint $cert.Thumbprint -NoWelcome
+Connect-MgGraph -TenantId $server.ENTRA_TENANT_ID -ClientId $application.ENTRA_CLIENT_ID -CertificateThumbprint $cert.Thumbprint -NoWelcome
 
 # --- Idempotent create: the task is at-least-once, so a retry must not double-create ---
 $filter   = "userPrincipalName eq '$userPrincipalName'"

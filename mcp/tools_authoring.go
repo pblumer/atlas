@@ -873,16 +873,16 @@ func authoringTools() []Tool {
 			},
 		},
 		{
-			Name: "atlas_application_values",
-			Description: "Report the values a process application holds on this installation, and what its " +
-				"deployed processes' constants bound to the application (source=\"application\") require of " +
-				"them: each required name with the processes binding it and its state here — set, missing, " +
-				"covered by a fallback, or held with another type. A missing value means a start is refused " +
-				"and a timer or message start runs without it. Read-only: setting values is an administrator's " +
-				"per-installation decision (ADR-0453).",
+			Name: "atlas_application_constants",
+			Description: "Report the constants a process application holds on this installation — read by its " +
+				"processes as application.NAME — and what its deployed processes declare from it " +
+				"(<atlas:constant source=\"application\"/>): each required name with the processes reading it " +
+				"and its state here — set, missing, covered by a fallback, or held with another type. A missing " +
+				"constant means a start is refused and a timer or message start runs without it. Read-only: " +
+				"setting constants is an administrator's per-installation decision (ADR-0453).",
 			InputSchema: map[string]any{
 				"type":       "object",
-				"properties": map[string]any{"id": stringProp("The application id whose values to report.")},
+				"properties": map[string]any{"id": stringProp("The application id whose constants to report.")},
 				"required":   []any{"id"},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
@@ -890,7 +890,19 @@ func authoringTools() []Tool {
 				if err != nil {
 					return "", err
 				}
-				return asText(c.get("/api/v1/applications/" + url.PathEscape(id) + "/values"))
+				return asText(c.get("/api/v1/applications/" + url.PathEscape(id) + "/constants"))
+			},
+		},
+		{
+			Name: "atlas_server_constants",
+			Description: "Report the constants this installation holds for every application — read by a process " +
+				"as server.NAME — and what the deployed processes declare from it (<atlas:constant " +
+				"source=\"server\"/>), each with its state here: set, missing, covered by a fallback, or held " +
+				"with another type. Read-only: setting them is an administrator's decision " +
+				"(ADR-0456).",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get("/api/v1/server/constants"))
 			},
 		},
 		{

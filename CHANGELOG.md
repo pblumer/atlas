@@ -24,6 +24,22 @@ _Changed_ / _Removed_ for each version.
   the field says what the expression must yield, that one yielding nothing usable raises an
   incident when the timer is armed, and that a timer start's expression may read no
   variables.
+- **A process reads the installation's constants as `server.NAME`, and facts it knows
+  without anybody typing them.** Beside an application's constants, an installation now
+  holds constants for every application — a tenant, an endpoint — set under **Admin →
+  Engine → Server constants** or with `PUT /api/v1/server/constants` (admin; `GET` for any
+  signed-in caller, MCP `atlas_server_constants`). A model declares one as
+  `<atlas:constant name="TENANT_ID" source="server"/>` and reads it as `server.TENANT_ID`.
+  Missing values get the same deploy warning, page state and 409 on a start as an
+  application's. Both namespaces also carry facts Atlas fills itself, in lower case:
+  `server.id`, `server.name` and `server.environment` from the node identity, and
+  `application.id`, `application.key` and `application.name`. They are declared the same
+  way (`<atlas:constant name="environment" source="server"/>`), and a node or application
+  rename reaches the next instance. In the Modeler, the Variables panel lists what a
+  process could read from its namespaces but does not declare yet, each with a **Declare**
+  button. FEEL and script completion offer the same members and add the declaration when
+  one is picked. The node identity's form on Admin → Engine has a heading of its own
+  ([ADR-0456](docs/adr/0456-constant-namespaces.md)).
 - **The business architecture has a screen.** The capability register, its value streams
   and the gap report ([ADR-0305](docs/adr/0305-business-capabilities-and-value-streams.md))
   had HTTP routes and MCP tools and no view, so they could only be read through curl or an
@@ -41,6 +57,37 @@ _Changed_ / _Removed_ for each version.
   ([ADR-0267](docs/adr/0267-console-speaks-german-first.md)): every sentence is composed
   from the report's keys and coordinates rather than taken from its English detail, so a
   missing-Worker finding now carries `workerRef` as a coordinate.
+
+### Changed
+
+- **An application's values are its constants, read as `application.NAME`.** A constant
+  bound to its application is no longer a root variable of its own name. It is a member of
+  the object `application`, read as `application.TENANT_ID` in FEEL, as
+  `$application.TENANT_ID` in PowerShell, `application.TENANT_ID` in JavaScript and
+  `application["TENANT_ID"]` in Python. The process's own constants are unchanged. The
+  rename runs through every surface:
+  - the Console tab is **Constants**;
+  - the routes are `GET`/`PUT /api/v1/applications/{id}/constants` with the body
+    `{"constants": [...]}`;
+  - the MCP tool is `atlas_application_constants`;
+  - the store is `application-constants`.
+
+  The pages name who last changed the constants (`updatedByName`) rather than showing an
+  id. **Breaking against 0.12.0:** a script that read `$TenantId` from a bound constant now
+  reads `$application.TENANT_ID`, and constants saved through the 0.12.0 route must be
+  saved again
+  ([ADR-0453](docs/adr/0453-application-values-per-installation.md), amended).
+- **A constant's name is written in capitals.** Every constant — the process's, an
+  application's, the installation's — is named in letters A–Z, digits and underscores,
+  starting with a letter (`TENANT_ID`). `APPLICATION` and `SERVER` are reserved for the
+  namespaces. A deploy and the API refuse any other name. The Modeler and the Console apply
+  the rule while a name is typed: `Größe` becomes `GROESSE`, and a space, dot or hyphen
+  becomes an underscore. A definition deployed before the rule still loads; the reload
+  reports `constant.name` instead of stopping the server
+  ([ADR-0454](docs/adr/0454-process-constants.md), amended).
+- **The Entra example reads `server.ENTRA_TENANT_ID`, `application.ENTRA_CLIENT_ID` and
+  `application.ENTRA_CERTIFICATE_SUBJECT`**: the tenant once per installation, the app
+  registration per application.
 
 ## [0.12.0] — 2026-10-13
 
