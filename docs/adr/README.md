@@ -269,7 +269,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0181](0181-ad-connector-mock-mode.md) | Mock mode for the Active Directory connector | Accepted | Landed |
 | [0182](0182-ad-default-offload.md) | Active Directory runs on a worker by default | Accepted | Landed |
 | [0183](0183-the-modeler-asks-where-a-kind-runs.md) | The Modeler asks the server where an authored kind runs | Accepted | Landed |
-| [0184](0184-grant-audit-log.md) | Grant audit log | Accepted | Landed |
+| [0184](0184-grant-audit-log.md) | Grant audit log | Accepted (amended) | Landed |
 | [0185](0185-live-group-membership.md) | Live group membership | Accepted | Landed |
 | [0186](0186-embed-public-forms-cross-origin.md) | Embedding a public start form cross-origin (scoped CORS) | Accepted | Landed |
 | [0187](0187-postgres-change-events.md) | Database change events — captured in the database, read on a worker, deduplicated in the engine | Proposed | Not started |

@@ -1,6 +1,6 @@
 # ADR-0184: Grant audit log
 
-- **Status:** Accepted
+- **Status:** Accepted (amended)
 - **Implementation:** Landed
 - **Date:** 2026-08-25
 - **Deciders:** Pat, Atlas maintainers
@@ -111,3 +111,33 @@ releases are.
   (`releaseStore`, the append-only per-application history this mirrors)
 - relates to ADR-0044 (users/principals — the actor identity), ADR-0018 (tolerated
   defensive save-error branches)
+
+## Amendment (2026-10-14): a change to the constants an installation holds is in the same history
+
+An application's constants and the installation's own
+([ADR-0456](0456-constant-namespaces.md)) are configuration every new
+instance starts from. When an instance on PROD reads the wrong tenant, the auditor asks the
+same question as about a share: who changed it, when, and from what. The security log
+stream says that something changed, but it is optional and shipped elsewhere. So the same
+store records a fifth action:
+
+- **constants**: a `PUT` of an application's or the installation's constants that changes
+  something. The event lists each name that was added, removed or changed, with its value
+  and type before and after.
+  - An event about the installation's constants has no application id. The Console's
+    audit log shows it as *Server (every application)*.
+  - A save that changes nothing records nothing.
+  - The values are kept because constants are identifiers, not secrets (ADR-0453). A
+    record that said only *something changed* could not answer what an instance started
+    with.
+- **Who reads it.** Only an admin reads the global view, `GET /api/v1/audit?action=constants`.
+  An application's owner sees its events through the existing per-application endpoint.
+  The sharing dialog leaves them out, because it shows access changes only.
+- **When it is recorded.** The write follows the save and the push into the processor, as
+  the other actions follow the project save. A failed audit save fails the request.
+- **What it is not.** It is not a version history to restore from. An event records a
+  change; it does not let anyone roll one back.
+- **The security log.** It carries a `constants.changed` line naming the scope and the
+  names changed, without the values.
+- **Deletion.** Deleting an application deletes its constant events with the rest of its
+  history. The installation's events have no application and stay.

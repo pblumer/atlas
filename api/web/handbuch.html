@@ -5596,7 +5596,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <code>application["TENANT_ID"]</code>. Ein Wert im Modell ist nur noch der Fallback. Beide Seiten zeigen,
         welche Konstanten die deployten Prozesse lesen und welche hier fehlen; ein Deploy warnt, und ein Start aus
         Modeler, Tasks-App, öffentlichem Link oder API wird abgelehnt, bis sie gesetzt sind. Eine Instanz behält den
-        Wert, mit dem sie gestartet ist; bei einer Promotion reisen die Konstanten nicht mit.</p>
+        Wert, mit dem sie gestartet ist; bei einer Promotion reisen die Konstanten nicht mit. Jede Änderung steht mit
+        Person, Zeitpunkt und altem und neuem Wert im <a href="/#/console/audit">Audit-Log</a> (Filter
+        <i>Constants</i>).</p>
       <p data-l="de"><b>Was Atlas selbst weiss.</b> Dieselben Namensräume tragen klein geschriebene Fakten:
         <code>server.environment</code>, <code>server.name</code> und <code>server.id</code> aus der Identität des
         Nodes, <code>application.name</code>, <code>application.key</code> und <code>application.id</code> aus der
@@ -5613,7 +5615,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <code>application["TENANT_ID"]</code>. A value in the model is then only the fallback. Both pages list what
         the deployed processes read and what is missing here; a deploy warns, and a start from the Modeler, the Tasks
         app, a public link or the API is refused until it is set. An instance keeps the value it started with; a
-        promotion does not carry the constants.</p>
+        promotion does not carry the constants. Every change is in the <a href="/#/console/audit">audit log</a>
+        (filter <i>Constants</i>) with who made it, when, and the value before and after.</p>
       <p data-l="en"><b>What Atlas knows itself.</b> The same namespaces carry facts in lower case:
         <code>server.environment</code>, <code>server.name</code> and <code>server.id</code> from the node's identity,
         <code>application.name</code>, <code>application.key</code> and <code>application.id</code> from the

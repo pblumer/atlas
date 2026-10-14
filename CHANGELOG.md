@@ -14,6 +14,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The audit log records every change to the constants an application or the installation
+  holds.** A save under an application's **Constants** tab or **Admin → Engine → Server
+  constants** that changes something writes one event: who saved it, when, and each name
+  added, removed or changed, with its value before and after. **Admin → Audit log** filters
+  them as **Constants** and shows the installation's as *Server (every application)*.
+  `GET /api/v1/audit?action=constants` reads them, and an application's owner also finds
+  them in `GET /api/v1/applications/{id}/audit`. A save that changes nothing records
+  nothing. The security log stream carries a `constants.changed` line without the values
+  ([ADR-0184](docs/adr/0184-grant-audit-log.md), amended).
 - **A process reads the installation's constants as `server.NAME`, and facts it knows
   without anybody typing them.** Beside an application's constants, an installation now
   holds constants for every application — a tenant, an endpoint — set under **Admin →

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/pblumer/atlas/api/sidecar"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/logging"
 )
 
 // Constants the installation holds (ADR-0453, ADR-0456).
@@ -498,10 +500,16 @@ func (s *Server) handlePutApplicationConstants(w http.ResponseWriter, r *http.Re
 	}
 	var saveErr error
 	s.do(func() {
+		prev, _, err := s.appConstants.Get(id)
+		if err != nil {
+			saveErr = err
+			return
+		}
 		if saveErr = s.appConstants.Save(rec); saveErr != nil {
 			return
 		}
 		s.proc.SetApplicationConstants(id, vals)
+		saveErr = s.recordConstantChanges(r, id, diffHeldConstants(prev.Constants, list))
 	})
 	if saveErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "persist application constants: "+saveErr.Error())
@@ -557,14 +565,75 @@ func (s *Server) handlePutServerConstants(w http.ResponseWriter, r *http.Request
 	}
 	var saveErr error
 	s.do(func() {
+		prev, _, err := s.srvConstants.Get(serverConstantsID)
+		if err != nil {
+			saveErr = err
+			return
+		}
 		if saveErr = s.srvConstants.Save(rec); saveErr != nil {
 			return
 		}
 		s.proc.SetServerConstants(vals)
+		saveErr = s.recordConstantChanges(r, "", diffHeldConstants(prev.Constants, list))
 	})
 	if saveErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "persist server constants: "+saveErr.Error())
 		return
 	}
 	s.handleGetServerConstants(w, r)
+}
+
+// diffHeldConstants is what replacing before with after changed, name by name, in name
+// order: a constant added, one removed, and one whose value or type changed. A save that
+// changes nothing changes nothing here, so it leaves no record.
+func diffHeldConstants(before, after []heldConstant) []constantChange {
+	was := make(map[string]heldConstant, len(before))
+	for _, c := range before {
+		was[c.Name] = c
+	}
+	is := make(map[string]heldConstant, len(after))
+	for _, c := range after {
+		is[c.Name] = c
+	}
+	var out []constantChange
+	for _, c := range after {
+		old, ok := was[c.Name]
+		switch {
+		case !ok:
+			out = append(out, constantChange{Name: c.Name, Change: "added", To: c.Value, ToType: c.Type})
+		case old.Value != c.Value || old.Type != c.Type:
+			out = append(out, constantChange{Name: c.Name, Change: "changed",
+				From: old.Value, FromType: old.Type, To: c.Value, ToType: c.Type})
+		}
+	}
+	for _, c := range before {
+		if _, ok := is[c.Name]; !ok {
+			out = append(out, constantChange{Name: c.Name, Change: "removed", From: c.Value, FromType: c.Type})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// recordConstantChanges writes a change to the constants an application — or, with no
+// application id, the installation — holds into the audit history the Console's audit
+// log reads (ADR-0184), with who made it and what each name was and became, and says so
+// in the security log stream (ADR-0197). Nothing changed, nothing recorded. Run loop
+// only, after the save it describes.
+func (s *Server) recordConstantChanges(r *http.Request, applicationID string, changes []constantChange) error {
+	if len(changes) == 0 {
+		return nil
+	}
+	names := make([]string, len(changes))
+	for i, c := range changes {
+		names[i] = c.Name
+	}
+	scope := "server"
+	if applicationID != "" {
+		scope = "application"
+	}
+	audit(r, logging.ConstantsChanged, "constants changed",
+		slog.String("scope", scope), slog.String("applicationId", applicationID),
+		slog.String("names", strings.Join(names, ",")))
+	return s.recordGrantAudit(r, grantAudit{ApplicationID: applicationID, Action: GrantActionConstants, Constants: changes})
 }

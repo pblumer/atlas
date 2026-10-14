@@ -1817,9 +1817,22 @@ async function viewConsoleLogs() {
   window.__atlasCleanup = () => clearInterval(timer);
 }
 
+// constantChangeHTML renders one name a "constants" audit event changed: added with its
+// value, removed with the value it had, or changed from one value (and type) to another.
+function constantChangeHTML(c) {
+  const val = (v, t) => `<code>${esc(v)}</code>${t && t !== "string" ? ` <span class="muted small">${esc(t)}</span>` : ""}`;
+  const name = `<b>${esc(c.name)}</b>`;
+  switch (c.change) {
+    case "added": return `${name} added: ${val(c.to, c.toType)}`;
+    case "removed": return `${name} removed (was ${val(c.from, c.fromType)})`;
+    default: return `${name} ${val(c.from, c.fromType)} → ${val(c.to, c.toType)}`;
+  }
+}
+
 // viewConsoleAudit is the global admin audit view (ADR-0184): the access-control
 // history across every application in one place — who shared, revoked, changed
-// visibility, or transferred ownership, and when. Admin-only on the server; a
+// visibility, or transferred ownership, and when — and every change to the constants an
+// application or the installation holds (ADR-0184, amended). Admin-only on the server; a
 // signed-in non-admin gets a notice rather than an error card. Subject and owner ids
 // are resolved to names via the principals directory when it loads.
 async function viewConsoleAudit() {
@@ -1836,12 +1849,13 @@ async function viewConsoleAudit() {
               <option value="unshare">Revoke</option>
               <option value="visibility">Visibility</option>
               <option value="transfer">Transfer</option>
+              <option value="constants">Constants</option>
             </select>
           </label>
           <button class="btn neutral" id="audit-refresh" title="Reload the audit log">Refresh</button>
         </div>
       </div>
-      <p class="muted">Access-control changes across every application — shares, revokes, visibility changes, and ownership transfers — newest first.</p>
+      <p class="muted">Access-control changes across every application — shares, revokes, visibility changes, and ownership transfers — and changes to the constants an application or this installation holds, newest first.</p>
       <div id="audit-out">loading…</div>
     </div>`;
 
@@ -1861,11 +1875,14 @@ async function viewConsoleAudit() {
       case "unshare": return `removed ${esc(nameOf(e.subjectId))}${isGroup(e.subjectId) ? " (group)" : ""}`;
       case "visibility": return `visibility ${esc(e.from)} → ${esc(e.to)}`;
       case "transfer": return `ownership ${esc(nameOf(e.from))} → ${esc(nameOf(e.to))}`;
+      // What each constant was and became (ADR-0456): the values
+      // are identifiers, kept so the log answers what an instance started with.
+      case "constants": return (e.constants || []).map(constantChangeHTML).join("<br>");
       default: return esc(e.action);
     }
   };
   const actionPill = (a) => {
-    const cls = { share: "ok", unshare: "err", visibility: "warn", transfer: "warn" }[a] || "";
+    const cls = { share: "ok", unshare: "err", visibility: "warn", transfer: "warn", constants: "warn" }[a] || "";
     return `<span class="pill ${cls}">${esc(a)}</span>`;
   };
 
@@ -1886,7 +1903,7 @@ async function viewConsoleAudit() {
     if (superseded(gen)) return;
     const events = (page && page.items) || [];
     if (!events.length) {
-      out.innerHTML = `<p class="muted">No access-control changes recorded yet.</p>`;
+      out.innerHTML = `<p class="muted">No changes recorded yet.</p>`;
       return;
     }
     // The endpoint counts every match and then returns a window of it, so this total is
@@ -1899,7 +1916,7 @@ async function viewConsoleAudit() {
       <tr>
         <td class="muted small" style="white-space:nowrap">${esc(fmtTime(e.at))}</td>
         <td>${actionPill(e.action)}</td>
-        <td>${esc(e.applicationName || e.applicationId)}</td>
+        <td>${e.applicationId ? esc(e.applicationName || e.applicationId) : `<span class="muted">Server (every application)</span>`}</td>
         <td>${detail(e)}</td>
         <td>${esc(e.actorName || e.actorId || "—")}</td>
       </tr>`).join("");
@@ -4241,6 +4258,9 @@ function openShareModal(proj, users, degraded, reload) {
     let events;
     try { events = await api("GET", `/api/v1/applications/${encodeURIComponent(p.id)}/audit`); }
     catch { host.innerHTML = ""; return; }
+    // The sharing dialog shows who changed access; a change to the application's
+    // constants is in the same history but belongs to the audit log, not here.
+    events = (events || []).filter((e) => e.action !== "constants");
     if (!events || !events.length) {
       host.innerHTML = `<div class="mlabel">Activity</div><p class="muted small">No access changes recorded yet.</p>`;
       return;
