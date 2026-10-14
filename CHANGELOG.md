@@ -12,6 +12,18 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A field's completion popup closes on its own.** In a FEEL field and the script
+  editors, picking an item re-opened the popup on the word it had just written, so it
+  stayed until Escape, and an Enter after a word typed out in full picked that word
+  again instead of breaking the line. The popup now closes once an item is picked, once
+  the word at the caret is typed out in full and picking it would change nothing, when a
+  click, an arrow key, Home or End moves the caret off the word, and when the page writes
+  a value in, such as the FEEL assistant's proposal. A function typed out in full is
+  still offered for its parentheses and an undeclared namespace member for its
+  declaration, and Ctrl+Space lists the offers as before.
+
 ## [0.13.0] — 2026-10-14
 
 **A constant says where its value comes from.** A constant the installation holds is read

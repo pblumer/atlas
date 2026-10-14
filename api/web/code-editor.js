@@ -320,11 +320,31 @@ export function attachCodeEditor(textarea, opts = {}) {
     return { before, ...p };
   }
 
+  // replaceFrom is where picking an item starts overwriting the text before the caret.
+  // A language may overwrite more than the caret word — FEEL's multi-word builtins
+  // ("string length") replace the whole already-typed run.
+  function replaceFrom(before, it) {
+    return lang.replaceStart ? lang.replaceStart(before, it) : currentPrefix().start;
+  }
+
+  // completes says whether picking an item would change anything: write another word
+  // than the one typed, add a call's parentheses, or run the caller's onAccept (the
+  // Modeler declares a namespace member). A word typed out in full, letter for letter,
+  // does none of these, so it leaves nothing to complete.
+  function completes(it, before) {
+    if (it.call || (it.src && typeof it.src.onAccept === "function")) return true;
+    const text = it.insert != null ? it.insert : it.label;
+    return before.slice(replaceFrom(before, it)) !== text;
+  }
+
   function openCompletion(explicit) {
     const { before, text } = currentPrefix();
     if (!explicit && text === "") { closePopup(); return; }
     const ctx = { variables: varList, source: textarea.value, before };
     items = (lang.completions ? lang.completions(text, ctx) : []).slice(0, 50);
+    // Typing does not keep a popup open on a word that is already complete; Ctrl+Space
+    // still lists it.
+    if (!explicit && !items.some((it) => completes(it, before))) { closePopup(); return; }
     active = items.length ? 0 : -1;
     renderPopup();
   }
@@ -333,10 +353,8 @@ export function attachCodeEditor(textarea, opts = {}) {
     const it = items[idx];
     if (!it) return;
     const caret = textarea.selectionStart;
-    // A language may overwrite more than the caret word — FEEL's multi-word
-    // builtins ("string length") replace the whole already-typed run.
     const before = textarea.value.slice(0, caret);
-    const start = lang.replaceStart ? lang.replaceStart(before, it) : currentPrefix().start;
+    const start = replaceFrom(before, it);
     let text = it.insert != null ? it.insert : it.label;
     let caretDelta = text.length;
     if (it.call) { text = text + "()"; caretDelta = text.length - 1; }
@@ -376,6 +394,7 @@ export function attachCodeEditor(textarea, opts = {}) {
     if (s === eSel && CLOSERS.has(e.key) && value[s] === e.key) {
       e.preventDefault();
       textarea.setSelectionRange(s + 1, s + 1);
+      closePopup(); // the caret left the word; no input event follows to close it
       return true;
     }
     if (OPENERS[e.key]) {
@@ -557,7 +576,16 @@ export function attachCodeEditor(textarea, opts = {}) {
   }
 
   // --- events ---
-  const onInput = () => { renderHighlight(); openCompletion(false); scheduleValidate(); hideTip(); };
+  // The popup answers the author's typing. An input event the page dispatches itself is
+  // not typing — afterEdit's after a picked item, a bracket or an indent, or a caller's
+  // that writes a value in (the FEEL assistant) — and closes the popup. Opening it there
+  // put a picked item back on offer, where it stayed until Escape.
+  const onInput = (e) => {
+    renderHighlight();
+    if (e.isTrusted) openCompletion(false); else closePopup();
+    scheduleValidate();
+    hideTip();
+  };
   const onScroll = () => {
     if (virtual) { renderWindow(); return; }
     pre.scrollTop = textarea.scrollTop; pre.scrollLeft = textarea.scrollLeft;
@@ -565,6 +593,8 @@ export function attachCodeEditor(textarea, opts = {}) {
     renderMarkers();
   };
   const onBlur = () => { setTimeout(closePopup, 120); };
+  // A click in the field puts the caret elsewhere; the popup's options are outside it.
+  const onMousedown = () => closePopup();
 
   // --- locked-prefix protection ---
   // Keep a collapsed caret out of the locked run (a click or Arrow-Left that lands
@@ -593,14 +623,22 @@ export function attachCodeEditor(textarea, opts = {}) {
     if (s < lp) textarea.setSelectionRange(lp, Math.max(lp, e2)); // nudge the caret out
   }
 
+  // Keys that move the caret off the word the popup was opened for; the popup closes
+  // and the key moves the caret as usual.
+  const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]);
+
   function onKeydown(e) {
     if (!pop.hidden) {
       if (e.key === "ArrowDown") { e.preventDefault(); moveActive(1); return; }
       if (e.key === "ArrowUp") { e.preventDefault(); moveActive(-1); return; }
       if (e.key === "Enter" || e.key === "Tab") {
-        if (active >= 0) { e.preventDefault(); accept(active); return; }
+        // Enter on a word already typed out in full is a plain Enter: picking it would
+        // change nothing, so the line breaks rather than the key being spent on it.
+        if (e.key === "Enter" && active >= 0 && !completes(items[active], currentPrefix().before)) closePopup();
+        else if (active >= 0) { e.preventDefault(); accept(active); return; }
       }
       if (e.key === "Escape") { e.preventDefault(); closePopup(); return; }
+      if (CARET_KEYS.has(e.key)) closePopup();
     }
     if ((e.ctrlKey || e.metaKey) && e.key === " ") { e.preventDefault(); openCompletion(true); return; }
     if (e.key === "Tab") { if (handleTab(e)) return; }
@@ -617,6 +655,7 @@ export function attachCodeEditor(textarea, opts = {}) {
   textarea.addEventListener("scroll", onScroll);
   textarea.addEventListener("keydown", onKeydown);
   textarea.addEventListener("blur", onBlur);
+  textarea.addEventListener("mousedown", onMousedown);
   textarea.addEventListener("mousemove", onHover);
   textarea.addEventListener("mouseleave", hideTip);
   textarea.addEventListener("dragover", onDragover);
@@ -646,6 +685,7 @@ export function attachCodeEditor(textarea, opts = {}) {
       textarea.removeEventListener("scroll", onScroll);
       textarea.removeEventListener("keydown", onKeydown);
       textarea.removeEventListener("blur", onBlur);
+      textarea.removeEventListener("mousedown", onMousedown);
       textarea.removeEventListener("mousemove", onHover);
       textarea.removeEventListener("mouseleave", hideTip);
       textarea.removeEventListener("dragover", onDragover);

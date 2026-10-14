@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas FEEL-editor completion e2e harness</title>
+    <!-- Attaches the *real* api/web/feel.js editor (over api/web/code-editor.js) to a
+         plain <textarea>, so the test can prove when the completion popup closes on its
+         own: after an item is picked, once a word is typed out in full, when the caret
+         moves away, and when the page writes a value in. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      body { margin: 24px; background: #fff; }
+      .fld { width: 480px; }
+      textarea { width: 100%; height: 80px; font: 14px ui-monospace, monospace; }
+    </style>
+  </head>
+  <body>
+    <div class="fld"><textarea id="expr"></textarea></div>
+    <script type="module">
+      import { attachFeelEditor } from "/feel.js";
+
+      window.__accepted = [];
+      // Vorname and VornameKind share a prefix, so typing the first out in full still
+      // leaves the second to offer; server.TENANT_ID stands for the Modeler's undeclared
+      // namespace member, whose pick declares it (onAccept).
+      const editor = attachFeelEditor(document.getElementById("expr"), {
+        variables: [
+          "Vorname",
+          "VornameKind",
+          { name: "server.TENANT_ID", detail: "server constant · declares it", onAccept: () => window.__accepted.push("server.TENANT_ID") },
+        ],
+      });
+
+      // setValue writes a value in the way the FEEL assistant does: the value, then the
+      // input event a keystroke produces.
+      window.__setValue = (v) => {
+        const ta = document.getElementById("expr");
+        ta.value = v;
+        ta.setSelectionRange(v.length, v.length);
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+      window.__highlightText = () =>
+        document.querySelector(".code-editor .ce-highlight code").textContent;
+      window.__cleanup = () => editor.destroy();
+      window.__ready = true;
+    </script>
+  </body>
+</html>
