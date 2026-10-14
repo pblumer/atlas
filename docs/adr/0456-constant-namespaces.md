@@ -1,4 +1,4 @@
-# ADR-DRAFT: Constants the installation holds are read under the namespace that holds them, and the installation holds its own
+# ADR-0456: Constants the installation holds are read under the namespace that holds them, and the installation holds its own
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -15,7 +15,7 @@ import (
 	"github.com/pblumer/atlas/engine"
 )
 
-// Constants the installation holds (ADR-0453, ADR-draft-constant-namespaces).
+// Constants the installation holds (ADR-0453, ADR-0456).
 //
 // A process reads two kinds of constant whose values are not in its model: an
 // application's — application.NAME, held per application — and the installation's —
@@ -223,7 +223,7 @@ func (s *Server) boundConstantRefusalOnLoop(d *deployment) string {
 			}
 		case compiler.ServerNamespace:
 			if !s.proc.HasServerConstant(k.Name) {
-				return fmt.Sprintf("the server constant %q is not set on this installation; set it under Admin → Engine → Server constants before starting this process (ADR-draft-constant-namespaces)", k.Name)
+				return fmt.Sprintf("the server constant %q is not set on this installation; set it under Admin → Engine → Server constants before starting this process (ADR-0456)", k.Name)
 			}
 		}
 	}

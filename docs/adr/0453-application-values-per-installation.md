@@ -189,7 +189,7 @@ not seeded.
 
 ## Amendment (2026-10-14): an application's values are its constants, read as application.NAME
 
-[ADR-draft-constant-namespaces](draft-constant-namespaces.md) keeps the decision above —
+[ADR-0456](0456-constant-namespaces.md) keeps the decision above —
 held per installation, pushed into the processor, bound by name, frozen into the creation
 event — and changes how it is named and read:
 

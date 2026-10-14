@@ -162,14 +162,14 @@ func (s *Server) apiRoutes() []apiRoute {
 				"name": tString(), "environment": tString(), "labels": tObject(),
 			})), resp: jsonBody("Node descriptor", tObject())}},
 		// The constants this installation holds for every application, read by a process
-		// as server.NAME (ADR-draft-constant-namespaces). Read like an application's — the
+		// as server.NAME (ADR-0456). Read like an application's — the
 		// Modeler offers them while a model is written — and replaced by an administrator.
 		{"GET", "/api/v1/server/constants", s.handleGetServerConstants, apiOp{
-			summary: "The constants this installation holds for every application — read by a process as server.NAME — and what the deployed processes require of them, each with its state: set, missing, covered by a fallback, or held with another type (ADR-draft-constant-namespaces)",
+			summary: "The constants this installation holds for every application — read by a process as server.NAME — and what the deployed processes require of them, each with its state: set, missing, covered by a fallback, or held with another type (ADR-0456)",
 			tag:     "System", role: roleAny,
 			resp: jsonBody("Constants and requirements", tObject())}},
 		{"PUT", "/api/v1/server/constants", s.handlePutServerConstants, apiOp{
-			summary: "Replace the constants this installation holds for every application; each is {name, type, value}, the name in capitals (TENANT_ID) and the type string, number, boolean or json. Instances started afterwards take them; running ones keep theirs (ADR-draft-constant-namespaces)",
+			summary: "Replace the constants this installation holds for every application; each is {name, type, value}, the name in capitals (TENANT_ID) and the type string, number, boolean or json. Instances started afterwards take them; running ones keep theirs (ADR-0456)",
 			tag:     "System", role: RoleAdmin,
 			req:  jsonBody("Constants", schemaObj(map[string]any{"constants": tArray()}, "constants")),
 			resp: jsonBody("Constants and requirements", tObject())}},

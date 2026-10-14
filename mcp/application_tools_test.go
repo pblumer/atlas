@@ -158,7 +158,7 @@ func TestDeleteApplicationToolIsIdempotent(t *testing.T) {
 // atlas_application_constants and atlas_server_constants report what the processes require
 // of this installation — an application's constants and the installation's own — so an
 // agent can explain a start refused for a missing one (ADR-0453,
-// ADR-draft-constant-namespaces).
+// ADR-0456).
 func TestHeldConstantsTools(t *testing.T) {
 	atlas := newAtlas(t)
 	created := callOne(t, atlas, "atlas_create_application", map[string]any{"name": "MCP Constants"})

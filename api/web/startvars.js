@@ -83,7 +83,7 @@ export function keepConstantNameInCapitals(container, selector) {
 }
 
 // NAMESPACE_INFO are the facts a namespace carries besides its constants, in lower case
-// so they never share a name with one (ADR-draft-constant-namespaces). The compiler's
+// so they never share a name with one (ADR-0456). The compiler's
 // namespaceInfo is the same list.
 export const NAMESPACE_INFO = {
   application: ["id", "key", "name"],

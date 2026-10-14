@@ -9,7 +9,7 @@
   <bpmn:process id="entra-create-account" name="Create EntraID Account" isExecutable="true">
 
     <!-- Which tenant, which app registration and which certificate differ between DEV, INT and
-         PROD, so the model states none of them (ADR-draft-constant-namespaces). The tenant is
+         PROD, so the model states none of them (ADR-0456). The tenant is
          the same for every application on an installation: a server constant, read as
          server.ENTRA_TENANT_ID and set under Admin → Engine → Server constants. The app
          registration and its certificate belong to this application: application constants,

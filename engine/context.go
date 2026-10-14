@@ -40,7 +40,7 @@ func (c *ProcessingContext) latestDefKey(processId string) (uint64, bool) {
 }
 
 // namespaceValue is the value of a namespace an instance of cp starts with
-// (ADR-draft-constant-namespaces): a JSON object holding each member the process declares
+// (ADR-0456): a JSON object holding each member the process declares
 // in it — for a constant, the value the installation holds on this server; for a fact,
 // what Atlas knows — else the member's fallback, else nothing, so the member reads as
 // null. The object is built once per definition and configuration change and cached on

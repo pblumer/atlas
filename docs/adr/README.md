@@ -541,6 +541,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0453](0453-application-values-per-installation.md) | An application holds its values per installation, and a constant binds to one by name | Accepted (amended) | Landed |
 | [0454](0454-process-constants.md) | Process constants are seeded with every instance and written by nothing else | Accepted (amended) | Landed |
 | [0455](0455-start-variable-defaults.md) | A start variable's default is what an instance starts with when its start did not supply it | Accepted | Landed |
+| [0456](0456-constant-namespaces.md) | Constants the installation holds are read under the namespace that holds them, and the installation holds its own | Accepted | Landed |
 
 ## The two states of a record
 

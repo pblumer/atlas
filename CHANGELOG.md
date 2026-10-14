@@ -29,7 +29,7 @@ _Changed_ / _Removed_ for each version.
   process could read from its namespaces but does not declare yet, each with a **Declare**
   button. FEEL and script completion offer the same members and add the declaration when
   one is picked. The node identity's form on Admin → Engine has a heading of its own
-  ([ADR-draft-constant-namespaces](docs/adr/draft-constant-namespaces.md)).
+  ([ADR-0456](docs/adr/0456-constant-namespaces.md)).
 - **The business architecture has a screen.** The capability register, its value streams
   and the gap report ([ADR-0305](docs/adr/0305-business-capabilities-and-value-streams.md))
   had HTTP routes and MCP tools and no view, so they could only be read through curl or an

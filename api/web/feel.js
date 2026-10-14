@@ -322,7 +322,7 @@ export const feel = {
   tokenize,
   prefix(before) {
     // A path into a constants namespace (application.TENANT_ID, server.environment;
-    // ADR-draft-constant-namespaces) completes as one run, so typing the dot already
+    // ADR-0456) completes as one run, so typing the dot already
     // lists the namespace's members.
     const ns = /(?:^|[^A-Za-z0-9_.])((?:application|server)\.[A-Za-z0-9_]*)$/.exec(before);
     if (ns) return { text: ns[1], start: before.length - ns[1].length };

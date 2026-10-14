@@ -126,7 +126,7 @@ func (s *searchableScan) read(t xml.StartElement) {
 	case "constant": // <atlas:constant name="…"/>: every instance carries it from its start
 		// — as a root variable of its own, or, when the installation holds its value, as a
 		// member of the namespace it is read under, which is then the root variable written
-		// (ADR-draft-constant-namespaces).
+		// (ADR-0456).
 		var name, source string
 		for _, a := range t.Attr {
 			switch a.Name.Local {

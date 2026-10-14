@@ -215,7 +215,7 @@ as one that declares nothing searchable.
 Every constant's name is written in capitals: letters A–Z, digits and underscores,
 starting with a letter (`TENANT_ID`). This covers a process constant here, and an
 application or server constant
-([ADR-draft-constant-namespaces](draft-constant-namespaces.md)).
+([ADR-0456](0456-constant-namespaces.md)).
 
 - **Why.** A reader tells a constant from a variable at a glance in every expression and
   script. And PowerShell, which does not tell `$TenantId` from `$tenantid`, can no longer

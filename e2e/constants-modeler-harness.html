@@ -5,7 +5,7 @@
     <title>Atlas process constants modeler e2e harness</title>
     <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, to verify
          the process's constants (atlas:constants, ADR-0454) and the namespaces the
-         installation's constants are read under (ADR-draft-constant-namespaces): the
+         installation's constants are read under (ADR-0456): the
          Implement tab edits them beside the start variables, the Variables panel and FEEL
          completion offer them — and declare the ones the model does not read yet — and a model arriving with them survives a round trip —
          which it does not unless api/web/atlas-moddle.json declares the types, because
@@ -67,7 +67,7 @@
         if (method === "GET" && /\/decisions/.test(url)) return [];
         if (method === "GET" && /\/forms/.test(url)) return [];
         if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
-        // What this installation holds for the namespaces (ADR-draft-constant-namespaces):
+        // What this installation holds for the namespaces (ADR-0456):
         // the Variables panel and completion offer what the model does not declare yet.
         if (method === "GET" && /\/server\/constants$/.test(url)) {
           return { constants: [{ name: "ENTRA_TENANT_ID", type: "string", value: "t" }], required: [] };

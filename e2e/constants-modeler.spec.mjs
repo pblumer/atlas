@@ -5,7 +5,7 @@
 // Modeler's round trip. A constant's name is written in capitals, and the constants the
 // installation holds are read under a namespace — application.NAME, server.NAME — which
 // the Variables panel and completion offer and declare when picked
-// (ADR-draft-constant-namespaces).
+// (ADR-0456).
 //
 // The assertions read the exported XML, because that is what a deploy sends. Without the
 // moddle types (api/web/atlas-moddle.json) the round trip fails: bpmn-js drops an

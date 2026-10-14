@@ -798,7 +798,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/applications/{id}/targets":                     "per-peer status of admin-configured targets; an agent reads this server's own state via atlas_application_deployments",
 
 	// The constants this installation holds — an application's and its own (ADR-0453,
-	// ADR-draft-constant-namespaces): what every new instance reading them takes here.
+	// ADR-0456): what every new instance reading them takes here.
 	// Per-installation operator config in the category ADR-0105 kept read-only on MCP — an
 	// agent reads them with atlas_application_constants and atlas_server_constants to
 	// explain a refused start, and an administrator sets them.

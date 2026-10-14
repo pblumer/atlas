@@ -13,7 +13,7 @@ import (
 
 // boundBPMN reads TENANT_ID from its application with no fallback, and LANGUAGE with the
 // fallback de-CH, then waits at a user task so the started instance can be read
-// (ADR-0453, ADR-draft-constant-namespaces).
+// (ADR-0453, ADR-0456).
 const boundBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
                     xmlns:atlas="http://atlas/schema/1.0">
   <process id="ucc-bound" isExecutable="true" name="Sammelanschluss">
@@ -202,7 +202,7 @@ func TestApplicationConstantsReachInstancesAndSurviveARestart(t *testing.T) {
 }
 
 // The installation's constants and the facts the namespaces carry
-// (ADR-draft-constant-namespaces): a missing server constant is warned about and refuses a
+// (ADR-0456): a missing server constant is warned about and refuses a
 // start like an application's, a fact not set here is warned about, and naming the node or
 // renaming the application reaches the next instance.
 func TestServerConstantsAndFactsReachInstances(t *testing.T) {

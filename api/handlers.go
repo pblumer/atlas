@@ -173,7 +173,7 @@ type constantResp struct {
 	Value string `json:"value"`
 	// Source is "application" or "server" for a constant whose value the installation
 	// holds — read as application.NAME or server.NAME, its Value then only the fallback
-	// (ADR-0453, ADR-draft-constant-namespaces); absent for a process constant.
+	// (ADR-0453, ADR-0456); absent for a process constant.
 	Source string `json:"source,omitempty"`
 	// Info marks a fact Atlas fills itself, such as server.environment.
 	Info bool `json:"info,omitempty"`

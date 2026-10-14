@@ -280,7 +280,7 @@ func (s *Server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// The server namespace reports the node's name and environment to the instances
-		// that read them (ADR-draft-constant-namespaces).
+		// that read them (ADR-0456).
 		s.noteNode(identity)
 		desc, saveErr = s.describeNode()
 	})

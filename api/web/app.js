@@ -1638,7 +1638,7 @@ async function viewConsoleEngine() {
       <div id="node-info" class="muted">loading…</div>
     </div>`;
   // The installation's constants, read by a process as server.NAME
-  // (ADR-draft-constant-namespaces) — beside the node identity, whose name and environment
+  // (ADR-0456) — beside the node identity, whose name and environment
   // a process can read as server.name and server.environment.
   view.innerHTML += `
     <div class="card" id="server-constants-card" style="margin-top:14px">
@@ -1703,7 +1703,7 @@ function mountNodeCard(node) {
   const editable = mayUse("admin");
   // The form gets a heading of its own: under the descriptor's table it read as more of
   // the table, and was missed. A process reads the name and the environment as server.name
-  // and server.environment when its model declares them (ADR-draft-constant-namespaces).
+  // and server.environment when its model declares them (ADR-0456).
   slot.innerHTML = nodeInfoHTML(node) + (editable ? `
     <h3 id="node-form-head" style="margin:16px 0 4px">Name this node</h3>
     <p class="muted" style="margin:0 0 4px; font-size:12px">For people, and for processes that read
@@ -3675,7 +3675,7 @@ function renderAppConstants(id) {
 
 // renderServerConstants fills the Server constants section of Admin → Engine: what this
 // installation holds for every application, read as server.NAME
-// (ADR-draft-constant-namespaces).
+// (ADR-0456).
 function renderServerConstants(host) {
   return renderHeldConstants(host, {
     url: "/api/v1/server/constants",

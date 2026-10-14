@@ -330,7 +330,7 @@ func TestMovingADefinitionRebuildsItsNamespace(t *testing.T) {
 
 // The server namespace carries the installation's constants for every application, and
 // both namespaces carry the facts the process declares from them — the node's environment,
-// the application's name — in lower case (ADR-draft-constant-namespaces). A fact not set
+// the application's name — in lower case (ADR-0456). A fact not set
 // on this server falls back like a missing constant; renaming the node or the application
 // reaches the next instance.
 func TestServerConstantsAndFactsReachTheNamespaces(t *testing.T) {

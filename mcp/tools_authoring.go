@@ -899,7 +899,7 @@ func authoringTools() []Tool {
 				"as server.NAME — and what the deployed processes declare from it (<atlas:constant " +
 				"source=\"server\"/>), each with its state here: set, missing, covered by a fallback, or held " +
 				"with another type. Read-only: setting them is an administrator's decision " +
-				"(ADR-draft-constant-namespaces).",
+				"(ADR-0456).",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				return asText(c.get("/api/v1/server/constants"))

@@ -19,7 +19,7 @@ import (
 // only an operator's audited correction does. Its name is written in capitals
 // (ValidConstantName). A constant whose value the installation holds is not a variable of
 // its own: it is a member of a namespace — application.NAME for the application's
-// constants, server.NAME for the installation's (ADR-draft-constant-namespaces) — and the
+// constants, server.NAME for the installation's (ADR-0456) — and the
 // same namespaces carry a few facts Atlas itself knows, in lower case: application.name,
 // server.environment.
 //
@@ -36,11 +36,11 @@ type xmlConstant struct {
 	// Source is where the value comes from: the model ("" or "model", the value
 	// attribute), the application the process is filed under on the installation where an
 	// instance starts ("application", ADR-0453), or that installation itself ("server",
-	// ADR-draft-constant-namespaces). For the last two Value is an optional fallback.
+	// ADR-0456). For the last two Value is an optional fallback.
 	Source string `xml:"source,attr"`
 }
 
-// Constant sources (ADR-0453, ADR-draft-constant-namespaces).
+// Constant sources (ADR-0453, ADR-0456).
 const (
 	ConstantSourceModel       = "model"
 	ConstantSourceApplication = "application"
@@ -48,7 +48,7 @@ const (
 )
 
 // ApplicationNamespace and ServerNamespace are the variables an instance holds the
-// constants in whose values the installation holds (ADR-draft-constant-namespaces): one
+// constants in whose values the installation holds (ADR-0456): one
 // object each, so a model reads application.TENANT_ID or server.ENVIRONMENT_URL in FEEL
 // and $application.TENANT_ID in PowerShell, and the source of every value is in the name
 // it is read by. A namespace exists only in an instance of a process that declares one of
@@ -335,7 +335,7 @@ func (p *CompiledProcess) refuseConstantConflicts() error {
 	}
 	for _, sv := range p.startVars {
 		if (sv.Name == ApplicationNamespace || sv.Name == ServerNamespace) && p.IsConstant(sv.Name) {
-			return fmt.Errorf("compiler: %q is declared as a start variable, but it is the namespace this process's %s constants are read under; name the start variable differently (ADR-draft-constant-namespaces)", sv.Name, sv.Name)
+			return fmt.Errorf("compiler: %q is declared as a start variable, but it is the namespace this process's %s constants are read under; name the start variable differently (ADR-0456)", sv.Name, sv.Name)
 		}
 		if p.IsConstant(sv.Name) {
 			return fmt.Errorf("compiler: %q is declared both as a start variable and as a constant — a start variable is asked for when an instance starts, a constant is fixed by the model; declare it as one or the other (ADR-0454)", sv.Name)
@@ -354,7 +354,7 @@ func (p *CompiledProcess) refuseConstantConflicts() error {
 			return nil
 		}
 		if name == ApplicationNamespace || name == ServerNamespace {
-			return fmt.Errorf("compiler: %s writes %q, the namespace this process's %s constants are read under — it is set when an instance starts and nothing in the run may replace it; write the value under another name (ADR-draft-constant-namespaces)", kind, name, name)
+			return fmt.Errorf("compiler: %s writes %q, the namespace this process's %s constants are read under — it is set when an instance starts and nothing in the run may replace it; write the value under another name (ADR-0456)", kind, name, name)
 		}
 		return fmt.Errorf("compiler: %s writes %q, which the process declares as a constant — a constant is set when an instance starts and nothing in the run may replace it; write the value under another name (ADR-0454)", kind, name)
 	}

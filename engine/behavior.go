@@ -240,7 +240,7 @@ func activateInstance(c *ProcessingContext, piKey uint64, seed instanceSeed) {
 	//
 	// The constants whose values the installation holds are not variables of their own:
 	// they are the members of a namespace, read as application.NAME or server.NAME
-	// (ADR-draft-constant-namespaces), beside the facts the process declares from it. Each
+	// (ADR-0456), beside the facts the process declares from it. Each
 	// takes the value held on this server, else its fallback, else it is absent; the object
 	// is built once per definition and configuration and frozen into the event like any
 	// other value. A start without a value a person could have supplied was refused before

@@ -305,7 +305,7 @@ func TestTheApplicationNamespaceIsTheConstant(t *testing.T) {
 	}
 }
 
-// The server namespace works like the application's (ADR-draft-constant-namespaces), and
+// The server namespace works like the application's (ADR-0456), and
 // both carry facts Atlas fills itself in lower case — which no constant can be — declared
 // like a constant so a namespace still holds only what its model reads.
 func TestServerConstantsAndInfoFields(t *testing.T) {

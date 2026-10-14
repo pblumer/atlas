@@ -48,7 +48,7 @@ var wantAdminRoutes = []string{
 	// And the constants this installation holds — an application's and its own: the
 	// tenant, client id or endpoint every instance of a process reading them starts with
 	// here — the same per-server operator decision as an override (ADR-0453,
-	// ADR-draft-constant-namespaces). Reading them stays open, because the Constants pages,
+	// ADR-0456). Reading them stays open, because the Constants pages,
 	// the Modeler and a deploy's warning read them.
 	"PUT /api/v1/applications/{id}/constants",
 	"PUT /api/v1/server/constants",

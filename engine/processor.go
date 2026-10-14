@@ -92,7 +92,7 @@ type Processor struct {
 	// this server, appConstants the constants each application holds here (ADR-0453),
 	// serverConstants the ones this installation holds for every application, and
 	// serverInfo and appInfo the facts the namespaces carry besides
-	// (ADR-draft-constant-namespaces). A bound constant is resolved from them when an
+	// (ADR-0456). A bound constant is resolved from them when an
 	// instance is created. Like callOverrides they are operator config: the server layer
 	// pushes them, from its deployment registry and sidecars, at startup and on every
 	// change, and they are owned by this run-loop goroutine (I3). The value read is frozen
@@ -346,7 +346,7 @@ func (p *Processor) Undeploy(defKey uint64) {
 
 // ConstantValue is the value of one constant the installation holds — for an application
 // or for every application — in the canonical form a variable is stored in (ADR-0453,
-// ADR-draft-constant-namespaces). The server layer parses it when it is saved, so the
+// ADR-0456). The server layer parses it when it is saved, so the
 // engine seeds it without parsing (I5).
 type ConstantValue struct {
 	Kind model.VarKind

@@ -123,7 +123,7 @@ var persistentStores = []storeEntry{
 	{name: "playground-scenarios", class: classInstance, why: "saved playground scenarios"},
 	{name: "call-overrides", class: classInstance, why: "which process a call activity resolves to on this server"},
 	{name: "application-constants", class: classInstance, why: "the constants each application holds on this installation — the tenant, app id or suffix its processes read as application.NAME here, which differ between DEV, INT and PROD and so never travel with an export (ADR-0453)"},
-	{name: "server-constants", class: classInstance, why: "the constants this installation holds for every application, read as server.NAME — like an application's, they differ between DEV, INT and PROD and never travel with an export (ADR-draft-constant-namespaces)"},
+	{name: "server-constants", class: classInstance, why: "the constants this installation holds for every application, read as server.NAME — like an application's, they differ between DEV, INT and PROD and never travel with an export (ADR-0456)"},
 	{name: "task-folders", class: classInstance, why: "the saved task views people work out of, and who each is shared with"},
 
 	// --- identity ----------------------------------------------------------

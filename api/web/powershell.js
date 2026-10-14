@@ -267,7 +267,7 @@ function psPrefix(before) {
   // A bare `$` (no name yet) already means "a variable" — offer them all so
   // Ctrl+Space right after the sigil lists the in-scope variables.
   // A path into a constants namespace ($application.TENANT_ID) is one variable run too
-  // (ADR-draft-constant-namespaces).
+  // (ADR-0456).
   m = /\$(?:(?:application|server)\.[A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*|)$/.exec(before);
   if (m) return { text: m[0], start: before.length - m[0].length, mode: "var" };
   m = /-[A-Za-z]*$/.exec(before);
@@ -404,7 +404,7 @@ export function tokenizeClike(src, kind) {
 function clikeModule(kind) {
   const keywords = CLIKE_KEYWORDS[kind] || [];
   // A namespace member is a key of an object: JavaScript reads it with a dot, Python —
-  // where the object arrives as a dict — with brackets (ADR-draft-constant-namespaces).
+  // where the object arrives as a dict — with brackets (ADR-0456).
   const spell = (name) => (kind === "python" && /^(application|server)\./.test(name)
     ? name.replace(/^(\w+)\.(.+)$/, '$1["$2"]') : name);
   return {

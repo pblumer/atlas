@@ -2249,7 +2249,7 @@ function variablesForCompletion(modeler, element) {
   } catch { /* best-effort */ }
   // What the process could read from its namespaces but has not declared: offered like
   // the rest, and declared on the process when picked, so the model keeps saying what
-  // it reads (ADR-draft-constant-namespaces).
+  // it reads (ADR-0456).
   try {
     const bo = processOf(modeler, element);
     for (const m of undeclaredMembers(bo)) {
@@ -2571,7 +2571,7 @@ function collectDiagramVariables(modeler) {
       // A constant is a variable every instance carries from its start
       // (ADR-0454), so expressions and completion offer it like one — a process constant
       // by its name, one the installation holds by the path it is read under
-      // (application.NAME, server.NAME; ADR-draft-constant-namespaces).
+      // (application.NAME, server.NAME; ADR-0456).
       for (const c of readConstants(rootBo)) {
         if (!c.source) push(c.name, "Process", "", "process constant", "Process", c.type || "");
         else push(`${c.source}.${c.name}`, "Process", "", `${c.source} ${c.info ? "info" : "constant"}`, "Process", c.type || "");
@@ -2753,7 +2753,7 @@ function wireEditorVars(root, modeler, api) {
       (v.source || "").toLowerCase().includes(q));
     // What the process could read from its namespaces and does not declare yet — the
     // constants this installation holds and the facts each namespace carries — under the
-    // list, each with the one click that declares it (ADR-draft-constant-namespaces).
+    // list, each with the one click that declares it (ADR-0456).
     let available = [];
     try { available = undeclaredMembers(rootProcess(modeler)).filter((m) => !q || m.path.toLowerCase().includes(q)); } catch { /* best-effort */ }
     const availableHTML = available.length
@@ -6899,7 +6899,7 @@ function readStartVariables(bo) {
 //
 // source is "application" or "server" for a constant whose value the installation holds —
 // read as application.NAME or server.NAME, its value then only a fallback (ADR-0453,
-// ADR-draft-constant-namespaces) — and "" for a process constant. info marks a fact the
+// ADR-0456) — and "" for a process constant. info marks a fact the
 // namespace carries (server.environment), which Atlas fills rather than an operator.
 function readConstants(bo) {
   const cs = findExt(bo, "atlas:Constants");
@@ -6918,7 +6918,7 @@ function readConstants(bo) {
 // HELD is what this installation holds for the namespaces a model reads from — the
 // constants of the diagram's application and the installation's own, with the names
 // deployed processes already read — so the Variables panel and completion can offer what
-// a model has not declared yet, and declare it when picked (ADR-draft-constant-namespaces).
+// a model has not declared yet, and declare it when picked (ADR-0456).
 // Loaded once per editor; best-effort, because a Modeler without it still edits.
 const HELD = { application: [], server: [] };
 
@@ -7153,7 +7153,7 @@ function startVarRowHTML(v, constant = false) {
     : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="${bound ? "fallback (optional)" : constant ? "value" : "default"}" aria-label="${what}"${tip}/>`;
   // A constant takes its value from the process model, or from what the installation
   // holds — for the application, or for every application — read as application.NAME or
-  // server.NAME (ADR-draft-constant-namespaces).
+  // server.NAME (ADR-0456).
   const src = constant ? (v.source || "") : "";
   const source = constant
     ? `<select class="sv-source" aria-label="Source"${info ? " disabled" : ""} title="Where the value comes from: the process model, the application's constant on each installation (application.NAME), or the installation's own (server.NAME)">

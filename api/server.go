@@ -420,7 +420,7 @@ type Server struct {
 	connectors       *connectorStore           // durable sidecar for managed workers (ADR-0041)
 	callOverrides    *callOverrideStore        // durable sidecar for per-server call-activity target overrides (ADR-0105)
 	appConstants     *applicationConstantStore // durable sidecar for each application's constants on this installation (ADR-0453)
-	srvConstants     *serverConstantStore      // durable sidecar for the installation's constants for every application (ADR-draft-constant-namespaces)
+	srvConstants     *serverConstantStore      // durable sidecar for the installation's constants for every application (ADR-0456)
 	repository       []repositoryPackage       // curated, bundled repository catalog, immutable after New (ADR-0081)
 	repositoryStore  *repositoryStore          // durable sidecar for installed repository templates (ADR-0081)
 	settings         *settingsStore            // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0113)
@@ -2152,7 +2152,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	}
 	// And the constants this installation holds — each application's and its own — with
 	// the facts the namespaces carry, which a bound constant is seeded from (ADR-0453,
-	// ADR-draft-constant-namespaces). Same place and same reason as the overrides above.
+	// ADR-0456). Same place and same reason as the overrides above.
 	if err := s.loadHeldConstants(); err != nil {
 		return nil, err
 	}
