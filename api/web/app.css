@@ -1356,6 +1356,11 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   text-align: right; user-select: none;
 }
 .code-editor .ce-ln { height: 1.5em; }
+/* Virtual drawing (code-editor.js opts.virtual): the backdrop and the gutter hold only
+   the lines in view and are moved onto the text area's lines by a transform, which an
+   inline <code> would ignore. */
+.code-editor.virtual .ce-highlight code { display: block; will-change: transform; }
+.code-editor.virtual .ce-gutter-lines { will-change: transform; }
 .code-editor .ce-ln.err { color: var(--danger); font-weight: 700; }
 /* Error markers: a translucent band behind the offending line. */
 .code-editor .ce-markers { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
@@ -3844,6 +3849,32 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
   width: 40px; height: 40px; border-radius: 8px;
   border: 1px solid var(--border);
 }
+
+/* ---------- XML source (xml-source.js) ---------- */
+/* The document behind a diagram or a decision, as text: the shared .modal frame,
+   grown to give a whole document room, with the code-editor.js surface filling it the
+   way it fills the Developer View. */
+.modal.xml-modal { width: min(1120px, 100%); height: min(860px, 88vh); max-height: 88vh; }
+.xml-modal .modal-head h2 { display: flex; align-items: center; gap: 8px; }
+.xml-kind { font-size: 11px; font-weight: 600; }
+.xml-body {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 16px; background: var(--bg);
+}
+.xml-hint { margin: 0; font-size: 12px; line-height: 1.5; }
+.xml-editor { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.xml-editor .code-editor { flex: 1 1 auto; min-height: 0; }
+.xml-editor .ce-input { height: 100%; resize: none; }
+.xml-status {
+  flex: 1 1 auto; min-width: 0; font-size: 12px; line-height: 1.45; color: var(--muted);
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 4.4em; overflow: auto;
+}
+.xml-status.err { color: var(--danger); }
+.xml-status.warn { color: var(--warn); }
+.xml-status.ok { color: var(--ok); }
+/* "</>" is three glyphs where the other menu icons are one: set it small enough to
+   keep the 16px column every row aligns its label on. */
+.dropdown-menu .mi-icon.mi-code { font: 600 9.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: -0.5px; }
 
 /* ---------- Developer View (dev-view.js, ADR-0145) ---------- */
 /* A full-screen modal that lifts one code-bearing field out of the property panel:

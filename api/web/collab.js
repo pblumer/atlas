@@ -310,6 +310,13 @@ export function attachCollab(modeler, api, draftId, toast, surface = bpmnSurface
       state.warnedPending = false;
       if (state.pendingRemote) scheduleReimport();
     },
+    // markDirty is markSaved's counterpart, for local work that reached the canvas by
+    // an import rather than by an edit — the XML source view's Apply. An import fires
+    // none of the element events onChange listens to, so without this the session
+    // would hold nothing local to protect and pull a peer's draft over it.
+    markDirty() {
+      state.dirty = true;
+    },
     close() {
       state.closed = true;
       if (reimportTimer) { clearTimeout(reimportTimer); reimportTimer = null; }

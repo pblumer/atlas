@@ -37,6 +37,8 @@ import { attachCollab } from "./collab.js";
 import { frozenBehindOn, frozenDeployNotice } from "./frozen-decisions.js";
 import { dmnSurface } from "./dmn-collab.js";
 import { informationRequirementFindings, knowledgeModelFindings } from "./dmn-warnings.js";
+// The decision as text, corrected in place — the BPMN editor's "XML source", shared.
+import { openXmlSource, closeXmlSource } from "./xml-source.js";
 import {
   addInputColumn, columnsFedBy, columnsNamed, columnTypeIn, nameOf, namesGivenTo,
   providedNames, removeInputColumn, renameInputColumn, tableOf,
@@ -1050,6 +1052,7 @@ let collab;
 export function cleanup() {
   generation++;
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
+  closeXmlSource(); // the decision it was showing is going away with the editor
   if (onDmnMenuDismiss) { onDmnMenuDismiss(); onDmnMenuDismiss = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
@@ -1098,6 +1101,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
           <div class="dropdown-menu" id="dmn-menu" hidden>
             <button id="dmn-autolayout" type="button" title="Re-flow the decision requirements graph into a clean layout"><span class="mi-icon">&#8649;</span>Auto-layout</button>
             <button id="dmn-export" type="button" title="Download this decision as DMN XML"><span class="mi-icon">&#8595;</span>Export XML</button>
+            <button id="dmn-xmlsource" type="button" title="Show this decision as DMN XML, and correct it in place"><span class="mi-icon mi-code">&lt;/&gt;</span>XML source</button>
             <button id="dmn-docexport" type="button" title="Publish this decision as a structured PDF — the requirements graph plus every decision's prose and rule table — as a numbered version you can share"><span class="mi-icon">&#128196;</span>Documentation</button>
           </div>
         </div>
@@ -1243,6 +1247,10 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
 
   let dropWarnings = () => {};
   let dropColumns = () => {};
+  // builtFor is the DMN version the modeler below is constructed for. It cannot change
+  // for the life of the modeler (see dmnVersionOf), so the XML source view has to know
+  // it to refuse a document of another version in words.
+  let builtFor = "1.3";
   current = {
     destroy() {
       caretObserver.disconnect();
@@ -1287,7 +1295,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
       // is fetched above rather than after the modeler exists — and why a model
       // opened as 1.5 also *saves* as 1.5: dmn-js's writer emits whatever the
       // moddle was built with, so the author's version is not quietly downgraded.
-      dmnVersion: dmnVersionOf(xml),
+      dmnVersion: (builtFor = dmnVersionOf(xml)),
       drd: {
         propertiesPanel: { parent: propsPanel },
         additionalModules: [
@@ -1773,6 +1781,55 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     }
   }
 
+  // applySource imports a corrected document from the XML source view. It answers the
+  // view's contract: resolve with the import's warnings, or throw with the decision as
+  // it was — dmn-js clears its views before it knows whether the new document reads, so
+  // a refused import puts back the model it was meant to correct. The author stays on
+  // the view they were reading, where the document still has it.
+  //
+  // A document of another DMN version is refused before dmn-js sees it, because the
+  // moddle it would be read with was chosen when the page opened (dmnVersionOf), and
+  // what dmn-js says when the two disagree is a parse failure that never mentions a
+  // version.
+  async function applySource(text) {
+    const wants = dmnVersionOf(text);
+    if (wants !== builtFor) {
+      throw new Error(`This XML is DMN ${wants}, and this editor opened the decision as DMN ${builtFor}: ` +
+        `the version is fixed when the page opens. Keep the DMN ${builtFor} namespace here.`);
+    }
+    const { xml: before } = await modeler.saveXML({ format: true });
+    const was = modeler.getActiveView();
+    const reopen = async () => {
+      const again = was && (modeler.getViews() || []).find((v) => v.id === was.id && v.type === was.type);
+      const now = modeler.getActiveView();
+      if (again && (!now || now.id !== again.id || now.type !== again.type)) {
+        try { await modeler.open(again); } catch { /* the default view stays */ }
+      }
+    };
+    let warnings;
+    try {
+      ({ warnings } = await modeler.importXML(text));
+    } catch (e) {
+      try { await modeler.importXML(before); await reopen(); } catch { /* nothing better to restore */ }
+      throw e;
+    }
+    await reopen();
+    // An import is not an edit the live session sees (ADR-0323): tell it, so a peer's
+    // draft is not pulled over this one before it is saved.
+    if (collab && collab.markDirty) collab.markDirty();
+    lastDeployedID = null; // the import replaced the canvas; re-read the chip's subject
+    refreshDeployed(true);
+    return { warnings: warnings || [] };
+  }
+
+  const openSource = () => openXmlSource({
+    kind: "DMN " + builtFor,
+    subject: "decision",
+    toast,
+    read: async () => (await currentXml()).xml,
+    apply: applySource,
+  });
+
   // The result is reported by toast rather than on the status line, as the BPMN
   // editor's Auto-layout reports it: the import re-opens the views, and the
   // views.changed handler clears the status line by design, so a message left there
@@ -1964,6 +2021,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   root.querySelector("#dmn-test-run").addEventListener("click", runTest);
   testDecision.addEventListener("change", renderTestForm);
   root.querySelector("#dmn-export").addEventListener("click", exportXml);
+  root.querySelector("#dmn-xmlsource").addEventListener("click", openSource);
   root.querySelector("#dmn-autolayout").addEventListener("click", autoLayout);
   onDmnMenuDismiss = wireDmnBarMenu(root);
 

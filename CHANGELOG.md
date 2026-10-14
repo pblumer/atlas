@@ -14,6 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Modeler shows a model's source, and takes a correction back.** The process and
+  decision editors carry **XML source** in their `⋯` menu, beside Export XML
+  ([ADR-draft-modeler-xml-source](docs/adr/draft-modeler-xml-source.md)). It opens the
+  BPMN or DMN document as the canvas holds it now, saved or not, in the Modeler's code
+  editor; **Apply** (Ctrl+Enter) rebuilds the diagram or decision from the text. A
+  document that is not well-formed XML is refused with the line the parser stopped on,
+  marked while you type; one the modeler cannot read leaves the canvas as it was, and an
+  import with warnings keeps the dialog open on them. An applied correction is an
+  unsaved edit like any other: leaving a deployment asks first, Save writes it, and a
+  collaborator's draft no longer arrives over it in a live session. It starts the undo
+  history afresh, and a DMN document of another version than the one the page opened is
+  refused by name. The form editor has always had its JSON schema as a tab; the tab now
+  says **Source**.
+
 - **The business architecture has a screen.** The capability register, its value streams
   and the gap report ([ADR-0305](docs/adr/0305-business-capabilities-and-value-streams.md))
   had HTTP routes and MCP tools and no view, so they could only be read through curl or an
