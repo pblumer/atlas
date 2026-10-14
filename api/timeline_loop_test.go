@@ -69,7 +69,7 @@ func runLoopModelWith(t *testing.T, model, start string) loopReplay {
 	var list []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(raw, &list); err != nil {
+	if err := json.Unmarshal(listRows(t, raw), &list); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	if len(list) == 0 {

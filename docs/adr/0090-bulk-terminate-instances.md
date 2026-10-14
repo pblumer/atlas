@@ -1,6 +1,7 @@
 # ADR-0090: Bulk-terminate running instances — an explicit selection and a filtered scope
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
 

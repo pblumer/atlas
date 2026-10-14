@@ -1,0 +1,21 @@
+{
+  "type": "default",
+  "id": "lg-arbeitsplatz",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🧰 Arbeitsplatz vorbereiten\n\nDie DMN-Entscheidung *Ausstattung & Zugriffe* hat aus der Rolle bestimmt, was bereitzustellen ist. Laptop, Softwarepakete und Zutritt stehen in den Variablen `ausstattung.laptop`, `ausstattung.software` und `ausstattung.zutritt` der Instanz (in der Aufgabenansicht sichtbar). Bitte den Arbeitsplatz einrichten und hier bestätigen."
+    },
+    {
+      "key": "arbeitsplatzBereit",
+      "type": "checkbox",
+      "label": "Arbeitsplatz ist eingerichtet (Laptop, Software, Zutritt)",
+      "validate": { "required": true }
+    },
+    {
+      "key": "bemerkung",
+      "type": "textfield",
+      "label": "Bemerkung (optional)"
+    }
+  ]
+}

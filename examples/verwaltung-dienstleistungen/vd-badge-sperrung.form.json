@@ -1,0 +1,32 @@
+{
+  "type": "default",
+  "id": "vd-badge-sperrung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Badge sperren · Block the badge**\n\nDer Badge wird sofort gesperrt; ein Ersatz ist eine eigene Anfrage. · The badge is blocked at once; a replacement is a request of its own."
+    },
+    {
+      "key": "grund",
+      "type": "radio",
+      "label": "Grund · Reason",
+      "values": [
+        {
+          "label": "Verloren · Lost",
+          "value": "verloren"
+        },
+        {
+          "label": "Gestohlen · Stolen",
+          "value": "gestohlen"
+        },
+        {
+          "label": "Defekt · Broken",
+          "value": "defekt"
+        }
+      ],
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

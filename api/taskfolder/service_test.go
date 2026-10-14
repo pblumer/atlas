@@ -45,17 +45,24 @@ func newService(t *testing.T) (*Service, *Store) {
 			Users:     []Option{{Value: "usr_me", Label: "Patrick"}},
 		}
 	}
-	count := func(ms []*Matcher, u User) ([]int, int, bool, error) {
-		out := make([]int, len(ms))
+	count := func(ms []*Matcher, u User) (Tally, error) {
+		tally := Tally{PerMatcher: make([]int, len(ms)), Builtin: map[string]int{}, Total: len(tasks)}
 		now := time.Now()
 		for i, m := range ms {
 			for _, task := range tasks {
 				if m.Match(task, u, now) {
-					out[i]++
+					tally.PerMatcher[i]++
 				}
 			}
 		}
-		return out, len(tasks), false, nil
+		for _, b := range BuiltinFolders {
+			for _, task := range tasks {
+				if b.Match(task, u) {
+					tally.Builtin[b.ID]++
+				}
+			}
+		}
+		return tally, nil
 	}
 	ids := 0
 	newID := func() (string, error) {
@@ -275,9 +282,16 @@ func TestCountsAreOneScan(t *testing.T) {
 	}
 }
 
-// TestCountsWithNoFoldersDoesNotScan proves the empty sidebar costs nothing: with
-// no folders there is nothing to count, so the engine is not walked at all.
-func TestCountsWithNoFoldersDoesNotScan(t *testing.T) {
+// TestCountsScanEvenWithNoSavedFolders. The sidebar is never empty — the fixed inbox
+// folders are always on it — so the walk runs whether or not this viewer has saved a
+// rule.
+//
+// This reverses an earlier property ("an empty sidebar costs nothing"), deliberately.
+// The fixed badges were counted in the console off the newest-first task page it had
+// already loaded, which cost nothing and was wrong the moment the inbox outgrew that
+// page: a task assigned to somebody and sitting past it left their "Assigned to me"
+// reading 0 (ADR-0365).
+func TestCountsScanEvenWithNoSavedFolders(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -291,16 +305,23 @@ func TestCountsWithNoFoldersDoesNotScan(t *testing.T) {
 
 	scanned := false
 	svc := New(loop, store, func(User) Options { return Options{} },
-		func([]*Matcher, User) ([]int, int, bool, error) {
+		func([]*Matcher, User) (Tally, error) {
 			scanned = true
-			return nil, 0, false, nil
+			return Tally{Builtin: map[string]int{"all": 7}}, nil
 		}, NewID)
 	rec := do(t, svc.HandleCounts, as(http.MethodGet, "", "usr_me"), nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("counts = %d", rec.Code)
 	}
-	if scanned {
-		t.Error("an empty sidebar still scanned the task population")
+	if !scanned {
+		t.Error("the fixed folders went uncounted, which is what left them the size of a page")
+	}
+	var got Counts
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode counts: %v (%s)", err, rec.Body)
+	}
+	if got.Builtin["all"] != 7 {
+		t.Errorf("builtin counts = %v, want the scan's own numbers", got.Builtin)
 	}
 }
 
@@ -455,5 +476,48 @@ func TestVisibleSkipsAFolderThatNoLongerCompiles(t *testing.T) {
 	}
 	if len(folders) != 1 || len(matchers) != 1 || folders[0].ID != good.ID {
 		t.Errorf("Visible returned %d folders, want only the compilable one", len(folders))
+	}
+}
+
+// TestTheMatcherCacheIsKeyedByTheRuleNotTheClock is the defect
+// TestMatcherIsRecompiledAfterAnEdit was failing on, made deterministic.
+//
+// The cache was keyed by the folder's UpdatedAt, a wall clock in milliseconds. Two
+// saves inside one millisecond therefore shared a key, and the second was served the
+// first's matcher — measured at 98 failures in 400 runs of that test, which had been
+// passing on the luck of the clock ticking between two writes.
+//
+// The property is not about time at all: a matcher is a pure function of
+// `Rule.FEEL()`, which is the only thing Compile reads. So the rule is the key, and
+// this pins that by changing the rule while holding UpdatedAt fixed — the state a
+// same-millisecond edit produces, and one no clock can be slow enough to avoid.
+func TestTheMatcherCacheIsKeyedByTheRuleNotTheClock(t *testing.T) {
+	svc, store := newService(t)
+	got := create(t, svc, kundenRule, "usr_me")
+
+	rec, found, err := store.Get(got.ID)
+	if err != nil || !found {
+		t.Fatalf("Get: %v (found %v)", err, found)
+	}
+	if _, m, _, err := svc.MatcherFor(got.ID, User{ID: "usr_me"}); err != nil {
+		t.Fatalf("MatcherFor: %v", err)
+	} else if !m.Match(tasks[0], User{ID: "usr_me", Name: "me"}, time.Now()) {
+		t.Fatal("the original rule does not match the task it names")
+	}
+
+	// A different rule under the *same* UpdatedAt: two saves in one millisecond.
+	rec.Rule = Rule{Match: MatchAll, Conditions: []Condition{
+		{Field: "process", Op: OpIs, Value: "onboarding"},
+	}}
+	if err := store.Save(rec); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	_, m, _, err := svc.MatcherFor(got.ID, User{ID: "usr_me"})
+	if err != nil {
+		t.Fatalf("MatcherFor: %v", err)
+	}
+	if m.Match(tasks[0], User{ID: "usr_me", Name: "me"}, time.Now()) {
+		t.Error("the edited folder is still filtered by its previous rule; the cache was keyed by the clock")
 	}
 }

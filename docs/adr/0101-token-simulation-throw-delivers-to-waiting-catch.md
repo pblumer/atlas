@@ -1,6 +1,7 @@
 # ADR-0101: Token simulation — a thrown message/signal delivers to a waiting catch
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-06
 - **Deciders:** Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0045: Binding user-task assignment to real identities
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas maintainers
 

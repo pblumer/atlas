@@ -246,3 +246,29 @@ func TestBuiltinConnectorsReportsGoogleSheetsUnconfigured(t *testing.T) {
 		t.Errorf("unconfigured = %v, want the kind reported as unserved", built.Unconfigured)
 	}
 }
+
+// TestRunGoogleSheetsJobRefusesAValueTheInstanceDidNotSupply: this offloaded path is
+// where the reported failure happened — the engine resolves the task, a Worker Instance
+// performs it — and it is the path a check placed at resolve time would miss, since a
+// Resolve that fails hands the worker a job with no detail at all and is reported as
+// that. The check lives in googlesheets.Run, which both paths share, so the empty value
+// is named here too and Google is asked nothing.
+func TestRunGoogleSheetsJobRefusesAValueTheInstanceDidNotSupply(t *testing.T) {
+	client := &recordingSheetsClient{}
+	job := sheetsJobFrom(t, googlesheets.Job{
+		Worker:    "acme",
+		Operation: "write-range",
+		Range:     "A1:C1",
+		Values:    [][]any{{"Antragsnummer"}},
+	})
+	_, err := RunGoogleSheetsJob(context.Background(), job, sheetsRegistryWith("acme", client))
+	if err == nil {
+		t.Fatal("a spreadsheet the instance never supplied: want an error, got nil")
+	}
+	if !strings.Contains(err.Error(), "the task's spreadsheet") {
+		t.Errorf("error %q should name the attribute that came up empty", err)
+	}
+	if client.got.Operation != "" {
+		t.Errorf("called Google with %+v; want no call at all", client.got)
+	}
+}

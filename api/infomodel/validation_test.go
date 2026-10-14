@@ -260,3 +260,258 @@ func TestValidateFindingsLocateThemselves(t *testing.T) {
 		}
 	}
 }
+
+// --- lifecycles (ADR-0259) -------------------------------------------------
+//
+// A lifecycle is what a BPMN data state resolves against, so a lifecycle on disk has
+// to be one a deploy can resolve against: every state a transition names exists, one
+// state is where an instance starts, and no two states answer to the same name.
+
+func withLifecycle(className string, lc *Lifecycle) Model {
+	m := orderModel()
+	for i := range m.Classes {
+		if m.Classes[i].Name == className {
+			m.Classes[i].Lifecycle = lc
+		}
+	}
+	return m
+}
+
+func TestValidateAcceptsALifecycle(t *testing.T) {
+	m := withLifecycle("Order", &Lifecycle{
+		States: []LifecycleState{
+			{Name: "draft", Initial: true},
+			{Name: "approved"},
+			{Name: "shipped", Final: true},
+		},
+		Transitions: []LifecycleTransition{
+			{ID: "t1", From: "draft", To: "approved", Name: "approve"},
+			{ID: "t2", From: "approved", To: "shipped", Name: "ship"},
+		},
+	})
+	if res := Validate(m); !res.Valid {
+		t.Fatalf("a well-formed lifecycle was rejected: %v", findingCodes(res))
+	}
+}
+
+// A class with no lifecycle is the normal case, and the one this must not disturb:
+// every model written before lifecycles existed is one of these.
+func TestValidateLeavesAClassWithoutALifecycleAlone(t *testing.T) {
+	for _, f := range Validate(orderModel()).Findings {
+		if strings.Contains(f.Code, "lifecycle") || strings.Contains(f.Code, "state") ||
+			strings.Contains(f.Code, "transition") {
+			t.Errorf("a model with no lifecycle drew a lifecycle finding: %+v", f)
+		}
+	}
+}
+
+func TestValidateLifecycleRefusals(t *testing.T) {
+	cases := []struct {
+		name string
+		lc   *Lifecycle
+		want string
+	}{
+		{"no states at all", &Lifecycle{States: []LifecycleState{}}, CodeLifecycleEmpty},
+		{"a state with no name", &Lifecycle{States: []LifecycleState{
+			{Name: "draft", Initial: true}, {Name: "  "}}}, CodeMissingStateName},
+		{"two states answering to one name", &Lifecycle{States: []LifecycleState{
+			{Name: "draft", Initial: true}, {Name: "draft"}}}, CodeDuplicateStateName},
+		{"nowhere to start", &Lifecycle{States: []LifecycleState{{Name: "draft"}}},
+			CodeNoInitialState},
+		{"two places to start", &Lifecycle{States: []LifecycleState{
+			{Name: "draft", Initial: true}, {Name: "new", Initial: true}}}, CodeManyInitialStates},
+		{"a transition from nowhere", &Lifecycle{
+			States:      []LifecycleState{{Name: "draft", Initial: true}},
+			Transitions: []LifecycleTransition{{ID: "t1", From: "ghost", To: "draft"}}},
+			CodeUnknownTransitionState},
+		{"a transition to nowhere", &Lifecycle{
+			States:      []LifecycleState{{Name: "draft", Initial: true}},
+			Transitions: []LifecycleTransition{{ID: "t1", From: "draft", To: "ghost"}}},
+			CodeUnknownTransitionState},
+		{"two transitions under one id", &Lifecycle{
+			States: []LifecycleState{{Name: "draft", Initial: true}, {Name: "done"}},
+			Transitions: []LifecycleTransition{
+				{ID: "t1", From: "draft", To: "done"}, {ID: "t1", From: "done", To: "draft"}}},
+			CodeDuplicateTransitionID},
+		{"a transition leaving a final state", &Lifecycle{
+			States: []LifecycleState{{Name: "draft", Initial: true}, {Name: "shipped", Final: true}},
+			Transitions: []LifecycleTransition{
+				{ID: "t1", From: "draft", To: "shipped"}, {ID: "t2", From: "shipped", To: "draft"}}},
+			CodeTransitionLeavesFinalState},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			res := Validate(withLifecycle("Order", c.lc))
+			if res.Valid {
+				t.Fatalf("the model was accepted; expected %s", c.want)
+			}
+			if !hasCode(res, c.want) {
+				t.Fatalf("codes = %v, want %s", findingCodes(res), c.want)
+			}
+			// Located on the class, so the canvas can mark it rather than print a list.
+			for _, f := range res.Findings {
+				if f.Code == c.want && f.ClassID != "c2" {
+					t.Errorf("the finding is not on the Order class: %+v", f)
+				}
+			}
+		})
+	}
+}
+
+// Only a business object has a life to have stages in.
+func TestValidateRefusesALifecycleOnAKindThatHasNoLife(t *testing.T) {
+	for _, name := range []string{"Address", "OrderStatus"} {
+		t.Run(name, func(t *testing.T) {
+			res := Validate(withLifecycle(name, &Lifecycle{
+				States: []LifecycleState{{Name: "draft", Initial: true}}}))
+			if !hasCode(res, CodeLifecycleNotAllowed) {
+				t.Errorf("codes = %v, want %s", findingCodes(res), CodeLifecycleNotAllowed)
+			}
+		})
+	}
+}
+
+// A self-loop says a record can be revised without leaving the stage it is in, which
+// is a real thing to model and not a mistake.
+func TestValidateAcceptsASelfTransition(t *testing.T) {
+	m := withLifecycle("Order", &Lifecycle{
+		States:      []LifecycleState{{Name: "draft", Initial: true}},
+		Transitions: []LifecycleTransition{{ID: "t1", From: "draft", To: "draft", Name: "revise"}},
+	})
+	if res := Validate(m); !res.Valid {
+		t.Errorf("a self-transition was rejected: %v", findingCodes(res))
+	}
+}
+
+// A state nothing reaches yet is a lifecycle being drawn, not a broken one: the
+// canvas puts a state down before the arrow to it exists, and a validator that
+// refused the write would be a canvas nobody could draw on.
+func TestValidateAcceptsAStateNothingReachesYet(t *testing.T) {
+	m := withLifecycle("Order", &Lifecycle{
+		States: []LifecycleState{{Name: "draft", Initial: true}, {Name: "parked"}},
+	})
+	if res := Validate(m); !res.Valid {
+		t.Errorf("a half-drawn lifecycle was rejected: %v", findingCodes(res))
+	}
+}
+
+// --- a lifecycle whose states come from an «enumeration» (ADR-0306)
+//
+// The model that prompted this had its five states written as an enumeration, with
+// documentation, because that was the only place they could be written at all. The
+// reference makes that enumeration the one place the strings live; everything an
+// enumeration cannot hold — the order, the start, the ends — stays on the lifecycle.
+
+// enumLifecycle points Order's lifecycle at OrderStatus, whose literals the fixture
+// declares as draft, approved and rejected.
+func enumLifecycle(states ...LifecycleState) Model {
+	return withLifecycle("Order", &Lifecycle{StatesFrom: "OrderStatus", States: states})
+}
+
+func TestValidateAcceptsALifecycleWhoseStatesAreAnEnumerationsLiterals(t *testing.T) {
+	m := withLifecycle("Order", &Lifecycle{
+		StatesFrom: "OrderStatus",
+		States: []LifecycleState{
+			{Name: "draft", Initial: true},
+			{Name: "approved"},
+			{Name: "rejected", Final: true},
+		},
+		Transitions: []LifecycleTransition{
+			{ID: "t1", From: "draft", To: "approved"},
+			{ID: "t2", From: "draft", To: "rejected"},
+		},
+	})
+	if res := Validate(m); !res.Valid {
+		t.Fatalf("a lifecycle sourced from an enumeration was rejected: %v", findingCodes(res))
+	}
+}
+
+func TestValidateRefusesALifecycleSourcedFromSomethingItCannotBe(t *testing.T) {
+	cases := []struct {
+		name string
+		lc   *Lifecycle
+		want string
+	}{
+		{
+			// A typo in the reference. Nothing supplies the states, so the document
+			// says its states come from somewhere that is not there.
+			name: "an enumeration that is not in the model",
+			lc: &Lifecycle{StatesFrom: "Lebenszustand",
+				States: []LifecycleState{{Name: "draft", Initial: true}}},
+			want: CodeLifecycleUnknownEnumeration,
+		},
+		{
+			// Pointing at a class that has literals is the whole idea; pointing at one
+			// that has attributes is pointing at the wrong kind of thing.
+			name: "a class that is not an enumeration",
+			lc: &Lifecycle{StatesFrom: "Address",
+				States: []LifecycleState{{Name: "draft", Initial: true}}},
+			want: CodeLifecycleNotAnEnumeration,
+		},
+		{
+			// The contradiction the reference exists to prevent: the states come from
+			// OrderStatus, and here is one OrderStatus does not contain.
+			name: "a state the enumeration does not declare",
+			lc: &Lifecycle{StatesFrom: "OrderStatus", States: []LifecycleState{
+				{Name: "draft", Initial: true}, {Name: "shipped"}}},
+			want: CodeStateNotALiteral,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			res := Validate(withLifecycle("Order", c.lc))
+			if res.Valid {
+				t.Fatalf("the model was accepted; expected %s", c.want)
+			}
+			if !hasCode(res, c.want) {
+				t.Fatalf("codes = %v, want %s", findingCodes(res), c.want)
+			}
+			for _, f := range res.Findings {
+				if f.Code == c.want && f.ClassID != "c2" {
+					t.Errorf("the finding is not on the Order class: %+v", f)
+				}
+			}
+		})
+	}
+}
+
+// The one refusal deliberately not made. A lifecycle half-drawn is the normal
+// condition — ADR-0259's validator is careful about exactly this — and "you declared a
+// value you have not placed on the machine yet" is incompleteness, not a contradiction.
+func TestALiteralWithNoStateIsNotRefused(t *testing.T) {
+	res := Validate(enumLifecycle(LifecycleState{Name: "draft", Initial: true}))
+	if !res.Valid {
+		t.Fatalf("a lifecycle that has not placed every literal yet was refused: %v", findingCodes(res))
+	}
+}
+
+// The finding names the state, so the state canvas marks the one that is wrong rather
+// than colouring the whole class — which is the reason Finding carries State at all.
+func TestAStateTheEnumerationDoesNotDeclareIsNamedOnTheState(t *testing.T) {
+	res := Validate(enumLifecycle(
+		LifecycleState{Name: "draft", Initial: true}, LifecycleState{Name: "shipped"}))
+	for _, f := range res.Findings {
+		if f.Code != CodeStateNotALiteral {
+			continue
+		}
+		if f.State != "shipped" {
+			t.Errorf("the finding names state %q, want shipped", f.State)
+		}
+		if !strings.Contains(f.Message, "OrderStatus") {
+			t.Errorf("the message does not name the enumeration to fix: %q", f.Message)
+		}
+		return
+	}
+	t.Fatalf("no %s finding; got %v", CodeStateNotALiteral, findingCodes(res))
+}
+
+// Silence when unused, which is how ADR-0259 itself degrades: a lifecycle that names
+// no enumeration is exactly the lifecycle it was before this existed.
+func TestALifecycleThatNamesNoEnumerationIsUnaffected(t *testing.T) {
+	m := withLifecycle("Order", &Lifecycle{
+		States: []LifecycleState{{Name: "anything at all", Initial: true}},
+	})
+	if res := Validate(m); !res.Valid {
+		t.Fatalf("a lifecycle that declares its own states was refused: %v", findingCodes(res))
+	}
+}

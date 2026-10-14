@@ -1,6 +1,7 @@
 # ADR-0130: Deprecating a process version — a drain state distinct from pausing
 
 - **Status:** Proposed (sketch for discussion — see "Open questions")
+- **Implementation:** Not started
 - **Date:** 2026-08-17
 - **Deciders:** Atlas maintainers
 

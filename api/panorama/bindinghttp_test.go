@@ -249,7 +249,8 @@ func TestCatalogForKeyCoversTheWholeContract(t *testing.T) {
 		Applications: map[string]ResourceRef{}, Processes: map[string]ResourceRef{},
 		Connectors: map[string]ResourceRef{}, JobTypes: map[string]ResourceRef{},
 		Runtimes: map[string]ResourceRef{}, Targets: map[string]ResourceRef{},
-		Releases: map[string]ResourceRef{},
+		Releases: map[string]ResourceRef{}, Capabilities: map[string]ResourceRef{},
+		ValueStreams: map[string]ResourceRef{},
 	}
 	for _, key := range BindingKeys() {
 		if full.forKey(key) == nil {

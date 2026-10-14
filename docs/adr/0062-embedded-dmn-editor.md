@@ -1,6 +1,7 @@
 # ADR-0062: An embedded DMN editor (dmn-js)
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-25
 - **Deciders:** Atlas maintainers
 

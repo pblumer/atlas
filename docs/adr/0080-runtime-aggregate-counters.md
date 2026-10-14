@@ -1,6 +1,7 @@
 # ADR-0080: Sublinear runtime views via maintained aggregate counters
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 

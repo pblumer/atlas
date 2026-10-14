@@ -86,12 +86,12 @@ func (h *compactionHarness) pass() {
 	h.t.Helper()
 	select {
 	case h.ticks <- time.Time{}:
-	case <-time.After(2 * time.Second):
+	case <-time.After(checkpointPassFailsafe):
 		h.t.Fatal("checkpoint loop did not accept a tick")
 	}
 	select {
 	case <-h.done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(checkpointPassFailsafe):
 		h.t.Fatal("checkpoint pass did not complete")
 	}
 }
@@ -129,7 +129,7 @@ func (h *compactionHarness) instanceCount() int {
 		h.t.Fatalf("list instances status=%d body=%s", code, body)
 	}
 	var rows []json.RawMessage
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(h.t, body), &rows); err != nil {
 		h.t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	return len(rows)

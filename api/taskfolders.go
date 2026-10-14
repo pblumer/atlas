@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"sort"
 	"strconv"
@@ -43,10 +44,130 @@ var maxFolderScan = 20000
 // snapshot's copy of it, rather than the two growing separate copies of the walk.
 type taskDefLookup func(defKey uint64) (processID, processName string, cp *compiler.CompiledProcess, ok bool)
 
-// elementReader is the one read enriching a task makes beyond the job itself.
+// elementReader is what enriching a task reads beyond the job itself.
 // Both *state.Store and *state.ReadView satisfy it.
 type elementReader interface {
 	GetElementInstance(key uint64) (*model.ElementInstanceValue, bool, error)
+	// ElementReplayHistory answers when a job written before it carried its own
+	// creation stamp was opened (see activatedAt).
+	ElementReplayHistory(piKey uint64, fn func(ts int64, pos uint64, v state.ElementReplayValue) error) error
+	// VisibleVariablesOfScope is read only when a caller asks for a task's content.
+	VisibleVariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error
+}
+
+// wantsTaskContent reports whether a task listing was asked to carry each task's
+// content (?content=1). Off by default: the rows every other caller reads stay the
+// size and the cost they were.
+func wantsTaskContent(r *http.Request) bool {
+	v := strings.TrimSpace(r.URL.Query().Get("content"))
+	return v == "1" || v == "true"
+}
+
+// errFound stops a scan that has what it came for.
+var errFound = errors.New("found")
+
+// activatedAt is when the element a job waits on was activated, in unix nanos, or 0
+// when the instance's history does not say. It is the fallback for a job written
+// before the job recorded its own creation time: a user task's job is created in the
+// same batch its element activates, so the two instants are the same moment. The
+// scan is over one instance's token history and stops at the match, and it is only
+// taken for those older jobs, so it fades out as they are completed.
+func activatedAt(r elementReader, jv *model.JobValue) int64 {
+	var at int64
+	err := r.ElementReplayHistory(jv.ProcessInstanceKey, func(ts int64, _ uint64, v state.ElementReplayValue) error {
+		if v.ElementInstanceKey == jv.ElementInstanceKey && v.Action == state.ReplayActivated {
+			at = ts
+			return errFound
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errFound) {
+		return 0
+	}
+	return at
+}
+
+// The bounds on what taskContent returns per task. A task's content is for finding
+// it, not for reading it — the form does that — so a long value is cut and a scope
+// with many variables contributes its first few.
+const (
+	maxTaskContentValues = 40
+	maxTaskContentLen    = 200
+)
+
+// taskContent is the short text and number values of the variables a task's form
+// asks for, as they are visible at the task's scope: the task's own variables over
+// those of every enclosing scope up to the instance. The inbox's filter matches
+// against them, so a person can find "every task about this recipient" by the
+// recipient rather than by a task name that is the same on every row.
+//
+// fields is that form's allowlist ([Server.taskFormFields]); a task with no form,
+// or a form that cannot be read, has none and carries no content. The list only
+// shows a viewer the tasks they may work ([Server.taskVisibleTo]), so the row says
+// what the task's form shows whoever works it, and nothing more. For an open task
+// that is somewhat earlier than the variables endpoint, which hands its fields out
+// only once somebody has claimed it — but anybody may claim it, so the row tells a
+// viewer nothing a claim would not. It used to carry every value at the scope, and
+// an open task, which every signed-in account sees, then handed out what no form
+// asks for and the variables endpoint refuses (ADR-0275; status report of
+// 2026-10-10).
+func taskContent(r elementReader, tr taskResp, fields map[string]bool) []string {
+	if len(fields) == 0 {
+		return nil
+	}
+	allowed := instanceAccess{fields: fields}
+	scope := tr.ElementInstanceKey
+	if scope == 0 {
+		scope = tr.ProcessInstanceKey
+	}
+	var out []string
+	err := r.VisibleVariablesOfScope(scope, func(v *model.VariableValue) error {
+		if v.Kind != model.VarString && v.Kind != model.VarNumber {
+			return nil
+		}
+		if !allowed.allows(v.Name) {
+			return nil
+		}
+		text := strings.TrimSpace(v.Text)
+		if text == "" {
+			return nil
+		}
+		if len(text) > maxTaskContentLen {
+			text = strings.ToValidUTF8(text[:maxTaskContentLen], "")
+		}
+		out = append(out, text)
+		if len(out) >= maxTaskContentValues {
+			return errFound
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errFound) {
+		return nil
+	}
+	return out
+}
+
+// taskFormFields is the allowlist a task's content is drawn from: the field keys of
+// the form the task names, collected as [Server.taskFieldsFor] collects them for the
+// variables endpoint, so a row and that endpoint cannot disagree about what a form
+// asks for. A page reads each form once, through seen; a form that is not saved or
+// will not read contributes nothing, which fails closed.
+//
+// It reads the form store from disk, so it belongs off the run loop.
+func (s *Server) taskFormFields(formID string, seen map[string]map[string]bool) map[string]bool {
+	if formID == "" {
+		return nil
+	}
+	if fields, ok := seen[formID]; ok {
+		return fields
+	}
+	var fields map[string]bool
+	if rec, ok, err := s.forms.Get(formID); err == nil && ok {
+		fields = map[string]bool{}
+		collectFormFieldKeys([]byte(rec.Schema), fields)
+	}
+	seen[formID] = fields
+	return fields
 }
 
 // deploymentMeta reads the loop-owned deployment registry. Only call it on the
@@ -112,6 +233,16 @@ func taskPriorityOf(tr taskResp) int32 {
 // ([taskfolder.Matcher.NeedsInstance]).
 func (s *Server) visitOpenTasks(before uint64, needInstance bool,
 	visit func(jobKey uint64, tr taskResp, ft taskfolder.Task) bool) (budgetHit bool, err error) {
+	return s.visitOpenTasksIn(before, needInstance, func(_ *state.ReadView, jobKey uint64, tr taskResp, ft taskfolder.Task) bool {
+		return visit(jobKey, tr, ft)
+	})
+}
+
+// visitOpenTasksIn is [Server.visitOpenTasks] with the snapshot the walk reads, for a
+// visitor that reads more about the tasks it keeps (a page asking for their content)
+// and should not pay for that on the tasks it skips.
+func (s *Server) visitOpenTasksIn(before uint64, needInstance bool,
+	visit func(rv *state.ReadView, jobKey uint64, tr taskResp, ft taskfolder.Task) bool) (budgetHit bool, err error) {
 	scanned := 0
 	err = s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
 		def := defsMeta(defs)
@@ -133,7 +264,7 @@ func (s *Server) visitOpenTasks(before uint64, needInstance bool,
 					ft.InstanceCreatedAt = pi.CreatedAt / int64(time.Millisecond)
 				}
 			}
-			if !visit(jobKey, tr, ft) {
+			if !visit(rv, jobKey, tr, ft) {
 				return errListTruncated
 			}
 			return nil
@@ -145,7 +276,14 @@ func (s *Server) visitOpenTasks(before uint64, needInstance bool,
 // countTaskFolders answers every visible folder's badge from one walk of the open
 // tasks. It is the [taskfolder.CountFunc] the service is built with — the service
 // knows how to decide membership, the server knows where the tasks are.
-func (s *Server) countTaskFolders(matchers []*taskfolder.Matcher, u taskfolder.User) ([]int, int, bool, error) {
+//
+// The fixed inbox folders are counted on the same walk. They used to be counted in
+// the console instead, off the rows of the newest-first page it had already loaded,
+// so each badge was the size of that page rather than of the inbox: a task assigned
+// to somebody and sitting outside the newest 500 left their "Assigned to me" reading
+// 0 (ADR-0365). One walk, one set of
+// numbers, one truncation flag over all of them.
+func (s *Server) countTaskFolders(matchers []*taskfolder.Matcher, u taskfolder.User) (taskfolder.Tally, error) {
 	needInstance := false
 	for _, m := range matchers {
 		if m.NeedsInstance() {
@@ -153,24 +291,43 @@ func (s *Server) countTaskFolders(matchers []*taskfolder.Matcher, u taskfolder.U
 			break
 		}
 	}
-	counts := make([]int, len(matchers))
-	total := 0
+	tally := taskfolder.Tally{
+		PerMatcher: make([]int, len(matchers)),
+		Builtin:    make(map[string]int, len(taskfolder.BuiltinFolders)),
+	}
+	// Every fixed folder is present in the map from the start, zero included: a badge
+	// with no entry would be "not counted" and a badge with a zero is "counted, none",
+	// and the console draws those two differently.
+	for _, b := range taskfolder.BuiltinFolders {
+		tally.Builtin[b.ID] = 0
+	}
 	// One instant for the whole scan, so "overdue" cannot mean two different
 	// moments within a single answer.
 	now := time.Now()
-	budgetHit, err := s.visitOpenTasks(0, needInstance, func(_ uint64, _ taskResp, ft taskfolder.Task) bool {
-		total++
+	budgetHit, err := s.visitOpenTasks(0, needInstance, func(_ uint64, tr taskResp, ft taskfolder.Task) bool {
+		// A badge counts what the viewer's list would show, not what exists: a count
+		// that includes tasks the list withholds is the withheld inbox by another name.
+		if !s.taskVisibleTo(u, tr) {
+			return true
+		}
+		tally.Total++
 		for i, m := range matchers {
 			if m.Match(ft, u, now) {
-				counts[i]++
+				tally.PerMatcher[i]++
+			}
+		}
+		for _, b := range taskfolder.BuiltinFolders {
+			if b.Match(ft, u) {
+				tally.Builtin[b.ID]++
 			}
 		}
 		return true
 	})
 	if err != nil {
-		return nil, 0, false, err
+		return taskfolder.Tally{}, err
 	}
-	return counts, total, budgetHit, nil
+	tally.Truncated = budgetHit
+	return tally, nil
 }
 
 // listTasksForFolder writes the open user tasks one folder selects. It keeps the
@@ -188,12 +345,34 @@ func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, fold
 		httpapi.Error(w, http.StatusNotFound, "no folder with that id")
 		return
 	}
+	now := time.Now()
+	s.pageOpenTasks(w, limit, before, matcher.NeedsInstance(), wantsTaskContent(r), func(tr taskResp, ft taskfolder.Task) bool {
+		return s.taskVisibleTo(viewer, tr) && matcher.Match(ft, viewer, now)
+	})
+}
+
+// listVisibleTasks is the unfiltered listing for a viewer who does not see every
+// task, and for any page asked for its content: the same page, cap and cursor,
+// walked off the loop because it has to skip what [Server.taskVisibleTo] withholds,
+// exactly as a folder skips what its rule does not select. For a viewer who sees
+// everything it skips nothing.
+func (s *Server) listVisibleTasks(w http.ResponseWriter, viewer taskfolder.User, limit int, before uint64, content bool) {
+	s.pageOpenTasks(w, limit, before, false, content, func(tr taskResp, _ taskfolder.Task) bool {
+		return s.taskVisibleTo(viewer, tr)
+	})
+}
+
+// pageOpenTasks writes one newest-first page of the open user tasks keep selects.
+// It keeps the page cap, the truncation flag and the cursor the unfiltered listing
+// uses, so a filtered list pages exactly like "All tasks" does.
+func (s *Server) pageOpenTasks(w http.ResponseWriter, limit int, before uint64, needInstance, content bool,
+	keep func(tr taskResp, ft taskfolder.Task) bool) {
 	tasks := []taskResp{}
 	var nextCursor uint64
-	now := time.Now()
 	full := false
-	budgetHit, scanErr := s.visitOpenTasks(before, matcher.NeedsInstance(), func(jobKey uint64, tr taskResp, ft taskfolder.Task) bool {
-		if !matcher.Match(ft, viewer, now) {
+	forms := map[string]map[string]bool{}
+	budgetHit, scanErr := s.visitOpenTasksIn(before, needInstance, func(rv *state.ReadView, jobKey uint64, tr taskResp, ft taskfolder.Task) bool {
+		if !keep(tr, ft) {
 			// A skipped task still advances the cursor: the next page must resume
 			// after everything this one looked at, not after the last row it kept.
 			nextCursor = jobKey
@@ -203,6 +382,9 @@ func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, fold
 			full = true
 			return false
 		}
+		if content {
+			tr.Content = taskContent(rv, tr, s.taskFormFields(tr.FormID, forms))
+		}
 		tasks = append(tasks, tr)
 		nextCursor = jobKey
 		return true
@@ -211,11 +393,16 @@ func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, fold
 		httpapi.Error(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
 		return
 	}
-	if full || budgetHit {
-		w.Header().Set("X-Tasks-Truncated", "true")
-		w.Header().Set("X-Tasks-Next-Cursor", strconv.FormatUint(nextCursor, 10))
+	// Same shape and same reasoning as the unfiltered listing
+	// (ADR-0378). The exact
+	// count for a folder is what GET /api/v1/task-folders/counts answers; here the
+	// total is the page unless the page is everything.
+	capped := full || budgetHit
+	page := httpapi.PageOf(tasks, capped)
+	if capped {
+		page = page.WithCursor(strconv.FormatUint(nextCursor, 10))
 	}
-	httpapi.JSON(w, http.StatusOK, tasks)
+	httpapi.JSON(w, http.StatusOK, page)
 }
 
 // taskFolderOptions fills the editor's value listboxes from what is actually

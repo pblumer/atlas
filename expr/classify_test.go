@@ -105,3 +105,24 @@ func TestFromStoredUnknownKind(t *testing.T) {
 		t.Errorf("FromStored(99,...) = %q, want null", got.String())
 	}
 }
+
+// TestValueKindLabel pins the words a kind is shown under. They are a wire contract
+// rather than a nicety: the FEEL evaluate route sends them, and the console and the
+// FEEL assistant both branch on them, so two places spelling them apart would show
+// one result two ways.
+func TestValueKindLabel(t *testing.T) {
+	for kind, want := range map[expr.ValueKind]string{
+		expr.KindNull:   "null",
+		expr.KindBool:   "boolean",
+		expr.KindNumber: "number",
+		expr.KindString: "string",
+		expr.KindJSON:   "json",
+		// A kind this build does not know reads as null, the one label that claims
+		// nothing about a value it cannot describe.
+		expr.ValueKind(200): "null",
+	} {
+		if got := kind.Label(); got != want {
+			t.Errorf("ValueKind(%d).Label() = %q, want %q", kind, got, want)
+		}
+	}
+}

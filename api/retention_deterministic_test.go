@@ -133,7 +133,7 @@ func (h retentionHarness) list() []instanceRow {
 		h.t.Fatalf("list instances status=%d body=%s", code, body)
 	}
 	var rows []instanceRow
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(h.t, body), &rows); err != nil {
 		h.t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	return rows

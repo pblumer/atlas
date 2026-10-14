@@ -1,4 +1,4 @@
-# Installing Atlas
+# Installing atlas
 
 How to get the `atlas` binary onto a machine and keep it running. This is the
 operator's guide — for setting up a *development* checkout see
@@ -49,11 +49,11 @@ warning and the tasks in that language park until you install it.
 same directory will corrupt it. This is also why the Helm chart is a one-replica
 StatefulSet and must never become a Deployment.
 
-**Nothing should reach Atlas in the clear.** The binary can terminate TLS itself —
+**Nothing should reach atlas in the clear.** The binary can terminate TLS itself —
 `--tls-cert` and `--tls-key` make `--addr` a TLS 1.3 listener — but it does not by
 default, and a TLS-terminating reverse proxy is still the other good answer. Pick
 one before anyone outside the host can reach it. TLS is not authorization either
-way: `/metrics`, `/healthz` and `/readyz` answer whoever can reach the port. See
+way: `/healthz` and `/readyz` answer whoever can reach the port. See
 [TLS: in the binary, or in front of it](#8-tls-in-the-binary-or-in-front-of-it).
 
 ## Quick try
@@ -61,16 +61,16 @@ way: `/metrics`, `/healthz` and `/readyz` answer whoever can reach the port. See
 If you only want to see it run, and will throw the directory away afterwards:
 
 ```bash
-curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.4.0/atlas_0.4.0_linux_amd64.tar.gz
-tar -xzf atlas_0.4.0_linux_amd64.tar.gz
-./atlas_0.4.0_linux_amd64/atlas serve
+curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.13.0/atlas_0.13.0_linux_amd64.tar.gz
+tar -xzf atlas_0.13.0_linux_amd64.tar.gz
+./atlas_0.13.0_linux_amd64/atlas serve
 ```
 
 Then open <http://127.0.0.1:8080/>. Authentication is off, so there is no login —
 which is exactly why this is a "try it" recipe and not an install. For anything
 that outlives the afternoon, follow the steps below.
 
-The URL names the version rather than using `/releases/latest/`: while Atlas is
+The URL names the version rather than using `/releases/latest/`: while atlas is
 pre-1.0 every release is published as a **prerelease**, and GitHub's "latest"
 never points at one — so a `/latest/` link would 404. Bump the version here when
 you cut a release, as in the steps below.
@@ -85,7 +85,7 @@ the transfer. Substitute the version and architecture you want — `linux_amd64`
 `linux_arm64`, or `linux_arm` (ARMv6, for a 32-bit Raspberry Pi OS).
 
 ```bash
-VERSION=0.4.0
+VERSION=0.13.0
 ARCH=linux_amd64
 BASE=https://github.com/pblumer/atlas/releases/download/v${VERSION}
 
@@ -94,7 +94,7 @@ curl -fsSLO ${BASE}/SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-`sha256sum` must print `atlas_0.4.0_linux_amd64.tar.gz: OK`. If it prints
+`sha256sum` must print `atlas_0.13.0_linux_amd64.tar.gz: OK`. If it prints
 anything else, stop — do not unpack the archive.
 
 ### 2. Put the binary on the system
@@ -199,14 +199,20 @@ journalctl -u atlas -f
 ```
 
 > If you enable script tasks, `ProtectSystem=strict` and `PrivateTmp=true` also
-> apply to the interpreters Atlas spawns. Loosen them only as far as your scripts
+> apply to the interpreters atlas spawns. Loosen them only as far as your scripts
 > actually need.
+>
+> For scripts that need neither local files nor network services, add
+> `--script-sandbox=strict`. The per-execution boundary is narrower than the
+> systemd unit: only the installed runtime and private scratch remain readable,
+> and new sockets are denied. It requires Linux Landlock ABI 3 or newer and fails
+> startup if the kernel cannot enforce it.
 
 ### 6. The administrator account
 
 Authentication is **on by default**; the unit above passes `--auth` explicitly so
 the file says what it relies on. On the **first** start with an empty user store,
-Atlas seeds one administrator:
+atlas seeds one administrator:
 
 ```bash
 sudo mkdir -p /etc/atlas
@@ -218,7 +224,7 @@ sudo chmod 0600 /etc/atlas/atlas.env
 sudo systemctl restart atlas
 ```
 
-If you leave `ATLAS_ADMIN_PASSWORD` unset, Atlas generates a password and logs it
+If you leave `ATLAS_ADMIN_PASSWORD` unset, atlas generates a password and logs it
 **once** at startup — read it out of `journalctl -u atlas` and change it. Either
 way, remove the password from `atlas.env` after the first successful login; it is
 only consulted while the user store is empty.
@@ -248,6 +254,8 @@ grant and every MCP tool call alike.
 | `modeler` | author drafts, forms and decisions — and **deploy** them |
 | `operator` | start, cancel, terminate and repair instances; read runtime data |
 | `user` | work on tasks and read what they are given |
+| `productmanager` | maintain the shop's catalogues and products, and publish releases — without deploying |
+| `feedreader` | read the event feed (`GET /api/v1/events`) and nothing else — what a CMDB's or a billing system's `events` token carries, narrowed to some catalogues if its reach names them |
 
 An account carries **several** roles, not one: they are a list, not a ladder, so a
 modeller who also starts test instances holds `modeler` *and* `operator`. An
@@ -271,13 +279,15 @@ Two things to know when you upgrade an installation that predates this:
 - **What you narrow, stays narrow.** The carry-over runs once per account, so an
   account you set back to `user` is still `user` after the next restart.
 
-New accounts get `user`. An API token carries the roles of the account that minted
-it and is **never** an administrator, whoever mints it. With `--auth=false` there is
+New accounts get `user`; `productmanager` and `feedreader` are never carried over by
+the upgrade, only granted. An API token carries the roles of the account that minted
+it and is **never** an administrator, whoever mints it — except an `events` token,
+which carries `feedreader` and nothing else. With `--auth=false` there is
 no account and none of this is enforced.
 
 ### Single sign-on with an identity provider
 
-Optional, and off unless you configure it. With no provider set, Atlas
+Optional, and off unless you configure it. With no provider set, atlas
 authenticates people exactly as it did before — a local password, no outbound
 connection, no dependency on anybody else being up.
 
@@ -302,7 +312,7 @@ refuse the login.
 Two more settings if you need them: `ATLAS_OIDC_SCOPES` (default
 `openid profile email`) and `ATLAS_OIDC_NAME`, which is what the button on the
 login screen says. The client secret may be omitted for a provider that registered
-Atlas as a public client; the flow uses PKCE either way.
+atlas as a public client; the flow uses PKCE either way.
 
 What to expect once it is on:
 
@@ -319,20 +329,20 @@ What to expect once it is on:
 
 **Keep one local administrator.** A provider that is unreachable — an expired
 certificate, a moved discovery document, a closed network path — takes federated
-sign-in with it. The local password remains the way back in, and Atlas refuses to
+sign-in with it. The local password remains the way back in, and atlas refuses to
 leave an instance without an enabled administrator.
 
 #### Letting the provider's groups decide roles
 
 Optional, and off until you turn it on. Under **Organization → Single sign-on** you
 name one claim in the provider's token and a list of exact values it may carry, and
-each value names the Atlas roles it grants and the groups it puts a person in. From
+each value names the atlas roles it grants and the groups it puts a person in. From
 that moment, onboarding and offboarding are a group membership somebody already
 maintains: the role and the shared projects arrive at the next sign-in, and go away
 at the sign-in after the membership does.
 
 The claim is whatever your provider emits — `groups` for many, `roles`, or a dotted
-path like `realm_access.roles` for Keycloak. Values are compared exactly; Atlas does
+path like `realm_access.roles` for Keycloak. Values are compared exactly; atlas does
 not interpret them, so a group name, an object id and a role name all work as long
 as the token carries that string.
 
@@ -347,7 +357,7 @@ Four things worth knowing before switching it on:
   matches no rule and gets `user` — which everybody who can sign in holds, mapping
   or not.
 - **A rule that cannot work is refused when you save it**, not silently ignored at
-  every login: a role Atlas does not enforce, or a group that no longer exists.
+  every login: a role atlas does not enforce, or a group that no longer exists.
 
 The mapping cannot lock you out of the local administrator account, which is not
 federated. If a mapping does leave the instance without a federated administrator,
@@ -369,6 +379,16 @@ Two ways to handle it, pick one:
   base64) or `ATLAS_VAULT_KEY_FILE`. An operator-provided key is never written to
   disk, which is the stronger posture — see
   [ADR-0070](adr/0070-vault-on-by-default-with-generated-key.md).
+
+A generated key is readable by the account `atlas serve` runs as and nobody else. On
+Windows that is an access list rather than a file mode, and releases up to and
+including 0.7.0 did not set one: a key they generated kept the rights of the data
+directory, which can include every local user. Restrict it once, as that account or
+an administrator, before relying on it:
+
+```powershell
+icacls <data-dir>\vault.key /inheritance:r /grant:r "<account>:F"
+```
 
 ### 8. TLS: in the binary, or in front of it
 
@@ -405,7 +425,7 @@ ephemeral port, in plaintext, for its own child processes — the MCP adapter's
 loopback calls and any worker this server supervises. It is not reachable from
 another host and needs no configuration; it exists because a certificate issued
 for `atlas.example.com` carries no name for `127.0.0.1`, and the alternative
-would be a switch to skip verification, which Atlas deliberately does not have.
+would be a switch to skip verification, which atlas deliberately does not have.
 
 **In front of it.** The other answer, and still a good one where a proxy is on the
 host anyway — it does certificates for everything else you run, and it is where
@@ -449,14 +469,61 @@ If you do not want an agent surface at all, block it at the proxy:
 location /mcp { deny all; }
 ```
 
-**What TLS does not cover, whichever way you terminate it.** Encryption is not
-authorization. `/metrics` is unauthenticated by design
-([ADR-0142](adr/0142-prometheus-metrics.md)), as are `/healthz` and `/readyz`,
-because a kubelet has no credential to offer. Turning the built-in listener on
-does not change that, so on a port that is reachable beyond the host either keep a
-proxy in front of those paths or run with `--metrics=false`.
+#### The client's address behind a proxy
 
-**Publishing to another Atlas whose CA is your own.** A deployment target must be
+Behind a proxy or load balancer every connection comes from the proxy, and by default
+that is the address atlas records: the login throttle charges everybody to the proxy's
+one bucket, and every audit line's `client_ip` names the proxy. Name the proxy with
+`--trusted-proxies` (or `ATLAS_TRUSTED_PROXIES`) and atlas takes the client's address
+from it instead — but only from it
+([ADR-0448](adr/0448-trusted-proxies.md)):
+
+```bash
+atlas serve ... --trusted-proxies 10.179.2.139
+```
+
+How the proxy says who the client is depends on what it is:
+
+- **A proxy that speaks HTTP** — the nginx sketch above, HAProxy in `mode http`,
+  Traefik, a cloud application load balancer — appends the client to
+  `X-Forwarded-For`. Atlas reads that header right to left and stops at the first
+  address that is not a listed proxy, so whatever a client wrote into the header
+  itself is never read.
+- **A load balancer that forwards TCP** and leaves TLS to atlas (`--tls-cert`) cannot
+  add a header to a stream it does not decrypt. Have it send the PROXY protocol
+  instead — v1 or v2, atlas detects which. In HAProxy:
+
+  ```
+  backend atlas
+      mode tcp
+      server atlas1 10.179.2.20:8443 send-proxy-v2 check
+  ```
+
+A connection from a listed proxy that sends neither is served as before, with the
+proxy as the client. A connection from any other address is never read for either: a
+PROXY header from it is just the first bytes of a TLS stream, and the handshake
+refuses it. Audit lines from a request a proxy vouched for carry the proxy as `via`
+beside `client_ip`, so a request that came round the balancer — no `via` — stands
+out. Only the public listener reads proxies; the plaintext loopback listener for this
+server's own children never does.
+
+**Point the balancer's health check at `/readyz`, over HTTPS.** A TCP check — connect,
+close — tells the balancer the port is open, not that this instance can serve:
+`/readyz` answers whether it can, unauthenticated, for exactly this caller. A TCP
+check against the TLS port also produces a `server.tls_handshake_aborted` line per
+interval; it is written at DEBUG, so it is not in the log unless you ask for
+`--log-level=debug`. The checker must speak TLS 1.3.
+
+**What TLS does not cover, whichever way you terminate it.** Encryption is not
+authorization. `/healthz` and `/readyz` are unauthenticated by design, because a
+kubelet has no credential to offer, and turning the built-in listener on does not
+change that: on a port that is reachable beyond the host, keep a proxy in front of
+them if their answers are not for everyone. `/metrics` is not among them any more —
+since [ADR-0198](adr/0198-metrics-behind-the-boundary.md) it is gated by `--auth`
+like the API, and a scraper presents a token scoped `metrics` (see
+[Credentials for machines](#credentials-for-machines)).
+
+**Publishing to another atlas whose CA is your own.** A deployment target must be
 `https://` ([ADR-0129](adr/0129-remote-deployment-targets.md)), and the certificate
 on the receiving server is usually issued by an internal CA that the sending host
 has never heard of. Point `--tls-ca` at that CA's PEM bundle on the *sending*
@@ -472,7 +539,7 @@ atlas mcp --server https://atlas.example.com --tls-ca /etc/atlas/internal-ca.pem
 It is added to the host's roots rather than replacing them, and it reaches only
 those two conversations — a Worker Type calling a third party keeps the host's
 trust store, because that endpoint is somebody else's. There is no switch to skip
-verification anywhere in Atlas, and there will not be one: it would be the first
+verification anywhere in atlas, and there will not be one: it would be the first
 thing reached for when a certificate is wrong, which is exactly when it must not
 be available.
 
@@ -510,10 +577,62 @@ real owner from the same page. Processes deployed before this carry no deployer
 either, so they keep any message name they already listen for until they are
 redeployed — deploy them again to bring them under the claim.
 
+### What a script can reach with `--script-sandbox=off`
+
+`off` is the default, for upgrade compatibility
+([ADR-0303](adr/0303-script-sandbox-isolation.md)). It is worth knowing what it means
+before a model author writes the first script task, because it comes down to one
+sentence: **a script runs under the operating-system account of the atlas process
+that starts it, so it can read every file that process can read.** In the container
+image that is uid 65532, which owns `/data`.
+
+What that reaches, with `off`:
+
+- **The data directory.** The log, the state store, the user and API-token stores, the
+  OAuth grants and the settings — readable, and writable, past every check the API
+  makes.
+- **The vault key, and so every stored credential.** A key atlas generated lives in
+  the data directory beside the ciphertext it protects; one you mount with
+  `ATLAS_VAULT_KEY_FILE` has to be readable by the same account. Either way a script
+  can read the key and the vault, and with both, decrypt every Worker's credentials.
+  The same holds for the TLS private key (`--tls-key`), a file the server must read.
+- **The environment of atlas processes under the same account.** A script does not
+  inherit its worker's environment — the interpreter starts from a short allowlist
+  with no atlas credential in it — but it can read `/proc/<pid>/environ` of the
+  server or worker process that started it. That holds `ATLAS_VAULT_KEY` and
+  `ATLAS_OIDC_CLIENT_SECRET` when they are given that way, and in a supervised worker
+  `ATLAS_TOKEN`, which is always set there: the token you configured, or else the
+  server's own credential, which is limited to the routes a worker uses (scope
+  `worker`). A secret passed as a flag instead, such as `--oidc-client-secret`, is in
+  `/proc/<pid>/cmdline`. Whether a host's `kernel.yama.ptrace_scope` closes these
+  paths has not been verified; do not count on it.
+- **The network.** Unrestricted. In Kubernetes the containers of a pod share one
+  network namespace, so the atlas API is reachable over loopback.
+
+What it does not hand over directly: passwords are stored as bcrypt hashes and API
+tokens as SHA-256 hashes, and each run is bounded — in wall-clock time (30 seconds by
+default, `--script-timeout`), in output (8 MB of stdout by default, the `Payload`
+budget), and in what it leaves behind: at the limit it ends with everything it
+started, its process group on Linux and macOS, its Job Object on Windows.
+
+So treat **whoever may deploy a script task as somebody who holds the data directory
+and the vault key**. Three ways to narrow that:
+
+| Setting | What a script reaches |
+|---|---|
+| `--script-sandbox=off` (default) | Everything above |
+| `--script-sandbox=strict` (Linux, Landlock ABI 3+) | The installed runtime and private per-run scratch; no `/data`, no other files, no new sockets |
+| An external worker under its own account | Whatever that account can reach — run it on another host or as another user, without the vault key or the data directory |
+
+`strict` is the narrowest, and refuses to start where the kernel cannot enforce it,
+or where an enabled interpreter cannot run inside it. Scripts that need a mounted
+file or a network service do not run under it; give those an external worker with
+its own account instead of loosening the server.
+
 ### Connecting a hosted AI connector
 
 > **A different "connector".** This section is about an *MCP client* — claude.ai's
-> custom connectors and their equivalents — not about Atlas workers. The Atlas
+> custom connectors and their equivalents — not about atlas workers. The atlas
 > concept that used to carry this name is a **worker** (above).
 
 A connector that runs on somebody else's infrastructure — claude.ai's, for
@@ -523,7 +642,7 @@ once, and each person who uses it approves it in their own browser and gets a
 token that carries *them*.
 
 One thing has to be right first: set `--external-url` to the address people reach
-Atlas at. Behind a TLS proxy Atlas cannot work it out, and every URL it publishes
+atlas at. Behind a TLS proxy atlas cannot work it out, and every URL it publishes
 would name `http://`, which no hosted connector can use.
 
 Then do it in the Console: **Console → AI access → Connect an assistant**. Pick the
@@ -559,7 +678,7 @@ self-registration. A connector then needs nothing but the MCP URL: it registers
 itself, and the person approves it as usual.
 
 **It is off by default, and it is worth understanding what turning it on means.**
-It is the only unauthenticated endpoint in Atlas that writes durable state:
+It is the only unauthenticated endpoint in atlas that writes durable state:
 anyone who can reach the port may create a client record and appear on your
 people's consent screens under a name they chose. What makes that liveable is
 that the consent screen **says so** — a self-registered application is labelled
@@ -587,7 +706,7 @@ Windows — Windows *containers* are not supported.
 In an elevated PowerShell:
 
 ```powershell
-$Version = '0.4.0'
+$Version = '0.13.0'
 $Base = "https://github.com/pblumer/atlas/releases/download/v$Version"
 Invoke-WebRequest "$Base/atlas_${Version}_windows_amd64.zip" -OutFile atlas.zip
 Invoke-WebRequest "$Base/SHA256SUMS" -OutFile SHA256SUMS
@@ -603,7 +722,7 @@ New-Item -ItemType Directory -Force -Path C:\Atlas\data | Out-Null
 ### 2. Try it in the foreground
 
 ```powershell
-C:\Atlas\atlas_0.4.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
+C:\Atlas\atlas_0.13.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
 ```
 
 ### 3. Run it as a Windows service
@@ -619,7 +738,7 @@ next to the wrapper executable:
   <id>atlas</id>
   <name>Atlas BPMN workflow engine</name>
   <description>Durable BPMN 2.x workflow engine.</description>
-  <executable>C:\Atlas\atlas_0.4.0_windows_amd64\atlas.exe</executable>
+  <executable>C:\Atlas\atlas_0.13.0_windows_amd64\atlas.exe</executable>
   <arguments>serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data --auth</arguments>
   <workingdirectory>C:\Atlas</workingdirectory>
   <onfailure action="restart" delay="5 sec"/>
@@ -675,28 +794,32 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--data-dir` | `atlas-data` | WAL, state store, and every other durable file |
 | `--auth` | `true` | Require login for the API, the UI and `/mcp`. `--auth=false` runs the server open — development and demos only; it logs a warning (`auth.disabled`) at startup. Sign-in attempts are throttled per address and per account, and every one is recorded (see [Logs](#logs)) |
 | `--oauth-dynamic-registration` | `false` | Let an OAuth client register itself ([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html)), so a hosted MCP connector can be connected with nothing but this server's URL. Off by default: it is the only unauthenticated endpoint that writes durable state, and anyone who can reach the port could then appear on your people's consent screens under a name they chose — where such a client is labelled as self-registered ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). Also `ATLAS_OAUTH_DYNAMIC_REGISTRATION=1` |
-| `--external-url` | *(derived)* | Public origin this server is reachable under, e.g. `https://atlas.example.com`. **Set this behind a reverse proxy:** the scheme such a request arrives with is `http`, so every absolute URL Atlas publishes — the OAuth discovery documents, the `WWW-Authenticate` challenge, the authorization and token endpoints — would name something no client can use ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). With `--tls-cert` and clients reaching the server by the name on its certificate, the derived origin is already right; set it anyway if they reach it by anything else. Also `ATLAS_EXTERNAL_URL` |
+| `--external-url` | *(derived)* | Public origin this server is reachable under, e.g. `https://atlas.example.com`. **Set this behind a reverse proxy:** the scheme such a request arrives with is `http`, so every absolute URL atlas publishes — the OAuth discovery documents, the `WWW-Authenticate` challenge, the authorization and token endpoints — would name something no client can use ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). With `--tls-cert` and clients reaching the server by the name on its certificate, the derived origin is already right; set it anyway if they reach it by anything else. Also `ATLAS_EXTERNAL_URL` |
 | `--tls-cert` | *(none)* | PEM certificate chain to serve `--addr` with. With `--tls-key`, this server terminates TLS 1.3 itself instead of a proxy doing it; unset, it serves plain HTTP. Both or neither — one alone refuses to start. The pair is re-read when either file changes, so a renewal needs no restart ([ADR-0191](adr/0191-built-in-tls-listener.md)). Also `ATLAS_TLS_CERT` |
 | `--tls-key` | *(none)* | PEM private key for `--tls-cert`. Also `ATLAS_TLS_KEY` |
-| `--tls-ca` | *(none)* | PEM bundle of certificate authorities to trust **in addition to** the host's, when this server calls another Atlas — publishing to a deployment target and reading its status back ([ADR-0129](adr/0129-remote-deployment-targets.md)). For an internally issued peer certificate. Never replaces the system roots, never skips verification, and does not touch Worker Types calling third parties. `atlas worker` and `atlas mcp` take the same flag, for their own hop to an `https://` server. Also `ATLAS_TLS_CA` |
-| `--oidc-issuer` | *(none)* | OpenID Connect issuer URL. Setting it makes Atlas a relying party: the login screen gains a "Sign in with …" button and two routes are mounted. With it unset nothing is mounted and no outbound connection is made. Also `ATLAS_OIDC_ISSUER` |
+| `--trusted-proxies` | *(none)* | Addresses or CIDR prefixes of the load balancers in front of this server, comma-separated, e.g. `10.179.2.139` or `10.179.2.0/28`. On a connection from one of them the client's address is taken from a PROXY protocol header (v1 or v2) or from `X-Forwarded-For`; from anywhere else neither is read. A prefix covering every address is refused. See [The client's address behind a proxy](#the-clients-address-behind-a-proxy) ([ADR-0448](adr/0448-trusted-proxies.md)). Also `ATLAS_TRUSTED_PROXIES` |
+| `--tls-ca` | *(none)* | PEM bundle of certificate authorities to trust **in addition to** the host's, when this server calls another atlas — publishing to a deployment target and reading its status back ([ADR-0129](adr/0129-remote-deployment-targets.md)). For an internally issued peer certificate. Never replaces the system roots, never skips verification, and does not touch Worker Types calling third parties. `atlas worker` and `atlas mcp` take the same flag, for their own hop to an `https://` server. Also `ATLAS_TLS_CA` |
+| `--oidc-issuer` | *(none)* | OpenID Connect issuer URL. Setting it makes atlas a relying party: the login screen gains a "Sign in with …" button and two routes are mounted. With it unset nothing is mounted and no outbound connection is made. Also `ATLAS_OIDC_ISSUER` |
 | `--oidc-client-id` | *(none)* | Client id this server was registered under at that provider. Also `ATLAS_OIDC_CLIENT_ID` |
 | `--oidc-client-secret` | *(none)* | Client secret, if the provider issued one; omit it for a public client (the flow uses PKCE either way). Prefer `ATLAS_OIDC_CLIENT_SECRET`, so it stays out of `ps` |
 | `--oidc-scopes` | `openid profile email` | Scopes requested at the provider. Also `ATLAS_OIDC_SCOPES` |
 | `--oidc-name` | *(the issuer host)* | What the button on the login screen says. Also `ATLAS_OIDC_NAME` |
 | `--shutdown-timeout` | `10s` | Grace period for in-flight requests on shutdown |
 | `--docs` | `true` | Serve `/api/docs` and `/api/v1/openapi.json` |
+| `--catalogue` | `true` | Serve the shop, the catalogue, the orders and the inventory. `--catalogue=false` runs atlas as a workflow engine without them: every route tagged *Catalogue* or *Order* answers 404 like an endpoint that never existed, `/shop.html` is not served, the Console leaves Shop, Catalogue, Reconciliation and Access review out of its menus, the MCP adapter does not offer their tools, the event feed is neither served nor pushed to its subscriptions (which keep their cursors), and the shop's fulfilment and approval processes are not filed into the system project. Nothing stored is removed and deployed processes run unchanged; setting it back to `true` is a restart. An order still in fulfilment when the area is switched off fails its next call to the order routes like any REST task meeting a 404: the job is retried and, its retries spent, becomes an incident, which can be retried once the area is on again. The start then logs one WARN, `event=server.catalogue_disabled_in_flight`, naming how many such processes are running and which, and the Console's dashboard shows an administrator the same notice for as long as it is true (`GET /api/v1/catalogue-switch`) ([ADR-0434](adr/0434-the-catalogue-can-be-switched-off.md)). Also `ATLAS_CATALOGUE=false`, which is read strictly: a value that is not a boolean stops the start rather than leaving the shop on |
 | `--vault` | `true` | Encrypted secret vault for worker credentials |
-| `--user-provisioning` | `true` | Let the system project's approved processes manage Atlas logins |
+| `--user-provisioning` | `true` | Let the system project's approved processes manage atlas logins |
 | `--powershell` | `true` | Run PowerShell script tasks via `pwsh` |
 | `--python` | `true` | Run Python script tasks via `python3` |
 | `--javascript` | `true` | Run JavaScript script tasks via `node` |
-| `--script-timeout` | `30s` | Wall-clock limit for one script task |
+| `--script-timeout` | `30s` | Wall-clock limit for one script task. At the limit the script ends with everything it started: its process group on Linux and macOS, its Job Object on Windows |
+| `--script-sandbox` | `off` | `off` preserves existing filesystem/network access. `strict` (also `ATLAS_SCRIPT_SANDBOX=strict`) requires Linux Landlock ABI 3+, exposes only the installed runtime, the process metadata a runtime reads to start, and private per-run scratch; denies socket creation; and fails closed when unavailable. It starts each enabled interpreter once at boot and refuses to start if one cannot run inside the profile ([ADR-0303](adr/0303-script-sandbox-isolation.md)) |
 | `--checkpoint-interval` | `5m` | How often to snapshot applied state so restarts replay less log; `0` disables |
 | `--checkpoint-keep` | `3` | How many checkpoints to retain |
 | `--compact-wal` | `false` | Delete WAL segments already covered by a checkpoint and every consumer watermark. Irreversible, so opt-in; requires checkpointing |
 | `--metrics` | `true` | Serve the Prometheus exposition at `/metrics`. Gated by `--auth` like every other route — give the scraper an API token scoped `metrics` (see [Credentials for machines](#credentials-for-machines)) |
 | `--log-format` | `text` | `text` for a terminal, `json` for a log shipper — see [Logs](#logs) |
+| `--log-level` | `info` | Least severe line written: `debug`, `info`, `warn` or `error` — see [Logs](#logs) |
 | `--trace-endpoint` | `$OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP collector base URL to export request traces to; empty disables tracing — see [Traces](#traces) |
 | `--trace-sample-ratio` | `0.1` | Fraction of traces to record, `0` to `1` |
 | `--opensearch-url` | `$ATLAS_OPENSEARCH_URL` | Mirror the event log into OpenSearch; empty disables |
@@ -704,6 +827,8 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--retention-max-age` | `$ATLAS_RETENTION_MAX_AGE` | Hard-delete finished instances older than this once exported, e.g. `720h`; `0` disables. A process may override it with its own `atlas:historyTtl` (ADR-0144) |
 | `--retention-interval` | `1m` | How often the retention sweep runs |
 | `--retention-batch` | `1000` | Finished instances one sweep evaluates; with `--retention-interval` this bounds how fast a backlog drains |
+| `--trigger-receipt-ttl` | `720h` | How long a directed trigger's receipt is kept (ADR-0425): a sender retrying the same `triggerId` within it gets the first instance back |
+| `--event-feed-ttl` | `720h` | How long a row of the event feed `GET /api/v1/events` serves is kept (ADR-0429 §5): a consumer whose cursor is older is answered 410 with the oldest cursor still held |
 
 The boolean flags above are all **on by default**, so they are turned off with an
 explicit `=false` — `--vault=false`, not `--no-vault`.
@@ -726,7 +851,7 @@ history.
 | Variable | Used for |
 |----------|----------|
 | `ATLAS_TOKEN` | The credential `atlas worker` and `atlas mcp` authenticate with, and what supervised workers are given if you set it on the server. It must be an **API token** the server accepts (see below); an arbitrary value is refused, and the server warns at startup if you set one |
-| `ATLAS_TLS_CA` | A CA bundle `atlas serve`, `atlas worker` and `atlas mcp` trust **in addition to** the host's roots when they call another Atlas over `https`. For an internally issued certificate; it never replaces the system roots and never skips verification |
+| `ATLAS_TLS_CA` | A CA bundle `atlas serve`, `atlas worker` and `atlas mcp` trust **in addition to** the host's roots when they call another atlas over `https`. For an internally issued certificate; it never replaces the system roots and never skips verification |
 | `ATLAS_ADMIN_USERNAME` | Bootstrap admin name (default `admin`); only read while the user store is empty and `--auth` is on |
 | `ATLAS_ADMIN_PASSWORD` | Bootstrap admin password; if unset, one is generated and logged once |
 | `ATLAS_VAULT_KEY` | Vault master key, 64 hex chars or base64; never written to disk |
@@ -739,13 +864,58 @@ history.
 | `ATLAS_RETENTION_MAX_AGE` | Default for `--retention-max-age` |
 | `ATLAS_RETENTION_INTERVAL` | Default for `--retention-interval` |
 | `ATLAS_RETENTION_BATCH` | Default for `--retention-batch` |
+| `ATLAS_TRIGGER_RECEIPT_TTL` | Default for `--trigger-receipt-ttl`: how long a directed trigger's receipt is kept (ADR-0425), 720h when unset |
+| `ATLAS_EVENT_FEED_TTL` | Default for `--event-feed-ttl`: how long a row of the event feed is kept (ADR-0429 §5), 720h when unset |
 | `ATLAS_DMN_RESOLVER_URL`, `ATLAS_DMN_RESOLVER_TOKEN` | Resolve DMN models from a remote service instead of `<data-dir>/dmn-models` |
 | `ATLAS_TEMIS_CONNECTORS` | Comma-separated temis worker names, each configured by `ATLAS_TEMIS_<NAME>_URL` and `ATLAS_TEMIS_<NAME>_TOKEN`. The variable keeps the pre-ADR-0203 spelling |
-| `ATLAS_AGENT_CONNECTORS` | Comma-separated agent model names, each configured by `ATLAS_AGENT_<NAME>_API_KEY` and, optionally, `_ENDPOINT`, `_MODEL`, `_PROTOCOL` (`messages`, the default, or `chat-completions`), `_AUTH` (`x-api-key` or `bearer`), `_THINKING` (`off`), `_MAX_TOKENS` and `_ANSWER_VARIABLE`. A name is what `<atlas:agentConnector connector="…">` refers to, so a container reaches the provider it was modelled against, and `_MODEL` is the **default** a step that names none asks — a task or a container may name its own with `model="…"`, so one name serves a cheap classification and a strong piece of advice ([ADR-0256](adr/0256-the-model-is-authored-the-provider-is-configured.md)). The key is required unless `_ENDPOINT` is set, because a self-hosted endpoint may need none. **Normally you do not set these**: add the model under Console → Workers instead and Atlas supervises a worker for it, picking the model up with no restart ([ADR-0255](adr/0255-agent-models-are-console-workers.md)) — these variables remain the way to configure a worker you start yourself. The same names serve both of the kind's job types: an agent container's round (`io.atlas.ai.agent`) and an ai service task's single call (`io.atlas.ai.task`). Both run **only** on a worker ([ADR-0164](adr/0164-no-in-process-service-tasks.md)/[ADR-0254](adr/0254-agent-rounds-on-a-worker.md)) |
+| `ATLAS_AGENT_CONNECTORS` | Comma-separated agent model names, each configured by `ATLAS_AGENT_<NAME>_API_KEY` and, optionally, `_ENDPOINT`, `_MODEL`, `_PROTOCOL` (`messages`, the default, or `chat-completions`), `_AUTH` (`x-api-key` or `bearer`), `_THINKING` (`off`), `_MAX_TOKENS` and `_ANSWER_VARIABLE`. A name is what `<atlas:agentConnector connector="…">` refers to, so a container reaches the provider it was modelled against, and `_MODEL` is the **default** a step that names none asks — a task or a container may name its own with `model="…"`, so one name serves a cheap classification and a strong piece of advice ([ADR-0256](adr/0256-the-model-is-authored-the-provider-is-configured.md)). The key is required unless `_ENDPOINT` is set, because a self-hosted endpoint may need none. **Normally you do not set these**: add the model under Console → Workers instead and atlas supervises a worker for it, picking the model up with no restart ([ADR-0255](adr/0255-agent-models-are-console-workers.md)) — these variables remain the way to configure a worker you start yourself. The same names serve both of the kind's job types: an agent container's round (`io.atlas.ai.agent`) and an ai service task's single call (`io.atlas.ai.task`). Both run **only** on a worker ([ADR-0164](adr/0164-no-in-process-service-tasks.md)/[ADR-0254](adr/0254-agent-rounds-on-a-worker.md)) |
 | `ATLAS_CONNECTOR_<REF>_TOKEN` | Bearer token for the credential reference `<REF>` a REST task names. The variable keeps the pre-ADR-0203 spelling |
-| `ATLAS_AD_MOCK`, `ATLAS_AD_MOCK_SEED` | Serve Active Directory tasks against a mock directory in the worker's memory, optionally seeded from an LDIF or DSML file ([ADR-0181](adr/0181-ad-connector-mock-mode.md)). For a worker Atlas supervises, prefer the switch in Console → Workers → Active Directory: it needs no restart. These variables remain the way to configure a worker you start yourself, and the way a server decides before anyone has used that switch |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Default for `--trace-endpoint`; the standard OpenTelemetry variable, honored so a deployment that already sets it needs no Atlas-specific flag |
+| `ATLAS_AD_MOCK`, `ATLAS_AD_MOCK_SEED` | Serve Active Directory tasks against a mock directory in the worker's memory, optionally seeded from an LDIF or DSML file ([ADR-0181](adr/0181-ad-connector-mock-mode.md)). For a worker atlas supervises, prefer the switch in Console → Workers → Active Directory: it needs no restart. These variables remain the way to configure a worker you start yourself, and the way a server decides before anyone has used that switch |
+| `ATLAS_LIMIT_*` | The installation's resource budgets — how much a caller, a called service, or a running process may make this server hold at once. One variable per budget, in bytes (or in steps for the two engine ones): see [Resource budgets](#resource-budgets) below. Normally you do not set these |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Default for `--trace-endpoint`; the standard OpenTelemetry variable, honored so a deployment that already sets it needs no atlas-specific flag |
 | `OTEL_SERVICE_NAME` | Name this process reports on exported traces (default `atlas`) |
+
+### Resource budgets
+
+Every ceiling on externally supplied input has a name and a default, and every one
+can be raised or lowered with an environment variable. **Most installations never
+touch these.** They exist because the defaults are estimates, and an estimate you
+cannot move is a number that will be wrong for somebody.
+
+A budget cannot be turned off. A value that is missing, not a positive whole number,
+or too large for its field leaves the default standing and is logged at startup — the
+one configuration mistake that must never be silent is a ceiling that quietly went
+away.
+
+| Variable | Default | What it holds |
+|----------|---------|---------------|
+| `ATLAS_LIMIT_ERROR_BODY` | 4 KiB | How much of a failed response is quoted in the error message |
+| `ATLAS_LIMIT_THEME` | 4 KiB | A UI theme document |
+| `ATLAS_LIMIT_REGISTRATION` | 16 KiB | A self-service handshake: an OAuth client registering itself, a node announcing itself |
+| `ATLAS_LIMIT_REQUEST` | 64 KiB | One ordinary JSON request, or a peer atlas's answer |
+| `ATLAS_LIMIT_SETTINGS` | 256 KiB | A configuration document a person edits — mock configuration, a script's source |
+| `ATLAS_LIMIT_ASSET` | 512 KiB | A logo, or a generated form answer holding one |
+| `ATLAS_LIMIT_DEFINITION` | 1 MiB | A form, a collaboration payload, the answer of a service a process called |
+| `ATLAS_LIMIT_GENERATED` | 2 MiB | A document this server produced or renders back |
+| `ATLAS_LIMIT_MODEL_UPLOAD` | 4 MiB | A BPMN, DMN or XOML document |
+| `ATLAS_LIMIT_PAYLOAD` | 8 MiB | The largest thing that travels in one piece: a model provider's answer, a script's output |
+| `ATLAS_LIMIT_DATA_UPLOAD` | 16 MiB | A CSV or a playground scenario |
+| `ATLAS_LIMIT_IMPORT` | 24 MiB | A document imported from another tool |
+| `ATLAS_LIMIT_APP_BUNDLE` | 32 MiB | An application's whole source or export |
+| `ATLAS_LIMIT_ARCHIVE` | 1 GiB | A backup being restored, compressed *and* decompressed |
+| `ATLAS_LIMIT_TOKEN_STEPS` | 10000 | How many elements one token may drive in a single run before the engine parks it — the guard against a cycle of automatic elements |
+| `ATLAS_LIMIT_ITERATIONS` | 100000 | How many iterations one multi-instance activity may ask for before the engine refuses it |
+| `ATLAS_LIMIT_VARIABLE` | 1 MiB | How large one process variable's value may be. A variable is a business record; past this it is a document |
+| `ATLAS_LIMIT_COLLECTION` | 16 MiB | How large a multi-instance activity's assembled output collection may be — a separate, larger budget, because a legitimate loop accumulates more than one record weighs |
+
+`TOKEN_STEPS` and `ITERATIONS` are counts, not bytes, and they are different guards: a
+hundred thousand iterations are a hundred thousand tokens taking one step each, which
+the step budget is deliberately built not to stop.
+
+A value past `VARIABLE` or `COLLECTION` is not written and not silently dropped: the
+element that produced it is parked with an incident naming the variable and both
+sizes, and resolving it writes the value again — so correcting the data, or raising
+the budget, lets the instance carry on.
 
 ### Endpoints
 
@@ -796,7 +966,7 @@ a replay that then starts over — the bundled Helm chart allows ten minutes.
 
 ### Logs
 
-Every line Atlas writes carries a stable **`event=` name** beside the sentence. The
+Every line atlas writes carries a stable **`event=` name** beside the sentence. The
 sentence explains, the name identifies — so an alert matches on `event=checkpoint.failed`
 and keeps working when the wording changes, and values arrive as fields instead of buried
 in English.
@@ -808,11 +978,18 @@ time=2026-01-31T09:19:02.885Z level=WARN msg="wal compaction failed; will retry 
 
 `--log-format=json` emits the same records as one JSON object per line, for a shipper
 that would otherwise need a parsing rule of its own. Text is the default because a
-terminal is the audience Atlas has always had.
+terminal is the audience atlas has always had.
 
 ```json
 {"time":"2026-01-31T09:19:02.884Z","level":"INFO","msg":"published a recovery checkpoint; recovery replays only past it","event":"checkpoint.published","position":48213}
 ```
+
+`--log-level` sets the least severe line written: `debug`, `info` (the default),
+`warn` or `error`. Debug holds lines that are true but not news — so far one: a
+connection that closed before its TLS handshake began, which is what a load balancer's
+TCP health check looks like (`server.tls_handshake_aborted`, with the peer as
+`remote`). Every other complaint from the HTTP server itself — a client that cannot
+speak TLS 1.3, a certificate it refused — stays at INFO in the HTTP server's own words.
 
 Everything goes to **stderr**, including lines from libraries, so `journalctl -u atlas`
 and `docker logs` see one stream in one shape. The most recent lines are also readable
@@ -825,6 +1002,8 @@ Event names an operator is most likely to alert on:
 |-------|-------|---------|
 | `server.listening` | INFO | The listener is up. It comes *after* recovery, so this is also "this instance finished starting" |
 | `server.shutting_down` | INFO | SIGTERM received; in-flight requests are being drained |
+| `server.trusted_proxies` | INFO | Said once at start where `--trusted-proxies` names any: the list as the server understood it |
+| `server.tls_handshake_aborted` | DEBUG | A connection to the TLS listener closed before its handshake began, with the peer as `remote` — a TCP health check, or a port scan |
 | `command.failed` | ERROR | A command exited non-zero |
 | `checkpoint.published` | INFO | A recovery checkpoint was captured, with the log `position` it covers |
 | `checkpoint.failed` | WARN | The checkpoint pass failed; the next tick retries. Persistent failures mean restarts replay more log |
@@ -832,12 +1011,18 @@ Event names an operator is most likely to alert on:
 | `wal_compaction.inert` | WARN | `--compact-wal` without `--checkpoint-interval` — it is doing nothing |
 | `exporter.tick_failed` | WARN | An OpenSearch export tick failed; lag grows until it recovers |
 | `retention.purged` | INFO | Finished instances were hard-deleted, with how many |
+| `order.instance_unrecorded` | WARN | An instance working an order position started but could not be noted on the order; the shop shows no tasks for that position |
 | `script_worker.binary_missing` | WARN | A script language is enabled but its interpreter is absent; those tasks park |
+| `feed.push_failing` | WARN | A push subscription's endpoint refused a batch or did not answer, said once when the failures begin; delivery holds and retries on a widening interval, and nothing is skipped |
+| `feed.push_recovered` | INFO | A held push subscription's endpoint accepted a batch again |
+| `feed.subscription_disabled` | WARN | The event feed's retention dropped rows a push subscription had not delivered, so delivery switched it off with the reason; enable it again from the oldest event held or from now |
 | `auth.admin_seeded` | WARN | The bootstrap administrator was created with a generated password |
 | `auth.disabled` | WARN | The server was started with `--auth=false` and requires no login for anything |
 
 **The security audit trail.** Every line below carries the acting principal
-(`actor`, `actor_id`) where the request has one, and the `client_ip` always. None
+(`actor`, `actor_id`) where the request has one, and the `client_ip` always — behind
+a proxy listed in `--trusted-proxies`, the client that proxy named, with the proxy
+itself as `via`. None
 of them carries a password, a hash or a token. Ship them with `--log-format=json`.
 
 | Event | Level | Meaning |
@@ -849,6 +1034,7 @@ of them carries a password, a hash or a token. Ship them with `--log-format=json
 | `auth.denied` | WARN | A signed-in caller was refused for lacking the admin role, with the `method` and `path`. Anonymous `401`s are deliberately *not* logged — they would bury this under every probe that finds the port |
 | `auth.user_created`, `auth.user_updated`, `auth.user_deleted` | INFO | The account lifecycle, naming both the actor and the subject; the update line carries the `roles` and `disabled` state that resulted |
 | `auth.password_set` | INFO | An administrator replaced a user's password (that it happened and for whom — never the password) |
+| `feed.subscription_changed` | INFO | An administrator created, changed or deleted a push subscription of the event feed, by `subscription_id`; a create names the `worker_id` and every change the `reach` |
 | `auth.token_minted`, `auth.token_revoked` | INFO | A machine credential — an API token or a deploy token — was issued or revoked, by `token_id` and `token_name`; a mint also records its `scope` and `expires_at` |
 | `auth.worker_token_unknown` | WARN | `ATLAS_TOKEN` is set to a value this server does not accept. Supervised workers are handed it instead of the server's own token and will be refused at every poll — mint an API token with scope `worker`, or unset the variable |
 
@@ -874,7 +1060,8 @@ curl -sS -X POST http://127.0.0.1:8080/api/v1/api-tokens \
 |-------|---------|
 | `worker` | Only what `atlas worker` does: lease a batch of jobs, settle each one, and post a preview mail back to the outbox. Nothing else — the right scope for a worker running in another network zone |
 | `metrics` | Only `GET /metrics`. The narrowest scope there is, for a Prometheus scraper |
-| `full` | Everything a signed-in non-admin reaches, for a CI job or an MCP adapter whose calls cannot be enumerated in advance. Broad by design, and never an admin: user management, secrets and backups stay refused |
+| `events` | Only `GET /api/v1/events`, the event feed of action outcomes and granted and revoked rights. The token carries the `feedreader` role and no other, so it reads the feed and nothing else — the right scope for a CMDB or a billing system that follows the feed. Without a `reach` it reads the whole feed; with `"reach":["<catalogue id>", …]` it reads only the events about products those catalogues maintain (each event names that catalogue as `homeCatalog`). Name only catalogues you maintain |
+| `full` | Everything a signed-in non-admin reaches, for a CI job or an MCP adapter whose calls cannot be enumerated in advance. Broad by design, and never an admin: user management, secrets and backups stay refused. It does **not** read the event feed, which needs `feedreader` |
 
 Then hand it over as `--token` or `ATLAS_TOKEN`:
 
@@ -910,14 +1097,54 @@ request. An expired token is refused exactly like an unknown one, and its record
 stays listed so you can see what needs reissuing.
 
 A **deploy token** (`atlasat_` vs `atlasdt_`) is the separate, narrower credential
-a peer Atlas uses to publish a bundle here; see
+a peer atlas uses to publish a bundle here; see
 [ADR-0129](adr/0129-remote-deployment-targets.md).
+
+### Pushing the event feed to another system
+
+A system that cannot poll — a billing service or a CMDB that offers an inbound webhook and
+nothing else — can be **sent** the event feed instead of reading it with an `events`
+token. Two steps, both an administrator's:
+
+1. **A worker for the endpoint.** In **Console → Workers → New worker**, type
+   **CloudEvents endpoint**: the receiver's address, which must be `https` (plain `http`
+   only for a loopback host), and optionally a vault key whose value is sent as
+   `Authorization: Bearer`.
+2. **A subscription.** In that worker's menu, **Feed…**, or over HTTP:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8080/api/v1/feed-subscriptions \
+  -b cookies.txt -H 'Content-Type: application/json' \
+  -d '{"workerId":"<worker id>","reach":["<catalogue id>"],"from":"oldest"}'
+```
+
+`reach` narrows it to the catalogues named, as an `events` token's does; leave it out to
+send the whole feed. `from` is `oldest` (the oldest event the feed still holds, the default)
+or `now`. Atlas then POSTs the feed's events after the subscription's cursor, up to
+`batchSize` (default 100) at a time, as a JSON array with
+`Content-Type: application/cloudevents-batch+json`, and moves the cursor when the receiver
+answers `2xx`. The events are exactly what `GET /api/v1/events` answers.
+
+- **At least once.** A batch accepted just before a restart can arrive again; deduplicate
+  by each event's `id`.
+- **A refusal is held, never skipped.** The cursor stays put and the next attempt waits
+  10 s, doubling to 5 min, until the receiver accepts. `GET /api/v1/feed-subscriptions`
+  (and the panel, and the MCP tool `atlas_feed_subscriptions`) shows the hold with the
+  receiver's last answer; `feed.push_failing` is logged once when it starts.
+- **Falling behind the retention switches it off.** If `--event-feed-ttl` drops events a
+  subscription had not delivered, it is disabled with the reason rather than continuing
+  past the gap. `PATCH /api/v1/feed-subscriptions/{id}` with
+  `{"enabled":true,"from":"oldest"}` (or `"now"`) resumes it.
+
+Delivery runs inside the server, off its processing loop, every two seconds
+([ADR-0433](adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)).
+Allow outbound `https` from the server to each receiver.
 
 ### Traces
 
-Off unless you point Atlas at a collector. `--trace-endpoint=http://collector:4318`
+Off unless you point atlas at a collector. `--trace-endpoint=http://collector:4318`
 (or the standard `OTEL_EXPORTER_OTLP_ENDPOINT`) turns on OpenTelemetry tracing for the
-`/api/v1` surface; Atlas posts to `<endpoint>/v1/traces` in OTLP's JSON encoding, which
+`/api/v1` surface; atlas posts to `<endpoint>/v1/traces` in OTLP's JSON encoding, which
 every OTLP/HTTP receiver accepts.
 
 ```bash
@@ -942,7 +1169,7 @@ another traced service continues that trace instead of starting a new one. A cal
 already decided to sample is always respected, whatever `--trace-sample-ratio` says — a
 half-recorded distributed trace is worse than none.
 
-Sampling applies to traces Atlas starts. `0.1` records one in ten; `0` records nothing;
+Sampling applies to traces atlas starts. `0.1` records one in ten; `0` records nothing;
 `1` records everything, which is fine for a quiet server and expensive for a busy one.
 
 If the collector is down, slow, or rejecting payloads, requests are unaffected: export
@@ -959,7 +1186,7 @@ unit; the parts are not independently consistent.
 | `wal/` | The write-ahead log — the source of truth |
 | `state/` | Materialized state (embedded LSM store), rebuildable from the WAL |
 | `checkpoints/` | Recovery checkpoints, so a restart replays only the log after the newest one |
-| `vault.key` | Vault master key, mode `0600`, only when generated rather than supplied |
+| `vault.key` | Vault master key, only when generated rather than supplied — readable by the account `atlas serve` runs as and nobody else: mode `0600`, on Windows an access list for that account alone |
 | `vault/` | Encrypted worker secrets |
 | `deployments/`, `drafts/`, `forms/`, `projects/`, `releases/`, `users/`, `connectors/`, `settings/`, … | Design-time and administrative stores |
 | `dmn-models/` | DMN models, unless resolved remotely |
@@ -983,7 +1210,7 @@ restore that is applied on the next start; see
 
 ## Upgrading
 
-While Atlas is `0.x`, on-disk formats can change between releases. Read
+While atlas is `0.x`, on-disk formats can change between releases. Read
 [`CHANGELOG.md`](../CHANGELOG.md) first, then:
 
 ```bash
@@ -1008,7 +1235,7 @@ sudo rm -rf /var/lib/atlas /etc/atlas   # deletes all process data
 
 ## Building from source
 
-You do not need this to run Atlas, but it is two commands. Go 1.26+ and no CGO:
+You do not need this to run atlas, but it is two commands. Go 1.26+ and no CGO:
 
 ```bash
 git clone https://github.com/pblumer/atlas.git
@@ -1050,5 +1277,5 @@ newest usable checkpoint. If checkpointing was disabled (`--checkpoint-interval
 - The **in-app handbook** at `/` in the UI — onboarding, BPMN and DMN from
   scratch, designing and running processes, testing and simulation
 - **[Postman onboarding kit](../postman/)** — drive the HTTP API end to end
-- **[Deploying Atlas](../deploy/README.md)** — container image and Helm chart
+- **[Deploying atlas](../deploy/README.md)** — container image and Helm chart
 - **[Architecture overview](ARCHITECTURE.md)** — how the engine works inside

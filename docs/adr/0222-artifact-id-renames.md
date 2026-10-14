@@ -1,6 +1,7 @@
 # ADR-0222: An artifact's id is its identity — renaming moves it, collisions are refused
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-02
 - **Deciders:** Atlas maintainers
 

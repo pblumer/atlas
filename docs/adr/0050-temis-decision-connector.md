@@ -1,6 +1,7 @@
 # ADR-0050: Central DMN decisions via a temis decision connector
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas maintainers
 
@@ -131,6 +132,12 @@ inventing its own.
   fix the temis service evaluate wire contract; a Modeler affordance to mark a
   business rule task central and pick the connector; per-connector retry/incident
   policy for a persistently unreachable service (extends ADR-0036).
+
+> **As built (2026-10-11).** The server wiring and the managed configuration have
+> landed: the temis kind is a managed Worker resolved from the connector store and run in the
+> server or on a worker (`api/connectorkinds.go`), and the Modeler marks a business rule task
+> central with its "External (temis worker)" option (`api/web/editor.js`). The wire contract
+> and a retry policy for an unreachable service are as this record left them.
 
 ## Pros and cons of the options
 

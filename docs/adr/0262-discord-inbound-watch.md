@@ -1,6 +1,7 @@
 # ADR-0262: Discord as an inbound event source — a channel is a log, and a snowflake is its sequence
 
-- **Status:** Proposed (amended 2026-09-07: the Google row watch this record established as unfixable-here is fixed, and needed no migration — [ADR-0264](0264-row-watch-mark-per-watch.md))
+- **Status:** Accepted (amended 2026-09-07: the Google row watch this record established as unfixable-here is fixed, and needed no migration — [ADR-0264](0264-row-watch-mark-per-watch.md))
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas maintainers
 

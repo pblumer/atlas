@@ -1,0 +1,30 @@
+{
+  "type": "default",
+  "id": "arbeitsplatz-start",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Arbeitsplatz für einen Eintritt\n\nDie Personalabteilung meldet den Eintritt. Die Ausstattung wählt danach die vorgesetzte Person aus."
+    },
+    {
+      "key": "neuePerson",
+      "type": "textfield",
+      "label": "Neue Mitarbeiterin oder neuer Mitarbeiter",
+      "validate": { "required": true }
+    },
+    {
+      "key": "eintrittsdatum",
+      "type": "datetime",
+      "subtype": "date",
+      "dateLabel": "Eintrittsdatum",
+      "validate": { "required": true }
+    },
+    {
+      "key": "vorgesetzter",
+      "type": "textfield",
+      "label": "Vorgesetzte Person (Benutzername in atlas)",
+      "description": "Sie wählt die Ausstattung aus.",
+      "validate": { "required": true }
+    }
+  ]
+}

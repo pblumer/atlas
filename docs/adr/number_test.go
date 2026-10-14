@@ -38,9 +38,9 @@ const miniIndex = `# Architecture Decision Records
 
 ## Index
 
-| ADR | Title | Status |
-|-----|-------|--------|
-| [0001](0001-first.md) | The first decision | Accepted |
+| ADR | Title | Status | Implementation |
+|-----|-------|--------|----------------|
+| [0001](0001-first.md) | The first decision | Accepted | Landed |
 
 ## Status values
 
@@ -50,6 +50,7 @@ const miniIndex = `# Architecture Decision Records
 const firstRecord = `# ADR-0001: The first decision
 
 - **Status:** Accepted
+- **Implementation:** Landed
 `
 
 // TestLoadRecordsReadsNumberedAndDraftRecords is the shape the rest of this
@@ -60,7 +61,7 @@ func TestLoadRecordsReadsNumberedAndDraftRecords(t *testing.T) {
 		"docs/adr/README.md":       miniIndex,
 		"docs/adr/template.md":     "# ADR-NNNN: Title\n",
 		"docs/adr/0001-first.md":   firstRecord,
-		"docs/adr/draft-second.md": "# ADR-DRAFT: The second decision\n\n- **Status:** Proposed\n",
+		"docs/adr/draft-second.md": "# ADR-DRAFT: The second decision\n\n- **Status:** Proposed\n- **Implementation:** Not started\n",
 	})
 
 	records, err := LoadRecords(filepath.Join(root, "docs", "adr"))
@@ -84,19 +85,19 @@ func TestLoadRecordsReadsNumberedAndDraftRecords(t *testing.T) {
 func TestLoadRecordsRejectsAMisshapenRecord(t *testing.T) {
 	for name, files := range map[string]map[string]string{
 		"a number in the draft heading": {
-			"docs/adr/draft-second.md": "# ADR-0002: The second decision\n\n- **Status:** Proposed\n",
+			"docs/adr/draft-second.md": "# ADR-0002: The second decision\n\n- **Status:** Proposed\n- **Implementation:** Not started\n",
 		},
 		"a draft heading on a numbered file": {
-			"docs/adr/0002-second.md": "# ADR-DRAFT: The second decision\n\n- **Status:** Proposed\n",
+			"docs/adr/0002-second.md": "# ADR-DRAFT: The second decision\n\n- **Status:** Proposed\n- **Implementation:** Not started\n",
 		},
 		"heading and file name disagree": {
-			"docs/adr/0002-second.md": "# ADR-0003: The second decision\n\n- **Status:** Proposed\n",
+			"docs/adr/0002-second.md": "# ADR-0003: The second decision\n\n- **Status:** Proposed\n- **Implementation:** Not started\n",
 		},
 		"no status line": {
 			"docs/adr/draft-second.md": "# ADR-DRAFT: The second decision\n",
 		},
 		"not a record file name": {
-			"docs/adr/notes.md": "# ADR-DRAFT: Notes\n\n- **Status:** Proposed\n",
+			"docs/adr/notes.md": "# ADR-DRAFT: Notes\n\n- **Status:** Proposed\n- **Implementation:** Not started\n",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -116,7 +117,7 @@ func TestAssignNumbersNumbersEveryDraft(t *testing.T) {
 	root := writeRepo(t, map[string]string{
 		"docs/adr/README.md":       miniIndex,
 		"docs/adr/0001-first.md":   firstRecord,
-		"docs/adr/draft-second.md": "# ADR-DRAFT: The second decision\n\n- **Status:** Proposed\n",
+		"docs/adr/draft-second.md": "# ADR-DRAFT: The second decision\n\n- **Status:** Proposed\n- **Implementation:** Not started\n",
 		"engine/thing.go":          "package engine\n\n// Why it works this way (ADR-draft-second).\n// See docs/adr/draft-second.md for the argument.\nvar x = 1\n",
 	})
 
@@ -150,7 +151,7 @@ func TestAssignNumbersNumbersEveryDraft(t *testing.T) {
 	}
 
 	readme := read(t, root, "docs/adr/README.md")
-	wantRow := "| [0002](0002-second.md) | The second decision | Proposed |"
+	wantRow := "| [0002](0002-second.md) | The second decision | Proposed | Not started |"
 	if !strings.Contains(readme, wantRow) {
 		t.Errorf("index has no row %q:\n%s", wantRow, readme)
 	}
@@ -169,9 +170,9 @@ func TestAssignNumbersOrdersSeveralDraftsBySlug(t *testing.T) {
 	root := writeRepo(t, map[string]string{
 		"docs/adr/README.md":       miniIndex,
 		"docs/adr/0001-first.md":   firstRecord,
-		"docs/adr/draft-zulu.md":   "# ADR-DRAFT: Zulu\n\n- **Status:** Proposed\n",
-		"docs/adr/draft-alpha.md":  "# ADR-DRAFT: Alpha\n\n- **Status:** Accepted\n",
-		"docs/adr/draft-alpha2.md": "# ADR-DRAFT: Alpha two\n\n- **Status:** Accepted\n",
+		"docs/adr/draft-zulu.md":   "# ADR-DRAFT: Zulu\n\n- **Status:** Proposed\n- **Implementation:** Not started\n",
+		"docs/adr/draft-alpha.md":  "# ADR-DRAFT: Alpha\n\n- **Status:** Accepted\n- **Implementation:** Landed\n",
+		"docs/adr/draft-alpha2.md": "# ADR-DRAFT: Alpha two\n\n- **Status:** Accepted\n- **Implementation:** Landed\n",
 		"engine/thing.go":          "package engine\n\n// ADR-draft-alpha and ADR-draft-alpha2 are different records.\nvar x = 1\n",
 	})
 
@@ -225,8 +226,8 @@ func TestAssignNumbersRefusesABrokenDirectory(t *testing.T) {
 	root := writeRepo(t, map[string]string{
 		"docs/adr/README.md":      miniIndex,
 		"docs/adr/0001-first.md":  firstRecord,
-		"docs/adr/0002-second.md": "# ADR-0009: Mismatched\n\n- **Status:** Accepted\n",
-		"docs/adr/draft-third.md": "# ADR-DRAFT: The third decision\n\n- **Status:** Proposed\n",
+		"docs/adr/0002-second.md": "# ADR-0009: Mismatched\n\n- **Status:** Accepted\n- **Implementation:** Landed\n",
+		"docs/adr/draft-third.md": "# ADR-DRAFT: The third decision\n\n- **Status:** Proposed\n- **Implementation:** Not started\n",
 	})
 
 	if _, err := AssignNumbers(root); err == nil {
@@ -243,8 +244,8 @@ func TestAssignNumbersRejectsATitleThatBreaksTheTable(t *testing.T) {
 	root := writeRepo(t, map[string]string{
 		"docs/adr/README.md":     miniIndex,
 		"docs/adr/0001-first.md": firstRecord,
-		"docs/adr/draft-good.md": "# ADR-DRAFT: A fine title\n\n- **Status:** Proposed\n",
-		"docs/adr/draft-pipe.md": "# ADR-DRAFT: A | in the title\n\n- **Status:** Proposed\n",
+		"docs/adr/draft-good.md": "# ADR-DRAFT: A fine title\n\n- **Status:** Proposed\n- **Implementation:** Not started\n",
+		"docs/adr/draft-pipe.md": "# ADR-DRAFT: A | in the title\n\n- **Status:** Proposed\n- **Implementation:** Not started\n",
 	})
 
 	if _, err := AssignNumbers(root); err == nil {
@@ -274,7 +275,7 @@ func TestLoadRecordsOnAMissingDirectory(t *testing.T) {
 // else — a missing index row, an unresolvable link — rather than as itself.
 func TestParseRecordNamesEveryDefect(t *testing.T) {
 	for name, body := range map[string]string{
-		"draft with no heading":   "Some prose.\n\n- **Status:** Proposed\n",
+		"draft with no heading":   "Some prose.\n\n- **Status:** Proposed\n- **Implementation:** Not started\n",
 		"draft with no status":    "# ADR-DRAFT: A title\n",
 		"draft with both missing": "Some prose.\n",
 	} {
@@ -284,7 +285,7 @@ func TestParseRecordNamesEveryDefect(t *testing.T) {
 			}
 		})
 	}
-	if _, err := parseRecord("0002-thing.md", "Some prose.\n\n- **Status:** Accepted\n"); err == nil {
+	if _, err := parseRecord("0002-thing.md", "Some prose.\n\n- **Status:** Accepted\n- **Implementation:** Landed\n"); err == nil {
 		t.Fatal("parseRecord accepted a numbered record with no heading")
 	}
 }
@@ -294,7 +295,7 @@ func TestParseRecordNamesEveryDefect(t *testing.T) {
 func TestAssignNumbersNeedsAnIndexToAppendTo(t *testing.T) {
 	root := writeRepo(t, map[string]string{
 		"docs/adr/README.md":      "# Architecture Decision Records\n\nNo table here.\n",
-		"docs/adr/draft-first.md": "# ADR-DRAFT: The first decision\n\n- **Status:** Proposed\n",
+		"docs/adr/draft-first.md": "# ADR-DRAFT: The first decision\n\n- **Status:** Proposed\n- **Implementation:** Not started\n",
 	})
 
 	if _, err := AssignNumbers(root); err == nil {
@@ -311,7 +312,7 @@ func TestRewriteSkipsWhatItCannotVouchFor(t *testing.T) {
 	root := writeRepo(t, map[string]string{
 		"docs/adr/README.md":            miniIndex,
 		"docs/adr/0001-first.md":        firstRecord,
-		"docs/adr/draft-second.md":      "# ADR-DRAFT: The second decision\n\n- **Status:** Proposed\n",
+		"docs/adr/draft-second.md":      "# ADR-DRAFT: The second decision\n\n- **Status:** Proposed\n- **Implementation:** Not started\n",
 		"api/web/vendor/thing/notes.md": cite,
 		"docs/notes.rst":                cite,
 		"engine/thing.go":               "package engine\n\n// " + cite,

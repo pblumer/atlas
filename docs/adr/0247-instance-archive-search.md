@@ -1,6 +1,7 @@
 # ADR-0247: An instance that is gone is still findable
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-04
 - **Deciders:** Atlas engine team
 

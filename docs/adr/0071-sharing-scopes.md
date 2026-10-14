@@ -1,6 +1,7 @@
 # ADR-0071: Sharing scopes — private and shared access boundaries for design-time work
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-28
 - **Deciders:** Atlas maintainers
 
@@ -188,6 +189,13 @@ operator opts in".
   isolation** (the big one); making user-task assignment (ADR-0042/0045) aware of
   a task's owning scope; audit logging of share/transfer actions; the "scope"
   naming overlap with FEEL variable scopes (ADR-0068) — revisit if it confuses.
+
+> **As built (2026-10-11).** Several of these follow-ups have landed: groups as members
+> ([ADR-0180](0180-groups-as-members.md), `PrincipalTypeGroup` in `api/scopes.go`), roles per endpoint group
+> ([ADR-0209](0209-roles-per-endpoint-group.md)) and an audit log of share actions ([ADR-0184](0184-grant-audit-log.md),
+> `api/grantauditstore.go`). Runtime access control has begun and is not finished: reading an
+> instance's variables is gated by the instance's project ([ADR-0275](0275-instance-visibility.md)), while its
+> other reads are still gated by role alone.
 
 ## Pros and cons of the options
 

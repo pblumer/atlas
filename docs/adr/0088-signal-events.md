@@ -1,6 +1,7 @@
 # ADR-0088: Signal events (broadcast throw/catch)
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
 

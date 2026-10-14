@@ -36,7 +36,7 @@ test("the generator opens on the step that sent the author here", async ({ page 
   expect(sent.elementId).toBe("Task_Melden");
   expect(sent.formId).toMatch(/^form-/);
 
-  // And what came back is on the canvas, unsaved: the Editor tab shows the schema the
+  // And what came back is on the canvas, unsaved: the Source tab shows the schema the
   // model wrote, under the id this editor was already holding.
   await page.locator('[data-ftab="editor"]').click();
   await expect(page.locator("#pane-editor")).toContainText('"grund"');

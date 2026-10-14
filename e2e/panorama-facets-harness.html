@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas Panorama product-facet e2e harness</title>
+    <!-- Drives the *real* narrowing functions from api/web/panorama-mesh.js.
+         Most of what this control does is visible on the canvas and is checked
+         there. One thing is not: an edge whose other end has just been filtered
+         away is dropped by the renderer anyway, because it has no second point to
+         draw between. So a canvas assertion passes whether the cut prunes its
+         edges or leaves them dangling, and the graph the rest of the view reasons
+         over — the counts, the drilldown, the export — is the one that has to be
+         coherent. That is checked here, as a function over the graph. -->
+  </head>
+  <body>
+    <div id="ready">loading</div>
+    <script type="module">
+      import { withoutProducts, statesPresent, approvalsPresent } from "/panorama-mesh.js";
+      window.facets = { withoutProducts, statesPresent, approvalsPresent };
+      document.getElementById("ready").textContent = "ready";
+    </script>
+  </body>
+</html>

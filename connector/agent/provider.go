@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pblumer/atlas/limits"
 	"io"
 	"net/http"
 	"strings"
@@ -81,7 +82,7 @@ func postJSON(ctx context.Context, client *http.Client, timeout time.Duration,
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, limits.Default().Payload))
 	if err != nil {
 		return nil, err
 	}

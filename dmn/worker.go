@@ -45,6 +45,11 @@ const builtinProcessInstanceKey = "processInstanceKey"
 type Evaluation struct {
 	Outputs map[string]any
 	Trace   []byte
+	// Key is the deployment whose model answered — a decision deployment, or the
+	// process's own key for a model bundled with it — so the evaluation record can
+	// say which version ran. 0 when the lookup that answered cannot name it (the
+	// runtime pointer of a definition deployed before ADR-0319).
+	Key uint64
 }
 
 // Evaluator evaluates a decision by id against an input context and returns its
@@ -130,6 +135,7 @@ func DecisionHandler(store state.Reader, lookup ProcessLookup, bind Bind, sink f
 			InputsJSON:         JSONObject(inputs),
 			OutputsJSON:        JSONObject(eval.Outputs),
 			TraceJSON:          string(eval.Trace),
+			DecisionKey:        eval.Key,
 		}
 		var outputs []model.VariableValue
 		if resultVar := cp.Intern(detail.ResultVar); resultVar != "" {
@@ -161,19 +167,65 @@ func JSONObject(m map[string]any) string {
 // ([compiler.DMNJobTypeIndex]). sink, if non-nil, observes each result.
 func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, sink func(Result)) job.CompletingHandler {
 	return DecisionHandler(store, lookup, func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDetail) (Evaluator, error) {
-		// The task's binding selects which deployed model version to evaluate
-		// (ADR-0063): deployment pins to this process's own snapshot; latest (the
-		// default) tracks the newest deployed version of the decision. Both request
-		// the trace so the evaluation is retained with its explanation (ADR-0066).
+		// Which deployed model to evaluate depends on the binding and on the policy the
+		// definition was deployed under (decisionModelKey). Both paths request the
+		// trace so the evaluation is retained with its explanation (ADR-0066), and the
+		// first names the deployment that answered so the record can say which version
+		// ran.
 		return func(ctx context.Context, decisionId string, inputs map[string]any) (Evaluation, error) {
-			if detail.Binding == compiler.BindingDeployment {
-				out, trace, err := reg.EvaluateTraced(ctx, cp.Key, decisionId, inputs)
-				return Evaluation{Outputs: out, Trace: trace}, err
+			key, ok, err := decisionModelKey(reg, cp, detail, decisionId)
+			if err != nil {
+				return Evaluation{}, err
+			}
+			if ok {
+				out, trace, err := reg.EvaluateTraced(ctx, key, decisionId, inputs)
+				return Evaluation{Outputs: out, Trace: trace, Key: key}, err
 			}
 			out, trace, err := reg.EvaluateLatestTraced(ctx, decisionId, inputs)
 			return Evaluation{Outputs: out, Trace: trace}, err
 		}, nil
 	}, sink)
+}
+
+// decisionModelKey answers which deployment's model a business rule task must
+// evaluate against, ok=false when the ADR-0063 runtime lookup is still the answer,
+// and an error when the binding names something that is not there.
+//
+// The cases, in order:
+//
+//   - `deployment` binding — the model snapshotted with this process, under this
+//     process's own key. Unchanged since ADR-0014.
+//   - a fixed version (atlas:version) — the decision deployment the deploy resolved
+//     that version to. Never another version: if the deploy recorded none, the task
+//     fails rather than running whatever else is there.
+//   - `latest` on a definition deployed under the runtime policy — the newest
+//     decision deployment of the decision *now*, when the job is worked, else the
+//     model bundled with the process
+//     (ADR-0423). The choice is made
+//     once, here, and the key that answered is recorded with the evaluation: a
+//     replay applies the recorded completion and chooses nothing.
+//   - `latest` on a definition deployed under ADR-0319 — the key frozen at deploy.
+//   - `latest` on a definition deployed before either — ok=false, so the caller
+//     keeps resolving the newest registered model, the behaviour it has run under.
+func decisionModelKey(reg *Registry, cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDetail, decisionId string) (uint64, bool, error) {
+	switch detail.Binding {
+	case compiler.BindingDeployment:
+		return cp.Key, true, nil
+	case compiler.BindingVersion:
+		key, ok := cp.VersionPinnedKey(decisionId, detail.Version)
+		if !ok {
+			return 0, false, fmt.Errorf("dmn: decision %q version %d was not resolved when definition %d was deployed; redeploy the process", decisionId, detail.Version, cp.Key)
+		}
+		return key, true, nil
+	}
+	if cp.LatestAtRuntime() {
+		if key, ok := reg.LatestDecisionKey(decisionId); ok {
+			return key, true, nil
+		}
+		return cp.Key, true, nil
+	}
+	key, ok := cp.PinnedDecisionKey(decisionId)
+	return key, ok, nil
 }
 
 // buildInputs assembles a decision's input context: the static constant inputs as

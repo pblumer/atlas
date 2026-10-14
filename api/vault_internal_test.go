@@ -16,6 +16,7 @@ import (
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/api/vault"
 	"github.com/pblumer/atlas/connector/clio"
+	"github.com/pblumer/atlas/internal/ownerfile"
 )
 
 func testVaultKey(t *testing.T) []byte {
@@ -349,12 +350,9 @@ func TestVaultOnByDefault(t *testing.T) {
 	if srv.vault == nil {
 		t.Fatal("vault should be on by default (opt-out, ADR-0070)")
 	}
-	info, err := os.Stat(filepath.Join(dir, "vault.key"))
-	if err != nil {
-		t.Fatalf("stat key file: %v", err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("key file mode = %o, want 600", perm)
+	// Mode 0600 on Unix; on Windows, which ignores modes, a DACL for this account only.
+	if err := ownerfile.Check(filepath.Join(dir, "vault.key")); err != nil {
+		t.Errorf("key file: %v, want it readable by this account only", err)
 	}
 	if _, err := srv.vault.Set("k", "v"); err != nil {
 		t.Errorf("generated key should work: Set: %v", err)

@@ -86,7 +86,7 @@ func activeInstanceKey(t *testing.T, c *http.Client, ts *httptest.Server) uint64
 		Key   uint64 `json:"key"`
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(list, &instances); err != nil {
+	if err := json.Unmarshal(listRows(t, list), &instances); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	for _, in := range instances {

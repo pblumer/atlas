@@ -1,6 +1,7 @@
 # ADR-0020: Message events and correlation
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-22
 - **Deciders:** Atlas engine maintainers
 

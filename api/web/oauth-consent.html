@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Authorize an application</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='52' fill='%23000'/%3E%3Cpath fill='%23fff' fill-rule='evenodd' d='M128 26 244 214 12 214ZM128 172 178 214 78 214ZM111 72H145V99H172V133H145V160H111V133H84V99H111Z'/%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='52' fill='%23000'/%3E%3Cpath fill='%23fff' d='M142.1 201.7A68 68 0 0 1 24 174.5L57.5 152.3A33 33 0 0 0 115.3 179.2Z'/%3E%3Cpath fill='%23fff' d='M22.2 162.7A68 68 0 0 1 106.5 92L119.7 117.1L98 126A33 33 0 0 0 59 146.7Z'/%3E%3Cpath fill='%23fff' d='M126 92H160V226H126Z'/%3E%3Cpath fill='%23fff' d='M189.5 38H210.5V62.5H235V83.5H210.5V108H189.5V83.5H165V62.5H189.5Z'/%3E%3C/svg%3E" />
 <style>
   /* The same base tokens app.css and the public form page declare; theme.js
      overwrites the accent family on the root with the org's brand colour once the
@@ -47,7 +47,7 @@
 </head>
 <body>
   <div class="wrap">
-    <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 256 256"><path fill="currentColor" fill-rule="evenodd" d="M128 34 236 206 20 206ZM128 166 174 206 82 206ZM115 77H141V102H166V128H141V153H115V128H90V102H115Z"/></svg></span> <b>Atlas</b></div>
+    <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 256 256"><path fill="currentColor" d="M146 189.6A60 60 0 0 1 42.3 167.5L69.5 145.6A31 31 0 0 0 123.7 170.9Z"/><path fill="currentColor" d="M40.6 159.4A60 60 0 0 1 114.5 92.8L125.4 113.3L107.5 120.9A31 31 0 0 0 70.5 141.4Z"/><path fill="currentColor" d="M133 93H162V211H133Z"/><path fill="currentColor" d="M184.5 53H199.5V70.5H217V85.5H199.5V103H184.5V85.5H167V70.5H184.5Z"/></svg></span> <b>atlas</b></div>
     <div class="card" id="card"><p class="muted">Loading…</p></div>
   </div>
 <script>
@@ -71,7 +71,13 @@ async function api(method, path, body) {
   });
   const text = await res.text();
   const data = text ? JSON.parse(text) : {};
-  if (!res.ok) throw new Error(data.error || res.statusText);
+  if (!res.ok) {
+    // The status rides along: the sign-in below has to tell a refused password from
+    // a refused attempt, and only the status says which one this is.
+    const err = new Error(data.error || res.statusText);
+    err.status = res.status;
+    throw err;
+  }
   return data;
 }
 
@@ -85,9 +91,23 @@ function fatal(message, redirect) {
   if (redirect) setTimeout(() => { location.href = redirect; }, 1500);
 }
 
+// signInFailure names what refused a sign-in — deliberately the same three answers
+// the login screen gives (app.js, loginFailureText). The 401 is the vague one on
+// purpose: which half was wrong is not this page's to disclose either. The 429 is the
+// login throttle (ADR-0197), which refuses the attempt without looking at the
+// password, so those same words would send somebody after a password that may
+// already be right.
+function signInFailure(e) {
+  switch (e?.status) {
+    case 401: return "Invalid username or password.";
+    case 429: return "Too many sign-in attempts — the password was not checked. Wait a few minutes and try again.";
+    default: return "The sign-in could not be completed. Try again, or ask an administrator to check the server log.";
+  }
+}
+
 function signIn(ctx) {
   card.innerHTML = `<h1>Sign in to continue</h1>
-    <p class="muted"><b>${esc(ctx.clientName)}</b> is asking for access to Atlas.
+    <p class="muted"><b>${esc(ctx.clientName)}</b> is asking for access to atlas.
     Sign in to decide.</p>
     <form id="login">
       <label>Username<input name="username" autocomplete="username" required autofocus /></label>
@@ -105,10 +125,8 @@ function signIn(ctx) {
         username: fd.get("username"), password: fd.get("password"),
       });
       load(); // back to the same question, now with a session
-    } catch {
-      // Deliberately the same words the login screen uses, and deliberately
-      // vague: which half was wrong is not this page's to disclose either.
-      err.textContent = "Invalid username or password.";
+    } catch (ex) {
+      err.textContent = signInFailure(ex);
       err.hidden = false;
     }
   });
@@ -117,9 +135,9 @@ function signIn(ctx) {
 function consent(ctx) {
   const mcpOnly = String(ctx.resource || "").endsWith("/mcp");
   const reach = mcpOnly
-    ? ["Drive Atlas through its Model Context Protocol tools, as you.",
+    ? ["Drive atlas through its Model Context Protocol tools, as you.",
        "Nothing else: this approval does not reach the rest of the API."]
-    : ["Use the Atlas API as you — everything your account can do."];
+    : ["Use the atlas API as you — everything your account can do."];
   // Who vouched for this application. Where self-registration is open, the name
   // above is one the application chose for itself and nobody checked — and a
   // person cannot weigh a request without being told which of the two they are
@@ -131,7 +149,7 @@ function consent(ctx) {
        only if you started this yourself and recognise what you started.</div>`
     : "";
   card.innerHTML = `<h1>Authorize ${esc(ctx.clientName)}</h1>
-    <p class="muted">This application is asking to act as you in Atlas.</p>
+    <p class="muted">This application is asking to act as you in atlas.</p>
     ${vouch}
     <ul class="reach">${reach.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
     <p class="muted" style="margin-top:14px">It will be able to do this until you

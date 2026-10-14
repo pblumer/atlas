@@ -16,10 +16,10 @@ The skeleton that proves the three pillars fit together end to end.
 - ✅ `state`: Pebble-backed store, transactions, column-family/index helpers
 - ✅ `engine`: single-writer processor loop, batch cycle, `ProcessingContext`
 - ✅ `applyToState` used identically live and on recovery; crash-recovery test
-- ✅ Minimal `compiler`: BPMN-XML parse → resolve → linearize to `CompiledProcess` (programmatic builder + `Parse`); deeper validation (reachability, gateway coverage) still to come
+- ✅ Minimal `compiler`: BPMN-XML parse → resolve → linearize to `CompiledProcess` (programmatic builder + `Parse`); deeper validation followed in Milestone 1 (`compiler/validation.go`, ADR-0026)
 - ✅ Behaviors: none/start event, end event, sequence flow, **service task**
-- ✅ `job`: dedicated `job` package — in-process worker subscription that pulls activatable jobs and feeds completions back (ADR-0007); gRPC streaming transport + leases/retry are Milestone 4
-- ✅ **Goal: execute `Start → ServiceTask → End` and recover it across a restart** (deployment is programmatic for now, pending the XML front end)
+- ✅ `job`: dedicated `job` package — in-process worker subscription that pulls activatable jobs and feeds completions back (ADR-0007); leases, retries and fencing followed over HTTP — only a gRPC transport is still undecided (Milestone 4)
+- ✅ **Goal: execute `Start → ServiceTask → End` and recover it across a restart** (deployment was programmatic then; XML deploy followed)
 
 ## Milestone 1 — Core BPMN 🚧
 
@@ -31,10 +31,10 @@ The control-flow basics most real models use.
   the result variable, so an instance runs to completion with no external worker.
   Recovery-tested (the result is written into the event and re-applied on replay,
   never re-evaluated).
-- 🚧 Process variables: a variable store with **input binding** — instances start
+- ✅ Process variables: a variable store with **input binding** — instances start
   with variables (`{"variables": {…}}`), script tasks read them, and Operations
-  shows them per instance. Variable scopes (local vs. propagated), copy-on-write,
-  and output mappings still to come.
+  shows them per instance. Variable scopes, propagation and input/output mappings
+  followed ([ADR-0068](docs/adr/0068-task-io-variable-mappings.md)).
 - ✅ Exclusive gateway (data-based XOR): takes the first outgoing flow whose
   compiled-FEEL condition is true, else the default flow. Recovery-tested (the
   chosen branch is captured by which element activates, never re-evaluated).
@@ -50,7 +50,7 @@ The control-flow basics most real models use.
   for exactly the branches the split took. Correct for reconverging splits with
   pass-through branches (no double fire), and recovery-tested. Cyclic inclusive
   joins still to come (ADR-0033).
-- 🚧 **Input/output variable mappings** ([ADR-0068](docs/adr/0068-task-io-variable-mappings.md)):
+- ✅ **Input/output variable mappings** ([ADR-0068](docs/adr/0068-task-io-variable-mappings.md)):
   generic `zeebe:ioMapping` on job-backed activities, backed by **activity-local
   variable scopes** and scope-chain FEEL resolution — Camunda-faithful semantics
   (input mappings create locals the activity sees; output mappings promote only
@@ -70,10 +70,13 @@ The control-flow basics most real models use.
   ([ADR-0086](docs/adr/0086-gateway-conditions-resolve-over-scope-chain.md)), so a
   business rule task or a gateway nested in a subprocess or a multi-instance body
   reads its enclosing scope's variables (e.g. a per-row `inputElement` or a
-  per-row `verdict`) rather than only the process root. Remaining: extend the same
-  scope-chain read to the REST/clio workers, and reuse the local-scope machinery
-  for embedded subprocess scopes.
-- 🚧 **Data objects** ([ADR-0053](docs/adr/0053-first-class-data-objects.md)):
+  per-row `verdict`) rather than only the process root. The two items this entry
+  carried as remaining are closed: the connector workers read up the chain because a
+  task's input mapping *is* the outbound payload
+  ([ADR-0174](docs/adr/0174-connector-payloads-are-the-input-mapping.md)), and embedded
+  subprocesses reuse the same local-scope machinery
+  ([ADR-0074](docs/adr/0074-embedded-subprocesses.md)). **ADR-0068 is complete.**
+- ✅ **Data objects** ([ADR-0053](docs/adr/0053-first-class-data-objects.md)):
   first-class, typed, event-sourced data — not the decoration most engines settle
   for. The foundational slice landed: a modeled `<dataObject>` (its name,
   `isCollection`, and optional `<dataState>`) compiles into the process, and at
@@ -230,8 +233,27 @@ The control-flow basics most real models use.
   XMI keeps the picture in a file of its own. Next here: an XMI *export*, which ADR-0230
   named and which would make the pair symmetric. Merging an import into an existing
   model is deliberately not done — reconciling two versions of a class is a modeling
-  decision, and it belongs to the person.
-- 🔲 Compiler validation: reachability, gateway coverage, scope consistency
+  decision, and it belongs to the person. **The vocabulary now has a reading of its own**
+  (ADR-0338): every reading until here ran from the process
+  outwards, so somebody about to rename `Order.total` or retire an enumeration literal could
+  see what an Order *is* and nothing about what would break. **Data › Business objects** lists
+  every class of every model the caller may view — business objects, value types and
+  enumerations together, in the console's shared table — deliberately **across applications**,
+  because two applications modelling the same Order is the failure this area exists to prevent
+  one level up, and a per-model view cannot show it. Opening one says **where it is used and
+  how**: every deployed process that declares a data object of it, and every element that
+  reads it, writes one member of it, moves it into a state or names the store it is kept in,
+  with the element, the member and the state named — beside the model's own uses (an attribute
+  typed with it, an association, a lifecycle taking its states from it, a store holding it),
+  which for an «enumeration» are normally the only uses there are, so a process-only reading
+  would have reported the vocabulary's most shared elements as dead. It **guesses nothing** (an
+  untyped data object whose name resembles a class is not a use) and reads only what the
+  installation runs — the deployed, active, latest version of each process, a Modeler draft
+  being uncompiled — which the page states where it makes the claim. Computed on every call and
+  stored nowhere, for ADR-0310's reason: the names are already the mechanism. Next here: a link
+  from the class canvas into the reading, which waits on what a navigation out of an editor
+  holding unsaved state should do.
+- ✅ Compiler validation: reachability, gateway coverage, scope consistency (`compiler/validation.go`), and the same checks as a dry run over `POST /api/v1/validate` ([ADR-0026](docs/adr/0026-problems-panel-and-versioned-validation.md))
 - 🚧 **Conformance tests against a curated BPMN model set** — the
   [`conformance/`](conformance/) package scaffolds the suite: a register of BPMN
   execution features mapped onto the workflow control-flow patterns (so gaps are
@@ -282,7 +304,7 @@ The control-flow basics most real models use.
   opt-in behind a build tag (needs Node), out of the default test/coverage path.
   Next: grow the differential's reference translations, plus data-object lineage
   and error/message end events.
-- 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
+- ✅ **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
   element, its behavior, and evaluation through the job path landed as a vertical
   slice. **The single-binary server now executes them end to end**: a project
@@ -317,20 +339,136 @@ The control-flow basics most real models use.
   as the base. Wiring the clio/REST workers the same way, health probes, and
   external vendor workers remain ADR-0041 follow-ups.
   **A decision can now be authored in Atlas** ([ADR-0062](docs/adr/0062-embedded-dmn-editor.md)):
-  the business rule task panel has "＋ Neue Decision" / "Bearbeiten" buttons that open
-  an embedded **dmn-js** editor (vendored, same family as the bpmn-js modeler) — a
+  the business rule task panel has "＋ New decision" / "Edit" buttons that reach an
+  embedded **dmn-js** editor (vendored, same family as the bpmn-js modeler) — a
   DRD + decision-table authoring surface. On save the model is stored (new reference,
   or overwritten in place when editing) and the decision's inputs and output are
   adopted into the task automatically through the existing picker path, so the
   empty-dropdown round trip (author elsewhere → export → upload → pick) is gone. This
   reverses ADR-0014's "no DMN authoring" non-goal for the decision-table case;
   authoring the FEEL/logic and model versioning still live in temis.
+  **That editor is now a page rather than a window over one**
+  ([ADR-0320](docs/adr/0320-the-decision-editor-is-a-page.md)):
+  a decision is edited at `#/modeler/dmn/new` or `#/modeler/dmn/e/{ref}`, in the
+  chrome the BPMN and form editors wear — breadcrumb, `.etabs` tab strip, Save — so it
+  can be bookmarked, linked and reloaded, and the browser's back button means what it
+  means everywhere else. The overlay fitted ADR-0062's picker-shaped entry point; it
+  stopped fitting when ADR-0319 made a decision a deployable, versioned artifact of
+  its own. Authoring one *for* a business rule task now leaves the diagram (saving it
+  as a draft first) and adopts what was authored on the way back, so the one-button
+  flow survives the move.
+  **And a decision now has a draft**
+  ([ADR-0321](docs/adr/0321-decision-drafts.md)): **Save** keeps work
+  in progress in a `dmn-drafts/` store of its own, and **Save to model** is what writes
+  the handle every reference, every picker and the next Publish resolve. A decision has
+  one layer more than a diagram — draft, model, deployment — and until now the editor
+  had no name for the first of them, so an unfinished decision could refuse a
+  colleague's publish of the same application. A publish ships the model, never the
+  draft; a decision that has only a draft is listed as such and says it will not travel.
+  Writing a model onto a handle another decision holds is refused and offered as a
+  deliberate replacement ([ADR-0222](docs/adr/0222-artifact-id-renames.md)) rather than
+  silently forking `eligibility-2`.
+  **The third verb landed too**
+  ([ADR-0322](docs/adr/0322-deploying-one-decision.md)):
+  **Deploy** ships the decision on screen on its own, through
+  `POST /api/v1/decision-deployments` — the same `deployDecisions` an application
+  publish calls, so the record, the key, the per-decision version and the recovery
+  are identical, and the deployment takes the `latest` pointer a process deployed
+  afterwards binds to. Until then the only door to the engine was Publish on the
+  application, which ships everything it holds. The bar also carries the version and
+  key the decision is currently deployed under, as a diagram opened from a deployment
+  carries its key. A decision that is not in the model can be deployed — the record
+  carries its own source — and the editor says that no business rule task can name it
+  until it is.
+  **And the decision can now be tried before anything runs it**
+  ([ADR-0326](docs/adr/0326-trying-a-decision-before-it-runs.md)):
+  **Test** posts the model on screen to `POST /api/v1/decisions/evaluate`, which compiles
+  it for that one call and throws it away — no key, no record, no registry entry — and
+  answers with the outputs and the temis trace (ADR-0066). The rule matrix is the one
+  Operations draws, extracted so both read from the same renderer. A decision stored
+  nowhere yet can be tried like any other, and `atlas_try_decision` exposes the same act
+  over MCP. **A DMN model with no diagram also renders now**
+  ([ADR-0325](docs/adr/0325-dmn-diagram-is-completed-on-read.md)):
+  almost every model reaching Atlas carries no `DMNDI`, and dmn-js drew a single box and
+  silently dropped the input data and the arrows — then a save wrote back a diagram
+  covering only what had been drawn, leaving the model worse than it was found. Atlas
+  completes the diagram on the way to the editor, as [ADR-0124](docs/adr/0124-server-side-diagram-auto-layout.md)
+  has always done for BPMN, and **Auto-layout** re-flows the whole graph on request; the
+  DRG viewer reads the same generated bounds, so both surfaces draw one picture.
+  **Export XML** joins them in the bar's `⋯` menu.
+  **The last two arrived with them.** A decision is published as its own document
+  ([ADR-0324](docs/adr/0324-decision-documentation.md)):
+  ADR-0143's design for a second artifact kind — the requirements graph, then every
+  decision's prose, inputs and rule table set as a real table — as an immutable
+  numbered version with a revocable public link, in a `decision-docs/` store that is a
+  deliberate sibling of `process-docs/`. Its version line is about sign-off rather than
+  about what is running, which is why it exists alongside ADR-0319's and not instead of
+  it. And a decision draft holds a live session
+  ([ADR-0323](docs/adr/0323-co-editing-a-decision.md)):
+  ADR-0140's registry, transport and semantics over a decision, with the lock scoped to
+  the **decision** — in the requirements graph that is ADR-0140's per-element rule
+  exactly, and opening a decision's table claims that decision, because a table row has
+  no stable identity to lock. The session handlers now take a subject rather than
+  assuming the BPMN draft store, so a third artifact with a draft is a binding rather
+  than a copy. With that, #919's parity list is complete.
+  **Two things it surfaced were fixed with it.** The deploy preflight refused a
+  process whose business rule task named a decision that existed only as a
+  deployment, telling the author to create what they had just deployed; it is now
+  binding-aware
+  ([ADR-0327](docs/adr/0327-a-deployed-decision-satisfies-a-latest-bound-task.md)),
+  because a `latest`-bound task resolves to that deployment and never consults the
+  bundle, while a `deployment`-bound one still needs it and now says so. And a
+  process document names a business rule task without showing the decision behind
+  it; it now carries the call the diagram holds and the decision's own rule table,
+  drawn by the renderer the decision document already uses
+  ([ADR-0328](docs/adr/0328-the-process-document-shows-the-decision-a-task-runs.md)).
+  **And what deletion costs is now said out loud.** Deleting a DMN reference names
+  the deployed definitions and drafts that could then not be deployed — the deploy
+  preflight's own condition, read forwards
+  ([ADR-0331](docs/adr/0331-deleting-a-dmn-reference-says-what-it-breaks.md));
+  a model nothing points at is listed under Not assigned instead of vanishing from
+  the product while staying on disk
+  ([ADR-0330](docs/adr/0330-a-model-with-no-reference-stays-findable.md));
+  and the rule that a decision deployment may not be deleted while a definition is
+  pinned to it is written down before any route can break it
+  ([ADR-0329](docs/adr/0329-a-decision-deployment-is-not-deletable.md)).
+  **The stores stopped growing.** A deployed decision version and an unreferenced
+  model file can both be removed, under that rule plus one it did not foresee — the
+  current version of a decision cannot go while older ones remain, because the
+  version counter is derived from what survives
+  ([ADR-0336](docs/adr/0336-cleaning-up-the-decision-store.md)).
+  Operations' decision page is where that happens, and it answers "what is pinned to
+  this version" for the first time.
+  **And the key space underneath both got a floor.** Deleting the highest-keyed
+  definition and restarting used to hand its key back, and the next definition
+  inherited the instance history filed under it — measured, on a process that had
+  never run. The highest key ever issued is now durable, written before the keys it
+  covers are used
+  ([ADR-0339](docs/adr/0339-the-definition-key-space-never-goes-backwards.md)).
   **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
   a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
-  (the default, Camunda-style) evaluates the newest deployed version of the
-  decision, `deployment` pins to the version snapshotted with the process — surfaced
-  as a "Binding" dropdown on the task. `versionTag` (pin to a numbered version) is
-  the next step, once models are stored with version history.
+  and `deployment` — surfaced as a "Binding" dropdown on the task.
+  **A decision is now a durable, versioned deployment artifact in its own right**
+  ([ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md)),
+  which is what that binding now resolves against. Publishing an application
+  deploys its DMN models as *decision deployments*: durable records in a
+  `decisions/` sidecar store, keyed from the same definition key space process
+  definitions come from, versioned per decision id, holding the validated DMN
+  source and its checksum — never a compiled temis structure, so the registry is
+  rebuilt by compiling the stored source again at startup. An application can
+  therefore consist of decisions with **no BPMN in it at all**, and it still
+  publishes something the engine runs and recovers. And `latest` is now resolved
+  **when the process is deployed**, not when a token reaches the task: a deployment
+  pins each reference to an exact decision deployment and stores it, so publishing a
+  newer decision no longer changes an already-deployed process, and neither the
+  runtime nor a replay chooses a version (I5/I6). `deployment` binding is unchanged,
+  and deployments written before this keep resolving `latest` at activation, exactly
+  as they were deployed to. Served over `GET /api/v1/decision-deployments` (+
+  `/{key}/xml` for the deployed source), reported in the application release
+  manifest beside its processes. A fixed version is chosen with `atlas:version`, resolved
+  at deploy, and a `versionTag` binding is refused rather than read as `latest` until a
+  decision version can carry a tag
+  ([ADR-0423](docs/adr/0423-a-business-rule-task-chooses-its-decision-version.md)).
   **A decision is now debuggable end to end**
   ([ADR-0066](docs/adr/0066-decision-evaluation-records.md)): the DMN worker
   requests temis's rules-fired **trace** during its off-path evaluation and rides
@@ -344,9 +482,12 @@ The control-flow basics most real models use.
   outputs it produced, and a rules-fired view of the trace — live and long after
   the instance finished (remote ADR-0050 decisions record an empty trace).
   Recovery-tested. Retention/compaction for the new family remains future work.
-  Next: explicit `<zeebe:output>` mappings, decimal precision across the temis
-  boundary, and off-loop streaming evaluation as the Milestone-4 gRPC job-worker
-  concern (the single binary drives jobs synchronously).
+  Outputs map through the task I/O mappings (`zeebe:ioMapping`, ADR-0068), and a
+  decision's numbers cross the temis boundary as exact decimals (`dmn/numbers.go`).
+  A business rule task can also call a **decision service**
+  ([ADR-0398](docs/adr/0398-a-business-rule-task-can-call-a-decision-service.md)):
+  one addressing vocabulary for decisions and services, an ambiguous name refused at
+  deploy.
 - 🚧 **Worker Types** ([ADR-0036](docs/adr/0036-clio-connector.md)): a service task
   bearing an `<atlas:clioConnector>` extension is a worker task that appends an
   event to a **server-registered** clio event store through the job path (like the
@@ -441,6 +582,27 @@ The control-flow basics most real models use.
   in, and the in-process handler remains as the fallback `--in-process-connectors` returns
   to. Attachments and inbound events are follow-ups — for the inbound half see
   [the Jira issue-watch draft](docs/adr/0214-jira-inbound-issue-watch.md).
+  **The mail Worker reads its mailbox** ([ADR-0438](docs/adr/0438-mailbox-worker.md)):
+  an inbound watch on a mail Worker publishes the new mail of one folder as an Atlas
+  message — over IMAP for an SMTP Worker that names a `mailboxEndpoint`, through the Gmail
+  history and the Microsoft Graph messages API for those providers — and a mail task's
+  `operation` lists, reads, moves, marks, deletes (to the trash) or answers mail by the
+  `messageId` a watch or a list answered. A process receives the envelope by default and
+  the text only on request; attachment content never. A watch admits `allowedSenders` and,
+  optionally, only a DMARC pass, and never changes the mailbox. A task that reads a mail
+  Worker's mailbox deploys only for a viewer of it and one that changes it for an editor,
+  at every deploy door — the application import included, which also gained ADR-0205's
+  message-name claim it had skipped. Still open: instance reads by relationship rather
+  than by role (ADR-0275), so what a process receives is not yet hidden from the
+  installation's other operators; IMAP `XOAUTH2`; push instead of polling (IMAP `IDLE`,
+  Graph change notifications).
+  The same reader also runs the other way: `atlas openapi-template --spec x.yaml --out
+  dir` writes one element-template package per operation, in the repository catalog's
+  own shape ([ADR-0300](docs/adr/0300-openapi-element-templates.md)) —
+  method fixed, URL filled in (a FEEL expression where the path has parameters), and
+  everything the document cannot decide left empty. Applying one to a task waits on the
+  applier ([ADR-0212](docs/adr/0212-element-template-applier.md)), so today the output is
+  a file to commit or to keep rather than to install.
 
 ## Milestone 2 — Events and timers 🚧
 
@@ -453,8 +615,8 @@ Making processes wait, react, and time out.
   execute: the token waits, a server-side scheduler fires due timers on the
   partition goroutine, and the event continues. Recovery-tested (a pending timer
   is restored from the log and fires afterward). A cycle on a plain catch is a
-  compile error (a catch fires once). An incident instead of firing immediately
-  when a FEEL timer can't resolve is still to come (ADR-0055/0056/0057).
+  compile error (a catch fires once). A FEEL timer that cannot resolve raises an
+  incident instead of firing ([ADR-0064](docs/adr/0064-timer-feel-failure-incidents.md)).
 - ✅ **Timer start events** (duration, date, cycle, cron): a `<startEvent>` with a
   `<timerEventDefinition>` starts a fresh instance on its schedule —
   `<timeDuration>` (once, after a delay), `<timeDate>` (once, at an absolute
@@ -473,8 +635,9 @@ Making processes wait, react, and time out.
   `POST /api/v1/messages` publish, correlating against open subscriptions through
   one shared path and carrying an optional variable payload into the woken
   instance. Recovery-tested (an open subscription is restored from the log and
-  correlates afterward). Message buffering, message boundary events, and
-  cross-partition correlation still to come (ADR-0020). A **message end event**
+  correlates afterward). Message boundary events are built (below), and a message
+  published with a time to live waits for its subscriber (below); cross-partition
+  correlation is Milestone 5 (ADR-0020). A **message end event**
   publishes its message, then ends the instance — the send-and-stop counterpart of
   the throw event (ADR-0052).
 - ✅ **Message start events** (single-partition): a `<startEvent>` with a
@@ -483,7 +646,12 @@ Making processes wait, react, and time out.
   end to end. Matching is by message name; a throw event carries its instance's
   variables as the payload, and the reserved FEEL identifier `processInstanceKey`
   exposes an instance's own key so a reply can correlate back to the requester.
-  Recovery-tested. A start-event correlation key and buffering remain (ADR-0035).
+  Recovery-tested. A message start may carry a correlation key and be a **singleton
+  start**: while an instance started with a key is live, another message with that key
+  starts no duplicate ([ADR-0094](docs/adr/0094-singleton-message-start.md)). With
+  several start events, only the one that fired is seeded, and an untriggered create
+  seeds the none start ([ADR-0226](docs/adr/0226-start-events-are-triggers.md)).
+  A buffered message feeds subscriptions, not start events (ADR-0370).
 - ✅ **Signal events (broadcast)**: a `signalEventDefinition` is a **named broadcast**
   — no correlation key, delivered 1:n to **every** waiting catch of the same name across
   all instances (ADR-0088). A signal throw or signal end event broadcasts the throwing
@@ -496,12 +664,14 @@ Making processes wait, react, and time out.
   signal event, plus a central signals manager on the diagram root).
 - ✅ **Error events and error propagation**: an `errorEventDefinition` is a **named, coded
   failure** propagated **structurally** to the **nearest enclosing** matching handler — not
-  broadcast (ADR-0089). An error end event (or a worker failing a job to a code via
-  `ThrowJobError`) throws; it walks up the live scope chain to the first error boundary or
+  broadcast (ADR-0089). An error end event (or a worker ending its job with a code over
+  `POST /jobs/{key}/error`, the Go worker's `BPMNError`, or an operator by hand with a reason
+  through the same route or `atlas_throw_job_error`) throws; it walks up the live scope chain to the first error boundary or
   error event subprocess whose code matches (a code-less catch is a catch-all), always
   interrupting: the caught scope is torn down and the handler's recovery flow runs. Uncaught,
   it propagates to a call-activity caller (ADR-0076) or, at the top, raises an incident
-  (ADR-0061). Built on the scope chain, `interruptHost`/`terminateScope`, and the
+  (ADR-0061) whose resolve retries the throw: an uncaught worker error keeps its job for
+  that retry, and an error end throws again. Built on the scope chain, `interruptHost`/`terminateScope`, and the
   boundary/event-subprocess lifecycle — no subscription, value type, or recovery path;
   propagation is a pure function of committed scope state. Recovery-tested; authored in the
   Modeler's Implement panel (an error-code picker on error end/boundary/event-subprocess
@@ -522,7 +692,7 @@ Making processes wait, react, and time out.
   panel (an escalation-code picker on escalation throw/end/boundary/event-subprocess events —
   keeping the interrupting toggle, unlike errors — plus a central escalations manager). Completes
   the throw/catch event family (message, error, signal, escalation).
-- ✅ **Link events** ([ADR-0133](docs/adr/0132-link-events.md)): BPMN's **off-page connector** — a
+- ✅ **Link events** ([ADR-0132](docs/adr/0132-link-events.md)): BPMN's **off-page connector** — a
   **link intermediate throw** ("go to X") and a **link intermediate catch** ("arrive at X"), paired
   by **name within one flow scope**, that stand in for a sequence flow so a long or crossing diagram
   stays readable. Reaching the throw is a **goto** to the matching catch, which flows straight on.
@@ -585,25 +755,6 @@ Making processes wait, react, and time out.
   dependency. Authored in the Modeler (the mode switch, the Worker and result collection, and a
   parameter editor per tool), and an undocumented tool is warned about at deploy and where it is
   written.
-- ✅ **Forms written by the AI Worker** ([ADR-0260](docs/adr/0260-ai-form-generation.md)):
-  the same Worker an operator configured for the runtime also writes forms at **design time**.
-  **"Create a new form" on a user task or a start event carries that step into the editor**, which
-  opens with the generator already on it — pressing that link was the author saying what the form is
-  for, so the dialog does not ask again (a repair form's link stays plain: a different kind of form).
-  The form editor's **✨ Generate** button asks for a brief in prose and, optionally, the process the
-  form belongs to and the step it is for — and the process's *own words* do the rest of the talking:
-  its documentation, each step's `<bpmn:documentation>`, the sequence-flow conditions, and the
-  variable names its mappings and data objects already use, read tolerantly from the **draft** the
-  author is looking at (or the deployed version) rather than from a compile. Regenerating over an
-  open form is a refinement, not a fresh start. **Nothing is stored**: what comes back opens unsaved
-  in the editor, under the id the editor was already holding, and the author reads it and saves it
-  through the ordinary path — ADR-0032's stance about generated diagrams, applied to forms. One
-  configuration and one credential for runtime and authoring alike (ADR-0255), no key in the browser,
-  and the call runs on the request's own goroutine, never on the run loop: it is authoring, not a
-  service task, so ADR-0164 is untouched. What comes back is gated before it is shown — form-js's
-  one root type, a curated component vocabulary (an `iframe` is refused **by name**, not dropped),
-  a unique key on every input, and a bound on the document — and an answer that is not a form is a
-  422 with the reason rather than a broken editor.
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel
@@ -649,7 +800,11 @@ Making processes wait, react, and time out.
   losers (their subscriptions/timers self-retire). The compiler validates every target is a
   catch event; recovery rebuilds the armed race and its group from the log, so the first fire
   after a restart still wins — no new recovery path. Authored in the Modeler (bpmn-js draws
-  it natively) ([ADR-0110](docs/adr/0110-event-based-gateways.md)).
+  it natively) ([ADR-0110](docs/adr/0110-event-based-gateways.md)). Only this exclusive kind
+  runs: a gateway marked `instantiate="true"` or `eventGatewayType="Parallel"` is refused at
+  deploy (stage-5 rule `event-gateway.kind`, #804) instead of running as the exclusive choice,
+  and the Modeler flags it while it is drawn; a definition already deployed with one still
+  loads. The parallel semantics themselves are not built.
 - ✅ **Terminate end events** ([ADR-0116](docs/adr/0116-terminate-end-events.md)): an
   `<endEvent><terminateEventDefinition/>` — the "abort" end — ends its **enclosing flow scope** at
   once, terminating every other live token in the scope (cancelling their jobs). At the process
@@ -714,6 +869,26 @@ Making processes wait, react, and time out.
   `GET /api/v1/instances/{key}/variable-audit` and surfaced inline in the instance
   timeline so a corrected value carries its actor.
 
+- ✅ **Message buffer** ([ADR-0370](docs/adr/0370-durable-message-buffer.md)): a message
+  published with `timeToLiveMs` that correlates nothing is kept, durably, and delivered
+  to the first subscription that opens on its name and key — a catch, a receive task, a
+  boundary or an event subprocess. A `messageId` makes a retry a no-op while the message
+  lives; the timer sweep drops it when its time is up; `--message-ttl-max` bounds the
+  lifetime, and a message that may be kept carries no personal data. An operator reads
+  what waits through `GET /api/v1/messages/buffered`, the MCP tool and the Console, and
+  `atlas_buffered_messages` counts it on `/metrics`. Built as the local slice; delivery
+  from a peer (ADR-0372) and a time to live on a throw event are not.
+
+**Still open in this milestone:**
+- 🔲 **Repeatable non-interrupting conditional events**: a non-interrupting conditional
+  fires once per arm; firing again on every false→true edge is ADR-0137's follow-up.
+- 🔲 **Overviews of the messages and signals deployed models exchange**
+  ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md),
+  [ADR-0447](docs/adr/0447-the-signals-deployed-models-throw-and-receive.md), both proposed).
+- 🔲 **Lanes, layers B and C** ([ADR-0121](docs/adr/0121-bpmn-lanes.md)): a lane naming
+  an Atlas group as a compile-time `candidateGroups` default, and instance-level access
+  control.
+
 ## Milestone 3 — Structure ✅
 
 Composition and reuse.
@@ -773,14 +948,21 @@ Composition and reuse.
   transactions and cancel events; the cancel boundary/end panels are wired)
   ([ADR-0108](docs/adr/0108-bpmn-transactions.md)). **Closes Milestone 3.**
 
-## Milestone 4 — Operability 🔲
+## Milestone 4 — Operability 🚧
 
 What it takes to run this for real.
 
-- 🔲 Public API surface (deploy, create instance, publish message, complete job, queries)
-- 🔲 gRPC job-worker protocol (streaming pull, leases, fencing) — ADR-0007
-- 🔲 Worker SDK (Go first)
-- 🚧 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
+- 🚧 Public API surface (deploy, create instance, publish message, complete job, queries): every route is in the served OpenAPI document with its role (`api/openapi.go`), with scoped API tokens ([ADR-0194](docs/adr/0194-api-tokens.md)) and a stated runtime contract ([ADR-0176](docs/adr/0176-standards-boundary-and-runtime-contract.md)). Deploy is still a sidecar store, not an event-sourced command ([ADR-0019](docs/adr/0019-durable-deployments.md))
+- 🚧 Job-worker protocol — ADR-0007: built over HTTP, with the type-keyed pull, long-poll, leases, `leaseToken` fencing, complete, fail and BPMN errors, and the activation and lease-timeout counters. A gRPC transport is not built, and whether it should be is open
+- 🚧 Worker SDK (Go first): the `worker` package is usable from Go — handlers, concurrency, `BPMNError` — but is not yet packaged and documented as an SDK
+- ✅ A worker runs the jobs of one type concurrently: `--max-jobs` places, a poll asking only
+  for the free ones, and supervised built-in workers at the engine's in-process bound
+  (`--worker-max-jobs`, default 16)
+  ([ADR-0440](docs/adr/0440-worker-runs-jobs-concurrently.md)).
+  On Windows a kill-on-close job object ends every supervised worker, and what it started,
+  with the server however the server ends
+  ([ADR-0439](docs/adr/0439-supervised-workers-end-with-the-server.md)).
+- ✅ Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
   ([ADR-0142](docs/adr/0142-prometheus-metrics.md), v0.2.0 programme E): a Prometheus
   exposition at `/metrics` on Atlas's own registry. The **durability** metrics landed —
   applied log position, checkpoints and the position/age of the newest that still
@@ -800,6 +982,14 @@ What it takes to run this for real.
   an explicit resolution event for the path where an incident is dropped with an element;
   the lease/timeout counters, which wait on ADR-0007; readiness distinct from liveness;
   then structured log event names and OTel traces.
+- ✅ **Running behind a load balancer**
+  ([ADR-0448](docs/adr/0448-trusted-proxies.md)): `--trusted-proxies`
+  names the balancers whose word about a client's address is taken — a PROXY protocol
+  header (v1/v2) from one that forwards TCP to a TLS-terminating Atlas, `X-Forwarded-For`
+  read from the right from one that speaks HTTP, and neither from anybody else — so the
+  login throttle and the audit trail see the person rather than the balancer, with the
+  balancer kept as `via`. A balancer's TCP health check is a DEBUG line, and
+  `--log-level` sets the floor.
 - ✅ Log compaction / snapshotting so recovery doesn't replay from genesis
   ([ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), v0.2.0
   programme D): the mechanism is complete. A checkpoint is a Pebble snapshot of the state
@@ -819,9 +1009,9 @@ What it takes to run this for real.
   compacted log. `GET`/`POST /api/v1/checkpoints` expose the status — published
   checkpoints and whether they still verify, the last pass, the WAL's footprint — and a
   checkpoint-now control for a planned restart. **ADR-0131 is complete.**
-- 🔲 Exported-log stream for downstream analytics
-- 🔲 **Instance migration**
-  ([ADR-0162](docs/adr/0162-process-instance-migration.md), designed): move running
+- ✅ Exported-log stream for downstream analytics: the OpenSearch exporter ([ADR-0114](docs/adr/0114-opensearch-event-exporter.md)) and the CloudEvents feed, pushed to a receiver ([ADR-0433](docs/adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md))
+- ✅ **Instance migration**
+  ([ADR-0162](docs/adr/0162-process-instance-migration.md)): move running
   instances from one deployed version to the next. A deployment is immutable and
   `applyToState` must replay identically live and on recovery (ADR-0019, I4/I6), so a
   model fix reaches instances that are already running only by cancelling and restarting
@@ -835,10 +1025,27 @@ What it takes to run this for real.
   would make replay depend on the matching algorithm's code), element instance keys
   preserved so variables, jobs and the scope tree ride through untouched, validation
   that refuses rather than guesses, and history left unrewritten with the replay
-  switching definitions at the migration's log position. Implementation sequence:
-  record encoding and the fold → validation → the plan/migrate endpoints → recovery
-  tests across the boundary → the timeline's two-definition reader → the Operations UI.
-- 🚧 Operator tooling: list/inspect instances, incidents, jobs. **Finding one instance
+  switching definitions at the migration's log position. That sequence is delivered:
+  record encoding and the fold, validation that refuses rather than guesses, the
+  plan/migrate endpoints and their MCP twins, recovery tests across the boundary, the
+  timeline's two-definition reader, and the Operations UI. A migration also re-indexes
+  the searchable variables its target declares
+  ([ADR-0295](docs/adr/0295-migration-reindexes-searchable-variables.md)).
+  **ADR-0162 is complete.**
+- ✅ **Forked instance migration**
+  ([ADR-0389](docs/adr/0389-forked-instance-migration.md)):
+  the answer to the refusal ADR-0162's validator is designed to give. Where a token
+  cannot be rebound — its element is gone from the target version, or is a different kind
+  of element there — the instance is ended where it is and its work **continues in a new
+  instance** of that version, seeded at resume points an operator names (proposed from
+  where the tokens are now), carrying the root-scope variables and data objects, with
+  each record naming the other. It emits no new durable fact: an instance created and
+  another terminated, plus two appended link fields, so replay needed nothing new.
+  Delivered with the validator that refuses a resume point which cannot seed an execution,
+  `POST /api/v1/instances/{key}/migrate/fork`, the `atlas_fork_instance` MCP tool, the
+  plan endpoint answering both readings at once, the Operations dialog showing the fork
+  below the rebinding, and the two-way link on the replay and the instance card.
+- ✅ Operator tooling: list/inspect instances, incidents, jobs. **Finding one instance
   among a few hundred thousand** landed
   ([ADR-0241](docs/adr/0241-finding-an-instance.md)): the
   variable search used to walk every instance in the engine *on the run loop*, so a
@@ -851,7 +1058,7 @@ What it takes to run this for real.
   backfilled once at open like the ADR-0080/0083 counters — make a version's
   instances a **bounded range scan**, newest first, with history already in
   completion order. `GET /api/v1/instances` gained `?state=active|finished` and a
-  `?before=` cursor (`X-Instances-Next-Cursor`, the task inbox's paging), the search
+  `?before=` cursor (`nextCursor` in the response, the task inbox's paging), the search
   gained `?process=`, and the live view's instance panel stops loading every instance
   of a version: one page per half, an honest "80 of 150", **Load more**, and a search
   box beside the list. The **variable value index** followed
@@ -861,8 +1068,16 @@ What it takes to run this for real.
   trailing `*` asks for a prefix. A process that declares nothing pays one length check
   per variable write and holds no entries. The decision to index a write is stamped onto
   the event at command time, because `applyToState` cannot ask a compiled process
-  anything; no backfill is needed, since the attribute postdates every definition that
-  could lack it. Remaining, and deliberately so: substring and free text stay in the
+  anything; no backfill is needed *within* a version, since the attribute postdates every
+  definition that could lack it. The declaration is authored in the Modeler's process
+  properties (**Searchable variables**), which also marks a declared name the model never
+  writes, or writes as JSON — a declaration that indexes nothing while looking like it
+  works. The one case the "no backfill" reasoning missed is **migration**, which moves an
+  instance to another version's declaration: the migration now emits the membership
+  corrections its target implies, and
+  `POST /api/v1/processes/{key}/reindex-instances` repairs the instances migrated before
+  it did ([ADR-0295](docs/adr/0295-migration-reindexes-searchable-variables.md)).
+  Remaining, and deliberately so: substring and free text stay in the
   OpenSearch export (ADR-0114) rather than becoming a second engine index.
   The **third way in is the diagram itself**
   ([ADR-0261](docs/adr/0261-instances-on-an-element.md)): a
@@ -877,6 +1092,34 @@ What it takes to run this for real.
   its predecessors. `GET /api/v1/instances` gained `?element=`, scoped to `?process=`
   and live-only, since a finished instance holds no token. The click it takes over is
   the decision inspection's (ADR-0066), which keeps the ⚖ badge it already had.
+  The same question asked of **incidents** landed next
+  ([ADR-0337](docs/adr/0337-incident-floods.md)): one broken worker
+  parks every instance that reaches its task, and the only reading on offer was rows —
+  a megabyte of near-identical JSON per refresh, thousands of DOM rows, and a resolve
+  dialog per incident. `GET /api/v1/incidents/summary` answers in one line per *cause*
+  (definition, element, kind) with its count, its raised-at window, a representative
+  message and the worker behind it, so the size of the reading is the number of causes;
+  `POST /api/v1/incidents/resolve` clears a ticked set or a whole matching scope in
+  bounded batches, in the shape ADR-0090 settled for bulk termination. The listing's new
+  `?element=` / `?elementIndex=` / `?type=` / `?message=` filters are the *same* selector that action
+  evaluates, so a preview and the act cannot disagree, and Operations → Incidents opens
+  on the causes with the worker fix and a Resolve all beside each.
+- ✅ **Shipping it**: a container image (`Dockerfile`, built per release tag by
+  `.github/workflows/docker.yml`) and a Helm chart (`deploy/helm/atlas`, released by
+  `.github/workflows/chart-release.yml`); an optional **TLS 1.3 listener** with
+  operator-supplied certificates, off by default
+  ([ADR-0191](docs/adr/0191-built-in-tls-listener.md)).
+- ✅ **Deactivating a version** ([ADR-0119](docs/adr/0119-deactivate-deployed-process.md)):
+  an inactive definition is no longer started by its timer, message or signal start
+  events; an explicit create and the running instances are untouched.
+- ✅ **Instance TTL** ([ADR-0085](docs/adr/0085-process-instance-ttl.md)): a definition
+  may declare `instanceTtl`, with an optional server default; an instance still running
+  when it expires is terminated by a durable timer created at its activation, so a
+  replay recreates it.
+- ✅ **A circuit breaker per Worker** ([ADR-0340](docs/adr/0340-worker-circuit-breaker.md)):
+  an outage stops at the Worker, not at every token — the dispatch of a failing Worker's
+  jobs is held in runtime state, deliberately not durable, instead of each instance
+  running into its own incident.
 
 ## Milestone 5 — Scale-out 🔲
 
@@ -889,12 +1132,12 @@ Beyond a single node.
 - 🔲 Partition rebalancing / failover
 - 🔲 Idempotency/dedupe for delivered cross-partition messages
 
-## Milestone 6 — Ecosystem 🔲
+## Milestone 6 — Ecosystem 🚧
 
 Adoption and polish.
 
 - 🔲 Worker SDKs in more languages
-- 🔲 BPMN modeler interoperability (import from common tools)
+- 🚧 BPMN modeler interoperability (import from common tools): the Zeebe dialect round-trips, and a MIM worksheet imports ([ADR-0292](docs/adr/0292-mim-import-worksheet.md)); importing from Camunda 7 or Signavio is not built
 - 🚧 **Benchmark suite and published performance numbers** (v0.2.0 programme B):
   a reproducible harness landed in [`benchmarks/`](benchmarks/) — durable-profile
   (real WAL `fsync` per batch) steady-state benchmarks for the minimal
@@ -914,7 +1157,7 @@ Adoption and polish.
   [`benchmarks/results/`](benchmarks/results/). Still to come: a loopback-socket HTTP
   variant and a large parked-workload profile
   ([`benchmarks/README.md`](benchmarks/README.md)).
-- 🔲 Documentation site, tutorials, examples
+- 🚧 Documentation site, tutorials, examples: the handbooks in the Console, the API explorer and the models under `examples/` exist; a documentation site of its own does not
 - 🔲 1.0 API stability commitment
 
 ## Milestone S — Single-binary server & web UI 🚧
@@ -968,7 +1211,7 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   it like every other route, and a tool call carries the caller's credential rather
   than one the adapter supplies
   ([ADR-0196](docs/adr/0196-authenticated-mcp-transport.md)).
-- 🔲 Full properties panel — the hand-written Details panel grows group by group
+- 🚧 Full properties panel — the hand-written Details panel grows group by group
   ([ADR-0025](docs/adr/0025-full-properties-panel.md)) rather than vendoring the
   ES-module-only `bpmn-js-properties-panel`. Enumerated in **Milestone A** below.
 - ✅ Durable deployments ([ADR-0019](docs/adr/0019-durable-deployments.md)): the
@@ -987,9 +1230,12 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   Modeler home lists each project's artifacts plus an **Ungrouped** bucket, moving
   one between projects from a per-row dropdown. Two artifact types so far:
   **BPMN drafts** (Phase 1) and **DMN references** — a DMN artifact is a *pointer*
-  to a temis-authored model (display name + temis handle), never DMN XML, so Atlas
-  organizes and deploys the decision without becoming a DMN editor, honoring the
-  "no DMN authoring surface" non-goal (Phase 2, ADR-0014). A DMN reference is
+  to a model (display name + model handle) rather than a copy of its XML, so the
+  model has one home and every reference to it sees the same edit (Phase 2). The
+  model behind a reference is authored either in temis or, since
+  [ADR-0062](docs/adr/0062-embedded-dmn-editor.md), in Atlas's own embedded dmn-js
+  editor; publishing the application deploys it as a durable, versioned decision
+  deployment (see Milestone 1). A DMN reference is
   **resolved and validated at deploy time**: a pluggable `dmn.Resolver` (default:
   a `<data-dir>/dmn-models/` folder of temis-exported models; a temis git/service
   source — `dmn.ServiceResolver`, an HTTP model source selected by
@@ -1008,8 +1254,8 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   API, no engine impact). The Modeler presents this as a **two-level view**: a
   clean project landscape (one row per project + an *Ungrouped* bucket) and a
   per-project detail page with a single unified artifact table, a **Create new ▾**
-  dropdown (BPMN diagram / DMN reference / Form, filing new artifacts into the
-  project), a filter, and per-row action menus. Next: further artifact types
+  dropdown (BPMN diagram / Decision (DMN) / uploaded DMN model / Form, filing new
+  artifacts into the project), a filter, and per-row action menus. Next: further artifact types
   (element templates, READMEs, nested folders), and — later — **importing or
   backing up a whole project from/to a git repository** (a natural fit for the
   same `Resolver`/sidecar seam that already externalizes DMN models).
@@ -1053,9 +1299,12 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
     ([ADR-0129](docs/adr/0129-remote-deployment-targets.md)), and design-time
     backup for free ([ADR-0107](docs/adr/0107-backup-and-restore.md)).
   - 🔲 **Deferred, and said out loud:** authenticated hosted apps — a page that
-    needs `/api/v1/tasks`, the shape `reisebuchung-kunde.html` demonstrates —
-    require a per-app credential and a record of their own; until then such a page
-    stays a product page in `api/web/` or lives on an origin the operator runs.
+    needs `/api/v1/tasks` — require a per-app credential and a record of their own;
+    until then such a page stays a product page in `api/web/` or lives on an origin
+    the operator runs. A multi-step customer page needs no credential any more:
+    `reisebuchung-kunde.html` walks a public wizard
+    ([ADR-0449](docs/adr/0449-a-wizard-is-a-subprocess-one-filler-walks-through.md))
+    through the public routes alone.
     Per-app subdomain isolation needs wildcard DNS and a wildcard certificate.
 - 🚧 **User management & the authentication boundary**
   ([ADR-0044](docs/adr/0044-user-management-and-authentication-boundary.md)):
@@ -1346,19 +1595,37 @@ for the derived whole-instance mesh above them.
   is their sum; the queue-depth gauge is asked with `max_over_time()` and its total
   is the peak, because adding two readings of a queue depth measures nothing.
 
-## Milestone A — Modeler & authoring experience 🔲
+**After the six slices** — the estate and the run graph, outside the milestone's marker:
+- ✅ **One estate, several nodes** ([ADR-0402](docs/adr/0402-one-estate-several-nodes.md)):
+  every node keeps deriving its own subgraph and the reader's node stitches them into one
+  starmap; no node is the master and nothing new is stored.
+- ✅ **A peer credential carries its reach**
+  ([ADR-0410](docs/adr/0410-a-peer-credential-carries-the-reach-a-membership-cannot-give-it.md)):
+  an API token carries, beside its scope, the subjects it may see, applied by the same
+  per-item filter a person's membership uses.
+- 🚧 **Taken edges**
+  ([ADR-0400](docs/adr/0400-an-edge-that-was-taken-is-not-an-edge-that-was-declared.md)):
+  a derived edge carries how often it was traversed and the window that was counted; the
+  drift axis — taken but not declared — is not built.
+- 🚧 **The run graph** ([ADR-0404](docs/adr/0404-the-whole-graph-can-be-walked.md)): a
+  rebuildable in-memory projection of the whole graph (`rungraph/`), named apart from the
+  starmap and with a stated scope; the record is partly built.
+- 🔲 **One graph model, several projections**
+  ([ADR-0420](docs/adr/0420-one-graph-model-several-projections.md), proposed).
+
+## Milestone A — Modeler & authoring experience 🚧
 
 A parallel track alongside Milestone S: bring the Modeler's *authoring* surface up
 to what a real BPMN "Implement" workspace offers, captured feature-by-feature from
 a reference modeler and translated into Atlas decisions. Every item respects the
 buildless, self-contained UI rule ([ADR-0012](docs/adr/0012-web-ui-app-shell.md))
 and the compiler gate ([ADR-0013](docs/adr/0013-embed-bpmn-js-modeler.md)) — the
-panel only ever authors what the engine actually runs. The ADRs below are
-**Proposed** (feature intentions, not yet decided or built).
+panel only ever authors what the engine actually runs. Most of the records below have
+been decided and built since this track was opened; the markers say which.
 
 **Properties panel** ([ADR-0025](docs/adr/0025-full-properties-panel.md)) — extend
 the hand-written Details panel one vertical slice at a time:
-- 🔲 General: element id, name.
+- ✅ General: element id, name.
 - ✅ Documentation: `<bpmn:documentation>` — a Documentation field beside every
   element's name and id, on the process, each pool and the process it executes, and
   the collaboration itself. The compiler carries it as metadata but never acts on it
@@ -1373,31 +1640,37 @@ the hand-written Details panel one vertical slice at a time:
 - 🔲 Example data — editor-only mock data used by Play mode, never by the runtime.
 
 **Validation & problems** ([ADR-0026](docs/adr/0026-problems-panel-and-versioned-validation.md)):
-- 🔲 A `POST /api/v1/validate` dry-run compile (no register, no version, no run)
+- ✅ A `POST /api/v1/validate` dry-run compile (no register, no version, no run)
   returning structured problems (element ref, severity, rule, message).
-- 🔲 A Problems panel that calls it debounced on edit, links each problem to its
+- ✅ A Problems panel that calls it debounced on edit, links each problem to its
   element, and shows a version selector ("check problems against Atlas <version>").
 
 **Element & connector templates** ([ADR-0027](docs/adr/0027-element-templates.md)):
-- 🔲 Adopt the bpmn.io element-templates JSON schema; a server-served catalog.
+- 🚧 Adopt the bpmn.io element-templates JSON schema; a server-served catalog. The Repository serves and installs templates (`api/repository.go`, ADR-0081, ADR-0300); nothing applies one yet (below, [ADR-0212](docs/adr/0212-element-template-applier.md)).
 - 🔲 "Template → Select" applies a template's bound properties through the
   ADR-0025 write path, rendering only the template's declared fields.
 
 **Human tasks & forms** ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)):
-- 🔲 `<bpmn:userTask>` that parks a token and creates an activatable human task
+- ✅ `<bpmn:userTask>` that parks a token and creates an activatable human task
   via the existing job/task lifecycle (ADR-0007).
-- 🔲 Form model (adopt the bpmn.io form-js schema) + a server-side form store.
-- 🔲 The **Tasks** app (reserved in ADR-0012) as the human "worker": task inbox,
+- ✅ Form model (adopt the bpmn.io form-js schema) + a server-side form store.
+- ✅ The **Tasks** app (reserved in ADR-0012) as the human "worker": task inbox,
   form rendering, submit-completes-task.
-- 🔲 Form binding + a **Test** tab that previews a form against example data.
+- ✅ Form binding + a **Test** tab that previews a form against example data.
+- ✅ Assignee and candidate groups as **FEEL expressions**, evaluated at activation and
+  frozen ([ADR-0318](docs/adr/0318-user-task-assignment-expressions.md)).
+- ✅ **Task folders** in the Tasks app: saved filters stored as structured rules and
+  generated into FEEL, evaluated on the server off the run loop
+  ([ADR-0268](docs/adr/0268-task-folders-are-saved-filters.md)).
 
 **Publication** ([ADR-0029](docs/adr/0029-public-process-start-links.md)):
-- 🔲 Opt-in, revocable public start links: a scoped, unauthenticated
+- ✅ Opt-in, revocable public start links: a scoped, unauthenticated
   `POST /public/forms/{token}/start` bound to one process + start form, reusing the
-  single-writer start path. Needs rate limiting / abuse mitigation before shipping.
+  single-writer start path, rate-limited, checked against its form, and embeddable
+  cross-origin ([ADR-0186](docs/adr/0186-embed-public-forms-cross-origin.md)).
 
 **Play mode** ([ADR-0030](docs/adr/0030-play-mode-simulation.md)):
-- 🔲 An ephemeral engine sandbox: the real compiler + processor over an in-memory,
+- ✅ An ephemeral engine sandbox: the real compiler + processor over an in-memory,
   non-durable partition seeded from the draft, external effects mocked, driven
   from the Modeler and overlaid with the existing runtime overlay. No JS token
   simulator — identical semantics to production by construction.
@@ -1508,9 +1781,30 @@ dataset of up to 50 000 cases":
   looped through carries every step it was. An unfinished case is drawn standing
   where it stopped. It reads rather than drives: Step's controls act on the whole
   sandbox, and offering them over a finished run would invite stepping it.
-- ✅ **Nothing left open.** Saving a scenario from a CSV-driven run stays impossible
+- ✅ **Nothing left open from ADR-0215.** Saving a scenario from a CSV-driven run stays impossible
   on purpose — its rows are parsed on the server, so the browser has nothing to store
   — and the described dataset is the answer to what that was wanted for.
+- 🔲 A rule that demands the cases it speaks about: `minMatched`, the fewest cases its
+  `when` has to select, and the variables it reads that no case carried
+  ([ADR-0424](docs/adr/0424-a-playground-rule-can-demand-the-cases-it-speaks-about.md),
+  proposed).
+
+**Working on a diagram:**
+- ✅ **Token simulation** in the Design view: a client-side walkthrough of the control
+  flow, a hand-written bpmn-js module
+  ([ADR-0078](docs/adr/0078-design-view-token-simulation.md)).
+- ✅ **Live co-editing**: several authors in one session on a draft, with presence and a
+  lock per element, reachable from MCP as well
+  ([ADR-0140](docs/adr/0140-live-collaborative-modeling-sessions.md)).
+- ✅ **Adjusting a deployed diagram** without redeploying it: only the diagram blocks are
+  replaced, every other byte of the stored model is kept
+  ([ADR-0251](docs/adr/0251-adjust-a-deployed-diagram.md)).
+- ✅ **What an element was handed**, on the replayed diagram: the evaluated inputs and
+  outputs of a task, read from the log, with nothing new persisted
+  ([ADR-0161](docs/adr/0161-element-io-on-the-diagram.md)).
+- ✅ **Into a call activity**: double-clicking its "+" opens the process it calls, on
+  every surface that draws one, with a hover cue
+  ([ADR-0245](docs/adr/0245-call-activity-drilldown.md)).
 
 **Version history** ([ADR-0031](docs/adr/0031-diagram-version-history.md)):
 - 🔲 A **Versions** control: explicit named checkpoints (immutable snapshots)
@@ -1518,8 +1812,9 @@ dataset of up to 50 000 cases":
   distinct from deployment versions. Browse, label, restore.
 
 **In-Modeler AI copilot** ([ADR-0032](docs/adr/0032-modeler-ai-copilot.md)):
-- 🔲 Extend the MCP/HTTP surface (ADR-0016) with model-authoring tools (return
-  XML, validate candidate XML, accept generated XML into a draft).
+- 🚧 Extend the MCP/HTTP surface (ADR-0016) with model-authoring tools (return
+  XML, validate candidate XML, accept generated XML into a draft). The draft tools
+  exist; a validation tool does not.
 - 🔲 A copilot panel over a user-configured agent endpoint that drops generated
   models into a reviewable draft — no LLM or provider SDK in the binary, every
   result passes the compiler + Problems gate before deploy.
@@ -1529,11 +1824,498 @@ dataset of up to 50 000 cases":
   result is an unsaved draft. The copilot is the same shape with a diagram where the
   form is — and ADR-0032's "a user-configured agent endpoint" is now answered by the
   Console record rather than by a second place to put a key.
+- ✅ **Forms written by the AI Worker** ([ADR-0260](docs/adr/0260-ai-form-generation.md)):
+  the same Worker an operator configured for the runtime also writes forms at **design time**.
+  **"Create a new form" on a user task or a start event carries that step into the editor**, which
+  opens with the generator already on it — pressing that link was the author saying what the form is
+  for, so the dialog does not ask again (a repair form's link stays plain: a different kind of form).
+  The form editor's **✨ Generate** button asks for a brief in prose and, optionally, the process the
+  form belongs to and the step it is for — and the process's *own words* do the rest of the talking:
+  its documentation, each step's `<bpmn:documentation>`, the sequence-flow conditions, and the
+  variable names its mappings and data objects already use, read tolerantly from the **draft** the
+  author is looking at (or the deployed version) rather than from a compile. Regenerating over an
+  open form is a refinement, not a fresh start. **Nothing is stored**: what comes back opens unsaved
+  in the editor, under the id the editor was already holding, and the author reads it and saves it
+  through the ordinary path — ADR-0032's stance about generated diagrams, applied to forms. One
+  configuration and one credential for runtime and authoring alike (ADR-0255), no key in the browser,
+  and the call runs on the request's own goroutine, never on the run loop: it is authoring, not a
+  service task, so ADR-0164 is untouched. What comes back is gated before it is shown — form-js's
+  one root type, a curated component vocabulary (an `iframe` is refused **by name**, not dropped),
+  a unique key on every input, and a bound on the document — and an answer that is not a form is a
+  422 with the reason rather than a broken editor.
+- ✅ **The FEEL assistant** ([ADR-0445](docs/adr/0445-feel-assistant.md)): a
+  conversation with the same AI Worker that writes a **FEEL expression**, opened from anywhere with
+  **Ctrl/⌘+Shift+E**, the spark in the top bar, a **mini spark on every FEEL field** of the Modeler,
+  or a spark beside a focused output cell, literal expression or input expression in the DMN editor.
+  **Every answer is run before anybody reads it**: compiled, its calls refused as a deploy refuses
+  them (ADR-0388), evaluated against the example the model gave and held against the result it
+  claimed — and an answer that fails goes back to the model with the engine's own words, at most
+  twice, so a small free model behind OpenRouter is usable. The prompt's function list is the
+  engine's registry and every rule it teaches is a tested expression. Beside the chat: a FEEL editor,
+  a test pane, Copy, and **Apply to the field it was opened from** (an fx field keeps its `=`; a
+  decision table's input cell, which takes a unary test, is not written to), a **history** of the
+  last thirty expressions and **favourites**, kept in the browser. Nothing is stored on the server.
 
 **Canvas polish** (bpmn-js affordances; mostly no ADR needed, toolkit features):
-- 🔲 Minimap, align/distribute, element color/appearance.
+- 🚧 Minimap, align/distribute, element color/appearance: align and distribute are on the bpmn-js context menu; a minimap and element colour are not built.
 - 🔲 Element comments / annotations.
-- 🔲 Projects/folders to organize diagrams (draft/deployment listing grows a tree).
+- 🚧 Projects/folders to organize diagrams (draft/deployment listing grows a tree): projects exist ([ADR-0034](docs/adr/0034-projects-and-artifacts.md), [ADR-0128](docs/adr/0128-process-applications.md)); nested folders do not.
+- ✅ **The editor says which version it shows** ([ADR-0452](docs/adr/0452-modeler-shows-its-version.md)):
+  a chip beside the breadcrumbs names the open record — the draft, or version N of M — and how it
+  stands against the other (`Draft = v7`, `Draft · v7 + changes`, `Draft ≠ v7` when a newer
+  deployed version differs from the draft), with who created and who last changed each. A draft
+  records who saved it, and `GET /api/v1/drafts/{id}/comparison` (MCP `atlas_compare_draft`)
+  compares it with a deployed version, ignoring the diagram. Deploy from a draft or a new diagram
+  saves it first, so the draft stays what runs; a version opened read-only is deployed without
+  touching the draft, and the Deploy panel says so.
+- ✅ **A model's source, in place** ([ADR-0457](docs/adr/0457-modeler-xml-source.md)):
+  **XML source** in the process and decision editors' `⋯` menu shows the BPMN or DMN document as
+  the canvas holds it, in the Modeler's code editor, and **Apply** rebuilds the canvas from a
+  corrected one. A malformed document is refused with its line, an unreadable one leaves the canvas
+  as it was, and an applied correction counts as an unsaved edit for leaving, saving and the live
+  session. The form editor's JSON schema tab is labelled **Source**.
+
+---
+
+## Milestone B — Business architecture: capabilities & value streams 🚧
+
+A parallel track: give Atlas a place for what an organisation must be able to do,
+above the processes that do it. The method is the business architecture of *Enterprise
+Process Orchestration* (Ruecker/Strauch, Wiley 2025) — value streams, strategic
+end-to-end processes, and business capabilities as a flat, tagged list stated
+independently of their implementation. Atlas holds every process and none of that, so
+a deployed process can be found by its name and by nothing else: not by the capability
+it realises, not by who owns that capability in the business, and not by what would
+stall without it.
+
+The whole milestone is **design-time**. It emits no events, participates in no replay,
+and `applyToState` never sees it. The reasoning, the options weighed and what is
+deliberately refused are in
+[ADR-0305](docs/adr/0305-business-capabilities-and-value-streams.md);
+the method and how to work it with Atlas as it stands are in
+[`docs/architecture/business-architecture.md`](docs/architecture/business-architecture.md).
+
+- ✅ **B0 — The method, written down.** The five levels mapped onto what Atlas has and
+  has not, the conventions the method needs from a modeller whatever the registry holds
+  (an application per capability, a required capability as a service task rather than a
+  call activity, an end event named for its outcome), and the measurement patterns with
+  the Atlas fact each one actually produces.
+- ✅ **B1 — The capability record.** A new `api/capability` area service
+  ([ADR-0147](docs/adr/0147-splitting-the-api-server-object.md)) over its own
+  `sidecar.NewStore`, holding scope, inputs, outputs, business owner, resources,
+  realisations, required capabilities, KPIs, SLAs, tags and a lifecycle state — with
+  **no parent field**, because the flat list is the method rather than a preference,
+  and a test asserts the absence rather than a comment describing it. The business
+  owner is free text with an optional principal: the person accountable for a
+  capability frequently has no account. One identity, the key, which is also the
+  filename — so the map reads as `capabilities/loan-underwriting.json` and diffs like
+  source; the price is that a key cannot be renamed in place, and the refusal says so.
+  Registered in [`api/storeregistry.go`](api/storeregistry.go) as design-time, so the
+  existing export already carries the map between installations. Exposed as MCP tools
+  alongside the HTTP surface: an agent that deploys a process otherwise has no way to
+  say what part of the business it is for.
+- ✅ **B2 — The value stream record.** Ordered stages, each naming the capabilities
+  that perform it, with the stream's own KPIs. The method's own inconsistency is
+  accepted rather than engineered away: an end-to-end process spans several stages
+  *and* is itself a capability, so a stage names capabilities and an end-to-end
+  capability is named by every stage it spans.
+- ✅ **B3 — Realisation, resolved at read time.** A capability's realisations point
+  outward by portable key ([ADR-0134](docs/adr/0134-git-backed-applications.md)) in one
+  of four kinds — `process`, `worker`, `system`, `manual` — because the two that are
+  not Atlas resources are the normal state of a capability before the work starts.
+  Everything mutable (does the application exist, is it deployed, at which version, how
+  many instances are live) is resolved when the record is read and stored nowhere:
+  [ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md) §4's
+  discipline, for its reason.
+- ✅ **B4 — The gap report.** The reverse direction, computed rather than stored, the
+  way [ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md) computes its overlay:
+  capabilities realised by nothing (the manual work, made visible), realisations
+  pointing at what no longer exists, deployed processes no capability claims, stages
+  with no capability, `requires` naming no capability, one process two capabilities both
+  claim, and a call activity crossing into another capability's process that the caller
+  never declared. A comparison, never
+  a merge — a declared dependency with no call is the normal case, since the method's
+  black box is usually a REST call. It runs *on* the run loop, and only because nothing
+  in it grows with the instance population: the map and the deployment registry are
+  design-time size, and the running-instance count is the maintained O(1) per-definition
+  counter ([ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) rather than a scan.
+  [ADR-0239](docs/adr/0239-off-loop-queries.md) is the rule that makes that a check
+  somebody had to pass rather than an assumption. Alongside it, a per-capability
+  **coverage** read: the resolved
+  realisations, what the capability depends on and what each has promised, who depends
+  on it, and the value-stream stages it performs.
+- ✅ **B5 — The milestone event compiles.** A **none intermediate throw event** — an
+  event whose only job is to leave a trace in the engine's history — is the method's
+  milestone marker, and the compiler refused it. It is now `TypeNoneThrowEvent`, a
+  pass-through node like the link throw event, and its product is not its execution but
+  its record: the visit counters count it, the step trail carries it in order, the
+  Operations overlay lights it up. That is what makes "identity verification started" a
+  readable business state where no task sits.
+
+  A type of its own rather than a reused task or link throw, because everything that
+  reads a compiled node back reads its type, and a milestone stored as a task would be
+  drawn and described as one. The change also splits a state that used to be single: an
+  intermediate throw event carrying a definition this compiler does not implement is now
+  refused by name, so making the empty case compile did not quietly make the wrong case
+  compile too ([ADR-0307](docs/adr/0307-the-milestone-event-compiles.md)).
+- ✅ **B6 — Panorama meets the registry.** `atlas.capabilityKey` on an ArchiMate
+  `Capability` and `atlas.valueStreamKey` on a `ValueStream`, so the drawing and the
+  registry are the same architecture seen twice rather than two architectures. Each key
+  is allowed on its own element and refused on the other's: both are strategy-layer
+  behaviour elements binding a key from the same register, which makes them the pair a
+  later edit is likeliest to treat as interchangeable and the pair where doing so would
+  be least visible.
+
+  The key travels, not an opaque id, because a capability's key *is* its identity — the
+  filename on disk, not renameable in place, what an export carries — so ADR-0189 §4's
+  rule points at it. The name is resolved on every read, as for every other binding.
+
+  `ValueStream` became authorable, which it was not: the validator accepted one in a
+  document it read and the palette offered no way to create one, so a model containing
+  value streams could be opened and edited around but never added to. One palette line,
+  because the relationship matrix is predicates over layer and aspect rather than a
+  table of type pairs, and a test asserts it is treated exactly as `Capability` is
+  across every relationship and partner in both directions.
+
+  Three surfaces are deliberately untouched, each for a stated reason: the mesh overlay
+  draws the runtime landscape and a capability is a different altitude; observations
+  are runtime health and a capability has none; the event-log context now says in its
+  own words that it can be asked about the processes realising a capability and not
+  about the capability itself
+  ([ADR-0308](docs/adr/0308-panorama-binds-the-capability-register.md)).
+- ✅ **B7 — Measurement.** A capability's declared SLAs are now checked against what
+  ran: `GET /api/v1/capabilities/{key}/measurement?windowDays=N` returns, per realising
+  process, the outcome distribution and cancellation counts from the maintained
+  per-element counters, the cycle time over the window, and each declared SLA's
+  attainment.
+
+  **The record's open question is answered, by measurement rather than by argument as
+  it required.** The counters are flat at any volume — a thousandfold population leaves
+  them in microseconds — and the instance walk is linear, costing 1.24 s over 100 000
+  finished instances. So: yes, computable without the OpenSearch exporter, provided the
+  readings that walk instances carry a **required** window. The exporter is an
+  optimisation for unbounded historical analysis, not a prerequisite
+  ([`benchmarks/results/measurement-381825f.md`](benchmarks/results/measurement-381825f.md)).
+
+  Two findings changed the shape of the slice. Per-phase duration went in as the
+  candidate for omission, on the reasoning that its cost scales with process length; a
+  second benchmark axis refuted that — the ratio is a constant near 2× and *falls* as
+  processes grow — so it is not dropped for cost. It is out of the response for a
+  different reason: a phase is a span between two points a reader names, and the
+  register has no field naming them. And the response mixes two kinds of number on
+  purpose, all-time counters and windowed walks, so every figure says which basis it
+  rests on in the body itself.
+
+  A declared figure Atlas cannot compute stays visible as a declaration: an SLA is
+  measured only where it carries the new optional `thresholdSeconds`, and every KPI is
+  listed as not measured with the reason, because guessing which recorded figure a goal
+  in the business's words refers to would put a number somebody acts on under a name
+  nobody authored. This is the one read in the area that runs off the run loop
+  ([ADR-0239](docs/adr/0239-off-loop-queries.md))
+  ([ADR-0309](docs/adr/0309-measuring-a-capability.md)).
+- ✅ **B8 — The Console surface.** A capability list that is worth opening: filter by
+  tag, sort by realisation state, and the gap report as the landing view rather than a
+  report somebody has to find. German first ([ADR-0267](docs/adr/0267-console-speaks-german-first.md)).
+  Built under Panorama → Capabilities and Value streams (`api/web/capabilities.js`): the
+  gap report grouped by kind and never ranked, the shared table with "nothing realizes
+  it" and "due for confirmation" as one click each, a capability's page with its
+  realizations, measurement over a chosen window, requirements and stages, and the
+  confirmation as the one write. Creating and editing records stays with the API and MCP.
+- 🔲 **B9 — Document-level exchange.** One JSON document holding the whole map, and an
+  import that reports what it would do before doing it: reconciled by key rather than by
+  position, with a `dryRun` naming what it would add, change and leave alone. The
+  installation-level half already works — both stores are design-time, so the existing
+  export and restore ([ADR-0107](docs/adr/0107-backup-and-restore.md)) carry them — and
+  this is the half that makes a map reviewable in a pull request and importable into a
+  second server without moving everything else with it. Cheap by construction: there are
+  no local ids to remap and no positional identity to preserve, so the document is the
+  records as they stand. Importing *another tool's* model — ArchiMate Open Exchange, or a
+  BIAN/eTOM reference model onto tags — is a separate slice again.
+- ✅ **B10 — A record says when somebody last confirmed it.** Every finding the gap
+  report raises today is a fact Atlas checked. The half of a capability it cannot check
+  is the half anybody acts on: who owns it, what it is and is not responsible for, and
+  what it has promised. Those decay silently, and a map whose realisations are green
+  and whose owners left two years ago is worse than no map.
+  [ADR-0304](docs/adr/0304-a-capability-says-when-it-was-last-confirmed.md)
+  is the third instance in this tree of the shape ADR-0289 and
+  [ADR-0293](docs/adr/0293-open-questions-in-records-expire.md) already use — a
+  backward-looking date saying somebody *looked*, never a forward promise somebody
+  *made* — with the one difference that forces its own record: both of those are
+  build-time tests over content here, and this is runtime data in a customer's
+  installation that no test will ever fail over.
+  `confirmedAt` / `confirmedBy` / `confirmedWith` / `confirmationNote` on both records,
+  set by an explicit confirmation and by **no** edit, because a save that refreshed the
+  date would let a typo fix assert that every SLA had been re-read. No bulk confirm, for
+  the same reason. `confirmedWith` is there because the confirmer is almost never the
+  owner — the owner is free text precisely because they often have no account — so
+  without it the map confirms itself and a reader cannot tell that from a review the
+  owner sat in. Optional, and its absence is the information; neither a self-confirmation
+  nor a name that differs from the recorded owner is a finding, because in a small
+  installation the first is the only confirmation possible and the second would be a
+  finding about spelling. The horizon is one installation setting defaulting to twelve months —
+  configurable, unlike its two precedents, because the reviewers are somebody else's
+  business architects rather than this repository's contributors. It surfaces as a
+  ninth finding, as `?stale=true` beside `?realized=false` (the review backlog beside
+  the automation one), and on the coverage read — and it never withholds a stale
+  record, which would make the map least useful exactly when it needs attention.
+
+Deliberately out of scope: business areas (Level 1) and integration capabilities
+(Level 5) as record kinds of their own — the first is a tag, and the second is what a
+Worker Type already is ([ADR-0203](docs/adr/0203-worker-execution-model.md)). Importing
+an industry reference model (BIAN, ACORD, eTOM) maps its levels onto tags and is a
+later slice; doing it inside B1 would drag the hierarchy question into the record that
+exists to settle it. No approval workflow: `state` is a field somebody sets, and Atlas
+is the engine an organisation would model such a workflow *in*.
+
+---
+
+## Milestone K — Service catalogue, orders & the portal 🚧
+
+A parallel track: what a person may order, and a record of what they already hold. Three
+models, not one ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md)): a
+design-time catalogue published as frozen releases, an order that is an ordinary process
+instance, and an inventory of held rights in engine state — its own column family, folded
+by the one `applyToState` and exempt from retention. People order in the **shop**
+(`/shop.html`, formerly the portal). The code is `api/catalog` and `api/order`, and the
+shipped approval and fulfilment models are in `api/systemprocesses/`.
+
+- ✅ **The whole area is optional.** `--catalogue=false` switches off its routes, the shop
+  page, its Console menus, its MCP tools, its starmap picture and its system processes,
+  keeps every store and leaves the engine untouched; on is the default, tests hold the
+  switch to routes added later, and a start with orders still in fulfilment warns rather
+  than refuses ([ADR-0434](docs/adr/0434-the-catalogue-can-be-switched-off.md)).
+
+**Catalogue & releases**
+- ✅ **Products, structure and releases.** Products nest by composition and aggregation,
+  `requires` orders fulfilment and `excludes` marks a conflicting pair; an ArchiMate model
+  imports as drafts. Publishing freezes a release an order then names, checks both graphs
+  for cycles, resolves precedence into fulfilment **waves** and resolves every process
+  binding; nothing is deleted, only withdrawn
+  ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md)).
+- ✅ **What a product carries.** Eligible groups, a configuration form whose answers ride
+  on the order line, a category, a price, keywords and a picture; its structure is
+  assembled per product in one form ([ADR-0347](docs/adr/0347-product-eligibility.md),
+  [ADR-0358](docs/adr/0358-order-line-configuration.md), [ADR-0360](docs/adr/0360-product-category.md),
+  [ADR-0361](docs/adr/0361-product-price.md), [ADR-0391](docs/adr/0391-product-picture.md),
+  [ADR-0395](docs/adr/0395-product-construction-kit.md)).
+- ✅ **The answers reach the approver and the processes.** The approver reads a position's
+  configuration answers on the approval, labelled as the form labels them; the processes the
+  product binds receive each answer as a variable of its own, sealed where the model declares
+  it personal, never in place of a variable the order sets; Atlas's own approval models and
+  the orchestration no longer receive them
+  ([ADR-0441](docs/adr/0441-a-position-s-answers-reach-its-processes.md)).
+- ✅ **Publishing warns about answers in the clear.** A publish names each order-form answer that
+  reaches a process without being declared personal data there, and still makes the release; a
+  field marked `personal = false` in the form is not warned about
+  ([ADR-0443](docs/adr/0443-publishing-warns-about-answers-in-the-clear.md)).
+- ✅ **Maintaining a catalogue.** A grantable `productmanager` role creates catalogues, and
+  each catalogue is the scope its members work in
+  ([ADR-0315](docs/adr/0315-portal-roles-and-responsibilities.md)). The Console screen and
+  the MCP tools edit, publish and report on approvers, fulfilment, translations and what is
+  unpublished ([ADR-0376](docs/adr/0376-catalogue-maintenance-over-mcp.md)); a product's
+  usage is answered across catalogues ([ADR-0353](docs/adr/0353-product-usage.md)), and the
+  starmap draws catalogues and products ([ADR-0396](docs/adr/0396-catalogue-on-the-starmap.md)).
+- ✅ **A shop as one document.** `POST /api/v1/catalogs/import` (MCP `atlas_import_catalog`)
+  writes catalogues, their products and edges, and optionally their releases, all or nothing,
+  under the authority the single writes need; ids are the document's own, so importing again
+  updates
+  ([ADR-0436](docs/adr/0436-a-catalogue-is-imported-as-one-document.md)).
+- ✅ **A catalogue exported as that document.** A whole catalogue, or chosen products to import
+  into another catalogue (`?into=`), optionally with the processes the products are bound to,
+  which the import deploys first; over HTTP, MCP and the Console
+  ([ADR-0451](docs/adr/0451-catalogue-export.md)).
+- ✅ **A shop handbook with an example to install.** `shop-handbuch.html` (DE/EN) on building
+  catalogues, several catalogues, products and services and their processes, with the
+  administration-services example (`examples/verwaltung-dienstleistungen/`, both process
+  forms, bilingual) and an installer that asks for audiences and approvers and imports the
+  shop as one document.
+- ✅ **A package installs from the command line.** `atlas import DIR` installs a package — an
+  application in the source layout (`atlas.json`), and optionally its shop (`katalog.json`)
+  with the questions its placeholders ask (`fragen.json`) — through the source import, a
+  publish and the catalogue import; answers come from a file or `--set`, groups and people by
+  id or by name, and every open answer is refused before the first write
+  ([ADR-0437](docs/adr/0437-a-package-is-imported-from-the-command-line.md)).
+  An `atlas.json` for the other examples is a follow-up.
+
+**The shop & ordering**
+- ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per
+  product by eligibility: levels read from the graph once ([ADR-0383](docs/adr/0383-portal-level-names.md)),
+  keyword search ([ADR-0355](docs/adr/0355-catalogue-search.md)), favourites
+  ([ADR-0348](docs/adr/0348-favourites.md)), the catalogue's own theme and mark
+  ([ADR-0316](docs/adr/0316-portal-theme-per-catalogue.md)), one column below 860px
+  ([ADR-0417](docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md)).
+  It carries its own sign-in ([ADR-0399](docs/adr/0399-portal-carries-its-own-sign-in.md)),
+  and with nobody to be it shows a catalogue and refuses an order ([ADR-0377](docs/adr/0377-portal-without-identity.md)).
+- ✅ **Ordering.** A position is a product and its variant, in its own key
+  ([ADR-0384](docs/adr/0384-order-position-key.md)); an item already held becomes a skipped
+  line. Placement refuses a closed orderable window ([ADR-0397](docs/adr/0397-enforce-the-orderable-window.md))
+  and a conflicting pair, which is also reported across the estate ([ADR-0342](docs/adr/0342-conflicting-rights.md)).
+  Ordering for somebody else needs the operator role and picks the recipient from the
+  directory ([ADR-0349](docs/adr/0349-ordering-for-others.md), [ADR-0356](docs/adr/0356-person-picker.md)).
+- ✅ **After placing.** An order or one position is withdrawn and a position's details are
+  corrected, never what is held ([ADR-0359](docs/adr/0359-amending-an-order-line.md)); each
+  position says where it stands ([ADR-0390](docs/adr/0390-position-progress.md)), and an
+  order lists its open tasks ([ADR-0416](docs/adr/0416-the-shop-shows-an-orders-open-tasks.md))
+  with one link into a process per row ([ADR-0408](docs/adr/0408-portal-shows-no-process-links-per-position.md)).
+
+**Approvals & escalation**
+- ✅ **Approvals in the inbox.** The shipped fixed, role and line-manager approvals reach
+  their approver by assignment expression ([ADR-0318](docs/adr/0318-user-task-assignment-expressions.md))
+  and are decided in Tasks ([ADR-0394](docs/adr/0394-approval-in-the-inbox.md)), one
+  decision covering an order's open approvals ([ADR-0362](docs/adr/0362-collective-approval.md));
+  the separate page and its list ordering are withdrawn ([ADR-0311](docs/adr/0311-portal-approval-page.md),
+  [ADR-0354](docs/adr/0354-approval-list-order.md)). A group's task is listed to that group
+  ([ADR-0421](docs/adr/0421-a-task-is-listed-to-whoever-it-was-addressed-to.md)), and who
+  decided is recorded on the task, the order and the right ([ADR-0422](docs/adr/0422-who-decided-is-recorded.md)).
+- ✅ **An approval nobody answers.** Non-interrupting deadlines remind, move a line
+  manager's approval one hop up, and otherwise stall it visibly at
+  `GET /api/v1/approvals/stalled` for a person to reassign
+  ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md)); reminder processes read
+  `GET /api/v1/pending-work` ([ADR-0343](docs/adr/0343-pending-work.md)).
+
+**Fulfilment & product lifecycle**
+- ✅ **Fulfilment.** The shipped orchestrator starts lines wave by wave, calling Atlas as
+  REST connector tasks told the server's own address
+  ([ADR-0411](docs/adr/0411-system-processes-call-atlas-directly.md)).
+- ✅ **A lifecycle is one process.** A product may bind one process with a message start per
+  operation, reached by a directed, idempotent trigger, and a start act decides between
+  approval and provisioning ([ADR-0425](docs/adr/0425-a-product-lifecycle-is-one-process-with-message-triggers.md)).
+  An ambiguous untriggered create is refused ([ADR-0426](docs/adr/0426-an-untriggered-create-never-seeds-several-start-events.md));
+  converting keeps the old processes alive until an explicit rebind
+  ([ADR-0427](docs/adr/0427-converting-a-product-to-a-lifecycle-process.md)); a lifecycle may
+  run as one instance per position, its later operations delivered to it by key
+  ([ADR-0428](docs/adr/0428-a-product-lifecycle-may-run-as-one-instance-per-position.md)).
+
+**The inventory of held rights**
+- ✅ **Grants, returns and history.** A line reaching `done` grants to the recipient, a
+  confirmed return revokes, and `GET /api/v1/inventory` reads it off the loop; a return runs
+  the deprovisioning process the order froze and is refused while something held requires
+  it ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md)). An ended hold leaves a
+  history row ([ADR-0346](docs/adr/0346-entitlement-history.md)), the commissioning load
+  reports before it writes ([ADR-0333](docs/adr/0333-inventory-commissioning-load.md)), and a
+  recertification revoke goes back through its order ([ADR-0418](docs/adr/0418-a-withdrawn-ordered-right-goes-back-through-its-order.md)).
+- ✅ **Reconciliation, recertification, expiry.** Absence is a finding only inside a scope
+  somebody promised was complete, acted on one finding at a time
+  ([ADR-0334](docs/adr/0334-reconciliation.md)); recertification never lets silence answer
+  ([ADR-0341](docs/adr/0341-access-recertification.md)); a right may carry an end, and a
+  daily model returns what is overdue ([ADR-0344](docs/adr/0344-time-bounded-entitlements.md)).
+
+**Languages & personal data**
+- ✅ **Translations.** A heading is a key plus a wording per language
+  ([ADR-0412](docs/adr/0412-translatable-catalogue-headings.md)), a language tag is checked
+  where it is written ([ADR-0413](docs/adr/0413-a-language-tag-is-checked-where-it-is-written.md)),
+  and a missing translation is reported, not refused ([ADR-0414](docs/adr/0414-a-missing-translation-is-reported-not-refused.md)).
+  The shop follows the browser and offers the catalogue's languages it can render — German,
+  English, French, Italian ([ADR-0415](docs/adr/0415-the-portal-offers-the-catalogues-languages.md)).
+- 🚧 **The chosen language belongs to the account**, and the shop keeps it in the browser
+  until that endpoint exists ([ADR-0313](docs/adr/0313-portal-language-follows-the-browser.md)).
+- 🚧 **Personal data.** A reference by default, and a per-subject key in the vault for the
+  rest, so erasure destroys one key; whether erasure waits for running instances and held
+  rights is still open ([ADR-0314](docs/adr/0314-portal-personal-data.md)).
+
+**Not built yet**
+- 🔲 The aggregate figures a product manager may see and the integration-manager relation
+  ([ADR-0315](docs/adr/0315-portal-roles-and-responsibilities.md)). (The screen for a
+  catalogue's theme and mark is built, in the catalogue administration —
+  [ADR-0316](docs/adr/0316-portal-theme-per-catalogue.md).)
+- 🔲 The TMF620 boundary, still Proposed
+  ([ADR-0387](docs/adr/0387-the-catalogue-against-the-standards-boundary.md)). A
+  per-operation product's `change`, which
+  [ADR-0425](docs/adr/0425-a-product-lifecycle-is-one-process-with-message-triggers.md) bound
+  but nothing started, is started by the action act of slice B below — built.
+
+**Product actions** ([ADR-0429](docs/adr/0429-product-actions-are-commands-with-published-outcomes.md),
+[plan](docs/planning/0429-product-actions-plan.md)) — a product declares an open list of
+actions with closed effects, each a command whose outcome is a fact published beyond Atlas:
+- ✅ **§9 — a process-level conditional start is refused at deploy** (stage-5 rule
+  `start.conditional`); it used to compile to a plain start and drop its condition.
+- ✅ **§6 — Worker events in the Modeler's message picker**, read from
+  `GET /api/v1/message-sources` for every element that waits for a message.
+- ✅ **Slice A — actions on the product.** `catalog.Action`, frozen on order lines; legacy
+  `operations` are read as the actions they mean; publishing checks each action against
+  the process, and an inbound watch may not claim a product's message.
+- ✅ **Follow-up — the name-correlated publish refuses a product's message**:
+  `POST /api/v1/messages` no longer starts a lifecycle process around its order.
+- ✅ **Slice B — the action act, availability and portal buttons.**
+  `POST /api/v1/orders/{id}/lines/{item}/actions/{action}` with a required `commandId`,
+  delivered to the strand or started at the action's start event; `GET …/actions` reads from
+  the strand's live elements whether each action is possible now; MCP reads it
+  (`atlas_order_line_actions`) and asks operator and system actions
+  (`atlas_ask_order_line_action`), never a customer's; a shop button per offered customer action, with its form or a
+  confirmation. `/change` is the act for the key `change`; the recipient may return and act
+  (§10, decision 4); a directed delivery to a catch that lost an event-based gateway's race
+  is now refused instead of reported delivered.
+- 🔲 **The Console's surface for operator actions** — waits for an order view the Console
+  does not have; operators use the route until then.
+- ✅ **Slice C — the outcome fact and the shop send task.**
+  - ✅ C1: `VTActionOutcome`, idempotent per command and written in one command with the
+    grant or revocation it accompanies; every act seeds `commandId`; the outcome route
+    (`POST …/actions/{commandId}/outcome`) and the read route (`GET …/outcomes`, MCP
+    `atlas_order_line_outcomes`).
+  - ✅ C2: the `shop` send task in mode `outcome` (`<atlas:shopTask>`, the in-process job
+    type `io.atlas.shop`), which states how the command its instance carries ended in the
+    command that completes its job; the publish check that every change and service action
+    is answered `completed`; the **Shop** kind in the modeler's send-task picker.
+  - ✅ C3: mode `command` (`io.atlas.shop.command`): a process asks a held position for an
+    operator or system action, or its return, in the name of an application the product's
+    `commandedBy` lists — read from the newest release, so removing one stops it for every
+    right already held; the list on the product in the Console, HTTP and MCP; the command
+    mode in the modeler's Shop kind.
+- ✅ **Slice D — product actions and shop badges in the modeler.** `GET /api/v1/message-sources`
+  tags each row `inbound-watch`, `product-action` (for the catalogues the caller maintains)
+  or `process` (where a deployed process waits); the message picker groups by source —
+  Worker events and product actions for an element that receives, waiting processes for one
+  that throws — and marks a Worker event in a product-bound process; a Shop task suggests the
+  declared action keys; the shop badge sits beside the envelope in the Implement and runtime
+  views.
+- ✅ **Slice E — the CloudEvents feed.** Every action outcome, grant and revocation is a
+  row of the feed, folded by `applyToState` and keyed by its log position, pruned by a fact
+  of its own (`--event-feed-ttl`, 30 days); `GET /api/v1/events?after=&limit=` (operator)
+  serves CloudEvents 1.0 in log order, 410 with the oldest cursor for one that fell behind;
+  the envelope is version 1 of the runtime contract. Push delivery is built below.
+- ✅ **The feed's own role and token scope**
+  ([ADR-0430](docs/adr/0430-the-event-feed-has-its-own-role-and-token-scope.md)).
+  The route requires `feedreader`; an API token minted with the `events` scope reaches that
+  route only and carries that role only, so a CMDB's credential reads the feed and nothing
+  else.
+- ✅ **The feed narrowed by catalogue**
+  ([ADR-0432](docs/adr/0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md)).
+  An `events` token's reach names catalogues, and it reads only the events about the
+  products they maintain; every event names that catalogue as `homeCatalog`. Narrowing by
+  the shop an order was placed in is a possible second dimension, not built.
+- ✅ **Push delivery of the feed**
+  ([ADR-0433](docs/adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)).
+  A `cloudevents` Worker holds a receiver's https address and bearer token; a feed
+  subscription on it (admin, HTTP and the Worker's Feed… panel, read over MCP) is sent the
+  feed after its server-held cursor as CloudEvents batches, narrowed by catalogue like a
+  token. A refusal holds the subscription on the breaker's ladder and skips nothing; one the
+  retention passed is switched off with the reason. Signatures and `Retry-After` are
+  follow-ups.
+- 🚧 **One catalogue of the events atlas emits**
+  ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)).
+  - ✅ The catalogue and its two views. The Go package `eventcatalog` holds every signal,
+    message and feed event atlas emits, with its meaning, moment, payload (personal data
+    marked, never by default), version, stability and access. Tests hold it to the system
+    processes and the feed in both directions, and a stable entry never loses a field. The
+    handbook chapter *Ereignisse* and the runtime contract's feed table are generated from it.
+    The Console page *Events* reads it (`modeler`); who listens now is a route of its own
+    (`admin`). The Modeler's signal picker offers the events a model may listen to.
+    `atlas.user.requested` carries `atlasInstance`.
+  - ✅ A signal start or catch on a catalogued event whose payload carries personal data
+    requires `admin`. It is refused at the deploy, the bundle deploy and the application import,
+    and the same finding, from the same check, is in the Problems panel.
+  - ✅ `atlas.approval.requested` from the three shop approval processes, thrown before the
+    approval task waits, with the rule, who decides and the approval instance.
+  - ✅ Incidents in the feed. The feed leaves the service-catalogue area: it is served and
+    pushed with the shop off, without the catalogue's events. `atlas.incident.raised` and
+    `atlas.incident.resolved` carry the cause (definition, element, type) and never the
+    message.
+  - 🔲 The remaining entries: user created and rejected, offboarding, access review,
+    deployments.
+- 🔲 **Not in any slice yet:** an operator action for every held position of a product.
+- 🔲 **Not in any slice yet:** a suspended entitlement state.
+- 🔲 **Not in any slice yet:** measuring the run loop before a per-position product goes
+  beyond a pilot.
 
 ---
 
@@ -1544,21 +2326,28 @@ dataset of up to 50 000 cases":
   reimplement BPMN rendering or modeling from scratch.
 - A batteries-included application server beyond the single-binary server above —
   the engine core stays a library first, with the server embedding it.
-- A standalone DMN authoring/product surface. Atlas *executes* the DMN decisions
-  a model references, via business rule tasks that delegate to the embedded temis
-  engine ([ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)); it does
-  not ship a DMN **modeler/editor** or decision-management product of its own —
-  decisions are authored in temis. (Atlas does offer a **read-only** view of a
-  referenced model's decision requirements graph, and a decision picker that
-  auto-reads inputs/outputs, so an author can *use* a decision without leaving the
-  Modeler; that is a look-and-use surface, not an authoring one.) FEEL is also used
-  internally for expressions.
+- A standalone DMN **product**. Atlas executes the DMN decisions a model
+  references, via business rule tasks that delegate to the embedded temis engine
+  ([ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)), it embeds the
+  standard `dmn-js` editor so a decision can be authored and versioned in place
+  ([ADR-0062](docs/adr/0062-embedded-dmn-editor.md),
+  [ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md)),
+  and it offers a read-only decision-requirements-graph view and a decision picker
+  that auto-reads inputs/outputs. What it does not do is reimplement DMN rendering
+  or become a decision-management product beside the workflow engine: the editor is
+  `dmn-js`, the engine is temis, and the FEEL and decision logic stay temis's job.
+  FEEL is also used internally for expressions.
 
 ## Guiding constraints
 
-Every milestone must respect the architecture's load-bearing decisions:
+Every milestone must respect the six invariants in
+[`docs/architecture/invariants.md`](docs/architecture/invariants.md):
 
-- No allocation on the hot path; immutable compiled graphs; value tokens.
-- Durable before visible (fsync → commit → side effects).
-- Single writer per partition; cross-partition only via async messaging.
-- Same `applyToState` live and on recovery.
+- **I1** No allocation on the hot path; immutable compiled graphs; value tokens.
+- **I2** Durable before visible (fsync → commit → side effects).
+- **I3** Single writer per partition; cross-partition only via async messaging.
+- **I4** One `applyToState`, live and on recovery, deterministic and side-effect-free.
+- **I5** Compile, don't interpret: what can be done once at deploy time is not done on
+  the hot path.
+- **I6** Events are facts, commands are intentions: only events are persisted, and the
+  keys and timestamps they carry are read back on replay, never generated again.

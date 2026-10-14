@@ -1,6 +1,7 @@
 # ADR-0156: In-process vs. out-of-process service tasks — where a step's work runs, and what we recommend
 
-- **Status:** Proposed
+- **Status:** Superseded by ADR-0164
+- **Implementation:** Superseded
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 

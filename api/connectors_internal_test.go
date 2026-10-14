@@ -52,7 +52,7 @@ func TestManagedConnectorKindsRegistry(t *testing.T) {
 		t.Error("http.rest should not be a managed Worker Type")
 	}
 	// The whitelist error lists exactly the registered kinds, in order.
-	want := "Worker Type must be \"temis\", \"clio\", \"mail\", \"sharepoint\", \"remedy\", \"jira\", \"googlesheets\", \"discord\", \"entra\", \"ad\", \"agent\", \"postgres\", \"mariadb\", or \"mssql\""
+	want := "Worker Type must be \"temis\", \"clio\", \"mail\", \"sharepoint\", \"remedy\", \"jira\", \"googlesheets\", \"discord\", \"s3\", \"entra\", \"ad\", \"agent\", \"cloudevents\", \"postgres\", \"mariadb\", or \"mssql\""
 	if got := managedConnectorKindsError(); got != want {
 		t.Errorf("managedConnectorKindsError() = %q, want %q", got, want)
 	}
@@ -156,7 +156,7 @@ func TestManagedConnectorExecutesDecision(t *testing.T) {
 	incidents := func() int {
 		_, b := x.do(http.MethodGet, "/api/v1/incidents", "")
 		var r struct {
-			Incidents []json.RawMessage `json:"incidents"`
+			Incidents []json.RawMessage `json:"items"`
 		}
 		_ = json.Unmarshal(b, &r)
 		return len(r.Incidents)
@@ -1168,6 +1168,7 @@ func TestConnectorTestDetail(t *testing.T) {
 	cases := []struct {
 		name                     string
 		provider, endpoint, to   string
+		loggedIn                 bool
 		wantContains, wantAbsent string
 	}{
 		{
@@ -1187,8 +1188,13 @@ func TestConnectorTestDetail(t *testing.T) {
 		},
 		{
 			name:     "smtp with no recipient names the endpoint it authenticated against",
-			provider: mail.ProviderSMTP, endpoint: "mx.example.ch:587",
+			provider: mail.ProviderSMTP, endpoint: "mx.example.ch:587", loggedIn: true,
 			wantContains: "mx.example.ch:587",
+		},
+		{
+			name:     "smtp with no credential does not claim it authenticated",
+			provider: mail.ProviderSMTP, endpoint: "relay.example.ch:25",
+			wantContains: "without logging in", wantAbsent: "authenticated",
 		},
 		{
 			name:         "a token provider with no recipient reports the credential only",
@@ -1198,7 +1204,7 @@ func TestConnectorTestDetail(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := connectorTestDetail(tc.provider, tc.endpoint, tc.to)
+			got := connectorTestDetail(tc.provider, tc.endpoint, tc.to, tc.loggedIn)
 			if !strings.Contains(got, tc.wantContains) {
 				t.Errorf("detail = %q, want it to contain %q", got, tc.wantContains)
 			}

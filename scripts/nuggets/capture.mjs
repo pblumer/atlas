@@ -148,8 +148,10 @@ async function seed() {
     });
   }
   await new Promise((r) => setTimeout(r, 3000));
+  // The listing answers {items, total, …}; total is the honest figure for a log line,
+  // because items is only what one page could carry.
   const tasks = await api("/api/v1/tasks");
-  log(`seeded: ${carts.length} order instances, ${tasks.length ?? 0} open tasks`);
+  log(`seeded: ${carts.length} order instances, ${tasks?.total ?? 0} open tasks`);
 }
 
 // ------------------------------------------------------------------ shooting

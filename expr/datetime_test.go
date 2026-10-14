@@ -11,7 +11,10 @@ import (
 // an instant bound as a FEEL date-and-time compares against another instant and
 // against one shifted by a duration, which a number binding cannot do.
 func TestDateTimeBinding(t *testing.T) {
-	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	// The cases involving FEEL's built-in now() need inputs relative to the real
+	// clock. A fixed date eventually crosses the one-hour boundary and reverses the
+	// expected answer even though the implementation has not changed.
+	now := time.Now().UTC()
 	vars := map[string]expr.Value{
 		"due":  expr.DateTime(now.Add(-2 * time.Hour)),
 		"cut":  expr.DateTime(now),

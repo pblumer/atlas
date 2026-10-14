@@ -2,6 +2,7 @@ package engine
 
 import (
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
@@ -231,6 +232,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// activatable-index write is idempotent and keyed on the job having retries
 			// left and nothing holding it, so a still-retryable job stays open while an
 			// exhausted, backing-off or leased one parks off the index (ADR-0042/0061).
+			//
+			// Creation stamps when the job opened from this event's header timestamp, the
+			// same way an instance's CreatedAt is set: replay reads the identical header,
+			// so it rebuilds the identical value (I4/I6). The re-puts carry it on the job
+			// value they copied from state.
+			if h.Intent == model.IntentJobCreated {
+				v.job.CreatedAt = h.Timestamp
+			}
 			if err := tx.PutJob(h.Key, &v.job); err != nil {
 				return err
 			}
@@ -247,11 +256,64 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.DecOpenJobs()
 		}
 
+	case model.VTEntitlement:
+		switch h.Intent {
+		case model.IntentEntitlementGranted:
+			// A function of the event alone — no clock, no lookup, nothing derived
+			// — which is what lets an access record rebuild identically from the log
+			// years after the instance that produced it was deleted (I4/I6).
+			if err := tx.PutEntitlement(&v.entitlement); err != nil {
+				return err
+			}
+			// The grant leaves Atlas on the feed (ADR-0429 §5), keyed by where it
+			// sits on the log and stamped with when it was recorded — both in the
+			// header, so replay writes the identical row.
+			return tx.PutFeedEntry(h.PartitionId, h.Position, h.Timestamp, state.FeedGranted, &v.entitlement)
+		case model.IntentEntitlementRevoked:
+			// A revocation written before holds left a history behind
+			// (ADR-0346). The log is append-only and replayed
+			// whole, so this arm cannot be deleted: an installation upgrading into
+			// that record replays years of them.
+			//
+			// It drops the hold without a row, which is what those events meant and
+			// all they can mean — the fields a row needs were never written. A
+			// history that invented them would be worse than one that starts on the
+			// day the family did.
+			return tx.DeleteEntitlement(v.entitlement.Principal, v.entitlement.ItemID)
+		}
+
+	case model.VTEntitlementHistory:
+		if h.Intent == model.IntentEntitlementRevoked {
+			// Closing a hold reads the hold. That is a departure from the arm above
+			// and stays inside I4/I6, which require the fold to be deterministic and
+			// free of side effects, not free of reads: it reads state this same
+			// pipeline built, through the same indexed batch, in the same order, live
+			// and on replay alike. Everything that could *not* be derived that way —
+			// the moment, the reason, who decided — travels in the event.
+			e := &v.entitlementEnd
+			row, err := tx.EndEntitlementRow(e.Principal, e.ItemID, e.EndedAt, e.EndedReason, e.EndedBy)
+			if err != nil || row == nil {
+				return err
+			}
+			// The feed publishes the hold as it ended — the order it came from is in
+			// the hold, not in the event (ADR-0429 §5).
+			return tx.PutFeedEntry(h.PartitionId, h.Position, h.Timestamp, state.FeedRevoked, row)
+		}
+
 	case model.VTIncident:
 		switch h.Intent {
 		case model.IntentIncidentCreated:
-			return tx.PutIncident(&v.incident)
+			if err := tx.PutIncident(&v.incident); err != nil {
+				return err
+			}
+			return putIncidentFeedRow(tx, h, state.FeedIncidentRaised, &v.incident)
 		case model.IntentIncidentResolved:
+			// The row first: it reads the element the incident parked, which the
+			// resolution leaves in place, and the incident it names is the one the
+			// event carries.
+			if err := putIncidentFeedRow(tx, h, state.FeedIncidentResolved, &v.incident); err != nil {
+				return err
+			}
 			return tx.DeleteIncident(v.incident.ElementInstanceKey)
 		}
 
@@ -266,6 +328,18 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// (ADR-0048). Derived only from the event header (timestamp/position)
 			// and the variable value, so replay rebuilds it identically (I4).
 			return tx.RecordVariableSnapshot(h.Timestamp, h.Position, &v.variable)
+		case model.IntentVariableElementSet:
+			// One element of a list, named rather than carried: the fold reads the
+			// collection, sets the element and writes it back
+			// (ADR-0296). It is a function of the batch's
+			// own state and of the event, so replay reaches the same list (I4).
+			//
+			// No snapshot. A loop's half-filled collection is scratch at the body scope
+			// until the loop promotes it, and the promotion writes the whole value with
+			// a snapshot of its own — the same reasoning that keeps the dropping of an
+			// activity-local scope out of the instance's variable timeline. Snapshotting
+			// each round is what made the timeline grow with the square of the count.
+			return setVariableElement(tx, &v.variable)
 		case model.IntentVariableDeleted:
 			// Dropping an activity-local scope on completion (ADR-0068). The delete is
 			// idempotent and carries no snapshot: the local was scratch state, so its
@@ -319,6 +393,21 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.DecMessageSubscriptions()
 		}
 
+	case model.VTMessage:
+		// The message buffer (ADR-0370). Every field the store keys or keeps — the
+		// message's key, its expiry and its id — was frozen into the event at command
+		// time, so replay keeps and drops exactly what the live run did (I4, I6).
+		switch h.Intent {
+		case model.IntentMessageBuffered:
+			return tx.PutBufferedMessage(h.Key, &v.message)
+		case model.IntentMessageIdRecorded:
+			return tx.RecordMessageId(h.Key, &v.message)
+		case model.IntentMessageConsumed:
+			return tx.ConsumeBufferedMessage(h.Key, &v.message)
+		case model.IntentMessageExpired:
+			return tx.ExpireMessage(h.Key, &v.message)
+		}
+
 	case model.VTSignal:
 		// A signal subscription's lifecycle mirrors a message subscription's: opened
 		// when a signal catch activates, retired when a broadcast fires it. Same two
@@ -337,6 +426,35 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// the timestamp and position come from this event's header, so replay
 			// rebuilds identical history — invariant I4, ADR-0038.
 			return tx.RecordMessageFlow(h.Timestamp, h.Position, &v.messageFlow)
+		}
+
+	case model.VTActionOutcome:
+		if h.Intent == model.IntentActionCompleted {
+			// How one action ended (ADR-0429 §3). Everything the record holds — the
+			// moment included — was frozen into the event at command time, so replay
+			// rebuilds the identical record (I4, I6).
+			if err := tx.PutActionOutcome(&v.actionOutcome); err != nil {
+				return err
+			}
+			return tx.PutFeedEntry(h.PartitionId, h.Position, h.Timestamp, state.FeedOutcome, &v.actionOutcome)
+		}
+
+	case model.VTFeedRetention:
+		if h.Intent == model.IntentFeedPruned {
+			// The cut was frozen into the event by the sweep, so replay drops exactly
+			// the rows the live run dropped (ADR-0429 §5, I4).
+			return tx.PruneFeed(h.PartitionId, v.feedRetention.Through)
+		}
+
+	case model.VTTriggerReceipt:
+		switch h.Intent {
+		case model.IntentTriggerReceived:
+			// A directed trigger was applied (ADR-0425). Everything the receipt holds
+			// is in the event — the instance key and the time were frozen into it —
+			// so replay rebuilds the identical set (I4, I6).
+			return tx.PutTriggerReceipt(v.trigger.Source, v.trigger.TriggerID, v.trigger.InstanceKey, v.trigger.At)
+		case model.IntentTriggerReceiptsPruned:
+			return tx.PruneTriggerReceipts(v.trigger.Cutoff)
 		}
 
 	case model.VTInboundDelivery:
@@ -381,6 +499,16 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.MigrateInstance(&v.migration)
 		}
 
+	case model.VTVariableIndex:
+		if h.Intent == model.IntentVariableIndexed {
+			// Correct one variable's membership in the value index after its instance
+			// moved to a version that declares something else (ADR-0244). The comparison
+			// was made at command time against the compiled process, because this fold
+			// cannot ask one anything; what arrives here is the answer, so replay
+			// reproduces the same index from the log alone (invariants I4/I6).
+			return tx.SetVariableIndexed(v.variableIndex.ProcessInstanceKey, v.variableIndex.Name, v.variableIndex.Indexed)
+		}
+
 	case model.VTDecisionEvaluation:
 		if h.Intent == model.IntentDecisionEvaluated {
 			// Retain how a business rule task's decision was made — its inputs, outputs
@@ -409,4 +537,47 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		}
 	}
 	return nil
+}
+
+// setVariableElement folds IntentVariableElementSet: element v.Index of the list
+// variable at (v.ScopeKey, v.Name) becomes v's own value. A collection that is absent
+// or not a list, or an index outside it, is a no-op rather than an error — the same
+// tolerance setListElement had when it did this work in the behaviour, and the reason
+// is unchanged: the loop that seeds the collection and the loop that fills it are the
+// same loop, so a mismatch here is a bug to find in a test rather than a reason to
+// stop a partition.
+func setVariableElement(tx *stateTx, v *model.VariableValue) error {
+	cur, err := tx.GetVariable(v.ScopeKey, v.Name)
+	if err != nil || cur == nil || cur.Kind != model.VarJSON {
+		return err
+	}
+	elems, ok := expr.AsList(expr.FromStored(expr.KindJSON, false, cur.Text))
+	if !ok || v.Index < 0 || int(v.Index) >= len(elems) {
+		return nil
+	}
+	elems[v.Index] = expr.FromStored(toExprKind(v.Kind), v.Bool, v.Text)
+	kind, b, text := expr.Classify(expr.ListOf(elems...))
+	next := *cur
+	next.Kind, next.Bool, next.Text = model.VarKind(kind), b, text
+	return tx.PutVariable(&next)
+}
+
+// putIncidentFeedRow puts an incident raised or resolved on the feed (ADR-0435): a
+// fact of the engine a receiver beyond Atlas can be told, keyed by where its record
+// sits on the log. The definition the instance ran is read from the parked element,
+// through the same indexed batch, live and on replay alike (I4); an element the batch
+// no longer holds leaves it zero rather than failing the fold. The row carries the
+// incident whole, and the feed decides what of it leaves: never the message, which is
+// whatever text a worker or an expression produced.
+func putIncidentFeedRow(tx *state.Tx, h model.RecordHeader, kind state.FeedKind, inc *model.IncidentValue) error {
+	var definition uint64
+	var ei model.ElementInstanceValue
+	found, err := tx.GetElementInstanceInto(inc.ElementInstanceKey, &ei)
+	if err != nil {
+		return err
+	}
+	if found {
+		definition = ei.ProcessDefKey
+	}
+	return tx.PutFeedIncident(h.PartitionId, h.Position, h.Timestamp, kind, definition, inc)
 }

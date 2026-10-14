@@ -1,6 +1,7 @@
 # ADR-0151: Incidents beyond the live diagram — the replay, the lists, and one shared action
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-19
 - **Deciders:** Atlas maintainers
 

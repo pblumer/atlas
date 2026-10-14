@@ -121,7 +121,7 @@ func infomodelTools() []Tool {
 		{
 			Name: "atlas_import_information_model",
 			Description: "Import a UML class diagram as a NEW information model of an application. Two " +
-				"documents are read: Atlas's own JSON (what atlas_get_information_model returns, so a " +
+				"documents are read: atlas's own JSON (what atlas_get_information_model returns, so a " +
 				"model moves between applications and installations), and the XMI 2.5.1 a UML tool " +
 				"exports. The format is detected from the document unless you state it. Reading a " +
 				"foreign notation into a declared subset is LOSSY: everything outside the subset is " +
@@ -132,7 +132,7 @@ func infomodelTools() []Tool {
 				"type": "object",
 				"properties": map[string]any{
 					"applicationId": stringProp("The process application that will own the imported model."),
-					"document":      stringProp("The whole source document: Atlas JSON, or UML XMI."),
+					"document":      stringProp("The whole source document: atlas JSON, or UML XMI."),
 					"format":        stringProp("Optional: \"json\" or \"xmi\". Detected from the document when omitted."),
 					"name":          stringProp("Optional: a name for the model, overriding the one the document carries."),
 					"documentation": stringProp("Optional: what part of the business these classes describe."),
@@ -254,6 +254,97 @@ func infomodelTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_validate_information_model",
+			Description: "Check an information-model document *before* writing it, and store nothing. " +
+				"Send the same shape atlas_save_information_model takes — classes, associations, " +
+				"stores — and get back the verdict a write would be checked against: `valid`, and " +
+				"`findings` naming the class, association or store each one is about. An invalid " +
+				"document is answered, not refused: findings are the answer, not an error. Use it to " +
+				"iterate on a model you are assembling without leaving half-built revisions behind, " +
+				"and to check a change before it costs a revision. It reads nothing stored, so it " +
+				"needs no model id and says nothing about what exists.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"classes":      map[string]any{"type": "array", "description": "The classes to judge, as atlas_save_information_model takes them."},
+					"associations": map[string]any{"type": "array", "description": "The associations between them."},
+					"stores":       map[string]any{"type": "array", "description": "The data stores, each naming the class it holds."},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				body := map[string]any{}
+				for _, key := range []string{"classes", "associations", "stores"} {
+					if v, ok := args[key]; ok {
+						body[key] = v
+					}
+				}
+				payload, err := json.Marshal(body)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/infomodel/validate", "application/json", payload))
+			},
+		},
+		{
+			Name: "atlas_class_catalog",
+			Description: "The class catalogue: every business object, value type and enumeration across " +
+				"the information models you can see, with where each one is used. One list across " +
+				"applications on purpose — two applications modelling the same Order is the failure the " +
+				"information model exists to prevent, and a per-model listing cannot show it. Each row " +
+				"says what the class holds (members, business key, lifecycle states) and how much depends " +
+				"on it: how many processes use it, how many reads and writes, which members and states " +
+				"they actually touch, and how many places the vocabulary itself refers to it. A class with " +
+				"no process use is not unused — check `usage.modelUses`, which for an enumeration is " +
+				"normally the whole answer. Only deployed processes are read, so \"used by nothing\" means " +
+				"nothing deployed; a Modeler draft is not in it.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"applicationId": stringProp("Optional process application to narrow to (from atlas_list_applications). Omitted, every application you can see is listed."),
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path := "/api/v1/infomodel/classes"
+				if id := strings.TrimSpace(optString(args, "applicationId")); id != "" {
+					path += "?applicationId=" + url.QueryEscape(id)
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
+			Name: "atlas_class_usage",
+			Description: "Where one class is used, and how — the question to ask *before* proposing to " +
+				"rename a member, retire an enumeration literal or drop a state. `processes` lists every " +
+				"deployed process that declares a data object of the class and every element that reads " +
+				"it, writes it, writes one member of it, moves it into a state, or names the store it is " +
+				"kept in, each with the element id, the member and the state. `model` lists what the " +
+				"vocabulary itself does with it: an attribute typed with it, an association, a lifecycle " +
+				"taking its states from it, a store holding it — for an enumeration usually the only uses " +
+				"there are. Nothing is inferred: a data object with no declared type is not counted as a " +
+				"use of the class its name resembles. Only the deployed, active, latest version of each " +
+				"process is read, so an empty `processes` does not mean no draft uses it.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":    stringProp("The information model id the class belongs to (from atlas_list_information_models)."),
+					"class": stringProp("The class name, e.g. \"Order\"."),
+				},
+				"required": []any{"id", "class"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				class, err := argString(args, "class")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/infomodel/models/" + url.PathEscape(id) +
+					"/usage?class=" + url.QueryEscape(class)))
+			},
+		},
+		{
 			Name: "atlas_instance_object_graph",
 			Description: "Derive one process instance's object diagram: its data objects as UML object " +
 				"nodes with their attributes and business keys, and the lines between them. Two things " +
@@ -269,6 +360,80 @@ func infomodelTools() []Tool {
 					return "", err
 				}
 				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/object-graph"))
+			},
+		},
+		{
+			Name: "atlas_model_difference",
+			Description: "Read the difference between what an application's processes *build* and what its " +
+				"information model *plans*. Two lists, never mixed: `planned` is in the model and in no " +
+				"process — the backlog, and the reason the pair exists — and `built` is in the processes " +
+				"and in no model, which usually means write it down and occasionally means a process is " +
+				"doing something nobody agreed to. Read `excluded` before concluding anything from a short " +
+				"list: derivation cannot see a business key, an attribute's type, or which states are " +
+				"final, so those are never compared and a clean list is not a clean bill. An application " +
+				"that models nothing returns no findings at all.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"applicationId": map[string]any{
+						"type":        "string",
+						"description": "The process application to read (from atlas_list_applications).",
+					},
+				},
+				"required": []string{"applicationId"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "applicationId")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/infomodel/difference?applicationId=" + url.QueryEscape(id)))
+			},
+		},
+		{
+			Name: "atlas_derived_information_model",
+			Description: "Derive an application's information model from the processes that use it, without " +
+				"anyone having modelled anything: the classes their data objects carry, the members their " +
+				"writes target, and the states and transitions they actually reach. This is what is *built* — " +
+				"the model somebody authors under Data is a different statement, a target, and this never " +
+				"writes into it. Read the two together and the difference is the work not yet done. Read " +
+				"`gaps` before trusting the picture: it says what could not be read, above all that no class " +
+				"has a business key, because nothing in BPMN says which attribute identifies a thing.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"applicationId": map[string]any{
+						"type":        "string",
+						"description": "The process application whose processes to read (from atlas_list_applications).",
+					},
+				},
+				"required": []string{"applicationId"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "applicationId")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/infomodel/derived?applicationId=" + url.QueryEscape(id)))
+			},
+		},
+		{
+			Name: "atlas_instance_lifecycle",
+			Description: "Read one process instance's data objects against the lifecycles their classes " +
+				"declare: the state machine as modelled, with the states this instance has actually been " +
+				"through, the moves it made and the BPMN element that made each. Answers \"where has this " +
+				"order got to, and what moved it there\" without reading the whole trail. Two fields are " +
+				"the reason to look even when nothing seems wrong — undeclared lists moves the model does " +
+				"not join, and unknown names states it never declared, which is what a process writing " +
+				"[aproved] once looks like from the outside. An object whose class declares no lifecycle " +
+				"is absent rather than empty: a class without one is the normal case.",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) to read."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/lifecycle"))
 			},
 		},
 		{

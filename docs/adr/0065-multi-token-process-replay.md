@@ -1,6 +1,7 @@
 # ADR-0065: Multi-token process replay and causal token lineage
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-26
 - **Deciders:** Atlas maintainers
 

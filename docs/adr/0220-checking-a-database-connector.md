@@ -1,6 +1,7 @@
 # ADR-0220: The Console may dial a database, and the engine still links no driver
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-02
 - **Deciders:** Atlas maintainers
 

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_payment_wait" targetNamespace="https://github.com/pblumer/atlas/postman">
+  <message id="Msg_payment_received" name="payment-received">
+    <extensionElements>
+      <zeebe:subscription correlationKey="= orderId"/>
+    </extensionElements>
+  </message>
+  <process id="payment-wait" name="Wait for payment" isExecutable="true">
+    <documentation>The Postman model for message correlation: an instance that parks until a message named "payment-received" arrives for its own order. Start it with {"variables": {"orderId": "..."}}; orderId is the correlation key, evaluated when the token reaches the catch event. Publish the message with POST /api/v1/messages and the same correlationKey, and the instance finishes; the message's variables are merged into it. The trap: messages are not buffered. A message published before the instance is waiting — or with a key no instance is waiting on — is accepted with 200 and then dropped, so publish after the start, not before.</documentation>
+    <startEvent id="start" name="Order placed"/>
+    <intermediateCatchEvent id="await-payment" name="Payment received">
+      <documentation>A message catch event rather than a user task, because nobody does anything here: the instance waits for an outside system (a payment provider, a bank import) to say that something happened. It subscribes to "payment-received" under the key the expression "= orderId" yields for this instance, so two orders waiting at once each receive only their own payment.</documentation>
+      <messageEventDefinition messageRef="Msg_payment_received"/>
+    </intermediateCatchEvent>
+    <endEvent id="end" name="Order paid"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="await-payment"/>
+    <sequenceFlow id="f2" sourceRef="await-payment" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram_payment_wait">
+    <bpmndi:BPMNPlane id="plane_payment_wait" bpmnElement="payment-wait">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="152" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_await_payment" bpmnElement="await-payment"><dc:Bounds x="302" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="452" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="188" y="200"/><di:waypoint x="302" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="338" y="200"/><di:waypoint x="452" y="200"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

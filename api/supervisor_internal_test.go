@@ -1,13 +1,53 @@
 package api
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
+
+// TestScriptWorkerDoesNotInheritTheServerEnvironment keeps unrelated server
+// credentials out of the process that hosts model-authored code. The worker token
+// is the sole intentional credential; principalFor confines it to worker routes.
+func TestScriptWorkerDoesNotInheritTheServerEnvironment(t *testing.T) {
+	t.Setenv("ATLAS_TOKEN", "worker-token")
+	t.Setenv("ATLAS_OIDC_CLIENT_SECRET", "oidc-secret")
+	t.Setenv("DATABASE_URL", "postgres://user:password@db/atlas")
+	t.Setenv("PATH", os.Getenv("PATH"))
+
+	env := map[string]string{}
+	for _, kv := range workerBaseEnvironment(SuperviseSpec{Connectors: []string{"script"}}) {
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			env[kv[:i]] = kv[i+1:]
+		}
+	}
+	if value, inherited := env["ATLAS_TOKEN"]; inherited {
+		t.Errorf("script worker inherited ambient ATLAS_TOKEN=%q instead of receiving its configured credential", value)
+	}
+	for _, name := range []string{"ATLAS_OIDC_CLIENT_SECRET", "DATABASE_URL"} {
+		if value, exposed := env[name]; exposed {
+			t.Errorf("script worker inherited %s=%q", name, value)
+		}
+	}
+	if _, ok := env["PATH"]; !ok {
+		t.Error("PATH was not preserved for interpreter resolution")
+	}
+}
+
+func TestSupervisedScriptWorkerReceivesItsSandboxProfile(t *testing.T) {
+	args := supervisedWorkerArgs("http://127.0.0.1:8080", SuperviseSpec{
+		ID: "script", Connectors: []string{"script"}, ScriptLanguages: []string{"python"}, ScriptSandbox: "strict",
+	}, nil)
+	got := strings.Join(args, " ")
+	if !strings.Contains(got, "--script-sandbox strict") {
+		t.Fatalf("worker args = %q, want strict sandbox profile", got)
+	}
+}
 
 // waitFor polls until cond holds, so a test never depends on a sleep being long
 // enough. Child processes start when the operating system gets to them.
@@ -152,6 +192,78 @@ func TestRestartDuringBackoffTriesAgainImmediately(t *testing.T) {
 	})
 }
 
+// A restart asked for while the child is still running cycles it at once. The run
+// ends because it was asked to, and the wait after it must not then sit out the
+// backoff: this is the ordinary press of the button on a worker that is up.
+func TestARestartWhileTheChildRunsStartsItAgainAtOnce(t *testing.T) {
+	quit := make(chan struct{})
+	sup := newSupervisor(quit)
+	sup.exe = "sh"
+	sup.backoff = 30 * time.Second // long enough that only the restart can shorten it
+	sup.add(SuperviseSpec{ID: "mailer-1", Kinds: []string{"send-email"}}, []string{"-c", "sleep 30"}, nil)
+	sup.start()
+	defer func() { close(quit); sup.wait() }()
+
+	waitFor(t, "the child to run", func() bool {
+		got := sup.list()[0]
+		return got.State == "running" && got.PID != 0
+	})
+	before := sup.list()[0].Starts
+	if err := sup.restart("mailer-1"); err != nil {
+		t.Fatalf("restart: %v", err)
+	}
+	waitFor(t, "another start without waiting out the backoff", func() bool {
+		return sup.list()[0].Starts > before
+	})
+}
+
+// restartOnceAfterRun lands one restart of id in the window between a child's exit
+// and the wait that follows it — the window a restart used to be lost in, because
+// the wait read the channel the restart had just replaced.
+func restartOnceAfterRun(sup *supervisor, id string) {
+	var once sync.Once
+	sup.afterRun = func(*child) {
+		once.Do(func() { _ = sup.restart(id) })
+	}
+}
+
+// A restart that lands after a crash, before the backoff wait has begun, still cuts
+// the backoff short.
+func TestARestartBetweenACrashAndItsBackoffIsNotLost(t *testing.T) {
+	quit := make(chan struct{})
+	sup := newSupervisor(quit)
+	sup.exe = "sh"
+	sup.backoff = 30 * time.Second
+	sup.add(SuperviseSpec{ID: "flappy", Kinds: []string{"send-email"}}, []string{"-c", "exit 1"}, nil)
+	restartOnceAfterRun(sup, "flappy")
+	sup.start()
+	defer func() { close(quit); sup.wait() }()
+
+	waitFor(t, "a second start without waiting out the backoff", func() bool {
+		return sup.list()[0].Starts >= 2
+	})
+}
+
+// A restart that lands as a worker with nothing to serve exits, before it has
+// parked, still starts it again. The console's refresh restarts a worker the moment
+// its kind is configured; lost here, the worker would stay parked until somebody
+// pressed the button that should not have been needed.
+func TestARestartAsAWorkerParksIsNotLost(t *testing.T) {
+	quit := make(chan struct{})
+	sup := newSupervisor(quit)
+	sup.exe = "sh"
+	sup.backoff = 30 * time.Second
+	sup.add(SuperviseSpec{ID: "mail", Connectors: []string{connectorKindMail}},
+		[]string{"-c", "exit " + strconv.Itoa(ExitNothingToServe)}, nil)
+	restartOnceAfterRun(sup, "mail")
+	sup.start()
+	defer func() { close(quit); sup.wait() }()
+
+	waitFor(t, "a second start instead of a park", func() bool {
+		return sup.list()[0].Starts >= 2
+	})
+}
+
 // A supervised worker whose command cannot start is reported as failed, with the
 // reason, rather than quietly missing from the view. This is the first thing an
 // operator hits after a typo in --supervise, and the Workers view is where they
@@ -286,5 +398,23 @@ func TestSupervisorStartsNothingAfterQuit(t *testing.T) {
 	}
 	if got[0].Starts != 0 {
 		t.Errorf("starts = %d, want 0 — nothing should have been spawned", got[0].Starts)
+	}
+}
+
+// A supervised worker is told how many jobs of one type to run at once. Left unset,
+// the flag is omitted and the worker keeps its own default, which is how a --supervise
+// command worker the operator wrote is started.
+func TestSupervisedWorkerReceivesItsConcurrency(t *testing.T) {
+	args := supervisedWorkerArgs("http://127.0.0.1:8080", SuperviseSpec{
+		ID: "rest", Connectors: []string{"rest"}, MaxJobs: 16,
+	}, nil)
+	if got := strings.Join(args, " "); !strings.Contains(got, "--max-jobs 16") {
+		t.Errorf("worker args = %q, want --max-jobs 16", got)
+	}
+	args = supervisedWorkerArgs("http://127.0.0.1:8080", SuperviseSpec{
+		ID: "mailer-1", Kinds: []string{"send-email"},
+	}, []string{"send-email=mailer"})
+	if got := strings.Join(args, " "); strings.Contains(got, "--max-jobs") {
+		t.Errorf("worker args = %q, want no --max-jobs when none was configured", got)
 	}
 }

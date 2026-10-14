@@ -30,9 +30,14 @@ import (
 // as an unconfigured job worker, because the extension was gone before the panel
 // ever looked.
 
+// A digit is admitted after the first letter, and that is not cosmetic: <atlas:s3Connector>
+// was the first such tag, and a pattern of [a-zA-Z]+ did not see it — so both guards below
+// would have passed while saying nothing about the kind at all, which is the failure they
+// exist to catch arriving by the back door.
+//
 // connectorExtRe matches the worker extension elements compiler/parse.go reads,
 // e.g. `xml:"extensionElements>userConnector"`.
-var connectorExtRe = regexp.MustCompile(`xml:"extensionElements>([a-zA-Z]+Connector)"`)
+var connectorExtRe = regexp.MustCompile(`xml:"extensionElements>([a-zA-Z][a-zA-Z0-9]*Connector)"`)
 
 // nonServiceTaskConnectors are worker extensions that are deliberately absent
 // from the Modeler's service-task catalog, with the reason. They are still required
@@ -275,7 +280,31 @@ func serviceTaskKindsSource(t *testing.T) string {
 
 // connectorAttrRe matches the attributes one xml*Worker struct parses, e.g.
 // `xml:"baseDN,attr"`.
-var connectorAttrRe = regexp.MustCompile(`xml:"([a-zA-Z]+),attr"`)
+var connectorAttrRe = regexp.MustCompile(`xml:"([a-zA-Z][a-zA-Z0-9]*),attr"`)
+
+// connectorFieldRe matches the field that parses one worker extension into its struct,
+// e.g. the field Rest *xmlRestConnector tagged xml:"extensionElements>restConnector".
+var connectorFieldRe = regexp.MustCompile(`\*(xml[A-Za-z0-9]+)\s+` + "`" + `xml:"extensionElements>([a-zA-Z][a-zA-Z0-9]*Connector)"` + "`")
+
+// connectorStruct is one worker extension and the struct the compiler parses it into.
+type connectorStruct struct{ tag, structName, moddleType string }
+
+// connectorStructs reads from compiler/parse.go which struct each worker extension tag
+// parses into. One struct may serve several tags (the SQL workers share one), and each
+// tag is its own moddle type, so each is checked.
+func connectorStructs(parseGo string) []connectorStruct {
+	seen := map[string]bool{}
+	var out []connectorStruct
+	for _, m := range connectorFieldRe.FindAllStringSubmatch(parseGo, -1) {
+		if seen[m[2]] {
+			continue
+		}
+		seen[m[2]] = true
+		out = append(out, connectorStruct{tag: m[2], structName: m[1], moddleType: moddleTypeFor(m[2])})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].tag < out[j].tag })
+	return out
+}
 
 // TestModdleKnowsEveryConnectorAttribute guards the same round trip one level down: a
 // worker *type* the moddle declares but an *attribute* it does not is the same
@@ -287,11 +316,11 @@ var connectorAttrRe = regexp.MustCompile(`xml:"([a-zA-Z]+),attr"`)
 // Console-configured directory (ADR-0206), was parsed by the compiler and declared
 // nowhere in the moddle.
 //
-// The list is the extensions whose attributes have since changed under this check
-// rather than every worker — widening it the rest of the way is worth doing on its
-// own. Jira joined it with the account search (ADR-0223), which
-// added the `query` attribute: an operation that adds an attribute is exactly the change
-// this guards, so covering it is the guard for that change and not a drive-by.
+// It held a hand-kept list — AD, then Jira with the account search (ADR-0223) — and the
+// REST worker's OAuth2 attributes (ADR-0152), which no list named, were stripped on every
+// Save of a task that used them (#468). So the extensions come from compiler/parse.go
+// itself: every struct a worker tag parses into is checked, and a worker added tomorrow
+// is checked without anybody remembering to add it.
 func TestModdleKnowsEveryConnectorAttribute(t *testing.T) {
 	src, err := os.ReadFile("../compiler/parse.go")
 	if err != nil {
@@ -315,11 +344,12 @@ func TestModdleKnowsEveryConnectorAttribute(t *testing.T) {
 		t.Fatalf("decode atlas-moddle.json: %v", err)
 	}
 
-	for _, tc := range []struct{ structName, moddleType string }{
-		{"xmlAdConnector", "AdConnector"},
-		{"xmlJiraConnector", "JiraConnector"},
-	} {
-		t.Run(tc.moddleType, func(t *testing.T) {
+	extensions := connectorStructs(body)
+	if len(extensions) == 0 {
+		t.Fatal("found no worker extensions in compiler/parse.go; the pattern must have changed")
+	}
+	for _, tc := range extensions {
+		t.Run(tc.tag, func(t *testing.T) {
 			// The struct's own body, so the pattern reads this extension's attributes only.
 			start := strings.Index(body, "type "+tc.structName+" struct {")
 			if start < 0 {
@@ -337,10 +367,12 @@ func TestModdleKnowsEveryConnectorAttribute(t *testing.T) {
 				t.Fatalf("found no attributes on %s; the pattern must have changed", tc.structName)
 			}
 
+			// Case-insensitively, as TestModdleDeclaresEveryCompilerConnector matches: the
+			// exact spelling of the tag is TestCompilerReadsWhatTheModelerWrites's concern.
 			declared := map[string]bool{}
 			var found bool
 			for _, ty := range moddle.Types {
-				if ty.Name != tc.moddleType {
+				if !strings.EqualFold(ty.Name, tc.moddleType) {
 					continue
 				}
 				found = true
@@ -364,5 +396,198 @@ func TestModdleKnowsEveryConnectorAttribute(t *testing.T) {
 					tc.moddleType, len(missing), strings.Join(missing, ", "))
 			}
 		})
+	}
+}
+
+// TestModelerOffersRestOAuth2 is #468's other half. Declaring the attributes keeps a
+// hand-written OAuth2 task intact through a Save, but a person could still only write
+// one by hand: the panel offered no oauth2 scheme and no field for its token endpoint,
+// client id or scope. The REST kind must offer the scheme and a field for each.
+func TestModelerOffersRestOAuth2(t *testing.T) {
+	catalog := serviceTaskKindsSource(t)
+	i := strings.Index(catalog, `id: "rest"`)
+	if i < 0 {
+		t.Fatal(`SERVICE_TASK_KINDS has no id: "rest" kind`)
+	}
+	rest := catalog[i:]
+	if j := strings.Index(rest[1:], "\n    id: \""); j >= 0 {
+		rest = rest[:j+1]
+	}
+	for _, want := range []string{`v: "oauth2"`, `key: "authTokenUrl"`, `key: "authClientId"`, `key: "authScope"`} {
+		if !strings.Contains(rest, want) {
+			t.Errorf("the REST kind in SERVICE_TASK_KINDS has no %s", want)
+		}
+	}
+}
+
+// shopTaskAttrs is the whole of <atlas:shopTask>, the shop send task's declaration
+// (ADR-0429 §4), in the order the Modeler writes them. Each mode uses its own share:
+//
+//	<atlas:shopTask mode="outcome" action="password-reset" outcome="completed" />
+//	<atlas:shopTask mode="command" action="deprovision" product="mailbox" order="= leaver.orderId" position="mailbox" resultVariable="commandId" />
+//
+// It is a contract with the compiler, which parses exactly this element. `retries` is the
+// task's own retry budget (ADR-0135) in either mode; the panel does not offer it, and it
+// is declared so a budget written by hand survives a Modeler round trip.
+var shopTaskAttrs = []string{"mode", "action", "outcome", "product", "order", "position", "resultVariable", "retries"}
+
+// TestModdleDeclaresTheShopTaskContract pins the Modeler's half of that contract. Every
+// guard above finds an extension by the Connector suffix of the compiler's tag, and the
+// shop task is not a Worker, so it escapes all of them — and a drift here loses data in
+// both directions without a sound. An attribute the moddle lacks is dropped from the
+// model on the first Save; one it has beyond them is written into models the
+// compiler never reads, which looks configured and is not. Without the panel naming the
+// type, nothing writes the element at all.
+//
+// The type is send-only: the moddle allows it in a send task, and the service-task
+// catalog must not offer it, because a service task cannot carry it.
+func TestModdleDeclaresTheShopTaskContract(t *testing.T) {
+	raw, err := os.ReadFile("web/atlas-moddle.json")
+	if err != nil {
+		t.Fatalf("read atlas-moddle.json: %v", err)
+	}
+	var moddle struct {
+		Types []struct {
+			Name string `json:"name"`
+			Meta struct {
+				AllowedIn []string `json:"allowedIn"`
+			} `json:"meta"`
+			Properties []struct {
+				Name   string `json:"name"`
+				Type   string `json:"type"`
+				IsAttr bool   `json:"isAttr"`
+			} `json:"properties"`
+		} `json:"types"`
+	}
+	if err := json.Unmarshal(raw, &moddle); err != nil {
+		t.Fatalf("decode atlas-moddle.json: %v", err)
+	}
+
+	found := false
+	for _, ty := range moddle.Types {
+		if ty.Name != "ShopTask" {
+			continue
+		}
+		found = true
+		if strings.Join(ty.Meta.AllowedIn, ",") != "bpmn:SendTask" {
+			t.Errorf("ShopTask is allowed in %v; it belongs on a send task and nowhere else", ty.Meta.AllowedIn)
+		}
+		var got []string
+		for _, p := range ty.Properties {
+			got = append(got, p.Name)
+			if p.Type != "String" || !p.IsAttr {
+				t.Errorf("ShopTask's %q is declared as type %q, isAttr %v; the contract has it as a string attribute",
+					p.Name, p.Type, p.IsAttr)
+			}
+		}
+		if strings.Join(got, ",") != strings.Join(shopTaskAttrs, ",") {
+			t.Errorf("ShopTask declares the attributes %v; the contract is exactly %v\n\n"+
+				"bpmn-js drops an attribute the moddle does not declare, and writes one the compiler does not read.",
+				got, shopTaskAttrs)
+		}
+	}
+	if !found {
+		t.Fatal("atlas-moddle.json declares no ShopTask type, so <atlas:shopTask> cannot round-trip through the Modeler")
+	}
+
+	editor, err := os.ReadFile("web/editor.js")
+	if err != nil {
+		t.Fatalf("read editor.js: %v", err)
+	}
+	if !strings.Contains(string(editor), `"atlas:ShopTask"`) {
+		t.Error("api/web/editor.js never names atlas:ShopTask, so no send task can be given the Shop kind")
+	}
+	if strings.Contains(serviceTaskKindsSource(t), `"atlas:ShopTask"`) {
+		t.Error("SERVICE_TASK_KINDS offers atlas:ShopTask; the shop kind is a send task's alone (ADR-0429 §4)")
+	}
+}
+
+// bpmnOwnProcessAttrs are the <bpmn:process> attributes the BPMN moddle itself
+// declares, so bpmn-js round-trips them without anything from our package. Every
+// other attribute compiler/parse.go reads off a process is ours and has to be
+// declared in ProcessMeta.
+var bpmnOwnProcessAttrs = map[string]string{
+	"id":           "bpmn:BaseElement's own id",
+	"name":         "bpmn:CallableElement's own name",
+	"isExecutable": "bpmn:Process's own isExecutable",
+}
+
+// TestModdleKnowsEveryProcessAttribute asks a different question at the process root,
+// and the difference is worth stating because it is not the data-loss one above. An
+// attribute in a namespace the document declares survives a round trip either way:
+// moddle keeps what it has no property for in $attrs and writes it back out. What it
+// cannot do without a property is let anything *read or write* the setting — the
+// properties panel reads rootBo.<attr> and writes it through updateProperties, and
+// both of those go through moddle's properties, not $attrs. So an undeclared process
+// attribute is not lost, it is unauthorable: the Modeler cannot show it, and a field
+// offered for it would silently write nothing.
+//
+// That is exactly what happened to atlas:searchable (ADR-0244). It shipped as a
+// compiler attribute with no moddle property, so declaring a searchable variable
+// meant editing the XML by hand outside the Modeler.
+func TestModdleKnowsEveryProcessAttribute(t *testing.T) {
+	src, err := os.ReadFile("../compiler/parse.go")
+	if err != nil {
+		t.Fatalf("read compiler/parse.go: %v", err)
+	}
+	body := string(src)
+	start := strings.Index(body, "type xmlProcess struct {")
+	if start < 0 {
+		t.Fatal("xmlProcess is no longer declared in compiler/parse.go")
+	}
+	end := strings.Index(body[start:], "\n}")
+	if end < 0 {
+		t.Fatal("xmlProcess's declaration does not end")
+	}
+	var want []string
+	for _, m := range connectorAttrRe.FindAllStringSubmatch(body[start:start+end], -1) {
+		if _, own := bpmnOwnProcessAttrs[m[1]]; !own {
+			want = append(want, m[1])
+		}
+	}
+	if len(want) == 0 {
+		t.Fatal("found no Atlas attributes on xmlProcess; the pattern must have changed")
+	}
+
+	raw, err := os.ReadFile("web/atlas-moddle.json")
+	if err != nil {
+		t.Fatalf("read atlas-moddle.json: %v", err)
+	}
+	var moddle struct {
+		Types []struct {
+			Name       string   `json:"name"`
+			Extends    []string `json:"extends"`
+			Properties []struct {
+				Name string `json:"name"`
+			} `json:"properties"`
+		} `json:"types"`
+	}
+	if err := json.Unmarshal(raw, &moddle); err != nil {
+		t.Fatalf("decode atlas-moddle.json: %v", err)
+	}
+	declared := map[string]bool{}
+	for _, ty := range moddle.Types {
+		for _, ext := range ty.Extends {
+			if ext != "bpmn:Process" {
+				continue
+			}
+			for _, p := range ty.Properties {
+				declared[p.Name] = true
+			}
+		}
+	}
+
+	var missing []string
+	for _, attr := range want {
+		if !declared[attr] {
+			missing = append(missing, attr)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		t.Errorf("atlas-moddle.json declares no bpmn:Process property for %d attribute(s) the compiler reads: %s\n\n"+
+			"bpmn-js drops an attribute it has no property for, so a Modeler round trip silently strips it — and "+
+			"nothing in the properties panel can offer a setting the moddle does not carry.",
+			len(missing), strings.Join(missing, ", "))
 	}
 }

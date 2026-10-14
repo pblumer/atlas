@@ -71,7 +71,7 @@ func TestProcessRuntimeShowsWhyATokenIsParked(t *testing.T) {
 	var instances []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &instances); err != nil || len(instances) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &instances); err != nil || len(instances) != 1 {
 		t.Fatalf("list instances: %v (status=%d body=%s)", err, code, body)
 	}
 	instKey := instances[0].Key
@@ -87,7 +87,7 @@ func TestProcessRuntimeShowsWhyATokenIsParked(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 1 {
 		t.Fatalf("expected 1 task, got %v (%s)", err, body)
 	}
 	jobKey := tasks[0].Key
@@ -175,7 +175,7 @@ func TestProcessRuntimeIgnoresAnotherDefinitionsIncidents(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 1 {
 		t.Fatalf("expected 1 task, got %v (%s)", err, body)
 	}
 	if code, body := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/jobs/%d/fail", tasks[0].Key), `{"retries":0,"message":"boom"}`, "application/json"); code != http.StatusOK {

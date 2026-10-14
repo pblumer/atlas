@@ -1,0 +1,390 @@
+# ADR-0402: One estate, several nodes — a starmap stitched from subgraphs
+
+- **Status:** Accepted (amended 2026-09-22: the estate view is sequenced behind the credential-reach record, see §1; amended 2026-09-23: the view is read by the landscape's own right rather than behind §1's operator gate, see §1)
+- **Implementation:** Landed
+- **Date:** 2026-09-18
+- **Deciders:** Atlas maintainers
+- **Open question:** whether an estate view is ever read by somebody who may not see all
+  of it. The operator gate in §1 is right only while the answer is "no". Looked at in
+  2026-09, and the question now has an addressee rather than a hypothetical: multi-domain
+  installations exist, and a federal administration is one of them. There the reader who
+  wants an estate picture is plausibly a cross-departmental architect who is *not* the
+  operator of each node, and separation between administrative units is precisely what such
+  an installation's information-protection concept restricts. So the gate is likely
+  **insufficient** for the customer who most needs this view, rather than merely unproven.
+  That does not change the gate — it is still the only posture buildable today — but it
+  moves the cross-installation identity
+  [ADR-0373](0373-published-process-interface.md) could not settle from a follow-up to the
+  thing this feature actually waits on.
+- **Question checked:** 2026-09
+
+## Context and problem statement
+
+The starmap draws one server. A peer appears on it as a single `target` node with no
+edges, and ADR-0211's own comment says why: a promotion is an act, not a stored
+relationship, and this server does not record which of its applications is running over
+there.
+
+In an estate of one Atlas per domain ([#986](https://github.com/pblumer/atlas/issues/986))
+that means there is no picture of the estate at all — at exactly the altitude Panorama
+exists to serve. Every domain has a landscape; nobody has the landscape.
+
+What already exists, and does not have to be built:
+
+- **the peer read channel** (`api/panoramaremote.go`): off the run loop, an 8-second
+  deadline, four-way bounded concurrency, a response-size limit, TLS verified by the same
+  client the promotion path uses, per-target error isolation, and a cache that keeps
+  *unreachable* and *stale* apart on purpose;
+- **a descriptor that advertises what a node can be asked for**, derived from the routes
+  it actually mounts — and `panorama.mesh` is already in that list (`api/node.go`,
+  `nodeFeatures`);
+- **a credential per target**, stored as a vault reference and never as a secret
+  ([ADR-0129](0129-remote-deployment-targets.md),
+  [ADR-0069](0069-engine-internal-encrypted-secret-vault.md));
+- **the budget, the cache, the restricted placeholder, the provenance legend and the
+  severity mapping** (ADR-0211 §§2–4, §7).
+
+So the mechanism is almost entirely assembly. What needs deciding is not how to fetch —
+that is solved — but what the stitched picture is allowed to claim, and who may look at
+it.
+
+## Decision drivers
+
+- **Every line is a fact the server can point at** (ADR-0211 §1). A cross-node edge has
+  to meet that test or it does not get drawn.
+- **A filtered picture must say that it is filtered** (ADR-0211 §3). The restricted
+  placeholder exists because an absence that means "you may not see this" reads as "this
+  depends on nothing".
+- **The budget is measured, not chosen.** 400 nodes is where browser layout stops
+  painting in about a second.
+- **There is no cross-installation identity.** ADR-0373 says so in its own open question,
+  and ADR-0129's targets are the only trust relationship in the tree.
+- **A peer is asked, never trusted to be present.** The four states are already the
+  contract, and collapsing them is the failure `panoramaremote.go` was written to avoid.
+
+## Considered options
+
+1. **A central estate registry** — one node, or a new component, holds the estate graph
+   and every node reports into it.
+2. **Each node derives its own subgraph; a reader's node asks reachable peers for theirs
+   and stitches.**
+3. **Export and diff offline** — each node's ArchiMate export
+   (`GET /api/v1/panorama/mesh/archimate`) is deterministic and committable, so an estate
+   picture is a job somebody runs in CI over N exports.
+
+## Decision outcome
+
+Chosen: **option 2 — every node keeps deriving its own subgraph, and the reader's node
+stitches.** No node becomes the estate's master, nothing new is stored, and the graph
+inherits the derivation rules it already has. Identities are
+ADR-0401'.
+
+Four things the stitching has to decide.
+
+### 1. Authorization is not transitive, and pretending otherwise is an escalation
+
+A peer filters its answer for **the credential it was given** — the target's — not for the
+human reading a screen here. ADR-0211 §3 computes the mesh per requesting principal; that
+principal does not exist on the far side, and there is no mechanism to carry it there.
+
+So a federated read has a real escalation in it: a viewer on node A would see node B's
+estate at the reach of A's stored credential. Three ways out, and only one is buildable:
+
+- **forward the reader's identity** — needs the cross-installation identity ADR-0373 could
+  not settle. Not available;
+- **make the peer's answer coarse enough that the credential's reach does not matter** —
+  honest, and nearly worthless: an estate view whose nodes are "domain B holds 12
+  applications" answers nothing the target list does not;
+- **gate the federated view on the local right that already sees the whole estate.**
+
+Chosen: **gate it.** The estate view is an operator's view, behind the same local right
+that configures deployment targets — because whoever configured them already holds the
+credential whose reach is in question, so the view grants no reach they did not have.
+
+On the answering side, a **new least-privilege scope**. `status` reaches the descriptor
+and nothing else, deliberately and for exactly this reason
+(`api/apitokenscope.go`: "a credential handed to a peer should be the narrowest one that
+answers the question — here, one GET"). A starmap read is a second, much wider question
+and must not be folded into `status`. It gets its own scope, whose whole reach is the
+derived landscape, and which can neither deploy, read an instance, nor list a person.
+
+And the picture **states whose credential drew each subgraph**, beside the same legend
+that already carries the restricted count. The same discipline: an incompleteness that is
+stated is a fact; one that is not is a discovery.
+
+#### Accepted, and the gate is not what gets built first (2026-09-22)
+
+This record is accepted, and with it the altitude, the budget rule, the fifth peer state and
+the refusal to invent edges. What is **not** built first is §1's operator gate. The
+measurement below found that the alternative it would foreclose is unavailable only because
+of a mechanism that can be changed, and the maintainer chose to change it: the credential's
+own reach is settled in
+ADR-0410, and the estate
+view is built after it.
+
+The gate in §1 therefore stands as the *fallback* — what an installation gets if the reach
+record is refused — rather than as the way in.
+
+#### What the mechanism allows, measured before building the gate (2026-09)
+
+The open question above says the operator gate is *likely insufficient* for the reader who
+most needs this view. Before that gate is built, the alternative it would foreclose was
+measured against the code rather than argued about, because "the gate may be wrong" and "the
+better thing is unavailable" are different situations and only the second justifies building
+it anyway.
+
+The fourth way out this section does not name is **one peer credential per administrative
+unit**: if the credential a target stores already reaches only one unit's part of the
+answering node, then a federated read grants exactly the reach an information-protection
+concept intended, and no identity has to cross an installation. It needs no ADR-0373.
+
+It is not expressible today, and the reason is structural rather than missing work:
+
+| | State |
+|---|---|
+| Filtering a landscape by who asks | **exists** — the mesh is derived from the subset a caller may see, with restricted placeholders for the rest (ADR-0211 §3) |
+| Carrying the asking identity across installations | **absent** — ADR-0373 could not settle it, which is why this section starts where it does |
+| A credential that carries *which* subset it may see | **absent, and not a scope away.** `apiScopeAllowed` in `api/apitokenscope.go` maps a flat scope name to a list of route patterns, and `apiScopeMayReach` decides per route. A scope can say *which endpoints*; nothing in the model says *which subjects*. A per-unit credential therefore needs a second dimension on the token, not another word in the scope list. |
+
+So this section's "three ways out, and only one is buildable" is accurate about today's
+mechanism, and the choice it faces is sharper than the open question states: the operator
+gate, a coarse answer that answers nothing, or **a change to what a token can express** —
+which is its own record and its own cost, and is the only one of the three that serves the
+multi-domain installation named in the open question.
+
+Nothing of this section was built when it was written: there was no estate altitude, no
+domain node kind and no new scope in the tree. That was the state the decision was taken
+from, and it is recorded here rather than rewritten, because a record that quietly updates
+the facts it decided from stops being evidence of anything.
+
+#### What is in the tree since (2026-09-23)
+
+The measurement's third option was taken, so the sentence above no longer describes the
+tree and says so here rather than by being edited away:
+
+| | State |
+|---|---|
+| A credential that carries which subjects it may see | **built** — a token carries a reach, the `landscape` scope must state one, and nobody may grant a reach they do not hold (ADR-0410) |
+| The estate altitude's assembly | **built** — `panorama.DeriveEstate`: one node per domain, one edge per recorded promotion, the fifth peer state, and each domain naming the credential that drew it |
+| The federated read | **built** — every peer's own starmap, over the existing peer channel and cached beside the descriptor, with a version boundary distinguished from a fault and a refused read from a silent server |
+| A route, and a screen | **built** — `GET /api/v1/panorama/estate`, and a Panorama view of its own beside the Starmap |
+
+Nothing of it grants a reach the reader did not have: a federated answer is as wide as the
+credential that fetched it, and every domain on the picture says which credential that was.
+
+#### The picture is built beside the Starmap before it is built into it (2026-09-23)
+
+§5 has the estate as an **extension of the existing altitudes** — the picker is where a reader
+switches altitude, and the landscape's renderer is the one that carries provenance, severity,
+drill-down, saved views and the export. That is still where it ends up, and this section does
+not repeal it.
+
+What changed is the order. The first build put the estate *into* the Starmap as a third
+subject: a new node kind and a new edge kind in its shared tables, a third shape of request in
+its loader, two of its controls made conditional, and two of its guards rewritten. All of it
+worked, and all of it was in the one view an operations team keeps open. The maintainer's
+sequencing decision is the opposite: **the new altitude is drawn on its own first, and folded
+in once it has been read against a real estate.** So the shipped landscape is byte-for-byte
+untouched, a defect in the estate cannot take it along, and the integration is a change that
+can be reviewed as one thing rather than as a side effect of a feature.
+
+What the separate picture does not have, stated rather than discovered: no filter, no saved
+views, no notation projection, no ArchiMate export and no drill-down into anything but the
+local domain's own landscape. Those belong to the renderer it is not using yet, and each is a
+reason the integration is worth making rather than an argument that it is optional. What it
+does have is the altitude's own topology — every edge the record admits runs from this domain
+to a peer (§4), so the layout is a star, which needs no simulation and comes out identically on
+two reads.
+
+The pure geometry the two share is imported rather than copied, so the outline a domain is
+drawn with is stated once. Nothing else crosses: this view holds none of the Starmap's state
+and changes none of it.
+
+**The integration is a removal as much as an addition.** Two ways into one altitude is the state
+this sequencing creates, and leaving both is how it becomes permanent: the older route is the one
+somebody has bookmarked, and it would be the one with fewer features. So the change that folds the
+estate into the picker also deletes the standalone view and rewrites `#/panorama/estate` to the
+picker's estate subject — the same redirect `#/panorama/landscape` already gets to
+`#/panorama/starmap`, and for the same reason. A reader who saved the link keeps it working, the
+menu entry goes, and there is one altitude with one way in.
+
+Until then this record's own answer to "where is the estate" is: its own view, and that is
+deliberate rather than provisional-by-neglect.
+
+#### The gate is not what was built, and this is the posture that was (2026-09-23)
+
+§1 chose an operator gate and its own open question then found that gate *likely insufficient
+for the customer who most needs this view* — a cross-departmental architect is not the operator
+of each node. With the reach record built, the maintainer decided the posture the measurement
+opened up: **the estate is read by the same right that reads the landscape, and every domain on
+it is exactly as wide as the credential that drew it.** The gate stays written down as the
+fallback an installation gets if the reach mechanism is refused; it is not what the route has.
+
+Three properties carry that decision, and each is a property of code rather than of intent:
+
+| | How |
+|---|---|
+| The local domain is as wide as the reader | It is counted off the landscape this caller would be served — the same derivation, the same per-request visibility decision. An application they may not see is not on their landscape and not in their count. |
+| A peer domain is as wide as the target's credential | Which is what a federated read can be and no wider. The credential is named on the domain, and so is how much of it that credential could not see. |
+| Nothing of a peer's content crosses | A domain carries a name, a count, a state and a join — never a node of somebody else's landscape. Expanding one is a read against *that* installation, where that reader's own rights are the only ones that can be resolved. |
+
+What the posture costs, stated rather than left to be found: a landscape reader who is not an
+operator now learns the peer domains' names, roughly how large each is, and which of them a
+promotion has reached. The names were already visible to such a reader as `target` nodes on the
+landscape itself; the size and the join are what this adds.
+
+#### One target, one credential, and two jobs it cannot both do (found 2026-09-23, decided 2026-09-28)
+
+Running two installations against each other surfaced a gap this record did not anticipate, in
+the record it depends on rather than in this one.
+
+A deployment target carries **one** credential reference (ADR-0129) and an API token carries
+**one** scope. The estate read needs a credential that reaches the descriptor and the derived
+landscape; a promotion needs one that reaches the import route; and the two sets are disjoint by
+design — a deploy token is deliberately the narrowest thing that can publish, and a landscape
+credential is deliberately unable to deploy. Measured, with the server's own words: a deploy
+token answers `401` at `/api/v1/node` and at `/api/v1/panorama/mesh`, and a landscape credential
+is refused `POST /api/v1/applications/import` with `403`.
+
+So on an installation where targets are configured for promotion — which is what targets are for
+— every peer is drawn on the estate as *unreachable*, and the picture is honest about knowing
+nothing while the operator can see the peer is plainly there.
+
+Three ways out, and the choice is not this record's to make alone:
+
+| | |
+|---|---|
+| A second, optional read credential on the target | Smallest change that works: promoting and being read are two jobs, so two references, both stored by reference as ADR-0129 already requires. Costs a field on the target record and a second row in its dialog. |
+| A token that carries several scopes | Larger: the scope is a single word everywhere it is read, and a set changes `apiScopeMayReach` and every place a scope is displayed or minted. |
+| Widen the deploy token to the two read routes | Refused here: ADR-0129's deploy token is narrow on purpose, and the estate is not a reason to widen the one credential a peer hands out. |
+
+**Decided and built (2026-09-28): the first option.** A target names a second, optional
+`readCredentialRef`, and a read of the peer presents it where it is configured. Empty means the
+two jobs share one credential, which is what every target configured before this says, so
+nothing that exists moves. The three reads that present it are the estate's fan-out, the
+landscape's target rows and the observation projection; the two promotion paths keep naming
+`credentialRef`, because a deploy credential is the narrowest thing that can publish and this
+does not widen it. See ADR-0129, which owns the target
+record.
+
+The second option — a token carrying several scopes — stays unbuilt and is the larger change it
+was: a scope is a single word everywhere it is read, minted and displayed. The third stays
+refused.
+
+### 2. The budget is per node and cannot be multiplied
+
+Eight domains at 400 nodes each is a hairball by arithmetic, inside every individual
+budget. So the estate view is **not L0 repeated — it is an altitude above L0**:
+
+| Level | Content | Owner |
+|---|---|---|
+| **L-1 Estate** | one node per domain, joined where promotion joined them | Panorama (new) |
+| L0 Landscape | one domain's derived mesh | Panorama, existing |
+| L1 Application | one application | Panorama, existing |
+| L2 / L3 | process and instance | Operations, existing |
+
+A node at L-1 is a **domain**, expanded one at a time into the L0 view that already
+exists. The estate view's own budget is the number of domains, which is operator
+configuration. The collapse-to-applications fallback ADR-0211 §7 already ships has exactly
+the shape the expansion needs, which is why this is an extension of the existing altitudes
+(§5) rather than a new picture.
+
+### 3. A peer that does not answer is a shape, not a gap
+
+The four states carry over unchanged — *unreachable* is nothing is known, *stale* is
+something is known and may be wrong, and the two are never rendered alike (ADR-0211 §4).
+A federated starmap adds a fifth case that deserves its own word rather than being folded
+into either:
+
+**the peer answered, and does not serve this view.** An older build whose descriptor
+advertises no `panorama.mesh` feature is neither unreachable nor stale — it is a version
+boundary. Reading it as unreachable sends an operator to look at a network; reading it as
+stale implies there was once an answer. The descriptor's derived feature list is what makes
+this distinguishable at all, which is the property it was built for.
+
+### 4. No edge is invented across the boundary
+
+The only estate-wide edges that are facts today are the application joins a promotion
+recorded. Two things are therefore explicitly refused:
+
+- **a message flow somebody drew is not an edge here.** ADR-0023 made the arrow
+  documentation and the parser still does not read `<messageFlow>`; drawing it on a derived
+  picture would be a drawn assertion on the one canvas that admits none;
+- **a peer's promotion history is not an edge either.** This server knows it promoted
+  application X to target T. It does not know what else T runs, or where T promotes onward.
+  An edge implying it does would be inference dressed as fact.
+
+Real cross-node edges arrive with #986: a published interface ([ADR-0373](0373-published-process-interface.md))
+is a declared contract, and a delivered envelope
+([ADR-0372](0372-peer-message-delivery-worker.md)) is an observed traversal in the sense of
+ADR-0400. Both are facts, and
+both are drawable when they exist. Until then the estate view draws domains, their
+contents and the promotion joins, and says that is what it draws.
+
+### Consequences
+
+- **Positive:** buildable **before any of #986 lands**, because it rides ADR-0129 targets
+  and the existing peer channel rather than messaging. The value is real on day one: which
+  domain runs which version of a shared definition, and where an application has drifted
+  between Test and Production — the comparison that today means opening two browser tabs
+  and reading carefully.
+- **Positive:** no node becomes a master, so there is nothing to elect, nothing to
+  reconcile, and an estate of two works the same way as an estate of twenty.
+- **Negative / trade-offs accepted:** it is an operator's view, and will stay one until
+  cross-installation identity exists. A domain owner cannot be given a scoped estate view,
+  and this record does not pretend otherwise. Known as of 2026-09 to bind rather than to be
+  hypothetical: see the open question. For a multi-domain public administration this is not
+  a limitation at the edge of the feature — it is plausibly the difference between a view
+  somebody may open and one nobody may.
+- **Negative:** the picture's completeness is a function of reachability at the moment it
+  was drawn. Four peers answering and one timing out is a different picture from the same
+  estate a minute later, and the freshness of each subgraph has to be rendered *into* it —
+  the same requirement ADR-0211 §10 already puts on every exported starmap, for the same
+  reason: an undated all-green picture is believed long after it stopped being true.
+- **Negative:** it is **not** an operational picture of the estate. Every peer's status is
+  still that peer's, at the freshness of its last answer, and no aggregate severity across
+  domains is computed. A cross-domain "is the estate healthy" reading would be a
+  monitoring claim, which ADR-0189's non-goal refuses and #986 refuses again.
+- **Follow-ups / risks to watch:** the fan-out cost when a domain count grows past the
+  four-way concurrency bound; whether a peer should be asked for a *summary* subgraph at
+  L-1 and the full one only on expansion (almost certainly yes, and it needs a route the
+  peer serves rather than a client-side trim); and the reverse direction — a node that
+  wants to know it is *in* somebody's estate view has no way to find out, which is a
+  privacy question nobody has asked yet.
+
+## Pros and cons of the options
+
+### Option 1 — a central estate registry
+- Good: one place to query, cheap reads, a natural home for history.
+- Bad: a new component to operate and back up, against the single-binary posture; an
+  election or a designation problem; and every node now has to push, which is a write path
+  where today there is only a read. It also makes the estate picture only as fresh as the
+  last report, replacing "I asked and it did not answer" with "it has not reported", which
+  is strictly less informative.
+
+### Option 2 — derive locally, stitch at the reader (chosen)
+- Good: no new storage, no master, no new protocol — the channel, the credential, the
+  feature advertisement and the four states all exist; each node stays the authority on
+  itself; authorization stays where it already is on each side.
+- Bad: cost is paid per read and grows with domain count; the picture is bounded by
+  reachability; and it is an operator's view until identity crosses installations.
+
+### Option 3 — export and diff offline
+- Good: zero server work, deterministic and committable artifacts, and a real answer for
+  "what changed between releases".
+- Bad: not a view. It answers an auditor's question on a schedule and cannot answer an
+  operator's question now. Worth keeping *as well* — the deterministic ArchiMate export
+  already exists and this is the estate-wide use for it.
+
+## Links
+
+- extends ADR-0211 (§§2–5, §7, §10 — the derivation rules, the altitudes, the budget and
+  the export honesty) and ADR-0189 §6 (the remote read constraints, unchanged)
+- builds on ADR-0129 (targets and their credential), ADR-0069 (the vault reference), the
+  node descriptor's derived feature list (ADR-0189 P4a), ADR-0071 (the local sharing scopes
+  the gate sits beside)
+- requires ADR-0401; bounded by
+  ADR-0403
+- blocked-on-nothing, but completed by [#986](https://github.com/pblumer/atlas/issues/986):
+  ADR-0373's contract and ADR-0372's delivery are what finally make a cross-node edge a
+  fact

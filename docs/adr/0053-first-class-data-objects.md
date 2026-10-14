@@ -1,6 +1,7 @@
 # ADR-0053: First-class data objects — typed, event-sourced state, and lineage
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Patrick Blumer
 

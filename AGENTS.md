@@ -41,10 +41,10 @@ go test ./...
 
 # Run tests with the race detector — MANDATORY before considering work done.
 # -timeout raises Go's default 10-minute *per-package* limit: the api package
-# alone takes 8-11 minutes under -race, so on a slower machine the default fails
+# alone takes over twenty minutes under -race, so the default fails
 # on elapsed time rather than on a defect, and the panic names whichever test
 # happened to be running. This is what CI runs, and what `make race` runs.
-go test -race -timeout=25m ./...
+go test -race -timeout=45m ./...
 
 # Vet and format checks (formatting must produce no output)
 go vet ./...
@@ -57,6 +57,18 @@ go test ./engine/...
 go test ./engine/ -run TestProcessorRecovery -v
 ```
 
+CI also runs the storage packages — `wal/`, `checkpoint/`, `state/`, `api/sidecar/`,
+`internal/` — and `engine/`, for its recovery tests, on a Windows runner
+(`windows · storage` in `.github/workflows/ci.yml`), and the whole `api/` tree and the
+Worker Types in `connector/` in a second Windows job beside it (`windows · api`), because
+a Windows binary ships and those packages are file-system and process behaviour. Linux
+cannot run those jobs for you; the closest local check is that the tests still compile
+there:
+
+```bash
+GOOS=windows go vet ./wal/... ./checkpoint/... ./state/... ./api/... ./connector/... ./internal/... ./engine/...
+```
+
 Browser end-to-end tests for the web UI (the Design-view token simulation) live in
 [`e2e/`](e2e/) and run on Playwright + Chromium — see [`e2e/README.md`](e2e/README.md).
 They are JS, not Go, so they are a separate CI job and are not part of the Go commands above.
@@ -65,7 +77,7 @@ They are JS, not Go, so they are a separate CI job and are not part of the Go co
 cd e2e && npm ci && npx playwright install chromium && npm test
 ```
 
-**Definition of done for any code change:** `go build ./...`, `go test -race -timeout=25m ./...`, `go vet ./...` all pass, and `gofmt -l .` is empty. Do not report a task complete until these are green. A `panic: test timed out` from `api` without `-timeout` is that missing flag, not a finding — re-run it with the flag before you go looking for a cause.
+**Definition of done for any code change:** `go build ./...`, `go test -race -timeout=45m ./...`, `go vet ./...` all pass, and `gofmt -l .` is empty. Do not report a task complete until these are green. A `panic: test timed out` from `api` without `-timeout` is that missing flag, not a finding — re-run it with the flag before you go looking for a cause. **A `CHANGELOG.md` entry is all the Console needs:** its release notes are read from the changelog the binary embeds (`api/releasenotes`, ADR-0444), so there is nothing to generate, translate or commit beside it. Write the bullet as Keep a Changelog has it — `- **Headline.** What changed.` under its `### Added` / `### Changed` / `### Fixed` heading — because the headline is what the Console lists; `go test ./api/releasenotes` fails when a bullet is lost to the one before it or its headline reads as a parse artefact.
 
 ## Repository layout
 
@@ -95,6 +107,10 @@ api/        HTTP API, web UI, command submission and queries
   infomodel/  The process information model: a UML class-diagram subset giving a
               BPMN data object's itemSubjectRef a type to resolve against
               (ADR-0230)
+  capability/ The business architecture: business capabilities and the value streams
+              whose stages they perform, with the realisation edge resolved at read
+              time and the gap report computed against what this server runs
+              (ADR-0305)
   formgen/    Writing a form from a description and from the process it belongs to
               (ADR-0260) — design-time authoring against the agent
               Worker an operator configured; it owns no state, so it holds no run loop
@@ -102,6 +118,15 @@ mcp/        MCP server over the HTTP API (ADR-0016)
 metrics/    Prometheus metrics (ADR-0142)
 opensearch/ OpenSearch event exporter (ADR-0114)
 cmd/atlas/  The single binary (ADR-0011)
+internal/dirsync/ Opening a directory so it can be fsynced — the one step that differs
+            on Windows, shared by wal/, checkpoint/ and api/sidecar/
+internal/sharedread/ Reading a file without blocking a delete of it or a rename over it,
+            which an os.Open handle does on Windows — api/sidecar/'s readers use it
+internal/ownerfile/ Making a file this account's alone, and checking it is: mode 0600,
+            and on Windows, which ignores modes, an access list — the vault key uses it
+internal/trustedproxy/ The client's address behind a load balancer: --trusted-proxies,
+            the PROXY protocol under the public listener and X-Forwarded-For in front of
+            the handler, read from listed peers only (ADR-0448)
 ```
 
 **`connector/` holds the Worker Types.** Every capability a model can put on a
@@ -117,6 +142,7 @@ connector/sharepoint/  SharePoint list items via Graph (ADR-0141)
 connector/remedy/      BMC Remedy AR System (ADR-0106)
 connector/jira/        Atlassian Jira issues (ADR-0201)
 connector/googlesheets/ Google Sheets and Drive (ADR-0235)
+connector/s3/          S3-compatible object storage (ADR-0442)
 connector/webscrape/   Web scraping (ADR-0118)
 connector/clio/        clio event store: read, write, query (ADR-0036)
 connector/temis/       temis decision service (ADR-0050)
@@ -127,6 +153,21 @@ connector/csvimport/   CSV-to-JSON, and the parser the upload check shares (ADR-
 Adding a Worker Type is one package here plus one `managedConnectorKind` entry in
 [`api/connectorkinds.go`](api/connectorkinds.go) — not edits scattered across the
 server.
+
+**A Worker Type also ships its setup.** One entry in
+[`api/web/workertypedocs.js`](api/web/workertypedocs.js), keyed by the Modeler catalog
+id: what has to exist before a task of it can run, the ordered steps at the provider,
+the failure it is usually reported with, the anchor of its handbook card in
+[`api/web/handbuch.html`](api/web/handbuch.html) — write that card too if the type has
+none — and a `checked` date saying when you last walked those steps at the provider. The
+properties panel, the Console's create form and the worker dialog all render it, so it is
+written once. `go test ./api -run SetupDoc` refuses a type that ships without it, a link
+into a card that no longer exists, or steps unread for over a year (ADR-0289). The
+handbook card carries that date too — `<p class="checked" data-checked="YYYY-MM">`, in
+both languages — and must agree with the entry's, since the two are one instruction at
+two lengths. When the freshness check fails, open the provider and walk the steps:
+bumping the date without re-reading tells the next reader they were verified when they
+were not.
 
 **Say Worker, not connector, in anything new you write.** [ADR-0203](docs/adr/0203-worker-execution-model.md)
 splits the old word into three: a **Worker Type** is a capability (`jira`, `mail`,
@@ -178,7 +219,13 @@ numbers (`docs/adr/number.go`, `make adr-number`).
 3. **Check the invariants** above against your plan *before* writing code.
 4. **Work test-first (TDD is the default — [ADR-0018](docs/adr/0018-test-driven-development.md)).** Write a failing test that states the intended behavior, watch it fail for the right reason, then write the minimum code to make it pass, then refactor with the test as a safety net. Anything touching persistence or the processor needs a recovery/replay test written up front (process some commands, simulate restart, replay the log, assert state matches). A bug fix starts with a failing regression test. See *Testing conventions* for the narrow, stated exceptions.
 5. **Run the full check sequence** (see Commands) until green, including `-race`.
-6. **If you changed an architectural decision**, write a new ADR instead of silently diverging — and **do not give it a number**. Copy [`docs/adr/template.md`](docs/adr/template.md) to `docs/adr/draft-<slug>.md`, keep its `# ADR-DRAFT: Title` heading, and add **no** row to [`docs/adr/README.md`](docs/adr/README.md). The number is assigned when the record lands on main, by a workflow that runs `make adr-number` there; picking one on a branch is how two records end up sharing it, and how a record gets renumbered on every merge. Cite the record as `ADR-draft-<slug>` (or link `draft-<slug>.md`) from code and docs — the numbering rewrites those citations along with the file name and adds the index row. `go test ./docs/adr` guards all of it and runs in the normal test sweep. See [`docs/adr/README.md`](docs/adr/README.md#writing-a-record) for the whole flow.
+6. **Ship the feature on every surface, and say so where people read it.** A feature is not done while only one door reaches it:
+   - **HTTP:** every new route is declared in the route table (`api/openapi.go`), with its role and what it answers; `TestOpenAPICoversEveryRoute` holds the table and the mux together.
+   - **MCP:** every new route is classified in `mcp/tool_registry_drift_test.go` — proxied by a tool in `mcp/`, or listed in `mcpOmittedRoutes` with the reason an agent must not have it. Reading is a tool unless it leaks what the HTTP route hides; deciding for a person, asserting a target system's outcome, or asking a customer's action of somebody's held right is omitted (ADR-0016, ADR-0428). An action an operator or the system asks for is a tool, limited server-side to those triggers (ADR-0429 §2). A new tool moves the tool count in `README.md`, which `TestReadmeToolCountIsCurrent` checks.
+   - **Docs:** the ADR's *As built* note and, where one exists, its plan under `docs/planning/`; `CHANGELOG.md`, which is also the Console's release notes; `e2e/README.md` for a new spec.
+   - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) changes in the same pull request when a bullet's status changes (🔲 → 🚧 → ✅) or a feature lands that it does not list yet. A roadmap that trails the code by a hundred records is a roadmap nobody can plan from.
+   - **Issues:** a pull request that fixes an issue says `Fixes #N` in its description, so the merge closes it; one that fixes part of it says in the issue what is left. A fix that lands without that line leaves an issue open that reads as work nobody has done — three such issues were found open long after their fix had shipped.
+7. **If you changed an architectural decision**, write a new ADR instead of silently diverging — and **do not give it a number**. Copy [`docs/adr/template.md`](docs/adr/template.md) to `docs/adr/draft-<slug>.md`, keep its `# ADR-DRAFT: Title` heading, and add **no** row to [`docs/adr/README.md`](docs/adr/README.md). Set **both** state lines: `Status` says whether the decision holds, `Implementation` says whether it is built, and `go test ./docs/adr` refuses `Implementation: Landed` under any status but `Accepted` — a record that arrives with its code is `Accepted` / `Landed` (see [`docs/adr/README.md`](docs/adr/README.md#the-two-states-of-a-record)). If the record is right only while something you could not settle stays unknown, say so in its front matter with an `Open question` and a `Question checked` month — `go test ./docs/adr` then insists somebody looks at that question once a year, so the gap cannot quietly become settled truth (see [`docs/adr/README.md`](docs/adr/README.md#when-the-record-rests-on-a-question-you-could-not-answer)). The number is assigned when the record lands on main, by a workflow that runs `make adr-number` there; picking one on a branch is how two records end up sharing it, and how a record gets renumbered on every merge. Cite the record as `ADR-draft-<slug>` (or link `draft-<slug>.md`) from code and docs — the numbering rewrites those citations along with the file name and adds the index row. `go test ./docs/adr` guards all of it and runs in the normal test sweep. See [`docs/adr/README.md`](docs/adr/README.md#writing-a-record) for the whole flow.
 
 ## Testing conventions
 
@@ -193,9 +240,16 @@ numbers (`docs/adr/number.go`, `make adr-number`).
 
 - **`applyToState` is special.** It is called both live and on recovery. Side effects (notifications, network, time reads) must *not* live here — only deterministic state mutation. Put side effects in the processor's post-fsync phase.
 - **A query that can grow with the instance population does not belong on the run loop.** `Server.do` gives its closure the engine's single writer for as long as it runs, so a scan dispatched onto it stops command processing for every other request. Use `Server.readOffLoop`: it takes a `state.ReadView` and the deployment metadata on the loop, then runs the scan with the loop free (ADR-0080, ADR-0239). Better still, check whether the answer is already a maintained counter or an index.
+
+- **Nor does anything else that grows with the data — it is not only queries.** The same `Server.do` closure that must not hold a scan must not hold a whole-store read either, and those hide in work nobody calls a query: publishing a checkpoint checksums every SST file in the store, and resolving the WAL compaction cut verifies checkpoints, which is that read again. Both sat on the loop behind comments calling them bounded, and on a store of a few GB they froze the entire API for seconds at a time, on a cadence (ADR-0382). Before you dispatch onto the loop, ask what the closure's cost is a function of. If the answer is anything that grows — instances, tokens, history, bytes on disk — only the part that genuinely needs the writer stopped goes on it, and the rest runs after. Note that this is why a *read-only* request can hang too: `readOffLoop` still takes a loop turn to open its view, so a held writer holds every request, not just the writing ones.
+- **A new compiler rule must not be able to stop the server from starting.** Every deployed definition is recompiled at boot, so a rule you add today is applied to models deployed long before it existed. That rule decides whether a model may be *deployed*, never whether it may be *loaded* (ADR-0177, ADR-0393). The mechanism is not automatic and it is not the stage: `parseNamed`'s reload escape hatch only recognises a `*ValidationError` carrying a compiled process, so a refusal raised anywhere earlier — in the build stage, where `compileFEEL` lives — arrives as a plain error and is fatal at boot. That is not theoretical: refusing a FEEL call that can only ever be null (ADR-0388) was implemented at that door, and one stored probe model took a production server into a crash loop with every other definition and fifty thousand instances behind it. If your rule refuses something the engine can still *run*, make sure the reload path can keep it and report it instead — a compile that produces nothing runnable is the one case that stays fatal (ADR-0019).
+
 - **Followup commands vs. events.** Emitting an event mutates state now and is persisted now. Scheduling a followup command defers work to the next batch. Don't confuse them; see `ProcessingContext` in [`processor.md`](docs/architecture/processor.md).
 - **Element IDs are integer indices**, not strings, everywhere in engine code. Strings are interned at compile time. Don't reintroduce string handling on the hot path.
 - **Keys encode the partition** in their high bits. Don't invent keys by hand; use the key generator.
+- **A user-facing feature owes a look at the key-features tile.** The Console's landing page says what Atlas *is* in fourteen evergreen statements ([`api/web/key-features.json`](api/web/key-features.json)), and a product that grows makes that list quietly incomplete — nothing renders wrong, the capability is simply missing. So the file carries a `reviewedThrough` marker naming the newest CHANGELOG `### Added` bullet it has been held against, and `go test ./api` fails while bullets sit above it. Ask the one question — does this change what Atlas is? — then edit the tile (both languages) if it does, and move the marker either way. "No, nothing to add" is the normal answer and costs one line.
+
+- **A new job type owes a registry row.** Adding a name to `compiler.ReservedJobTypes` is what brings a Worker Type into existence, so `api/releasedkinds.go` needs a row for it saying which ADR decided it, what class it is, and which Repository package advertises it. `go test ./api` fails until it does ([ADR-0167](docs/adr/0167-released-connectors-ship-in-the-marketplace.md)). A connector kind whose record is `Accepted` owes a package too; the count of kinds still missing one is pinned in that file and may only fall.
 
 ## Style
 
@@ -226,7 +280,11 @@ it will be read by humans.
   doesn't collide with an edge or node.
 - **Check the render, not just the deploy.** Open the model in the
   Operations/Modeler view (or a rendered preview) and confirm there are no
-  overlaps before calling it done.
+  overlaps before calling it done. `go test ./api/layout` holds every model
+  under `api/systemprocesses/` and `examples/` to the layout invariants — no
+  overlapping shapes or captions, no edge through a shape or ending beside it, a
+  position for every caption — and a model it rejects is not done. It cannot see
+  everything: a caption it passes may still sit awkwardly, so look anyway.
 - **Document the model in the model.** Every BPMN element may carry a
   `<bpmn:documentation>`, and Atlas reads it: the Modeler shows it in the
   Documentation field, the replay shows it beside the selected element, and it
@@ -240,6 +298,22 @@ it will be read by humans.
   null, not 0; a parallel round must not accumulate). A model that has to be
   explained alongside itself is not finished.
 
+## Commit attribution
+
+A commit is made under whatever git identity the session or the person running it
+already has, and every commit an agent makes keeps its `Co-Authored-By:` trailer.
+That trailer and the committer field are the record of what produced the change;
+nothing in this repository rewrites the author field, and no check inspects it.
+
+Between 2026-09-08 and 2026-09-11 a session hook and a CI check did, so that GitHub
+would count an agent's commit for the person who asked for it. Both are gone: the only
+repair the check could offer was a history rewrite of the whole branch, which kept
+reopening conflicts on branches that were mergeable before it ran. ADR-0288 still holds
+the argument for the split; ADR-0302 says why it is no
+longer enforced here.
+
+Do not rewrite the author of commits that are already on `main`.
+
 ## Pointers
 
 | I need to… | Go to |
@@ -249,6 +323,10 @@ it will be read by humans.
 | Write a decision record | [`docs/adr/README.md`](docs/adr/README.md#writing-a-record) — copy the template to `draft-<slug>.md`, **do not pick a number** |
 | See what to build next | [`ROADMAP.md`](ROADMAP.md) |
 | Look up a term | [`docs/architecture/glossary.md`](docs/architecture/glossary.md) |
+| Understand business capabilities and value streams | [`docs/architecture/business-architecture.md`](docs/architecture/business-architecture.md) |
+| Know how the catalogue relates to TMF620 and the other standards | [`docs/comparisons/catalogue-standards.md`](docs/comparisons/catalogue-standards.md) |
 | Check the rules I must not break | [`docs/architecture/invariants.md`](docs/architecture/invariants.md) |
 | Set or overwrite a running instance's variables | `POST /api/v1/instances/{key}/variables` — [ADR-0095](docs/adr/0095-external-variable-modification.md) |
 | See who overrode an instance's variables (the audit trail) | `GET /api/v1/instances/{key}/variable-audit` — [ADR-0098](docs/adr/0098-external-variable-modification-audit.md) |
+| Move a running instance onto a fixed version of its process | `POST /api/v1/instances/{key}/migrate` — [ADR-0162](docs/adr/0162-process-instance-migration.md) |
+| Continue an instance in a new one when its tokens cannot be rebound | `POST /api/v1/instances/{key}/migrate/fork` — [ADR-0389](docs/adr/0389-forked-instance-migration.md) |

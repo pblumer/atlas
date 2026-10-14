@@ -73,7 +73,7 @@ func (f *failRW) WriteHeader(int)           {}
 func TestWriteBackupWalkError(t *testing.T) {
 	// Opening the first allowlisted directory fails with a non-not-exist error,
 	// which the walk must surface rather than swallow.
-	fsys := errFS{FS: fstest.MapFS{}, failOpen: backupDirs[0]}
+	fsys := errFS{FS: fstest.MapFS{}, failOpen: backupDirs()[0]}
 	if err := writeBackup(tar.NewWriter(&bytes.Buffer{}), fsys); err == nil {
 		t.Fatal("writeBackup: want error from a failed directory walk, got nil")
 	}
@@ -102,7 +102,7 @@ func TestWriteBackupHeaderAndBodyWriteErrors(t *testing.T) {
 }
 
 func TestStreamBackupSurfacesWriteBackupError(t *testing.T) {
-	fsys := errFS{FS: fstest.MapFS{}, failOpen: backupDirs[0]}
+	fsys := errFS{FS: fstest.MapFS{}, failOpen: backupDirs()[0]}
 	if err := streamBackup(&bytes.Buffer{}, fsys); err == nil {
 		t.Fatal("streamBackup: want the underlying walk error, got nil")
 	}
@@ -211,5 +211,24 @@ func TestRestoreDestMapsTheLegacyMarketplaceDirectory(t *testing.T) {
 				t.Errorf("restoreDest(%q) = %q, want %q", tc.entry, dest, tc.want)
 			}
 		})
+	}
+}
+
+// TestABackupCarriesACatalogueLogo closes the assumption the theme record left
+// open. A catalogue's accent rides in its record and is carried because the record
+// is; its brand mark is a file beside the stores, in a subdirectory, and nothing
+// said whether the walk reaches it. Losing every customer's logo on restore while
+// the archive reported success is exactly the failure ADR-0282 was written about.
+func TestABackupCarriesACatalogueLogo(t *testing.T) {
+	fsys := fstest.MapFS{
+		"catalog/catalogs/aa.json":     {Data: []byte(`{"id":"cat_1"}`)},
+		"catalog/logos/6361745f31.png": {Data: []byte("mark")},
+	}
+	var buf bytes.Buffer
+	if err := writeBackup(tar.NewWriter(&buf), fsys); err != nil {
+		t.Fatalf("writeBackup: %v", err)
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("catalog/logos/6361745f31.png")) {
+		t.Error("the archive does not carry a catalogue's brand mark")
 	}
 }

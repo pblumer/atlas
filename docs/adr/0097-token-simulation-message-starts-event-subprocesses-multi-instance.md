@@ -1,6 +1,7 @@
 # ADR-0097: Token simulation — message starts, event-subprocess triggers, and multi-instance
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-06
 - **Deciders:** Atlas maintainers
 

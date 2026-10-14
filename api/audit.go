@@ -34,7 +34,8 @@ import (
 //     An attribute is precisely what a log shipper extracts, indexes and keeps.
 
 // auditActor returns the attributes every audit line carries about who is acting:
-// the client address always, and the principal when the request has one.
+// the client address always, the trusted proxy that named it where one did, and the
+// principal when the request has one.
 //
 // A login attempt has no principal yet — that is what it is trying to become — so
 // the address is what identifies it, and the username it named is passed by the
@@ -43,6 +44,13 @@ import (
 // starts crediting actions to the victim.
 func auditActor(r *http.Request) []slog.Attr {
 	attrs := []slog.Attr{slog.String("client_ip", httpapi.ClientIP(r))}
+	// Behind a load balancer the connection is the balancer's, and client_ip is the
+	// client it vouched for (ADR-0448). The balancer is kept beside
+	// it, so a request that came round it — no via — can be told from one that came
+	// through it.
+	if via := httpapi.Via(r); via != "" {
+		attrs = append(attrs, slog.String("via", via))
+	}
 	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 		attrs = append(attrs,
 			slog.String("actor", p.Username),

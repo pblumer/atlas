@@ -1,6 +1,7 @@
 # ADR-0075: A clio inbound event bridge — at-least-once ingestion with engine-side idempotent delivery
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-28
 - **Deciders:** Atlas engine team
 

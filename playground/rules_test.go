@@ -155,6 +155,13 @@ func TestAConditionNothingMatchesSelectsNothing(t *testing.T) {
 // A rule that will not compile is refused where it is written. The alternative is
 // a rule that silently matches nothing for the rest of the run — the one thing an
 // assertion must never do.
+//
+// "Will not compile" includes a call this build can only answer with null
+// (ADR-0388), which does compile. The engine keeps invocation total for DMN's
+// sake, so `is defined(x)` becomes a constant null: as a When it selects no case,
+// as a Then it fails every one — a verdict reached for a reason that has nothing
+// to do with the run. The playground is where somebody is learning which dialect
+// Atlas speaks, which is exactly when being told beats being let through.
 func TestARuleThatWillNotCompileIsRefused(t *testing.T) {
 	sb := openSandbox(t, "exclusive-gateway.bpmn", playground.StubSet{
 		Human: &playground.Stub{Min: time.Minute, Max: time.Minute},
@@ -169,6 +176,12 @@ func TestARuleThatWillNotCompileIsRefused(t *testing.T) {
 		{"a condition that is not an expression", playground.Rule{When: "amount <", Then: "true"}, "not an expression"},
 		{"an expectation that is not an expression", playground.Rule{Then: "end = "}, "not an expression"},
 		{"an expectation that is empty", playground.Rule{When: "true"}, "says nothing"},
+		{"a condition calling another engine's function",
+			playground.Rule{When: "is defined(amount)", Then: "true"}, "x != null"},
+		{"an expectation calling another engine's function",
+			playground.Rule{Then: "is defined(end)"}, "x != null"},
+		{"an expectation calling a built-in with the wrong argument count",
+			playground.Rule{Then: "date() = null"}, "cannot work"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := sb.JudgeRules([]playground.Rule{tc.rule})
@@ -179,6 +192,26 @@ func TestARuleThatWillNotCompileIsRefused(t *testing.T) {
 				t.Errorf("error = %q, want it to say %q", err, tc.says)
 			}
 		})
+	}
+}
+
+// The refusal above has to let through everything a reading cannot resolve, or it
+// blocks rules that run. A callee the expression binds itself is the case that
+// matters: the engine looks it up in the scope at evaluation time.
+func TestARuleWhoseCalleeItBindsItselfIsAccepted(t *testing.T) {
+	sb := openSandbox(t, "exclusive-gateway.bpmn", playground.StubSet{
+		Human: &playground.Stub{Min: time.Minute, Max: time.Minute},
+	})
+	runPlan(t, sb, playground.Plan{Cases: creditCases(2)})
+
+	for _, r := range []playground.Rule{
+		{When: "amount != null", Then: `end != ""`},
+		{When: "count([amount]) = 1", Then: "true"},
+		{Then: "every f in [function(x) x] satisfies f(1) = 1"},
+	} {
+		if _, err := sb.JudgeRules([]playground.Rule{r}); err != nil {
+			t.Errorf("%+v was refused: %v", r, err)
+		}
 	}
 }
 

@@ -404,6 +404,46 @@ const DiscordJobType = "io.atlas.discord"
 // way the Jira worker uses JiraJobTypeIndex.
 const DiscordJobTypeIndex int32 = 29
 
+// ShopJobType is the reserved job type a shop send task carries (ADR-0429 §4): the
+// point where a product's process states how an action ended, or — in a later mode —
+// issues one of its own. The server serves it itself: it only changes state the run
+// loop owns, reaches no system and holds no credential, which is the one exception
+// ADR-0164 and ADR-0233 allow for an engine-only job type.
+const ShopJobType = "io.atlas.shop"
+
+// ShopJobTypeIndex is the interned index ShopJobType is guaranteed to occupy in every
+// compiled process: NewBuilder reserves it thirty-first, so it is always 30.
+const ShopJobTypeIndex int32 = 30
+
+// ShopCommandJobType is the reserved job type of a shop send task in mode `command`
+// (ADR-0429 §4, §10 decision 1): the point where a process issues an action on a
+// position it does not carry. It is a type of its own because its handler acts
+// through the order act, which waits on the run loop, so it may run only in a round
+// that works its jobs off the loop — never in the in-process drive a fork or a
+// migration runs on it.
+const ShopCommandJobType = "io.atlas.shop.command"
+
+// ShopCommandJobTypeIndex is the interned index ShopCommandJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it thirty-second, so it is
+// always 31.
+const ShopCommandJobTypeIndex int32 = 31
+
+// S3JobType is the reserved job type an object-store task carries
+// (ADR-0442). One job type serves every object operation — put
+// one down, read a small one back, ask whether it is there, list what is under a prefix,
+// copy one, delete one, or mint a time-limited URL somebody can open it with — because
+// they share a bucket, a credential and an error envelope; the operation is a modeled
+// value rather than a reserved index of its own, as it is for Jira (ADR-0201), Google
+// Sheets (ADR-0235) and Discord (ADR-0258).
+const S3JobType = "io.atlas.s3"
+
+// S3JobTypeIndex is the interned index S3JobType is guaranteed to occupy in every
+// compiled process: NewBuilder reserves it thirty-third, so it is always 32. Together
+// with the name it lets a job carry its type as an integer and the in-process S3 worker
+// subscribe by one global index across every deployed process, the same way the Jira
+// worker uses JiraJobTypeIndex.
+const S3JobTypeIndex int32 = 32
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -441,6 +481,9 @@ var reservedJobTypes = []string{
 	AgentJobType,         // 27
 	AiTaskJobType,        // 28
 	DiscordJobType,       // 29
+	ShopJobType,          // 30
+	ShopCommandJobType,   // 31
+	S3JobType,            // 32
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -487,6 +530,12 @@ type Builder struct {
 	bpmnProcessId string
 	version       int32
 
+	// feel decides what this compile does with a FEEL call that can only ever be
+	// null: refuse it, as a deploy does, or keep it and report it, as a reload does
+	// (see feelcalls.go). nil means strict, so a Builder assembled directly — in a
+	// test, or by a caller building a process by hand — behaves like a deploy.
+	feel *feelGate
+
 	nodes              []CompiledNode
 	flows              []CompiledFlow
 	serviceTasks       []ServiceTaskDetail
@@ -527,10 +576,17 @@ type Builder struct {
 	lanes              []LaneDetail                // organizational lanes (ADR-0121)
 	documentation      int32                       // interned <bpmn:documentation> of the process itself, -1 if none
 	startFormId        int32                       // interned start-form id (ADR-0028), -1 if the process has none
+	startVars          []StartVariable             // declared start variables (atlas:startForm), nil = none
+	constants          []Constant                  // process constants (atlas:constants), nil = none
+	conditionalStarts  []int32                     // process-level start nodes that carried a conditional event definition (RuleConditionalStart)
+	eventGatewayKinds  []eventGatewayKind          // event-based gateways of a kind atlas does not run (RuleEventGatewayKind)
+	invalidWizards     []int32                     // subprocess nodes whose atlas:wizard named no kind (RuleWizardValue, ADR-0449)
 	versionTag         int32                       // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64                       // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	historyTtlNanos    int64                       // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
 	searchableVars     []string                    // variable names the value index is maintained for, nil = none
+	personalVars       []string                    // variable names holding personal data, nil = none (ADR-0314)
+	dataSubjectVar     string                      // variable holding the data subject's id, "" = none (ADR-0314)
 	isExecutable       bool                        // bpmn:isExecutable; defaults true (set in NewBuilder)
 
 	// flowScope is the enclosing scope every node added now lands in: -1 for the
@@ -566,6 +622,19 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	}
 	return b
 }
+
+// gate is the FEEL-call gate this compile runs under, defaulting to strict so a
+// Builder that nobody handed one behaves like a deploy (see feelcalls.go).
+func (b *Builder) gate() *feelGate {
+	if b.feel == nil {
+		return strictFEEL
+	}
+	return b.feel
+}
+
+// setFeelGate is how a parse hands the Builder the gate it compiles under. Only
+// compileProcess calls it; every other Builder keeps the strict default.
+func (b *Builder) setFeelGate(g *feelGate) { b.feel = g }
 
 // agentParamSpec is one <atlas:agentParam> as authored, before it is validated and
 // interned into an AgentParam. It is a plain data struct so the builder never handles the
@@ -833,6 +902,27 @@ func (b *Builder) AddStartEvent() int32 { return b.addNode(TypeStartEvent, -1) }
 // It is design-time metadata the engine ignores.
 func (b *Builder) SetStartFormId(id string) { b.startFormId = b.intern(id) }
 
+// SetStartVariables records the process's declared start variables (atlas:startForm).
+// Like the start form, it is design-time metadata the engine ignores.
+func (b *Builder) SetStartVariables(vs []StartVariable) { b.startVars = vs }
+
+// markConditionalStart records that the process-level start node id carried a
+// conditional event definition. The node stays the plain start it has always
+// compiled to; the mark is what lets stage 5 refuse it at deploy while a reload
+// brings a stored definition back unchanged (RuleConditionalStart, ADR-0177).
+func (b *Builder) markConditionalStart(id int32) {
+	b.conditionalStarts = append(b.conditionalStarts, id)
+}
+
+// markEventGatewayKind records that the event-based gateway node id was marked as a
+// kind atlas does not run — instantiating, parallel, or both. The node stays the
+// exclusive deferred choice it has always compiled to; the mark is what lets stage 5
+// refuse it at deploy while a reload brings a stored definition back unchanged
+// (RuleEventGatewayKind, ADR-0177, #804).
+func (b *Builder) markEventGatewayKind(id int32, instantiate, parallel bool) {
+	b.eventGatewayKinds = append(b.eventGatewayKinds, eventGatewayKind{Node: id, Instantiate: instantiate, Parallel: parallel})
+}
+
 // SetExecutable records the process's bpmn:isExecutable flag. A non-executable
 // process is descriptive-only — the API refuses to start it and hides it from the
 // start surfaces (it still deploys and lists so it can be inspected).
@@ -858,6 +948,16 @@ func (b *Builder) SetHistoryTtl(nanos int64) { b.historyTtlNanos = nanos }
 // names — see [CompiledProcess.IsSearchableVariable] — so a process that declares
 // none pays nothing for the feature.
 func (b *Builder) SetSearchableVariables(names []string) { b.searchableVars = names }
+
+// SetPersonalVariables declares which variables hold personal data (ADR-0314). The
+// declaration is what makes [Builder.Build] refuse a process that reads one of them in
+// an expression, so it is set before Build rather than checked after it.
+func (b *Builder) SetPersonalVariables(names []string) { b.personalVars = names }
+
+// SetDataSubjectVariable declares which variable holds the id of the person the
+// personal variables are about (ADR-0314). It is the name the enciphering edge looks
+// the data key up by, and the name the erasure route destroys a key under.
+func (b *Builder) SetDataSubjectVariable(name string) { b.dataSubjectVar = name }
 
 // AddMessageStartEvent adds a message start event and returns its element id. It
 // is a process entry point like a none start event — at runtime it simply flows
@@ -1617,6 +1717,16 @@ type MailConfig struct {
 	Body      RestExpr
 	BodyHTML  RestExpr
 	Retries   int32
+	// The mailbox half (ADR-0438): the operation ("" is send) and
+	// what it takes. ResultVar names the variable list, get and move answer into.
+	Operation   string
+	Folder      RestExpr
+	Message     RestExpr
+	Destination RestExpr
+	MaxResults  int32
+	IncludeBody bool
+	UnreadOnly  bool
+	ResultVar   string
 }
 
 // AddMailConnectorTask adds an outbound mail task and returns its element
@@ -1628,24 +1738,35 @@ type MailConfig struct {
 // the named worker, never authored in the model — mirroring clio (ADR-0036).
 func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 	detail := int32(len(b.connectorTasks))
+	resultVar := int32(-1) // a send produces no result variable
+	if cfg.ResultVar != "" {
+		resultVar = b.intern(cfg.ResultVar)
+	}
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:     b.intern(MailJobType),
-		Connector:   b.intern(cfg.Connector),
-		Subject:     -1, // not a clio task
-		EventType:   -1,
-		ClioQuery:   -1,
-		ReduceSpec:  -1,
-		Method:      -1, // not a REST task
-		ResultVar:   -1, // mail sends, it produces no result variable
-		Auth:        -1,
-		To:          cfg.To,
-		Cc:          cfg.Cc,
-		Bcc:         cfg.Bcc,
-		From:        cfg.From,
-		MailSubject: cfg.Subject,
-		Body:        cfg.Body,
-		BodyHTML:    cfg.BodyHTML,
-		Retries:     cfg.Retries,
+		JobType:         b.intern(MailJobType),
+		Connector:       b.intern(cfg.Connector),
+		Subject:         -1, // not a clio task
+		EventType:       -1,
+		ClioQuery:       -1,
+		ReduceSpec:      -1,
+		Method:          -1, // not a REST task
+		ResultVar:       resultVar,
+		Auth:            -1,
+		To:              cfg.To,
+		Cc:              cfg.Cc,
+		Bcc:             cfg.Bcc,
+		From:            cfg.From,
+		MailSubject:     cfg.Subject,
+		Body:            cfg.Body,
+		BodyHTML:        cfg.BodyHTML,
+		Retries:         cfg.Retries,
+		MailOp:          cfg.Operation,
+		MailFolder:      cfg.Folder,
+		MailMessage:     cfg.Message,
+		MailDestination: cfg.Destination,
+		MailMaxResults:  cfg.MaxResults,
+		MailIncludeBody: cfg.IncludeBody,
+		MailUnreadOnly:  cfg.UnreadOnly,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
@@ -1960,6 +2081,81 @@ func (b *Builder) AddDiscordConnectorTask(cfg DiscordConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
+// S3Config is the deploy-time configuration of an object-store task
+// (ADR-0442). Worker names the configured S3 Worker (whose
+// access key lives server-side, never in the model) and Operation is the object
+// operation. It is read from the task's `connector="…"` attribute, which keeps the
+// pre-ADR-0203 spelling because it is authored in deployed models. The remaining values
+// are the ones that operation takes — literal-or-FEEL values (the parser compiles the
+// FEEL ones) evaluated over the variables the task sees at call time.
+//
+// Encoding, MaxKeys and ExpiresIn are compiled structure rather than authored values,
+// because each decides the *shape* of a call rather than its content and the compiler
+// has already applied their defaults, so the runtime interprets nothing (I5). Metadata
+// are extra request headers as name/literal-or-FEEL pairs. ResultVar, if set, is the
+// process variable what the store returned is written back into.
+type S3Config struct {
+	Worker       string
+	Operation    string
+	Bucket       RestExpr
+	Key          RestExpr
+	Content      RestExpr
+	ContentType  RestExpr
+	Encoding     string
+	Prefix       RestExpr
+	Delimiter    RestExpr
+	StartAfter   RestExpr
+	MaxKeys      int32
+	SourceBucket RestExpr
+	SourceKey    RestExpr
+	ExpiresIn    int32
+	Metadata     []RestKV
+	ResultVar    string
+	Retries      int32
+}
+
+// AddS3ConnectorTask adds an object-store task and returns its element id. Like a
+// service task it creates a job on activation and waits; the job carries the reserved
+// S3JobType so the in-process S3 worker picks it up, evaluates the authored
+// literal-or-FEEL values over the variables the task sees, resolves the named Worker's
+// client, performs the one operation, writes what the store returned into ResultVar
+// (empty = discard it), and completes the job. The access key is resolved server-side
+// from the named Worker, never authored in the model — mirroring Jira, Google Sheets
+// and Discord (ADR-0201/0235/0258).
+//
+// The method keeps the Add*ConnectorTask name its siblings on this Builder carry;
+// renaming that family is its own step of the ADR-0203 migration.
+func (b *Builder) AddS3ConnectorTask(cfg S3Config) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:        b.intern(S3JobType),
+		Connector:      b.intern(cfg.Worker),
+		Subject:        -1, // not a clio task
+		EventType:      -1,
+		ClioQuery:      -1,
+		ReduceSpec:     -1,
+		Method:         -1, // not a REST task
+		ResultVar:      b.intern(cfg.ResultVar),
+		Auth:           -1,
+		S3Op:           b.intern(cfg.Operation),
+		S3Bucket:       cfg.Bucket,
+		S3Key:          cfg.Key,
+		S3Content:      cfg.Content,
+		S3ContentType:  cfg.ContentType,
+		S3Encoding:     b.intern(cfg.Encoding),
+		S3Prefix:       cfg.Prefix,
+		S3Delimiter:    cfg.Delimiter,
+		S3StartAfter:   cfg.StartAfter,
+		S3MaxKeys:      cfg.MaxKeys,
+		S3SourceBucket: cfg.SourceBucket,
+		S3SourceKey:    cfg.SourceKey,
+		S3ExpiresIn:    cfg.ExpiresIn,
+		S3Metadata:     cfg.Metadata,
+		Retries:        cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
 // GoogleSheetsConfig is the deploy-time configuration of a Google Sheets task
 // (ADR-0235). Worker names the Google identity an operator
 // configured (whose credential lives server-side, never in the model) and Operation is
@@ -2122,20 +2318,54 @@ func (b *Builder) AddWebScrapeConnectorTask(cfg WebScrapeConfig) int32 {
 
 // AddUserTask adds a user task that parks a token and creates a job for a human
 // to complete via the Tasks app (ADR-0028). assignee and candidateGroups are
-// optional (empty strings are stored as -1). Returns its element id.
-func (b *Builder) AddUserTask(name, assignee, candidateGroups, formId string, priority int32, dueDateNanos int64, retries int32) int32 {
+// optional: an empty [Assignment] is stored as -1 and no expression. Returns its
+// element id.
+func (b *Builder) AddUserTask(name string, assignee, candidateGroups Assignment, formId string, priority int32, dueDateNanos int64, retries int32) int32 {
 	detail := int32(len(b.userTasks))
 	b.userTasks = append(b.userTasks, UserTaskDetail{
-		JobType:         b.intern(UserTaskJobType),
-		Name:            b.intern(name),
-		Assignee:        b.intern(assignee),
-		CandidateGroups: b.intern(candidateGroups),
-		FormId:          b.intern(formId),
-		Priority:        priority,
-		DueDateNanos:    dueDateNanos,
-		Retries:         retries,
+		JobType:             b.intern(UserTaskJobType),
+		Name:                b.intern(name),
+		Assignee:            b.intern(assignee.Literal),
+		CandidateGroups:     b.intern(candidateGroups.Literal),
+		AssigneeExpr:        assignee.Expr,
+		CandidateGroupsExpr: candidateGroups.Expr,
+		FormId:              b.intern(formId),
+		Priority:            priority,
+		DueDateNanos:        dueDateNanos,
+		Retries:             retries,
 	})
 	return b.addNode(TypeUserTask, detail)
+}
+
+// Assign reads one assignment attribute the way the model vocabulary means it: a
+// value beginning with "=" is a FEEL expression, anything else a literal name.
+// That is the same rule zeebe:input sources and a REST worker's fields already
+// follow, so a modeller writes one thing everywhere.
+//
+// what names the attribute for the error message; taskID names the task. An empty
+// value is an absent assignment, not an empty expression.
+//
+// It compiles strictly, as a deploy does. The compile path calls [assign] with the
+// gate its own parse carries, so a reload keeps a stored expression the build that
+// stored it kept (see feelcalls.go).
+func Assign(taskID, what, raw string) (Assignment, error) {
+	return assign(strictFEEL, taskID, what, raw)
+}
+
+func assign(g *feelGate, taskID, what, raw string) (Assignment, error) {
+	trimmed := strings.TrimSpace(raw)
+	if !strings.HasPrefix(trimmed, "=") {
+		return Assignment{Literal: raw}, nil
+	}
+	text := strings.TrimSpace(trimmed[1:])
+	if text == "" {
+		return Assignment{}, fmt.Errorf("compiler: user task %q has an empty FEEL expression for %s", taskID, what)
+	}
+	e, err := g.compileFEEL(text)
+	if err != nil {
+		return Assignment{}, fmt.Errorf("compiler: user task %q: %s: %w", taskID, what, err)
+	}
+	return Assignment{Expr: e}, nil
 }
 
 // AddBoundaryTimerEvent adds a timer boundary event attached to host, firing
@@ -2249,21 +2479,55 @@ func (b *Builder) AddDataInputAssociation(node int32, dataObject, variable strin
 	})
 }
 
+// DataWrite is one assignment as an author states it, before interning: a FEEL value
+// and the member path it targets (empty for the whole value). It is the builder's
+// argument shape; DataObjectWrite is the compiled one.
+type DataWrite struct {
+	Value      *expr.Compiled
+	TargetPath string
+}
+
 // AddDataOutputAssociation attaches a data-output association to activity node: when
 // the activity completes, the engine evaluates value (a FEEL expression over the
 // instance's variables, nil for a state-only transition) and writes it into the data
 // object named dataObject, advancing that object's data state to targetState (empty
 // keeps the object's current state) — ADR-0058. A non-empty targetPath writes only
-// that member of a structured object, keeping the rest (ADR-0060). Build groups a
-// node's associations into a shared array.
+// that member of a structured object, keeping the rest (ADR-0060).
+//
+// This is the one-write case of AddDataOutputAssociationWrites, which every caller
+// that has a single assignment to add says more plainly.
 func (b *Builder) AddDataOutputAssociation(node int32, dataObject string, value *expr.Compiled, targetState, targetPath string) {
+	b.AddDataOutputAssociationWrites(node, dataObject, targetState,
+		[]DataWrite{{Value: value, TargetPath: targetPath}})
+}
+
+// AddDataOutputAssociationWrites attaches a data-output association carrying several
+// writes — the association's <assignment> elements in document order, which BPMN
+// allows any number of (ADR-0350). They are
+// applied in order onto one value and appended as one event, so one activity writing
+// five members of one object is one arrow and one fact.
+//
+// A write with no value is not a write: it is how an association with no <assignment>
+// at all reaches here, and ADR-0058 makes that a state-only transition. Dropping it
+// keeps "has writes" and "writes something" the same question everywhere downstream.
+// Build groups a node's associations into a shared array.
+func (b *Builder) AddDataOutputAssociationWrites(node int32, dataObject, targetState string, writes []DataWrite) {
+	compiled := make([]DataObjectWrite, 0, len(writes))
+	for _, w := range writes {
+		if w.Value == nil {
+			continue
+		}
+		compiled = append(compiled, DataObjectWrite{Value: w.Value, TargetPath: b.intern(w.TargetPath)})
+	}
+	if len(compiled) == 0 {
+		compiled = nil
+	}
 	b.dataOutAssocs = append(b.dataOutAssocs, pendingDataOut{
 		node: node,
 		assoc: DataOutputAssociation{
 			DataObject:  b.intern(dataObject),
-			Value:       value,
 			TargetState: b.intern(targetState),
-			TargetPath:  b.intern(targetPath),
+			Writes:      compiled,
 		},
 	})
 }
@@ -2476,6 +2740,15 @@ func (b *Builder) AddLinkThrowEvent() int32 { return b.addNode(TypeLinkThrowEven
 // Returns its element id.
 func (b *Builder) AddLinkCatchEvent() int32 { return b.addNode(TypeLinkCatchEvent, -1) }
 
+// AddNoneThrowEvent adds an intermediate throw event with no event definition — the
+// milestone marker (ADR-0307). It carries no detail and runs
+// as a pass-through, flowing
+// straight on its outgoing sequence flow. What distinguishes it from having drawn nothing
+// at all is not its execution but its record: activating and completing it writes element
+// events under its own id, so the visit counters (ADR-0080), the instance timeline and the
+// Operations overlay all carry a point the business named. Returns its element id.
+func (b *Builder) AddNoneThrowEvent() int32 { return b.addNode(TypeNoneThrowEvent, -1) }
+
 // AddBoundaryEscalationEvent adds an escalation boundary event attached to host that catches
 // an escalation propagating up to the host whose code matches escalationCode ("" is a
 // catch-all). Unlike an error boundary it honors interrupting: an interrupting escalation
@@ -2569,6 +2842,23 @@ func (b *Builder) SetTransaction(nodeID int32) {
 	if b.validNode(nodeID) {
 		b.nodes[nodeID].Transaction = true
 	}
+}
+
+// SetWizard marks an already-added subprocess node as a wizard of kind k (ADR-0449). It
+// is applied before the subprocess's scope is pushed, so the mark is there when its
+// children are added.
+func (b *Builder) SetWizard(nodeID int32, k WizardKind) {
+	if b.validNode(nodeID) {
+		b.nodes[nodeID].Wizard = k
+	}
+}
+
+// markInvalidWizard records that the subprocess node id carried an atlas:wizard value
+// naming no kind. The node stays an ordinary subprocess; the mark is what lets stage 5
+// refuse it at deploy while a reload brings a stored definition back unchanged
+// (RuleWizardValue, ADR-0177).
+func (b *Builder) markInvalidWizard(id int32) {
+	b.invalidWizards = append(b.invalidWizards, id)
 }
 
 // AddLane adds an organizational lane and returns its index (ADR-0121). parent is the index of
@@ -2880,13 +3170,24 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		}
 	}
 
-	return &CompiledProcess{
+	// The inclusive joins' ancestor sets, derived once here from the finished
+	// topology rather than per arrival at runtime
+	// (ADR-0279).
+	joinReach := computeJoinReach(b.nodes,
+		func(id int32) []int32 {
+			n := &b.nodes[id]
+			return outgoing[n.OutgoingStart : n.OutgoingStart+n.OutgoingCount]
+		},
+		func(fid int32) int32 { return b.flows[fid].Target })
+
+	p := &CompiledProcess{
 		Key:                b.key,
 		BpmnProcessId:      b.intern(b.bpmnProcessId),
 		Version:            b.version,
 		hasConditional:     hasConditional,
 		nodes:              b.nodes,
 		flows:              b.flows,
+		joinReach:          joinReach,
 		outgoingFlows:      outgoing,
 		boundaryEvents:     boundary,
 		scopeStarts:        scopeStarts,
@@ -2930,14 +3231,47 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		lanes:              b.lanes,
 		documentation:      b.documentation,
 		startFormId:        b.startFormId,
+		startVars:          b.startVars,
+		constants:          b.constants,
+		constantSet:        constantSetOf(b.constants),
+		conditionalStarts:  b.conditionalStarts,
+		eventGatewayKinds:  b.eventGatewayKinds,
+		invalidWizards:     b.invalidWizards,
 		versionTag:         b.versionTag,
 		instanceTtlNanos:   b.instanceTtlNanos,
 		historyTtlNanos:    b.historyTtlNanos,
 		searchableVars:     b.searchableVars,
 		searchableSet:      searchableSet(b.searchableVars),
+		personalVars:       b.personalVars,
+		personalSet:        searchableSet(b.personalVars),
+		dataSubjectVar:     b.dataSubjectVar,
 		isExecutable:       b.isExecutable,
 		strings:            b.strings,
-	}, nil
+	}
+	// ADR-0314's rule, last because it reads the assembled expressions: a process that
+	// computes on a variable it declared personal does not deploy. Placed here rather
+	// than in Parse so a process built through this Builder is held to it too — the
+	// refusal is a property of the compiled process, not of one way of authoring it.
+	p.markPersonalPassThroughs()
+	if err := p.refuseEngineWritesToPersonalData(); err != nil {
+		return nil, err
+	}
+	if err := p.refuseExpressionsReadingPersonalData(); err != nil {
+		return nil, err
+	}
+	// A constant is fixed by the model, so a model that also asks for it, declares it
+	// personal, or writes it does not deploy (ADR-0454). Here for the
+	// same reason as the personal-data rule: it reads the assembled mappings. A reload's
+	// gate keeps such a stored model and reports it instead (ADR-0393).
+	if err := p.refuseConstantConflicts(b.gate()); err != nil {
+		return nil, err
+	}
+	// And a start variable whose default would be refused as it is written — personal
+	// data in the clear — keeps the default for its start form only
+	// (ADR-0455). It needs the personal declarations, which are
+	// only complete here.
+	p.withholdPersonalDefaults()
+	return p, nil
 }
 
 func (b *Builder) validNode(id int32) bool {

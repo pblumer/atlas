@@ -4,12 +4,12 @@
   "components": [
     {
       "type": "text",
-      "text": "# 📝 Abschlussprüfung: Atlas-Grundlagen\n\nBeantworten Sie alle **vier** Fragen. Jede richtige Antwort zählt **25 Punkte** (max. 100). Das Zeitlimit beträgt **45 Minuten** — läuft es ab, bevor Sie abgeben, gilt die Prüfung als nicht bestanden."
+      "text": "# 📝 Abschlussprüfung: atlas-Grundlagen\n\nBeantworten Sie alle **vier** Fragen. Jede richtige Antwort zählt **25 Punkte** (max. 100). Das Zeitlimit beträgt **45 Minuten** — läuft es ab, bevor Sie abgeben, gilt die Prüfung als nicht bestanden."
     },
     {
       "key": "antwort1",
       "type": "radio",
-      "label": "1. Was persistiert Atlas bei jeder Zustandsänderung?",
+      "label": "1. Was persistiert atlas bei jeder Zustandsänderung?",
       "values": [
         { "label": "Ein Event in einem Append-only-Log", "value": "event" },
         { "label": "Ein UPDATE in einer SQL-Tabelle", "value": "sql" },
@@ -20,7 +20,7 @@
     {
       "key": "antwort2",
       "type": "radio",
-      "label": "2. Wie macht Atlas viele Events dauerhaft (durable)?",
+      "label": "2. Wie macht atlas viele Events dauerhaft (durable)?",
       "values": [
         { "label": "Ein fsync pro Batch (Group Commit)", "value": "group" },
         { "label": "Ein fsync pro einzelnem Event", "value": "single" },

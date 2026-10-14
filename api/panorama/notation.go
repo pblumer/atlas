@@ -18,7 +18,22 @@ package panorama
 // mapping to be explicit *and* versioned: a reader who saw a picture last quarter
 // has to be able to tell whether it would be drawn the same way today. Bump it
 // whenever a row changes meaning.
-const NotationMappingVersion = 1
+//
+// Serving the relationship table did not bump it, and that is a judgment rather than
+// an oversight. No row changed meaning: the three relationship types were already
+// what the exporter wrote at version 1, and a document generated then is what a
+// document generated now would be, relationship for relationship. What changed is
+// who can read the table — the canvas as well as the exporter — and a version that
+// moved for that would say a document might differ when it cannot.
+//
+// Drawing the service catalogue did bump it, to 2. The landscape gained two element
+// types and two relationship types, and — the part that actually forces the bump —
+// the sentence "three relationships is all there can ever be" stopped being true: a
+// catalogue holds real Composition and real Aggregation, which is the first thing on
+// this landscape that ArchiMate can name exactly. A document generated at version 1
+// and one generated now are different documents about one estate, and that is the
+// question this number exists to answer.
+const NotationMappingVersion = 2
 
 const (
 	// NotationAtlas is the landscape drawn as itself: Atlas's own kinds, no
@@ -42,6 +57,25 @@ type NotationType struct {
 	Type string `json:"type,omitempty"`
 }
 
+// NotationRelation is what one notation calls one derived edge kind, and which way
+// round it runs.
+//
+// The same one-row rule as NotationType, for the same reason and one more: the edge
+// is now drawn as well as written. A picture that put Triggering's filled arrowhead
+// on an edge the exported document calls Serving would be two answers to one
+// question, and the reader would have no way of telling which was the true one.
+//
+// Flip says the notation's relationship runs opposite to the derived edge. It is a
+// fact about the vocabulary rather than about the drawing — ArchiMate's Serving runs
+// from the provider to the consumer and the landscape's `uses` edge runs from the
+// consumer to the provider — so it belongs in this table, and the export and the
+// canvas each read it rather than each deciding it.
+type NotationRelation struct {
+	Name string `json:"name"`
+	Type string `json:"type,omitempty"`
+	Flip bool   `json:"flip,omitempty"`
+}
+
 // Notation is one vocabulary the landscape can be drawn in.
 //
 // Types maps a mesh node kind to what this notation calls it. A kind that is
@@ -55,14 +89,28 @@ type Notation struct {
 	Projection     bool                    `json:"projection"`
 	MappingVersion int                     `json:"mappingVersion"`
 	Types          map[string]NotationType `json:"types"`
-	Loss           []string                `json:"loss"`
+	// Relations is the same for the edges between those kinds. A kind absent from it
+	// is drawn as the plain derived line and named in the loss list, exactly as an
+	// absent node kind keeps its derived outline.
+	Relations map[string]NotationRelation `json:"relations"`
+	Loss      []string                    `json:"loss"`
 }
 
 var notations = []Notation{
 	{
 		ID: NotationAtlas, Label: "Atlas (derived)", Short: "Atlas",
 		Projection: false, MappingVersion: NotationMappingVersion,
-		Types: map[string]NotationType{}, Loss: []string{},
+		Types: map[string]NotationType{}, Relations: map[string]NotationRelation{},
+		// The derived picture has no mapping to lose anything *to* — it is the facts
+		// drawn as themselves — so what belongs here is what the derivation itself
+		// does not draw. It was empty while that was nothing. It is not nothing now:
+		// a catalogue holds one relationship this canvas deliberately refuses to
+		// draw, and a picture that dropped it in silence would be the complete-looking
+		// incompleteness the whole record is arranged against. The projections below
+		// carry what *they* drop on top of this.
+		Loss: []string{
+			"Incompatibility between two products is not drawn. A catalogue can record that two rights must never be held by the same person — the clerk who creates a supplier must not also approve payments to it — and that is the one catalogue relationship meaning the opposite of every other line here. Drawn in the same ink it would read as a dependency, so it is left off the picture and stays where it is enforced and reported: the catalogue, and what publishing proves.",
+		},
 	},
 	{
 		ID: NotationArchiMate32, Label: "ArchiMate 3.2", Short: "ArchiMate",
@@ -73,14 +121,36 @@ var notations = []Notation{
 			KindWorker:      {Name: "Application Service", Type: "ApplicationService"},
 			KindDecision:    {Name: "Application Function", Type: "ApplicationFunction"},
 			KindTarget:      {Name: "Node", Type: "Node"},
+			// A catalogue is a Grouping: ArchiMate's element for things that belong
+			// together on a common characteristic, which is what a catalogue is —
+			// what one audience may order. It is deliberately not a Product: a
+			// Product in ArchiMate is one coherent offering with a contract, and
+			// calling the catalogue one would make the things inside it parts of a
+			// single offering rather than a list of them.
+			KindCatalog: {Name: "Grouping", Type: "Grouping"},
+			// And a catalogue item is that Product — "a coherent collection of
+			// services accompanied by a contract, offered as a whole to customers",
+			// which is what a catalogue product is, down to the contract.
+			KindProduct: {Name: "Product", Type: "Product"},
 		},
+		// Derived from archiRelations rather than written out again: the export picks
+		// the relationship type from that table and the canvas draws its notation from
+		// this one, and one table feeding both is what stops the file and the picture
+		// from disagreeing about which relationship an edge is.
+		Relations: archiNotationRelations(),
 		Loss: []string{
-			"Nothing here was modelled. This is Atlas's own resources in ArchiMate's vocabulary — a picture, and a document generated from it, neither of which anybody drew.",
-			"Relationships are derived from two facts. ArchiMate tells serving from triggering from assignment; the starmap knows only that a process calls another and that it uses a worker or a decision, and the export picks one ArchiMate type per fact.",
+			"Nothing here was modelled. This is atlas's own resources in ArchiMate's vocabulary — a picture, and a document generated from it, neither of which anybody drew.",
+			"Relationships are derived from facts rather than drawn, so there are as many as there are kinds of fact and no more. An application holds a process; a process calls another; a process uses a worker or a decision; a catalogue offers a product; a product is assembled from other products, either integrally or optionally. Those become Assignment, Triggering, Serving, Aggregation and Composition. Nothing here is a Flow, an Access or a Realization, because the facts that would distinguish them are not held — so an absent relationship type means atlas cannot see one, never that there is none.",
+			"Precedence between two products is drawn and not exported. The catalogue records that one product cannot be provisioned before another; ArchiMate's Triggering runs between behaviours and its Serving asserts a provider and a consumer, and neither is what that record says. Rather than pick the nearest wrong one, the line stays on the picture in atlas's own ink and is absent from the document.",
+			"A product is written as a Product whether it is offered as a whole or as a part of one. Atlas holds one record for both, and which it is depends on the catalogue reading it — the same laptop is an offering in one and a component of a workplace bundle in another. ArchiMate would distinguish the Product from the Business Services it aggregates; that distinction is not in the data, so it is not invented here.",
+			"A Serving relationship is drawn pointing the other way from the fact it comes from. ArchiMate's Serving runs from the provider to the consumer, and the landscape's edge runs from the process to the worker it needs. The arrowhead is therefore on the process, so that the picture says \"the mail worker serves the invoice process\" — the same reversal the exported document makes.",
 			"A worker becomes an Application Service with nothing behind it. Atlas holds the worker's name and type and never what is on the other side, so there is no Technology Service to realize it.",
 			"Restricted placeholders have no ArchiMate element — they stand for resources this reader may not see, which is a fact about the reader rather than about the architecture — and are absent from the exported document.",
 			"Drafts are absent too. The document describes what this server runs; a saved diagram nobody has deployed is a plan, and giving it the same element type as a deployed process would put an intention into a file that reads as a record.",
-			"The type is written out rather than drawn as ArchiMate's corner icon.",
+			"The picture uses ArchiMate's icon-only notation — the element's own symbol at full size with the name beneath it — rather than the boxed notation with the type icon in the corner. Both are the standard's; at the size a node is drawn here a corner icon would be a pixel or two, so the icon is the node and the type is written under the name as well.",
+			"The layer colours are convention, not standard. ArchiMate 3.2 states that colour carries no formal semantics and defines none; the fills here are the ones the specification's own figures and the Archi tool use, so a reader recognises the layers at a glance. Nothing in the exported document depends on them.",
+			"Only the five kinds this table names are drawn as ArchiMate elements. A draft, a restricted placeholder and an unresolved dependency keep atlas's own shape and colour, because ArchiMate has no element for them and dressing them as one would be a claim the notation does not make.",
+			"A process definition — the model itself, drawn where more than one server holds it (ADR-0401) — is one of those. ArchiMate's Application Process is the behaviour that runs, which is what the deployment beneath it already is; naming the definition one too would put the same behaviour on the picture twice. The nearest alternatives are worse rather than imperfect: an Artifact is a file on a node, and this is the thing that is *not* tied to a node, while a Deployment is not an ArchiMate concept at all. So the definition keeps atlas's own shape, and what the document loses is the one line saying two deployments are the same model.",
 		},
 	},
 	{
@@ -93,22 +163,30 @@ var notations = []Notation{
 			KindDecision:    {Name: "Component"},
 			KindTarget:      {Name: "Deployment Node"},
 		},
+		// C4 has no relationship types to map to. Its arrow is one arrow, and what
+		// tells two of them apart is the technology label Atlas does not hold — which
+		// the loss list already says.
+		Relations: map[string]NotationRelation{},
 		Loss: []string{
 			"C4 separates its levels onto different diagrams. This canvas shows containers and components together, which no C4 level does.",
-			"External systems are absent. C4 puts the thing a component talks to on the diagram; Atlas holds no model of what is behind a worker, only its name and type.",
+			"External systems are absent. C4 puts the thing a component talks to on the diagram; atlas holds no model of what is behind a worker, only its name and type.",
 			"Relationships carry no technology or protocol label, which is most of what a C4 arrow is for.",
 			"Restricted and unresolved placeholders have no C4 element and keep their own shape. So does a draft: C4 describes a system that exists, and a diagram nobody has deployed is not part of one.",
-			"There is no Person and no Software System: the starmap is derived from what this server runs, and neither is a thing Atlas holds.",
+			"A process definition keeps its own shape too. C4's Component is the deployment beneath it, and C4 has no notation for one model held by several systems — that is precisely the relationship its levels separate onto different diagrams.",
+			"There is no Person and no Software System: the starmap is derived from what this server runs, and neither is a thing atlas holds.",
+			"A catalogue and a product have no C4 element and keep atlas's own shape. C4 describes the structure of a software system across four levels; what an organisation offers its people, and what that offering is assembled from, is not one of them.",
 		},
 	},
 }
 
 // Notations returns every vocabulary the landscape can be drawn in, in the order the
-// picker offers them. The slice is copied: a caller must not be able to edit the
+// picker offers them. Copied, not shared: a caller must not be able to edit the
 // mapping the next request is answered from.
 func Notations() []Notation {
 	out := make([]Notation, len(notations))
-	copy(out, notations)
+	for i, n := range notations {
+		out[i] = n.clone()
+	}
 	return out
 }
 
@@ -117,10 +195,31 @@ func Notations() []Notation {
 func NotationByID(id string) (Notation, bool) {
 	for _, n := range notations {
 		if n.ID == id {
-			return n, true
+			return n.clone(), true
 		}
 	}
-	return notations[0], false
+	return notations[0].clone(), false
+}
+
+// clone is what makes "copied" true of the whole row rather than of its header.
+//
+// Copying the struct copies the maps' and the slice's headers, so a caller handed one
+// could reach through and edit the table every later request is answered from — and
+// the edit would be invisible, because nothing here reads the table back to check it.
+// The rows are three and small; a deep copy per call costs nothing a request notices
+// and removes a class of bug that would present as the mapping being wrong.
+func (n Notation) clone() Notation {
+	out := n
+	out.Types = make(map[string]NotationType, len(n.Types))
+	for kind, t := range n.Types {
+		out.Types[kind] = t
+	}
+	out.Relations = make(map[string]NotationRelation, len(n.Relations))
+	for edge, r := range n.Relations {
+		out.Relations[edge] = r
+	}
+	out.Loss = append([]string(nil), n.Loss...)
+	return out
 }
 
 // archiRelation is how one derived edge is written as an ArchiMate relationship.
@@ -131,6 +230,10 @@ func NotationByID(id string) (Notation, bool) {
 // needs. The exported relationship is therefore reversed, so that "the mail worker
 // serves the invoice process" is what the document says.
 type archiRelation struct {
+	// Name is what a person is shown — the relationship spelled the way the standard
+	// prints it — and Type is the xsi:type an exchange document carries. Two fields
+	// for the same two readers NotationType has.
+	Name string
 	Type string
 	Flip bool
 }
@@ -139,8 +242,33 @@ var archiRelations = map[string]archiRelation{
 	// An application component is *assigned to* the behaviour it performs. It does
 	// not compose it: composition is for elements of one kind, and a component and a
 	// process are not.
-	EdgeContains: {Type: "Assignment"},
+	EdgeContains: {Name: "Assignment", Type: "Assignment"},
 	// A call activity is one behaviour invoking another, which is Triggering.
-	EdgeCalls: {Type: "Triggering"},
-	EdgeUses:  {Type: "Serving", Flip: true},
+	EdgeCalls: {Name: "Triggering", Type: "Triggering"},
+	EdgeUses:  {Name: "Serving", Type: "Serving", Flip: true},
+	// A catalogue aggregates what it offers rather than composing it: a product goes
+	// on existing when a catalogue stops offering it, and is offered by several at
+	// once (ADR-0315). That is exactly the difference ArchiMate draws between the two.
+	EdgeOffers: {Name: "Aggregation", Type: "Aggregation"},
+	// And the arrangement of a product is the same distinction one level down, which
+	// is the first thing on this landscape ArchiMate can name exactly rather than
+	// approximately: an integral part is a Composition, an optional one an
+	// Aggregation.
+	EdgeComposition: {Name: "Composition", Type: "Composition"},
+	EdgeAggregation: {Name: "Aggregation", Type: "Aggregation"},
+	// EdgeRequires has no row on purpose — see the loss list above.
+}
+
+// archiNotationRelations is archiRelations as the served table.
+//
+// A second shape of the same rows rather than a second list of them: the exporter
+// reads archiRelations and the canvas is served this, and a test holds the two to
+// being the same table. Writing the relationships out twice is how the picture and
+// the file would eventually come to call one edge two things.
+func archiNotationRelations() map[string]NotationRelation {
+	out := make(map[string]NotationRelation, len(archiRelations))
+	for edge, rel := range archiRelations {
+		out[edge] = NotationRelation{Name: rel.Name, Type: rel.Type, Flip: rel.Flip}
+	}
+	return out
 }

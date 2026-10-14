@@ -1,6 +1,6 @@
-# Deploying Atlas
+# Deploying atlas
 
-Artifacts for running the single-binary Atlas server as a container.
+Artifacts for running the single-binary atlas server as a container.
 
 | I want to… | Go to |
 |------------|-------|
@@ -31,7 +31,7 @@ To let people sign in with an identity provider instead, pass
 together with `-e ATLAS_EXTERNAL_URL=…`, and register
 `<external-url>/auth/oidc/callback` at the provider. Keep the local administrator:
 it is the way back in when the provider is unreachable. Details, and how the
-provider's groups can decide Atlas roles, are in
+provider's groups can decide atlas roles, are in
 [`docs/install.md`](../docs/install.md#single-sign-on-with-an-identity-provider).
 
 The image is a Debian-slim build running as nonroot (uid 65532), storing durable
@@ -41,6 +41,18 @@ state under `/data` — mount a volume there. It bundles the **python3** and
 Everything runs as a Linux container (amd64/arm64); Windows containers are not
 supported and script tasks must be Linux-compatible (PowerShell Core, `python3`,
 Node.js).
+
+Script isolation is opt-in for upgrade compatibility. Set
+`ATLAS_SCRIPT_SANDBOX=strict` (or append `--script-sandbox=strict`) after verifying
+that your scripts need neither mounted files nor network access. On a kernel with
+Landlock ABI 3+, strict mode gives each execution private scratch, denies access
+to `/data` and other non-runtime files, and blocks socket creation. Atlas refuses
+to start strict mode when the host or container runtime cannot enforce it, and
+likewise when an enabled interpreter cannot start inside it — each one is run once
+at boot rather than taken on trust. What a script can reach in the default `off`
+mode — the data directory, the vault key and every credential it protects — is
+spelled out in
+[What a script can reach with `--script-sandbox=off`](../docs/install.md#what-a-script-can-reach-with---script-sandboxoff).
 
 ## Kubernetes (Helm)
 

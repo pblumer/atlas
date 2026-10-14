@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/layout"
+	"github.com/pblumer/atlas/api/taskfolder"
+	"github.com/pblumer/atlas/api/vault"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/agent"
@@ -29,6 +31,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/sharepoint"
@@ -46,14 +49,6 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/infomodel"
 )
-
-// maxXMLBytes caps a deployment body. BPMN models are small; this is a sanity
-// bound, not a tuning knob.
-const maxXMLBytes = 4 << 20 // 4 MiB
-
-// maxFeelBytes caps a FEEL validation body. Expressions are tiny; this is a
-// sanity bound.
-const maxFeelBytes = 64 << 10 // 64 KiB
 
 // deployedProcess is one process registered by a deployment. A collaboration
 // deploys several (one per executable pool); a plain model deploys one.
@@ -102,6 +97,17 @@ type processResp struct {
 	// when the process has no start form (ADR-0028). It lets the Tasks app offer a
 	// "start via form" flow whose submitted data becomes the start variables.
 	StartFormID string `json:"startFormId,omitempty"`
+	// StartVariables are the start variables the process declares (atlas:startForm),
+	// absent when it declares none. A start surface that shows the start form renders
+	// the ones the form does not bind beside it, so the form does not silently replace
+	// the declaration: without them a declared value the form never asks for is simply
+	// missing from every instance started that way.
+	StartVariables []startVariableResp `json:"startVariables,omitempty"`
+	// Constants are the values every instance of this definition starts with and nobody
+	// is asked for (atlas:constants, ADR-0454), absent when it declares
+	// none. Listed so a client can tell them from inputs: a start variable naming one is
+	// dropped, because the constant is written first.
+	Constants []constantResp `json:"constants,omitempty"`
 	// Executable is the process's bpmn:isExecutable flag. A non-executable process
 	// still lists (so it can be inspected) but is omitted from the start surfaces and
 	// cannot be started. Always emitted so the UI can filter on it.
@@ -119,8 +125,72 @@ type processResp struct {
 	// diagram is shown: the drawing is no longer the deployed artefact, and a reader
 	// comparing it against a printed copy deserves to know that before they conclude
 	// somebody redeployed.
-	DiagramUpdatedAt int64  `json:"diagramUpdatedAt,omitempty"`
-	DiagramUpdatedBy string `json:"diagramUpdatedBy,omitempty"`
+	DiagramUpdatedAt     int64  `json:"diagramUpdatedAt,omitempty"`
+	DiagramUpdatedBy     string `json:"diagramUpdatedBy,omitempty"`
+	DiagramUpdatedByName string `json:"diagramUpdatedByName,omitempty"`
+	// DeployedBy is the account that deployed this version (ADR-0205), and
+	// DeployedByName the name a colleague knows it by: a version is created by its
+	// deploy, so this is who created what the Modeler shows when it opens one. Both
+	// absent where nobody is known — a system deploy, authentication off, or a
+	// version deployed before it was recorded.
+	DeployedBy     string `json:"deployedBy,omitempty"`
+	DeployedByName string `json:"deployedByName,omitempty"`
+	// FrozenDecisions are the decisions this definition's latest-bound business rule
+	// tasks were frozen on when it was deployed under ADR-0319, and what latest
+	// resolves to now. Absent on every definition that follows latest, which is every
+	// one deployed since ADR-0423 — so the listing says which definitions do not
+	// behave as their binding reads, and only those.
+	FrozenDecisions []frozenDecisionResp `json:"frozenDecisions,omitempty"`
+}
+
+// startVariableResp is one declared start variable as the start surfaces read it: the
+// same {name, type, default, required} the Modeler reads off the model.
+type startVariableResp struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Default  string `json:"default,omitempty"`
+	Required bool   `json:"required,omitempty"`
+}
+
+// startVariablesOf is a definition's declared start variables in their response shape,
+// nil when it declares none, so the field is left out of the listing.
+func startVariablesOf(cp *compiler.CompiledProcess) []startVariableResp {
+	decl := cp.StartVariables()
+	if len(decl) == 0 {
+		return nil
+	}
+	out := make([]startVariableResp, len(decl))
+	for i, v := range decl {
+		out[i] = startVariableResp{Name: v.Name, Type: v.Type, Default: v.Default, Required: v.Required}
+	}
+	return out
+}
+
+// constantResp is one process constant as declared: its name, type and value.
+type constantResp struct {
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+	Value string `json:"value"`
+	// Source is "application" or "server" for a constant whose value the installation
+	// holds — read as application.NAME or server.NAME, its Value then only the fallback
+	// (ADR-0453, ADR-0456); absent for a process constant.
+	Source string `json:"source,omitempty"`
+	// Info marks a fact Atlas fills itself, such as server.environment.
+	Info bool `json:"info,omitempty"`
+}
+
+// constantsOf is a definition's constants in their response shape, nil when it declares
+// none, so the field is left out of the listing.
+func constantsOf(cp *compiler.CompiledProcess) []constantResp {
+	decl := cp.Constants()
+	if len(decl) == 0 {
+		return nil
+	}
+	out := make([]constantResp, len(decl))
+	for i, c := range decl {
+		out[i] = constantResp{Name: c.Name, Type: c.Type, Value: c.Value, Source: c.Namespace, Info: c.Info}
+	}
+	return out
 }
 
 // collaborationParticipants reports how many <participant> pools a model's
@@ -201,6 +271,11 @@ type infoResp struct {
 	// (the --docs gate, ADR-0043), so the web UI can show or hide its
 	// "API Explorer" entry without probing /api/docs.
 	Docs bool `json:"docs"`
+	// Catalogue reports whether the shop, the catalogue, the orders and the
+	// inventory are served (the --catalogue gate,
+	// ADR-0434), so the Console can leave them out
+	// of its menus rather than lead somebody to a view whose every call is a 404.
+	Catalogue bool `json:"catalogue"`
 	// Revision/BuildTime/Modified/Go are the binary's embedded VCS build metadata,
 	// so the web UI can show exactly which commit the running server was built from.
 	Revision  string `json:"revision,omitempty"`
@@ -267,21 +342,42 @@ type runtimeResp struct {
 	// operator then gives it — "the task is still open" — while the engine has in fact
 	// been holding a failure for hours (ADR-0150).
 	Incidents []runtimeIncident `json:"incidents"`
-	// IncidentsTruncated marks a capped page: more elements are parked than the
-	// overlay lists. The per-element counts are then a floor, not a total.
+	// IncidentTotal is how many of this definition's tokens are parked right now —
+	// the number the diagram's badges and the header pill say, which is not the
+	// length of the list above: that list is a bounded page of *details*, and under a
+	// flood it is a hundred rows out of thousands.
+	//
+	// Keeping the two apart is the whole point. A count read off the page was a
+	// floor presented as a total, and a page the bounded scan never reached made it a
+	// zero presented as a total — a process with thousands of parked tokens rendering
+	// as healthy on its own diagram (ADR-0366).
+	IncidentTotal int `json:"incidentTotal"`
+	// IncidentsTruncated marks a capped page: more tokens are parked than the overlay
+	// details. It says nothing about the counts, which are exact whenever
+	// IncidentCountsExact is set — it is what tells the browser the *panel* is showing
+	// a page, so it can point at the incidents view for the rest.
 	IncidentsTruncated bool `json:"incidentsTruncated"`
+	// IncidentCountsExact reports that IncidentTotal and the per-element counts are
+	// the whole truth rather than what a bounded scan happened to reach. False only
+	// when the exact reading could not be taken at all (the loop is closing, or the
+	// store errored), in which case the counts fall back to the bounded scan's and a
+	// reader must treat them as a floor.
+	IncidentCountsExact bool `json:"incidentCountsExact"`
 }
 
-// Bounds on the incident overlay. maxRuntimeIncidents caps what one response carries;
-// maxRuntimeIncidentScan caps how far the aggregate view reads to find them, so a
-// store full of *other* definitions' incidents cannot turn a 1.5-second poll into an
-// unbounded scan on the run loop (the O(elements) discipline of ADR-0080). The
-// single-instance view needs neither: it point-looks-up the incident of each token it
-// is already walking.
-const (
-	maxRuntimeIncidents    = 100
-	maxRuntimeIncidentScan = 2000
-)
+// maxRuntimeIncidents bounds the overlay's *details* — how many rows the resolve panel
+// is handed for one definition, or for one isolated instance.
+//
+// It no longer bounds a count, and the second bound that used to stand beside it
+// (how far the aggregate view read on the run loop to find its incidents) is gone
+// entirely. Between them those two are what made a flood on one definition read as a
+// healthy diagram on another: the counts came off the page, the page came off a scan in
+// key order, and the scan was spent before it reached the definition being drawn
+// (ADR-0366).
+//
+// Counts now come from the off-loop reading in api/runtimeincidents.go, which walks
+// the whole family and is exact; this is only the size of the page.
+const maxRuntimeIncidents = 100
 
 // collabPool is one pool (participant) of a collaboration, as a deployed
 // definition the collaboration runtime aggregates.
@@ -377,6 +473,39 @@ type timelineStep struct {
 	// the version the instance left, and only the boundary explains why. Absent on
 	// every ordinary step; present only with Action "migrate".
 	Migration *migrationView `json:"migration,omitempty"`
+	// Fork is the other step that is not an element activation: the point at which this
+	// instance's work left for a new instance of another version, or arrived from an
+	// older one (ADR-0389). A replay that simply stopped
+	// mid-diagram reads as a defect and one that starts mid-diagram reads as a ghost;
+	// this row is what makes each of them a decision somebody made, with a reason.
+	// Absent on every ordinary step; present only with Action "fork".
+	Fork *forkView `json:"fork,omitempty"`
+}
+
+// forkView renders one end of a fork on the replay timeline: which instance the work
+// went to or came from, the version it is running there, and who decided it. Direction
+// is "out" on the instance that was ended and "in" on the one continuing it — the two
+// halves are separate records on separate instances, so a reader never has to work out
+// which side of the link they are on.
+type forkView struct {
+	Direction   string `json:"direction"`
+	InstanceKey uint64 `json:"instanceKey,omitempty"`
+	Version     int32  `json:"version,omitempty"`
+	Actor       string `json:"actor,omitempty"`
+	Reason      string `json:"reason"`
+	At          int64  `json:"at"`
+}
+
+// forkRow is one fork as read off the operator-action log, before the instance it links
+// to is resolved: the record says which way the work went and why, and the instance's
+// own Predecessor/Successor field says where — one link per direction, so the pair is
+// unambiguous without the record carrying a key.
+type forkRow struct {
+	pos    uint64
+	at     int64
+	kind   model.OperatorActionKind
+	actor  string
+	reason string
 }
 
 // migrationView renders one migration on the replay timeline (ADR-0162): which version
@@ -417,6 +546,9 @@ type manualActionView struct {
 	Actor  string `json:"actor,omitempty"`
 	Reason string `json:"reason"`
 	At     int64  `json:"at"`
+	// ErrorCode is the BPMN error a throw by hand threw (ADR-0089); absent for a
+	// completion by hand.
+	ErrorCode string `json:"errorCode,omitempty"`
 }
 
 type timelineToken struct {
@@ -457,6 +589,12 @@ type instanceTimelineResp struct {
 	// ignores this still gets correct per-step element ids; one that honours it can say
 	// why a step names an element the diagram does not contain.
 	Migrated bool `json:"migrated,omitempty"`
+	// PredecessorInstanceKey and SuccessorInstanceKey are the two ends of a fork
+	// (ADR-0389). A replay that stops mid-diagram is not a
+	// defect when the instance was forked away: the rest of the story is in the
+	// instance named here, under the version that runs it.
+	PredecessorInstanceKey uint64 `json:"predecessorInstanceKey,omitempty"`
+	SuccessorInstanceKey   uint64 `json:"successorInstanceKey,omitempty"`
 	// VariableAttribution says this instance's history records *which element* wrote each
 	// variable (ADR-0219), so a step's `writes` is the
 	// element's own production rather than a guess. It is false for an instance that ran
@@ -483,6 +621,24 @@ type instanceResp struct {
 	// (ADR-0115) and exists only in the archive. It cannot be opened, cancelled or
 	// migrated, and what it reports is what the log recorded, not what is true now.
 	Archived bool `json:"archived,omitempty"`
+	// PredecessorInstanceKey and SuccessorInstanceKey are the two ends of a fork
+	// (ADR-0389): the instance this one continues, and the
+	// one continuing it. A terminated row carrying a successor ended because its work
+	// moved to another version, not because somebody cancelled it — which is the one
+	// thing the lifecycle state cannot say on its own, since both are "terminated".
+	PredecessorInstanceKey uint64 `json:"predecessorInstanceKey,omitempty"`
+	SuccessorInstanceKey   uint64 `json:"successorInstanceKey,omitempty"`
+	// Incidents is how many of this instance's tokens are parked, counted through the
+	// instance's own element index — exact, and bounded by the tokens that instance
+	// holds rather than by anything the rest of the engine is doing.
+	//
+	// A pointer because *absent* and *zero* are different claims and the console acts
+	// on the difference. A row that carries it says "this instance is parked behind n
+	// incidents", zero included; a row without it says nothing either way. Only the
+	// search fills it: its result set is capped at 200, so the per-row walk is paid on
+	// a bounded set, and the search is where a reader concludes an instance is healthy
+	// from the word "active" beside it (ADR-0365).
+	Incidents *int `json:"incidents,omitempty"`
 }
 
 type statsResp struct {
@@ -494,9 +650,22 @@ type statsResp struct {
 	UnresolvedIncidents int `json:"unresolvedIncidents"`
 }
 
+// createInstanceResp answers a start with the definition it started and the engine's
+// live counts, and not with the instance key: that key is minted inside the batch on the
+// single writer and frozen into the activation event, and nothing carries it back out
+// (invariants I3/I6). A caller that needs the identity of what it just started therefore
+// reconstructs it from the instance listing around the call — which is a guess when two
+// callers start the same definition at once. Closing that is
+// ADR-0335.
 type createInstanceResp struct {
-	DefinitionKey uint64    `json:"definitionKey"`
-	Stats         statsResp `json:"stats"`
+	DefinitionKey uint64 `json:"definitionKey"`
+	// InstanceKey is the instance this start created. Absent where the start
+	// created none — a call answered before anything was minted.
+	InstanceKey uint64    `json:"instanceKey,omitempty"`
+	Stats       statsResp `json:"stats"`
+	// Wizard is where the first sitting the instance entered stands, when the start
+	// led into a wizard (ADR-0449): the starter is carried to its first screen.
+	Wizard *wizardResp `json:"wizard,omitempty"`
 }
 
 type cancelInstanceResp struct {
@@ -592,6 +761,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 		Product:   "Atlas",
 		Version:   Version,
 		Docs:      s.docsEnabled,
+		Catalogue: !s.catalogueOff,
 		Revision:  b.Revision,
 		BuildTime: b.Time,
 		Modified:  b.Modified,
@@ -611,7 +781,12 @@ type validateFeelResp struct {
 // handleValidateFeel compiles a FEEL expression with the same engine deployment
 // uses, so the Modeler can flag syntax/type errors as they're typed instead of
 // only at deploy time. Unknown identifiers are allowed (they're process
-// variables, discovered via CompileAuto) — only genuine parse/type errors fail.
+// variables, discovered via CompileAuto) — but an unknown *function* is not, and
+// neither is a built-in called with an argument count its signature cannot take
+// (ADR-0388): the engine compiles either into a constant null and says nothing,
+// which is the one answer a route named "validate" must not give. Certifying the
+// expression to somebody who asked exactly the right question is worse than never
+// having been asked (ADR-0392).
 //
 // It is a pure compile: no state is read or written, so it runs off the
 // single-writer loop (no s.do) and never touches the processor hot path — a
@@ -619,7 +794,7 @@ type validateFeelResp struct {
 // (ADR-0008).
 func (s *Server) handleValidateFeel(w http.ResponseWriter, r *http.Request) {
 	var req validateFeelReq
-	if err := json.NewDecoder(io.LimitReader(r.Body, maxFeelBytes)).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Request)).Decode(&req); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
@@ -630,6 +805,10 @@ func (s *Server) handleValidateFeel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := expr.CompileAuto(req.Expression); err != nil {
+		httpapi.JSON(w, http.StatusOK, validateFeelResp{OK: false, Error: err.Error()})
+		return
+	}
+	if err := expr.CheckCallsError(req.Expression); err != nil {
 		httpapi.JSON(w, http.StatusOK, validateFeelResp{OK: false, Error: err.Error()})
 		return
 	}
@@ -656,7 +835,7 @@ type evalFeelResp struct {
 // scope: no engine state is read or written, so it runs off the single-writer
 // loop and never touches the processor hot path (ADR-0008).
 func (s *Server) handleEvaluateFeel(w http.ResponseWriter, r *http.Request) {
-	dec := json.NewDecoder(io.LimitReader(r.Body, maxFeelBytes))
+	dec := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Request))
 	dec.UseNumber() // keep numbers exact (json.Number) for FEEL's decimals
 	var req evalFeelReq
 	if err := dec.Decode(&req); err != nil {
@@ -690,7 +869,7 @@ func (s *Server) handleEvaluateFeel(w http.ResponseWriter, r *http.Request) {
 	case expr.KindNull:
 		result = "null"
 	}
-	httpapi.JSON(w, http.StatusOK, evalFeelResp{OK: true, Result: result, Kind: feelKindName(kind)})
+	httpapi.JSON(w, http.StatusOK, evalFeelResp{OK: true, Result: result, Kind: kind.Label()})
 }
 
 // feelBindings converts the JSON sample variables into FEEL values. Numbers keep
@@ -718,22 +897,6 @@ func feelBindings(in map[string]any) (map[string]expr.Value, error) {
 	return out, nil
 }
 
-// feelKindName maps a classified value kind to the label the UI shows.
-func feelKindName(k expr.ValueKind) string {
-	switch k {
-	case expr.KindBool:
-		return "boolean"
-	case expr.KindNumber:
-		return "number"
-	case expr.KindString:
-		return "string"
-	case expr.KindJSON:
-		return "json"
-	default:
-		return "null"
-	}
-}
-
 // handleDeploy parses a BPMN XML body, compiles and deploys every executable
 // process it contains — one for a plain model, several for a collaboration (one
 // per pool) — and returns the assigned key/id/version for each. Each pool's
@@ -741,7 +904,7 @@ func feelKindName(k expr.ValueKind) string {
 // are the diagram's counterpart of the message events that link them at runtime
 // (ADR-0023).
 func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -750,7 +913,35 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
 		return
 	}
+	resp, refused := s.deployBody(r, body)
+	if refused != nil {
+		httpapi.JSON(w, refused.status, refused.body)
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, resp)
+}
 
+// deployRefusal is why a deploy did not happen: the status and body the deploy
+// route answers with, and the same in one sentence for a caller that reports it
+// inside an answer of its own, as a catalogue import does.
+type deployRefusal struct {
+	status int
+	body   any
+	reason string
+}
+
+// refusedWith is the refusal whose body is the API's ordinary error envelope.
+func refusedWith(status int, msg string) *deployRefusal {
+	return &deployRefusal{status: status, body: map[string]string{"error": msg}, reason: msg}
+}
+
+// deployBody is everything POST /api/v1/deployments does with a model once it has
+// read it, as the caller of r: the DMN models it needs, the application it files
+// under, who may listen to and claim what, and the deploy itself. It is the one
+// door a BPMN model is deployed through on a person's behalf, so a catalogue
+// import that carries processes takes it too rather than a second, laxer copy
+// (ADR-0451). It must not be called on the run loop.
+func (s *Server) deployBody(r *http.Request, body []byte) (deployResp, *deployRefusal) {
 	// Resolve the DMN model this diagram's business rule tasks need and bundle it,
 	// so a decision authored in Atlas deploys together with its process instead of
 	// model-less (which would create DMN jobs that can never evaluate and then fail
@@ -759,20 +950,26 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	var (
 		refs    []dmnRef
 		loadErr error
+		// The decisions already deployed in their own right: a latest-bound task
+		// naming one needs no model bundled with this process, because the deploy
+		// pins it to that deployment's key
+		// (ADR-0327). Registry
+		// state, so it is read on the loop beside the references.
+		deployedDecisionIDs map[string]bool
 	)
-	s.do(func() { refs, loadErr = s.dmnrefs.LoadAll() })
+	s.do(func() {
+		refs, loadErr = s.dmnrefs.LoadAll()
+		deployedDecisionIDs = s.dmnRegistry.LatestDecisionIDs()
+	})
 	if loadErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
-		return
+		return deployResp{}, refusedWith(http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
 	}
-	dmnXMLs, refuse, dmnErr := s.dmnForDeployBody(r.Context(), body, refs)
+	dmnXMLs, refuse, dmnErr := s.dmnForDeployBody(r.Context(), body, refs, deployedDecisionIDs)
 	if dmnErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "resolve dmn model: "+dmnErr.Error())
-		return
+		return deployResp{}, refusedWith(http.StatusInternalServerError, "resolve dmn model: "+dmnErr.Error())
 	}
 	if refuse != "" {
-		httpapi.Error(w, http.StatusConflict, refuse)
-		return
+		return deployResp{}, refusedWith(http.StatusConflict, refuse)
 	}
 
 	// Resolve the project this deploy files under, so the Modeler home groups the
@@ -784,30 +981,73 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	projectID := r.URL.Query().Get("projectId")
 	hasProjectParam := r.URL.Query().Has("projectId")
 	pid, _ := processIdentity(body)
-	var (
-		resp           deployResp
-		compErr        error
-		persistErr     error
-		projErr        error
-		claimed        string
-		e              error
-		unknownProject bool
-	)
-	s.do(func() {
-		if !hasProjectParam {
-			if d, ok, e := s.drafts.Get(pid); e == nil && ok {
+
+	// Inherit the matching draft's project when the caller named none. A project
+	// that has since been deleted degrades to Ungrouped (ADR-0034) rather than
+	// failing the deploy over a stale record the caller does not own.
+	if !hasProjectParam {
+		var (
+			d       draft
+			ok      bool
+			readErr error
+		)
+		s.do(func() { d, ok, readErr = s.drafts.Get(pid) })
+		if readErr != nil {
+			return deployResp{}, refusedWith(http.StatusInternalServerError, "read draft: "+readErr.Error())
+		}
+		if ok && d.ProjectID != "" {
+			var exists bool
+			s.do(func() { _, exists, readErr = s.projects.Get(d.ProjectID) })
+			if readErr != nil {
+				return deployResp{}, refusedWith(http.StatusInternalServerError, "read project: "+readErr.Error())
+			}
+			if exists {
 				projectID = d.ProjectID
 			}
-		} else if projectID != "" {
-			_, ok, e := s.projects.Get(projectID)
-			if e != nil {
-				projErr = e
-				return
-			}
-			if !ok {
-				unknownProject = true
-				return
-			}
+		}
+	}
+	// Filing a definition into a project is a write on that project, so it needs
+	// editor there — the check the project deploy path has always made, and the
+	// axis a role-per-route table cannot express (ADR-0071,
+	// ADR-0278). Without it the global modeler role was enough
+	// to publish a runnable definition into any private project whose id the caller
+	// knew, by naming it or by matching the process id of a draft filed in it.
+	//
+	// It runs before the message claim and before deployModel, so a refused deploy
+	// leaves behind neither a sidecar file nor a registry entry. It also has to stay
+	// outside the deploy's own do(): authorization reads the project store through a
+	// do() of its own, and Loop.Do is a rendezvous, so dispatching onto the loop from
+	// the loop would deadlock.
+	if projectID != "" {
+		if code, msg := s.authorizeTargetProject(r, projectID, ScopeRoleEditor); code != 0 {
+			return deployResp{}, refusedWith(code, msg)
+		}
+	}
+	// Who may listen to the personal data atlas emits (ADR-0435 §6), before anything
+	// is persisted. It reads only the bytes and the caller, so it runs here rather
+	// than on the loop.
+	if found := s.personalListenersBlocking(r, body); len(found) > 0 {
+		auditPersonalListenerRefusal(r, found)
+		return deployResp{}, &deployRefusal{status: http.StatusForbidden, body: personalListenerBody(r, found),
+			reason: personalListenerReason(r, found)}
+	}
+	var (
+		resp       deployResp
+		compErr    error
+		persistErr error
+		claimed    string
+		refused    *mailboxRefusal
+		e          error
+	)
+	s.do(func() {
+		// Who may use a mailbox, checked before anything is persisted
+		// (ADR-0438): a definition that reads somebody else's mailbox
+		// must not exist even briefly.
+		if refused, e = s.mailboxUseBlockingModel(r, body); e != nil {
+			persistErr = e
+			return
+		} else if refused != nil {
+			return
 		}
 		// The claim on a message name, checked before anything is persisted (ADR-0205):
 		// a definition that would be delivered somebody else's inbound events must not
@@ -831,42 +1071,31 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		}
 		// Still on the run loop, where the worker store and the registries may be
 		// read (I3), and with every pool of a collaboration already registered.
-		// The information model of the application this deploy files under, resolved
-		// once for every pool: what a data object's itemSubjectRef points at. An
-		// application with no model resolves to an unmodeled vocabulary, and the type
-		// checks then say nothing (ADR-0230).
-		vocab, vocabErr := s.infomodel.VocabularyOnLoop(projectID)
-		for _, d := range deployed {
-			if dep, ok := s.deployments[d.Key]; ok && dep.cp != nil {
-				resp.Warnings = append(resp.Warnings, s.connectorWarnings(dep.cp)...)
-				if vocabErr == nil {
-					resp.Warnings = append(resp.Warnings, dataFlowWarnings(dep.cp, vocab)...)
-				}
-			}
-		}
+		resp.Warnings = append(resp.Warnings, s.deployWarningsOnLoop(deployed, projectID)...)
 	})
 	switch {
-	case projErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "read project: "+projErr.Error())
-	case unknownProject:
-		httpapi.Error(w, http.StatusBadRequest, "unknown project id")
 	case compErr != nil:
 		// A compile failure is a client error: the submitted model is invalid.
-		httpapi.Error(w, http.StatusBadRequest, compErr.Error())
+		return deployResp{}, refusedWith(http.StatusBadRequest, compErr.Error())
 	case persistErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
+		return deployResp{}, refusedWith(http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
+	case refused != nil:
+		return deployResp{}, &deployRefusal{status: http.StatusForbidden, body: mailboxRefusalBody(refused),
+			reason: mailboxRefusalReason(refused)}
 	case claimed != "":
-		claimRefusal(w, claimed, "An inbound worker you cannot reach publishes under this "+
-			"message name. Rename the message in your model, or ask whoever owns that worker to share it.")
-	default:
-		// Off the run loop on purpose: this reads nothing but the bytes the caller
-		// sent, and work that does not need the engine's single writer does not
-		// belong on it (I3). Once for the model rather than once per deployed pool —
-		// a namespace prefix is bound at the document root, so every pool of a
-		// collaboration shares the one declaration and the one mistake.
-		resp.Warnings = append(resp.Warnings, foreignAtlasNamespaceWarnings(body)...)
-		httpapi.JSON(w, http.StatusOK, resp)
+		detail := "An inbound worker you cannot reach publishes under this " +
+			"message name. Rename the message in your model, or ask whoever owns that worker to share it."
+		return deployResp{}, &deployRefusal{status: http.StatusConflict, body: claimBody(claimed, detail),
+			reason: "the message name " + claimed + " is claimed elsewhere: " + detail}
 	}
+	// Off the run loop on purpose: this reads nothing but the bytes the caller
+	// sent, and work that does not need the engine's single writer does not
+	// belong on it (I3). Once for the model rather than once per deployed pool —
+	// a namespace prefix is bound at the document root, so every pool of a
+	// collaboration shares the one declaration and the one mistake.
+	resp.Warnings = append(resp.Warnings, foreignAtlasNamespaceWarnings(body)...)
+	resp.Warnings = append(resp.Warnings, searchableDeclarationWarnings(body)...)
+	return resp, nil
 }
 
 // deployModel compiles and registers every executable process in one BPMN model
@@ -902,6 +1131,35 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 	if err != nil {
 		return nil, err, nil
 	}
+	// A personal declaration is a promise that the values can be destroyed, and the
+	// thing that gets destroyed is a key in the vault. With no vault there is no key,
+	// so the values would be stored in the clear while the model said otherwise — the
+	// deploy is refused rather than accepted into that state (ADR-0314).
+	if s.vault == nil {
+		for i := range deployables {
+			if cp := deployables[i].Process; cp.HasPersonalVariables() {
+				return nil, fmt.Errorf("process %q declares personal variables (atlas:personal), which are enciphered under a key in the vault, and this server runs with the vault disabled: the values would be stored in the clear and nothing could be erased. Enable the vault or drop the declaration (ADR-0314)", cp.BpmnProcessId), nil
+			}
+		}
+	}
+	// Resolve every fixed decision version the model names before anything is
+	// written, so a version that is not deployed refuses the whole model instead of
+	// leaving the processes before it deployed
+	// (ADR-0423).
+	versionPins := make([]map[compiler.DecisionVersionRef]uint64, len(deployables))
+	for i := range deployables {
+		pins, err := s.resolveVersionPins(deployables[i].Process)
+		if err != nil {
+			return nil, err, nil
+		}
+		versionPins[i] = pins
+	}
+	// Spend the keys ParseAll just handed out, durably, before any record claims one
+	// (ADR-0339). ParseAll assigned
+	// s.nextKey+i, so this reserves exactly that span and leaves the counter past it.
+	if _, err := s.reserveKeys(len(deployables)); err != nil {
+		return nil, nil, err
+	}
 	dmnStrings := make([]string, len(dmnXMLs))
 	for i, x := range dmnXMLs {
 		dmnStrings[i] = string(x)
@@ -919,28 +1177,43 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 			name = deployables[i].ProcessName
 		}
 
+		// Latest is settled when the job is worked, and the evaluation records the
+		// deployment that answered; a fixed version was resolved above
+		// (ADR-0423).
+		cp.ResolveLatestAtRuntime(versionPins[i])
+
+		// Translate the process's model-authored job types into the engine-wide index
+		// space before it can create any job, so the type a job carries means the same
+		// thing in every definition (ADR-0007/0157). Resolution is idempotent, so a
+		// redeploy of the same model lands on the same indices.
+		//
+		// It comes before the record is written and before the version is counted,
+		// because interning a new type is itself a durable write that can fail. Done
+		// after the save, a failure answered the deploy with an error while leaving its
+		// record on disk — so the definition the caller was told had failed came back
+		// on the next restart — and with its version already spent, so a retry deployed
+		// as the next one.
+		if err := cp.ResolveJobTypes(s.jobTypes.Intern); err != nil {
+			return deployed, nil, err
+		}
+
 		if err := s.deploys.Save(persistedDeployment{
-			Key:        key,
-			ProcessID:  pid,
-			Name:       name,
-			Version:    version,
-			DeployedAt: deployedAt,
-			ProjectID:  projectID,
-			DeployedBy: deployedBy,
-			XML:        string(body),
-			DMNXMLs:    dmnStrings,
+			Key:              key,
+			ProcessID:        pid,
+			Name:             name,
+			Version:          version,
+			DeployedAt:       deployedAt,
+			ProjectID:        projectID,
+			DeployedBy:       deployedBy,
+			XML:              string(body),
+			DMNXMLs:          dmnStrings,
+			BindingPolicy:    bindingRuntime,
+			DecisionBindings: persistedVersionPins(versionPins[i]),
 		}); err != nil {
 			return deployed, nil, err
 		}
 
 		s.versions[pid] = version
-		// Translate the process's model-authored job types into the engine-wide index
-		// space before it can create any job, so the type a job carries means the same
-		// thing in every definition (ADR-0007/0157). Resolution is idempotent, so a
-		// redeploy of the same model lands on the same indices.
-		if err := cp.ResolveJobTypes(s.jobTypes.Intern); err != nil {
-			return deployed, nil, err
-		}
 		s.proc.Deploy(cp)
 		// Arm this fresh version's timer start events and supersede any the prior
 		// version left running, so the process starts on its schedule (ADR-0051).
@@ -958,6 +1231,11 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 				return deployed, nil, fmt.Errorf("register dmn model for %s: %w", pid, err)
 			}
 		}
+		// The Starmap's collection no longer describes this server. Deploying is the
+		// change a person makes and then immediately goes looking for, so it is the
+		// one that does not wait out the TTL (see forgetLandscape).
+		s.forgetLandscape()
+		s.proc.SetDefinitionApplication(key, projectID) // ADR-0453
 		s.deployments[key] = &deployment{
 			Key:        key,
 			ProcessID:  pid,
@@ -970,9 +1248,8 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 			cp:         cp,
 		}
 		s.order = append(s.order, key)
-		if key >= s.nextKey {
-			s.nextKey = key + 1
-		}
+		// The counter is already past this key: reserveKeys above moved it, durably,
+		// before any of these records existed.
 		// A model that binds to a directory names a bind-password reference, and this
 		// server's supervised AD worker may not be holding that one yet — it is handed
 		// exactly the references the deployed models make (adWorkerEnv).
@@ -1014,14 +1291,25 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				ProjectID:        d.ProjectID,
 				CollaborationKey: s.collaborationKeyOf(d),
 				StartFormID:      d.cp.StartFormId(),
+				StartVariables:   startVariablesOf(d.cp),
+				Constants:        constantsOf(d.cp),
 				Executable:       d.cp.IsExecutable(),
 				VersionTag:       d.cp.VersionTag(),
 				Active:           !d.inactive,
 				DiagramUpdatedAt: d.diagramUpdatedAt,
 				DiagramUpdatedBy: d.diagramUpdatedBy,
+				DeployedBy:       d.DeployedBy,
+				FrozenDecisions:  s.frozenDecisionsOf(d),
 			})
 		}
 	})
+	// The people are named after the writer's turn, for the reason handleListDrafts
+	// gives.
+	name := s.principalNamer()
+	for i := range list {
+		list[i].DeployedByName = name(list[i].DeployedBy)
+		list[i].DiagramUpdatedByName = name(list[i].DiagramUpdatedBy)
+	}
 	httpapi.JSON(w, http.StatusOK, list)
 }
 
@@ -1078,7 +1366,7 @@ func (s *Server) handleUpdateProcessDiagram(w http.ResponseWriter, r *http.Reque
 		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -1211,7 +1499,7 @@ func (s *Server) handleUpdateProcessDiagram(w http.ResponseWriter, r *http.Reque
 // be regenerated (unparseable, or nodeless) comes back unchanged; only a missing or
 // unreadable body is a 4xx, matching the deploy and validate endpoints.
 func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -1239,7 +1527,26 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		running    int
 		scanErr    error
 		persistErr error
+		needed     string
+		released   []string
+		processID  string
+		lastOne    bool
 	)
+	// Whether an order still needs this process is a scan of the order store, so it
+	// is asked off the run loop, before the delete's own turn (ADR-0427). Only the
+	// last deployed version of a process id is guarded: an order starts the newest.
+	s.do(func() {
+		if d, ok := s.deployments[key]; ok {
+			processID = d.ProcessID
+			lastOne = s.onlyVersionOnLoop(key, processID)
+		}
+	})
+	if lastOne {
+		if needed, scanErr = s.processStillNeeded(processID); scanErr != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "check orders: "+scanErr.Error())
+			return
+		}
+	}
 	s.do(func() {
 		d, ok := s.deployments[key]
 		if !ok {
@@ -1251,6 +1558,16 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		if s.systemPIDs[d.ProcessID] {
 			protected = true
 			return
+		}
+		if needed != "" {
+			return
+		}
+		// Re-asked here, in the turn that deletes: a version deployed meanwhile makes
+		// this one no longer the last, and a release published meanwhile binds.
+		if s.onlyVersionOnLoop(key, d.ProcessID) {
+			if released, scanErr = s.releaseBindsOnLoop(d.ProcessID); scanErr != nil || len(released) > 0 {
+				return
+			}
 		}
 		// The per-definition live count is maintained on the write path (ADR-0083),
 		// so the refusal check is a single counter read. It used to walk every
@@ -1266,6 +1583,7 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.proc.Undeploy(key)
+		s.forgetLandscape()
 		delete(s.deployments, key)
 		for i, k := range s.order {
 			if k == key {
@@ -1281,6 +1599,12 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusForbidden, "protected system process cannot be deleted")
 	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "check instances: "+scanErr.Error())
+	case needed != "":
+		httpapi.Error(w, http.StatusConflict, needed)
+	case len(released) > 0:
+		httpapi.Error(w, http.StatusConflict, fmt.Sprintf("cannot delete: the current catalogue "+
+			"release binds %s for %s; an order placed now would freeze it (ADR-0427)",
+			processID, strings.Join(released, ", ")))
 	case running > 0:
 		httpapi.Error(w, http.StatusConflict, fmt.Sprintf("cannot delete: %d running instance(s); cancel them first", running))
 	case persistErr != nil:
@@ -1358,39 +1682,6 @@ func (s *Server) handleSetProcessActive(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// collectDefIncidents adds the unresolved incidents of one definition to the overlay.
-// An incident carries its process instance, not its definition (model.IncidentValue),
-// so each candidate costs one point lookup to attribute — and attribute it must: a
-// compiled element index is only meaningful within its own definition, so an incident
-// let through from another one would mark a completely unrelated shape.
-//
-// The work is bounded twice, by how far it reads and by how much it returns, because
-// this runs on the run loop under a 1.5-second poll: a definition whose own tokens are
-// healthy must not pay an unbounded scan because some other definition has thousands
-// parked behind a broken worker. A bound that bites marks the page truncated, which
-// is what tells the browser its per-element counts are a floor rather than a total.
-func (s *Server) collectDefIncidents(defKey uint64, add func(uint64, *model.IncidentValue) bool, resp *runtimeResp) error {
-	scanned := 0
-	return unlessTruncated(s.store.Incidents(func(elKey uint64, v *model.IncidentValue) error {
-		if scanned++; scanned > maxRuntimeIncidentScan {
-			resp.IncidentsTruncated = true
-			return errListTruncated
-		}
-		pi, ok, err := s.store.ProcessInstance(v.ProcessInstanceKey)
-		if err != nil {
-			return err
-		}
-		if !ok || pi.ProcessDefKey != defKey {
-			return nil
-		}
-		if add(elKey, v) {
-			resp.IncidentsTruncated = true
-			return errListTruncated
-		}
-		return nil
-	}))
-}
-
 // handleProcessRuntime returns, for one definition, how many instances are live
 // and how many tokens (element instances) currently sit on each BPMN element —
 // the data the browser overlays onto the diagram. An optional ?instance=<key>
@@ -1414,7 +1705,12 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 	var (
 		found   bool
 		scanErr error
-		resp    = runtimeResp{Elements: []runtimeElement{}, Incidents: []runtimeIncident{}}
+		// cp is carried out of the loop turn so the exact incident counts can be
+		// mapped back onto BPMN ids off it. A CompiledProcess is immutable once
+		// deployed (I5), which is what makes that safe — readOffLoop hands the same
+		// pointer to its own callers for the same reason.
+		cp   *compiler.CompiledProcess
+		resp = runtimeResp{Elements: []runtimeElement{}, Incidents: []runtimeIncident{}}
 	)
 	s.do(func() {
 		d, ok := s.deployments[key]
@@ -1422,6 +1718,7 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		cp = d.cp
 
 		byElement := map[string]*runtimeElement{}
 		var order []string
@@ -1446,15 +1743,27 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 		// One resolver for the whole overlay, so the worker store is read once for
 		// the page rather than once per parked token (ADR-0160).
 		connectorFor := s.incidentConnectorLookup()
-		// addIncident records one parked element instance on the overlay: a count on
-		// the element (so the diagram can mark the shape) and the detail behind it (so
-		// the panel can say why and offer the resolve). Full is the response cap.
-		addIncident := func(elKey uint64, v *model.IncidentValue) (full bool) {
+		// addIncident records one parked element instance of the *isolated instance*
+		// on the overlay: a count on the element (so the diagram can mark the shape)
+		// and, while the page has room, the detail behind it (so the panel can say why
+		// and offer the resolve).
+		//
+		// Counting and paging are separate, and that separation is the correction: this
+		// used to stop counting when the page filled, which made a single instance
+		// holding more than a hundred parked tokens report exactly a hundred — on the
+		// one branch whose counts nothing else corrects
+		// (ADR-0366).
+		addIncident := func(elKey uint64, v *model.IncidentValue) {
 			e := get(v.ElementId)
 			if e == nil {
-				return false
+				return
 			}
 			e.Incidents++
+			resp.IncidentTotal++
+			if len(resp.Incidents) >= maxRuntimeIncidents {
+				resp.IncidentsTruncated = true
+				return
+			}
 			inc := runtimeIncident{
 				ElementInstanceKey: elKey,
 				ProcessInstanceKey: v.ProcessInstanceKey,
@@ -1466,7 +1775,6 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			inc.Connector, inc.ConnectorKind, inc.ConnectorID = connectorFor(d.cp, v.ElementId)
 			inc.RepairForm = d.cp.RepairForm(v.ElementId)
 			resp.Incidents = append(resp.Incidents, inc)
-			return len(resp.Incidents) >= maxRuntimeIncidents
 		}
 
 		// The definition's finished-instance total, on both branches: the live view
@@ -1524,7 +1832,11 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 				resp.Instances = n
 				return err
 			})
-			scan(func() error { return s.collectDefIncidents(key, addIncident, &resp) })
+			// No incident scan here. Collecting them on the loop is what bounded them,
+			// and bounding them by a walk of the *whole* family in key order is what let
+			// another definition's flood spend this one's budget
+			// (ADR-0366). They arrive
+			// from the off-loop reading once this turn is over.
 		} else {
 			// Isolating one instance on the diagram (a deliberate single-instance
 			// action, not the default view). The elByProc index lists exactly this
@@ -1532,6 +1844,11 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			// holds rather than every token in the engine — the follow-up ADR-0080
 			// left open. The definition check stays: an instance key from another
 			// definition must draw nothing on this diagram.
+			//
+			// Its counts are exact by construction: the walk enumerates this instance's
+			// own element instances, so it sees every token it holds and every incident
+			// hanging off one. Nothing bounds it but the instance itself.
+			resp.IncidentCountsExact = true
 			scan(func() error {
 				return s.store.ElementInstancesOfProcess(instanceFilter, func(elKey uint64) error {
 					v, ok, err := s.store.GetElementInstance(elKey)
@@ -1548,14 +1865,17 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 					// One point lookup per token this instance holds: an element instance is
 					// where an incident hangs (ADR-0061), so the walk that draws the tokens
 					// also finds every reason one of them is not moving.
-					if len(resp.Incidents) < maxRuntimeIncidents {
-						inc, err := s.store.GetIncident(elKey)
-						if err != nil {
-							return err
-						}
-						if inc != nil && addIncident(elKey, inc) {
-							resp.IncidentsTruncated = true
-						}
+					//
+					// The lookup is paid past the detail cap too, and deliberately: it is
+					// bounded by the tokens of *one* instance, and stopping at a hundred
+					// used to stop the counting with it — the one branch whose counts
+					// nothing else corrects (ADR-0366).
+					inc, err := s.store.GetIncident(elKey)
+					if err != nil {
+						return err
+					}
+					if inc != nil {
+						addIncident(elKey, inc)
 					}
 					return nil
 				})
@@ -1597,6 +1917,17 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			resp.Elements = append(resp.Elements, *byElement[bid])
 		}
 	})
+	// The aggregate branch's incidents — its counts and its detail page both — come
+	// from the off-loop reading. The single-instance branch needs neither: its walk is
+	// bounded by one instance's own tokens, so it counts every one of them and finds
+	// every incident hanging off them.
+	//
+	// After the loop turn, not inside it: the reading takes its snapshot through the
+	// loop itself (ADR-0266), and dispatching onto the loop from a closure the loop is
+	// running would deadlock.
+	if found && scanErr == nil && instanceFilter == 0 {
+		applyIncidentOverlay(s, key, cp, &resp)
+	}
 	switch {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
@@ -1605,6 +1936,57 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 	default:
 		httpapi.JSON(w, http.StatusOK, resp)
 	}
+}
+
+// applyIncidentOverlay puts one definition's parked tokens onto the aggregate overlay:
+// the exact total, the exact count on each element, and a bounded page of the details
+// behind them (ADR-0366).
+//
+// A definition with nothing parked gets zeroes, and that is a statement rather than an
+// absence: the reading is a whole snapshot of the incident family, so "not in it" means
+// "none". It is the case this exists for — a healthy definition must be able to say it
+// is healthy, and under the bounded scan it could not be told apart from an unreached
+// one.
+//
+// A reading that could not be taken leaves the response saying so through
+// IncidentCountsExact and carrying no incidents, rather than a zero it has not earned.
+func applyIncidentOverlay(s *Server, key uint64, cp *compiler.CompiledProcess, resp *runtimeResp) {
+	parked, ok := s.incidentOverlay(key)
+	if !ok || cp == nil {
+		return
+	}
+	resp.IncidentCountsExact = true
+	resp.IncidentTotal = parked.total
+	resp.Incidents = append(resp.Incidents, parked.details...)
+	resp.IncidentsTruncated = parked.detailsTruncated
+	at := make(map[string]int, len(resp.Elements))
+	for i := range resp.Elements {
+		at[resp.Elements[i].ElementID] = i
+	}
+	// An element holding a parked token that the live-token counters did not report
+	// would otherwise be counted in the total and drawn nowhere. It should not happen —
+	// an incident hangs on an active element instance — but a diagram that silently
+	// drops one is the failure this whole change is about, so it is added rather than
+	// discarded. Collected first and appended after, because appending while the index
+	// above is in use would invalidate it.
+	var unplaced []runtimeElement
+	for elementID, n := range parked.byElement {
+		bid := cp.ElementBpmnId(elementID)
+		if bid == "" {
+			continue
+		}
+		if i, ok := at[bid]; ok {
+			resp.Elements[i].Incidents = n
+			continue
+		}
+		unplaced = append(unplaced, runtimeElement{
+			ElementID: bid, Type: cp.Node(elementID).Type.String(), Incidents: n,
+		})
+	}
+	// Map iteration is unordered; the overlay is polled, so an order that reshuffles
+	// between two identical readings is a diff where there is no change.
+	sort.Slice(unplaced, func(i, j int) bool { return unplaced[i].ElementID < unplaced[j].ElementID })
+	resp.Elements = append(resp.Elements, unplaced...)
 }
 
 // handleCollaborationRuntime returns the runtime of a whole collaboration for the
@@ -1896,6 +2278,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		manualByElement := map[uint64]manualActionView{}
 		var migrations []migrationBoundary
 		var migrationRows []migrationRow
+		var forkRows []forkRow
 		if scanErr == nil {
 			scanErr = s.store.OperatorActionHistory(key, func(ts int64, pos uint64, v *model.OperatorActionValue) error {
 				if v.Kind == model.OperatorActionMigrate {
@@ -1905,9 +2288,18 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 					})
 					return nil
 				}
+				// A fork is instance-wide like a migration, and deliberately *not* a
+				// version boundary: the predecessor ran only its own version, and the
+				// successor only the new one, so neither instance's element indices are
+				// ever read through two graphs (ADR-0389).
+				if v.Kind == model.OperatorActionForkedTo || v.Kind == model.OperatorActionForkedFrom {
+					forkRows = append(forkRows, forkRow{pos: pos, at: ts, kind: v.Kind, actor: v.Actor, reason: v.Reason})
+					return nil
+				}
 				if v.ElementInstanceKey != 0 {
 					manualByElement[v.ElementInstanceKey] = manualActionView{
 						Action: v.Kind.String(), Actor: v.Actor, Reason: v.Reason, At: ts,
+						ErrorCode: v.ErrorCode,
 					}
 				}
 				return nil
@@ -1925,6 +2317,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			return nil
 		})
 		resp.Migrated = ver.migrated()
+		resp.PredecessorInstanceKey, resp.SuccessorInstanceKey = pi.PredecessorInstanceKey, pi.SuccessorInstanceKey
 		// childByParent was built off the loop above; nil means this instance's
 		// definitions call no other process, so no step can carry a drill-in link.
 		// Variable snapshots are scope-aware: the process-instance (root) scope plus
@@ -2310,7 +2703,35 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				},
 			})
 		}
-		if len(migrationRows) > 0 {
+		for _, f := range forkRows {
+			other, direction := pi.SuccessorInstanceKey, "out"
+			if f.kind == model.OperatorActionForkedFrom {
+				other, direction = pi.PredecessorInstanceKey, "in"
+			}
+			ver := int32(0)
+			if other != 0 {
+				if o, ok, err := s.store.ProcessInstance(other); err == nil && ok {
+					// The linked instance's version, not this one's: what a reader wants
+					// to know is what the work is running on now (or what it ran on
+					// before), and the instance beside them already says their own.
+					if dd, found := s.deployments[o.ProcessDefKey]; found {
+						ver = dd.Version
+					}
+				}
+			}
+			resp.Steps = append(resp.Steps, timelineStep{
+				At:        f.at,
+				Position:  f.pos,
+				Type:      "fork",
+				Action:    "fork",
+				Variables: []variableView{},
+				Fork: &forkView{
+					Direction: direction, InstanceKey: other, Version: ver,
+					Actor: f.actor, Reason: f.reason, At: f.at,
+				},
+			})
+		}
+		if len(migrationRows) > 0 || len(forkRows) > 0 {
 			sort.Slice(resp.Steps, func(i, j int) bool { return resp.Steps[i].Position < resp.Steps[j].Position })
 		}
 
@@ -2425,7 +2846,7 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -2435,50 +2856,7 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	var (
-		found   bool
-		notExec bool
-		runErr  error
-		statErr error
-		stats   statsResp
-	)
-	var driveNeeded bool
-	s.do(func() {
-		d, ok := s.deployments[key]
-		if !ok {
-			return
-		}
-		found = true
-		// A non-executable process is descriptive-only; refuse to start it (the UI
-		// also hides it, but this guards the API and public start paths directly).
-		if d.cp != nil && !d.cp.IsExecutable() {
-			notExec = true
-			return
-		}
-		s.proc.CreateInstance(key, startVars...)
-		driveNeeded = true
-	})
-	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
-	// read-back that follows it are two separate visits to the loop — and the
-	// read-back's is now only long enough to take a view, not to do the counting
-	// (ADR-0266).
-	if driveNeeded {
-		if runErr = s.drive(); runErr == nil {
-			stats, statErr = s.statsOffLoop()
-		}
-	}
-	switch {
-	case !found:
-		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
-	case notExec:
-		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
-	case runErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "run instance: "+runErr.Error())
-	case statErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
-	default:
-		httpapi.JSON(w, http.StatusOK, createInstanceResp{DefinitionKey: key, Stats: stats})
-	}
+	s.startInstance(w, r, key, startVars)
 }
 
 // parseStartVariables reads {"variables": {name: value}} from a request body
@@ -2554,6 +2932,22 @@ type variableView struct {
 
 func toVariableView(v *model.VariableValue) variableView {
 	out := variableView{Name: v.Name}
+	// An enciphered value is reported as what it is, never as the base64 it looks like.
+	// This is the answer to the question ADR-0314 left open — whether the variable audit
+	// should show that a value was declared personal rather than showing ciphertext — and
+	// it is answered here rather than by deciphering, because these views (the timeline,
+	// the audit, an instance list) are about what happened to a value and when, not about
+	// the value; opening one per row would mean a vault read per row for a screen that
+	// does not need the content. The two edges that do need it open it (ADR-0314's "out
+	// at the edge"), and what a caller may read of an instance at all is decided by
+	// ADR-0275, not here.
+	if v.Kind == model.VarJSON {
+		if env, ok := vault.ParseEnvelope(v.Text); ok {
+			out.Kind = "personal"
+			out.Value = "enciphered for data subject " + env.Subject
+			return out
+		}
+	}
 	switch v.Kind {
 	case model.VarBool:
 		out.Kind = "boolean"
@@ -2608,15 +3002,38 @@ func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request)
 		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
+	// Being signed in is not a relationship to this instance. The role gate on this
+	// route is "any" so a task worker can prefill their form; the object question —
+	// may *you* read *this* instance, and how much of it — is asked here
+	// (ADR-0275, audit F11).
+	acc, code, msg := s.instanceAccessFor(r, key)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	out := map[string]any{}
 	var scanErr error
 	s.do(func() {
-		scanErr = s.store.VisibleVariablesOfScope(key, func(v *model.VariableValue) error {
-			out[v.Name] = nativeVar(v)
+		// The other edge ADR-0314 permits plaintext at: this is what a task's form is
+		// prefilled from and what a task detail shows. Enciphering is about
+		// *erasability*, not about access control — what a caller may read of an
+		// instance is decided by acc above (ADR-0275), and a declared variable does not
+		// quietly become a second, differently-ruled access boundary.
+		scanErr = state.VisibleVariables(s.personalReader(s.store), key, func(v *model.VariableValue) error {
+			if acc.allows(v.Name) {
+				out[v.Name] = nativeVar(v)
+			}
 			return nil
 		})
 	})
-	if scanErr != nil {
+	switch {
+	case errors.Is(scanErr, vault.ErrErased):
+		// Not a fault: this instance carries a value whose data subject has been erased,
+		// so it is permanently unreadable and the form cannot be prefilled. Saying so is
+		// the difference between the outcome ADR-0314 intends and a 500 somebody debugs.
+		httpapi.Error(w, http.StatusConflict, "this instance holds personal data whose data subject has been erased, so it can no longer be read or completed: "+scanErr.Error())
+		return
+	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read variables: "+scanErr.Error())
 		return
 	}
@@ -2643,7 +3060,7 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -2671,6 +3088,17 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	scopeKey := payload.ScopeKey
+	// A declared personal value is enciphered here, before it becomes a command, exactly
+	// as it would be on the way in from a form or a worker (ADR-0314). An operator
+	// correction is not an exception to erasability.
+	sealScope := scopeKey
+	if sealScope == 0 {
+		sealScope = key
+	}
+	if err := s.encipherScopeVars(sealScope, vars); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	// Who is making the change, for the audit trail (ADR-0098): the authenticated
 	// principal's username, or "" when auth is off (single-user) or the caller is
 	// unidentified. Read off the request before the run loop, like every other
@@ -2776,14 +3204,24 @@ func (s *Server) handleInstanceVariableAudit(w http.ResponseWriter, r *http.Requ
 	var scanErr error
 	s.do(func() {
 		scanErr = s.store.VariableAuditHistory(key, func(ts int64, _ uint64, v *model.VariableAuditValue) error {
-			out = append(out, variableAuditView{
+			view := variableAuditView{
 				At:    ts,
 				Actor: v.Actor,
 				Scope: v.ScopeKey,
 				Name:  v.Name,
 				Value: nativeVar(&model.VariableValue{Kind: v.Kind, Bool: v.Bool, Text: v.Text}),
 				Kind:  varKindName(v.Kind),
-			})
+			}
+			// The audit's subject is that somebody overrode this variable, not what the
+			// value was, so an enciphered value is reported as what it is rather than as
+			// the envelope it is stored as — the same reading the timeline takes, and the
+			// answer to the question ADR-0314 left open for this view.
+			if v.Kind == model.VarJSON {
+				if env, ok := vault.ParseEnvelope(v.Text); ok {
+					view.Kind, view.Value = "personal", "enciphered for data subject "+env.Subject
+				}
+			}
+			out = append(out, view)
 			return nil
 		})
 	})
@@ -3016,6 +3454,169 @@ func (s *Server) annotateDataObjects(key uint64, byName map[string]*dataObjectVi
 		// left it in its current value — the write the row's summary names.
 		p.view.ProducedBy = id
 	}
+}
+
+// handleDerivedModel answers what the application's processes imply about its data,
+// without anyone having modelled it (ADR-0301).
+//
+// The derived model is what is *built*. What a person authors under Data is a
+// different statement — a target, not yet reality — and this reads the first without
+// touching the second: no model is created, seeded or updated, and the response is
+// never stored. Their difference is the interesting part, and it is work not yet done
+// rather than drift to be reconciled away.
+//
+// Per application by construction: one application's processes are what imply one
+// vocabulary, so without one there is no set to read and the request is refused
+// rather than answered with an accidental empty.
+func (s *Server) handleDerivedModel(w http.ResponseWriter, r *http.Request) {
+	applicationID := r.URL.Query().Get("applicationId")
+	if strings.TrimSpace(applicationID) == "" {
+		httpapi.Error(w, http.StatusBadRequest, "applicationId is required — a derived model is read from one application's processes")
+		return
+	}
+	var cps []*compiler.CompiledProcess
+	s.do(func() { cps = s.applicationProcessesOnLoop(applicationID) })
+	httpapi.JSON(w, http.StatusOK, infomodel.Derive(cps))
+}
+
+// handleModelDifference answers what the application's processes and its authored
+// model say differently (ADR-0310).
+//
+// It is stateless, which is what makes it possible: ADR-0301 §4 wanted an identity for a
+// derived element that survives a re-derivation, because a *reconciliation* has to
+// remember which change was rejected. Nothing here remembers anything — both sides are
+// computed fresh and compared by name — so there is no identity to keep.
+//
+// A read, like the derivation it stands beside: nothing is written to either model.
+func (s *Server) handleModelDifference(w http.ResponseWriter, r *http.Request) {
+	applicationID := r.URL.Query().Get("applicationId")
+	if strings.TrimSpace(applicationID) == "" {
+		httpapi.Error(w, http.StatusBadRequest, "applicationId is required — a difference is read between one application's processes and its own model")
+		return
+	}
+	var (
+		cps   []*compiler.CompiledProcess
+		vocab *infomodel.Vocabulary
+		err   error
+	)
+	s.do(func() {
+		cps = s.applicationProcessesOnLoop(applicationID)
+		vocab, err = s.infomodel.VocabularyOnLoop(applicationID)
+	})
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "could not read this application's information model")
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, infomodel.Difference(cps, vocab))
+}
+
+// lifecycleView is one data object's declared lifecycle with its own life drawn on
+// it (ADR-0259 §4). The trace is inlined rather than nested under a key, because the
+// caller's question is about the object and the machine is the answer, not a
+// sub-object of it.
+type lifecycleView struct {
+	Object string `json:"object"`
+	Class  string `json:"class"`
+	infomodel.Trace
+}
+
+// handleInstanceLifecycle answers "where has this datum got to in the life its class
+// declares, and how did it get there" — the run-time twin of the lifecycle drawn in
+// the information model, the way the object diagram is the run-time twin of the class
+// diagram (ADR-0259 §4).
+//
+// It adds no fact. The trail, with the element that made each write, is the same one
+// the Data tab lists; the machine is the same one the editor draws. What is new is
+// reading them against each other, which is done here rather than in the browser for
+// the reason the object graph is: which declared transition a move corresponds to is
+// model semantics, and a second copy of that rule is a second place for it to be
+// wrong.
+//
+// An object whose class declares no lifecycle is simply absent — nil is the normal
+// case for a class and stays silent here as it does everywhere else.
+func (s *Server) handleInstanceLifecycle(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	out := []lifecycleView{}
+	var opErr error
+	s.do(func() {
+		objects := []dataObjectView{}
+		if opErr = s.store.DataObjectsOfScope(key, func(v *model.DataObjectValue) error {
+			objects = append(objects, toDataObjectView(v))
+			return nil
+		}); opErr != nil || len(objects) == 0 {
+			return
+		}
+		byName := make(map[string]*dataObjectView, len(objects))
+		for i := range objects {
+			byName[objects[i].Name] = &objects[i]
+		}
+		// The same annotation the Data tab's list gets: the declared class off the
+		// definition, and the trail off the log with each write attributed. Sharing it
+		// is what keeps "who moved this datum" one answer rather than two that can come
+		// to differ.
+		s.annotateDataObjects(key, byName, &opErr)
+		if opErr != nil {
+			return
+		}
+		applicationID := ""
+		pi, ok, err := s.store.ProcessInstance(key)
+		if err != nil {
+			opErr = err
+			return
+		}
+		if ok {
+			if d, found := s.deployments[pi.ProcessDefKey]; found && d.cp != nil {
+				applicationID = d.ProjectID
+			}
+		}
+		vocab, err := s.infomodel.VocabularyOnLoop(applicationID)
+		if err != nil {
+			opErr = err
+			return
+		}
+		for i := range objects {
+			o := &objects[i]
+			if o.ItemType == "" {
+				continue
+			}
+			c, found := vocab.Class(o.ItemType)
+			if !found || c.Lifecycle == nil {
+				continue
+			}
+			out = append(out, lifecycleView{
+				Object: o.Name, Class: o.ItemType,
+				Trace: infomodel.TraceLifecycle(c.Lifecycle, lifecycleTrail(o)),
+			})
+		}
+	})
+	if opErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read lifecycle: "+opErr.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, out)
+}
+
+// lifecycleTrail is the object's recorded life as the trace reads it. Where no
+// history was recorded at all — an instance older than the snapshot history, or one
+// whose objects were only ever seeded — the object's current state still says where
+// it is, and saying that is better than drawing a machine nothing is standing on. It
+// carries no attribution, which is honest: nothing is known about how it got there.
+func lifecycleTrail(o *dataObjectView) []infomodel.TrailEntry {
+	if len(o.History) == 0 {
+		if o.State == "" {
+			return nil
+		}
+		return []infomodel.TrailEntry{{State: o.State, At: o.At}}
+	}
+	trail := make([]infomodel.TrailEntry, 0, len(o.History))
+	for _, h := range o.History {
+		trail = append(trail, infomodel.TrailEntry{State: h.State, At: h.At, By: h.ProducedBy})
+	}
+	return trail
 }
 
 // handleInstanceObjectGraph derives one instance's object diagram: its data objects
@@ -3282,12 +3883,24 @@ func (s *Server) handleDataObjectsAcrossInstances(w http.ResponseWriter, r *http
 // raw JSON rather than being re-encoded. Trace is omitted when the decision produced
 // none (a literal-expression decision, or a remote decision returning no trace).
 type decisionEvaluationView struct {
-	At         int64           `json:"at"`
+	At int64 `json:"at"`
+	// AtKey is At again, as a decimal string, and it is not redundant: a nanosecond
+	// timestamp is past 2^53, so a browser cannot hold one as a number without
+	// rounding it (1789824241612033700 parses as …3800). Every client here is a
+	// browser, and the timestamp is how an evaluation is addressed — so the number is
+	// for reading and arithmetic, and this is the identity to hand back.
+	AtKey      string          `json:"atKey"`
 	ElementID  string          `json:"elementId"`
 	DecisionID string          `json:"decisionId"`
 	Inputs     json.RawMessage `json:"inputs"`
 	Outputs    json.RawMessage `json:"outputs"`
 	Trace      json.RawMessage `json:"trace,omitempty"`
+	// DecisionKey and DecisionVersion say which deployment answered and which
+	// version of the decision that is — absent for an evaluation recorded before
+	// the key was, and the version absent for a model bundled with the process
+	// (ADR-0423).
+	DecisionKey     uint64 `json:"decisionKey,omitempty"`
+	DecisionVersion int32  `json:"decisionVersion,omitempty"`
 }
 
 // rawJSONOr returns s as raw JSON, or fallback when s is empty — so a view field
@@ -3319,10 +3932,13 @@ func (s *Server) handleInstanceDecisions(w http.ResponseWriter, r *http.Request)
 	s.do(func() {
 		scanErr = s.store.DecisionEvaluationHistory(key, func(ts int64, _ uint64, v *model.DecisionEvaluationValue) error {
 			view := decisionEvaluationView{
-				At:         ts,
-				DecisionID: v.DecisionId,
-				Inputs:     rawJSONOr(v.InputsJSON, "{}"),
-				Outputs:    rawJSONOr(v.OutputsJSON, "{}"),
+				At:              ts,
+				AtKey:           strconv.FormatInt(ts, 10),
+				DecisionID:      v.DecisionId,
+				Inputs:          rawJSONOr(v.InputsJSON, "{}"),
+				Outputs:         rawJSONOr(v.OutputsJSON, "{}"),
+				DecisionKey:     v.DecisionKey,
+				DecisionVersion: s.decisionVersionOf(v.DecisionKey, v.DecisionId),
 			}
 			if v.TraceJSON != "" {
 				view.Trace = json.RawMessage(v.TraceJSON)
@@ -3336,6 +3952,112 @@ func (s *Server) handleInstanceDecisions(w http.ResponseWriter, r *http.Request)
 	})
 	if scanErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read decisions: "+scanErr.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, out)
+}
+
+// decisionGraphView answers "how was this case decided" in one read: the
+// evaluation itself — what it saw, what it produced, and the trace of which rules
+// fired — together with the decision requirements graph of the model that
+// produced it, so an operator can be shown the decision rather than told about it.
+//
+// The graph is the one the *evaluation* ran against, resolved from the process
+// definition the record carries, not the design-time model as it reads today. A
+// decision that was re-modelled since must not redraw the case that ran under the
+// old shape.
+//
+// Service marks a decision service, whose evaluation retains no rule trace at all
+// (ADR-0398). The distinction is load-bearing for the reader: the graph and the
+// values are still exact, and only the rule-level detail is missing — which is a
+// different sentence from "no rules fired".
+type decisionGraphView struct {
+	At         int64           `json:"at"`
+	AtKey      string          `json:"atKey"`
+	ElementID  string          `json:"elementId,omitempty"`
+	DecisionID string          `json:"decisionId"`
+	ModelName  string          `json:"modelName,omitempty"`
+	Service    bool            `json:"service,omitempty"`
+	Inputs     json.RawMessage `json:"inputs"`
+	Outputs    json.RawMessage `json:"outputs"`
+	Trace      json.RawMessage `json:"trace,omitempty"`
+	Nodes      []dmn.GraphNode `json:"nodes"`
+	Edges      []dmn.GraphEdge `json:"edges"`
+	// DecisionKey and DecisionVersion as on decisionEvaluationView.
+	DecisionKey     uint64 `json:"decisionKey,omitempty"`
+	DecisionVersion int32  `json:"decisionVersion,omitempty"`
+}
+
+// handleInstanceDecisionGraph serves one of an instance's decision evaluations —
+// the one recorded at `at` — with the requirements graph of the decision behind
+// it. It is what the Operations viewers open when a business rule task is
+// double-clicked: the picture of the decision, annotated with this case's values.
+//
+// `at` identifies the evaluation because the record is keyed by timestamp within
+// the instance and the client passes back a timestamp it was served. An unknown
+// instance or timestamp is a 404 rather than an empty document: the caller asked
+// for one specific evaluation, and there is no such thing as an empty one.
+func (s *Server) handleInstanceDecisionGraph(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	// The path carries the timestamp as the decimal string the listing served
+	// (decisionEvaluationView.AtKey), because a browser rounds a nanosecond
+	// timestamp the moment it parses one as a number. Parsed back here it is exact
+	// again, so the comparison below is the identity it looks like.
+	at, err := strconv.ParseInt(r.PathValue("at"), 10, 64)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid evaluation timestamp")
+		return
+	}
+	var out *decisionGraphView
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.DecisionEvaluationHistory(key, func(ts int64, _ uint64, v *model.DecisionEvaluationValue) error {
+			if ts != at {
+				return nil
+			}
+			view := &decisionGraphView{
+				At:              ts,
+				AtKey:           strconv.FormatInt(ts, 10),
+				DecisionID:      v.DecisionId,
+				Inputs:          rawJSONOr(v.InputsJSON, "{}"),
+				Outputs:         rawJSONOr(v.OutputsJSON, "{}"),
+				Nodes:           []dmn.GraphNode{},
+				Edges:           []dmn.GraphEdge{},
+				DecisionKey:     v.DecisionKey,
+				DecisionVersion: s.decisionVersionOf(v.DecisionKey, v.DecisionId),
+			}
+			if v.TraceJSON != "" {
+				view.Trace = json.RawMessage(v.TraceJSON)
+			}
+			if d, ok := s.deployments[v.ProcessDefKey]; ok {
+				view.ElementID = d.cp.ElementBpmnId(v.ElementId)
+			}
+			// The graph of the model that answered, when the record says which one did;
+			// otherwise the process's own model, as before the key was recorded.
+			graphKey := v.ProcessDefKey
+			if v.DecisionKey != 0 {
+				graphKey = v.DecisionKey
+			}
+			if g, ok := s.dmnRegistry.Graph(graphKey, v.DecisionId); ok {
+				view.ModelName, view.Nodes, view.Edges = g.ModelName, g.Nodes, g.Edges
+			}
+			view.Service = s.dmnRegistry.IsService(v.ProcessDefKey, v.DecisionId)
+			out = view
+			// The evaluation asked for is in hand; the rest of the instance's decision
+			// history is not this read's business.
+			return errListTruncated
+		})
+	})
+	if err := unlessTruncated(scanErr); err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read decisions: "+err.Error())
+		return
+	}
+	if out == nil {
+		httpapi.Error(w, http.StatusNotFound, "no decision evaluation recorded at that time")
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, out)
@@ -3410,9 +4132,13 @@ func (s *Server) handleInstancesSummary(w http.ResponseWriter, _ *http.Request) 
 }
 
 type publishMessageResp struct {
-	Name           string    `json:"name"`
-	CorrelationKey string    `json:"correlationKey"`
-	Stats          statsResp `json:"stats"`
+	Name           string `json:"name"`
+	CorrelationKey string `json:"correlationKey"`
+	// TimeToLiveMs and MessageId echo what the publish asked for (ADR-0370), so a
+	// sender's log shows the lifetime the server accepted.
+	TimeToLiveMs int64     `json:"timeToLiveMs,omitempty"`
+	MessageId    string    `json:"messageId,omitempty"`
+	Stats        statsResp `json:"stats"`
 }
 
 // handlePublishMessage publishes a message by name and correlation key, with
@@ -3421,7 +4147,7 @@ type publishMessageResp struct {
 // a message that matches nothing is accepted as a no-op (no buffering yet,
 // ADR-0020). Body: {"name","correlationKey","variables":{…}}.
 func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -3429,6 +4155,11 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		Name           string `json:"name"`
 		CorrelationKey string `json:"correlationKey"`
+		// TimeToLiveMs keeps a message nothing waits for yet, for a subscription that
+		// opens later (ADR-0370); 0 or absent is ADR-0020's publish, lost when unmatched.
+		TimeToLiveMs int64 `json:"timeToLiveMs"`
+		// MessageId makes a repeat of the same message a no-op while the first lives.
+		MessageId string `json:"messageId"`
 	}
 	if len(bytes.TrimSpace(body)) > 0 {
 		if err := json.Unmarshal(body, &payload); err != nil {
@@ -3438,6 +4169,19 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	if payload.Name == "" {
 		httpapi.Error(w, http.StatusBadRequest, "message name is required")
+		return
+	}
+	ttl := time.Duration(payload.TimeToLiveMs) * time.Millisecond
+	switch limit := s.messageTTLLimit(); {
+	case payload.TimeToLiveMs < 0:
+		httpapi.Error(w, http.StatusBadRequest, "timeToLiveMs must not be negative")
+		return
+	case payload.TimeToLiveMs > limit.Milliseconds():
+		httpapi.Error(w, http.StatusBadRequest, "timeToLiveMs is longer than the "+limit.String()+
+			" this server keeps a message (--message-ttl-max); a message kept that long is a record, not a message")
+		return
+	case payload.MessageId != "" && ttl == 0:
+		httpapi.Error(w, http.StatusBadRequest, "messageId needs a timeToLiveMs: the id is remembered for as long as its message lives")
 		return
 	}
 	vars, err := parseStartVariables(body)
@@ -3450,11 +4194,56 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 		statErr error
 		stats   statsResp
 	)
-	var driveNeeded bool
+	var (
+		driveNeeded bool
+		owner       string
+		action      string
+		ownerErr    error
+		personalVar string
+		personalIn  string
+	)
 	s.do(func() {
-		s.proc.PublishMessage(payload.Name, payload.CorrelationKey, vars...)
+		// A message a catalogue product's action starts or waits at is the order's to
+		// send. A per-position product's later actions are delivered to the one
+		// instance that carries a position, and reported; by name they would reach
+		// whatever waits under the key they carry (ADR-0428). A per-operation
+		// product's actions are start events the order enters through its start act,
+		// a return or an action; by name they would start the lifecycle process
+		// outside the order — a provisioning no line knows of, a return the inventory
+		// never hears about (ADR-0425 §8, ADR-0429 §1).
+		if owner, action, ownerErr = s.catalogOwnerOfName(payload.Name); ownerErr != nil || owner != "" {
+			return
+		}
+		if ttl == 0 {
+			s.proc.PublishMessage(payload.Name, payload.CorrelationKey, vars...)
+			driveNeeded = true
+			return
+		}
+		// A buffered message keeps its payload readable until it is delivered or expires:
+		// nothing on the message path can seal a value, because the instance whose data
+		// subject would key it is known only once the message correlates (ADR-0314). So a
+		// message that may be buffered must not carry a value any deployed process
+		// declares personal (ADR-0370, amended 2026-10-13).
+		if personalVar, personalIn = s.personalDeclarationOf(vars); personalVar != "" {
+			return
+		}
+		s.proc.PublishMessageWithTTL(payload.Name, payload.CorrelationKey, payload.MessageId, ttl, vars...)
 		driveNeeded = true
 	})
+	switch {
+	case personalVar != "":
+		httpapi.Error(w, http.StatusUnprocessableEntity, "variable "+personalVar+" is declared personal by process "+personalIn+
+			"; a message with a timeToLiveMs is kept readable until it is delivered or expires, so it may not carry personal data")
+		return
+	case ownerErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "read catalogue: "+ownerErr.Error())
+		return
+	case owner != "":
+		httpapi.Error(w, http.StatusConflict, "message "+payload.Name+" is product "+owner+
+			"'s action "+action+"; the order sends it — through its start act, a return or "+
+			"the action — and it is never published by name")
+		return
+	}
 	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
 	// read-back that follows it are two separate visits to the loop — and the
 	// read-back's is now only long enough to take a view, not to do the counting
@@ -3470,7 +4259,8 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	case statErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
 	default:
-		httpapi.JSON(w, http.StatusOK, publishMessageResp{Name: payload.Name, CorrelationKey: payload.CorrelationKey, Stats: stats})
+		httpapi.JSON(w, http.StatusOK, publishMessageResp{Name: payload.Name, CorrelationKey: payload.CorrelationKey,
+			TimeToLiveMs: payload.TimeToLiveMs, MessageId: payload.MessageId, Stats: stats})
 	}
 }
 
@@ -3655,7 +4445,7 @@ type terminateInstancesResp struct {
 // they are atomic with the scan/lookups; filter mode's Limit bounds that turn.
 func (s *Server) handleTerminateInstances(w http.ResponseWriter, r *http.Request) {
 	var req terminateInstancesReq
-	if !decodeJSONBody(w, r, &req) {
+	if !s.decodeJSONBody(w, r, &req) {
 		return
 	}
 	switch {
@@ -3834,12 +4624,6 @@ type jobResp struct {
 	Retries            int32  `json:"retries"`
 }
 
-// handleListInstanceJobs lists the activatable jobs one instance is parked on,
-// regardless of type — the read side of POST /jobs/{key}/complete. It mirrors
-// handleListTasks but is scoped to one instance and not limited to user tasks, so
-// a client that only speaks HTTP can discover the job keys of parked service tasks
-// and finish them by hand. The scan runs on the run-loop goroutine (state's sole
-// owner) via do.
 // jobTypeName turns the job-type index on a job record back into the name an
 // operator authored. The engine-wide table is authoritative: since job types are
 // resolved at deploy (ADR-0007/0157) every job created from then on carries an
@@ -3857,6 +4641,19 @@ func (s *Server) jobTypeName(cp *compiler.CompiledProcess, jobType int32) string
 	return cp.Intern(jobType)
 }
 
+// handleListInstanceJobs lists the activatable jobs one instance is parked on,
+// regardless of type — the read side of POST /jobs/{key}/complete. It mirrors
+// handleListTasks but is scoped to one instance and not limited to user tasks, so
+// a client that only speaks HTTP can discover the job keys of parked service tasks
+// and finish them by hand.
+//
+// It walks the instance's own element index and asks the element→job reverse index
+// for each token, so it costs the instance's live token count rather than the
+// server's whole job population. That count is not small by construction — one
+// multi-instance activity alone may hold limits.Iterations tokens — so the walk
+// runs off the run loop (readOffLoop). Only the job-type names need the loop — the
+// registry that holds them is loop-owned and has no lock — so they are resolved
+// afterwards in one short dispatch that does a map lookup per row found.
 func (s *Server) handleListInstanceJobs(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
@@ -3864,27 +4661,62 @@ func (s *Server) handleListInstanceJobs(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	jobs := []jobResp{}
-	var scanErr error
-	s.do(func() {
-		scanErr = s.store.AllActivatableJobs(func(jobKey uint64) error {
-			jv, ok, err := s.store.GetJob(jobKey)
-			if err != nil || !ok || jv.ProcessInstanceKey != key {
-				return err // err is nil for the skip cases (missing job / other instance)
+	// The job-type index of each row and the compiled process its name falls back to,
+	// kept beside the rows until the names are resolved on the loop. A row whose
+	// definition is not deployed carries no cp and stays unnamed.
+	type jobTypeRef struct {
+		cp      *compiler.CompiledProcess
+		jobType int32
+	}
+	var refs []jobTypeRef
+	scanErr := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
+		return rv.ElementInstancesOfProcess(key, func(elKey uint64) error {
+			jobKey, ok, err := rv.JobOfElement(elKey)
+			if err != nil || !ok {
+				return err // no job on this element (or a read error)
+			}
+			jv, ok, err := rv.GetJob(jobKey)
+			if err != nil || !ok {
+				return err
+			}
+			// Activatable exactly as a worker's pull sees it: a leased, backing-off or
+			// incident-parked job is off the index, and so off this list.
+			if on, err := rv.JobActivatable(jv.JobType, jobKey); err != nil || !on {
+				return err
 			}
 			jr := jobResp{Key: jobKey, ProcessInstanceKey: jv.ProcessInstanceKey, Retries: jv.Retries}
-			if ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {
+			ref := jobTypeRef{jobType: jv.JobType}
+			if ei, ok, err := rv.GetElementInstance(elKey); err == nil && ok {
 				jr.ProcessDefKey = ei.ProcessDefKey
-				if d, dok := s.deployments[ei.ProcessDefKey]; dok {
-					cp := d.cp
-					jr.ElementID = cp.ElementBpmnId(ei.ElementId)
-					jr.JobType = s.jobTypeName(cp, jv.JobType)
+				if d, dok := defs[ei.ProcessDefKey]; dok && d.cp != nil {
+					ref.cp = d.cp
+					jr.ElementID = d.cp.ElementBpmnId(ei.ElementId)
 				}
 			}
 			jobs = append(jobs, jr)
+			refs = append(refs, ref)
 			return nil
 		})
 	})
-	if scanErr != nil {
+	if scanErr == nil && len(jobs) > 0 {
+		resolved := false
+		s.do(func() {
+			for i, ref := range refs {
+				if ref.cp != nil {
+					jobs[i].JobType = s.jobTypeName(ref.cp, ref.jobType)
+				}
+			}
+			resolved = true
+		})
+		if !resolved {
+			scanErr = errLoopClosing
+		}
+	}
+	switch {
+	case errors.Is(scanErr, errLoopClosing):
+		httpapi.Error(w, http.StatusServiceUnavailable, scanErr.Error())
+		return
+	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "list jobs: "+scanErr.Error())
 		return
 	}
@@ -3919,6 +4751,21 @@ type taskResp struct {
 	// when the task is in no lane. Metadata only — the Tasks app groups/labels by it.
 	Lane     string   `json:"lane,omitempty"`
 	LanePath []string `json:"lanePath,omitempty"`
+	// CreatedAt is when the task was opened, in Unix milliseconds: the job's own
+	// creation stamp, or for a job written before it carried one, the activation of the
+	// element it waits on. Omitted when neither is known.
+	CreatedAt int64 `json:"createdAt,omitempty"`
+	// Content is what the task is about, as the short text values of the fields its
+	// form asks for (a recipient's id, an order, an address), so the inbox can find a
+	// task by what is in it and not only by what it is called. A task without a form
+	// has none. Only filled when the caller asks for it with ?content=1, because it
+	// costs a variable and a form read per row (see taskContent).
+	Content []string `json:"content,omitempty"`
+	// WizardScopeKey is the sitting this task is a step of — the element instance of
+	// its wizard subprocess — and Wizard that wizard's kind, "internal" or "public"
+	// (ADR-0449). Both are empty for a task in no wizard.
+	WizardScopeKey uint64 `json:"wizardScopeKey,omitempty"`
+	Wizard         string `json:"wizard,omitempty"`
 }
 
 // handleListTasks lists open user tasks — activatable jobs of the reserved
@@ -3928,7 +4775,7 @@ type taskResp struct {
 // returns per call, so the inbox loads even when a definition has parked hundreds of
 // thousands of instances on a user task (the reported flood): the scan stops at the
 // cap instead of enriching and shipping every job. Raise per request with ?limit= (up
-// to the max); a capped page is flagged with X-Tasks-Truncated.
+// to the max); a capped page says so in the response's `truncated`.
 const (
 	maxTaskListDefault = 500
 	maxTaskListMax     = 5000
@@ -3955,13 +4802,13 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	// its own instance's task) always finds it, even when a flood has pushed that
 	// task past the global page cap.
 	if v := strings.TrimSpace(q.Get("processInstance")); v != "" {
-		s.listTasksForInstance(w, v, limit)
+		s.listTasksForInstance(w, taskfolder.Viewer(r), v, limit)
 		return
 	}
 
 	// ?before= is the newest-first pagination cursor: the job key handed back as
-	// X-Tasks-Next-Cursor on the previous (truncated) page. Absent, the scan starts
-	// from the newest task.
+	// `nextCursor` on the previous (truncated) page. Absent, the scan starts from the
+	// newest task.
 	var before uint64
 	if v := strings.TrimSpace(q.Get("before")); v != "" {
 		n, err := strconv.ParseUint(v, 10, 64)
@@ -3982,6 +4829,18 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A viewer who does not see every task gets the same page with what is not
+	// theirs skipped (see [Server.taskVisibleTo]). That walk grows with the tasks it
+	// skips, so it runs off the loop like a folder does. A page asked for its content
+	// goes the same way whoever asks: each row's content reads the variables at its
+	// scope and the form that allows them, which is disk work the writer must not
+	// wait on. Operators and administrators keep the loop-bound page below for the
+	// plain rows.
+	if viewer := taskfolder.Viewer(r); wantsTaskContent(r) || (s.authEnabled && !viewer.SeesAll) {
+		s.listVisibleTasks(w, viewer, limit, before, wantsTaskContent(r))
+		return
+	}
+
 	tasks := []taskResp{}
 	truncated := false
 	var nextCursor uint64
@@ -3999,7 +4858,8 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 			if err != nil || !ok {
 				return err
 			}
-			tasks = append(tasks, s.enrichTask(jobKey, jv))
+			tr := s.enrichTask(jobKey, jv)
+			tasks = append(tasks, tr)
 			nextCursor = jobKey // desc scan: the last kept key is the smallest on the page
 			return nil
 		})
@@ -4009,13 +4869,20 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
 		return
 	}
+	// The page and its cap in one object
+	// (ADR-0378). The cap used to ride in
+	// X-Tasks-Truncated, which a caller had to know to read: the console's own sidebar
+	// did not, and counted the rows of this page as the size of the inbox.
+	//
+	// The total is a floor on a capped page, and deliberately: counting every open task
+	// is the folder-count walk, measured at ~108 ms against ~1.6 ms for serving this
+	// page at 6 000 instances. GET /api/v1/task-folders/counts is the endpoint that
+	// pays for it, and the one to ask when the number itself is what you need.
+	page := httpapi.PageOf(tasks, truncated)
 	if truncated {
-		// Signal a capped page and hand back the cursor for the next (older) page, so a
-		// client can page through or narrow rather than assume it received every task.
-		w.Header().Set("X-Tasks-Truncated", "true")
-		w.Header().Set("X-Tasks-Next-Cursor", strconv.FormatUint(nextCursor, 10))
+		page = page.WithCursor(strconv.FormatUint(nextCursor, 10))
 	}
-	httpapi.JSON(w, http.StatusOK, tasks)
+	httpapi.JSON(w, http.StatusOK, page)
 }
 
 // listTasksForInstance writes one process instance's open user tasks, resolved
@@ -4023,7 +4890,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 // than the global activatable scan. This keeps a client that only cares about its
 // own instance — the order-to-cash demo — working under a flood that has pushed that
 // instance's task past the global /tasks page cap.
-func (s *Server) listTasksForInstance(w http.ResponseWriter, raw string, limit int) {
+func (s *Server) listTasksForInstance(w http.ResponseWriter, viewer taskfolder.User, raw string, limit int) {
 	instKey, err := strconv.ParseUint(raw, 10, 64)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid processInstance (want an instance key)")
@@ -4051,7 +4918,9 @@ func (s *Server) listTasksForInstance(w http.ResponseWriter, raw string, limit i
 			if jv.JobType != compiler.UserTaskJobTypeIndex || jv.Retries <= 0 {
 				return nil
 			}
-			tasks = append(tasks, s.enrichTask(jobKey, jv))
+			if tr := s.enrichTask(jobKey, jv); s.taskVisibleTo(viewer, tr) {
+				tasks = append(tasks, tr)
+			}
 			return nil
 		})
 		scanErr = unlessTruncated(err)
@@ -4060,10 +4929,7 @@ func (s *Server) listTasksForInstance(w http.ResponseWriter, raw string, limit i
 		httpapi.Error(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
 		return
 	}
-	if truncated {
-		w.Header().Set("X-Tasks-Truncated", "true")
-	}
-	httpapi.JSON(w, http.StatusOK, tasks)
+	httpapi.JSON(w, http.StatusOK, httpapi.PageOf(tasks, truncated))
 }
 
 // enrichTask turns a user-task job into the response row the inbox and the
@@ -4086,6 +4952,10 @@ func enrichTaskWith(r elementReader, def taskDefLookup, jobKey uint64, jv *model
 		Key:                jobKey,
 		ProcessInstanceKey: jv.ProcessInstanceKey,
 		ElementInstanceKey: jv.ElementInstanceKey,
+		CreatedAt:          jv.CreatedAt / int64(time.Millisecond),
+	}
+	if tr.CreatedAt == 0 {
+		tr.CreatedAt = activatedAt(r, jv) / int64(time.Millisecond)
 	}
 	if ei, ok, err := r.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {
 		tr.ProcessDefKey = ei.ProcessDefKey
@@ -4111,16 +4981,30 @@ func enrichTaskWith(r elementReader, def taskDefLookup, jobKey uint64, jv *model
 				// What the task is actually asking the person to do, if the modeler
 				// wrote it down (ADR-0025).
 				tr.Documentation = cp.ElementDocumentation(ei.ElementId)
-				// The assignee is the job's runtime value (claim/unclaim rewrite it,
-				// ADR-0042); candidate groups stay the compile-time attribute.
+				// Both halves of the assignment are the job's runtime values: the
+				// assignee because claim and unclaim rewrite it (ADR-0042), the
+				// candidate groups because a model may name them with an expression
+				// and what it evaluated to belongs to this instance
+				// (ADR-0318). The model's own value
+				// is the fallback for a job written before the job carried them.
 				tr.Assignee = jv.Assignee
-				tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
+				if tr.CandidateGroups = jv.CandidateGroups; tr.CandidateGroups == "" {
+					tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
+				}
 				tr.FormID = cp.Intern(detail.FormId)
 				tr.Priority = detail.Priority
 				// The due date is frozen on the job as an absolute instant
 				// (nanoseconds); expose it as Unix ms for the browser.
 				if jv.Deadline != 0 {
 					tr.DueDate = jv.Deadline / int64(time.Millisecond)
+				}
+			}
+			// The sitting the task is a step of (ADR-0449). Only a task the compiled
+			// graph puts inside a wizard pays for the walk; a sitting that cannot be
+			// read leaves the row as a plain task.
+			if w := cp.EnclosingWizard(ei.ElementId); w >= 0 {
+				if scope, err := enclosingWizardInstance(r, cp, ei); err == nil && scope != 0 {
+					tr.WizardScopeKey, tr.Wizard = scope, cp.Wizard(w).String()
 				}
 			}
 		}
@@ -4139,6 +5023,7 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "invalid task key")
 		return
 	}
+	viewer := taskfolder.Viewer(r)
 	var (
 		task  taskResp
 		found bool
@@ -4156,8 +5041,12 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 		if !ok || jv.JobType != compiler.UserTaskJobTypeIndex {
 			return
 		}
-		found = true
-		task = s.enrichTask(key, jv)
+		// A task the viewer may not see answers exactly as an absent one does: the
+		// by-key read must not be a way round the list's filter.
+		if tr := s.enrichTask(key, jv); s.taskVisibleTo(viewer, tr) {
+			found = true
+			task = tr
+		}
 	})
 	switch {
 	case opErr != nil:
@@ -4183,7 +5072,7 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req failJobReq
-	if !decodeJSONBody(w, r, &req) {
+	if !s.decodeJSONBody(w, r, &req) {
 		return
 	}
 	var (
@@ -4201,6 +5090,12 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 		if worker != "" && !holdsLease(jv, worker, req.LeaseToken) {
 			notHolder = true
 			return
+		}
+		if worker != "" {
+			// The breaker hears it before the command that records it, while the job
+			// is still readable, and only for a *worker's* report: an operator failing
+			// a job by hand is not evidence about a target (ADR-0340).
+			s.breakers.failed(s.breakerTargetOfJob(jv), key, jv.ProcessInstanceKey, req.Message)
 		}
 		s.proc.FailJob(key, req.Retries, req.Message, req.RetryBackoff*int64(time.Millisecond))
 		if worker != "" {
@@ -4232,6 +5127,111 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// throwJobErrorReq is the body of POST /api/v1/jobs/{key}/error (ADR-0089).
+type throwJobErrorReq struct {
+	// ErrorCode is what an error boundary or error event subprocess matches on.
+	ErrorCode string `json:"errorCode"`
+	// ErrorMessage is the worker's own account of the error. Nothing reads it while a
+	// handler catches the error; when nothing does, it follows the code on the incident.
+	ErrorMessage string `json:"errorMessage"`
+	// Worker and LeaseToken are the protocol path, fenced exactly as a completion or a
+	// failure is (ADR-0007): only the holder of the job's current lease may throw.
+	Worker     string `json:"worker"`
+	LeaseToken uint64 `json:"leaseToken"`
+	// Reason is the operator path: throwing by hand forces the error flow the engine
+	// did not take on its own, so it is required and recorded like a completion by hand
+	// (ADR-0159).
+	Reason string `json:"reason"`
+}
+
+// handleThrowJobError ends a job with a BPMN error instead of a result (ADR-0089): a
+// matching error boundary or error event subprocess catches it and the instance takes
+// the error path; with none in reach the job is kept under an incident, and resolving
+// that incident retries the job. It is the third answer a worker can give beside
+// complete and fail, and it takes the same two doors complete does — the lease-holding
+// worker, or an operator with a reason.
+//
+// A thrown error says nothing about whether the target behind the job is healthy: the
+// worker may have reached it and been told no, or decided before ever calling it. So
+// unlike a completion or a failure it neither closes nor feeds a circuit breaker
+// (ADR-0340).
+func (s *Server) handleThrowJobError(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid job key")
+		return
+	}
+	var req throwJobErrorReq
+	if !s.decodeJSONBody(w, r, &req) {
+		return
+	}
+	code := strings.TrimSpace(req.ErrorCode)
+	if code == "" {
+		httpapi.Error(w, http.StatusBadRequest, "errorCode is required: it is what an error boundary or error event subprocess catches")
+		return
+	}
+	worker := strings.TrimSpace(req.Worker)
+	reason := strings.TrimSpace(req.Reason)
+	if worker == "" && reason == "" {
+		httpapi.Error(w, http.StatusBadRequest, "reason is required: throwing a job's error by hand is an operator intervention and is recorded with who did it and why")
+		return
+	}
+	if worker != "" && req.LeaseToken == 0 {
+		httpapi.Error(w, http.StatusBadRequest, "leaseToken is required when throwing as a worker; it is returned by the activation that leased the job")
+		return
+	}
+	message := strings.TrimSpace(req.ErrorMessage)
+	actor := ""
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
+		actor = p.Username
+	}
+	var (
+		found     bool
+		notHolder bool
+		runErr    error
+	)
+	s.do(func() {
+		jv, ok, err := s.store.GetJob(key)
+		if err != nil || !ok {
+			return
+		}
+		found = true
+		if worker == "" {
+			s.proc.ThrowJobErrorManually(key, code, message, actor, reason)
+			return
+		}
+		if !holdsLease(jv, worker, req.LeaseToken) {
+			notHolder = true
+			return
+		}
+		s.proc.ThrowJobErrorWithMessage(key, code, message)
+		// What the worker sent back, on the row its lease opened: the code first, since
+		// that is what decided where the instance went.
+		said := code
+		if message != "" {
+			said += ": " + message
+		}
+		s.workers.recordOutcome(worker, key, jobRunErrorThrown, said, jv.Retries, nil)
+	})
+	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
+	// where a worker's outbound call happens, and holding the single writer for
+	// its duration is the stall ADR-0157 step 6 removes.
+	if runErr == nil {
+		runErr = s.drive()
+	}
+	switch {
+	case runErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "throw job error: "+runErr.Error())
+	case !found:
+		httpapi.Error(w, http.StatusNotFound, "no job with that key")
+	case notHolder:
+		httpapi.Error(w, http.StatusConflict,
+			"worker "+strconv.Quote(worker)+" does not hold this job's current lease; it may have elapsed and been taken by another worker. Lease it again, or throw as an operator with a reason")
+	default:
+		httpapi.JSON(w, http.StatusOK, map[string]any{"jobKey": key})
+	}
+}
+
 // handleCompleteJob is the operator/manual counterpart to handleFailJob: it
 // completes an activatable job by key, optionally writing the outputs a worker
 // would have produced as {"variables": {...}} into the instance scope, then
@@ -4239,13 +5239,12 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 // worker's CompleteJob takes, so it works for any job type. 404 if the job
 // doesn't exist or is already completed.
 //
-// This is deliberately NOT the gRPC job-worker protocol (ADR-0007): there is no
-// lease, fencing token, or at-least-once streaming — it is a synchronous
-// operator affordance, the completion mirror of POST /jobs/{key}/fail from the
-// incident model (ADR-0061), for finishing a parked service-task job by hand
-// (e.g. when the external work was carried out out-of-band) until a real worker
-// transport lands. Discovering the job key is out of scope here — that comes
-// from runtime inspection.
+// It has two doors. A worker completes a job it holds by presenting its id and
+// the lease token its activation returned, fenced by holdsLease (ADR-0007). An
+// operator completes a parked job by hand — when the external work was carried out
+// out of band — and has to give a reason, which is recorded for audit (ADR-0159).
+// Discovering the job key is out of scope here — that comes from runtime
+// inspection.
 //
 // Because a person is forcing a step the engine would not have taken on its own, the
 // body must carry a "reason" and the completion is recorded as an operator action —
@@ -4401,6 +5400,13 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// A worker result landing a job's output is one of the two edges ADR-0314 enciphers
+	// at: the completion command must already hold ciphertext, so nothing is enciphered
+	// per command on the processor path (I1).
+	if err := s.encipherJobVars(key, vars); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	// An agent round's answer rides here beside the variables (ADR-0254). Read before
 	// the run loop like the variables are, because turning arguments into variables is
 	// a parse and a parse that fails is a 400, not a job that dies inside the loop.
@@ -4503,6 +5509,16 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			case callErr != nil:
 				badReport = callErr
 				return
+			}
+			// A worker's call reached its target, so the target is answering: close
+			// any breaker on it, or break the failure streak it was building. Asked
+			// before the command, while the job is still readable, and short-circuited
+			// on a job type nothing has failed on — which is almost every completion
+			// (ADR-0340).
+			if s.breakers.tracking(jv.JobType) {
+				s.breakers.succeeded(s.breakerTargetOfJob(jv))
+			}
+			switch {
 			case decision != nil:
 				s.proc.CompleteJobWithDecision(key, decision, vars...)
 			case len(calls) > 0:
@@ -4552,7 +5568,7 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req resolveIncidentReq
-	if !decodeJSONBody(w, r, &req) {
+	if !s.decodeJSONBody(w, r, &req) {
 		return
 	}
 	retries := req.Retries
@@ -4573,6 +5589,12 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 		jobKey = inc.JobKey
 		s.proc.ResolveIncident(key, retries)
 	})
+	if found {
+		// The operator's next move is the diagram they resolved this from, so the
+		// overlay's counts must not spend the TTL still showing it parked
+		// (ADR-0366).
+		s.forgetIncidentCounts()
+	}
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
 	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.
@@ -4590,20 +5612,44 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 }
 
 // incidentType names what an incident parked, the distinction the operator views
-// label: a job incident holds a service-task job whose retries ran out; a job-less
-// incident is a timer whose FEEL schedule stopped resolving (ADR-0064/0111).
+// label: a job incident holds a service-task job whose retries ran out; one the
+// execution budget raised holds a token that never got to run
+// (ADR-0272); an error incident holds a BPMN error nothing caught, which resolving
+// throws again (ADR-0089); a job-less incident is otherwise a timer whose FEEL
+// schedule stopped resolving (ADR-0064/0111).
+//
+// A job outranks the reason: a worker's uncaught error keeps its job, and resolving
+// it retries that job with the retries the operator grants, as for any parked job.
+// An error end event's incident raised before IncidentUnhandledError existed carries
+// no reason and still reads as "timer"; resolving it re-raises one that reads "error".
+//
+// The timer fallback is approximate and was already: a mockup task's simulated
+// failure, a runaway loop and a gateway that cannot route all raise job-less
+// incidents and all read as "timer" here. Classifying them is what
+// model.IncidentReason is for, and doing it is a change to each of those sources
+// rather than to this function.
 func incidentType(v *model.IncidentValue) string {
-	if v.JobKey != 0 {
+	switch {
+	case v.JobKey != 0:
 		return "job"
+	case v.Reason == model.IncidentOverBudget:
+		return "budget"
+	case v.Reason == model.IncidentUnhandledError:
+		return "error"
+	default:
+		return "timer"
 	}
-	return "timer"
 }
 
 // handleListIncidents lists the unresolved incidents — the operator "what's stuck"
-// view (ADR-0061). Optionally scoped to one process instance (?instance=) or one
-// deployed definition (?process=): the replay badges a single instance's incidents
-// and the live view a whole version's, and neither should have to pull the server's
-// entire — page-capped — incident list to find its own (ADR-0151).
+// view (ADR-0061). Scoped by the shared [incidentSelector]: one process instance
+// (?instance=) or one deployed definition (?process=), because the replay badges a
+// single instance's incidents and the live view a whole version's and neither should
+// pull the server's entire — page-capped — list to find its own (ADR-0151); and, since
+// a flood is read by cause, one BPMN element (?element=), one kind (?type=) or a
+// fragment of the message (?message=), which are the group's rows
+// (ADR-0337). The same selector is what a bulk resolve takes, so what
+// this page shows and what that action touches cannot disagree.
 func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	limit := maxTaskListMax // incidents share the task list's ceiling; the default page is generous
 	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
@@ -4616,21 +5662,10 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 			limit = maxTaskListMax
 		}
 	}
-	var instanceFilter, processFilter uint64
-	for _, f := range []struct {
-		name string
-		dst  *uint64
-	}{{"instance", &instanceFilter}, {"process", &processFilter}} {
-		q := strings.TrimSpace(r.URL.Query().Get(f.name))
-		if q == "" {
-			continue
-		}
-		n, err := strconv.ParseUint(q, 10, 64)
-		if err != nil {
-			httpapi.Error(w, http.StatusBadRequest, "invalid "+f.name+" (want a key)")
-			return
-		}
-		*f.dst = n
+	sel, selErr := incidentSelectorFromQuery(r)
+	if selErr != nil {
+		httpapi.Error(w, http.StatusBadRequest, selErr.Error())
+		return
 	}
 	list := []incidentView{}
 	truncated := false
@@ -4641,48 +5676,12 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	// precisely when it is. The view is a second gain — an incident resolved while
 	// the page is being built can no longer appear half-described.
 	scanErr := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
-		// One instance is looked up once however many of its elements are stuck, and
-		// a flood of incidents is usually a flood on few instances.
-		type instanceCtx struct {
-			defKey    uint64
-			processID string
-			cp        *compiler.CompiledProcess
-		}
-		resolved := map[uint64]instanceCtx{}
 		// One resolver for the whole page: the worker store is read once, not once
 		// per parked token, and not at all when nothing on the page is on a worker
 		// task (ADR-0159). It reads a durable sidecar, which is safe to do off the
 		// loop (ADR-0265).
 		connectorFor := s.incidentConnectorLookup()
-		lookup := func(piKey uint64) (instanceCtx, error) {
-			if ctx, ok := resolved[piKey]; ok {
-				return ctx, nil
-			}
-			var ctx instanceCtx
-			pi, ok, err := rv.ProcessInstance(piKey)
-			if err != nil {
-				return ctx, err
-			}
-			if ok {
-				ctx.defKey = pi.ProcessDefKey
-				if d, ok := defs[pi.ProcessDefKey]; ok {
-					ctx.processID, ctx.cp = d.ProcessID, d.cp
-				}
-			}
-			resolved[piKey] = ctx
-			return ctx, nil
-		}
-		err := rv.Incidents(func(elKey uint64, v *model.IncidentValue) error {
-			if instanceFilter != 0 && v.ProcessInstanceKey != instanceFilter {
-				return nil
-			}
-			ctx, err := lookup(v.ProcessInstanceKey)
-			if err != nil {
-				return err
-			}
-			if processFilter != 0 && ctx.defKey != processFilter {
-				return nil
-			}
+		return unlessTruncated(walkIncidents(rv, defs, sel, func(elKey uint64, v *model.IncidentValue, ctx incidentCtx, elementID string) error {
 			if len(list) >= limit {
 				truncated = true
 				return errListTruncated // page full: bound the response even under a flood of failures
@@ -4699,14 +5698,13 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 				Message:            v.Message,
 			}
 			if ctx.cp != nil {
-				view.ElementID = ctx.cp.ElementBpmnId(v.ElementId)
+				view.ElementID = elementID
 				view.Connector, view.ConnectorKind, view.ConnectorID = connectorFor(ctx.cp, v.ElementId)
 				view.RepairForm = ctx.cp.RepairForm(v.ElementId)
 			}
 			list = append(list, view)
 			return nil
-		})
-		return unlessTruncated(err)
+		}))
 	})
 	switch {
 	case errors.Is(scanErr, errLoopClosing):
@@ -4716,10 +5714,14 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "list incidents: "+scanErr.Error())
 		return
 	}
-	if truncated {
-		w.Header().Set("X-Incidents-Truncated", "true")
-	}
-	httpapi.JSON(w, http.StatusOK, map[string]any{"incidents": list})
+	// One shape for every capped listing, so a client learns it once. This answered
+	// with {"incidents": [...]} — an object, but its own object, with the cap in a
+	// header beside it that the console's instance search never read
+	// (ADR-0378).
+	//
+	// The total is a floor on a capped page: counting every match means walking the
+	// whole incident family, which is what GET /api/v1/incidents/summary is for.
+	httpapi.JSON(w, http.StatusOK, httpapi.PageOf(list, truncated))
 }
 
 func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
@@ -4742,18 +5744,42 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// The form's answer is the other half of the in edge: a submitted personal value is
+	// enciphered before it becomes a command (ADR-0314).
+	if err := s.encipherJobVars(key, vars); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Who completed it travels with the answer (taskcompleter.go): a task offered to
+	// a group can otherwise only report the group as the one who decided.
+	vars = withCompleter(r, vars)
+	// Completing is deciding: it writes the form's answer into the instance and
+	// lets the process act on it. Who may (taskauthority.go) is asked before the
+	// processor is told anything.
+	auth, authErr := s.mayWorkTask(r, key)
+	if s.refuseTaskWork(w, auth, authErr) {
+		return
+	}
 	var (
 		found  bool
 		runErr error
+		// sitting is the wizard the task is a step of (ADR-0449), 0 for none. It is
+		// read before the completion, because a completed task's element instance is
+		// gone, and with it the way up to the sitting.
+		sitting, sittingPI uint64
 	)
 	s.do(func() {
 		// A job that can't be read — absent, already completed, or unreadable — is
 		// simply not an open task (reported 404 below); GetJob reports ok=false in
 		// every such case, so there's no separate error path to plumb here.
-		if _, ok, err := s.store.GetJob(key); err != nil || !ok {
+		jv, ok, err := s.store.GetJob(key)
+		if err != nil || !ok {
 			return
 		}
 		found = true
+		// A sitting that cannot be read is no reason to refuse the answer: the
+		// completion goes ahead, and the next screen is found in the inbox instead.
+		sitting, sittingPI, _ = s.wizardOfElement(jv.ElementInstanceKey)
 		s.proc.CompleteJob(key, vars...)
 	})
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
@@ -4768,7 +5794,17 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no open task with that key")
 	default:
-		httpapi.JSON(w, http.StatusOK, map[string]any{"taskKey": key})
+		resp := map[string]any{"taskKey": key}
+		// A step of a wizard answers with where the sitting now stands, so the person
+		// is carried to the next screen rather than back to the inbox (ADR-0449).
+		if sitting != 0 {
+			if wz, err := s.continueWizard(r, sittingPI, sitting); err != nil {
+				logWizardFailure(r, sittingPI, err)
+			} else {
+				resp["wizard"] = wz
+			}
+		}
+		httpapi.JSON(w, http.StatusOK, resp)
 	}
 }
 
@@ -4850,6 +5886,14 @@ func (s *Server) assignTask(w http.ResponseWriter, r *http.Request, assignee str
 		httpapi.Error(w, http.StatusBadRequest, "invalid task key")
 		return
 	}
+	// Claiming and releasing are gated with completion, and have to be: releasing
+	// somebody else's task is how a caller who may not complete it makes sure
+	// nobody can. An approval left holderless is an order stuck until an operator
+	// repairs it (taskauthority.go).
+	auth, authErr := s.mayWorkTask(r, key)
+	if s.refuseTaskWork(w, auth, authErr) {
+		return
+	}
 	var (
 		found  bool
 		runErr error
@@ -4895,6 +5939,13 @@ type draftResp struct {
 	Name      string `json:"name"`
 	ProjectID string `json:"projectId,omitempty"`
 	SavedAt   int64  `json:"savedAt"`
+	// OwnerID / SavedBy are who created the draft and whose save wrote its current
+	// content, each beside the name a colleague knows them by, so the Modeler can say
+	// who to ask about what it shows. Absent where the server does not know.
+	OwnerID     string `json:"ownerId,omitempty"`
+	OwnerName   string `json:"ownerName,omitempty"`
+	SavedBy     string `json:"savedBy,omitempty"`
+	SavedByName string `json:"savedByName,omitempty"`
 	// LayoutGenerated marks a draft that arrived without any diagram interchange and
 	// was laid out on the way in (ADR-0124). Only a save that generated one sets it,
 	// so the importer can say where the diagram came from — the file the author picked
@@ -4933,7 +5984,7 @@ type draftResp struct {
 // the author to wonder whose arrangement they are looking at. A save from the Modeler
 // always carries DI, so this never touches one.
 func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -5051,7 +6102,7 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		movedFrom = origin
 	}
 	stored, laidOut := layout.EnsureReport(body)
-	rec := draft{ProcessID: pid, Name: name, ProjectID: destProjectID, OwnerID: ownerID, SavedAt: time.Now().Unix(), XML: string(stored)}
+	rec := draft{ProcessID: pid, Name: name, ProjectID: destProjectID, OwnerID: ownerID, SavedAt: time.Now().Unix(), SavedBy: principalID(r), XML: string(stored)}
 	var (
 		saveErr, projErr error
 		protectedProject bool
@@ -5108,10 +6159,19 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, fmt.Sprintf(
 			"saved as %q, but the draft it was renamed from (%q) could not be removed — delete it by hand", pid, origin))
 	default:
-		httpapi.JSON(w, http.StatusOK, draftResp{
-			ProcessID: pid, Name: name, ProjectID: rec.ProjectID, SavedAt: rec.SavedAt,
-			RenamedFrom: movedFrom, LayoutGenerated: laidOut,
-		})
+		resp := draftRespOf(rec, s.principalNamer())
+		resp.RenamedFrom, resp.LayoutGenerated = movedFrom, laidOut
+		httpapi.JSON(w, http.StatusOK, resp)
+	}
+}
+
+// draftRespOf is a stored draft as the Modeler lists it, its two people named by
+// name (see principalNamer).
+func draftRespOf(d draft, name func(string) string) draftResp {
+	return draftResp{
+		ProcessID: d.ProcessID, Name: d.Name, ProjectID: d.ProjectID, SavedAt: d.SavedAt,
+		OwnerID: d.OwnerID, OwnerName: name(d.OwnerID),
+		SavedBy: d.SavedBy, SavedByName: name(d.SavedBy),
 	}
 }
 
@@ -5119,8 +6179,10 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 // ?projectId= query narrows the list to one project's artifacts (ADR-0034).
 func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 	filter := r.URL.Query().Get("projectId")
-	list := []draftResp{}
-	var loadErr error
+	var (
+		visible []draft
+		loadErr error
+	)
 	s.do(func() {
 		var recs []draft
 		if recs, loadErr = s.drafts.LoadAll(); loadErr != nil {
@@ -5139,12 +6201,19 @@ func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 			if !s.canViewArtifact(r, d.ProjectID, d.OwnerID, projs) {
 				continue
 			}
-			list = append(list, draftResp{ProcessID: d.ProcessID, Name: d.Name, ProjectID: d.ProjectID, SavedAt: d.SavedAt})
+			visible = append(visible, d)
 		}
 	})
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list drafts: "+loadErr.Error())
 		return
+	}
+	// Named after the writer's turn: resolving a person reads the user store, and a
+	// listing has no business holding the engine's single writer while it does.
+	name := s.principalNamer()
+	list := make([]draftResp, 0, len(visible))
+	for _, d := range visible {
+		list = append(list, draftRespOf(d, name))
 	}
 	httpapi.JSON(w, http.StatusOK, list)
 }
@@ -5154,7 +6223,7 @@ func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 // non-empty projectId must name an existing project (ADR-0034).
 func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -5221,7 +6290,7 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "move draft: "+saveErr.Error())
 		return
 	}
-	httpapi.JSON(w, http.StatusOK, draftResp{ProcessID: rec.ProcessID, Name: rec.Name, ProjectID: rec.ProjectID, SavedAt: rec.SavedAt})
+	httpapi.JSON(w, http.StatusOK, draftRespOf(rec, s.principalNamer()))
 }
 
 // handleDraftXML returns a draft's BPMN XML so the editor can reopen it, laying the
@@ -5421,6 +6490,9 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		runErr   error
 		reserved bool
 		jobType  int32
+		// held is read off the loop by the long poll below, and written only inside
+		// s.do — which is synchronous, so the write happens-before the read.
+		held bool
 	)
 	attempt := func() {
 		s.do(func() {
@@ -5439,13 +6511,33 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 				return
 			}
 			// Collect first, then lease: activating mutates the very index being scanned.
+			// The scan *stops* at the page it wanted rather than reading on and
+			// discarding: the callback used to keep returning nil once it was full, so a
+			// poll for one job walked every waiting job of that type, and the cost of a
+			// worker's heartbeat grew with the backlog it was there to drain
+			// (ADR-0270).
 			var keys []uint64
-			if scanErr = s.store.ActivatableJobs(jobType, func(k uint64) error {
-				if len(keys) < want {
+			held = s.breakers.holdingFor(jobType)
+			if held {
+				// A target under this type is down, so the candidates have to be
+				// filtered as they are scanned rather than after: collecting first
+				// would fill the page with jobs that may not go out and hand back
+				// nothing (ADR-0340).
+				scanErr = s.scanHeldCandidates(jobType, want, &keys)
+			} else {
+				// Nothing held: forget where a gated scan of this type once stopped,
+				// so the next outage starts at the newest jobs rather than part-way
+				// down a rotation that ended when the last one recovered.
+				delete(s.gateResume, jobType)
+				scanErr = unlessTruncated(s.store.ActivatableJobs(jobType, func(k uint64) error {
 					keys = append(keys, k)
-				}
-				return nil
-			}); scanErr != nil {
+					if len(keys) >= want {
+						return errListTruncated
+					}
+					return nil
+				}))
+			}
+			if scanErr != nil {
 				return
 			}
 			for _, k := range keys {
@@ -5464,6 +6556,9 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 				}
 				jobs = append(jobs, j)
 			}
+			// Every poll, productive or not: this is what says somebody is serving
+			// this queue, and a queue with no work in it can say nothing else.
+			s.workers.polls(body.Worker, body.Type)
 			s.workers.leased(body.Worker, body.Type, len(jobs))
 			// The variables as they stood at lease time are the half an operator
 			// cannot reconstruct later: the instance moves on, and this is what the
@@ -5487,18 +6582,40 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 	// single writer for the whole poll, which is the stall this entire sequence
 	// exists to remove.
 	if wait > 0 && len(jobs) == 0 && !unknown && !inProc && !reserved && scanErr == nil && runErr == nil {
-		woken, cancel := s.jobWaiters.wait(jobType)
-		defer cancel()
-		attempt()
-		if len(jobs) == 0 {
+		if held {
+			// A breaker is holding this type back (ADR-0340), and that changes what a
+			// wake-up means. Nearly every job arriving under a held type belongs to the
+			// target that is down, so waking on each one would have this request scan
+			// and answer empty at the rate the flood is being created — a held queue
+			// turned into a spin, which is the failure the record warns about.
+			//
+			// So the poll simply sleeps out its own wait and looks once more at the end.
+			// It costs a job of a *healthy* Worker sharing this type up to one poll of
+			// latency, which is the price of not spinning; it is paid only while a
+			// breaker is open, and a second worker polling on its own schedule shortens
+			// it in practice.
 			timer := time.NewTimer(wait)
 			defer timer.Stop()
 			select {
-			case <-woken:
-				attempt()
 			case <-timer.C:
+				attempt()
 			case <-r.Context().Done():
 			case <-s.quit:
+			}
+		} else {
+			woken, cancel := s.jobWaiters.wait(jobType)
+			defer cancel()
+			attempt()
+			if len(jobs) == 0 {
+				timer := time.NewTimer(wait)
+				defer timer.Stop()
+				select {
+				case <-woken:
+					attempt()
+				case <-timer.C:
+				case <-r.Context().Done():
+				case <-s.quit:
+				}
 			}
 		}
 	}
@@ -5548,12 +6665,18 @@ type connectorPayload struct {
 // registry are readable.
 func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *model.ElementInstanceValue, cp *compiler.CompiledProcess) *connectorPayload {
 	node := cp.Node(ei.ElementId)
+	// Every kind below resolves its own expressions over the variables this reader
+	// yields, so wrapping it once is what makes a worker expression see the plaintext of
+	// a declared personal value rather than the envelope it is stored as (ADR-0314).
+	// compiler/personal.go exempts worker-evaluated expressions from the refusal on
+	// exactly that basis, and the exemption is only true because of this line.
+	rd := s.personalReader(s.store)
 	// A script task is its own node type rather than a task, but it resolves
 	// the same way and for the same reason: the source is in the compiled process and
 	// the variables it sees come from walking the scope chain, neither of which a
 	// worker has. What it needs on the far side is an interpreter, not a credential.
 	if node.Type == compiler.TypeScriptJobTask {
-		j, err := script.Resolve(s.store, cp, cp.ScriptJobTask(node.Detail), jv.ElementInstanceKey)
+		j, err := script.Resolve(rd, cp, cp.ScriptJobTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -5571,7 +6694,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 	// A plain ad-hoc parks no job on its container at all, so a job here is an agent
 	// round by construction — and Resolve says so itself rather than trusting that.
 	if node.Type == compiler.TypeAdHocSubProcess {
-		r, err := agent.Resolve(s.store, cp, ei, jv.ElementInstanceKey)
+		r, err := agent.Resolve(rd, cp, ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -5589,7 +6712,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// The one arm that is not a connector task's. What a worker needs is the
 		// decision id and the input context the engine built for it; what comes back
 		// is more than variables, which is why this kind went last (ADR-0233).
-		j, err := temis.Resolve(s.store, cp, cp.BusinessRuleTask(node.Detail), ei, jv.ElementInstanceKey)
+		j, err := temis.Resolve(rd, cp, cp.BusinessRuleTask(node.Detail), ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -5598,7 +6721,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"inputs": j.Inputs, "resultVariable": j.Result,
 		}}
 	case compiler.CsvImportJobTypeIndex:
-		j, err := csvimport.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		j, err := csvimport.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			// The worker will fail the job with a message of its own; refusing to lease
 			// here would park the token with nothing said about why.
@@ -5612,7 +6735,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 	case compiler.LdifJobTypeIndex:
 		// A pure transform: what travels is the file text (or the entries) and the
 		// format, and there is no credential to leave behind.
-		j, err := ldif.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		j, err := ldif.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -5624,13 +6747,19 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// The message travels; the SMTP host and password do not. What names the
 		// credential is the worker's name, which the worker resolves against its
 		// own configuration — the whole of ADR-0168's decision, in one field.
-		j, err := mail.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := mail.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey, mailDirectory{s})
 		if err != nil {
 			return nil
 		}
 		return &connectorPayload{Kind: "mail", Fields: map[string]any{
 			"connector": j.Connector, "from": j.From, "to": j.To, "cc": j.Cc, "bcc": j.Bcc,
 			"subject": j.Subject, "body": j.Body, "html": j.HTML, "messageId": j.MessageID,
+			// The mailbox half (ADR-0438): what to do and to which
+			// message — never how to reach the mailbox, which the worker holds.
+			"operation": j.Operation, "folder": j.Folder, "target": j.Target,
+			"destination": j.Destination, "maxResults": j.MaxResults,
+			"includeBody": j.IncludeBody, "unreadOnly": j.UnreadOnly,
+			"resultVariable": j.ResultVariable,
 		}}
 	case compiler.RemedyJobTypeIndex:
 		// The form and its field values travel; the AR System base URL and the service
@@ -5638,7 +6767,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// operator-managed instance behind a name (ADR-0106) — so what names the
 		// credential is the worker's name, resolved against the worker's own
 		// configuration.
-		j, err := remedy.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := remedy.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -5653,7 +6782,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// credential is the worker's name, resolved against the worker's own
 		// configuration. That is also what lets the worker operate as a different
 		// Atlassian account from anything the engine holds.
-		j, err := jira.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := jira.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -5676,7 +6805,11 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// round's completion carries tool calls the engine turns into activations
 		// (ADR-0253/0254). Two arms rather than one payload nobody can read without
 		// knowing which it is.
-		j, err := agent.ResolveTask(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		//
+		// Through rd like every other arm: the prompt is one of the worker-evaluated
+		// expressions compiler/personal.go exempts, and that exemption only holds while
+		// it is evaluated over the plaintext of a declared personal value (ADR-0314).
+		j, err := agent.ResolveTask(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -5688,7 +6821,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// (ADR-0235) — so what travels is the *Worker's* name,
 		// resolved against the Worker Instance's own configuration. That is also what
 		// lets it act as a different Google identity from anything the engine holds.
-		j, err := googlesheets.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := googlesheets.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -5701,7 +6834,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 	case compiler.DiscordJobTypeIndex:
 		// The channel, the message and the body travel; the bot token does not exist
 		// here to travel. Same split as Jira's above (ADR-0258).
-		j, err := discord.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := discord.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -5711,11 +6844,31 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"after": j.After, "maxResults": j.MaxResults, "fields": j.Fields,
 			"nonce": j.Nonce, "resultVariable": j.ResultVariable,
 		}}
+	case compiler.S3JobTypeIndex:
+		// The bucket, the key and — for a put — the document travel; the access key does
+		// not exist here to travel. Same split as Jira's above
+		// (ADR-0442), and with one consequence this kind has that
+		// the others do not: on an offloaded installation the *bytes* of a put go from
+		// the worker to the store, so the engine only ever held the variable they were
+		// composed from.
+		j, err := s3.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "s3", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "bucket": j.Bucket,
+			"key": j.Key, "content": j.Content, "contentType": j.ContentType,
+			"encoding": j.Encoding, "prefix": j.Prefix, "delimiter": j.Delimiter,
+			"startAfter": j.StartAfter, "maxKeys": j.MaxKeys,
+			"sourceBucket": j.SourceBucket, "sourceKey": j.SourceKey,
+			"expiresIn": j.ExpiresIn, "metadata": j.Metadata,
+			"resultVariable": j.ResultVariable,
+		}}
 	case compiler.MsSqlJobTypeIndex, compiler.MariaDBJobTypeIndex, compiler.PostgresJobTypeIndex:
 		// The statement and its bound parameters travel; the DSN does not exist here
 		// to travel. SQL is the first kind with no in-process handler at all, so this
 		// is not one of two paths that could drift — it is the only one (ADR-0173).
-		j, err := sqldb.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		j, err := sqldb.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -5729,7 +6882,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// What does not is the bind password: the *reference* travels and whoever runs
 		// the job resolves it, so an offloaded AD task never reads the engine's vault
 		// (ADR-0168).
-		j, err := ad.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
+		j, err := ad.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -5752,7 +6905,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// the credentials do not: the bind-password and client-certificate
 		// *references* travel and whoever runs the job resolves them, so an offloaded
 		// LDAP task never reads the engine's vault (ADR-0168).
-		j, err := ldap.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
+		j, err := ldap.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -5768,7 +6921,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// REST's arm exactly, and for REST's reason: everything about the call is model
 		// data and travels resolved, while the credential behind authSecret stays a
 		// reference for whoever runs the job to resolve (ADR-0168).
-		j, err := soap.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
+		j, err := soap.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -5781,7 +6934,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// Jira's arm exactly, and for Jira's reason: the task names its instance, and
 		// the Graph endpoint and OAuth bundle stay with the worker — a URL is half a
 		// credential (ADR-0141/0168). The site and list are model data and travel.
-		j, err := sharepoint.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := sharepoint.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -5794,7 +6947,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// derived from them: a parked job's payload is read by an operator, and the
 		// derivation's own failure cases (a get with no id) belong where both halves
 		// reach them (ADR-0168).
-		j, err := scim.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := scim.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -5807,7 +6960,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 	case compiler.EntraJobTypeIndex:
 		// The operation and the ids travel; the tenant's app credential does not
 		// exist here to travel. Worker-only, like the SQL kinds (ADR-0172).
-		j, err := entra.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		j, err := entra.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -5825,7 +6978,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// worker under the connector's name (ADR-0036/0168); what travels is what only
 		// the engine has — including a write's event body, which is the task's input
 		// mappings or the variables it sees, and exists nowhere but in engine state.
-		j, err := clio.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := clio.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -5838,7 +6991,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 	case compiler.WebScrapeJobTypeIndex:
 		// No credential at all here — what the worker adds is network reach. A page
 		// only reachable from somewhere the engine is not is the case for moving it.
-		j, err := webscrape.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
+		j, err := webscrape.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -5858,7 +7011,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// The authored auth travels — its type, username, api-key header name, OAuth
 		// endpoint and the *reference* naming the secret. The secret behind that
 		// reference does not: the worker resolves it from its own store.
-		j, err := rest.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := rest.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -5909,11 +7062,21 @@ func (s *Server) pulledJob(jobKey uint64, typeName string) (pulledJob, bool) {
 			j.Connector = s.resolveConnectorTask(jobKey, jv, ei, d.cp)
 		}
 	}
-	// The task's own scope chain, so an input mapping shadows the instance value.
-	if err := s.store.VisibleVariablesOfScope(jv.ElementInstanceKey, func(v *model.VariableValue) error {
+	// The task's own scope chain, so an input mapping shadows the instance value — read
+	// through the opening reader, because the payload handed to a worker is one of the two
+	// edges ADR-0314 permits plaintext at. A worker that received the envelope would
+	// either send ciphertext to the far end or fail on it, and either way the transform
+	// the record moves *into* the worker could not be written.
+	if err := state.VisibleVariables(s.personalReader(s.store), jv.ElementInstanceKey, func(v *model.VariableValue) error {
 		j.Variables[v.Name] = nativeVar(v)
 		return nil
 	}); err != nil {
+		// The one read failure worth naming: a value whose data subject has been erased
+		// cannot be opened, so this job cannot be handed out at all. ADR-0314 accepts
+		// that consequence — an erased subject's live instance can no longer provision —
+		// but it must not be silent, or a worker polls forever with nothing saying why.
+		logging.Warn(logging.PersonalValueUnreadable, "withholding a job whose variables cannot be read",
+			slog.Uint64("jobKey", jobKey), slog.String("reason", err.Error()))
 		return pulledJob{}, false
 	}
 	return j, true

@@ -4,6 +4,11 @@
 // replaces the one-off sort/filter code each view used to hand-roll, so every table
 // in the UI behaves the same way.
 //
+// The filter row is a list's own search, and shown with the list
+// (ADR-0286): a view does not build a search box over a
+// table it owns, and a table that is *not* a list — a grid of inputs, an editing
+// surface, a matrix — carries `no-enhance` instead of being enhanced.
+//
 // It is DOM-driven on purpose: a view keeps rendering its own rich row markup (links,
 // badges, buttons) and simply calls enhanceTable(tableEl, opts) once after building
 // the table. The helper reads each row's cells to sort and filter them. When a cell's
@@ -12,8 +17,9 @@
 // attribute on that <td>, and the helper uses it instead of the text.
 //
 // opts:
-//   key      — stable id; when set, the chosen sort column/direction persists in
-//              localStorage so it survives a refresh or navigating away and back.
+//   key      — stable id; when set, the chosen sort column/direction and whether the
+//              filter row is collapsed persist in localStorage, so both survive a
+//              refresh or navigating away and back.
 //   columns  — optional array aligned to the header cells. Each entry may set
 //              { sort:false } to make a column unsortable, { filter:false } to drop
 //              its filter input, or { type:"number"|"text" } to force the comparator.
@@ -44,10 +50,24 @@ export function enhanceTable(table, opts = {}) {
 
   const KEY = opts.key ? "atlas.dt." + opts.key : null;
   let sort = { col: -1, dir: "asc" };
+  // The filter row is part of the list, not a mode to discover: a list opens with its
+  // boxes showing, so the way to search it is the first thing on screen rather than
+  // something behind an icon (ADR-0286). The funnel still
+  // takes it away for anyone who wants the vertical space back, and a keyed table
+  // remembers that choice like it remembers its sort column — a table with no key opens
+  // showing them every time.
+  let filtersOpen = true;
   if (KEY) {
-    try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && typeof s.col === "number") sort = s; } catch { /* ignore */ }
+    try {
+      const s = JSON.parse(localStorage.getItem(KEY));
+      if (s && typeof s.col === "number") sort = { col: s.col, dir: s.dir };
+      if (s && typeof s.open === "boolean") filtersOpen = s.open;
+    } catch { /* ignore */ }
   }
-  const saveSort = () => { if (KEY) { try { localStorage.setItem(KEY, JSON.stringify(sort)); } catch { /* ignore */ } } };
+  const saveState = () => {
+    if (!KEY) return;
+    try { localStorage.setItem(KEY, JSON.stringify({ col: sort.col, dir: sort.dir, open: filtersOpen })); } catch { /* ignore */ }
+  };
 
   // Clickable sort headers: a small indicator shows the active column/direction. Text
   // columns default to A→Z, numeric columns to high→low, and clicking again toggles.
@@ -62,7 +82,7 @@ export function enhanceTable(table, opts = {}) {
     th.addEventListener("click", () => {
       if (sort.col === i) sort.dir = sort.dir === "asc" ? "desc" : "asc";
       else sort = { col: i, dir: cols[i].type === "number" ? "desc" : "asc" };
-      saveSort();
+      saveState();
       apply();
     });
   });
@@ -88,23 +108,24 @@ export function enhanceTable(table, opts = {}) {
   });
   thead.appendChild(frow);
 
-  // The filter row is collapsed by default so it costs no vertical space until wanted.
-  // A small funnel toggle in the header reveals it; the funnel stays highlighted while
-  // any filter is set, so a collapsed-but-active filter is never a mystery. It sits in
-  // the trailing actions column when there is one (right-aligned, out of the way), else
-  // before the first header's label.
+  // A small funnel toggle in the header collapses the filter row and brings it back,
+  // for a list where the vertical space matters more than the search. The funnel stays
+  // highlighted while any filter is set, so a collapsed-but-active filter is never a
+  // mystery. It sits in the trailing actions column when there is one (right-aligned,
+  // out of the way), else before the first header's label.
   const funnel = document.createElement("button");
   funnel.type = "button";
   funnel.className = "dt-filter-toggle";
-  funnel.title = "Filter columns";
-  funnel.setAttribute("aria-label", "Toggle column filters");
-  funnel.setAttribute("aria-expanded", "false");
+  funnel.title = "Show or hide the column filters";
+  funnel.setAttribute("aria-label", "Show or hide the column filters");
+  funnel.setAttribute("aria-expanded", filtersOpen ? "true" : "false");
   funnel.innerHTML = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1.8 2.5h12.4L9.3 8.6v4.4l-2.6 1.3V8.6L1.8 2.5Z"/></svg>';
   funnel.addEventListener("click", (e) => {
     e.stopPropagation();
-    const open = table.classList.toggle("dt-filters-open");
-    funnel.setAttribute("aria-expanded", open ? "true" : "false");
-    if (open) { const first = frow.querySelector(".dt-filter"); if (first) first.focus(); }
+    filtersOpen = table.classList.toggle("dt-filters-open");
+    funnel.setAttribute("aria-expanded", filtersOpen ? "true" : "false");
+    saveState();
+    if (filtersOpen) { const first = frow.querySelector(".dt-filter"); if (first) first.focus(); }
   });
   const lastI = ths.length - 1;
   if (ths[lastI] && ths[lastI].textContent.trim() === "" && !cols[lastI].sortable) {
@@ -114,6 +135,7 @@ export function enhanceTable(table, opts = {}) {
     ths[0].classList.add("dt-toggle-host");
     ths[0].insertBefore(funnel, ths[0].firstChild);
   }
+  table.classList.toggle("dt-filters-open", filtersOpen);
 
   // The comparable/filterable value of a cell: a data-sort/data-filter override wins,
   // else the rendered text. forSort prefers data-sort; filtering prefers data-filter.

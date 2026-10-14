@@ -66,6 +66,90 @@ test("a filtered or drilled export says which landscape it is", async ({ page })
   expect(lines.everything[0].text).toContain("within any hop(s)");
 });
 
+// A picture with whole element types switched off is narrowed as surely as a
+// filtered one, and the narrowing leaves no trace on the canvas: there is no term
+// in a box and no breadcrumb, just fewer things. A file that called it "the whole
+// starmap" would be the one kind of export this stamp exists to prevent.
+test("an export says which element types were switched off", async ({ page }) => {
+  const lines = await page.evaluate(() => ({
+    off: window.exporter.stampLines({
+      scope: { kind: "all", hiddenKinds: ["Product", "Unresolved"] },
+      drawn: { nodes: 12 }, total: 40,
+    }),
+    andDrilled: window.exporter.stampLines({
+      scope: { kind: "drill", name: "Billing", hops: "2", hiddenKinds: ["Worker"] },
+      drawn: { nodes: 4 }, total: 40,
+    }),
+    none: window.exporter.stampLines({
+      scope: { kind: "all", hiddenKinds: [] }, drawn: { nodes: 40 }, total: 40,
+    }),
+  }));
+
+  // Not "the whole starmap": it is not.
+  expect(lines.off[0].text).not.toContain("the whole starmap");
+  expect(lines.off[0].text).toContain("Product");
+  expect(lines.off[0].text).toContain("Unresolved");
+
+  // It composes with every other narrowing rather than replacing it — a reader has
+  // to be able to see both that the picture was drilled and that a kind is missing
+  // from what the drilldown found.
+  expect(lines.andDrilled[0].text).toContain("drilled into Billing");
+  expect(lines.andDrilled[0].text).toContain("Worker");
+
+  // And the consequence a reader of the file cannot see for themselves: what is
+  // missing is not only the hidden kind.
+  const spelt = lines.off.map((l) => l.text).join(" ");
+  expect(spelt).toMatch(/only reachable through/i);
+
+  // An empty list is not a narrowing, and must not read as one.
+  expect(lines.none[0].text).toContain("the whole starmap");
+  expect(lines.none.map((l) => l.text).join(" ")).not.toMatch(/switched off/i);
+});
+
+// Narrowing by a product facet is the least visible narrowing this view can do.
+// Switching a type off removes a whole layer and the picture looks like it;
+// filtering products by what the catalogue says about them leaves the catalogues,
+// the processes and the shape of the thing exactly as they were and quietly removes
+// some of the tiles. A reader of the file has no way at all to tell, which is why
+// the stamp has to.
+test("an export says which products were switched off", async ({ page }) => {
+  const lines = await page.evaluate(() => ({
+    facets: window.exporter.stampLines({
+      scope: { kind: "all", hiddenStates: ["Withdrawn"], hiddenApprovals: ["Ordered without approval"] },
+      drawn: { nodes: 9 }, total: 40,
+    }),
+    withTypes: window.exporter.stampLines({
+      scope: { kind: "filter", term: "phone", hiddenKinds: ["Worker"], hiddenStates: ["Draft"] },
+      drawn: { nodes: 3 }, total: 40,
+    }),
+    none: window.exporter.stampLines({
+      scope: { kind: "all", hiddenStates: [], hiddenApprovals: [] },
+      drawn: { nodes: 40 }, total: 40,
+    }),
+  }));
+
+  // Not "the whole starmap": it is not, and this is the case where nothing else on
+  // the page would have said so.
+  expect(lines.facets[0].text).not.toContain("the whole starmap");
+  expect(lines.facets[0].text).toContain("Withdrawn");
+  expect(lines.facets[0].text).toContain("Ordered without approval");
+
+  // One sentence for what this picture is, whichever controls narrowed it.
+  expect(lines.withTypes[0].text).toContain("filtered by \u201cphone\u201d");
+  expect(lines.withTypes[0].text).toContain("Worker");
+  expect(lines.withTypes[0].text).toContain("Draft");
+
+  // And the part a reader cannot work out: the catalogues are all still here and
+  // still look complete, so the count under one of them is not what it offers.
+  const detail = lines.facets.map((l) => l.text).join(" ");
+  expect(detail).toContain("Products switched off");
+  expect(detail).toContain("may offer more than the products shown");
+
+  // Nothing switched off, nothing claimed.
+  expect(lines.none[0].text).toContain("the whole starmap");
+  expect(lines.none.map((l) => l.text).join(" ")).not.toContain("Products switched off");
+});
+
 // Everything the picture cannot show has to travel with it. On screen these are in
 // the legend beside the canvas; in a file there is no beside.
 test("what the picture is not showing is written into it", async ({ page }) => {

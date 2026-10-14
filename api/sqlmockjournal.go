@@ -28,10 +28,6 @@ import (
 // the run loop: [sqldb.MockJournalView] holds its own lock, so a Console polling this
 // cannot slow a running process down.
 
-// maxSQLMockReport bounds one report. A journal is bounded in the worker already; this
-// exists so a body is refused before being read into memory rather than after.
-const maxSQLMockReport = 8 << 20
-
 // handleSQLMockJournal serves the mockup journals this server's workers reported, which
 // is what Operations › Mock database renders.
 //
@@ -59,7 +55,7 @@ func (s *Server) handleSQLMockJournal(w http.ResponseWriter, _ *http.Request) {
 // journal has to show as empty rather than as yesterday's run.
 func (s *Server) handleReportSQLMockJournal(w http.ResponseWriter, r *http.Request) {
 	var snap sqldb.MockJournalSnapshot
-	if err := json.NewDecoder(io.LimitReader(r.Body, maxSQLMockReport)).Decode(&snap); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Payload)).Decode(&snap); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid mock journal report: "+err.Error())
 		return
 	}

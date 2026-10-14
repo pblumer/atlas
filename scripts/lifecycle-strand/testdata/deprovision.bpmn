@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             id="defs_proc_demo_interner_account_deprov" targetNamespace="http://atlas/katalog-demo">
+  <process id="proc_demo_interner_account_deprov" name="Katalog Demo: Interner Account deprovisionieren" isExecutable="true">
+    <documentation>Demo-Deprovisionierungsprozess für Account-Produkte. Ablauf: Account entfernen (User Task) -&gt; Ergebnis an die Bestellposition melden (returned) -&gt; Ende. Ohne die Meldung bleibt die Position auf returning und die Leistung weiterhin unter Meine Leistungen.</documentation>
+    <startEvent id="start" name="Interner Account gekündigt">
+      <outgoing>f_start_task</outgoing>
+    </startEvent>
+    <userTask id="account_entfernen" name="Account entfernen">
+      <incoming>f_start_task</incoming>
+      <outgoing>f_task_melden</outgoing>
+    </userTask>
+    <serviceTask id="melden" name="Rückgabe melden">
+      <documentation>POST /api/v1/orders/{orderId}/lines/{positionId} mit {"status": "returned"}. Erst diese Meldung setzt die Position auf returned und streicht die Leistung aus dem Inventar. Die Position wird über positionId adressiert; fehlt sie, über itemId. atlasApiBase kommt aus den Startvariablen; wo der Starter sie nicht mitgibt (die Rückgabe-Route setzt sie nicht), gilt die Adresse dieser Installation. Voraussetzung: API-Token mit Rolle operator unter ATLAS_CONNECTOR_ATLAS_TOKEN.</documentation>
+      <extensionElements>
+        <atlas:restConnector method="POST"
+          url="=(if atlasApiBase = null then &#34;http://127.0.0.1:8080&#34; else atlasApiBase) + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + (if positionId = null then itemId else positionId)"
+          authType="bearer" authSecret="atlas" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;returned&#34;" target="status" />
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>f_task_melden</incoming>
+      <outgoing>f_melden_ende</outgoing>
+    </serviceTask>
+    <endEvent id="ende" name="Account entfernt">
+      <incoming>f_melden_ende</incoming>
+    </endEvent>
+    <sequenceFlow id="f_start_task" sourceRef="start" targetRef="account_entfernen"/>
+    <sequenceFlow id="f_task_melden" sourceRef="account_entfernen" targetRef="melden"/>
+    <sequenceFlow id="f_melden_ende" sourceRef="melden" targetRef="ende"/>
+  </process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_proc_demo_interner_account_deprov">
+    <bpmndi:BPMNPlane id="BPMNPlane_proc_demo_interner_account_deprov" bpmnElement="proc_demo_interner_account_deprov">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="152" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="125" y="145" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="account_entfernen_di" bpmnElement="account_entfernen">
+        <omgdc:Bounds x="250" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="melden_di" bpmnElement="melden">
+        <omgdc:Bounds x="400" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="582" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="555" y="145" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_start_task_di" bpmnElement="f_start_task">
+        <omgdi:waypoint x="188" y="120"/><omgdi:waypoint x="250" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_task_melden_di" bpmnElement="f_task_melden">
+        <omgdi:waypoint x="350" y="120"/><omgdi:waypoint x="400" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_melden_ende_di" bpmnElement="f_melden_ende">
+        <omgdi:waypoint x="500" y="120"/><omgdi:waypoint x="582" y="120"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

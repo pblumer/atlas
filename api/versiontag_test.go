@@ -49,7 +49,7 @@ func TestVersionTagSurfaced(t *testing.T) {
 		Key uint64 `json:"key"`
 	}
 	_, ibody := doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
-	if err := json.Unmarshal(ibody, &insts); err != nil || len(insts) == 0 {
+	if err := json.Unmarshal(listRows(t, ibody), &insts); err != nil || len(insts) == 0 {
 		t.Fatalf("instances: %v (%s)", err, ibody)
 	}
 	_, tbody := doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/timeline", insts[0].Key), "", "")

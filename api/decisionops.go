@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sort"
+	"strconv"
 
 	"github.com/pblumer/atlas/model"
 
@@ -79,6 +80,21 @@ func (s *Server) handleDeployedDecisions(w http.ResponseWriter, _ *http.Request)
 
 	var scanErr error
 	s.do(func() {
+		// Decisions deployed in their own right
+		// (ADR-0319). These are listed whether
+		// or not any process calls them: an application may publish decisions and no
+		// BPMN at all, and a decision nobody has referenced yet is still something the
+		// engine is holding — a deployed process with no instances is listed for the
+		// same reason. A read failure here is not fatal to the view: the deployment
+		// sweep and the evaluation history below still answer, and this row set only
+		// widens what is shown.
+		if recs, err := s.decisionDeploys.LoadAll(); err == nil {
+			for _, rec := range recs {
+				for _, d := range rec.Decisions {
+					get(d.ID).local = true
+				}
+			}
+		}
 		// Deployed decisions: every local business rule decision across all deployed
 		// definitions. These are the decisions snapshotted into the DMN registry, so a
 		// decision that has never been evaluated still lists with its referencing
@@ -151,13 +167,20 @@ func (s *Server) handleDeployedDecisions(w http.ResponseWriter, _ *http.Request)
 // returns nothing — a string compared against the wrong type, a trailing space, a
 // number where a string was expected — is diagnosable from what it actually saw.
 type decisionEvaluationRow struct {
-	At          int64           `json:"at"`
+	At int64 `json:"at"`
+	// AtKey is At as a decimal string, for the reason decisionEvaluationView carries
+	// one: a nanosecond timestamp is past 2^53, so a browser cannot parse one without
+	// rounding it, and this is how an evaluation is addressed.
+	AtKey       string          `json:"atKey"`
 	InstanceKey uint64          `json:"instanceKey"`
 	ProcessID   string          `json:"processId"`
 	ElementID   string          `json:"elementId"`
 	Inputs      json.RawMessage `json:"inputs"`
 	Outputs     json.RawMessage `json:"outputs"`
 	Trace       json.RawMessage `json:"trace,omitempty"`
+	// DecisionKey and DecisionVersion as on decisionEvaluationView.
+	DecisionKey     uint64 `json:"decisionKey,omitempty"`
+	DecisionVersion int32  `json:"decisionVersion,omitempty"`
 }
 
 // handleDecisionEvaluations returns every retained evaluation of one decision id,
@@ -176,10 +199,13 @@ func (s *Server) handleDecisionEvaluations(w http.ResponseWriter, r *http.Reques
 				return nil
 			}
 			row := decisionEvaluationRow{
-				At:          ts,
-				InstanceKey: v.ProcessInstanceKey,
-				Inputs:      rawJSONOr(v.InputsJSON, "{}"),
-				Outputs:     rawJSONOr(v.OutputsJSON, "{}"),
+				At:              ts,
+				AtKey:           strconv.FormatInt(ts, 10),
+				InstanceKey:     v.ProcessInstanceKey,
+				Inputs:          rawJSONOr(v.InputsJSON, "{}"),
+				Outputs:         rawJSONOr(v.OutputsJSON, "{}"),
+				DecisionKey:     v.DecisionKey,
+				DecisionVersion: s.decisionVersionOf(v.DecisionKey, id),
 			}
 			if v.TraceJSON != "" {
 				row.Trace = json.RawMessage(v.TraceJSON)

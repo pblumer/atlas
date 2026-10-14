@@ -1,6 +1,7 @@
 # ADR-0095: External variable modification on a running instance
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-06
 - **Deciders:** Atlas maintainers
 

@@ -1,0 +1,149 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas capabilities e2e harness</title>
+    <!-- Drives the *real* api/web/capabilities.js against a mock `api`: the gap report as
+         the landing view, the capability list one tab away, one capability with its
+         realizations, measurement and confirmation, and one value stream.
+
+         The fixture is chosen for the cases that matter. "claims-intake" is realized by
+         nothing and has never been confirmed; "notify" names a Worker this server does not
+         have; "billing" is realized by a deployed process and confirmed. A deployed
+         process nobody claims raises the finding in the other direction, and the value
+         stream has one stage naming a capability that is not in the map. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { setLocale } from "/i18n.js";
+      import {
+        mountCapabilityMap, mountCapabilityDetail, mountValueStreams, mountValueStreamDetail,
+      } from "/capabilities.js";
+      const view = document.getElementById("view");
+
+      const SUBSET = {
+        states: ["proposed", "active", "deprecated"],
+        realizationKinds: ["process", "worker", "system", "manual"],
+        gapFindingKinds: [
+          "capability.unrealized", "realization.missing", "process.unclaimed", "requires.unknown",
+          "stage.empty", "stage.unknown", "process.shared", "call.undeclared",
+          "capability.unconfirmed", "value-stream.unconfirmed",
+        ],
+      };
+
+      const CAPS = [
+        { key: "billing", name: "Rechnungsstellung", summary: "Kunden eine korrekte Rechnung stellen.",
+          owner: { name: "Ida Muster", role: "Leiterin Debitoren" }, state: "active", tags: ["finance"],
+          realizationCount: 1, realized: true, requiresCount: 1, kpiCount: 1, slaCount: 1,
+          confirmedAt: 1760000000, stale: false, revision: 3, updatedAt: 1760000000 },
+        { key: "claims-intake", name: "Schadenaufnahme", owner: {}, state: "proposed", tags: ["claims"],
+          realizationCount: 0, realized: false, requiresCount: 0, kpiCount: 0, slaCount: 0,
+          stale: true, revision: 1, updatedAt: 1759000000 },
+        { key: "notify", name: "Benachrichtigen", owner: { name: "Service Desk" }, state: "active", tags: ["finance", "platform"],
+          realizationCount: 1, realized: true, requiresCount: 0, kpiCount: 0, slaCount: 0,
+          confirmedAt: 1700000000, stale: true, revision: 2, updatedAt: 1759500000 },
+      ];
+
+      const STREAMS = [
+        { key: "order-to-cash", name: "Bestellung bis Zahlung", owner: { name: "COO" }, tags: [],
+          stageCount: 2, capabilityCount: 2, kpiCount: 0, stale: true, revision: 1, updatedAt: 1759000000 },
+      ];
+
+      const GAPS = {
+        counts: {}, horizonMonths: 12, restricted: 1,
+        checked: { capabilities: 3, valueStreams: 1, processes: 2, calls: 0 },
+        findings: [
+          { kind: "capability.unrealized", capabilityKey: "claims-intake", detail: "english prose" },
+          { kind: "capability.unconfirmed", capabilityKey: "claims-intake", detail: "english prose" },
+          { kind: "realization.missing", capabilityKey: "notify", workerRef: "mail-service-desk", detail: "english prose" },
+          { kind: "capability.unconfirmed", capabilityKey: "notify", detail: "english prose" },
+          { kind: "process.unclaimed", applicationKey: "fin", processId: "dunning", detail: "english prose" },
+          { kind: "stage.unknown", valueStreamKey: "order-to-cash", stageKey: "ship", requiredKey: "shipping", detail: "english prose" },
+          { kind: "value-stream.unconfirmed", valueStreamKey: "order-to-cash", detail: "english prose" },
+        ],
+      };
+
+      const BILLING = {
+        key: "billing", name: "Rechnungsstellung", summary: "Kunden eine korrekte Rechnung stellen.",
+        scope: "Rechnung erzeugen und versenden; nicht das Mahnwesen.",
+        owner: { name: "Ida Muster", role: "Leiterin Debitoren" }, state: "active", tags: ["finance"],
+        realizations: [{ kind: "process", applicationKey: "fin", processId: "invoice" }],
+        requires: ["notify"],
+        kpis: [{ name: "Durchlaufzeit", metric: "cycle-time", goal: "unter zwei Tagen" }],
+        slas: [{ name: "Versand", metric: "cycle-time", threshold: "24 Stunden", thresholdSeconds: 86400, scope: "customer" }],
+        revision: 3, createdAt: 1750000000, createdBy: "ida", updatedAt: 1760000000, updatedBy: "ida",
+        confirmation: { at: 1760000000, by: "max" },
+      };
+
+      const COVERAGE = {
+        capability: BILLING,
+        realized: true,
+        realizations: [
+          { kind: "process", applicationKey: "fin", processId: "invoice", resolved: true, restricted: false,
+            name: "Rechnung stellen", applicationName: "Finanzen", version: 4, activeInstances: 7 },
+        ],
+        requires: [{ key: "notify", known: true, name: "Benachrichtigen", state: "active", realized: true }],
+        requiredBy: [],
+        valueStreams: [{ key: "order-to-cash", name: "Bestellung bis Zahlung", stages: [{ key: "bill", name: "Fakturieren" }] }],
+        confirmation: { at: 1760000000, by: "max", horizonMonths: 12, stale: false, ever: true },
+        measurement: "english prose",
+      };
+
+      const MEASUREMENT = {
+        key: "billing", name: "Rechnungsstellung", window: { from: 0, to: 1 }, windowDays: 30,
+        countedBasis: "english prose", walkedBasis: "english prose",
+        processes: [{ processId: "invoice", name: "Rechnung stellen", deployed: true,
+          outcomes: [{ elementId: "sent", name: "Versandt", count: 120 }],
+          cases: { cases: 40, meanSeconds: 5400, minSeconds: 600, maxSeconds: 86000 } }],
+        slas: [{ name: "Versand", metric: "cycle-time", thresholdSeconds: 86400, within: 38, cases: 40, share: 0.95 }],
+        notMeasured: [{ kind: "kpi", name: "Durchlaufzeit", reason: "english prose" }],
+      };
+
+      const STREAM = {
+        key: "order-to-cash", name: "Bestellung bis Zahlung", description: "Vom Auftrag bis zum Zahlungseingang.",
+        owner: { name: "COO" }, tags: [],
+        stages: [
+          { key: "bill", name: "Fakturieren", capabilities: ["billing"] },
+          { key: "ship", name: "Versenden", capabilities: ["shipping"] },
+        ],
+        revision: 1, createdAt: 1750000000, createdBy: "coo", updatedAt: 1759000000, updatedBy: "coo",
+        confirmation: {},
+      };
+
+      // calls records what the page asked for, so a test can say which window was read
+      // and what a confirmation sent.
+      window.__calls = [];
+      const api = async (method, url, body) => {
+        window.__calls.push({ method, url, body });
+        if (url === "/api/v1/business-architecture/subset") return SUBSET;
+        if (url === "/api/v1/business-architecture/gaps") return GAPS;
+        if (url === "/api/v1/capabilities") return CAPS;
+        if (url === "/api/v1/value-streams") return STREAMS;
+        if (url === "/api/v1/capabilities/billing/coverage") return COVERAGE;
+        if (url.startsWith("/api/v1/capabilities/billing/measurement?")) return MEASUREMENT;
+        if (url === "/api/v1/value-streams/order-to-cash") return STREAM;
+        if (method === "POST" && url.endsWith("/confirmation")) {
+          return { at: 1761000000, by: "harness", with: body.with, note: body.note, horizonMonths: 12, stale: false, ever: true };
+        }
+        const err = new Error("not found");
+        err.status = 404;
+        throw err;
+      };
+      const toast = (msg) => { window.__toast = msg; };
+
+      window.__locale = (id) => setLocale(id);
+      window.__mountMap = () => mountCapabilityMap(view, { api });
+      window.__mountBilling = () => mountCapabilityDetail(view, { api, toast, key: "billing" });
+      window.__mountMissing = () => mountCapabilityDetail(view, { api, toast, key: "gone" });
+      window.__mountStreams = () => mountValueStreams(view, { api });
+      window.__mountStream = () => mountValueStreamDetail(view, { api, toast, key: "order-to-cash" });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

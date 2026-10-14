@@ -24,7 +24,16 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
 // How wide a class is drawn. It is the one piece of geometry this file still needs,
 // to place a new box where there is room; the rest lives with the drawing, in
 // api/web/vendor/canvas/src/uml.js.
-const BOX_W = 200;
+// The step a new class is placed on, not the width one is drawn at: a class box now
+// grows to hold its members (up to 380px in uml.js), so a grid stepped by the old
+// fixed 200 would drop the next one on top of the last.
+const BOX_STEP = 400;
+
+// How long the canvas waits after an edit before asking the server what it thinks of
+// the model. Long enough that typing a class name is one question rather than nine,
+// short enough that the answer arrives while the edit is still the thing being looked
+// at — which is the whole point of not waiting for Save.
+const VALIDATE_DEBOUNCE_MS = 250;
 
 // The bundle carries both canvases; this view wants the UML half of it.
 function loadCanvas() {
@@ -59,11 +68,19 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     connecting: null,    // {kind, fromId} while a relationship is being drawn
     dirty: false,
     schemaFor: "",       // class whose JSON Schema projection is open
+    // Which class's lifecycle is open on the second sheet, if any (ADR-0259). It is a
+    // mode of this editor rather than a route of its own: same document, same Save,
+    // same dirty flag, with the sheet swapped underneath.
+    lifecycleOf: null,
     // What the panel's member filter is narrowed to, and what the bar's search box
     // is looking for. Both are view state: neither touches the document, and neither
     // survives leaving the class it was typed for.
     memberFilter: "",
     search: "",
+    // The where-used reading, once somebody has asked for it, as a Map from class name
+    // to that class's usage summary. Null means nobody asked, which is what leaves the
+    // drawing exactly as it has always been drawn.
+    usage: null,
   };
 
   const stereotypeOf = (name) => subset.stereotypes.find((s) => s.stereotype === name) || subset.stereotypes[0];
@@ -77,8 +94,9 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       <div class="im-bar">
         <a class="btn neutral" href="#/data" title="Back to the information models">← Model</a>
         <b class="im-title" id="im-name">${esc(state.model.name)}</b>
+        <button type="button" class="btn neutral small im-lc-back" id="im-lc-back" hidden
+          title="Back to the class diagram">← <span id="im-lc-of"></span> lifecycle</button>
         <span class="im-rev muted" id="im-rev">r${state.model.revision}</span>
-        <span class="im-palette" id="im-palette"></span>
         <span class="im-search">
           <input type="search" id="im-search" placeholder="Find a class or a member…"
             aria-label="Find a class or a member" autocomplete="off" role="combobox"
@@ -98,12 +116,30 @@ export async function mountClassDiagram(root, { api, toast, id }) {
             <button type="button" class="icon-btn" data-tool="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
             <button type="button" class="icon-btn" data-tool="fit" title="Fit the whole diagram in the window" aria-label="Fit diagram">⊡</button>
             <span class="im-tool-sep" aria-hidden="true"></span>
-            <button type="button" class="icon-btn" data-tool="marquee" aria-pressed="false"
-              title="Select several at once: draw a box around them. Shift and drag does the same without this button, and Escape puts the drag back to panning."
-              aria-label="Select several">⬚</button>
-            <span class="im-tool-sep" aria-hidden="true"></span>
             <button type="button" class="icon-btn" data-tool="undo" title="Undo the last move on the canvas (Ctrl/⌘ + Z)" aria-label="Undo" disabled>↺</button>
             <button type="button" class="icon-btn" data-tool="redo" title="Redo (Ctrl/⌘ + Shift + Z)" aria-label="Redo" disabled>↻</button>
+            <span class="im-tool-sep" aria-hidden="true"></span>
+            <button type="button" class="icon-btn" data-tool="usage" aria-pressed="false"
+              title="Shade by use: bring out the members deployed processes name, fade the ones none of them does"
+              aria-label="Shade by use">◧</button>
+          </div>
+          <p class="im-usage-legend" id="im-usage-legend" hidden>
+            <b>Shaded by use.</b> A member some deployed process names is bright; one none of
+            them names is faint. A read takes the whole object, so faint means
+            <i>nothing names it</i> — not that nothing uses it. A literal is read through the
+            lifecycles that borrow it: bright where a process moves something into that state.
+            A faint class is used by no deployed process and nowhere in this model either.
+            Anything this reading has never seen — renamed or added since — is left as it was.
+          </p>
+        </div>
+        <div class="im-canvas" id="im-lc-canvas" hidden>
+          <p class="im-empty-hint" id="im-lc-empty" hidden>No states yet. Add the state an instance
+            is created in — <code>draft</code>, <code>new</code>, <code>erfasst</code> — then the
+            ones it moves to.</p>
+          <div class="im-tools" aria-label="Lifecycle controls">
+            <button type="button" class="icon-btn" data-lc-tool="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+            <button type="button" class="icon-btn" data-lc-tool="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+            <button type="button" class="icon-btn" data-lc-tool="fit" title="Fit the whole lifecycle in the window" aria-label="Fit lifecycle">⊡</button>
           </div>
         </div>
         <div class="props-resizer im-resizer" id="im-resizer"
@@ -114,11 +150,13 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     </div>`;
 
   const canvasEl = root.querySelector("#im-canvas");
+  const lcCanvasEl = root.querySelector("#im-lc-canvas");
+  const lcEmptyEl = root.querySelector("#im-lc-empty");
+  const lcBackBtn = root.querySelector("#im-lc-back");
   const emptyEl = root.querySelector("#im-empty");
   const sideEl = root.querySelector("#im-side");
   const problemsEl = root.querySelector("#im-problems");
   const saveBtn = root.querySelector("#im-save");
-  const marqueeBtn = root.querySelector('[data-tool="marquee"]');
   const undoBtn = root.querySelector('[data-tool="undo"]');
   const redoBtn = root.querySelector('[data-tool="redo"]');
   const dirtyEl = root.querySelector("#im-dirty");
@@ -128,21 +166,25 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // difference between a business object and a value type is the single most
   // consequential choice in this metamodel, and a palette of three bare words is
   // how it gets made by accident.
-  root.querySelector("#im-palette").innerHTML = subset.stereotypes.map((s) =>
-    `<button type="button" class="im-add" data-stereotype="${esc(s.stereotype)}"
-       title="${esc(s.meaning)}">+ ${esc(s.label)}</button>`).join("") +
-    `<button type="button" class="im-add store" data-add="store"
-       title="Where instances of a class outlive the process that made them. Declared once here and named by every process that reaches it — which is the thing BPMN's dataStoreReference gestures at and then says nothing about.">+ Data store</button>` +
-    subset.associationKinds.map((k) =>
-      `<button type="button" class="im-connect" data-kind="${esc(k.kind)}"
-         title="${esc(k.rule)}">${esc(k.label)}</button>`).join("");
-
   // The canvas. Everything a modeler expects of one — zoom, pan, marquee, multi-select
   // move, undo of a move, keyboard nudging — comes from diagram-js; what Atlas owns is
   // how a class is drawn and what the served subset permits between two of them
   // (ADR-0237).
   const canvas = new uml.ClassCanvas(canvasEl, {
     subset,
+    paletteEntries,
+    contextPadEntries,
+    // A drag out of the pad reports where it landed; nothing is created on the canvas.
+    // The document is the host's, and reconcile rebuilds every line from it — a
+    // connection diagram-js added to its own model would live until the next sync.
+    onConnect: (kind, from, to) => { if (!drawRelationship(kind, from.id, to.id)) render(); },
+    // Dropped where the subset refuses. The drag already refused it, so nothing is
+    // created — this only says why, in the server's own words.
+    onConnectRefused: (kind, from, to) => {
+      const a = classById(from.id);
+      const b = classById(to.id);
+      if (a && b) toast(refusalFor(kind, a, b), "err");
+    },
     onSelection: (bo, all) => onCanvasSelection(bo, all),
     onChange: () => { absorbMoves(); syncHistoryButtons(); },
     onTool: (tool) => showMarquee(tool === "marquee"),
@@ -170,10 +212,11 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // The button arms it and nothing more. Whether the mode is still on is the canvas's
   // to say and this only follows, because the mode ends without the button being
   // touched: the box being drawn spends it, and Escape takes it back.
-  marqueeBtn.addEventListener("click", (e) => canvas.marquee(e));
+  // Whether the next drag draws a box is the canvas's to say and this only follows:
+  // the mode ends without anything being pressed — the box being drawn spends it, and
+  // Escape takes it back. diagram-js lights the palette entry itself, off the same
+  // tool events, so all that is left here is the cursor over the sheet.
   function showMarquee(on) {
-    marqueeBtn.classList.toggle("active", on);
-    marqueeBtn.setAttribute("aria-pressed", on ? "true" : "false");
     canvasEl.classList.toggle("marquee", on);
   }
 
@@ -324,7 +367,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     // that heard, typing in a relationship's name would deselect it on the first key.
     applyingSelection = true;
     try {
-      canvas.sync(state.model, state.validation.findings || [], { unreachable: unreachableNow() });
+      canvas.sync(state.model, state.validation.findings || [],
+        { unreachable: unreachableNow(), usage: usageMarks() });
       // An empty canvas says what to do with it. It is HTML over the drawing rather
       // than text in it: diagram-js fits the viewport to the content, so a sentence
       // drawn on the sheet would be zoomed to fill it.
@@ -355,20 +399,212 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     return out;
   }
 
+  // ---- shading by use ------------------------------------------------------
+  // The where-used reading (ADR-0338) brought onto the drawing, where the question is
+  // actually asked (ADR-0363).
+  // actually asked. That reading answers "what would this change break" one class at a
+  // time, on a page of its own; somebody about to retire a member is looking at the
+  // class diagram, and walking off it to find out whether anything writes `placedOn`
+  // is a walk most people do not take.
+  //
+  // It is the same reading, not a second one — /api/v1/infomodel/classes, asked once
+  // for this model's application. So the drawing cannot say anything the Business
+  // objects page does not, and there is one computation to keep true.
+  //
+  // What it can say, exactly:
+  //
+  //   - **A member is used** when a deployed process names it: a write targeting that
+  //     member (ADR-0060). A business key counts too, whenever any deployed process
+  //     uses the class at all — no write ever names it, and it is what every store
+  //     lookup and cross-process correlation resolves against, so it is used by every
+  //     use there is. Fading it would point at the one member that must not go.
+  //   - **A member is not named** when nothing deployed writes it by name. That is not
+  //     the same as unused: a read takes the whole object into a variable and what a
+  //     FEEL expression then reads out of it is not a fact of the model (ADR-0301's
+  //     whole-object gap). The legend says so rather than letting faint read as dead.
+  //   - **A class is used by nothing** when no deployed process uses it and the
+  //     vocabulary does not either. Both halves, because an «enumeration» is normally
+  //     declared by no data object at all — a class-level fade counting only processes
+  //     would grey out the most shared elements in the model.
+  //
+  // And what it will not say. A class whose name the reading has never seen — added
+  // since, or renamed a moment ago — is left alone rather than faded: the reading made
+  // no claim about that name, and inventing one would turn every rename into a scare.
+  // Members are shaded only where a process uses the class, since member-level facts
+  // come only from process writes — and an «enumeration»'s literals only where some
+  // class borrows them as its states and a process reaches one, which is the only way a
+  // literal is ever named.
+  //
+  // Asked once, when it is switched on. What it reads is deployed processes, which do
+  // not change while somebody is drawing; what does change is the document, and the
+  // marks follow it on every sync because they are matched by name.
+  async function loadUsage() {
+    const rows = await api("GET", "/api/v1/infomodel/classes?applicationId=" +
+      encodeURIComponent(state.model.applicationId || ""));
+    const byName = new Map();
+    for (const row of rows || []) {
+      if (row.modelId === state.model.id) byName.set(row.name, row.usage || {});
+    }
+    return byName;
+  }
+
+  // usageMarks turns that reading into what the drawing shows. The rule stays here, the
+  // way the relationship matrix does: the canvas is told which classes and which member
+  // names are used, and draws that. A class with no entry is a class the reading has
+  // nothing to say about, and its members are drawn unshaded.
+  function usageMarks() {
+    if (!state.usage) return undefined;
+    const unused = [];
+    const members = {};
+    for (const c of state.model.classes || []) {
+      const u = state.usage.get(c.name);
+      if (!u) continue;
+      if (!u.processes && !u.modelUses) { unused.push(c.id); continue; }
+      const named = c.stereotype === "enumeration" ? reachedLiterals(c) : namedMembers(c, u);
+      if (named) members[c.id] = named;
+    }
+    return { unused, members };
+  }
+
+  // The members of a class that deployed processes name.
+  function namedMembers(c, u) {
+    if (!u.processes) return null;
+    const named = new Set(u.attributes || []);
+    for (const k of c.identity || []) named.add(k);
+    return [...named];
+  }
+
+  // The literals of an «enumeration» that deployed processes reach — the same reading,
+  // one step across.
+  //
+  // No process ever names a literal. What a process names is a *state*: a `<dataState>`
+  // on a write, matched to a lifecycle state by that string. A literal becomes a state
+  // when a class's lifecycle takes its states from this enumeration (ADR-0306), and a
+  // literal's rename *is* that state's rename — which is what makes matching by name
+  // right here rather than merely convenient.
+  //
+  // So the question "is this literal used" is asked of the classes that borrow it, and
+  // it is only worth asking where at least one of them is used by a deployed process.
+  // Where none is — or where nothing borrows from this enumeration at all — the answer
+  // is null and no literal is shaded, because "no process reaches this state" and "no
+  // process was in a position to" are different claims and only one of them is true.
+  function reachedLiterals(e) {
+    const reached = new Set();
+    let asked = false;
+    for (const c of state.model.classes || []) {
+      if (!c.lifecycle || c.lifecycle.statesFrom !== e.name) continue;
+      const u = state.usage.get(c.name);
+      if (!u || !u.processes) continue;
+      asked = true;
+      for (const st of u.states || []) reached.add(st);
+    }
+    return asked ? [...reached] : null;
+  }
+
+  const usageBtn = root.querySelector('[data-tool="usage"]');
+  const usageLegendEl = root.querySelector("#im-usage-legend");
+
+  function reflectUsage() {
+    usageBtn.setAttribute("aria-pressed", String(Boolean(state.usage)));
+    usageBtn.classList.toggle("active", Boolean(state.usage));
+    usageLegendEl.hidden = !state.usage;
+  }
+
+  usageBtn.addEventListener("click", async () => {
+    if (state.usage) {
+      state.usage = null;
+      reflectUsage();
+      syncCanvas();
+      return;
+    }
+    usageBtn.disabled = true;
+    try {
+      state.usage = await loadUsage();
+    } catch (e) {
+      // Nothing shaded, rather than shaded from nothing: a diagram that fades members
+      // on a reading that failed is a diagram saying something nobody checked.
+      toast(`Could not read where these classes are used: ${e.message}`, "err");
+      return;
+    } finally {
+      usageBtn.disabled = false;
+    }
+    reflectUsage();
+    syncCanvas();
+  });
+
   function markDirty() {
     state.dirty = true;
     dirtyEl.hidden = false;
     saveBtn.disabled = false;
+    revalidate();
+  }
+
+  // The verdict on the model being edited, asked of the server whenever it changes
+  // (ADR-0364).
+  //
+  // Until this existed the panel showed the findings of the *last save*, so every edit
+  // that broke the model was silent until Save — and the refusal then named an edit the
+  // author had stopped thinking about. Checking it here rather than in the browser is
+  // the same choice ADR-0230 made for the relationship matrix: the rules are served,
+  // never duplicated, because two copies of them are two rule sets and the one the
+  // author sees would drift from the one the server enforces.
+  //
+  // Debounced, because markDirty runs on every keystroke in the panel and a verdict per
+  // character is not read anyway. The last request wins: an answer about a model that
+  // has already changed again is not the verdict, so a late one is dropped rather than
+  // painted over a newer one.
+  let validateTimer = null;
+  let validateSeq = 0;
+  function revalidate() {
+    clearTimeout(validateTimer);
+    validateTimer = setTimeout(async () => {
+      const seq = ++validateSeq;
+      let verdict;
+      try {
+        verdict = await api("POST", "/api/v1/infomodel/validate", {
+          classes: state.model.classes,
+          associations: state.model.associations,
+          stores: state.model.stores,
+        });
+      } catch {
+        return; // unreachable or refused: the last verdict stands rather than blanking
+      }
+      if (seq !== validateSeq || !root.isConnected) return;
+      state.validation = verdict && verdict.findings ? verdict : { valid: true, findings: [] };
+      // The problems bar and the marks on the drawing, and deliberately not the side
+      // panel: a row being typed in is not repainted, which is what keeps the caret
+      // where it is.
+      renderProblems();
+      syncCanvas();
+    }, VALIDATE_DEBOUNCE_MS);
   }
 
   // ---- rendering -----------------------------------------------------------
   function render() {
+    if (state.lifecycleOf) { syncLifecycle(); renderSide(); renderProblems(); return; }
     syncCanvas();
     renderSide();
     renderProblems();
-    root.querySelectorAll(".im-connect").forEach((b) =>
-      b.classList.toggle("active", !!state.connecting && state.connecting.kind === b.dataset.kind));
+    // Which relationship is armed lives in the palette now, and the palette is
+    // diagram-js's — so it is told to ask again rather than having a class toggled on it.
+    canvas.refreshPalette();
     canvasEl.classList.toggle("connecting", !!state.connecting);
+  }
+
+  function syncLifecycle() {
+    const c = lifecycleClass();
+    if (!c || !lcCanvas) return;
+    applyingSelection = true;
+    try {
+      lcCanvas.sync(c.lifecycle, lifecycleFindings(c));
+      lcEmptyEl.hidden = (c.lifecycle.states || []).length > 0;
+      lcCanvas.select(state.selected ? (state.selected.kind === "state"
+        ? state.selected.id : state.selected.id) : null);
+    } finally {
+      applyingSelection = false;
+    }
+    lcCanvas.refreshPalette();
+    lcCanvasEl.classList.toggle("connecting", !!state.connecting);
   }
 
   // ---- problems ------------------------------------------------------------
@@ -431,8 +667,204 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     return (words.length > 1 ? words.map((w) => w[0]).join("") : words[0].slice(0, 2)).toUpperCase();
   };
 
+  // ---- the lifecycle panels -----------------------------------------------
+
+  // ---- states taken from an «enumeration» -----------------------------------
+  //
+  // The enumeration is where the *names* live; everything it cannot hold — the order,
+  // the start, the ends, the layout — stays on the lifecycle
+  // (ADR-0306). So every function
+  // here adds and removes and never overwrites: a state that survives keeps what
+  // somebody set on it.
+
+  function enumerationsIn() {
+    return (state.model.classes || []).filter((x) => x.stereotype === "enumeration");
+  }
+
+  // The enumeration a class takes its states from, or null. A reference to something
+  // that is not there resolves to null rather than being repaired: the validator
+  // reports it, and a canvas that quietly fixed it would hide the typo.
+  function sourceEnumOf(c) {
+    const from = c && c.lifecycle && c.lifecycle.statesFrom;
+    if (!from) return null;
+    return enumerationsIn().find((x) => x.name === from) || null;
+  }
+
+  // syncStatesFromLiterals brings a lifecycle's states in step with its enumeration's
+  // literals: a literal with no state gets one, a state whose literal is gone goes and
+  // takes the transitions that name it with it. Order follows the literals, because
+  // the order somebody put them in is the order they read.
+  function syncStatesFromLiterals(c) {
+    const src = sourceEnumOf(c);
+    if (!src) return;
+    const lc = c.lifecycle;
+    const had = new Map((lc.states || []).map((st) => [st.name, st]));
+    // A literal listed twice is one state said twice, which the validator refuses on
+    // the enumeration itself — so it is not made into two states here.
+    const wanted = (src.literals || []).filter((lit, i, all) => lit && all.indexOf(lit) === i);
+    let below = Math.max(-90, ...(lc.states || []).map((st) => st.y || 0));
+    lc.states = wanted.map((name) => {
+      const kept = had.get(name);
+      if (kept) return kept;
+      below += 90;
+      return { name, x: 0, y: below };
+    });
+    // A machine with no start is one the document refuses, and picking one is a worse
+    // surprise than the first literal standing in — which the lifecycle sheet changes
+    // in one click.
+    if (lc.states.length && !lc.states.some((st) => st.initial)) lc.states[0].initial = true;
+    const live = new Set(lc.states.map((st) => st.name));
+    lc.transitions = (lc.transitions || []).filter((t) => live.has(t.from) && live.has(t.to));
+  }
+
+  // Renaming a literal renames the state, exactly as renaming a state does — because a
+  // state's name *is* what every process writes, so the transitions naming it are
+  // rewritten rather than left pointing at a string that is gone.
+  function renameStateFromLiteral(enumName, before, after) {
+    if (!before || !after || before === after) return;
+    for (const cls of state.model.classes || []) {
+      if (!cls.lifecycle || cls.lifecycle.statesFrom !== enumName) continue;
+      for (const st of cls.lifecycle.states || []) if (st.name === before) st.name = after;
+      for (const t of cls.lifecycle.transitions || []) {
+        if (t.from === before) t.from = after;
+        if (t.to === before) t.to = after;
+      }
+    }
+  }
+
+  // Every class this enumeration supplies, after its literals changed.
+  function resyncClassesSourcedFrom(enumName) {
+    for (const cls of state.model.classes || []) {
+      if (cls.lifecycle && cls.lifecycle.statesFrom === enumName) syncStatesFromLiterals(cls);
+    }
+  }
+
+  function lcStates() { return (lifecycleClass()?.lifecycle?.states) || []; }
+  function lcTransitions() { return (lifecycleClass()?.lifecycle?.transitions) || []; }
+
+  function renderLifecycleNothingSelected() {
+    const c = lifecycleClass();
+    const rules = subset.lifecycles || {};
+    paint(`${pheadHTML("LC", "Lifecycle", c ? c.name : "")}
+      <h3>Lifecycle</h3>
+      <p class="im-meaning">${esc(rules.meaning || "")}</p>
+      <p class="im-hint-text">${lcStates().length
+        ? `${lcStates().length} state${lcStates().length === 1 ? "" : "s"},
+           ${lcTransitions().length} transition${lcTransitions().length === 1 ? "" : "s"}.
+           Pick one to edit it.`
+        : "Add the state an instance is created in, then the ones it moves to."}</p>
+      ${sourceEnumOf(c)
+        ? `<p class="im-hint-text">The names come from the enumeration
+             <b>${esc(sourceEnumOf(c).name)}</b> and are renamed there. What is set here is what an
+             enumeration cannot say: where instances start, where the life ends, and what may
+             follow what.</p>`
+        : ""}`);
+  }
+
+  // Where a class's state names come from: this lifecycle, or an «enumeration» the
+  // model already has. The second is the case the record exists for — a model whose
+  // author had written the states as literals, with documentation, because that was
+  // the only place they could be written at all.
+  function lifecycleSourceHTML(c) {
+    const enums = enumerationsIn();
+    const from = (c.lifecycle && c.lifecycle.statesFrom) || "";
+    // A reference to something that is not there is shown as what it says rather than
+    // silently reset, because the remedy — draw it, or point somewhere else — is the
+    // author's to pick.
+    const stray = from && !enums.some((e) => e.name === from)
+      ? `<option value="${esc(from)}" selected>${esc(from)} — no such enumeration</option>` : "";
+    return `<label class="field"><span>States from</span>
+        <select id="im-c-lcfrom">
+          <option value=""${from ? "" : " selected"}>This lifecycle</option>
+          ${enums.map((e) => `<option value="${esc(e.name)}"${e.name === from ? " selected" : ""}>${esc(e.name)}</option>`).join("")}
+          ${stray}
+        </select></label>
+      ${from
+        ? `<p class="im-hint-text">The literals of <b>${esc(from)}</b> are this class's states, so each
+             name is written in one place. What an enumeration cannot hold — which state instances start
+             in, which end the life, and what may follow what — stays on the lifecycle. The class diagram
+             draws the tie as a dashed <code>&laquo;lifecycle&raquo;</code> line.</p>`
+        : enums.length
+          ? `<p class="im-hint-text">Or take them from an enumeration you have already written, so the
+             names and their documentation live in one place rather than two.</p>`
+          : ""}`;
+  }
+
+  function renderStatePanel() {
+    const st = lcStates().find((x) => x.name === state.selected.id);
+    if (!st) return renderLifecycleNothingSelected();
+    // Where the names come from an enumeration, they are edited there and nowhere
+    // else. Shown read-only rather than hidden or silently ignored: a field that took
+    // a rename and dropped it is the worse surprise, and the remedy is one sentence.
+    const src = sourceEnumOf(lifecycleClass());
+    paint(`${pheadHTML("ST", "State", st.name, src ? ""
+      : `<button type="button" class="icon-btn" data-act="del-state" title="Delete this state">✕</button>`)}
+      <h3>General</h3>
+      <label class="field"><span>Name</span>
+        <input id="im-st-name" value="${esc(st.name)}" autocomplete="off"${src ? " readonly" : ""}/></label>
+      ${src
+        ? `<p class="im-hint-text">This name is the literal <code>${esc(st.name)}</code> of
+             <b>${esc(src.name)}</b>, which is where it is renamed and where it is removed. It is also
+             the string a process writes into the BPMN data state.</p>`
+        : `<p class="im-hint-text">This is the string a process writes into the BPMN data state
+             (<code>${esc(st.name)}</code>). Renaming it here renames what every process has to write.</p>`}
+      <label class="field"><span>Documentation</span>
+        <textarea id="im-st-doc" rows="3">${esc(st.documentation || "")}</textarea></label>
+      <h3>Where it sits in the life</h3>
+      <label class="field im-check"><input type="checkbox" id="im-st-initial"
+        ${st.initial ? "checked" : ""}/> <span>Instances are created in this state</span></label>
+      <p class="im-hint-text">Exactly one state carries this. Marking another moves it.</p>
+      <label class="field im-check"><input type="checkbox" id="im-st-final"
+        ${st.final ? "checked" : ""}/> <span>Nothing leaves this state</span></label>
+      ${st.final ? "" : `<p class="im-hint-text">A final state ends the life: no transition may
+        start at one.</p>`}`);
+  }
+
+  // The ends of a transition, offered rather than only drawn. A transition names its
+  // ends by state name because the name is the identity — the string a process writes —
+  // so this is the same closed list the canvas draws between.
+  //
+  // `noFinal` disables the states nothing leaves rather than hiding them: hiding them
+  // would say they do not exist, and the reason they cannot be picked is the point.
+  function stateOptionsHTML(current, noFinal) {
+    const states = lcStates();
+    return states.map((s) => {
+      const blocked = noFinal && s.final && s.name !== current;
+      return `<option value="${esc(s.name)}"${s.name === current ? " selected" : ""}${
+        blocked ? " disabled" : ""}>${esc(s.name)}${s.initial ? " · start" : ""}${
+        s.final ? " · final" : ""}</option>`;
+    }).join("") + (states.some((s) => s.name === current) ? ""
+      : `<option value="${esc(current)}" selected>${esc(current)} — no such state</option>`);
+  }
+
+  function renderTransitionPanel() {
+    const t = lcTransitions().find((x) => x.id === state.selected.id);
+    if (!t) return renderLifecycleNothingSelected();
+    paint(`${pheadHTML("TR", "Transition", `${t.from} → ${t.to}`,
+      `<button type="button" class="icon-btn" data-act="del-transition" title="Delete this transition">✕</button>`)}
+      <p class="im-reading">${esc(t.from)} → ${esc(t.to)}</p>
+      <h3>General</h3>
+      <label class="field"><span>Name</span>
+        <input id="im-tr-name" value="${esc(t.name || "")}" placeholder="approve" autocomplete="off"/></label>
+      <label class="field"><span>From</span>
+        <select id="im-tr-from">${stateOptionsHTML(t.from, true)}</select></label>
+      <label class="field"><span>To</span>
+        <select id="im-tr-to">${stateOptionsHTML(t.to, false)}</select></label>
+      <p class="im-hint-text">Drawing a transition is the quick way; these are the way to
+        re-aim one that is already there, without deleting it and losing its name. A state
+        nothing leaves cannot be a <b>From</b>, which is the same rule the drawing enforces.</p>
+      <p class="im-hint-text">The name is documentation only. What <em>causes</em> this transition is
+        the element in the process that writes the state — a condition here would be a second place
+        deciding what happens, and the first is the sequence flow.</p>`);
+  }
+
   function renderSide() {
     if (state.schemaFor) return renderSchema();
+    if (state.lifecycleOf) {
+      if (state.selected && state.selected.kind === "state") return renderStatePanel();
+      if (state.selected && state.selected.kind === "transition") return renderTransitionPanel();
+      return renderLifecycleNothingSelected();
+    }
     if (state.multi.length > 1) return renderManySelected();
     if (!state.selected) return renderNothingSelected();
     if (state.selected.kind === "store") {
@@ -583,6 +1015,10 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         <td><button type="button" class="icon-btn" data-act="del-attr" title="Remove">✕</button></td>
       </tr>`).join("");
 
+    // Both member tables below are `no-enhance`: they are editing grids, not lists of
+    // data — their cells are inputs the shared enhancer finds no text to sort or filter
+    // by, the row order is the order the class box reads in and is set by dragging, and
+    // the box above each of them already filters it (ADR-0286).
     paint(`
       ${pheadHTML(abbrev(kind.label), kind.label, c.name,
         `<button type="button" class="icon-btn" data-act="del-class" title="Delete this class">✕</button>`)}
@@ -603,19 +1039,33 @@ export async function mountClassDiagram(root, { api, toast, id }) {
           <div class="field-actions">
             <button type="button" class="btn ghost small" data-act="add-attr">+ Attribute</button></div>
           ${memberFilterHTML("Filter attributes by name or type…")}
-          <table class="im-attrs"><thead><tr>
+          <table class="im-attrs no-enhance"><thead><tr>
             <th></th><th>Name</th><th>Type</th><th>Card.</th><th title="Business key">⚿</th><th></th>
           </tr></thead><tbody>${attrRows || `<tr><td colspan="6" class="muted">No attributes yet.</td></tr>`}</tbody></table>
           ${kind.hasIdentity ? `<p class="im-hint-text"><b>The business key</b> is what makes two of these the
             same one — <code>Order#ORD-1</code> in this process and in the next. It is the part BPMN has no
             equivalent for, and what a data store and a cross-process lookup will resolve against.</p>` : ""}
           <button type="button" class="btn ghost small" data-act="schema">View JSON Schema</button>
+          ${kind.hasIdentity ? `
+          <h3>Lifecycle</h3>
+          <p class="im-meaning">The states instances of this class move through, and what a BPMN
+            data state resolves against. Only a business object has one: a value type is equal to
+            any other with the same contents, so there is no <em>this one, later</em> to track.</p>
+          ${(c.lifecycle && (c.lifecycle.states || []).length)
+            ? `<p class="im-hint-text">${(c.lifecycle.states || []).length} state${(c.lifecycle.states || []).length === 1 ? "" : "s"}, ${(c.lifecycle.transitions || []).length} transition${(c.lifecycle.transitions || []).length === 1 ? "" : "s"}.</p>`
+            : `<p class="im-hint-text">None declared, which is the normal case: a class without one
+               behaves exactly as it always has, and the states its processes write are simply not
+               checked against anything.</p>`}
+          ${lifecycleSourceHTML(c)}
+          <div class="field-actions">
+            <button type="button" class="btn ghost small" data-act="open-lifecycle" data-class-id="${esc(c.id)}">${(c.lifecycle && (c.lifecycle.states || []).length) ? "Open lifecycle" : "Draw a lifecycle"}</button>
+          </div>` : ""}
         ` : `
           <h3>Literals</h3>
           <div class="field-actions">
             <button type="button" class="btn ghost small" data-act="add-literal">+ Literal</button></div>
           ${memberFilterHTML("Filter literals…")}
-          <table class="im-attrs"><tbody>
+          <table class="im-attrs no-enhance"><tbody>
             ${(c.literals || []).map((lit, i) => `<tr data-lit="${i}" data-member="${esc(String(lit).toLowerCase())}">
               <td class="im-grip" title="Drag to reorder" aria-label="Reorder">⠿</td>
               <td><input class="im-in" data-f="literal" value="${esc(lit)}" placeholder="approved"/></td>
@@ -684,17 +1134,37 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     const kind = kindOf(a.kind) || { label: a.kind, rule: "" };
     const allow = allowed(from.stereotype, to.stereotype);
     const findings = state.validation.findings.filter((f) => f.associationId === a.id);
-    const endFields = (side, end, otherName) => `
+    // Which class an end is on. Drawing is how a relationship is made; it was also the
+    // only way to change one, so an end aimed at the wrong class meant deleting the
+    // line and drawing it again — losing its name, its roles and its multiplicities.
+    //
+    // A class this kind of relationship cannot reach is disabled with the reason on it,
+    // exactly as Kind above disables a kind these two classes cannot have. It is the
+    // same fact read from the same matrix, from the other side.
+    const endClassHTML = (side, end) => `
+      <label class="field"><span>Class</span>
+        <select class="im-end-in" data-side="${side}" data-f="classId">
+          ${state.model.classes.map((x) => {
+            const pair = side === "from" ? allowed(x.stereotype, to.stereotype)
+              : allowed(from.stereotype, x.stereotype);
+            const blocked = x.id !== end.classId && !pair.includes(a.kind);
+            return `<option value="${esc(x.id)}"${x.id === end.classId ? " selected" : ""}${
+              blocked ? " disabled" : ""}>${esc(x.name)}${blocked ? ` — no ${esc(kind.label.toLowerCase())} from here` : ""}</option>`;
+          }).join("")}
+        </select></label>`;
+
+    const endFields = (side, end, otherName, roles) => `
       <fieldset class="im-end">
         <legend>${esc(side === "from" ? from.name : to.name)}</legend>
-        <label class="field"><span>Role</span>
+        ${endClassHTML(side, end)}
+        ${roles ? `<label class="field"><span>Role</span>
           <input class="im-end-in" data-side="${side}" data-f="role" value="${esc(end.role || "")}"
             placeholder="how ${esc(otherName)} refers to it"/></label>
         <label class="field"><span>Multiplicity</span>
           <select class="im-end-in" data-side="${side}" data-f="multiplicity">
             <option value=""${end.multiplicity ? "" : " selected"}>unsaid</option>
             ${subset.multiplicities.map((m) => `<option value="${esc(m.multiplicity)}"${m.multiplicity === end.multiplicity ? " selected" : ""}>${esc(m.multiplicity)} — ${esc(m.label)}</option>`).join("")}
-          </select></label>
+          </select></label>` : ""}
       </fieldset>`;
 
     paint(`
@@ -718,7 +1188,9 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         ${a.kind === "generalization"
           ? `<p class="im-hint-text">A generalization has no roles or multiplicities: “is a kind of” is not a
              counted relationship. ${esc(to.name)} is the general class.</p>`
-          : endFields("from", a.from, to.name) + endFields("to", a.to, from.name)}
+          : ""}
+        ${endFields("from", a.from, to.name, a.kind !== "generalization")
+          + endFields("to", a.to, from.name, a.kind !== "generalization")}
 
         ${findings.length ? `
           <h3>Problems</h3>
@@ -746,8 +1218,77 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // release of a click on another class, the node the press landed on is gone by the
   // time the release happens, the browser synthesizes no click at all, and the class
   // a person just clicked is silently not selected.
+  // The lifecycle panel's fields, handled before the class panel's: they are the only
+  // ones on screen while a lifecycle is open, and a renamed state has to carry its
+  // transitions with it, which nothing else here has to do.
+  function onLifecycleEdit(target) {
+    const c = lifecycleClass();
+    if (!c) return false;
+    if (target.id === "im-st-name") {
+      const st = c.lifecycle.states.find((x) => x.name === state.selected.id);
+      const next = target.value;
+      if (!st || next === st.name) return true;
+      // A transition names its ends by state name, because the name is the identity —
+      // it is the string a process writes. So a rename moves the transitions with it,
+      // or the document refers to a state that is no longer there.
+      for (const t of c.lifecycle.transitions) {
+        if (t.from === st.name) t.from = next;
+        if (t.to === st.name) t.to = next;
+      }
+      st.name = next;
+      state.selected = { kind: "state", id: next };
+      markDirty(); render();
+      return true;
+    }
+    if (target.id === "im-st-doc") {
+      const st = c.lifecycle.states.find((x) => x.name === state.selected.id);
+      if (st) { st.documentation = target.value; markDirty(); }
+      return true;
+    }
+    if (target.id === "im-st-initial") {
+      // Exactly one state is where instances are created, so marking one unmarks the
+      // rest rather than letting the save be refused for saying two things.
+      for (const x of c.lifecycle.states) x.initial = false;
+      const st = c.lifecycle.states.find((x) => x.name === state.selected.id);
+      if (st) st.initial = target.checked;
+      markDirty(); render();
+      return true;
+    }
+    if (target.id === "im-st-final") {
+      const st = c.lifecycle.states.find((x) => x.name === state.selected.id);
+      if (st) {
+        st.final = target.checked;
+        // "Final" and "leaves" are the two saying opposite things. Marking a state
+        // final drops the transitions out of it rather than saving a document the
+        // server would refuse — and the drawing shows exactly what was dropped.
+        if (st.final) {
+          c.lifecycle.transitions = c.lifecycle.transitions.filter((t) => t.from !== st.name);
+        }
+      }
+      markDirty(); render();
+      return true;
+    }
+    if (target.id === "im-tr-name") {
+      const t = c.lifecycle.transitions.find((x) => x.id === state.selected.id);
+      if (t) { t.name = target.value; markDirty(); syncLifecycle(); }
+      return true;
+    }
+    if (target.id === "im-tr-from" || target.id === "im-tr-to") {
+      const t = c.lifecycle.transitions.find((x) => x.id === state.selected.id);
+      if (t) {
+        t[target.id === "im-tr-from" ? "from" : "to"] = target.value;
+        // A full render and not just a sync: the panel's heading is the two ends, and
+        // the line has to be redrawn between the states it now joins.
+        markDirty(); render();
+      }
+      return true;
+    }
+    return false;
+  }
+
   function onSideEdit(e) {
     const target = e.target;
+    if (state.lifecycleOf && onLifecycleEdit(target)) return;
     // The filter is not an edit: it changes what is on screen, not what is in the
     // document. Handling it here and returning is what keeps the caret in the field
     // — every path below ends in a render, and a render rebuilds this panel.
@@ -787,6 +1328,18 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         const before = c.name;
         for (const other of state.model.classes) {
           for (const a of other.attributes || []) if (a.type === before) a.type = target.value;
+          // And every lifecycle that takes its states from it, for the same reason: a
+          // reference by name has to follow the name.
+          if (other.lifecycle && other.lifecycle.statesFrom === before) {
+            other.lifecycle.statesFrom = target.value;
+          }
+        }
+        // And every store that holds it, which is the third reference by name and was
+        // the one this loop missed: a store left naming a class nothing declares is
+        // refused on save (`store-unknown-class`), so the rename could not be saved at
+        // all until somebody renamed the class back to whatever the store still said.
+        for (const st of state.model.stores || []) {
+          if (st.class === before) st.class = target.value;
         }
         c.name = target.value;
         markDirty(); syncCanvas(); renderProblems();
@@ -804,6 +1357,21 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         if ((c.documentation || "") === target.value) return;
         c.documentation = target.value;
         markDirty();
+        return;
+      }
+      if (target.id === "im-c-lcfrom") {
+        const from = target.value;
+        if (((c.lifecycle && c.lifecycle.statesFrom) || "") === from) return;
+        if (!from) {
+          // Unhooking keeps the states that were there. They were this class's states
+          // all along; what changes is that the enumeration no longer supplies them.
+          if (c.lifecycle) delete c.lifecycle.statesFrom;
+        } else {
+          if (!c.lifecycle) c.lifecycle = { states: [], transitions: [] };
+          c.lifecycle.statesFrom = from;
+          syncStatesFromLiterals(c);
+        }
+        markDirty(); render();
         return;
       }
 
@@ -839,8 +1407,11 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       if (lit) {
         const i = Number(lit.dataset.lit);
         if (c.literals[i] === target.value) return;
+        // A literal is a state wherever a lifecycle takes its states from here, so a
+        // rename is a state's rename and the transitions naming it are rewritten.
+        renameStateFromLiteral(c.name, c.literals[i], target.value);
         c.literals[i] = target.value;
-        markDirty(); syncCanvas();
+        markDirty(); syncCanvas(); renderProblems();
       }
       return;
     }
@@ -863,11 +1434,50 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       const end = a[target.dataset.side];
       if ((end[target.dataset.f] || "") === target.value) return;
       end[target.dataset.f] = target.value;
-      markDirty(); syncCanvas();
+      // Moving an end to another class changes what the panel is about — its heading,
+      // its legends, and which kinds the two of them can have — so it takes a full
+      // render where a role or a multiplicity only redraws the line.
+      markDirty();
+      if (target.dataset.f === "classId") render(); else syncCanvas();
     }
   }
 
+  function onLifecycleClick(e) {
+    const c = lifecycleClass();
+    if (!c) return false;
+    if (e.target.closest('[data-act="del-state"]')) {
+      const name = state.selected.id;
+      c.lifecycle.states = c.lifecycle.states.filter((x) => x.name !== name);
+      // A transition with an end that is gone is not a transition. Removing them with
+      // the state is what keeps the document one the server accepts.
+      c.lifecycle.transitions = c.lifecycle.transitions.filter((t) => t.from !== name && t.to !== name);
+      // Somebody has to be where instances start, and the server refuses a lifecycle
+      // with nobody. If the deleted state was it, the first survivor takes it.
+      if (c.lifecycle.states.length && !c.lifecycle.states.some((x) => x.initial)) {
+        c.lifecycle.states[0].initial = true;
+      }
+      state.selected = null;
+      markDirty(); render();
+      return true;
+    }
+    if (e.target.closest('[data-act="del-transition"]')) {
+      c.lifecycle.transitions = c.lifecycle.transitions.filter((t) => t.id !== state.selected.id);
+      state.selected = null;
+      markDirty(); render();
+      return true;
+    }
+    return false;
+  }
+
   function onSideClick(e) {
+    if (state.lifecycleOf && onLifecycleClick(e)) return;
+    // The way in: a business object's panel offers its lifecycle, because that is the
+    // only kind that has one — an identity that persists through states.
+    const open = e.target.closest('[data-act="open-lifecycle"]');
+    if (open && sideEl.contains(open)) {
+      openLifecycle(open.dataset.classId);
+      return;
+    }
     // A line in the "several selected" list narrows the selection to that one, which
     // is also what puts it back on the canvas — the round trip is the same one a
     // click on the drawing takes.
@@ -882,12 +1492,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     const act = btn.dataset.act;
     if (act === "close-schema") { state.schemaFor = ""; renderSide(); return; }
 
-    const store = selectedStore();
-    if (store && act === "del-store") {
-      if (!window.confirm(`Delete the data store ${store.name}? The processes that name it will say so.`)) return;
-      state.model.stores = state.model.stores.filter((s) => s.id !== store.id);
-      selectOne(null);
-      markDirty(); render();
+    if (act === "del-store" || act === "del-class" || act === "del-assoc") {
+      deleteSelected();
       return;
     }
 
@@ -906,16 +1512,13 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       } else if (act === "add-literal") {
         c.literals = c.literals || [];
         c.literals.push(`value${c.literals.length + 1}`);
+        resyncClassesSourcedFrom(c.name);
         markDirty(); render();
       } else if (act === "del-literal") {
         c.literals.splice(Number(btn.closest("[data-lit]").dataset.lit), 1);
-        markDirty(); render();
-      } else if (act === "del-class") {
-        if (!window.confirm(`Delete ${c.name}? Relationships touching it go with it.`)) return;
-        state.model.classes = state.model.classes.filter((x) => x.id !== c.id);
-        state.model.associations = state.model.associations.filter(
-          (x) => x.from.classId !== c.id && x.to.classId !== c.id);
-        selectOne(null);
+        // The state goes with the literal, and the transitions that named it go too:
+        // an arrow to a state that is not there is what the validator refuses.
+        resyncClassesSourcedFrom(c.name);
         markDirty(); render();
       } else if (act === "schema") {
         state.schemaFor = c.name;
@@ -926,11 +1529,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
 
     const a = selectedAssoc();
     if (!a) return;
-    if (act === "del-assoc") {
-      state.model.associations = state.model.associations.filter((x) => x.id !== a.id);
-      selectOne(null);
-      markDirty(); render();
-    } else if (act === "flip") {
+    if (act === "flip") {
       const tmp = a.from; a.from = a.to; a.to = tmp;
       markDirty(); render();
     }
@@ -1095,48 +1694,343 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   function freeSpot() {
     const cols = 4;
     const n = state.model.classes.length;
-    return { x: 40 + (n % cols) * (BOX_W + 60), y: 40 + Math.floor(n / cols) * 200 };
+    return { x: 40 + (n % cols) * (BOX_STEP + 60), y: 40 + Math.floor(n / cols) * 220 };
   }
 
-  root.querySelector("#im-palette").addEventListener("click", (e) => {
-    if (e.target.closest('[data-add="store"]')) {
-      const spot = freeSpot();
-      const st = {
-        id: `new-${Math.random().toString(36).slice(2, 10)}`, name: "NewStore", class: "",
-        worker: "", mode: (subset.storeModes[0] || {}).mode || "read",
-        x: spot.x, y: spot.y + 240,
-      };
-      state.model.stores.push(st);
-      selectOne({ kind: "store", id: st.id });
+  // ---- the lifecycle sheet ------------------------------------------------
+  //
+  // A lifecycle belongs to a class, so it is opened *from* one rather than being a
+  // place of its own: the same document, the same Save, the same dirty flag, with the
+  // sheet swapped underneath. A second route would have meant a second editor around
+  // one model, and two Save buttons that could disagree about which revision they
+  // are writing.
+  //
+  // The canvas is built the first time a lifecycle is opened. Most sessions never
+  // open one — a lifecycle is opt-in per class — and diagram-js is not free.
+  let lcCanvas = null;
+
+  const lifecycleClass = () =>
+    state.lifecycleOf ? classById(state.lifecycleOf) : null;
+
+  function openLifecycle(classId) {
+    const c = classById(classId);
+    if (!c) return;
+    // A class carries no lifecycle until somebody opens one. The empty shape is put
+    // there now rather than on the first state, so the canvas has a document to draw
+    // and the panel a thing to edit.
+    if (!c.lifecycle) c.lifecycle = { states: [], transitions: [] };
+    state.lifecycleOf = classId;
+    state.connecting = null;
+    state.selected = null;
+    state.multi = [];
+    if (!lcCanvas) {
+      lcCanvas = new uml.StateCanvas(lcCanvasEl, {
+        rules: subset.lifecycles || {},
+        paletteEntries: lifecyclePaletteEntries,
+        onSelection: (bo) => onLifecycleSelection(bo),
+        onElementClick: (bo) => onLifecycleClickElement(bo),
+        onChange: () => { absorbStateMoves(); },
+      });
+    }
+    lcCanvasEl.hidden = false;
+    canvasEl.hidden = true;
+    lcBackBtn.hidden = false;
+    root.querySelector("#im-lc-of").textContent = c.name;
+    lcCanvas.render(c.lifecycle, lifecycleFindings(c));
+    render();
+  }
+
+  function closeLifecycle() {
+    state.lifecycleOf = null;
+    state.selected = null;
+    state.multi = [];
+    state.connecting = null;
+    lcCanvasEl.hidden = true;
+    canvasEl.hidden = false;
+    lcBackBtn.hidden = true;
+    render();
+  }
+
+  lcBackBtn.addEventListener("click", closeLifecycle);
+  lcCanvasEl.querySelector('[data-lc-tool="zoom-in"]').addEventListener("click", () => lcCanvas?.zoom(1.2));
+  lcCanvasEl.querySelector('[data-lc-tool="zoom-out"]').addEventListener("click", () => lcCanvas?.zoom(1 / 1.2));
+  lcCanvasEl.querySelector('[data-lc-tool="fit"]').addEventListener("click", () => lcCanvas?.fit());
+
+  // The server locates a lifecycle finding on the class and names the state or the
+  // transition inside it, so the sheet can mark the one that is wrong.
+  const lifecycleFindings = (c) =>
+    (state.validation.findings || []).filter((f) => f.classId === c.id && (f.state || f.transition));
+
+  function absorbStateMoves() {
+    const c = lifecycleClass();
+    if (!c || !lcCanvas) return;
+    const moves = lcCanvas.moved();
+    if (!moves.length) return;
+    for (const m of moves) {
+      const st = (c.lifecycle.states || []).find((x) => x.name === m.name);
+      if (!st) continue;
+      st.x = m.x;
+      st.y = m.y;
+    }
+    markDirty();
+  }
+
+  function addState() {
+    const c = lifecycleClass();
+    if (!c) return;
+    const states = c.lifecycle.states;
+    // A name has to be unique — a process writes a state by that string and nothing
+    // else — so a new one is numbered until it is.
+    let name = "new";
+    for (let n = 2; states.some((x) => x.name === name); n++) name = `new${n}`;
+    // Where the states come from an enumeration, the name lives there, so the gesture
+    // writes the literal and the state follows from it. Adding a state here instead
+    // would add one the enumeration does not declare, which the server refuses — and a
+    // palette that draws something unsaveable is a trap.
+    const src = sourceEnumOf(c);
+    if (src) {
+      src.literals = src.literals || [];
+      src.literals.push(name);
+      syncStatesFromLiterals(c);
+      state.selected = { kind: "state", id: name };
       state.connecting = null;
       markDirty(); render();
       return;
     }
-    const add = e.target.closest(".im-add");
-    if (add) {
-      const kind = stereotypeOf(add.dataset.stereotype);
-      const spot = freeSpot();
-      const c = {
-        id: "", name: `New${kind.label.replace(/\s/g, "")}`, stereotype: kind.stereotype,
-        attributes: kind.hasAttributes ? [] : undefined, literals: kind.hasAttributes ? undefined : [],
-        identity: [], x: spot.x, y: spot.y,
-      };
+    // Where the reader is looking, rather than on a grid the sheet may have been
+    // scrolled away from: a state dropped outside the window reads as a palette that
+    // did nothing.
+    const spot = lcCanvas ? lcCanvas.spotFor(states.length) : { x: 40, y: 40 };
+    states.push({
+      name,
+      // The first state is where instances start. Marking it here rather than leaving
+      // it to the author is what keeps the document valid while it is being drawn:
+      // the server refuses a lifecycle with no initial state, so a canvas that let
+      // you add one and then refused to save it would be a trap.
+      initial: states.length === 0,
+      x: spot.x, y: spot.y,
+    });
+    state.selected = { kind: "state", id: name };
+    state.connecting = null;
+    markDirty(); render();
+  }
+
+  function armTransition() {
+    state.connecting = state.connecting && state.connecting.kind === "transition"
+      ? null : { kind: "transition", fromId: null };
+    render();
+  }
+
+  function lifecyclePaletteEntries() {
+    return [
+      { id: "lasso", group: "tools", title: "Select several at once: draw a box around them.",
+        onClick: (event) => lcCanvas?.marquee(event) },
+      { id: "sep-lc", group: "tools", separator: true },
+      { id: "state", group: "elements",
+        title: "State — one stage in this class's life. Its name is what a process writes into " +
+          "the BPMN data state, so it is the name that has to match.",
+        onClick: () => addState() },
+      { id: "transition", group: "relations",
+        title: "Transition — a move this class's instances may make. What causes it is the " +
+          "element in the process that writes the state; this only says it is allowed.",
+        active: !!state.connecting && state.connecting.kind === "transition",
+        onClick: () => armTransition() },
+    ];
+  }
+
+  // Two clicks make a transition, the way two clicks make a relationship on the class
+  // sheet: the first names where it starts, the second where it goes.
+  //
+  // It hangs off the *click* and not off the selection, which is the difference that
+  // makes it work. A state just added is already the selected one, and it is the one
+  // a person reaches for first — a selection-driven gesture hears nothing there,
+  // because nothing changed, and quietly loses its own first half.
+  function onLifecycleClickElement(bo) {
+    if (applyingSelection || !state.connecting) return;
+    const c = lifecycleClass();
+    if (!c || !bo || bo.element !== "state") return;
+    if (!state.connecting.fromId) {
+      state.connecting.fromId = bo.name;
+      renderSide();
+      return;
+    }
+    const from = state.connecting.fromId;
+    const to = bo.name;
+    state.connecting = null;
+    // Drawing the same move twice is a no-op rather than a second arrow: two
+    // transitions between one pair say nothing the one already says.
+    if (!c.lifecycle.transitions.some((t) => t.from === from && t.to === to)) {
+      c.lifecycle.transitions.push({
+        id: `t-${Math.random().toString(36).slice(2, 10)}`, from, to, name: "",
+      });
+      markDirty();
+    }
+    state.selected = null;
+    render();
+  }
+
+  function onLifecycleSelection(bo) {
+    if (applyingSelection || state.connecting) return;
+    state.selected = bo && bo.element
+      ? { kind: bo.element, id: bo.element === "state" ? bo.name : bo.id }
+      : null;
+    state.multi = [];
+    renderSide();
+  }
+
+  // ---- the palette --------------------------------------------------------
+  //
+  // Down the canvas's left edge, in diagram-js's own palette — the one bpmn-js and
+  // dmn-js put there, with its chrome and its stylesheet, because a person moving
+  // between the process modeler and this one should not have to find a second kind of
+  // toolbox. It used to be a row of text buttons in the title bar, which put the
+  // things you draw with as far from the sheet you draw on as the window allows.
+  //
+  // The entries come from the served subset, so the palette offers exactly what the
+  // write path accepts (ADR-0230) and gains a stereotype the day the server does.
+
+  function addClass(stereotype) {
+    const kind = stereotypeOf(stereotype);
+    const spot = freeSpot();
+    const c = {
       // A new class needs a local handle until the server mints its real id, because
       // selection and association ends both address a class by id.
-      c.id = `new-${Math.random().toString(36).slice(2, 10)}`;
-      state.model.classes.push(c);
-      selectOne({ kind: "class", id: c.id });
-      state.connecting = null;
+      id: `new-${Math.random().toString(36).slice(2, 10)}`,
+      name: `New${kind.label.replace(/\s/g, "")}`, stereotype: kind.stereotype,
+      attributes: kind.hasAttributes ? [] : undefined, literals: kind.hasAttributes ? undefined : [],
+      identity: [], x: spot.x, y: spot.y,
+    };
+    state.model.classes.push(c);
+    selectOne({ kind: "class", id: c.id });
+    state.connecting = null;
+    markDirty(); render();
+  }
+
+  function addStore() {
+    const spot = freeSpot();
+    const st = {
+      id: `new-${Math.random().toString(36).slice(2, 10)}`, name: "NewStore", class: "",
+      worker: "", mode: (subset.storeModes[0] || {}).mode || "read",
+      x: spot.x, y: spot.y + 240,
+    };
+    state.model.stores.push(st);
+    selectOne({ kind: "store", id: st.id });
+    state.connecting = null;
+    markDirty(); render();
+  }
+
+  // deleteSelected removes whatever is selected, and is the only place that answers
+  // "delete what?". The panel's ✕ and the context pad's bin both come here, so the two
+  // cannot drift into meaning different things — and a class still takes its
+  // relationships with it however it was deleted.
+  function deleteSelected() {
+    const store = selectedStore();
+    if (store) {
+      if (!window.confirm(`Delete the data store ${store.name}? The processes that name it will say so.`)) return;
+      state.model.stores = state.model.stores.filter((s) => s.id !== store.id);
+      selectOne(null);
       markDirty(); render();
       return;
     }
-    const connect = e.target.closest(".im-connect");
-    if (connect) {
-      state.connecting = state.connecting && state.connecting.kind === connect.dataset.kind
-        ? null : { kind: connect.dataset.kind, fromId: null };
-      render();
+    const c = selectedClass();
+    if (c) {
+      // A delete says what it would break before it is confirmed (ADR-0331). A store
+      // keeps naming its class by name, and nothing can follow that for a class that
+      // is going away — so the cost is stated here rather than met as a refusal on
+      // the next save.
+      const held = (state.model.stores || []).filter((st) => st.class === c.name).map((st) => st.name);
+      const alsoKept = held.length
+        ? ` ${held.length === 1 ? "The store" : "The stores"} ${held.map((n) => `"${n}"`).join(", ")} ` +
+          `${held.length === 1 ? "holds" : "hold"} it, and the model will not save until that is settled.`
+        : "";
+      if (!window.confirm(`Delete ${c.name}? Relationships touching it go with it.${alsoKept}`)) return;
+      state.model.classes = state.model.classes.filter((x) => x.id !== c.id);
+      state.model.associations = state.model.associations.filter(
+        (x) => x.from.classId !== c.id && x.to.classId !== c.id);
+      selectOne(null);
+      markDirty(); render();
+      return;
     }
-  });
+    const a = selectedAssoc();
+    if (!a) return;
+    state.model.associations = state.model.associations.filter((x) => x.id !== a.id);
+    selectOne(null);
+    markDirty(); render();
+  }
+
+  // Arming a relationship is a mode: the next two classes clicked become its ends.
+  // Pressing the armed one again puts it away, which is the only way out that does
+  // not require drawing something first.
+  function armConnect(kind) {
+    state.connecting = state.connecting && state.connecting.kind === kind
+      ? null : { kind, fromId: null };
+    render();
+  }
+
+  function paletteEntries() {
+    // The lasso leads, in diagram-js's own `tools` group, exactly where bpmn-js puts
+    // it. That group is not decoration: the palette lights the active tool by reading
+    // `[data-group=tools]` out of its own markup, and with no such group it reads null
+    // and throws the moment any tool is activated — which took the lasso down with it.
+    // A tool belongs in the tools group; the crash was the library saying so.
+    const out = [{
+      id: "lasso", group: "tools",
+      title: "Select several at once: draw a box around them. Shift and drag does the same " +
+        "without this, and Escape puts the drag back to panning.",
+      onClick: (event) => canvas.marquee(event),
+    }, { id: "sep-tools", group: "tools", separator: true }];
+    for (const st of subset.stereotypes) {
+      out.push({
+        id: st.stereotype, group: "elements", title: `${st.label} — ${st.meaning}`,
+        onClick: () => addClass(st.stereotype),
+      });
+    }
+    out.push({
+      id: "store", group: "elements",
+      title: "Data store — where instances of a class outlive the process that made them. " +
+        "Declared once here and named by every process that reaches it.",
+      onClick: () => addStore(),
+    });
+    out.push({ id: "sep-relations", group: "elements", separator: true });
+    for (const k of subset.associationKinds) {
+      out.push({
+        id: k.kind, group: "relations", title: `${k.label} — ${k.rule}`,
+        active: !!state.connecting && state.connecting.kind === k.kind,
+        onClick: () => armConnect(k.kind),
+      });
+    }
+    return out;
+  }
+
+  // What the context pad offers beside the selected element. It is the palette's
+  // relations group, moved to where the thing it acts on is: a relationship is drawn by
+  // dragging out of the class it starts at, the way a sequence flow is drawn in the BPMN
+  // modeler, instead of arming a kind and then remembering which class to click first.
+  //
+  // Only the kinds this class could actually reach something with. Offering a
+  // generalization on an enumeration would be a button whose only possible outcome is
+  // the refusal toast — the matrix is served, so the pad can ask it rather than offer
+  // and apologise.
+  function contextPadEntries(bo) {
+    if (!bo || !bo.element) return [];
+    const bin = {
+      id: "trash", group: "edit", title: "Delete", onClick: () => deleteSelected(),
+    };
+    // A store's line to its class, and a class's lines to an enumeration, exist because
+    // something names something. There is nothing to do to one, so the pad stays shut.
+    if (bo.element !== "class") return bo.element === "store" || bo.element === "association" ? [bin] : [];
+    const out = [];
+    for (const k of subset.associationKinds) {
+      const reaches = subset.stereotypes.some((st) => allowed(bo.stereotype, st.stereotype).includes(k.kind));
+      if (!reaches) continue;
+      out.push({
+        id: k.kind, group: "connect", connect: k.kind,
+        title: `${k.label} — ${k.rule} Drag onto the class at the other end.`,
+      });
+    }
+    out.push(bin);
+    return out;
+  }
 
   // Selecting on the canvas and selecting in the panel are the same selection, so
   // the round trip is guarded: telling the panel what the canvas selected must not
@@ -1176,17 +2070,29 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       render();
       return;
     }
-    const from = classById(state.connecting.fromId);
-    const to = classById(bo.id);
-    const kind = state.connecting.kind;
-    if (!from || !to || from.id === to.id) { state.connecting = null; render(); return; }
+    const { kind, fromId } = state.connecting;
+    state.connecting = null;
+    // Read before the mode is cleared, and re-rendered when nothing was drawn: a
+    // refusal still has to take the armed entry's light off the palette.
+    if (!drawRelationship(kind, fromId, bo.id)) render();
+  }
+
+  // drawRelationship is the one place a relationship comes into being — the armed
+  // two-click draw and a drag out of the context pad both end here, so the matrix that
+  // refuses, the sentence it refuses with and the shape of what is created cannot
+  // differ between the two ways of drawing the same line.
+  //
+  // It answers whether it drew, because the two callers differ in one thing only: a
+  // refusal has to re-render either way, and only one of them has a mode to clear.
+  function drawRelationship(kind, fromId, toId) {
+    const from = classById(fromId);
+    const to = classById(toId);
+    if (!from || !to || from.id === to.id) return false;
     if (!allowed(from.stereotype, to.stereotype).includes(kind)) {
       // The matrix the server enforces is the matrix that refuses here, and it
       // refuses in the server's own words.
       toast(refusalFor(kind, from, to), "err");
-      state.connecting = null;
-      render();
-      return;
+      return false;
     }
     const a = {
       id: `new-${Math.random().toString(36).slice(2, 10)}`, kind, name: "",
@@ -1195,8 +2101,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     };
     state.model.associations.push(a);
     selectOne({ kind: "association", id: a.id });
-    state.connecting = null;
     markDirty(); render();
+    return true;
   }
 
   // refusalFor turns a matrix miss into the sentence the server would have sent. It

@@ -8,6 +8,7 @@
 # Local engine data / build output (also in .gitignore, repeated for bind builds)
 /bin/
 /dist/
+/atlas
 /coverage/
 /data/
 /atlas-data/

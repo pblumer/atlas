@@ -1,6 +1,7 @@
 # ADR-0138: Ad-hoc subprocesses (on-demand, unordered contained activities)
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-18
 - **Deciders:** Atlas engine team
 

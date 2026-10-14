@@ -1,6 +1,7 @@
 # ADR-0183: The Modeler asks the server where an authored kind runs
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-25
 - **Deciders:** Atlas maintainers
 

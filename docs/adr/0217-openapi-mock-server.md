@@ -1,6 +1,7 @@
 # ADR-0217: A mock REST API served from an OpenAPI document
 
 - **Status:** Accepted (amended 2026-09-03 — see the amendment below: what published documents taught it, and reading one made of many files)
+- **Implementation:** Landed
 - **Date:** 2026-09-01
 - **Deciders:** Atlas maintainers
 
@@ -83,7 +84,9 @@ Chosen option: **"a spec-driven mock server as a subcommand"**, in package
   `/pets/{id}` and `/pets/{petId}` panics a mux, and `/reports/{year}-{month}.csv`
   cannot be expressed at all. Sixty lines of matcher serve every template OpenAPI
   allows and take nothing down at startup.
-- **It reports into the Mockups view, and adds no fourth place to look.**
+- **It reports into the Mockups view, and adds no fourth place to look.** (As built,
+  2026-10-11: the Mockups view of ADR-0216 does not exist yet, so the report is
+  produced in its envelope but nothing in Atlas collects it.)
   `GET /__mock/calls` is the journal — what was called, in what order, with which
   `X-Request-ID` (the job key) and body — and `GET /__mock/report` is that journal and
   the operation table inside the envelope

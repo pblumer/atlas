@@ -35,3 +35,35 @@ func TestJobValueLeaseEpochRoundTripsAndIsAppendCompatible(t *testing.T) {
 		t.Errorf("legacy record decoded to %+v, want everything else intact", legacy)
 	}
 }
+
+// The creation time is the newest appended field: it round-trips, and a record
+// written before it (ending after the candidate groups) decodes with it zero and
+// everything else intact.
+func TestJobValueCreatedAtRoundTripsAndIsAppendCompatible(t *testing.T) {
+	full := JobValue{
+		ProcessInstanceKey: 11, ElementInstanceKey: 22, JobType: 7, Retries: 3,
+		Deadline: 99, Assignee: "anja", LeaseEpoch: 4, CandidateGroups: "IntMgr",
+		CreatedAt: 1_790_000_000_000_000_000,
+	}
+	var got JobValue
+	if err := got.decode(full.encode(nil)); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got != full {
+		t.Errorf("round trip = %+v, want %+v", got, full)
+	}
+
+	short := full.encode(nil)
+	short = short[:len(short)-8] // the previous wire shape: no trailing creation time
+	var legacy JobValue
+	if err := legacy.decode(short); err != nil {
+		t.Fatalf("decode legacy: %v", err)
+	}
+	if legacy.CreatedAt != 0 {
+		t.Errorf("CreatedAt = %d on a record written before the field, want 0", legacy.CreatedAt)
+	}
+	legacy.CreatedAt = full.CreatedAt
+	if legacy != full {
+		t.Errorf("legacy record decoded to %+v, want everything else intact", legacy)
+	}
+}

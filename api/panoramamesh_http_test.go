@@ -21,12 +21,23 @@ type meshNode struct {
 	Version     int32  `json:"version"`
 	WorkerType  string `json:"workerType"`
 	Children    int    `json:"children"`
+	// RuntimeID and Definition are the ADR-0401 §2 split: which runtime holds this
+	// deployment, and the definition node it realises where one is drawn.
+	RuntimeID  string `json:"runtimeId"`
+	Definition string `json:"definition"`
+	// The two catalogue facets a product node carries, and nothing else does.
+	ProductState string `json:"productState"`
+	ApprovalKind string `json:"approvalKind"`
 }
 
 type meshEdge struct {
 	From string `json:"from"`
 	To   string `json:"to"`
 	Kind string `json:"kind"`
+	// Taken and TakenSince are the traversal fact (ADR-0400). A pointer because nil
+	// and zero are different answers: unread versus read-and-nothing-happened.
+	Taken      *int64 `json:"taken"`
+	TakenSince int64  `json:"takenSince"`
 }
 
 type meshGraph struct {
@@ -34,6 +45,7 @@ type meshGraph struct {
 	Edges      []meshEdge `json:"edges"`
 	Restricted int        `json:"restricted"`
 	Clustered  bool       `json:"clustered"`
+	RuntimeID  string     `json:"runtimeId"`
 }
 
 func getMesh(t *testing.T, ts *httptest.Server) meshGraph {
@@ -215,9 +227,10 @@ func TestPanoramaMeshShowsAnUnconfiguredWorker(t *testing.T) {
 // derivation alone: the endpoint reaches the store, and must not reach the wire.
 func TestPanoramaMeshNeverCarriesAWorkerEndpoint(t *testing.T) {
 	ts := newTestServer(t)
+	const endpoint = "smtp://mesh-secret-canary.invalid:45987"
 
 	code, body := doReq(t, ts, http.MethodPost, "/api/v1/configured-workers",
-		`{"name":"ops-mail","kind":"mail","endpoint":"smtp://internal-relay.corp.example:587","sender":"ops@example.test"}`, "application/json")
+		`{"name":"ops-mail","kind":"mail","endpoint":"`+endpoint+`","sender":"ops@example.test"}`, "application/json")
 	if code != http.StatusOK && code != http.StatusCreated {
 		t.Fatalf("create worker status = %d, body = %s", code, body)
 	}
@@ -229,7 +242,10 @@ func TestPanoramaMeshNeverCarriesAWorkerEndpoint(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("mesh status = %d, body = %s", code, raw)
 	}
-	for _, leak := range []string{"internal-relay", "corp.example", "smtp://", "587"} {
+	// Search for a canary tied specifically to the endpoint. A bare port such as
+	// "587" can occur in the unrelated observedAt Unix timestamp and made this
+	// disclosure test fail depending on the second in which it ran.
+	for _, leak := range []string{endpoint, "mesh-secret-canary.invalid"} {
 		if strings.Contains(string(raw), leak) {
 			t.Errorf("mesh payload leaks %q: %s", leak, raw)
 		}
@@ -476,6 +492,165 @@ func TestPanoramaMeshDraftNeverCarriesARuntimeClaim(t *testing.T) {
 		if _, present := node[field]; present {
 			t.Errorf("draft node carries %q = %v — a plan reports nothing about running",
 				field, node[field])
+		}
+	}
+}
+
+// meshEdgeOf finds exactly one edge by its identity triple. Distinct from
+// meshHasEdge: this needs the edge, and needs to know the deduplication left one.
+func meshEdgeOf(t *testing.T, g meshGraph, from, to, kind string) meshEdge {
+	t.Helper()
+	var found []meshEdge
+	for _, e := range g.Edges {
+		if e.From == from && e.To == to && e.Kind == kind {
+			found = append(found, e)
+		}
+	}
+	if len(found) != 1 {
+		t.Fatalf("edges %s -%s-> %s = %d, want exactly 1: %+v", from, kind, to, len(found), g.Edges)
+	}
+	return found[0]
+}
+
+// TestPanoramaMeshCountsWhatActuallyTookTheEdge is the join of ADR-0400 asserted
+// against a real server rather than against the derivation alone, which is the only
+// place it can be asserted at all.
+//
+// The derivation tests build a Landscape by hand and so agree with whatever element
+// index they are handed. What they cannot catch is the collector attributing one
+// element's traffic to another — and that is the failure that matters, because the
+// count would look plausible and name the wrong edge. Here the engine picks the index
+// when it compiles the model, the engine increments the counter when a token arrives,
+// and the only thing under test is whether the picture joins the two correctly.
+func TestPanoramaMeshCountsWhatActuallyTookTheEdge(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", workerMeshBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status = %d, body = %s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	edge := func() meshEdge {
+		return meshEdgeOf(t, getMesh(t, ts), meshProcessID(dep.Key), "unresolved:worker:ops-mail", "uses")
+	}
+
+	// Nothing has run. The counter has been read and holds nothing for this element,
+	// which is zero rather than absent — and it arrives with the window that qualifies
+	// it, because a bare zero is what gets misread as "dead" (ADR-0400).
+	before := edge()
+	if before.Taken == nil {
+		t.Fatalf("edge carries no count on a server whose counters read fine: %+v", before)
+	}
+	if *before.Taken != 0 {
+		t.Errorf("Taken = %d before anything ran, want 0", *before.Taken)
+	}
+	if before.TakenSince == 0 {
+		t.Error("TakenSince = 0, want the deployment stamp: a count without its window says nothing")
+	}
+
+	// Two instances, so the assertion is a count and not a boolean. The service task
+	// names a worker nobody configured, so each token parks on it — activation is what
+	// the counter folds, and it does not wait for anybody to serve the job.
+	for i := 0; i < 2; i++ {
+		if code, b := doReq(t, ts, http.MethodPost, "/api/v1/instances", `{"processId":"notifier"}`, "application/json"); code != http.StatusOK {
+			t.Fatalf("start instance %d: status = %d, body = %s", i, code, b)
+		}
+	}
+
+	after := edge()
+	if after.Taken == nil {
+		t.Fatalf("edge lost its count after two instances ran: %+v", after)
+	}
+	if *after.Taken != 2 {
+		t.Errorf("Taken = %d after two instances, want 2 — the element the edge is anchored on was activated twice", *after.Taken)
+	}
+	if after.TakenSince != before.TakenSince {
+		t.Errorf("TakenSince moved from %d to %d; the window is the deployment and does not change under traffic",
+			before.TakenSince, after.TakenSince)
+	}
+}
+
+// TestPanoramaMeshNamesTheRuntimeItDerivedFrom is ADR-0401 §1 against a real server.
+//
+// The derivation tests are handed a runtime id and check that it travels. What they
+// cannot check is the half that matters here: that the id on the payload is *this
+// installation's own* — the one the node descriptor publishes and a peer would use to
+// address it. A graph carrying a runtime id nobody else would recognise is worse than
+// one carrying none, because a consumer would join on it.
+//
+// So this asserts the two ends agree: GET /api/v1/node and GET /api/v1/panorama/mesh.
+func TestPanoramaMeshNamesTheRuntimeItDerivedFrom(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/node", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("GET node status = %d, body = %s", code, body)
+	}
+	var descriptor struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &descriptor); err != nil {
+		t.Fatalf("decode descriptor: %v", err)
+	}
+	if descriptor.ID == "" {
+		t.Fatal("the node descriptor has no id; this server cannot name itself at all")
+	}
+
+	g := getMesh(t, ts)
+	if g.RuntimeID != descriptor.ID {
+		t.Errorf("mesh runtimeId = %q, descriptor id = %q — the keys in this document must be attributable to the runtime a peer would address (ADR-0401 §1)",
+			g.RuntimeID, descriptor.ID)
+	}
+}
+
+// TestPanoramaMeshDeploymentNamesItsRuntimeAndDrawsNoDefinition pins both halves of
+// what ADR-0401 §2 does on a server that holds one of everything — which is every
+// installation today.
+//
+// A deployment says which runtime holds it, so the pair `(runtimeId, key)` is complete
+// without a second lookup. And no definition node is drawn, because the collector reads
+// the latest deployment per process id: the definition has exactly one deployment, the
+// two would stand in a permanent 1:1 relation, and a node per process against a measured
+// 400-node budget is what the rule exists to avoid.
+func TestPanoramaMeshDeploymentNamesItsRuntimeAndDrawsNoDefinition(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", workerMeshBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status = %d, body = %s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+
+	g := getMesh(t, ts)
+	node := meshNodeByID(t, g, meshProcessID(dep.Key))
+	if node.RuntimeID == "" {
+		t.Error("the deployment carries no runtime id, so its key cannot be placed (ADR-0401 §1)")
+	}
+	if node.RuntimeID != g.RuntimeID {
+		t.Errorf("deployment runtimeId = %q, graph runtimeId = %q — a locally read deployment belongs to the deriving runtime",
+			node.RuntimeID, g.RuntimeID)
+	}
+	if node.Definition != "" {
+		t.Errorf("deployment names definition %q; nothing draws one here, so nothing should point at one", node.Definition)
+	}
+	for _, n := range g.Nodes {
+		if n.Kind == "definition" {
+			t.Errorf("drew a definition node on a single-runtime server: %+v", n)
+		}
+	}
+	for _, e := range g.Edges {
+		if e.Kind == "deploys" {
+			t.Errorf("drew a %q edge with no definition node to carry it: %+v", e.Kind, e)
 		}
 	}
 }

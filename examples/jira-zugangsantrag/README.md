@@ -62,7 +62,7 @@ Der Prozess koordiniert, Jira dokumentiert, ein Mensch entscheidet:
 ```
 Antrag (Formular)
   → Jira-Vorgang anlegen        create-issue      → ticket
-  → Zugang freigeben            User-Task in Atlas
+  → Zugang freigeben            User-Task in atlas
   → Freigegeben?                (X) Default: ablehnen
        ja   → Vorgang abschliessen   transition-issue + Kommentar
        nein → Ablehnung vermerken    add-comment
@@ -96,6 +96,6 @@ absichern, nicht das Formular lockern.
 1. Beide Formulare und beide Modelle in ein Projekt deployen.
 2. `jira-verbindungstest` starten — läuft der durch, stimmt die Einrichtung.
 3. `jira-zugangsantrag` starten, Formular ausfüllen.
-4. Der Vorgang steht in Jira. In Atlas wartet unter **Tasks** die Freigabe.
+4. Der Vorgang steht in Jira. In atlas wartet unter **Tasks** die Freigabe.
 5. Freigeben → der Vorgang wird weitergeschaltet und trägt die Notiz.
    Ablehnen → er bleibt offen und bekommt den Ablehnungsgrund als Kommentar.

@@ -1,6 +1,7 @@
 package examples
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -57,6 +58,14 @@ type catalogSource struct {
 	// already owns the artifacts (the system processes). It still gets a card, and
 	// still opens in the Modeler; it just has no install button.
 	NoInstall bool
+	// Shop marks an example that ships a shop: its directory is a package
+	// (shopcatalog_test.go) — an application manifest, atlas.json, and a catalogue
+	// document, katalog.json, beside the processes and forms its products are bound to
+	// — and it installs from the shop handbook (api/web/shop-handbuch.html), whose
+	// installer also imports the catalogue, or with `atlas import`. Such an example is
+	// NoInstall here: the Beispiele chapter's button would deploy the processes
+	// without the shop they serve, so its card links to the shop handbook instead.
+	Shop bool
 }
 
 type catalogStart struct {
@@ -142,13 +151,27 @@ var catalogSources = []catalogSource{
 	},
 	{ID: "pruefung", App: "Beispiel: Prüfung", Dir: "pruefung"},
 	{ID: "reisebuchung", App: "Beispiel: Reisebuchung", Dir: "reisebuchung", Main: "reisebuchung/reisebuchung.bpmn"},
+	// The internal counterpart of the trip booking's public wizard (ADR-0449). No Start
+	// button: its first screen is a supervisor's, so a bare start would only park it.
+	{ID: "arbeitsplatz", App: "Beispiel: Arbeitsplatz-Ausstattung", Dir: "arbeitsplatz"},
 	{ID: "bewerbermanagement", App: "Bewerbermanagement", Dir: "bewerbermanagement", Main: "bewerbermanagement/bewerbung.bpmn"},
+	// The course's guiding case (docs/planning/lehrgang-prozessentwicklung.md, phase 3):
+	// one onboarding process the six reference modules all hang on. No Start button — the
+	// konto-anlegen job parks for a worker, which a bare start would leave hanging.
+	{ID: "lehrgang", App: "Lehrgang: Mitarbeitereintritt", Dir: "lehrgang", Main: "lehrgang/eintritt.bpmn"},
 	{
 		ID: "pruefe-datensaetze", App: "Beispiel: Datensätze prüfen",
 		Files: []string{"pruefe-datensaetze.bpmn", "pruefe-datensaetze.dmn",
 			"csv-upload-form.json", "row-correction-form.json"},
 	},
 	{ID: "onboarding", App: "Onboarding", Dir: "onboarding"},
+	// No Start: every service task in it calls Atlas's own API, which needs an
+	// operator token under ATLAS_CONNECTOR_ATLAS_TOKEN. A reader without one would
+	// press "run it" and get an incident on the first step. The tasks themselves
+	// need nothing configured — they are connector tasks on the reserved REST job
+	// type now — and the address comes from the start form.
+	{ID: "produkt-erfassung", App: "Beispiel: Produkt erfassen", Dir: "produkt-erfassung",
+		Main: "produkt-erfassung/produkt-erfassung.bpmn"},
 	{
 		ID: "order-to-cash", App: "Beispiel: Order-to-Cash",
 		Files: []string{"order-to-cash.bpmn", "order-to-cash-live.bpmn"},
@@ -196,6 +219,39 @@ var catalogSources = []catalogSource{
 		ID: "entra-delta-sync", App: "Beispiel: Delta-Sync (Entra)",
 		Files: []string{"entra-delta-sync.bpmn"},
 	},
+	{
+		ID: "entra-verzeichnis-abgleich", App: "Beispiel: Verzeichnis-Abgleich (Entra)",
+		Files: []string{"entra-verzeichnis-abgleich.bpmn"},
+	},
+	{
+		ID: "bestandsaufnahme", App: "Beispiel: Bestandsaufnahme (Entra)",
+		Files: []string{"bestandsaufnahme.bpmn"},
+	},
+	{
+		ID: "rezertifizierung", App: "Beispiel: Rezertifizierung (Entra)",
+		Files: []string{"rezertifizierung.bpmn"},
+	},
+	{
+		ID: "befristung", App: "Beispiel: Befristung",
+		Files: []string{"befristung.bpmn"},
+	},
+	{
+		ID: "erinnerung", App: "Beispiel: Erinnerung", Dir: "erinnerung",
+		Main: "erinnerung/erinnerung.bpmn",
+	},
+	{
+		ID: "unvereinbarkeit", App: "Beispiel: Unvereinbarkeit",
+		Files: []string{"unvereinbarkeit.bpmn"},
+	},
+	{
+		// Two processes, one card, and that is the point rather than a saving: they
+		// are the same comparison promising completeness on its two axes. The daily
+		// run names the groups it read whole; the leaver check names the person. A
+		// reader who sees only one of them learns the mechanism as half of itself.
+		ID: "abgleich", App: "Beispiel: Abgleich (Entra)",
+		Files: []string{"abgleich.bpmn", "austrittspruefung.bpmn"},
+		Main:  "abgleich.bpmn",
+	},
 	{ID: "entra-onboarding-selfservice", App: "Beispiel: Onboarding-Self-Service (Entra)", Dir: "entra-onboarding-selfservice"},
 	{ID: "account-bestellung", App: "Beispiel: Account-Bestellung (Entra)", Dir: "account-bestellung"},
 	// No install: these three ship inside the binary and are deployed into the
@@ -208,6 +264,12 @@ var catalogSources = []catalogSource{
 	{ID: "identitaet-lebenszyklus", App: "Beispiel: Identitäts-Lebenszyklus", Dir: "identitaet-lebenszyklus",
 		Main: "identitaet-lebenszyklus/identitaet-lebenszyklus.bpmn"},
 	{ID: "ad-objektmodell", Dir: "ad-objektmodell", NoInstall: true},
+	// A whole shop: two catalogues, three products in both process forms, bilingual.
+	// It installs from the shop handbook, which asks the reader for the audience
+	// groups and the approvers the catalogue document leaves open.
+	{ID: "verwaltung-dienstleistungen", Dir: "verwaltung-dienstleistungen", NoInstall: true,
+		Main: "verwaltung-dienstleistungen/zutrittsbadge-lebenszyklus.bpmn",
+		Shop: true},
 }
 
 // formDisplayNames gives a form the name the Modeler and the Tasks inbox list it
@@ -271,6 +333,16 @@ type catalogExample struct {
 	Decisions []catalogDecision `json:"decisions,omitempty"`
 	Forms     []catalogForm     `json:"forms,omitempty"`
 	Start     *catalogStartJSON `json:"start,omitempty"`
+	// Shop is the catalogue document of an example that ships a shop, and the
+	// application the shop handbook's installer creates for its processes and forms.
+	Shop *catalogShop `json:"shop,omitempty"`
+}
+
+type catalogShop struct {
+	App      string          `json:"app"`
+	Document json.RawMessage `json:"document"`
+	// Questions are what each placeholder in the document asks (fragen.json).
+	Questions json.RawMessage `json:"questions,omitempty"`
 }
 
 type catalogProcess struct {
@@ -412,6 +484,16 @@ func TestFormIDsAreUniqueAcrossExamples(t *testing.T) {
 
 // --- building the catalog ---
 
+// compactFile is a JSON file without its whitespace.
+func compactFile(t *testing.T, path string) json.RawMessage {
+	t.Helper()
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, []byte(readFile(t, path))); err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+	return compact.Bytes()
+}
+
 func buildCatalog(t *testing.T) string {
 	t.Helper()
 	cat := catalog{}
@@ -423,6 +505,13 @@ func buildCatalog(t *testing.T) string {
 		}
 		if !src.NoInstall {
 			ex.App = src.App
+		}
+		if src.Shop {
+			ex.Shop = &catalogShop{
+				App:       readPackageManifest(t, src.Dir).Name,
+				Document:  compactFile(t, filepath.Join(src.Dir, shopDocumentName)),
+				Questions: compactFile(t, filepath.Join(src.Dir, shopQuestionsName)),
+			}
 		}
 		for _, f := range files {
 			switch {

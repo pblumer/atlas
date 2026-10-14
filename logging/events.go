@@ -80,6 +80,17 @@ var (
 	ServerShuttingDown = newEvent("server.shutting_down")
 	ServerDocsEnabled  = newEvent("server.docs_enabled")
 	ServerMetrics      = newEvent("server.metrics_enabled")
+	// ServerCatalogueDisabled is a server started with --catalogue=false: the shop,
+	// the catalogue, the orders and the inventory are not served
+	// (ADR-0434). One line at start, so the
+	// question "why is there no shop" has an answer in the log.
+	ServerCatalogueDisabled = newEvent("server.catalogue_disabled")
+	// ServerCatalogueInFlight is that start finding processes still working orders —
+	// the shop's fulfilment and approval processes, or a product's provisioning — that
+	// will fail at their next call to the order routes (ADR-0434). A WARN, written only
+	// when there are any: it names how many and which, so the operator meets the
+	// consequence before the incidents do.
+	ServerCatalogueInFlight = newEvent("server.catalogue_disabled_in_flight")
 	// The operator-supplied certificate, where this server terminates TLS itself
 	// (ADR-0191). ServerTLSReloaded is one line per renewal picked up without a
 	// restart; ServerTLSReloadFailed is the pair that changed on disk and could not
@@ -88,7 +99,17 @@ var (
 	// certificate that is still being served expires.
 	ServerTLSReloaded     = newEvent("server.tls_reloaded")
 	ServerTLSReloadFailed = newEvent("server.tls_reload_failed")
-	DataDirOpened         = newEvent("server.data_dir_opened")
+	// ServerTLSHandshakeAborted is a connection to the TLS listener that closed before
+	// its handshake began — net/http's "TLS handshake error … EOF". A load balancer's
+	// TCP health check produces one per interval, so it is DEBUG: true, countable, and
+	// not news (ADR-0448). A handshake that failed for a reason keeps
+	// net/http's own wording at INFO.
+	ServerTLSHandshakeAborted = newEvent("server.tls_handshake_aborted")
+	// ServerTrustedProxies is said once at startup where --trusted-proxies names any:
+	// the list as the server understood it, so whoever reads an audit line's client_ip
+	// later can see whose word it was taken on (ADR-0448).
+	ServerTrustedProxies = newEvent("server.trusted_proxies")
+	DataDirOpened        = newEvent("server.data_dir_opened")
 	// AuthDisabled is a server started with --auth=false: no login is required for
 	// anything. It is a WARN and it is loud because it is now the deliberate
 	// exception rather than the default — the one line that says this instance is
@@ -131,6 +152,25 @@ var (
 	// after it: from the moment the mapping is on, whoever administers the provider's
 	// groups administers this instance's roles.
 	AuthOIDCMappingSet = newEvent("auth.oidc_mapping_set")
+	// ConstantsChanged records a change to the constants this installation holds — an
+	// application's, or its own for every application (ADR-0456):
+	// what every new instance reading them starts with. The names changed are
+	// attributes; the values are in the Console's audit log, which keeps the history,
+	// rather than in a stream shipped elsewhere.
+	ConstantsChanged = newEvent("constants.changed")
+	// The directory mirror (ADR-0332). AuthDirectorySync
+	// is one line per run, written whether or not the run wrote anything: a report-only
+	// run still read a whole tenant out of a directory, which is an event even though
+	// nothing changed here. Its attributes are counts and the mode; the Graph cursor is
+	// deliberately absent, because a URL naming a tenant does not belong in a log that
+	// is shipped elsewhere. The accounts it creates and changes are recorded under the
+	// existing auth.user_created and auth.user_updated, so an alert written against
+	// those keeps working whoever made the change.
+	AuthDirectorySync = newEvent("auth.directory_sync")
+	// AuthDirectoryGroupSynced is one mirrored group written. It is its own name rather
+	// than a general group event, because it says exactly what it covers: nothing here
+	// claims to record the group edits an administrator makes by hand.
+	AuthDirectoryGroupSynced = newEvent("auth.directory_group_synced")
 	// AuthRolesUpgraded is said once, on the first start after roles per endpoint
 	// group shipped, naming how many accounts kept what they could already do. It is
 	// the line an operator needs to see: nothing is narrower than it was yesterday
@@ -175,6 +215,11 @@ var (
 	// CommandFailed is a top-level command exiting non-zero.
 	CommandFailed = newEvent("command.failed")
 	MCPProxying   = newEvent("mcp.proxying")
+	// MCPCatalogueUnknown is the stdio adapter unable to ask its server whether it
+	// serves the catalogue (ADR-0434). The
+	// adapter then offers every tool and the server refuses what it does not serve,
+	// so this is a WARN about a tool list that may be too long, never a failure.
+	MCPCatalogueUnknown = newEvent("mcp.catalogue_unknown")
 	// WorkerStarting is the out-of-process job worker announcing what it will serve
 	// and for which server (ADR-0157).
 	WorkerStarting = newEvent("worker.starting")
@@ -184,6 +229,16 @@ var (
 	// worker process Atlas launched itself (ADR-0157 step 7).
 	WorkerSupervisorStarted = newEvent("worker.supervised_started")
 	WorkerSupervisorFailed  = newEvent("worker.supervise_failed")
+	// WorkerBreakerOpen and WorkerBreakerClosed report a circuit breaker holding a
+	// failing target's jobs back, and letting them go again (ADR-0340).
+	//
+	// These are the line an operator alerts on. A breaker turns an outage from a flood
+	// of incidents into *silence* — work that simply does not happen — and silence is
+	// the one failure mode nothing else surfaces, which is why the record makes
+	// visibility part of the decision rather than a follow-up. Open is a warning: an
+	// integration has stopped and somebody should know why.
+	WorkerBreakerOpen   = newEvent("worker.breaker_open")
+	WorkerBreakerClosed = newEvent("worker.breaker_closed")
 	// ADMockEnabled is an AD worker announcing that it serves the Active Directory
 	// worker against a directory in its own memory rather than a real one
 	// (ADR-0181). It is a warning rather than an info because
@@ -263,6 +318,54 @@ var (
 	// the minute and skips what it could not read. Warned because that is a delivery
 	// gap — and because standing still instead would silently stop the watch for good.
 	InboundWatchMinuteOverflowed = newEvent("inbound_watch.minute_overflowed")
+	// InboundWatchGap reports a watch that resumed past mail it could no longer read:
+	// an IMAP folder the server renumbered, Gmail history older than Gmail keeps
+	// (ADR-0438). Warned because it is a delivery gap that otherwise
+	// looks exactly like a quiet mailbox.
+	InboundWatchGap = newEvent("inbound_watch.gap")
+)
+
+// Push delivery of the event feed
+// (ADR-0433).
+var (
+	// FeedSubscriptionChanged: an administrator created, changed or deleted a push
+	// subscription — what decides which system beyond Atlas is sent who holds what, so
+	// it belongs in the audit trail beside the tokens that read the same feed.
+	FeedSubscriptionChanged = newEvent("feed.subscription_changed")
+	// FeedPushFailing: a subscription's endpoint refused a batch or did not answer, said
+	// once when the failures begin rather than at every retry; the subscription is held
+	// on the backoff ladder and its cursor stays put.
+	FeedPushFailing = newEvent("feed.push_failing")
+	// FeedPushRecovered: a held subscription's endpoint accepted a batch again.
+	FeedPushRecovered = newEvent("feed.push_recovered")
+	// FeedSubscriptionDisabled: the feed's retention dropped rows a subscription had not
+	// delivered, so delivery switched it off rather than go on from the oldest row held
+	// and hide the gap.
+	FeedSubscriptionDisabled = newEvent("feed.subscription_disabled")
+)
+
+// Orders (ADR-0416).
+var (
+	// OrderInstanceUnrecorded: an instance started to work an order position could not
+	// be noted on the order. The instance runs; what is lost is the shop's view of its
+	// open tasks, so this is a warning and not a failed start — failing the start would
+	// make the caller retry and start the work twice.
+	OrderInstanceUnrecorded = newEvent("order.instance_unrecorded")
+	// OrderOutcomeConflict: one of the order's own acts — a provision or a return —
+	// reached an ending different from the outcome already recorded for the same
+	// attempt (ADR-0429 §3). The first ending stands; the second is reported here
+	// rather than written, because an action ends once.
+	OrderOutcomeConflict = newEvent("order.outcome_conflict")
+)
+
+// Wizards (ADR-0449).
+var (
+	// WizardContinuationFailed: a step of a wizard was completed, and reading where the
+	// sitting stands afterwards — or claiming the next step for the person — failed. The
+	// completion stands; what is lost is the hand-over to the next screen, which the
+	// person then finds in their inbox. A warning and not a failed completion, because
+	// failing it would make the caller submit the same answer twice.
+	WizardContinuationFailed = newEvent("wizard.continuation_failed")
 )
 
 // History retention (ADR-0115/0144) and the OpenSearch exporter (ADR-0114).
@@ -288,6 +391,12 @@ var (
 	UserProvisioningPasswordSet  = newEvent("user_provisioning.password_set")
 	UserProvisioningUserDisabled = newEvent("user_provisioning.user_disabled")
 )
+
+// Resource budgets (ADR-0291). A budget the environment could
+// not set is the one configuration mistake that must never be silent: what is left
+// standing is a ceiling, and a ceiling nobody knows about is how an installation
+// discovers it at the request that ran out of memory.
+var LimitIgnored = newEvent("limit.ignored")
 
 // Distributed traces (ADR-0142 slice 8b).
 var (
@@ -320,4 +429,51 @@ var (
 	CallOverrideSkipped      = newEvent("call_override.skipped")
 	CollabParticipantsReaped = newEvent("collab.participants_reaped")
 	PlaygroundSessionsReaped = newEvent("playground.sessions_reaped")
+
+	// PersonalValueUnreadable says a job could not be handed to a worker because one
+	// of the variables it would carry is a personal value whose data subject has been
+	// erased (ADR-0314). The record predicts this — "erasing a subject with a live
+	// instance leaves that instance unable to provision" — and predicts that it will
+	// read as an incident rather than a clear message. This is the line that at least
+	// makes it diagnosable: without it the job is simply never handed out, and a worker
+	// polls forever with nothing anywhere saying why.
+	PersonalValueUnreadable = newEvent("personal_data.value_unreadable")
+
+	// PersonalDataErased records an erasure: one data subject's key destroyed, and with
+	// it every copy of their personal data made unreadable (ADR-0314).
+	//
+	// This line is the *only* remaining evidence that the erasure happened, and that is
+	// what makes it load-bearing rather than informative. The key is gone, the ciphertext
+	// says nothing, and the subject leaves no other trace — so without it an operator
+	// could not demonstrate to an auditor that a deletion request was honoured, on the
+	// date it was honoured, by whom. Demonstrability is half of what a data-protection
+	// obligation asks for.
+	//
+	// It names the subject's id on purpose, which is the one place these events carry an
+	// identifier. An erasure record that does not say *who* was erased proves nothing,
+	// and the id is a reference that this design deliberately keeps readable
+	// ([ADR-0314](../docs/adr/0314-portal-personal-data.md)'s primary defence) rather
+	// than content it protects.
+	PersonalDataErased = newEvent("personal_data.erased")
+
+	// PersonalDataKeyWriteRefused records an attempt to write or delete a data key
+	// through the ordinary secrets API. Overwriting one makes a subject's data unreadable
+	// without erasing it — the same effect as an erasure, with no intent to do it and no
+	// record that it happened — so the attempt is refused and the refusal is audited.
+	PersonalDataKeyWriteRefused = newEvent("personal_data.key_write_refused")
+)
+
+// The FEEL assistant (ADR-0445).
+var (
+	// FeelAssistantAnswered is one request of the FEEL assistant that reached a model:
+	// which Worker and model answered, how the request ended, and what each round
+	// failed on. It is the data the assistant's prompt is improved from — how often a
+	// model keeps to the contract, which foreign functions it reaches for, how many
+	// rounds a model needs — so it is said for every request, not only for failures.
+	//
+	// It carries the engine's verdicts and never the conversation or the expressions:
+	// what an author writes in a chat may be anything, and an expression may hold a
+	// literal they typed. The categories are enough to tell a prompt that teaches the
+	// dialect from one that does not.
+	FeelAssistantAnswered = newEvent("feel_assistant.answered")
 )

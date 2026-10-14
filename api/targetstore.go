@@ -25,12 +25,44 @@ type deploymentTarget struct {
 	BaseURL       string `json:"baseUrl"`
 	Kind          string `json:"kind,omitempty"` // free operator label, e.g. "prod"
 	CredentialRef string `json:"credentialRef,omitempty"`
-	CreatedAt     int64  `json:"createdAt"`
+	// ReadCredentialRef names the vault entry a *read* of this peer presents, where it
+	// differs from the one a promotion presents. Empty means the two are the same
+	// credential, which is what every target configured before this had.
+	//
+	// Two references rather than one, because the two jobs a target's credential does are
+	// disjoint by design and a token carries one scope. Promotion needs the import route
+	// and nothing else — ADR-0129's deploy token is deliberately the narrowest thing that
+	// can publish. Reading a peer needs its descriptor and, for the estate altitude
+	// (ADR-0402), its derived landscape, and a credential
+	// that reaches those is refused the import route. Measured against two installations:
+	// a deploy token answers 401 at both read routes, and a landscape credential answers
+	// 403 at the import route. So a target configured for promotion — which is what a
+	// target is for — was drawn on the estate as unreachable, and the picture was honest
+	// about knowing nothing while an operator could see the peer was plainly there.
+	//
+	// Both are handles into the vault and never secrets, so a second one discloses no more
+	// than the first (ADR-0069/0070).
+	ReadCredentialRef string `json:"readCredentialRef,omitempty"`
+	CreatedAt         int64  `json:"createdAt"`
 	// Bindings maps a *local* application id to the id the same application has on
 	// this target, learned from the remote's reply on the first successful
 	// promotion (ADR-0129 option C1). The two servers keep their own ids; this is
 	// how the publisher addresses the application over there afterwards.
 	Bindings map[string]string `json:"bindings,omitempty"`
+}
+
+// readRef is the reference a read of this peer presents: the read credential where one is
+// configured, and otherwise the promotion credential.
+//
+// The fallback is what makes this change invisible to every target that already exists. A
+// target with one reference keeps presenting it for both jobs, exactly as before — including
+// the case where that one credential is a status token an operator configured so the landscape
+// could draw the peer at all.
+func (t deploymentTarget) readRef() string {
+	if ref := strings.TrimSpace(t.ReadCredentialRef); ref != "" {
+		return ref
+	}
+	return t.CredentialRef
 }
 
 // validateTargetURL checks a target's base URL and returns it normalized.

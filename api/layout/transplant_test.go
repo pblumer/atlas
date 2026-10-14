@@ -403,3 +403,71 @@ func TestDifferenceIsNamed(t *testing.T) {
 		t.Errorf("the refusal does not locate the added element: %v", err)
 	}
 }
+
+// TestDifferenceNamesBothSides is the comparison a draft is held against what is
+// deployed with: the same walk SameModel makes, but answered in a sentence that names
+// which document is which, because "the submitted model" means nothing to somebody
+// asking whether the draft they opened is the version that runs.
+func TestDifferenceNamesBothSides(t *testing.T) {
+	got, err := Difference([]byte(storedModel), []byte(movedDiagram), "the deployed version", "the draft")
+	if err != nil {
+		t.Fatalf("Difference: %v", err)
+	}
+	if got != "" {
+		t.Errorf("a moved diagram of the same process = %q, want no difference", got)
+	}
+
+	renamed := strings.Replace(movedDiagram, `name="Betrag prüfen"`, `name="Betrag geprüft"`, 1)
+	got, err = Difference([]byte(storedModel), []byte(renamed), "the deployed version", "the draft")
+	if err != nil {
+		t.Fatalf("Difference: %v", err)
+	}
+	if !strings.Contains(got, `scriptTask id="calc"`) || !strings.Contains(got, "differs") {
+		t.Errorf("a renamed task = %q, want the task named as what differs", got)
+	}
+
+	added := strings.Replace(movedDiagram, "</process>", `<task id="extra" name="Zusatz"/></process>`, 1)
+	got, err = Difference([]byte(storedModel), []byte(added), "the deployed version", "the draft")
+	if err != nil {
+		t.Fatalf("Difference: %v", err)
+	}
+	if !strings.Contains(got, "the draft has <task id=\"extra\">") {
+		t.Errorf("an added task = %q, want it named on the draft's side", got)
+	}
+
+	// The other way round, the deployed version is the one that carries more.
+	got, err = Difference([]byte(added), []byte(storedModel), "the deployed version", "the draft")
+	if err != nil {
+		t.Fatalf("Difference: %v", err)
+	}
+	if !strings.Contains(got, `<task id="extra">`) || !strings.Contains(got, "the draft has") {
+		t.Errorf("a task only the deployed version has = %q, want it located", got)
+	}
+
+	if _, err := Difference([]byte("<definitions>"), []byte(movedDiagram), "a", "b"); err == nil {
+		t.Error("a malformed document compared without an error")
+	}
+	if _, err := Difference([]byte(movedDiagram), []byte("<definitions>"), "a", "b"); err == nil {
+		t.Error("a malformed document compared without an error")
+	}
+}
+
+// TestDifferenceAgainstAnEmptyDocument: a walk that yields nothing must still be
+// described, not indexed past its end. An empty body parses as a document with no
+// elements, so it is the case where one side has no last step to name.
+func TestDifferenceAgainstAnEmptyDocument(t *testing.T) {
+	got, err := Difference([]byte(storedModel), []byte(""), "the deployed version", "the draft")
+	if err != nil {
+		t.Fatalf("Difference: %v", err)
+	}
+	if !strings.Contains(got, "the draft is empty") {
+		t.Errorf("an empty draft = %q, want it said to be empty", got)
+	}
+	got, err = Difference([]byte(""), []byte(storedModel), "the deployed version", "the draft")
+	if err != nil {
+		t.Fatalf("Difference: %v", err)
+	}
+	if !strings.Contains(got, "the deployed version is empty") {
+		t.Errorf("an empty deployed version = %q, want it said to be empty", got)
+	}
+}

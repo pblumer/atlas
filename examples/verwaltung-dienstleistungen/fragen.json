@@ -1,0 +1,46 @@
+{
+  "zielgruppe": {
+    "kind": "group",
+    "label": {
+      "de": "Zielgruppe «Dienstleistungen der Verwaltung»: wer bestellt",
+      "en": "Audience of \"Administration services\": who orders"
+    },
+    "hint": {
+      "de": "Meist alle Mitarbeitenden.",
+      "en": "Usually all staff."
+    }
+  },
+  "zielgruppe-bau": {
+    "kind": "group",
+    "label": {
+      "de": "Zielgruppe «Fachbereich Bau»",
+      "en": "Audience of \"Building department\""
+    },
+    "hint": {
+      "de": "Die Mitarbeitenden des Fachbereichs. Sie sehen diesen Katalog, weil sein Rang höher ist.",
+      "en": "The department's staff. They see this catalogue because its rank is higher."
+    }
+  },
+  "facility-management": {
+    "kind": "user",
+    "label": {
+      "de": "Wer genehmigt Parkplätze (Facility Management)",
+      "en": "Who approves parking spaces (facility management)"
+    },
+    "hint": {
+      "de": "Eine Person.",
+      "en": "One person."
+    }
+  },
+  "geoportal-verantwortliche": {
+    "kind": "group",
+    "label": {
+      "de": "Wer genehmigt Geoportal-Zugänge",
+      "en": "Who approves geoportal access"
+    },
+    "hint": {
+      "de": "Eine Gruppe; wer zuerst entscheidet, entscheidet.",
+      "en": "A group; whoever decides first decides."
+    }
+  }
+}

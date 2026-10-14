@@ -199,7 +199,7 @@ func (s *Server) mayUseCredentialRef(r *http.Request, ref string) (bool, error) 
 func (s *Server) handleSetConnectorMember(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	principalID := r.PathValue("principalId")
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxUserBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Request))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -320,7 +320,7 @@ func (s *Server) handleRemoveConnectorMember(w http.ResponseWriter, r *http.Requ
 // would be a reason not to seal it at all.
 func (s *Server) handleSetConnectorVisibility(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxUserBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Request))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

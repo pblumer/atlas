@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas business-objects e2e harness</title>
+    <!-- Drives the *real* api/web/business-objects.js against a mock `api`: the class
+         catalogue, and the page that says where one class is used and how.
+
+         The fixture is chosen for the two cases that matter. An Order is used by a
+         process every way a process can use one — declared, read, written through a
+         member, moved into a state, kept in a store — and an OrderStatus is used by no
+         process at all, which is the ordinary life of an enumeration and the case a
+         process-only reading would report as unused. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { mountObjectCatalog, mountObjectDetail } from "/business-objects.js";
+      const view = document.getElementById("view");
+
+      const CLASSES = [
+        {
+          modelId: "m1", modelName: "Sales data", applicationId: "app-1", applicationName: "Sales",
+          classId: "c1", name: "Order", stereotype: "businessObject",
+          documentation: "What a customer asked us to do, and how far it has got.",
+          members: 3, identity: ["id"], states: 3, updatedAt: 1758000000,
+          usage: {
+            processes: 1, uses: 5, reads: 1, writes: 2,
+            attributes: ["total"], states: ["approved", "received"], stores: ["Order archive"],
+            modelUses: 2,
+          },
+        },
+        {
+          modelId: "m1", modelName: "Sales data", applicationId: "app-1", applicationName: "Sales",
+          classId: "c2", name: "OrderStatus", stereotype: "enumeration",
+          members: 3, states: 0, updatedAt: 1758000000,
+          usage: { processes: 0, uses: 0, reads: 0, writes: 0, modelUses: 2 },
+        },
+        {
+          modelId: "m2", modelName: "Fulfilment data", applicationId: "app-2", applicationName: "Fulfilment",
+          classId: "c3", name: "Address", stereotype: "valueType",
+          members: 2, states: 0, updatedAt: 1757000000,
+          usage: { processes: 0, uses: 0, reads: 0, writes: 0, modelUses: 0 },
+        },
+      ];
+
+      const ORDER_USAGE = {
+        applicationId: "app-1", applicationName: "Sales", modelId: "m1", modelName: "Sales data",
+        class: {
+          id: "c1", name: "Order", stereotype: "businessObject", identity: ["id"],
+          documentation: "What a customer asked us to do, and how far it has got.",
+          attributes: [
+            { name: "id", type: "string", multiplicity: "1" },
+            { name: "total", type: "number", multiplicity: "0..1" },
+            { name: "status", type: "OrderStatus", multiplicity: "1" },
+          ],
+          lifecycle: {
+            statesFrom: "OrderStatus",
+            states: [
+              { name: "received", initial: true },
+              { name: "approved" },
+              { name: "shipped", final: true },
+            ],
+            transitions: [
+              { id: "t1", from: "received", to: "approved", name: "approve" },
+              { id: "t2", from: "approved", to: "shipped" },
+            ],
+          },
+        },
+        processes: [
+          { processDefinitionKey: 7, processId: "order-to-cash", processName: "Order to cash", version: 1,
+            kind: "declare", object: "order", state: "received" },
+          { processDefinitionKey: 7, processId: "order-to-cash", processName: "Order to cash", version: 1,
+            kind: "write", object: "order", elementId: "capture", attribute: "total", writesValue: true },
+          { processDefinitionKey: 7, processId: "order-to-cash", processName: "Order to cash", version: 1,
+            kind: "read", object: "order", elementId: "approve", variable: "orderUnderReview" },
+          { processDefinitionKey: 7, processId: "order-to-cash", processName: "Order to cash", version: 1,
+            kind: "write", object: "order", elementId: "approve", state: "approved" },
+          { processDefinitionKey: 7, processId: "order-to-cash", processName: "Order to cash", version: 1,
+            kind: "store", elementId: "Ref_archive", store: "Order archive" },
+        ],
+        model: [
+          { modelId: "m1", modelName: "Sales data", kind: "association", class: "Customer",
+            name: "places", detail: "association · Customer 1 → Order 0..*" },
+          { modelId: "m1", modelName: "Sales data", kind: "store", name: "Order archive", detail: "read · clio" },
+        ],
+        summary: {
+          processes: 1, uses: 5, reads: 1, writes: 2,
+          attributes: ["total"], states: ["approved", "received"], stores: ["Order archive"],
+          modelUses: 2,
+        },
+      };
+
+      const STATUS_USAGE = {
+        applicationId: "app-1", applicationName: "Sales", modelId: "m1", modelName: "Sales data",
+        class: {
+          id: "c2", name: "OrderStatus", stereotype: "enumeration",
+          literals: ["received", "approved", "shipped"],
+        },
+        processes: [],
+        model: [
+          { modelId: "m1", modelName: "Sales data", kind: "attribute", class: "Order", name: "status", detail: "multiplicity 1" },
+          { modelId: "m1", modelName: "Sales data", kind: "states", class: "Order" },
+        ],
+        summary: { processes: 0, uses: 0, reads: 0, writes: 0, modelUses: 2 },
+      };
+
+      let classes = CLASSES;
+      const api = async (method, url) => {
+        if (/\/infomodel\/classes/.test(url)) return classes;
+        if (/class=OrderStatus/.test(url)) return STATUS_USAGE;
+        if (/\/usage\?/.test(url)) return ORDER_USAGE;
+        return {};
+      };
+
+      window.__mount = () => { classes = CLASSES; return mountObjectCatalog(view, { api }); };
+      window.__mountEmpty = () => { classes = []; return mountObjectCatalog(view, { api }); };
+      window.__mountOrder = () => mountObjectDetail(view, { api, modelId: "m1", className: "Order" });
+      window.__mountStatus = () => mountObjectDetail(view, { api, modelId: "m1", className: "OrderStatus" });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

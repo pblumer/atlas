@@ -11,6 +11,7 @@ package compiler
 
 import (
 	"fmt"
+	"math/bits"
 	"sort"
 
 	"github.com/pblumer/atlas/expr"
@@ -82,8 +83,10 @@ const (
 
 	TypeAdHocSubProcess // an ad-hoc subprocess: a container scope whose contained activities run on demand, in any order, zero or more times — not driven by sequence flow from a start event (ADR-0138). On entry it activates every entry activity (a contained node with no incoming flow) at once; after each contained activity completes an optional boolean FEEL completion condition is re-evaluated, and the first time it holds the remaining work is cancelled and the ad-hoc completes (else it completes on scope-drain)
 
+	TypeNoneThrowEvent // an intermediate throw event with no event definition: it throws nothing and waits for nothing, and runs as a pass-through. Its whole purpose is the fact it leaves behind — one named point in the instance's history, on the path, where no task sits (ADR-0307; the method's milestone marker, ADR-0305)
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 42
+	numBpmnTypes = 43
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -173,6 +176,8 @@ func (t BpmnType) String() string {
 		return "LinkCatchEvent"
 	case TypeConditionalCatchEvent:
 		return "ConditionalCatchEvent"
+	case TypeNoneThrowEvent:
+		return "NoneThrowEvent"
 	default:
 		return "Unspecified"
 	}
@@ -205,7 +210,34 @@ type CompiledNode struct {
 	EventSubStart   int32 // offset into eventSubs (the event-subprocess handler nodes nested directly in this scope)
 	EventSubCount   int32 // number of event subprocesses in this scope (0 for a node that hosts none)
 	Transaction     bool  // this subprocess is a <transaction>: it may hold a cancel end event and host a cancel boundary (ADR-0108)
-	Lane            int32 // index into lanes, -1 if this node is in no lane; organizational metadata with no execution effect (ADR-0121)
+	// Wizard is atlas:wizard on an embedded subprocess, WizardNone on every other node
+	// (ADR-0449). It sits in the padding after Transaction, so the node does not grow.
+	Wizard WizardKind
+	Lane   int32 // index into lanes, -1 if this node is in no lane; organizational metadata with no execution effect (ADR-0121)
+}
+
+// WizardKind says whether, and for whom, an embedded subprocess is a wizard: one
+// sitting of one filler, walked user task by user task (ADR-0449). The engine runs a
+// wizard exactly like any other subprocess. What the mark changes is how the API
+// carries a filler from one step to the next, and who may fill the steps.
+type WizardKind uint8
+
+const (
+	WizardNone     WizardKind = iota // an ordinary subprocess, or not a subprocess at all
+	WizardInternal                   // atlas:wizard="internal": signed-in fillers
+	WizardPublic                     // atlas:wizard="public": the anonymous filler of a public start link
+)
+
+// String names the kind as the model writes it.
+func (k WizardKind) String() string {
+	switch k {
+	case WizardInternal:
+		return "internal"
+	case WizardPublic:
+		return "public"
+	default:
+		return ""
+	}
 }
 
 // LaneDetail is one BPMN lane: an organizational partition of the process's flow nodes with no
@@ -372,6 +404,7 @@ type BusinessRuleTaskDetail struct {
 	Connector     int32 // interned temis worker name → index, -1 = local (in-engine)
 	Retries       int32
 	Binding       DecisionBinding        // how the decision model is resolved (ADR-0063)
+	Version       int32                  // the decision version a BindingVersion task names; 0 otherwise
 	InputMappings []DecisionInputMapping // variable-driven inputs, evaluated off the hot path
 }
 
@@ -384,10 +417,23 @@ type DecisionBinding int32
 const (
 	// BindingLatest evaluates the newest deployed version of the decision (the
 	// default, matching Camunda). It is zero so an unset binding means "latest".
+	// When "newest" is settled depends on the deployment's binding policy: when the
+	// job is worked for a definition deployed from ADR-0423
+	// on, at deploy time for one deployed under ADR-0319.
 	BindingLatest DecisionBinding = iota
 	// BindingDeployment evaluates the decision snapshotted with this process's own
 	// deployment (the ADR-0014 behavior): pinned and reproducible.
 	BindingDeployment
+	// BindingVersion evaluates the one deployed version of the decision the task
+	// names (atlas:version), resolved to its decision deployment when the process is
+	// deployed (ADR-0423).
+	BindingVersion
+	// BindingVersionTag is Camunda's `versionTag` binding, which Atlas does not
+	// support: a version cannot carry a tag here. It is kept apart rather than read
+	// as latest, so the deploy can refuse it instead of running whatever is newest;
+	// a definition already deployed with it keeps evaluating the newest version, as
+	// it always has.
+	BindingVersionTag
 )
 
 // String renders a binding as the lower-case token used on the wire and in the
@@ -399,6 +445,10 @@ func (b DecisionBinding) String() string {
 		return "latest"
 	case BindingDeployment:
 		return "deployment"
+	case BindingVersion:
+		return "version"
+	case BindingVersionTag:
+		return "versionTag"
 	default:
 		return fmt.Sprintf("DecisionBinding(%d)", int32(b))
 	}
@@ -409,12 +459,26 @@ func (b DecisionBinding) String() string {
 // person using the Tasks app (ADR-0028). Assignee and CandidateGroups are
 // interned strings from the zeebe:assignmentDefinition extension (-1 if unset).
 type UserTaskDetail struct {
-	JobType         int32
-	Retries         int32
-	Name            int32 // interned element name (the task's human title) → index, -1 if unset
+	JobType int32
+	Retries int32
+	Name    int32 // interned element name (the task's human title) → index, -1 if unset
+	// Assignee and CandidateGroups are the literal halves of the assignment: the
+	// interned strings the model wrote, or -1 when it wrote an expression instead.
 	Assignee        int32
 	CandidateGroups int32
-	FormId          int32 // interned form id bound via zeebe:formDefinition → index, -1 if unset (ADR-0028)
+	// AssigneeExpr and CandidateGroupsExpr are the other half: a FEEL expression
+	// the model wrote with a leading "=", evaluated when the task activates and
+	// frozen into the job-created event, exactly as the due date below is
+	// (ADR-0318). Nil when the model wrote a
+	// literal or nothing.
+	//
+	// The two are exclusive by construction — a value is one or the other — and a
+	// reader must consult the expression first: the literal is -1 whenever an
+	// expression is present, so reading only the literal silently yields an
+	// unassigned task, which is what happened before this existed.
+	AssigneeExpr        *expr.Compiled
+	CandidateGroupsExpr *expr.Compiled
+	FormId              int32 // interned form id bound via zeebe:formDefinition → index, -1 if unset (ADR-0028)
 	// Priority is the task's static importance from zeebe:priorityDefinition
 	// (default 50, Camunda's convention); higher sorts first in the inbox.
 	Priority int32
@@ -522,6 +586,20 @@ type ConnectorTaskDetail struct {
 	MailSubject RestExpr
 	Body        RestExpr
 	BodyHTML    RestExpr
+	// Mailbox fields (JobType == MailJobType, ADR-0438). MailOp is the
+	// operation, "" being send — every mail task authored before mailboxes existed.
+	// MailFolder is the folder a list reads, MailMessage the message an operation
+	// addresses and MailDestination where a move files it, each literal-or-FEEL.
+	// MailMaxResults is a list's effective cap, written here by the compiler so the
+	// runtime interprets nothing (I5); MailIncludeBody and MailUnreadOnly are literal
+	// flags. ResultVar (above) receives what list, get and move answer.
+	MailOp          string
+	MailFolder      RestExpr
+	MailMessage     RestExpr
+	MailDestination RestExpr
+	MailMaxResults  int32
+	MailIncludeBody bool
+	MailUnreadOnly  bool
 	// CSV worker fields (JobType == CsvImportJobType, ADR-0139). CsvSource is the
 	// interned name of the process variable holding the raw CSV text (-1 → the
 	// default "csvText"); CsvResult the variable the parsed rows are written to
@@ -590,7 +668,23 @@ type ConnectorTaskDetail struct {
 	// is read only by the in-process user-provisioning worker, which the runner
 	// dispatches by the user job type alone. There is no Worker and no credential:
 	// the worker mutates the internal user store directly, gated to the system project.
-	UserOp          int32
+	UserOp int32
+	// Shop send task fields (JobType == ShopJobType, ADR-0429 §4). ShopMode is what the
+	// task does ("outcome": state how the command this instance carries ended);
+	// ShopAction the product action's key and ShopOutcome the ending it states. All
+	// three are literals fixed at deploy (I5): the publish check reads them to know
+	// that every action is answered, which a value computed at runtime would hide.
+	ShopMode    string
+	ShopAction  string
+	ShopOutcome string
+	// ShopProduct, ShopOrder and ShopPosition say which position a `command` task
+	// acts on: the product is a literal fixed at deploy, the order and the position
+	// literal-or-FEEL values evaluated over the instance's variables when the task
+	// runs. ShopResultVar, when set, receives the command id the act was asked under.
+	ShopProduct     string
+	ShopOrder       RestExpr
+	ShopPosition    RestExpr
+	ShopResultVar   string
 	UserName        RestExpr
 	UserEmail       RestExpr
 	UserDisplayName RestExpr
@@ -920,6 +1014,52 @@ type ConnectorTaskDetail struct {
 	// (ADR-0253), not this.
 	AgentModel  int32
 	AgentPrompt RestExpr
+	// Object-store fields (JobType == S3JobType, ADR-0442).
+	// Connector (above) names the configured S3 Worker — the field keeps that name
+	// because the BPMN attribute it is read from does; its access key lives in the
+	// Worker store and the vault, never in a model. S3Op is the interned operation
+	// ("put-object"|"get-object"|"head-object"|"list-objects"|"copy-object"|
+	// "delete-object"|"presign-get"|"presign-put"), and it decides which of the rest are
+	// populated; the compiler refuses a value on an operation that does not use it, so a
+	// field can never be quietly ignored at call time.
+	//
+	// S3Bucket addresses the bucket every operation acts in and S3Key the one object the
+	// seven object-level operations address — a listing has no key, because it addresses
+	// S3Prefix instead. S3Content is the document a put writes and S3ContentType what
+	// those bytes are, which a presigned upload also *binds*: a client using that URL
+	// must send the same type.
+	//
+	// S3Prefix, S3Delimiter, S3StartAfter and S3MaxKeys are a listing's shape — what to
+	// match, how to roll it up at a separator, where to resume from, and how much to
+	// answer with. S3SourceBucket and S3SourceKey are what a copy copies from, which is
+	// how a document moves between prefixes without its bytes entering this process.
+	// S3ExpiresIn is a presigned URL's lifetime in seconds.
+	//
+	// S3Encoding, S3MaxKeys and S3ExpiresIn are compiled structure rather than authored
+	// values, because each decides the shape of a call rather than its content and a
+	// shape that differed per token would not be one; the compiler has already applied
+	// their defaults, so the runtime interprets nothing (I5). S3Metadata are extra
+	// request headers as name/literal-or-FEEL pairs — user metadata under
+	// x-amz-meta-<name>, or an x-amz-* header sent as itself, which is how a model
+	// reaches server-side encryption or a storage class.
+	//
+	// Each RestExpr is a literal-or-FEEL value evaluated over the variables the task
+	// sees at call time; all are the zero value for a non-S3 task. ResultVar (above)
+	// receives what the store returned, for the operations that return anything.
+	S3Op           int32
+	S3Bucket       RestExpr
+	S3Key          RestExpr
+	S3Content      RestExpr
+	S3ContentType  RestExpr
+	S3Encoding     int32
+	S3Prefix       RestExpr
+	S3Delimiter    RestExpr
+	S3StartAfter   RestExpr
+	S3MaxKeys      int32
+	S3SourceBucket RestExpr
+	S3SourceKey    RestExpr
+	S3ExpiresIn    int32
+	S3Metadata     []RestKV
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a
@@ -956,6 +1096,16 @@ type MockupTaskDetail struct {
 // I5, ADR-0008/0067). It backs the modeler's fx toggle: a model value with a
 // leading '=' is an expression, otherwise a literal.
 type RestExpr struct {
+	Literal string
+	Expr    *expr.Compiled
+}
+
+// Assignment is what a model wrote for a user task's assignee or its candidate
+// groups: a literal name, or a FEEL expression to evaluate when the task
+// activates. It is a type rather than two strings so the compiler cannot build a
+// user task while forgetting that one of them was an expression — which is
+// precisely the defect this shape was introduced to make impossible.
+type Assignment struct {
 	Literal string
 	Expr    *expr.Compiled
 }
@@ -1217,23 +1367,36 @@ type CompiledDataStore struct {
 	ElementId int32
 }
 
+// DataObjectWrite is one <assignment> of a data output association: a value and the
+// member it goes into. Value is the FEEL expression (the assignment's <from>)
+// evaluated over the instance's variables to produce what is written.
+//
+// TargetPath is the interned member path (the assignment's <to>, e.g. "name" or
+// "customer.name") the write sets within a structured data object, -1 to write the
+// whole value (ADR-0060). A path write reads the object's current JSON, sets that
+// member, and keeps the rest.
+type DataObjectWrite struct {
+	Value      *expr.Compiled
+	TargetPath int32
+}
+
 // DataOutputAssociation is one compiled <dataOutputAssociation> on an activity: it
-// writes a value into a data object and advances that object's data state when the
-// activity completes (ADR-0058). DataObject is the interned target data-object
-// name; Value is the FEEL expression (the association's <assignment><from>)
-// evaluated over the instance's variables to produce the written value, nil for a
-// state-only transition; TargetState is the interned data state the write moves the
-// object into (from the target <dataObjectReference>'s <dataState>), -1 to keep the
-// object's current state.
+// writes a data object and advances that object's data state when the activity
+// completes (ADR-0058). DataObject is the interned target data-object name;
+// TargetState is the interned data state the write moves the object into (from the
+// target <dataObjectReference>'s <dataState>), -1 to keep the object's current state.
+//
+// Writes are the association's <assignment> elements, in document order — BPMN gives
+// a data association `assignment [0..*]`, so one arrow may set several members of one
+// object and a step that captures a form's worth of fields need not be drawn as one
+// arrow per field (ADR-0350). They are applied
+// in order onto one accumulating value and appended as one event, so the order is not
+// presentation: two writes to the same member mean the later one. Empty is ADR-0058's
+// state-only transition, which keeps the object's value and moves only its state.
 type DataOutputAssociation struct {
 	DataObject  int32 // interned target data-object name → index
-	Value       *expr.Compiled
 	TargetState int32
-	// TargetPath is the interned member path (the association's <assignment><to>,
-	// e.g. "name" or "customer.name") the write sets within a structured data
-	// object, -1 to write the whole value (ADR-0060). A path write reads the object's
-	// current JSON, sets that member, and writes the merged value back.
-	TargetPath int32
+	Writes      []DataObjectWrite
 }
 
 // DataInputAssociation is one compiled <dataInputAssociation> on an activity: it
@@ -1262,6 +1425,13 @@ type DataInputAssociation struct {
 type IOMapping struct {
 	Target int32          // interned target variable name → index
 	Source *expr.Compiled // FEEL expression evaluated to produce the value
+	// Verbatim marks an output mapping that hands a value its process declares personal
+	// out under that value's own name, source "=iban" for target "iban" (ADR-0314,
+	// amended). The engine copies the stored record — the sealed envelope it cannot open
+	// — unchanged instead of evaluating Source: evaluating would re-encode the envelope,
+	// and anything but the identical bytes under the identical name is a value the engine
+	// computed. Set by Build; Source stays for display.
+	Verbatim bool
 }
 
 // CompiledProcess is the immutable result of compiling one process definition.
@@ -1277,6 +1447,11 @@ type CompiledProcess struct {
 
 	nodes []CompiledNode
 	flows []CompiledFlow
+
+	// joinReach is each inclusive join's ancestor set, computed at compile time
+	// (ADR-0279). Nil when the process has no
+	// inclusive join, which is the common case.
+	joinReach map[int32]NodeSet
 
 	outgoingFlows      []int32 // shared topology: flow ids grouped by source node
 	boundaryEvents     []int32 // shared topology: boundary-event node ids grouped by host node
@@ -1316,18 +1491,57 @@ type CompiledProcess struct {
 	ioOutputs          []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
 	startEvents        []int32
 	startFormId        int32               // interned start-form id (ADR-0028), -1 if none
+	startVars          []StartVariable     // declared start variables (atlas:startForm), nil if none
+	constants          []Constant          // process constants (atlas:constants), nil if none
+	constantSet        map[string]struct{} // the same names as a set, for the per-write question
+	conditionalStarts  []int32             // process-level start nodes that carried a conditional event definition; read by stage 5 only
+	eventGatewayKinds  []eventGatewayKind  // event-based gateways of a kind atlas does not run; read by stage 5 only
+	invalidWizards     []int32             // subprocess nodes whose atlas:wizard named no kind; read by stage 5 only (ADR-0449)
 	versionTag         int32               // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64               // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	historyTtlNanos    int64               // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
 	searchableVars     []string            // declared searchable variable names, in the order authored
 	searchableSet      map[string]struct{} // the same names as a set, for the per-write question
-	isExecutable       bool                // bpmn:isExecutable — a non-executable process can't be started
-	elementIds         []int32             // interned source BPMN id per node id (-1 if unset)
-	elementDocs        []int32             // interned <bpmn:documentation> per node id (-1 if undocumented, ADR-0025)
-	repairForms        []int32             // interned repair form id per node id (-1 if none, ADR-0169)
-	documentation      int32               // interned <bpmn:documentation> of the process itself, -1 if none
-	lanes              []LaneDetail        // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
-	strings            []string            // intern table (index → string), for debug/export
+	// personalVars and personalSet are the variables declared to hold personal data
+	// (ADR-0314), in the order authored and as a set. A declared variable is enciphered
+	// under its subject's data key before it becomes a command, which is why it may not
+	// be read by any expression — ciphertext cannot be compared, matched or routed on.
+	// Build refuses a process that does, so nothing downstream has to check.
+	personalVars []string
+	personalSet  map[string]struct{}
+	// dataSubjectVar is the variable holding the id of the person the personal
+	// variables are about: the name the enciphering edge resolves the data key by, and
+	// the name an erasure destroys a key under. Empty exactly when nothing is personal
+	// — Build refuses one declaration without the other, because personal data with no
+	// subject could never be erased and a subject with nothing personal enciphers
+	// nothing.
+	dataSubjectVar string
+	isExecutable   bool         // bpmn:isExecutable — a non-executable process can't be started
+	elementIds     []int32      // interned source BPMN id per node id (-1 if unset)
+	elementDocs    []int32      // interned <bpmn:documentation> per node id (-1 if undocumented, ADR-0025)
+	repairForms    []int32      // interned repair form id per node id (-1 if none, ADR-0169)
+	documentation  int32        // interned <bpmn:documentation> of the process itself, -1 if none
+	lanes          []LaneDetail // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
+	strings        []string     // intern table (index → string), for debug/export
+	// decisionPins is the exact decision deployment each latest-bound business rule
+	// task evaluates against, resolved once when this definition was deployed and
+	// restored from the deployment record on reload
+	// (ADR-0319). It is not compiled from
+	// the model — the model says "latest", the deployment says which one that was —
+	// so it is written by PinDecisions after Build and before the definition is
+	// visible to the processor, the same post-compile discipline Version and
+	// ResolveJobTypes already use. decisionsPinned is the policy marker: false means
+	// this definition predates deploy-time pinning and still resolves latest at task
+	// activation (ADR-0063).
+	decisionPins    map[string]uint64
+	decisionsPinned bool
+	// latestAtRuntime is the binding policy of a definition deployed from
+	// ADR-0423 on: its latest-bound tasks
+	// evaluate the newest decision deployment when their job is worked, and nothing
+	// about them is pinned. versionPins is the decision deployment each
+	// version-bound reference resolved to at deploy time, under the same policy.
+	latestAtRuntime bool
+	versionPins     map[DecisionVersionRef]uint64
 }
 
 // Node returns the node with the given ElementId.
@@ -1378,6 +1592,68 @@ func (p *CompiledProcess) BoundaryEvent(detail int32) *BoundaryEventDetail {
 // rather than entered by a flow (ADR-0082).
 func (p *CompiledProcess) IsEventSubProcess(id int32) bool { return p.nodes[id].EventSub >= 0 }
 
+// Wizard reports the wizard kind of node id (ADR-0449): WizardNone for every node but
+// an embedded subprocess marked atlas:wizard.
+func (p *CompiledProcess) Wizard(id int32) WizardKind { return p.nodes[id].Wizard }
+
+// EnclosingWizard returns the nearest wizard subprocess enclosing node id, and -1 when
+// none does (ADR-0449). It walks the compiled FlowScope chain, so the answer is the
+// deploy-time graph's and costs the nesting depth; nothing on the processor's path
+// asks it.
+//
+// The walk ends at an index the graph does not hold, and after as many steps as the
+// graph has nodes. Validate also runs on processes a Builder assembled by hand, and a
+// malformed chain has to end in "none" rather than in a panic or a loop.
+func (p *CompiledProcess) EnclosingWizard(id int32) int32 {
+	s := p.nodes[id].FlowScope
+	for range p.nodes {
+		if s < 0 || int(s) >= len(p.nodes) {
+			return -1
+		}
+		if p.nodes[s].Wizard != WizardNone {
+			return s
+		}
+		s = p.nodes[s].FlowScope
+	}
+	return -1
+}
+
+// HasPublicWizard reports whether the process holds a public wizard (ADR-0449): whether
+// a public start of it hands its visitor a pass.
+func (p *CompiledProcess) HasPublicWizard() bool {
+	for i := range p.nodes {
+		if p.nodes[i].Wizard == WizardPublic {
+			return true
+		}
+	}
+	return false
+}
+
+// UntimedPublicWizard returns the BPMN id of a public wizard that no interrupting timer
+// boundary event bounds, and "" when the process has none (ADR-0449). A public start link
+// is refused for such a process: every sitting an anonymous filler abandons would stay a
+// live instance, holding what they typed, for as long as the server runs.
+func (p *CompiledProcess) UntimedPublicWizard() string {
+	for id := range p.nodes {
+		if p.nodes[id].Wizard == WizardPublic && !p.timedOut(int32(id)) {
+			return p.ElementBpmnId(int32(id))
+		}
+	}
+	return ""
+}
+
+// timedOut reports whether an interrupting timer boundary event is attached to node id:
+// the bound ADR-0449 asks every wizard to state, because it is what ends a sitting
+// nobody finishes.
+func (p *CompiledProcess) timedOut(id int32) bool {
+	for _, be := range p.BoundaryEvents(id) {
+		if d := p.BoundaryEvent(p.nodes[be].Detail); d.Kind == BoundaryTimer && d.Interrupting {
+			return true
+		}
+	}
+	return false
+}
+
 // EventSubProcess returns the event-subprocess detail at the given table index — the
 // trigger the runtime arms while the parent scope runs (ADR-0082).
 func (p *CompiledProcess) EventSubProcess(detail int32) *EventSubProcessDetail {
@@ -1397,32 +1673,100 @@ func (p *CompiledProcess) EventSubprocesses(id int32) []int32 {
 // process root — the triggers armed when an instance is created (ADR-0082).
 func (p *CompiledProcess) RootEventSubprocesses() []int32 { return p.rootEventSubs }
 
-// NodesReaching returns the set of node ids from which target is reachable by
-// following sequence flows — target's ancestors in the flow graph. An inclusive
-// join uses it to decide whether any live token upstream could still arrive
-// (if none can, and at least one has, it fires). Computed by a reverse walk from
-// target; target itself is not included unless a cycle leads back to it.
-func (p *CompiledProcess) NodesReaching(target int32) map[int32]bool {
-	preds := make([][]int32, len(p.nodes))
-	for i := range p.nodes {
-		for _, fid := range p.Outgoing(int32(i)) {
-			t := p.Flow(fid).Target
+// NodeSet is a compile-time set of node ids, held as a bitset. It answers
+// membership and nothing else, which is all the runtime asks of it, and it is
+// immutable once built — so one lives on the CompiledProcess and is shared by every
+// instance of it (invariant I5).
+//
+// The zero NodeSet is empty and safe to query.
+type NodeSet struct{ bits []uint64 }
+
+// Has reports whether id is in the set.
+func (s NodeSet) Has(id int32) bool {
+	if id < 0 {
+		return false
+	}
+	w := int(id) >> 6
+	if w >= len(s.bits) {
+		return false
+	}
+	return s.bits[w]&(1<<(uint(id)&63)) != 0
+}
+
+// Count returns how many ids the set holds. It is for tests and diagnostics; the
+// runtime only ever asks Has.
+func (s NodeSet) Count() int {
+	n := 0
+	for _, w := range s.bits {
+		n += bits.OnesCount64(w)
+	}
+	return n
+}
+
+func (s *NodeSet) add(id int32) {
+	w := int(id) >> 6
+	for len(s.bits) <= w {
+		s.bits = append(s.bits, 0)
+	}
+	s.bits[w] |= 1 << (uint(id) & 63)
+}
+
+// InclusiveJoinReach returns the set of node ids from which the given node is
+// reachable by following sequence flows — its ancestors in the flow graph. An
+// inclusive join uses it to decide whether any live token upstream could still
+// arrive (if none can, and at least one has, it fires).
+//
+// It is computed once, at compile time, for exactly the nodes that need it: the
+// inclusive gateways with more than one incoming flow. Anything else gets the empty
+// set, which is why the name says which nodes it answers for — a join that had no
+// set would look like a join with nothing upstream, and fire early.
+//
+// It used to be derived at runtime, on every arrival at every such join: a reverse
+// adjacency over the whole graph, a map and a stack, all allocated and thrown away
+// per token movement. That is topology, and topology is compiled, not interpreted
+// (invariants I1 and I5, ADR-0279).
+func (p *CompiledProcess) InclusiveJoinReach(node int32) NodeSet { return p.joinReach[node] }
+
+// computeJoinReach builds the ancestor set of each inclusive join in nodes, given
+// the flow graph. It is the compile-time half of InclusiveJoinReach and runs once
+// per process, so the reverse adjacency it needs is built once rather than per
+// arrival.
+func computeJoinReach(nodes []CompiledNode, outgoingOf func(int32) []int32, targetOf func(int32) int32) map[int32]NodeSet {
+	var joins []int32
+	for i := range nodes {
+		if nodes[i].Type == TypeInclusiveGateway && nodes[i].IncomingCount > 1 {
+			joins = append(joins, int32(i))
+		}
+	}
+	if len(joins) == 0 {
+		return nil
+	}
+	preds := make([][]int32, len(nodes))
+	for i := range nodes {
+		for _, fid := range outgoingOf(int32(i)) {
+			t := targetOf(fid)
 			preds[t] = append(preds[t], int32(i))
 		}
 	}
-	seen := map[int32]bool{}
-	stack := []int32{target}
-	for len(stack) > 0 {
-		n := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		for _, pd := range preds[n] {
-			if !seen[pd] {
-				seen[pd] = true
-				stack = append(stack, pd)
+	out := make(map[int32]NodeSet, len(joins))
+	for _, target := range joins {
+		var set NodeSet
+		seen := make([]bool, len(nodes))
+		stack := []int32{target}
+		for len(stack) > 0 {
+			n := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			for _, pd := range preds[n] {
+				if !seen[pd] {
+					seen[pd] = true
+					set.add(pd)
+					stack = append(stack, pd)
+				}
 			}
 		}
+		out[target] = set
 	}
-	return seen
+	return out
 }
 
 // ServiceTask returns the detail at the given table index.
@@ -1676,7 +2020,14 @@ func (p *CompiledProcess) CallActivity(detail int32) *CallActivityDetail {
 // which deployed definition the call reaches is a per-server, deploy-time fact
 // the server layer computes on top of this (ADR-0076).
 type CallActivityRef struct {
-	ElementId          string
+	ElementId string
+	// ElementIndex is the same element as ElementId, by the identity the engine uses:
+	// the node's position in the compiled table. It is what joins a reference to a
+	// maintained per-element counter, since those are keyed by (definition, element
+	// index) and never by the id a modeller typed (ADR-0080, ADR-0400). It is
+	// version-local — the interning is per compiled process — so it means nothing
+	// outside the definition it came from.
+	ElementIndex       int32
 	CalledProcessId    string
 	Binding            DecisionBinding
 	PropagateAllParent bool
@@ -1696,8 +2047,15 @@ type CallActivityRef struct {
 // enumerable from outside, where the worker store is (ADR-0158).
 type ConnectorRef struct {
 	ElementId string
-	JobType   int32
-	Connector string
+	// ElementIndex is the same element as ElementId, by the identity the engine uses:
+	// the node's position in the compiled table. It is what joins a reference to a
+	// maintained per-element counter, since those are keyed by (definition, element
+	// index) and never by the id a modeller typed (ADR-0080, ADR-0400). It is
+	// version-local — the interning is per compiled process — so it means nothing
+	// outside the definition it came from.
+	ElementIndex int32
+	JobType      int32
+	Connector    string
 }
 
 // NodeConnectorRef returns the worker reference one node makes, and false when it
@@ -1744,9 +2102,10 @@ func (p *CompiledProcess) NodeConnectorRef(id int32) (ConnectorRef, bool) {
 		return ConnectorRef{}, false
 	}
 	return ConnectorRef{
-		ElementId: p.ElementBpmnId(id),
-		JobType:   jobType,
-		Connector: p.Intern(connector),
+		ElementId:    p.ElementBpmnId(id),
+		ElementIndex: id,
+		JobType:      jobType,
+		Connector:    p.Intern(connector),
 	}, true
 }
 
@@ -1794,6 +2153,33 @@ func (p *CompiledProcess) ReceivableMessageNames() []string {
 	return out
 }
 
+// MailboxUse is one mail task that reads or changes its Worker's mailbox rather than
+// sending through it: the Worker it names and the operation.
+type MailboxUse struct {
+	ElementID string
+	Worker    string
+	Operation string
+}
+
+// MailboxUses lists the mail tasks whose operation is not send, in node order. It is
+// what the deploy check reads to decide whether the deployer may use each mailbox
+// (ADR-0438); a send is not listed, because who may use a sender is
+// not what that check governs.
+func (p *CompiledProcess) MailboxUses() []MailboxUse {
+	var out []MailboxUse
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeConnectorTask {
+			continue
+		}
+		d := p.ConnectorTask(p.nodes[i].Detail)
+		if d.JobType != MailJobTypeIndex || d.MailOp == "" {
+			continue
+		}
+		out = append(out, MailboxUse{ElementID: p.ElementBpmnId(int32(i)), Worker: p.Intern(d.Connector), Operation: d.MailOp})
+	}
+	return out
+}
+
 func (p *CompiledProcess) ConnectorRefs() []ConnectorRef {
 	var out []ConnectorRef
 	for i := range p.nodes {
@@ -1818,6 +2204,7 @@ func (p *CompiledProcess) CallActivities() []CallActivityRef {
 		d := p.CallActivity(p.nodes[i].Detail)
 		out = append(out, CallActivityRef{
 			ElementId:          p.ElementBpmnId(int32(i)),
+			ElementIndex:       int32(i),
 			CalledProcessId:    p.Intern(d.CalledProcessId),
 			Binding:            d.Binding,
 			PropagateAllParent: d.PropagateAllParent,
@@ -1881,6 +2268,197 @@ func (p *CompiledProcess) BusinessRuleDecisions() []string {
 	return out
 }
 
+// BusinessRuleDecisionRef is one business rule task and the local decision it calls.
+//
+// It is [CompiledProcess.BusinessRuleDecisions] without the de-duplication, which is
+// the whole reason it exists as a second method rather than a changed one. That
+// enumeration answers "which decisions must exist for this model to deploy", so one
+// entry per decision is right and the deploy-time gate reads it. This one answers
+// "how often was this decision reached, and from where", and for that two tasks
+// calling one decision are two places: the count on the edge is their sum, and
+// collapsing them first would lose half of it (ADR-0400).
+type BusinessRuleDecisionRef struct {
+	// DecisionId is the local decision the task calls, already interned to a string.
+	DecisionId string
+	// ElementIndex is the calling business rule task, by the identity the per-element
+	// counters are keyed on. See [CallActivityRef.ElementIndex].
+	ElementIndex int32
+}
+
+// BusinessRuleDecisionRefs returns one reference per business rule task that calls a
+// local decision, in node order — the same elements [CompiledProcess.BusinessRuleDecisions]
+// walks, before it collapses them by decision id.
+//
+// Worker-mode tasks are skipped here for the same reason they are skipped there: a
+// central decision is evaluated by a remote temis service (ADR-0050), so there is no
+// local decision for an edge to point at.
+func (p *CompiledProcess) BusinessRuleDecisionRefs() []BusinessRuleDecisionRef {
+	var out []BusinessRuleDecisionRef
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeBusinessRuleTask {
+			continue
+		}
+		detail := p.BusinessRuleTask(p.nodes[i].Detail)
+		if detail.Connector >= 0 {
+			continue
+		}
+		if id := p.Intern(detail.DecisionId); id != "" {
+			out = append(out, BusinessRuleDecisionRef{DecisionId: id, ElementIndex: int32(i)})
+		}
+	}
+	return out
+}
+
+// LatestBoundDecisions returns the DMN decision ids this process's *local,
+// latest-bound* business rule tasks reference, distinct and in node order — the
+// references a deployment has to resolve to an exact decision deployment
+// (ADR-0319).
+//
+// It is deliberately narrower than [CompiledProcess.BusinessRuleDecisions]: a
+// deployment-bound task already names its model (the snapshot registered under
+// this process's own key) and a central decision resolves through its worker
+// (ADR-0050), so neither has a version to pin.
+func (p *CompiledProcess) LatestBoundDecisions() []string {
+	var out []string
+	seen := map[string]bool{}
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeBusinessRuleTask {
+			continue
+		}
+		detail := p.BusinessRuleTask(p.nodes[i].Detail)
+		// A versionTag binding is refused at deploy, but a definition deployed with
+		// one before that is still loaded, and it has always resolved as latest.
+		if detail.Connector >= 0 || (detail.Binding != BindingLatest && detail.Binding != BindingVersionTag) {
+			continue
+		}
+		id := p.Intern(detail.DecisionId)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// BundleBoundDecisions returns the DMN decision ids this process's *local,
+// deployment-bound* business rule tasks reference, distinct and in node order —
+// the references that need a model bundled with this deployment, because that is
+// literally what they evaluate (ADR-0063).
+//
+// It is the complement of [CompiledProcess.LatestBoundDecisions] over the same
+// local tasks, and the deploy-time gate reads the two differently: a latest-bound
+// reference can be satisfied by a decision deployment already in the registry, and
+// a deployment-bound one cannot
+// (ADR-0327).
+func (p *CompiledProcess) BundleBoundDecisions() []string {
+	var out []string
+	seen := map[string]bool{}
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeBusinessRuleTask {
+			continue
+		}
+		detail := p.BusinessRuleTask(p.nodes[i].Detail)
+		if detail.Connector >= 0 || detail.Binding != BindingDeployment {
+			continue
+		}
+		id := p.Intern(detail.DecisionId)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// PinDecisions records the decision deployment each latest-bound reference
+// resolved to, and marks this definition as one that resolved them at deploy time
+// (ADR-0319). An empty or nil map is a
+// meaningful call: it says "this definition was deployed under the pinning policy
+// and had nothing to pin".
+//
+// It mutates the compiled process, so it must be called on the deploying
+// goroutine before the definition is handed to the processor — the same window
+// Version and ResolveJobTypes are set in. After that the definition is read-only
+// and safe for concurrent evaluation.
+func (p *CompiledProcess) PinDecisions(pins map[string]uint64) {
+	p.decisionPins = pins
+	p.decisionsPinned = true
+}
+
+// DecisionVersionRef names one deployed version of a decision: what a
+// version-bound business rule task evaluates.
+type DecisionVersionRef struct {
+	DecisionID string
+	Version    int32
+}
+
+// VersionBoundDecisions returns the distinct (decision, version) pairs this
+// process's local, version-bound business rule tasks name, in node order — the
+// references a deploy resolves to exact decision deployments
+// (ADR-0423).
+func (p *CompiledProcess) VersionBoundDecisions() []DecisionVersionRef {
+	var out []DecisionVersionRef
+	seen := map[DecisionVersionRef]bool{}
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeBusinessRuleTask {
+			continue
+		}
+		detail := p.BusinessRuleTask(p.nodes[i].Detail)
+		if detail.Connector >= 0 || detail.Binding != BindingVersion {
+			continue
+		}
+		ref := DecisionVersionRef{DecisionID: p.Intern(detail.DecisionId), Version: detail.Version}
+		if ref.DecisionID != "" && !seen[ref] {
+			seen[ref] = true
+			out = append(out, ref)
+		}
+	}
+	return out
+}
+
+// ResolveLatestAtRuntime marks this definition as deployed under the runtime
+// policy: its latest-bound tasks evaluate the newest decision deployment when the
+// job is worked, and pins records the decision deployment each version-bound
+// reference resolved to
+// (ADR-0423). Like PinDecisions it
+// mutates the compiled process and must be called before the processor sees it.
+func (p *CompiledProcess) ResolveLatestAtRuntime(pins map[DecisionVersionRef]uint64) {
+	p.latestAtRuntime = true
+	p.versionPins = pins
+}
+
+// LatestAtRuntime reports whether this definition's latest-bound tasks resolve
+// the newest decision deployment when their job is worked.
+func (p *CompiledProcess) LatestAtRuntime() bool { return p.latestAtRuntime }
+
+// VersionPinnedKey returns the decision deployment a version-bound task naming
+// this decision and version evaluates, and ok=false when the deploy recorded none.
+// A caller must not fall back to another version on false: a task that names v2
+// and runs v3 is the answer this binding exists to rule out.
+func (p *CompiledProcess) VersionPinnedKey(decisionId string, version int32) (uint64, bool) {
+	key, ok := p.versionPins[DecisionVersionRef{DecisionID: decisionId, Version: version}]
+	return key, ok
+}
+
+// DecisionsPinned reports whether this definition resolved its latest-bound
+// decision references at deploy time. False means it was deployed before that
+// existed, and its latest-bound tasks still resolve the newest deployed model at
+// task activation (ADR-0063) — the behavior it has been running under.
+func (p *CompiledProcess) DecisionsPinned() bool { return p.decisionsPinned }
+
+// PinnedDecisionKey returns the decision deployment a latest-bound task on this
+// decision id must evaluate against, and ok=false when there is none to use —
+// either because this definition was never pinned, or (defensively) because the
+// pin map does not carry that id. Both fall back to the runtime lookup rather
+// than to a key nobody chose.
+func (p *CompiledProcess) PinnedDecisionKey(decisionId string) (uint64, bool) {
+	if !p.decisionsPinned {
+		return 0, false
+	}
+	key, ok := p.decisionPins[decisionId]
+	return key, ok
+}
+
 // UserTask returns the user-task detail at the given table index.
 func (p *CompiledProcess) UserTask(detail int32) *UserTaskDetail {
 	return &p.userTasks[detail]
@@ -1913,6 +2491,28 @@ func (p *CompiledProcess) ConnectorTaskOf(id int32) (*ConnectorTaskDetail, error
 
 // StartEvents returns the process's entry-point element ids.
 func (p *CompiledProcess) StartEvents() []int32 { return p.startEvents }
+
+// UntriggeredStartAmbiguous reports whether a create that nobody triggered — the
+// API, a call activity — has no answer to where the instance begins: the process
+// has no none start event and more than one start event (ADR-0426).
+//
+// Each of those start events is a trigger, and a create by hand fired none of them.
+// With one, seeding it is what "start this by hand" has always meant (ADR-0035).
+// With several, seeding all of them runs branches nobody triggered — a lifecycle
+// process would provision and deprovision in the same instant — so a caller refuses
+// the create instead. It reads the slice the create reads anyway and allocates
+// nothing (invariant I1).
+func (p *CompiledProcess) UntriggeredStartAmbiguous() bool {
+	if len(p.startEvents) < 2 {
+		return false
+	}
+	for _, id := range p.startEvents {
+		if p.nodes[id].Type == TypeStartEvent {
+			return false
+		}
+	}
+	return true
+}
 
 // DataObjects returns the process's declared data objects — the typed, named
 // data seeded under each instance's scope at creation (ADR-0053). Empty for a
@@ -1968,6 +2568,41 @@ func (p *CompiledProcess) IOOutputs(id int32) []IOMapping {
 // metadata; the engine never reads it.
 func (p *CompiledProcess) StartFormId() string { return p.Intern(p.startFormId) }
 
+// StartVariable is one start variable a process declares (<atlas:startVariable> inside
+// <atlas:startForm>): a name, one of the types the start surfaces render (string,
+// number, boolean, json), the default they prefill, and whether they refuse to start
+// without it.
+//
+// The default is also what an instance starts with when whoever started it did not supply
+// the variable (ADR-0455): Kind, Bool and Text are it in the
+// canonical form a variable is stored as, computed once at deploy so the engine seeds it
+// without parsing (I5), and meaningful only when HasDefault is set. A declaration whose
+// default cannot be seeded has none, and DefaultProblem says why — the deploy warns with
+// it rather than refusing, because a stored model is compiled again on every restart.
+type StartVariable struct {
+	Name     string
+	Type     string
+	Default  string // as authored, for the start surfaces to prefill
+	Required bool
+
+	HasDefault     bool
+	Kind           expr.ValueKind
+	Bool           bool
+	Text           string
+	DefaultProblem string
+}
+
+// startVariableTypes are the types a declared start variable can take, the same four the
+// Modeler's typed start form renders (START_VAR_TYPES in api/web/editor.js).
+var startVariableTypes = []string{"string", "number", "boolean", "json"}
+
+// StartVariables returns the process's declared start variables in the order they were
+// authored, nil when it declares none. The start surfaces render them beside the start
+// form, so a value the form does not ask for is still asked, and the engine seeds the
+// default of each one a start did not supply (ADR-0455). The
+// slice is shared and must not be modified.
+func (p *CompiledProcess) StartVariables() []StartVariable { return p.startVars }
+
 // IsExecutable reports the process's bpmn:isExecutable flag. A non-executable
 // process is descriptive-only: the API refuses to start it and omits it from the
 // start surfaces. Absent in the source defaults to true (see the parser).
@@ -1999,6 +2634,29 @@ func (p *CompiledProcess) SearchableVariables() []string { return p.searchableVa
 // this first on every variable write, so a process that declares none pays one
 // comparison rather than a lookup.
 func (p *CompiledProcess) HasSearchableVariables() bool { return len(p.searchableSet) > 0 }
+
+// PersonalVariables are the variable names this process declared as personal data
+// (ADR-0314), in the order they were authored.
+func (p *CompiledProcess) PersonalVariables() []string { return p.personalVars }
+
+// IsPersonal reports whether a variable name was declared personal. The engine asks it
+// where a value crosses an edge — enciphering on the way in, deciphering on the way out —
+// and never in an expression, because [Builder.Build] has already refused a process whose
+// expressions read one.
+func (p *CompiledProcess) IsPersonal(name string) bool {
+	_, ok := p.personalSet[name]
+	return ok
+}
+
+// DataSubjectVariable is the variable holding the id of the person this process's
+// personal variables are about (ADR-0314), or "" when nothing is personal. An edge that
+// enciphers reads this variable's value to find the data key; an edge that deciphers
+// does not need it, because an enciphered value names its own subject.
+func (p *CompiledProcess) DataSubjectVariable() string { return p.dataSubjectVar }
+
+// HasPersonalVariables reports whether this process declares any, so a process that
+// declares none pays one length check and nothing else.
+func (p *CompiledProcess) HasPersonalVariables() bool { return len(p.personalSet) > 0 }
 
 // IsSearchableVariable reports whether name is one of the declared names — the
 // question the engine asks per variable write to decide whether the write is

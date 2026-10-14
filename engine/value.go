@@ -23,12 +23,39 @@ type inflightValue struct {
 	variableAudit model.VariableAuditValue
 	compensable   model.CompensableValue
 	operatorAct   model.OperatorActionValue
+	// entitlement rides only on the two inventory commands and the events they
+	// emit (ADR-0312). Like migration it never
+	// rides token movement, so it costs the hot path the field and nothing else.
+	entitlement model.EntitlementValue
+	// entitlementEnd rides only on the revocation command and the event it emits
+	// (ADR-0346). Like entitlement it never rides token
+	// movement, so it costs the hot path the field and nothing else.
+	entitlementEnd model.EntitlementHistoryValue
 	// migration rides only on the operator-initiated migrate command and the event it
 	// emits (ADR-0162). Its mapping is a slice, so — like the decision a job completion
 	// carries — it is a non-hot-path payload: no token movement ever populates it. It is
 	// also what makes inflightValue non-comparable, so compare one with reflect.DeepEqual
 	// rather than ==.
 	migration model.ProcessMigrationValue
+	// variableIndex rides only on the reindex command and the events it emits: a
+	// membership correction after a migration or an operator's repair (ADR-0244). Like
+	// migration it never rides token movement, so it costs the hot path nothing but the
+	// field.
+	variableIndex model.VariableIndexValue
+	// trigger rides only on the directed-trigger command and the receipt events it
+	// and the prune command emit (ADR-0425). Never on token movement.
+	trigger model.TriggerReceiptValue
+	// actionOutcome rides on the outcome-report command and the event it emits, and
+	// beside an entitlement on a grant or revocation that ends a provision or a
+	// return, so both commit in one batch (ADR-0429 §3). Never on token movement.
+	actionOutcome model.ActionOutcomeValue
+	// feedRetention rides only on the feed's prune command and the event it emits
+	// (ADR-0429 §5). Never on token movement.
+	feedRetention model.FeedRetentionValue
+	// message rides on the message buffer's events and the sweep's expiry command
+	// (ADR-0370). Its payload is a slice, so like migration it is a non-hot-path
+	// field: no token movement populates it.
+	message model.MessageValue
 }
 
 // asValue returns a model.Value pointing at the active field, for encoding. The
@@ -68,6 +95,20 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.operatorAct
 	case model.VTProcessMigration:
 		return &v.migration
+	case model.VTVariableIndex:
+		return &v.variableIndex
+	case model.VTEntitlement:
+		return &v.entitlement
+	case model.VTEntitlementHistory:
+		return &v.entitlementEnd
+	case model.VTTriggerReceipt:
+		return &v.trigger
+	case model.VTActionOutcome:
+		return &v.actionOutcome
+	case model.VTFeedRetention:
+		return &v.feedRetention
+	case model.VTMessage:
+		return &v.message
 	}
 	return nil
 }
@@ -148,6 +189,34 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTProcessMigration:
 		if v, ok := rec.Value.(*model.ProcessMigrationValue); ok {
 			iv.migration = *v
+		}
+	case model.VTVariableIndex:
+		if v, ok := rec.Value.(*model.VariableIndexValue); ok {
+			iv.variableIndex = *v
+		}
+	case model.VTEntitlement:
+		if v, ok := rec.Value.(*model.EntitlementValue); ok {
+			iv.entitlement = *v
+		}
+	case model.VTEntitlementHistory:
+		if v, ok := rec.Value.(*model.EntitlementHistoryValue); ok {
+			iv.entitlementEnd = *v
+		}
+	case model.VTTriggerReceipt:
+		if v, ok := rec.Value.(*model.TriggerReceiptValue); ok {
+			iv.trigger = *v
+		}
+	case model.VTActionOutcome:
+		if v, ok := rec.Value.(*model.ActionOutcomeValue); ok {
+			iv.actionOutcome = *v
+		}
+	case model.VTFeedRetention:
+		if v, ok := rec.Value.(*model.FeedRetentionValue); ok {
+			iv.feedRetention = *v
+		}
+	case model.VTMessage:
+		if v, ok := rec.Value.(*model.MessageValue); ok {
+			iv.message = *v
 		}
 	}
 	return iv

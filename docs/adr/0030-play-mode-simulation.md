@@ -1,6 +1,7 @@
 # ADR-0030: Play mode — ephemeral in-Modeler process simulation
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
 

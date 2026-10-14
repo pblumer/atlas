@@ -3,6 +3,7 @@
 - **Status:** Accepted (amended 2026-08-17 and 2026-08-18 — phases 2 and 3 were each measured before
   being built, and each mostly dropped in favour of a smaller fix; see the amendment notes below).
   Invariant gate and phases 0–3 in place, phases 2 and 3 *as amended*
+- **Implementation:** Landed
 - **Date:** 2026-08-17
 - **Deciders:** Atlas engine team
 

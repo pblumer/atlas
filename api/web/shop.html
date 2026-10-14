@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Shop</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='52' fill='%23000'/%3E%3Cpath fill='%23fff' d='M142.1 201.7A68 68 0 0 1 24 174.5L57.5 152.3A33 33 0 0 0 115.3 179.2Z'/%3E%3Cpath fill='%23fff' d='M22.2 162.7A68 68 0 0 1 106.5 92L119.7 117.1L98 126A33 33 0 0 0 59 146.7Z'/%3E%3Cpath fill='%23fff' d='M126 92H160V226H126Z'/%3E%3Cpath fill='%23fff' d='M189.5 38H210.5V62.5H235V83.5H210.5V108H189.5V83.5H165V62.5H189.5Z'/%3E%3C/svg%3E" />
+<style>
+  /* The same token set app.css and the public form declare. What is written here
+     is the instance's brand — the operator's — and shop.js overwrites the accent
+     trio and the typeface on the root once the visitor's catalogue answers, so a
+     catalogue with a face of its own shows it and one without falls back to this.
+
+     The brand mark follows the same cascade and is not a token: it is an image,
+     fetched in renderMark. */
+  :root {
+    --bg:#f3f4f6; --surface:#ffffff;
+    --border:#e2e4e9; --border-strong:#cdd0d6;
+    --text:#14161a; --muted:#62666d;
+    --accent:#0b5cff; --accent-hover:#0a4ad1; --accent-soft:#eaf0ff; --accent-ink:#ffffff;
+    --ok:#2d8a4e; --danger:#c0392b;
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 var(--font-sans); color:var(--text); background:var(--bg); }
+  /* Wide, because the catalogue is now a four-column cascade rather than a card
+     grid: Kategorie → Bundle → Marktleistung → Service, the shape the mockups use
+     and the shape a decomposition actually has. 880px was right for cards and
+     would squeeze four columns into strips. */
+  #app { max-width: 1400px; margin: 0 auto; padding: 32px 20px 96px; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:16px;
+           flex-wrap:wrap; margin-bottom:8px; }
+  .brand { display:flex; align-items:center; gap:12px; min-width:0; }
+  /* Bounded in both directions: a mark is somebody's own image at whatever size
+     they uploaded it, and a page that let it set its own height would be laid out
+     by the upload. */
+  .mark { height:32px; width:auto; max-width:180px; display:block; }
+  h1 { font-size:22px; margin:0; }
+  h2 { font-size:15px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+       margin:32px 0 12px; font-weight:600; }
+  h3 { font-size:16px; margin:0 0 8px; }
+  .langs { display:flex; gap:4px; }
+  /* The way back out of a page that is not part of the shell. Quiet on purpose: it
+     is an exit for whoever wants one, not an invitation into the tooling. */
+  .headright { display:flex; align-items:center; gap:14px; }
+  .backlink { color:var(--muted); font-size:13px; text-decoration:none; white-space:nowrap; }
+  .backlink:hover { color:var(--accent-hover); text-decoration:underline; }
+
+  .lang { border:1px solid var(--border-strong); background:var(--surface); color:var(--muted);
+          border-radius:6px; padding:3px 9px; font-size:12px; cursor:pointer; }
+  .lang.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .cards { display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; }
+  .parts { margin:10px 0; font-size:14px; }
+  .parts ul { margin:4px 0 0; padding-left:18px; }
+  .muted { color:var(--muted); font-size:13px; }
+  /* The product's own words, set apart from the muted fact lines under it: those
+     describe the transaction, this describes the thing. Full ink and the body
+     size, with the measure held short enough to read as prose rather than as a
+     wall the eye slides off. */
+  .product-description {
+    color:var(--text); margin:8px 0 12px; max-width:62ch; white-space:pre-line;
+  }
+  /* A return sits on one line among others, so it is a link and not a button:
+     a row of buttons down the side of a list reads as the list's purpose. */
+  button.linkish { background:none; border:0; padding:0 0 0 8px; font:inherit; font-size:13px;
+                   color:var(--accent-hover); cursor:pointer; text-decoration:underline; }
+  button.linkish:disabled { opacity:.55; cursor:default; text-decoration:none; }
+  .pill { display:inline-block; background:var(--accent-soft); color:var(--accent-hover);
+          border-radius:999px; padding:2px 10px; font-size:12px; margin:0 0 8px; }
+  /* What somebody already holds, in the same green a settled line uses. Deliberately
+     not a warning colour: having a thing is not a problem, and a mark that looked
+     like one would make the catalogue read as a list of complaints. */
+  .pill.ok { background:#e7f6ec; color:var(--ok); }
+  .row { display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+         margin-bottom:8px; flex-wrap:wrap; }
+  .lines { margin:0; padding-left:0; list-style:none; font-size:14px; }
+  .lines li { padding:3px 0; border-top:1px solid var(--border); }
+  .lines li:first-child { border-top:0; }
+  /* A position's open tasks, under it (ADR-0416). */
+  .lines .tasks { margin:4px 0 2px 18px; padding:0; list-style:none; font-size:13px; }
+  .lines .tasks li { border-top:0; padding:2px 0; }
+  .lines .tasks .task-name { font-weight:600; }
+  /* What the process link found, under the button that asked for it. Narrow, so a
+     sentence does not stretch the column it sits in. */
+  .follow-note { font-size:12px; padding-left:8px; max-width:34ch; }
+  /* One dot per line status. The three that mean "not provisioned" are deliberately
+     different colours: a refusal is a decision, a failure is a defect somebody is
+     fixing, and a block is neither — showing them alike would tell a visitor the
+     same thing about three different situations. */
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--border-strong); }
+  .dot.done, .dot.skipped { background:var(--ok); }
+  .dot.failed, .dot.abandoned, .dot.returnFailed { background:var(--danger); }
+  .dot.rejected, .dot.cancelled, .dot.returned { background:var(--muted); }
+  .dot.returning { background:var(--accent-soft); border:1px solid var(--accent); }
+  .dot.blocked { background:var(--accent-soft); border:1px solid var(--border-strong); }
+  .dot.running { background:var(--accent); }
+  button.primary { background:var(--accent); color:var(--accent-ink); border:1px solid var(--accent);
+                   border-radius:8px; padding:7px 14px; font:inherit; cursor:pointer; margin-top:8px; }
+  /* Withdrawing is a plain button, not a red one. Taking back something you
+     ordered a minute ago is an ordinary act, and dressing it as dangerous is how
+     somebody ends up telephoning instead. */
+  button.secondary { background:var(--surface); color:var(--text); border:1px solid var(--border-strong);
+                     border-radius:8px; padding:6px 12px; font:inherit; cursor:pointer; margin-top:8px; }
+  button.primary:disabled, button.secondary:disabled { opacity:.55; cursor:default; }
+  .empty { background:var(--surface); border:1px dashed var(--border-strong); border-radius:10px;
+           padding:24px; text-align:center; }
+  .empty p { margin:4px 0; }
+  .error { background:#fdecea; border:1px solid var(--danger); color:var(--danger);
+           border-radius:8px; padding:10px 14px; }
+  /* --- The shell the mockups describe: a nav row, a view, an action row. ---
+     Layout only. Every colour below is one of the tokens already declared above;
+     nothing here introduces a palette. */
+
+  /* The nav row. Three destinations and a help affordance, with whoever is
+     signed in at the right — the arrangement the mockups use on every screen. */
+  .nav { display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+         border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+         padding:10px 0; margin:16px 0 20px; }
+  .nav .spacer { flex:1 1 auto; }
+  .navlink { background:var(--surface); border:1px solid var(--border-strong); color:var(--text);
+             border-radius:8px; padding:7px 16px; font:inherit; cursor:pointer; }
+  .navlink.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  /* The round "?" the mockups put beside the first entry. */
+  .help { width:30px; height:30px; border-radius:50%; border:1px solid var(--border-strong);
+          background:var(--surface); color:var(--muted); font:inherit; cursor:pointer; }
+  .who { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px; }
+  .avatar { width:30px; height:30px; border-radius:50%; border:1px solid var(--border-strong);
+            background:var(--bg); display:flex; align-items:center; justify-content:center;
+            font-size:12px; color:var(--muted); }
+  /* The same circle, filled. object-fit keeps a portrait or a landscape photograph
+     round rather than squashing it into the box. */
+  img.avatar { object-fit:cover; padding:0; }
+
+  /* The four-column cascade. Equal columns that scroll sideways rather than
+     collapse: a decomposition read at four levels is the point of the screen, and
+     a narrow window should move it, not fold it — down to the narrow-screen
+     breakpoint, below which one column shows at a time
+     (ADR-0417). */
+  .cascade { display:grid; grid-template-columns:repeat(4, minmax(220px, 1fr));
+             gap:12px; overflow-x:auto; }
+  .col { min-width:0; }
+  /* The basket's lines, one per offering. The grid makes each line as tall as its
+     tallest cell, which is what keeps one offering's services from sliding beside
+     the next; the rule under each line is what tells two offerings apart. */
+  .basket-groups .grp { border-bottom:2px solid var(--border); }
+  .basket-groups .grp .cell:last-child { border-bottom:0; }
+  .colhead { font-size:12px; text-transform:uppercase; letter-spacing:.04em;
+             color:var(--muted); font-weight:600; padding:0 0 6px; border-bottom:1px solid var(--border); }
+  .cell { display:flex; align-items:flex-start; gap:6px; padding:6px 0;
+          border-bottom:1px solid var(--border); }
+  /* The name and whatever describes the row, as one shrinkable item. break-word and
+     not anywhere: `anywhere` lets a box shrink below its longest word, so a flex
+     sibling that refuses to shrink can take the whole row and the name wraps one
+     letter per line. `break-word` keeps the longest word as the floor and breaks a
+     word only when it truly does not fit. */
+  .cell .body { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:2px; }
+  .cell .label { min-width:0; overflow-wrap:break-word; font-size:14px; }
+  /* What the row says about itself — a price, the level it sits at, where a search
+     found it. Under the name rather than beside the controls, and wrapping, because
+     two of those together are wider than a column of this cascade. */
+  .cell .meta { font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap;
+                column-gap:8px; row-gap:2px; overflow-wrap:break-word; }
+  /* A product's picture, bounded by the page rather than by the file: what was
+     uploaded is what is served, so the size is decided here. object-fit:contain
+     keeps a logo a logo and a photograph a photograph — a cover crop would cut the
+     top off somebody's product. */
+  .card .picture { display:block; max-width:100%; max-height:200px; width:auto;
+                   margin:0 0 10px; border-radius:8px; object-fit:contain;
+                   background:var(--surface); }
+  /* What a row carries at its right edge, and the two declarations that keep it on
+     one line. Each icon already refuses to shrink; the trail around them did not,
+     and its contents were inline boxes — so a narrow column wrapped them and one
+     row read as two. A flex row does not wrap by default, and 0 0 auto stops the
+     trail giving up width the icons cannot give up. */
+  .cell .trail { flex:0 0 auto; display:flex; align-items:center; gap:4px; }
+  /* A cell that leads somewhere is the whole label, not a separate chevron: the
+     mockups make the name itself the way into the next column. */
+  button.label { background:none; border:0; padding:0; font:inherit; text-align:left;
+                 color:var(--text); cursor:pointer; }
+  button.label.on { font-weight:600; color:var(--accent-hover); }
+  /* The square −/+/X/i affordances the mockups put at the column edges. Same size
+     so a row of them lines up whatever it carries. */
+  .sq { flex:0 0 auto; width:24px; height:24px; line-height:1; border-radius:6px;
+        border:1px solid var(--border-strong); background:var(--surface); color:var(--text);
+        font:inherit; font-size:13px; cursor:pointer; padding:0; }
+  .sq:disabled { opacity:.45; cursor:default; }
+  .sq.info { color:var(--muted); }
+
+  /* The favourites bar above the cascade. */
+  .favbar { display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:12px;
+            font-size:14px; }
+  .favbar label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+  .favbar input[type="search"] { flex:1 1 260px; min-width:0; font:inherit; font-size:14px;
+                                 padding:7px 10px; border-radius:8px;
+                                 border:1px solid var(--border-strong);
+                                 background:var(--surface); color:var(--text); }
+
+  /* The action row along the bottom. */
+  .actions { display:flex; justify-content:center; align-items:center; gap:12px;
+             flex-wrap:wrap; margin-top:28px; padding-top:16px; border-top:1px solid var(--border); }
+
+  /* The orders table: a filter row above the header, exactly as the mockups draw
+     it — the search sits over the column it searches. */
+  .table { width:100%; border-collapse:collapse; font-size:14px; }
+  .table th, .table td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);
+                         vertical-align:top; }
+  .table thead th { font-size:12px; text-transform:uppercase; letter-spacing:.04em;
+                    color:var(--muted); font-weight:600; }
+  .table .filters td { border-bottom:0; padding-bottom:0; }
+  /* The filter row's fields only. A bare `.table input` also reached the inputs
+     of a task's form opened inside a row, and stretched its checkbox to the
+     cell's width with the label pushed off the end. */
+  .table .filters input { width:100%; font:inherit; font-size:13px; padding:5px 8px;
+                 border:1px solid var(--border-strong); border-radius:6px;
+                 background:var(--surface); color:var(--text); }
+  .tablewrap { overflow-x:auto; }
+  /* A person picker on its own line above the view, for ordering on somebody
+     else's behalf. */
+  .forwhom { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+  .forwhom input { font:inherit; font-size:14px; padding:6px 10px; border-radius:6px;
+                   border:1px solid var(--border-strong); background:var(--surface);
+                   color:var(--text); min-width:240px; }
+  /* The field and its suggestions are one column so the list hangs under the
+     input rather than beside the label. */
+  .forwhomfield { position:relative; display:flex; flex-direction:column; }
+  .people { position:absolute; top:100%; left:0; z-index:5; min-width:240px;
+            max-height:240px; overflow-y:auto; margin-top:2px;
+            border:1px solid var(--border-strong); border-radius:6px;
+            background:var(--surface); box-shadow:0 4px 12px rgba(0,0,0,.12); }
+  .person { display:block; width:100%; text-align:left; font:inherit; font-size:14px;
+            padding:6px 10px; border:0; background:none; color:var(--text);
+            cursor:pointer; }
+  .person:hover, .person:focus { background:var(--accent-soft); }
+  .forwhomfield .note { position:absolute; top:100%; left:0; margin:4px 0 0;
+                        white-space:nowrap; }
+  /* A product's configuration form, under the basket rather than beside a row:
+     a form is taller than a row, and an integral part asks its own questions. */
+  .cfg { max-width:640px; margin:0 0 12px; }
+  .cfg h3 { margin:0 0 10px; font-size:15px; }
+  .note { color:var(--muted); font-size:12px; margin:10px 0 0; }
+
+  /* --- The sign-in, for a shop that enforces one. ---
+     Narrow and centred, like every sign-in: the form is the only thing on the
+     page, and a field stretched across 1400px reads as a page that lost its
+     layout. Every colour is a token declared above — the operator's brand, since
+     no catalogue is resolved until somebody is signed in. */
+  .signin { max-width:380px; margin:8vh auto; }
+  /* Not the page's h2, which is the uppercase muted rule that labels a section.
+     This is the page's whole heading while it is showing. */
+  .signin .signin-title { font-size:20px; text-transform:none; letter-spacing:normal;
+                          color:var(--text); margin:0 0 6px; font-weight:600; }
+  .signin .field { display:flex; flex-direction:column; gap:4px; margin:14px 0 0;
+                   font-size:13px; color:var(--muted); }
+  .signin .field input { font:inherit; font-size:15px; color:var(--text);
+                         padding:8px 10px; border-radius:8px;
+                         border:1px solid var(--border-strong); background:var(--surface); }
+  .signin button.primary { width:100%; margin-top:16px; padding:9px 14px; }
+  .signin .error { margin:14px 0 0; font-size:13px; }
+  /* A federated login, where one is configured. Above the password form and not
+     beside it: on an installation that federates, the password form is the
+     fallback and not the offer. */
+  .signin .provider { display:block; text-align:center; text-decoration:none;
+                      background:var(--accent); color:var(--accent-ink);
+                      border:1px solid var(--accent); border-radius:8px;
+                      padding:9px 14px; margin-bottom:8px; }
+  .signin .or { text-align:center; margin:0 0 4px; }
+
+  @media (max-width:520px) { .cards { grid-template-columns:1fr; } }
+
+  /* --- A narrow screen (ADR-0417). ---
+     One breakpoint for the whole page, so a phone and a small tablet read the
+     shop the same way: below it every view is one column wide. 860px and not
+     900: the four-column cascade needs about 920px to show its columns at their
+     minimum width, and the browser tests' default window is 900px wide — so the
+     wide layout keeps the width those tests measure it at. The stepper is hidden
+     on a wide screen and shown here. */
+  .stepper { display:none; }
+  @media (max-width:860px) {
+    #app { padding:16px 12px 72px; }
+    h2 { margin:22px 0 10px; }
+
+    /* The catalogue: one column at a time, the one state.step names, with the
+       stepper above it to go back. A column shown alone takes the width. */
+    .stepper { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+               margin:0 0 10px; font-size:14px; }
+    .stepper .step-back { margin-top:0; }
+    .step-path { min-width:0; overflow-wrap:break-word; }
+    .cascade { grid-template-columns:1fr; overflow-x:visible; }
+    .cascade[data-step] > .col { display:none; }
+    .cascade[data-step="0"] > .col:nth-child(1),
+    .cascade[data-step="1"] > .col:nth-child(2),
+    .cascade[data-step="2"] > .col:nth-child(3),
+    .cascade[data-step="3"] > .col:nth-child(4) { display:block; }
+    /* Columns nothing is chosen in (what somebody holds) simply stack; the gap
+       between them says where one list ends. */
+    .cascade:not([data-step]):not(.basket-groups) { row-gap:18px; }
+
+    /* The basket: each offering a block, its services and options indented under
+       it with their own label, because the names at the top of the grid no longer
+       stand above them. */
+    .basket-groups > .colhead { display:none; }
+    .basket-groups .grp { border-bottom:0; }
+    .basket-groups .grp:empty { display:none; }
+    .basket-groups .grp-first { border-top:2px solid var(--border); margin-top:6px; }
+    .basket-groups .grp[data-label] { padding-left:22px; }
+    .basket-groups .grp[data-label]::before { content:attr(data-label); display:block;
+      font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+      font-weight:600; padding:6px 0 2px; }
+
+    /* My orders: the table becomes a list of cards. Each cell says what it is,
+       because the column heads are gone; the filters sit two to a row above. */
+    .tablewrap { overflow-x:visible; }
+    .table.orders, .table.orders tbody, .table.orders tr, .table.orders td { display:block; width:100%; }
+    .table.orders thead { display:block; }
+    .table.orders thead tr:not(.filters) { display:none; }
+    .table.orders .filters { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px; }
+    .table.orders .filters td { padding:0; }
+    .table.orders .filters td:empty { display:none; }
+    .table.orders tbody tr { background:var(--surface); border:1px solid var(--border);
+                             border-radius:10px; padding:10px 12px; margin:0 0 12px; }
+    .table.orders tbody td { border-bottom:0; padding:3px 0; }
+    .table.orders tbody td:empty { display:none; }
+    .table.orders tbody td[data-label]::before { content:attr(data-label); display:block;
+      font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+      font-weight:600; }
+    .lines .tasks { margin-left:8px; }
+    /* A form opened in a row takes the card's width, not 640px of it. */
+    .cfg { max-width:100%; }
+    .follow-note { max-width:none; }
+
+    /* Touch: a fingertip needs about 40px; the 24px squares were drawn for a
+       pointer. The row grows with them rather than crowding them. */
+    .sq { width:40px; height:40px; font-size:15px; border-radius:8px; }
+    .help, .avatar { width:40px; height:40px; }
+    .cell { padding:8px 0; gap:8px; align-items:center; }
+    .cell .label { font-size:15px; }
+    .lang { padding:6px 12px; font-size:13px; }
+    button.linkish { padding:8px 0 8px 8px; }
+    .forwhomfield { flex:1 1 200px; min-width:0; }
+    .forwhom input { min-width:0; width:100%; }
+    .people { min-width:0; right:0; }
+  }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <!-- A module: shop.js imports theme.js's palette derivation rather than
+       carrying a second copy of it. -->
+  <script type="module" src="/shop.js"></script>
+</body>
+</html>

@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "# 🎫 Zugang beantragen\n\nDer Antrag wird als Vorgang in Jira angelegt. Über die Freigabe entscheidet danach ein Mensch in Atlas — der Vorgang wird erst dann weitergeschaltet."
+      "text": "# 🎫 Zugang beantragen\n\nDer Antrag wird als Vorgang in Jira angelegt. Über die Freigabe entscheidet danach ein Mensch in atlas — der Vorgang wird erst dann weitergeschaltet."
     },
     {
       "key": "antragsteller",

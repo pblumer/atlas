@@ -1,0 +1,53 @@
+{
+  "type": "default",
+  "id": "lg-eintritt-start",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🚪 Eintritt melden\n\nDie Felder dieses Formulars sind der **Datenvertrag** des Prozesses: `rolle` steuert die DMN-Entscheidung *Ausstattung & Zugriffe*, `personalnummer` ist der Bezeichner, unter dem der Worker *Konto anlegen* das Konto erstellt."
+    },
+    {
+      "key": "name",
+      "type": "textfield",
+      "label": "Name",
+      "validate": { "required": true }
+    },
+    {
+      "key": "personalnummer",
+      "type": "textfield",
+      "label": "Personalnummer",
+      "description": "Bezeichner für das anzulegende Konto (Idempotenzschlüssel des Worker-Jobs).",
+      "validate": { "required": true }
+    },
+    {
+      "key": "rolle",
+      "type": "select",
+      "label": "Rolle",
+      "values": [
+        { "label": "Entwicklung", "value": "entwicklung" },
+        { "label": "Vertrieb", "value": "vertrieb" },
+        { "label": "Produktion", "value": "produktion" },
+        { "label": "Verwaltung", "value": "verwaltung" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "standort",
+      "type": "select",
+      "label": "Standort",
+      "values": [
+        { "label": "Zürich", "value": "zuerich" },
+        { "label": "Bern", "value": "bern" },
+        { "label": "Remote", "value": "remote" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "eintrittsdatum",
+      "type": "textfield",
+      "label": "Eintrittsdatum",
+      "description": "Format JJJJ-MM-TT, z. B. 2026-11-01.",
+      "validate": { "required": true }
+    }
+  ]
+}

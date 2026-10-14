@@ -13,8 +13,20 @@
   <body>
     <div id="ready">loading</div>
     <script type="module">
-      import { radiusFor, degreesOf, shapeForNode, shapeVertices } from "/panorama-mesh.js";
+      import { radiusFor, radiusForHeat, radiusForTally, heatPeak, heatTicks, degreesOf,
+        shapeForNode, shapeVertices, refreshEvery, REFRESH_FLOOR,
+        REFRESH_CEILING } from "/panorama-mesh.js";
+      window.refreshEvery = (ms, opts) => refreshEvery(ms, opts);
+      window.REFRESH_FLOOR = REFRESH_FLOOR;
+      window.REFRESH_CEILING = REFRESH_CEILING;
       window.radiusFor = (node, degree) => radiusFor(node, degree);
+      window.radiusForHeat = (node, peak, heat, at) => radiusForHeat(node, peak, heat, at);
+      window.heatPeak = (graph, heat, at) => heatPeak(graph, heat, at);
+      // The law over a bare tally, and the tallies the key puts a circle against —
+      // the two halves of the scale in the legend, checked as arithmetic here and
+      // against the rendered row in panorama-mesh.spec.mjs.
+      window.radiusForTally = (tally, peak, heat) => radiusForTally(tally, peak, heat);
+      window.heatTicks = (peak, heat) => heatTicks(peak, heat);
       window.degreesOf = (graph) => [...degreesOf(graph)];
       window.shapeForNode = (node) => shapeForNode(node);
       window.shapeVertices = (shape, r) => shapeVertices(shape, r);

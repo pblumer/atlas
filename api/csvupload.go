@@ -12,15 +12,9 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// maxCSVUploadBytes caps a CSV upload. Generous enough for a realistic batch of
-// records, small enough to refuse a runaway upload: the file is read whole and
-// materialised as one VarJSON `rows` variable, so the ceiling also bounds the
-// resulting variable (ADR-0084).
-const maxCSVUploadBytes = 16 << 20 // 16 MiB
-
 // csvMultipartMemory is how much of the multipart body ParseMultipartForm keeps
 // in memory before spilling parts to temp files; the total is still bounded by
-// maxCSVUploadBytes via MaxBytesReader.
+// s.budgets().DataUpload via MaxBytesReader.
 const csvMultipartMemory = 4 << 20 // 4 MiB
 
 // csvInstanceResp is the result of starting an instance from a CSV upload: the
@@ -47,7 +41,7 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, maxCSVUploadBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, s.budgets().DataUpload)
 	if err := r.ParseMultipartForm(csvMultipartMemory); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "parse upload: "+err.Error())
 		return
@@ -100,12 +94,20 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// A CSV batch can carry personal data in its rows like any other start (ADR-0314).
+	if err := s.encipherStartVars(key, startVars); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	var (
 		found   bool
 		notExec bool
 		runErr  error
 		statErr error
 		stats   statsResp
+		// ambiguous is ADR-0426's refusal: a process only its triggers can start.
+		ambiguous string
 	)
 	var driveNeeded bool
 	s.do(func() {
@@ -116,6 +118,12 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 		found = true
 		if d.cp != nil && !d.cp.IsExecutable() {
 			notExec = true
+			return
+		}
+		if ambiguous = untriggeredStartRefusal(d.cp); ambiguous != "" {
+			return
+		}
+		if ambiguous = s.boundConstantRefusalOnLoop(d); ambiguous != "" {
 			return
 		}
 		s.proc.CreateInstance(key, startVars...)
@@ -135,6 +143,8 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
 	case notExec:
 		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
+	case ambiguous != "":
+		httpapi.Error(w, http.StatusConflict, ambiguous)
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "run instance: "+runErr.Error())
 	case statErr != nil:

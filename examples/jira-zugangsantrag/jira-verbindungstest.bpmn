@@ -41,7 +41,7 @@
           project="=jiraProjekt"
           issueType="=vorgangstyp"
           summary="Atlas-Verbindungstest"
-          description="=&quot;Dieser Vorgang wurde vom Atlas-Verbindungstest angelegt.\nProzessinstanz: &quot; + processInstanceKey"
+          description="=&quot;Dieser Vorgang wurde vom atlas-Verbindungstest angelegt.\nProzessinstanz: &quot; + processInstanceKey"
           resultVariable="ticket"/>
       </extensionElements>
       <incoming>f_start_anlegen</incoming>

@@ -1,6 +1,7 @@
 # ADR-0046: Single-process step-by-step replay
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas maintainers
 

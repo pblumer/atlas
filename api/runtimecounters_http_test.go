@@ -100,7 +100,7 @@ func TestRuntimeFilterWrongDefinition(t *testing.T) {
 		Key   uint64 `json:"key"`
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(lb, &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, lb), &insts); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, lb)
 	}
 	var liveKey uint64
@@ -176,7 +176,7 @@ func TestListAndSearchInstancesWithVariables(t *testing.T) {
 	var insts []struct {
 		Key uint64 `json:"key"`
 	}
-	_ = json.Unmarshal(body, &insts)
+	_ = json.Unmarshal(listRows(t, body), &insts)
 	if len(insts) > 0 {
 		code, vb := doReq(t, ts, http.MethodGet, "/api/v1/instances/"+strconv.FormatUint(insts[0].Key, 10)+"/variables", "", "")
 		if code != http.StatusOK {
@@ -202,13 +202,13 @@ func TestSearchInstancesEdgeCases(t *testing.T) {
 	}
 
 	// An empty query returns an empty result (the parse-miss branch).
-	if code, body := doReq(t, ts, http.MethodGet, "/api/v1/instances/search?q=", "", ""); code != http.StatusOK || strings.TrimSpace(string(body)) != "[]" {
-		t.Fatalf("empty query: %d %s, want []", code, body)
+	if code, body := doReq(t, ts, http.MethodGet, "/api/v1/instances/search?q=", "", ""); code != http.StatusOK || string(listRows(t, body)) != "[]" {
+		t.Fatalf("empty query: %d %s, want no rows", code, body)
 	}
 
 	// A query that matches nothing drops the instance (the len(hits)==0 skip).
-	if code, body := doReq(t, ts, http.MethodGet, "/api/v1/instances/search?q=orderId=nope", "", ""); code != http.StatusOK || strings.TrimSpace(string(body)) != "[]" {
-		t.Fatalf("non-matching query: %d %s, want []", code, body)
+	if code, body := doReq(t, ts, http.MethodGet, "/api/v1/instances/search?q=orderId=nope", "", ""); code != http.StatusOK || string(listRows(t, body)) != "[]" {
+		t.Fatalf("non-matching query: %d %s, want no rows", code, body)
 	}
 
 	// Reading variables of a non-existent instance yields an empty object, not an error.
@@ -274,7 +274,7 @@ func TestSearchCompletedSortAndSkip(t *testing.T) {
 	var matches []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &matches); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &matches); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
 	if len(matches) != 2 {
@@ -334,7 +334,7 @@ func TestProcessRuntimeReportsFinishedCount(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 2 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 2 {
 		t.Fatalf("expected 2 tasks, got %v (%s)", err, body)
 	}
 	if code, b := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/tasks/%d/complete", tasks[0].Key), "{}", "application/json"); code != http.StatusOK {

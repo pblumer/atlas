@@ -24,12 +24,12 @@ func eventSubStart(sub *xmlSubProcess) *xmlStartEvent {
 // expression (ADR-0137), mirroring how a gateway condition is compiled (connectScope). It
 // strips a leading Zeebe FEEL "=" and trims; an empty condition is a deploy error (a
 // conditional event with no predicate can never fire). id names the event for the error.
-func compileCondition(id, raw string) (*expr.Compiled, error) {
+func compileCondition(g *feelGate, id, raw string) (*expr.Compiled, error) {
 	cond := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(raw), "="))
 	if cond == "" {
 		return nil, fmt.Errorf("compiler: conditional event %q has no condition", id)
 	}
-	ce, err := expr.CompileAuto(cond)
+	ce, err := g.compileFEEL(cond)
 	if err != nil {
 		return nil, fmt.Errorf("compiler: conditional event %q condition: %w", id, err)
 	}
@@ -129,7 +129,7 @@ func registerScope(
 			continue
 		}
 		if s.Timer != nil {
-			schedule, err := parseTimerSchedule(s.Timer)
+			schedule, err := parseTimerSchedule(b.gate(), s.Timer)
 			if err != nil {
 				return fmt.Errorf("compiler: start event %q timer: %w", s.Id, err)
 			}
@@ -139,7 +139,16 @@ func registerScope(
 			reg.node(s.Id, b.AddTimerStartEvent(schedule))
 			continue
 		}
-		reg.node(s.Id, b.AddStartEvent())
+		startID := b.AddStartEvent()
+		reg.node(s.Id, startID)
+		// A process-level start with a condition compiles as the plain start it has
+		// always run as, and is marked so stage 5 refuses it at deploy: a condition
+		// reads variables, and before an instance exists there are none
+		// (RuleConditionalStart). An event subprocess's conditional start is its
+		// trigger and is compiled with the subprocess below; it is never in root scope.
+		if s.Conditional != nil && b.CurrentScope() == -1 {
+			b.markConditionalStart(startID)
+		}
 		// A none start event may carry a start form; the first one that does wins as
 		// the process's start form (ADR-0028). Only a root-scope start is a process
 		// entry, so a form on a subprocess start is ignored.
@@ -245,6 +254,10 @@ func registerScope(
 		return nil
 	}
 	for _, st := range c.ServiceTasks {
+		if st.Shop != nil {
+			// The shop states something to the order, which is a send (ADR-0429 §4).
+			return fmt.Errorf("compiler: service task %q carries a shop task; a shop task is a send task", st.Id)
+		}
 		if err := registerJobWorkerTask(st, "service task", b.AddServiceTask); err != nil {
 			return err
 		}
@@ -266,6 +279,16 @@ func registerScope(
 				return err
 			}
 			reg.node(st.Id, b.AddMessageThrowEvent(name, keyExpr))
+			continue
+		}
+		// The shop kind (ADR-0429 §4): send-only, so it is resolved here rather than
+		// in the worker table a service task shares.
+		if st.Shop != nil {
+			id, err := compileShopTask(b, st.Id, st.Shop)
+			if err != nil {
+				return err
+			}
+			reg.taskNode(st.Id, id, st.Form.FormId)
 			continue
 		}
 		if err := registerJobWorkerTask(st, "send task", b.AddSendTask); err != nil {
@@ -311,7 +334,7 @@ func registerScope(
 		// FEEL is compiled once, at deploy time (ADR-0008/0015). CompileAuto
 		// discovers the process variables the expression reads; a syntax or type
 		// error fails here — i.e. fails deploy.
-		e, err := expr.CompileAuto(text)
+		e, err := b.gate().compileFEEL(text)
 		if err != nil {
 			return fmt.Errorf("compiler: script task %q: %w", st.Id, err)
 		}
@@ -329,7 +352,7 @@ func registerScope(
 		if err != nil {
 			return fmt.Errorf("compiler: business rule task %q: %w", brt.Id, err)
 		}
-		mappings, err := decisionInputMappings(brt.Id, brt.InputMappings)
+		mappings, err := decisionInputMappings(b.gate(), brt.Id, brt.InputMappings)
 		if err != nil {
 			return err
 		}
@@ -344,7 +367,14 @@ func registerScope(
 			}
 			node, err = b.AddTemisDecisionTask(tc.Connector, brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries)
 		} else {
-			node, err = b.AddBusinessRuleTaskMapped(brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries, decisionBinding(brt.CalledDecision.BindingType))
+			binding, version, berr := calledDecisionBinding(brt.Id, brt.CalledDecision)
+			if berr != nil {
+				return berr
+			}
+			node, err = b.addBusinessRuleTask("", brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries, binding)
+			if err == nil && version > 0 {
+				b.businessRuleTasks[len(b.businessRuleTasks)-1].Version = version
+			}
 		}
 		if err != nil {
 			return err
@@ -370,7 +400,15 @@ func registerScope(
 			}
 			dueDateNanos = nanos
 		}
-		reg.node(ut.Id, b.AddUserTask(ut.Name, ut.Assignment.Assignee, ut.Assignment.CandidateGroups, ut.Form.FormId, priority, dueDateNanos, retries))
+		assignee, err := assign(b.gate(), ut.Id, "assignee", ut.Assignment.Assignee)
+		if err != nil {
+			return err
+		}
+		groups, err := assign(b.gate(), ut.Id, "candidateGroups", ut.Assignment.CandidateGroups)
+		if err != nil {
+			return err
+		}
+		reg.node(ut.Id, b.AddUserTask(ut.Name, assignee, groups, ut.Form.FormId, priority, dueDateNanos, retries))
 	}
 	for _, ca := range c.CallActivities {
 		ce := ca.CalledElement
@@ -394,12 +432,20 @@ func registerScope(
 		reg.node(g.Id, b.AddInclusiveGateway())
 	}
 	for _, g := range c.EventBasedGateways {
-		reg.node(g.Id, b.AddEventBasedGateway())
+		id := b.AddEventBasedGateway()
+		reg.node(g.Id, id)
+		// A kind atlas does not run compiles as the exclusive choice it has always run
+		// as, and is marked so stage 5 refuses it at deploy (RuleEventGatewayKind).
+		instantiate := strings.EqualFold(strings.TrimSpace(g.Instantiate), "true")
+		parallel := strings.EqualFold(strings.TrimSpace(g.EventGatewayType), "Parallel")
+		if instantiate || parallel {
+			b.markEventGatewayKind(id, instantiate, parallel)
+		}
 	}
 	for _, ev := range c.IntermediateCatchEvents {
 		switch {
 		case ev.Timer != nil:
-			schedule, err := parseTimerSchedule(ev.Timer)
+			schedule, err := parseTimerSchedule(b.gate(), ev.Timer)
 			if err != nil {
 				return fmt.Errorf("compiler: intermediate catch event %q timer: %w", ev.Id, err)
 			}
@@ -428,7 +474,7 @@ func registerScope(
 			// A conditional catch waits until its boolean FEEL condition becomes true, then
 			// flows on (ADR-0137). It arms inert and is driven to Completing by a re-check on
 			// variable change.
-			cond, err := compileCondition(ev.Id, ev.Conditional.Condition)
+			cond, err := compileCondition(b.gate(), ev.Id, ev.Conditional.Condition)
 			if err != nil {
 				return err
 			}
@@ -470,7 +516,17 @@ func registerScope(
 			continue
 		}
 		if ev.Message == nil {
-			return fmt.Errorf("compiler: intermediate throw event %q: only message, signal, compensation, escalation, and link events are supported yet", ev.Id)
+			// Nothing above matched. Either the event carries a definition this compiler
+			// does not implement — refuse, naming it, rather than run something else — or
+			// it carries none at all, which is the milestone marker
+			// (ADR-0307): a throw
+			// that throws nothing, on the path, whose product is the record of having been
+			// reached. It compiles to a pass-through, like the link events above.
+			if def := unimplementedEventDefinition(ev.OtherChildren); def != "" {
+				return fmt.Errorf("compiler: intermediate throw event %q: <%s> is not supported here — a throw event may carry a message, signal, compensation, escalation, or link definition, or none at all (a milestone)", ev.Id, def)
+			}
+			reg.node(ev.Id, b.AddNoneThrowEvent())
+			continue
 		}
 		name, keyExpr, err := resolveMessage(ev.Id, ev.Message.MessageRef)
 		if err != nil {
@@ -574,7 +630,7 @@ func registerScope(
 		// parallel — which would run every activity at once, not what the model says — it is
 		// refused at deploy until the sequential driver lands.
 		if ah.Ordering == "Sequential" {
-			return fmt.Errorf("compiler: ad-hoc subprocess %q uses ordering=\"Sequential\", which Atlas can't execute yet "+
+			return fmt.Errorf("compiler: ad-hoc subprocess %q uses ordering=\"Sequential\", which atlas can't execute yet "+
 				"(only the default parallel ordering, where every entry activity is activated at once, is supported)", ah.Id)
 		}
 		d := AdHocDetail{
@@ -646,7 +702,7 @@ func registerScope(
 				d.ResultCollection = b.intern(rc)
 			}
 			if re := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ag.ResultElement), "=")); re != "" {
-				ce, err := expr.CompileAuto(re)
+				ce, err := b.gate().compileFEEL(re)
 				if err != nil {
 					return fmt.Errorf("compiler: agent-driven ad-hoc subprocess %q resultElement: %w", ah.Id, err)
 				}
@@ -654,7 +710,7 @@ func registerScope(
 			}
 		}
 		if cond := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ah.CompletionCondition), "=")); cond != "" {
-			ce, err := expr.CompileAuto(cond)
+			ce, err := b.gate().compileFEEL(cond)
 			if err != nil {
 				return fmt.Errorf("compiler: ad-hoc subprocess %q completion condition: %w", ah.Id, err)
 			}
@@ -680,6 +736,18 @@ func registerScope(
 		// runtime and validation treat it as one (ADR-0108). It is never triggeredByEvent.
 		if sub.IsTransaction {
 			b.SetTransaction(subID)
+		}
+		// atlas:wizard makes the subprocess one sitting of one filler (ADR-0449). A value
+		// naming no kind compiles as an ordinary subprocess and is refused by stage 5, so
+		// the refusal is a deploy's and never a reload's.
+		switch strings.TrimSpace(sub.Wizard) {
+		case "":
+		case "internal":
+			b.SetWizard(subID, WizardInternal)
+		case "public":
+			b.SetWizard(subID, WizardPublic)
+		default:
+			b.markInvalidWizard(subID)
 		}
 		b.PushScope(subID)
 		if err := registerScope(b, reg, resolveMessage, resolveSignal, resolveError, resolveEscalation, &sub.xmlFlowContent); err != nil {
@@ -730,7 +798,7 @@ func registerScope(
 				}
 				d.Kind, d.EscalationCode = BoundaryEscalation, code
 			case st.Timer != nil:
-				schedule, err := parseTimerSchedule(st.Timer)
+				schedule, err := parseTimerSchedule(b.gate(), st.Timer)
 				if err != nil {
 					return fmt.Errorf("compiler: event subprocess %q timer: %w", sub.Id, err)
 				}
@@ -741,7 +809,7 @@ func registerScope(
 				// analog of a conditional boundary. Like escalation it honors isInterrupting;
 				// unlike error it is not always interrupting. It is re-checked on every variable
 				// change in its scope, not driven by a throw.
-				cond, err := compileCondition(st.Id, st.Conditional.Condition)
+				cond, err := compileCondition(b.gate(), st.Id, st.Conditional.Condition)
 				if err != nil {
 					return err
 				}
@@ -766,7 +834,7 @@ func registerScope(
 		interrupting := ev.CancelActivity != "false"
 		switch {
 		case ev.Timer != nil:
-			schedule, err := parseTimerSchedule(ev.Timer)
+			schedule, err := parseTimerSchedule(b.gate(), ev.Timer)
 			if err != nil {
 				return fmt.Errorf("compiler: boundary event %q timer: %w", ev.Id, err)
 			}
@@ -820,7 +888,7 @@ func registerScope(
 			// becomes true (ADR-0137). It honors cancelActivity — interrupting tears the host
 			// down, non-interrupting runs the handler alongside. It opens no subscription and is
 			// re-evaluated on variable change.
-			cond, err := compileCondition(ev.Id, ev.Conditional.Condition)
+			cond, err := compileCondition(b.gate(), ev.Id, ev.Conditional.Condition)
 			if err != nil {
 				return err
 			}
@@ -839,7 +907,7 @@ func registerScope(
 		{"complexGateway", c.ComplexGateways},
 	} {
 		if len(u.nodes) > 0 {
-			return fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+
+			return fmt.Errorf("compiler: element %q is a <%s>, which atlas can't execute yet "+
 				"(supported: start/end events, tasks (undefined/manual pass-through, service, script, "+
 				"business rule, user), embedded and ad-hoc subprocesses, exclusive/parallel/inclusive gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
 		}
@@ -968,7 +1036,7 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 		flowIdx[f.Id] = fid
 		if cond := strings.TrimSpace(f.Condition); cond != "" {
 			cond = strings.TrimSpace(strings.TrimPrefix(cond, "=")) // FEEL condition, '=' prefix per Zeebe
-			ce, err := expr.CompileAuto(cond)
+			ce, err := b.gate().compileFEEL(cond)
 			if err != nil {
 				return fmt.Errorf("compiler: flow %q condition: %w", f.Id, err)
 			}

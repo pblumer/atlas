@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/pblumer/atlas/api/capability"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/jobtype"
 )
@@ -153,9 +154,83 @@ func TestCollectBindingCatalogOmitsKindsWithNoSource(t *testing.T) {
 		"Targets":      catalog.Targets != nil,
 		"Releases":     catalog.Releases != nil,
 		"Runtimes":     catalog.Runtimes != nil,
+		"Capabilities": catalog.Capabilities != nil,
+		"ValueStreams": catalog.ValueStreams != nil,
 	} {
 		if !supplied {
 			t.Errorf("%s is absent; the server can supply it, so an empty map is the honest answer", name)
 		}
+	}
+}
+
+// The register resolves by the record's key, and every signed-in caller may read it.
+//
+// That second half is the part worth an assertion rather than a comment: every other
+// map in this catalog is filtered per caller, so "capabilities are not" reads as an
+// omission until somebody checks why. The reason is the register's own — a capability
+// says what the organisation must be able to do and nothing about what this server
+// runs — and what *is* scoped are the processes it names as realisations, which are
+// resolved elsewhere and never appear here.
+func TestCollectBindingCatalogResolvesTheBusinessArchitecture(t *testing.T) {
+	dir := t.TempDir()
+	s := storesFor(t)
+	releases, err := newReleaseStore(filepath.Join(dir, "releases"))
+	if err != nil {
+		t.Fatalf("newReleaseStore: %v", err)
+	}
+	connectors, err := newConnectorStore(filepath.Join(dir, "connectors"))
+	if err != nil {
+		t.Fatalf("newConnectorStore: %v", err)
+	}
+	targets, err := newTargetStore(filepath.Join(dir, "targets"))
+	if err != nil {
+		t.Fatalf("newTargetStore: %v", err)
+	}
+	settings, err := newSettingsStore(filepath.Join(dir, "settings"))
+	if err != nil {
+		t.Fatalf("newSettingsStore: %v", err)
+	}
+	s.releases, s.connectors, s.targets, s.settings = releases, connectors, targets, settings
+	s.versions = map[string]int32{}
+	s.jobTypes = jobTypesFor(t, dir)
+	if _, err := ensureNodeIdentity(settings); err != nil {
+		t.Fatalf("ensureNodeIdentity: %v", err)
+	}
+
+	if err := s.capabilityRecords.Save(capability.Capability{
+		Key: "loan-underwriting", Name: "Underwrite a loan",
+	}); err != nil {
+		t.Fatalf("save capability: %v", err)
+	}
+	if err := s.valueStreamRecords.Save(capability.ValueStream{
+		Key: "consumer-loan", Name: "Consumer lending",
+	}); err != nil {
+		t.Fatalf("save value stream: %v", err)
+	}
+
+	catalog, err := s.collectBindingCatalog(httptest.NewRequest(http.MethodGet, "/", nil))
+	if err != nil {
+		t.Fatalf("collectBindingCatalog: %v", err)
+	}
+	cap, ok := catalog.Capabilities["loan-underwriting"]
+	if !ok {
+		t.Fatalf("Capabilities = %#v, want the record filed under its key", catalog.Capabilities)
+	}
+	if cap.Name != "Underwrite a loan" || !cap.CanView {
+		t.Errorf("capability ref = %#v, want the record's name, visible to this caller", cap)
+	}
+	vs, ok := catalog.ValueStreams["consumer-loan"]
+	if !ok {
+		t.Fatalf("ValueStreams = %#v, want the record filed under its key", catalog.ValueStreams)
+	}
+	if vs.Name != "Consumer lending" || !vs.CanView {
+		t.Errorf("value stream ref = %#v", vs)
+	}
+	// The key is the identity a binding carries, so the catalog is keyed by it and
+	// never by the name: a record renamed tomorrow must still resolve the binding
+	// written today, which is the whole reason ADR-0189 §4 carries an identifier
+	// rather than a label.
+	if _, byName := catalog.Capabilities["Underwrite a loan"]; byName {
+		t.Error("the catalog is keyed by name as well as by key; a binding carries the key alone")
 	}
 }

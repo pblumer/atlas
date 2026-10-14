@@ -170,6 +170,9 @@ func (s *Server) handleMoveProcess(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			d.ProjectID = payload.ProjectID
+			// Its constants bound to an application now read the new one's values
+			// (ADR-0453).
+			s.proc.SetDefinitionApplication(k, payload.ProjectID)
 			moved = append(moved, k)
 		}
 	})

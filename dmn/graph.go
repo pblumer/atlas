@@ -3,6 +3,8 @@ package dmn
 import (
 	"context"
 	"errors"
+
+	tdmn "github.com/pblumer/temis/dmn"
 )
 
 // GraphNode is one element of a DMN model's decision requirements graph, for a
@@ -49,6 +51,10 @@ type ModelGraph struct {
 // an infrastructure failure; an unresolved handle or an invalid model is a normal
 // result carrying a Message (and no nodes), so the viewer can explain the state
 // instead of erroring.
+//
+// Every node comes back with bounds: a model whose diagram does not cover it is
+// completed on the way through, so the viewer never has to invent a layout of its
+// own (ADR-0325).
 func (v *Validator) Graph(ctx context.Context, modelRef string) (ModelGraph, error) {
 	empty := ModelGraph{Nodes: []GraphNode{}, Edges: []GraphEdge{}}
 	xml, err := v.resolver.Resolve(ctx, modelRef)
@@ -59,6 +65,11 @@ func (v *Validator) Graph(ctx context.Context, modelRef string) (ModelGraph, err
 	if err != nil {
 		return ModelGraph{}, err
 	}
+	// The viewer draws from the bounds this graph carries, so the model is completed
+	// first and temis then reports the generated diagram as any other
+	// (ADR-0325). One generator, so the viewer and
+	// the editor place the same model in the same picture.
+	xml = EnsureDiagram(xml)
 	defs, diags, err := v.engine.Compile(ctx, xml)
 	if err != nil {
 		empty.Resolved, empty.Message = true, err.Error()
@@ -68,8 +79,41 @@ func (v *Validator) Graph(ctx context.Context, modelRef string) (ModelGraph, err
 		empty.Resolved, empty.Message = true, formatDiagnostics(diags)
 		return empty, nil
 	}
-	g := defs.Graph()
+	return graphOf(defs), nil
+}
+
+// modelGraph freezes a compiled model's requirements graph at registration time,
+// so a runtime surface can draw the model an evaluation actually ran against
+// without compiling anything (invariant I5) and without doing the work on the run
+// loop, which is where the read that wants it lands.
+//
+// Bounds come from the document's own DMNDI where it has one. Where it has none —
+// the common case for a model written over MCP or by temis, which produce logic
+// and not a picture — the diagram is generated exactly as the read-only viewer
+// generates it (ADR-0325), by completing the source and re-reading the completed
+// model's graph. One generator, so a decision is drawn in the same place wherever
+// it is looked at. A completion that does not compile is not an error worth
+// failing a deploy over: the boundless graph stands and the client lays it out.
+func modelGraph(engine *tdmn.Engine, defs *tdmn.Definitions, src []byte) ModelGraph {
+	mg := graphOf(defs)
+	if hasBounds(mg) || len(src) == 0 {
+		return mg
+	}
+	completed, diags, err := engine.Compile(context.Background(), EnsureDiagram(src))
+	if err != nil || diags.HasErrors() {
+		return mg
+	}
+	if drawn := graphOf(completed); hasBounds(drawn) {
+		return drawn
+	}
+	return mg
+}
+
+// graphOf maps temis's own graph onto the wire shape, which is the one thing
+// [Validator.Graph] and [modelGraph] must not do differently.
+func graphOf(defs *tdmn.Definitions) ModelGraph {
 	mg := ModelGraph{Resolved: true, Valid: true, ModelName: defs.ModelName(), Nodes: []GraphNode{}, Edges: []GraphEdge{}}
+	g := defs.Graph()
 	for _, n := range g.Nodes {
 		mg.Nodes = append(mg.Nodes, GraphNode{
 			ID: n.ID, Type: n.Type, Name: n.Name, DataType: n.DataType,
@@ -80,5 +124,17 @@ func (v *Validator) Graph(ctx context.Context, modelRef string) (ModelGraph, err
 	for _, e := range g.Edges {
 		mg.Edges = append(mg.Edges, GraphEdge{Type: e.Type, Source: e.Source, Target: e.Target})
 	}
-	return mg, nil
+	return mg
+}
+
+// hasBounds reports whether a graph carries a drawable diagram. One sized node is
+// enough: a document with DMNDI sizes every shape it declares, and the viewer's
+// own fallback keys off the same question.
+func hasBounds(mg ModelGraph) bool {
+	for _, n := range mg.Nodes {
+		if n.Width > 0 {
+			return true
+		}
+	}
+	return false
 }

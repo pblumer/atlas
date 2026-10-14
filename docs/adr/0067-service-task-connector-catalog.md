@@ -1,6 +1,7 @@
 # ADR-0067: A service-task connector catalog, and REST with a model-authored endpoint
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-27
 - **Deciders:** Atlas engine team
 

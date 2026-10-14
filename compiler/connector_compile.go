@@ -128,6 +128,11 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.Discord.Retries },
 		compile: compileDiscordConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.S3 != nil },
+		retries: func(st xmlServiceTask) string { return st.S3.Retries },
+		compile: compileS3ConnectorTask,
+	},
 }
 
 // The directory-file formats and directions a model can author. They are spelled here
@@ -197,11 +202,17 @@ type entraOp struct {
 	// resume from and refuses filter/search/advancedQuery, which Graph's delta endpoint
 	// does not run.
 	isDelta bool
+	// isBinary marks an operation whose answer is bytes rather than an object — a
+	// photo (ADR-0367). It needs a resultVariable for a listing's
+	// reason and takes none of the query fields: there is no collection to filter,
+	// project or page.
+	isBinary bool
 }
 
 var entraOps = map[string]entraOp{
 	"create-user":         {needsAttributes: true},
 	"get-user":            {needsUser: true},
+	"get-user-photo":      {needsUser: true, isBinary: true},
 	"list-users":          {isList: true},
 	"delta-users":         {isDelta: true},
 	"update-user":         {needsUser: true, needsAttributes: true},
@@ -269,7 +280,7 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	// '=') so one process can serve more than one tenant, resolving the name from its
 	// own variables at call time. This is entra-only: the kind is worker-only, so no
 	// deploy-time credential lookup keys off a fixed name (ADR-0172).
-	connectorExpr, err := connectorValue(st.Id, "entra worker", "connector", cn.Connector)
+	connectorExpr, err := connectorValue(b.gate(), st.Id, "entra worker", "connector", cn.Connector)
 	if err != nil {
 		return 0, err
 	}
@@ -298,7 +309,7 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if !spec.needsAttributes && (hasInlineAttrs || hasAttrsVar) {
 		return 0, fmt.Errorf("compiler: entra task %q sets attributes on operation %q, which sends no body (attributes apply to create/update and create-channel)", st.Id, op)
 	}
-	attrs, err := entraAttributesExpr(st.Id, cn.Attributes)
+	attrs, err := entraAttributesExpr(b.gate(), st.Id, cn.Attributes)
 	if err != nil {
 		return 0, err
 	}
@@ -308,7 +319,7 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if !spec.needsPassword && strings.TrimSpace(cn.NewPassword) != "" {
 		return 0, fmt.Errorf("compiler: entra task %q sets newPassword on operation %q, which sets no password (newPassword applies to reset-password)", st.Id, op)
 	}
-	if (spec.isList || spec.isDelta) && strings.TrimSpace(cn.ResultVariable) == "" {
+	if (spec.isList || spec.isDelta || spec.isBinary) && strings.TrimSpace(cn.ResultVariable) == "" {
 		return 0, fmt.Errorf("compiler: entra task %q operation %q needs a resultVariable (a directory read that discards its result is one nothing asked for)", st.Id, op)
 	}
 	if err := entraFieldGating(st.Id, op, spec, cn); err != nil {
@@ -325,27 +336,27 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if err != nil {
 		return 0, err
 	}
-	userID, err := connectorValue(st.Id, "entra worker", "userId", cn.UserID)
+	userID, err := connectorValue(b.gate(), st.Id, "entra worker", "userId", cn.UserID)
 	if err != nil {
 		return 0, err
 	}
-	groupID, err := connectorValue(st.Id, "entra worker", "groupId", cn.GroupID)
+	groupID, err := connectorValue(b.gate(), st.Id, "entra worker", "groupId", cn.GroupID)
 	if err != nil {
 		return 0, err
 	}
-	newPassword, err := connectorValue(st.Id, "entra worker", "newPassword", cn.NewPassword)
+	newPassword, err := connectorValue(b.gate(), st.Id, "entra worker", "newPassword", cn.NewPassword)
 	if err != nil {
 		return 0, err
 	}
-	filter, err := connectorValue(st.Id, "entra worker", "filter", cn.Filter)
+	filter, err := connectorValue(b.gate(), st.Id, "entra worker", "filter", cn.Filter)
 	if err != nil {
 		return 0, err
 	}
-	search, err := connectorValue(st.Id, "entra worker", "search", cn.Search)
+	search, err := connectorValue(b.gate(), st.Id, "entra worker", "search", cn.Search)
 	if err != nil {
 		return 0, err
 	}
-	deltaLink, err := connectorValue(st.Id, "entra worker", "deltaLink", cn.DeltaLink)
+	deltaLink, err := connectorValue(b.gate(), st.Id, "entra worker", "deltaLink", cn.DeltaLink)
 	if err != nil {
 		return 0, err
 	}
@@ -726,35 +737,35 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 	if spec.needsNewDN && strings.TrimSpace(cn.NewDN) == "" {
 		return 0, fmt.Errorf("compiler: ad task %q operation %q needs a newDN (the entry's new distinguished name)", st.Id, op)
 	}
-	url, err := connectorValue(st.Id, "ad worker", "url", cn.URL)
+	url, err := connectorValue(b.gate(), st.Id, "ad worker", "url", cn.URL)
 	if err != nil {
 		return 0, err
 	}
-	bindDN, err := connectorValue(st.Id, "ad worker", "bindDN", cn.BindDN)
+	bindDN, err := connectorValue(b.gate(), st.Id, "ad worker", "bindDN", cn.BindDN)
 	if err != nil {
 		return 0, err
 	}
-	dn, err := connectorValue(st.Id, "ad worker", "dn", cn.DN)
+	dn, err := connectorValue(b.gate(), st.Id, "ad worker", "dn", cn.DN)
 	if err != nil {
 		return 0, err
 	}
-	newDN, err := connectorValue(st.Id, "ad worker", "newDN", cn.NewDN)
+	newDN, err := connectorValue(b.gate(), st.Id, "ad worker", "newDN", cn.NewDN)
 	if err != nil {
 		return 0, err
 	}
-	baseDN, err := connectorValue(st.Id, "ad worker", "baseDN", cn.BaseDN)
+	baseDN, err := connectorValue(b.gate(), st.Id, "ad worker", "baseDN", cn.BaseDN)
 	if err != nil {
 		return 0, err
 	}
-	filter, err := connectorValue(st.Id, "ad worker", "filter", cn.Filter)
+	filter, err := connectorValue(b.gate(), st.Id, "ad worker", "filter", cn.Filter)
 	if err != nil {
 		return 0, err
 	}
-	memberDN, err := connectorValue(st.Id, "ad worker", "memberDN", cn.MemberDN)
+	memberDN, err := connectorValue(b.gate(), st.Id, "ad worker", "memberDN", cn.MemberDN)
 	if err != nil {
 		return 0, err
 	}
-	newPassword, err := connectorValue(st.Id, "ad worker", "newPassword", cn.NewPassword)
+	newPassword, err := connectorValue(b.gate(), st.Id, "ad worker", "newPassword", cn.NewPassword)
 	if err != nil {
 		return 0, err
 	}
@@ -859,15 +870,15 @@ func compileSoapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if !soapVersions[version] {
 		return 0, fmt.Errorf("compiler: soap task %q has an unknown soapVersion %q (want 1.1 or 1.2)", st.Id, cn.Version)
 	}
-	endpoint, err := connectorValue(st.Id, "soap worker", "endpoint", cn.Endpoint)
+	endpoint, err := connectorValue(b.gate(), st.Id, "soap worker", "endpoint", cn.Endpoint)
 	if err != nil {
 		return 0, err
 	}
-	action, err := connectorValue(st.Id, "soap worker", "soapAction", cn.Action)
+	action, err := connectorValue(b.gate(), st.Id, "soap worker", "soapAction", cn.Action)
 	if err != nil {
 		return 0, err
 	}
-	body, err := connectorValue(st.Id, "soap worker", "body", cn.Body)
+	body, err := connectorValue(b.gate(), st.Id, "soap worker", "body", cn.Body)
 	if err != nil {
 		return 0, err
 	}
@@ -970,27 +981,27 @@ func compileLdapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if err != nil {
 		return 0, err
 	}
-	url, err := connectorValue(st.Id, "ldap worker", "url", cn.URL)
+	url, err := connectorValue(b.gate(), st.Id, "ldap worker", "url", cn.URL)
 	if err != nil {
 		return 0, err
 	}
-	bindDN, err := connectorValue(st.Id, "ldap worker", "bindDN", cn.BindDN)
+	bindDN, err := connectorValue(b.gate(), st.Id, "ldap worker", "bindDN", cn.BindDN)
 	if err != nil {
 		return 0, err
 	}
-	dn, err := connectorValue(st.Id, "ldap worker", "dn", cn.DN)
+	dn, err := connectorValue(b.gate(), st.Id, "ldap worker", "dn", cn.DN)
 	if err != nil {
 		return 0, err
 	}
-	baseDN, err := connectorValue(st.Id, "ldap worker", "baseDN", cn.BaseDN)
+	baseDN, err := connectorValue(b.gate(), st.Id, "ldap worker", "baseDN", cn.BaseDN)
 	if err != nil {
 		return 0, err
 	}
-	filter, err := connectorValue(st.Id, "ldap worker", "filter", cn.Filter)
+	filter, err := connectorValue(b.gate(), st.Id, "ldap worker", "filter", cn.Filter)
 	if err != nil {
 		return 0, err
 	}
-	newPassword, err := connectorValue(st.Id, "ldap worker", "newPassword", cn.NewPassword)
+	newPassword, err := connectorValue(b.gate(), st.Id, "ldap worker", "newPassword", cn.NewPassword)
 	if err != nil {
 		return 0, err
 	}
@@ -1085,19 +1096,19 @@ func compileScimConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 			return 0, fmt.Errorf("compiler: scim task %q operation %q needs a resourceId", st.Id, op)
 		}
 	}
-	baseURL, err := connectorValue(st.Id, "scim worker", "baseUrl", cn.BaseUrl)
+	baseURL, err := connectorValue(b.gate(), st.Id, "scim worker", "baseUrl", cn.BaseUrl)
 	if err != nil {
 		return 0, err
 	}
-	resource, err := connectorValue(st.Id, "scim worker", "resource", cn.Resource)
+	resource, err := connectorValue(b.gate(), st.Id, "scim worker", "resource", cn.Resource)
 	if err != nil {
 		return 0, err
 	}
-	resourceID, err := connectorValue(st.Id, "scim worker", "resourceId", cn.ResourceId)
+	resourceID, err := connectorValue(b.gate(), st.Id, "scim worker", "resourceId", cn.ResourceId)
 	if err != nil {
 		return 0, err
 	}
-	filter, err := connectorValue(st.Id, "scim worker", "filter", cn.Filter)
+	filter, err := connectorValue(b.gate(), st.Id, "scim worker", "filter", cn.Filter)
 	if err != nil {
 		return 0, err
 	}
@@ -1216,15 +1227,15 @@ func compileRestConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if err != nil {
 		return 0, fmt.Errorf("compiler: rest task %q: %w", st.Id, err)
 	}
-	url, err := restValue(st.Id, "url", cn.Url)
+	url, err := restValue(b.gate(), st.Id, "url", cn.Url)
 	if err != nil {
 		return 0, err
 	}
-	headers, err := httpKVList(st.Id, "header", cn.Headers)
+	headers, err := httpKVList(b.gate(), st.Id, "header", cn.Headers)
 	if err != nil {
 		return 0, err
 	}
-	query, err := httpKVList(st.Id, "query parameter", cn.QueryParams)
+	query, err := httpKVList(b.gate(), st.Id, "query parameter", cn.QueryParams)
 	if err != nil {
 		return 0, err
 	}
@@ -1245,56 +1256,175 @@ func compileRestConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 
 // compileMailConnectorTask compiles an <atlas:mailConnector> task: it sends a
 // model-authored message through a server-registered mail provider via the job path
-// (ADR-0079). The provider (host, credentials) is resolved server-side by worker
-// name, like clio; only the message (recipients, subject, and the text and/or HTML
-// body) lives in the model.
+// (ADR-0079), or — with an operation — reads or changes the Worker's mailbox
+// (ADR-0438). The provider (host, credentials) is resolved
+// server-side by worker name, like clio; only the message, or the operation and what
+// it addresses, lives in the model.
 func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Mail
 	if strings.TrimSpace(cn.Connector) == "" {
 		return 0, fmt.Errorf("compiler: mail task %q needs a worker", st.Id)
 	}
-	if strings.TrimSpace(cn.To) == "" {
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		op = mailOpSend
+	}
+	spec, ok := mailOps[op]
+	if !ok {
+		return 0, fmt.Errorf("compiler: mail task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(MailOperations(), ", "))
+	}
+	if op == mailOpSend && strings.TrimSpace(cn.To) == "" {
 		return 0, fmt.Errorf("compiler: mail task %q needs a to recipient", st.Id)
 	}
-	to, err := restValue(st.Id, "to", cn.To)
-	if err != nil {
-		return 0, err
+	// One pass over every authored value, as for Discord: required where the operation
+	// needs it, refused where it does not use it, so a model never carries a value the
+	// worker ignores.
+	for _, v := range []struct {
+		attr     string
+		raw      string
+		required bool
+		allowed  bool
+		why      string
+	}{
+		{"to", cn.To, false, spec.send, "the recipients of a message this task sends"},
+		{"cc", cn.Cc, false, spec.send, "copy recipients of a message this task sends"},
+		{"bcc", cn.Bcc, false, spec.send, "blind-copy recipients of a message this task sends"},
+		{"from", cn.From, false, spec.send, "the sender of a message this task sends"},
+		{"subject", cn.Subject, false, spec.send, "the subject of a message this task sends; a reply takes the original's"},
+		{"body", cn.Body, false, spec.send || spec.reply, "the text of a message or a reply"},
+		{"bodyHtml", cn.BodyHtml, false, spec.send || spec.reply, "the HTML of a message or a reply"},
+		{"folder", cn.Folder, false, spec.list, "the folder a list reads"},
+		{"messageId", cn.MessageID, spec.message, spec.message, "the message the operation acts on — the messageId a watch or a list answered"},
+		{"destination", cn.Destination, spec.destination, spec.destination, "the folder a move files the message into"},
+		{"maxResults", cn.MaxResults, false, spec.list, "how many messages a list answers"},
+		{"unreadOnly", cn.UnreadOnly, false, spec.list, "whether a list answers only unread messages"},
+		{"includeBody", cn.IncludeBody, false, spec.list || spec.get, "whether the text of a message is read along with it"},
+		{"resultVariable", cn.ResultVariable, spec.needsResult, spec.takesResult, "the process variable receiving what the mailbox answered"},
+	} {
+		set := strings.TrimSpace(v.raw) != ""
+		if v.required && !set {
+			return 0, fmt.Errorf("compiler: mail task %q operation %q needs a %s (%s)", st.Id, op, v.attr, v.why)
+		}
+		if set && !v.allowed {
+			return 0, fmt.Errorf("compiler: mail task %q operation %q does not use %s (%s); remove it rather than leaving a value the worker ignores",
+				st.Id, op, v.attr, v.why)
+		}
 	}
-	cc, err := restValue(st.Id, "cc", cn.Cc)
-	if err != nil {
-		return 0, err
+	if spec.reply && strings.TrimSpace(cn.Body) == "" && strings.TrimSpace(cn.BodyHtml) == "" {
+		return 0, fmt.Errorf("compiler: mail task %q operation %q needs a body or a bodyHtml (the text of the reply)", st.Id, op)
 	}
-	bcc, err := restValue(st.Id, "bcc", cn.Bcc)
-	if err != nil {
-		return 0, err
-	}
-	from, err := restValue(st.Id, "from", cn.From)
-	if err != nil {
-		return 0, err
-	}
-	subject, err := restValue(st.Id, "subject", cn.Subject)
-	if err != nil {
-		return 0, err
-	}
-	body, err := restValue(st.Id, "body", cn.Body)
-	if err != nil {
-		return 0, err
-	}
-	bodyHTML, err := restValue(st.Id, "bodyHtml", cn.BodyHtml)
-	if err != nil {
-		return 0, err
-	}
-	return b.AddMailConnectorTask(MailConfig{
+	cfg := MailConfig{
 		Connector: strings.TrimSpace(cn.Connector),
-		To:        to,
-		Cc:        cc,
-		Bcc:       bcc,
-		From:      from,
-		Subject:   subject,
-		Body:      body,
-		BodyHTML:  bodyHTML,
 		Retries:   retries,
-	}), nil
+		ResultVar: strings.TrimSpace(cn.ResultVariable),
+	}
+	if op != mailOpSend {
+		cfg.Operation = op
+	}
+	var err error
+	if spec.list {
+		if cfg.MaxResults, err = mailMaxResults(st.Id, cn.MaxResults); err != nil {
+			return 0, err
+		}
+		if cfg.UnreadOnly, err = mailFlag(st.Id, "unreadOnly", cn.UnreadOnly); err != nil {
+			return 0, err
+		}
+	}
+	if cfg.IncludeBody, err = mailFlag(st.Id, "includeBody", cn.IncludeBody); err != nil {
+		return 0, err
+	}
+	// Each authored value is literal or FEEL (the fx toggle, ADR-0067), compiled once
+	// here and evaluated over the variables the task sees at call time.
+	for _, v := range []struct {
+		what string
+		raw  string
+		into *RestExpr
+	}{
+		{"to", cn.To, &cfg.To},
+		{"cc", cn.Cc, &cfg.Cc},
+		{"bcc", cn.Bcc, &cfg.Bcc},
+		{"from", cn.From, &cfg.From},
+		{"subject", cn.Subject, &cfg.Subject},
+		{"body", cn.Body, &cfg.Body},
+		{"bodyHtml", cn.BodyHtml, &cfg.BodyHTML},
+		{"folder", cn.Folder, &cfg.Folder},
+		{"messageId", cn.MessageID, &cfg.Message},
+		{"destination", cn.Destination, &cfg.Destination},
+	} {
+		if *v.into, err = restValue(b.gate(), st.Id, v.what, v.raw); err != nil {
+			return 0, err
+		}
+	}
+	return b.AddMailConnectorTask(cfg), nil
+}
+
+// The mail task's operations (ADR-0438). Send is the one every mail
+// task authored before mailboxes existed carries, written as no operation at all.
+const (
+	mailOpSend = "send"
+	// mailDefaultMaxResults and mailMaxResultsCeiling bound a list. The answer becomes
+	// a process variable, so the ceiling is about what an instance carries.
+	mailDefaultMaxResults int32 = 25
+	mailMaxResultsCeiling int32 = 100
+)
+
+// mailOp describes what one mail operation requires of a model and what it may carry.
+// It is the compiler's half of connector/mail's operation list; the drift test
+// TestMailOpsMatchTheConnector keeps the two from disagreeing, because the compiler
+// cannot import a package that imports it.
+type mailOp struct {
+	send, reply, list, get   bool
+	message, destination     bool
+	needsResult, takesResult bool
+}
+
+var mailOps = map[string]mailOp{
+	mailOpSend:    {send: true},
+	"list":        {list: true, needsResult: true, takesResult: true},
+	"get":         {get: true, message: true, needsResult: true, takesResult: true},
+	"move":        {message: true, destination: true, takesResult: true},
+	"mark-read":   {message: true},
+	"mark-unread": {message: true},
+	"delete":      {message: true},
+	"reply":       {reply: true, message: true},
+}
+
+// MailOperations lists the operations a mail task may name, sorted.
+func MailOperations() []string {
+	out := make([]string, 0, len(mailOps))
+	for name := range mailOps {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func mailMaxResults(taskID, raw string) (int32, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return mailDefaultMaxResults, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: mail task %q has a non-numeric maxResults %q", taskID, raw)
+	}
+	if n < 1 || int32(n) > mailMaxResultsCeiling {
+		return 0, fmt.Errorf("compiler: mail task %q has a maxResults of %d; a list answers between 1 and %d messages", taskID, n, mailMaxResultsCeiling)
+	}
+	return int32(n), nil
+}
+
+// mailFlag reads a literal true/false attribute. It is not FEEL: whether a body is read
+// decides what an instance carries, and that is a property of the model, fixed at
+// deploy, not of the data that happens to flow through it.
+func mailFlag(taskID, attr, raw string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "false":
+		return false, nil
+	case "true":
+		return true, nil
+	}
+	return false, fmt.Errorf("compiler: mail task %q has %s=%q; it is true or false", taskID, attr, raw)
 }
 
 // compileUserConnectorTask compiles an <atlas:userConnector> task: it delegates to
@@ -1317,23 +1447,23 @@ func compileUserConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if (op == "create" || op == "set-password") && strings.TrimSpace(cn.Password) == "" {
 		return 0, fmt.Errorf("compiler: user task %q (%s) needs a password", st.Id, op)
 	}
-	username, err := restValue(st.Id, "username", cn.Username)
+	username, err := restValue(b.gate(), st.Id, "username", cn.Username)
 	if err != nil {
 		return 0, err
 	}
-	email, err := restValue(st.Id, "email", cn.Email)
+	email, err := restValue(b.gate(), st.Id, "email", cn.Email)
 	if err != nil {
 		return 0, err
 	}
-	displayName, err := restValue(st.Id, "displayName", cn.DisplayName)
+	displayName, err := restValue(b.gate(), st.Id, "displayName", cn.DisplayName)
 	if err != nil {
 		return 0, err
 	}
-	roles, err := restValue(st.Id, "roles", cn.Roles)
+	roles, err := restValue(b.gate(), st.Id, "roles", cn.Roles)
 	if err != nil {
 		return 0, err
 	}
-	password, err := restValue(st.Id, "password", cn.Password)
+	password, err := restValue(b.gate(), st.Id, "password", cn.Password)
 	if err != nil {
 		return 0, err
 	}
@@ -1364,15 +1494,15 @@ func compileSharePointConnectorTask(b *Builder, st xmlServiceTask, retries int32
 	if strings.TrimSpace(cn.List) == "" {
 		return 0, fmt.Errorf("compiler: sharepoint task %q needs a list", st.Id)
 	}
-	site, err := restValue(st.Id, "site", cn.Site)
+	site, err := restValue(b.gate(), st.Id, "site", cn.Site)
 	if err != nil {
 		return 0, err
 	}
-	list, err := restValue(st.Id, "list", cn.List)
+	list, err := restValue(b.gate(), st.Id, "list", cn.List)
 	if err != nil {
 		return 0, err
 	}
-	fields, err := httpKVList(st.Id, "item field", cn.Fields)
+	fields, err := httpKVList(b.gate(), st.Id, "item field", cn.Fields)
 	if err != nil {
 		return 0, err
 	}
@@ -1399,11 +1529,11 @@ func compileRemedyConnectorTask(b *Builder, st xmlServiceTask, retries int32) (i
 	if strings.TrimSpace(cn.Form) == "" {
 		return 0, fmt.Errorf("compiler: remedy task %q needs a form", st.Id)
 	}
-	form, err := restValue(st.Id, "form", cn.Form)
+	form, err := restValue(b.gate(), st.Id, "form", cn.Form)
 	if err != nil {
 		return 0, err
 	}
-	fields, err := httpKVList(st.Id, "field", cn.Fields)
+	fields, err := httpKVList(b.gate(), st.Id, "field", cn.Fields)
 	if err != nil {
 		return 0, err
 	}
@@ -1477,13 +1607,13 @@ func compileWebScrapeConnectorTask(b *Builder, st xmlServiceTask, retries int32)
 			return 0, fmt.Errorf("compiler: webscrape task %q format %q does not use absoluteLinks; a feed's link is already absolute", st.Id, format.String())
 		}
 	}
-	url, err := restValue(st.Id, "url", cn.Url)
+	url, err := restValue(b.gate(), st.Id, "url", cn.Url)
 	if err != nil {
 		return 0, err
 	}
 	var selector RestExpr
 	if format == WebScrapeFormatHTML {
-		selector, err = restValue(st.Id, "selector", cn.Selector)
+		selector, err = restValue(b.gate(), st.Id, "selector", cn.Selector)
 		if err != nil {
 			return 0, err
 		}
@@ -1699,7 +1829,7 @@ func compileDiscordConnectorTask(b *Builder, st xmlServiceTask, retries int32) (
 	if len(cn.Fields) > 0 && !spec.takesFields {
 		return 0, fmt.Errorf("compiler: discord task %q operation %q has no request body, so it does not use discordField values; remove them rather than leaving values the worker ignores", st.Id, op)
 	}
-	fields, err := httpKVList(st.Id, "discord field", cn.Fields)
+	fields, err := httpKVList(b.gate(), st.Id, "discord field", cn.Fields)
 	if err != nil {
 		return 0, err
 	}
@@ -1734,7 +1864,7 @@ func compileDiscordConnectorTask(b *Builder, st xmlServiceTask, retries int32) (
 		if strings.TrimSpace(v.raw) == "" {
 			continue
 		}
-		val, err := connectorValue(st.Id, "discord worker", v.what, v.raw)
+		val, err := connectorValue(b.gate(), st.Id, "discord worker", v.what, v.raw)
 		if err != nil {
 			return 0, err
 		}
@@ -1897,7 +2027,7 @@ func compileJiraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if len(cn.Fields) > 0 && !spec.takesFields {
 		return 0, fmt.Errorf("compiler: jira task %q operation %q does not use jiraField values; remove them rather than leaving values the worker ignores", st.Id, op)
 	}
-	fields, err := httpKVList(st.Id, "jira field", cn.Fields)
+	fields, err := httpKVList(b.gate(), st.Id, "jira field", cn.Fields)
 	if err != nil {
 		return 0, err
 	}
@@ -1940,7 +2070,7 @@ func compileJiraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		if strings.TrimSpace(v.raw) == "" {
 			continue
 		}
-		val, err := connectorValue(st.Id, "jira worker", v.what, v.raw)
+		val, err := connectorValue(b.gate(), st.Id, "jira worker", v.what, v.raw)
 		if err != nil {
 			return 0, err
 		}
@@ -2126,7 +2256,7 @@ func compileGoogleSheetsConnectorTask(b *Builder, st xmlServiceTask, retries int
 		if strings.TrimSpace(v.raw) == "" {
 			continue
 		}
-		val, err := connectorValue(st.Id, "google sheets", v.what, v.raw)
+		val, err := connectorValue(b.gate(), st.Id, "google sheets", v.what, v.raw)
 		if err != nil {
 			return 0, err
 		}
@@ -2258,7 +2388,7 @@ func compileAgentConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 				st.Id, unsupported.attr, unsupported.instead)
 		}
 	}
-	prompt, err := connectorValue(st.Id, "ai", "prompt", cn.Prompt)
+	prompt, err := connectorValue(b.gate(), st.Id, "ai", "prompt", cn.Prompt)
 	if err != nil {
 		return 0, err
 	}
@@ -2269,4 +2399,284 @@ func compileAgentConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 		ResultVar: result,
 		Retries:   retries,
 	}), nil
+}
+
+// The content encodings and the numeric ceilings an object-store task may author. They
+// are spelled here as well as in connector/s3 because the compiler cannot import that
+// package (the dependency runs the other way); the drift test
+// TestS3OpsMatchTheWorkerType guards the seam.
+//
+// Text is the default because a process writing JSON, CSV or a letter into a bucket
+// wants the characters it composed; base64 is what makes a binary round-trip through a
+// process variable possible at all.
+const (
+	s3EncodingText   = "text"
+	s3EncodingBase64 = "base64"
+
+	// s3DefaultExpiresIn and s3MaxExpiresIn bound a presigned URL's lifetime: an hour by
+	// default, and SigV4's own ceiling of seven days. A longer one is refused by the
+	// store with a message about the signature rather than about the expiry, which is
+	// why it is refused here instead.
+	s3DefaultExpiresIn int32 = 3600
+	s3MaxExpiresIn     int32 = 7 * 24 * 60 * 60
+
+	// s3DefaultMaxKeys and s3MaxListPageSize bound a listing. Asking the store for more
+	// than a thousand is not an error there — it silently answers with a thousand — and
+	// a model that says one number while another happens is exactly what a deploy check
+	// is for.
+	s3DefaultMaxKeys  int32 = 1000
+	s3MaxListPageSize int32 = 1000
+)
+
+// s3Op describes what one object operation requires of a model, and what it is allowed
+// to carry. The table is the compiler's half of connector/s3's Ops table; the drift test
+// TestS3OpsMatchTheWorkerType keeps the two from disagreeing about the operation set,
+// which is the failure this shape exists to prevent.
+//
+// Both halves matter. "Needs" is the familiar one: a put with no content cannot be sent.
+// "Takes" is the half that is easy to forget and expensive to have forgotten — a prefix
+// authored on a put, or an expiry on a delete, would otherwise compile and then be
+// silently dropped at call time, which from the author's side is indistinguishable from
+// a Worker that ignored it.
+type s3Op struct {
+	needsBucket      bool
+	needsKey         bool
+	needsContent     bool
+	takesContentType bool
+	takesEncoding    bool
+	takesList        bool
+	needsSource      bool
+	takesExpiry      bool
+	takesMetadata    bool
+	// needsResult marks an operation whose whole point is what it returns: a read or a
+	// presign that discards its answer is a call made for nothing. takesResult marks one
+	// that returns something a model may keep or discard — and, by its absence,
+	// delete-object, where a result variable would name a value that is never written.
+	needsResult bool
+	takesResult bool
+}
+
+// s3Ops is the operation table: the loop a process actually runs against an object store
+// — put a document down, find it again, look at it, hand it out, move it when the case
+// closes, and take it away. It mirrors connector/s3.Ops, which the drift test keeps
+// honest.
+var s3Ops = map[string]s3Op{
+	"put-object":    {needsBucket: true, needsKey: true, needsContent: true, takesContentType: true, takesEncoding: true, takesMetadata: true, takesResult: true},
+	"get-object":    {needsBucket: true, needsKey: true, takesEncoding: true, needsResult: true, takesResult: true},
+	"head-object":   {needsBucket: true, needsKey: true, needsResult: true, takesResult: true},
+	"list-objects":  {needsBucket: true, takesList: true, needsResult: true, takesResult: true},
+	"copy-object":   {needsBucket: true, needsKey: true, needsSource: true, takesMetadata: true, takesResult: true},
+	"delete-object": {needsBucket: true, needsKey: true},
+	"presign-get":   {needsBucket: true, needsKey: true, takesExpiry: true, needsResult: true, takesResult: true},
+	"presign-put":   {needsBucket: true, needsKey: true, takesExpiry: true, takesContentType: true, needsResult: true, takesResult: true},
+}
+
+// s3OpNames lists the operations, sorted, for the messages that have to say what was
+// expected.
+func s3OpNames() []string {
+	out := make([]string, 0, len(s3Ops))
+	for name := range s3Ops {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// compileS3ConnectorTask compiles an <atlas:s3Connector> task: one object operation
+// against a Worker an operator configured, via the job path
+// (ADR-0442). The access key is resolved server-side by Worker
+// name, like Jira's and Google Sheets'; only the operation and its values live in the
+// model.
+//
+// The element and the function keep the …Connector spelling their siblings carry: the
+// element is authored in deployed models, and the moddle drift guard that keeps bpmn-js
+// from silently dropping an extension only recognizes elements named that way.
+func compileS3ConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.S3
+	if strings.TrimSpace(cn.Connector) == "" {
+		return 0, fmt.Errorf("compiler: s3 task %q needs a connector attribute naming the Worker the server holds the access key under", st.Id)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		return 0, fmt.Errorf("compiler: s3 task %q needs an operation (%s)", st.Id, strings.Join(s3OpNames(), ", "))
+	}
+	spec, ok := s3Ops[op]
+	if !ok {
+		return 0, fmt.Errorf("compiler: s3 task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(s3OpNames(), ", "))
+	}
+	// One pass over every authored value: required where the operation needs it, refused
+	// where it does not use it. A single table means neither half can be forgotten for a
+	// field, and an added field is one row rather than two checks in two places. noun is
+	// how the "needs" message reads; attr is the attribute the "does not use" message
+	// names, because those are the two different things an author has to be told.
+	values := []struct {
+		attr     string
+		noun     string
+		raw      string
+		required bool
+		allowed  bool
+	}{
+		{"bucket", "a bucket", cn.Bucket, spec.needsBucket, spec.needsBucket},
+		{"key", "a key", cn.Key, spec.needsKey, spec.needsKey},
+		{"content", "content to store", cn.Content, spec.needsContent, spec.needsContent},
+		{"contentType", "a contentType", cn.ContentType, false, spec.takesContentType},
+		{"encoding", "an encoding", cn.Encoding, false, spec.takesEncoding},
+		{"prefix", "a prefix", cn.Prefix, false, spec.takesList},
+		{"delimiter", "a delimiter", cn.Delimiter, false, spec.takesList},
+		{"startAfter", "a startAfter", cn.StartAfter, false, spec.takesList},
+		{"maxKeys", "a maxKeys", cn.MaxKeys, false, spec.takesList},
+		{"sourceBucket", "a source bucket", cn.SourceBucket, spec.needsSource, spec.needsSource},
+		{"sourceKey", "a source key", cn.SourceKey, spec.needsSource, spec.needsSource},
+		{"expiresIn", "an expiresIn", cn.ExpiresIn, false, spec.takesExpiry},
+		{"resultVariable", "a resultVariable", cn.ResultVariable, spec.needsResult, spec.takesResult},
+	}
+	for _, v := range values {
+		set := strings.TrimSpace(v.raw) != ""
+		if v.required && !set {
+			return 0, fmt.Errorf("compiler: s3 task %q operation %q needs %s (%s)",
+				st.Id, op, v.noun, s3Why(v.attr))
+		}
+		if set && !v.allowed {
+			return 0, fmt.Errorf("compiler: s3 task %q operation %q does not use %s (%s); remove it rather than leaving a value the Worker ignores",
+				st.Id, op, v.attr, s3Why(v.attr))
+		}
+	}
+	if len(cn.Meta) > 0 && !spec.takesMetadata {
+		return 0, fmt.Errorf("compiler: s3 task %q operation %q sends no request headers, so it does not use s3Meta values; remove them rather than leaving values the Worker ignores", st.Id, op)
+	}
+	meta, err := httpKVList(b.gate(), st.Id, "s3 metadata", cn.Meta)
+	if err != nil {
+		return 0, err
+	}
+	encoding, err := s3Encoding(st.Id, op, cn.Encoding, spec.takesEncoding)
+	if err != nil {
+		return 0, err
+	}
+	maxKeys, err := s3Count(st.Id, op, "maxKeys", cn.MaxKeys, spec.takesList, s3DefaultMaxKeys, s3MaxListPageSize)
+	if err != nil {
+		return 0, err
+	}
+	expiresIn, err := s3Count(st.Id, op, "expiresIn", cn.ExpiresIn, spec.takesExpiry, s3DefaultExpiresIn, s3MaxExpiresIn)
+	if err != nil {
+		return 0, err
+	}
+	cfg := S3Config{
+		Worker:    strings.TrimSpace(cn.Connector),
+		Operation: op,
+		Encoding:  encoding,
+		MaxKeys:   maxKeys,
+		ExpiresIn: expiresIn,
+		Metadata:  meta,
+		ResultVar: strings.TrimSpace(cn.ResultVariable),
+		Retries:   retries,
+	}
+	// Each authored value is literal or FEEL (the fx toggle, ADR-0067), compiled once
+	// here and evaluated over the variables the task sees at call time.
+	for _, v := range []struct {
+		what string
+		raw  string
+		into *RestExpr
+	}{
+		{"bucket", cn.Bucket, &cfg.Bucket},
+		{"key", cn.Key, &cfg.Key},
+		{"content", cn.Content, &cfg.Content},
+		{"contentType", cn.ContentType, &cfg.ContentType},
+		{"prefix", cn.Prefix, &cfg.Prefix},
+		{"delimiter", cn.Delimiter, &cfg.Delimiter},
+		{"startAfter", cn.StartAfter, &cfg.StartAfter},
+		{"sourceBucket", cn.SourceBucket, &cfg.SourceBucket},
+		{"sourceKey", cn.SourceKey, &cfg.SourceKey},
+	} {
+		if strings.TrimSpace(v.raw) == "" {
+			continue
+		}
+		val, err := connectorValue(b.gate(), st.Id, "s3", v.what, v.raw)
+		if err != nil {
+			return 0, err
+		}
+		*v.into = val
+	}
+	return b.AddS3ConnectorTask(cfg), nil
+}
+
+// s3Why explains one attribute, so both halves of the check above — the missing value
+// and the ignored one — say the same thing about it in one place.
+func s3Why(attr string) string {
+	switch attr {
+	case "bucket":
+		return "the bucket the operation acts in"
+	case "key":
+		return "the object's key — its whole path inside the bucket, without a leading slash"
+	case "content":
+		return "the document to store, as text or base64"
+	case "contentType":
+		return "what the bytes are; on presign-put it also binds the type the client must send"
+	case "encoding":
+		return `whether content is read and written as text ("text") or base64 ("base64")`
+	case "prefix":
+		return "the start of the keys a listing matches, which is what searching an object store means"
+	case "delimiter":
+		return `the separator a listing rolls keys up at ("/" makes it read like a folder)`
+	case "startAfter":
+		return "the key a listing resumes after, which a truncated page answers with"
+	case "maxKeys":
+		return "how many keys a listing may return"
+	case "sourceBucket":
+		return "the bucket the object is copied from"
+	case "sourceKey":
+		return "the key the object is copied from"
+	case "expiresIn":
+		return "how many seconds the minted URL stays usable"
+	default:
+		return "the process variable receiving what the store returned"
+	}
+}
+
+// s3Encoding reads the content encoding, applying the default when a model authors none
+// so the runtime interprets nothing (I5). Anything that is neither text nor base64 is
+// refused at deploy rather than read as the default at call time, where the difference
+// is a PDF stored as the characters of its base64.
+func s3Encoding(taskID, op, raw string, takes bool) (string, error) {
+	if !takes {
+		return "", nil
+	}
+	switch mode := strings.ToLower(strings.TrimSpace(raw)); mode {
+	case "":
+		return s3EncodingText, nil
+	case s3EncodingText, s3EncodingBase64:
+		return mode, nil
+	default:
+		return "", fmt.Errorf("compiler: s3 task %q operation %q has an unknown encoding %q (want %q or %q)",
+			taskID, op, raw, s3EncodingText, s3EncodingBase64)
+	}
+}
+
+// s3Count reads one of the two numeric ceilings an operation may author, applying the
+// default when a model authors none. A value that is not a number, is not positive, or
+// is past what the store honours is refused at deploy rather than turned into a silently
+// different call — a maxKeys of ten thousand is answered with a thousand and no
+// complaint, and an expiry past seven days is answered with a signature error that says
+// nothing about expiry.
+//
+// The two share a function because they are the same check with different numbers, and
+// two copies is how one of them later grows a rule the other does not.
+func s3Count(taskID, op, attr, raw string, takes bool, def, max int32) (int32, error) {
+	if !takes {
+		return 0, nil
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: s3 task %q operation %q has a non-numeric %s %q", taskID, op, attr, raw)
+	}
+	if n <= 0 {
+		return 0, fmt.Errorf("compiler: s3 task %q operation %q has a %s of %d; it must be positive", taskID, op, attr, n)
+	}
+	if int32(n) > max {
+		return 0, fmt.Errorf("compiler: s3 task %q operation %q has a %s of %d, and the most that takes effect is %d", taskID, op, attr, n, max)
+	}
+	return int32(n), nil
 }

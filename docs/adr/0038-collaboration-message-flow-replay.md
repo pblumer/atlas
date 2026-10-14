@@ -1,6 +1,7 @@
 # ADR-0038: Collaboration message-flow replay
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
 

@@ -134,7 +134,7 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_fork" bpmnElement="fork">
         <dc:Bounds x="1250" y="215" width="50" height="50"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="1230" y="188" width="90" height="27"/></bpmndi:BPMNLabel>
+        <bpmndi:BPMNLabel><dc:Bounds x="1305" y="226" width="84" height="27"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_pick" bpmnElement="pick">
         <dc:Bounds x="1350" y="90" width="100" height="80"/>

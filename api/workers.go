@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/jobtype"
 	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
 )
 
 // The Workers view (ADR-0157, step 4): who is doing the engine's out-of-process
@@ -42,12 +44,21 @@ type workerStat struct {
 	// the providers it can reach. Empty for a worker that serves only plain job
 	// types, which need no credential of their own.
 	Connectors []string `json:"connectors,omitempty"`
-	FirstSeen  int64    `json:"firstSeen"`
-	LastSeen   int64    `json:"lastSeen"`
-	Leased     int64    `json:"leased"`
-	Pulled     int64    `json:"pulled"`
-	Completed  int64    `json:"completed"`
-	Failed     int64    `json:"failed"`
+	// Serves are the job types this worker has asked for, recorded on every poll
+	// including the ones that came back empty.
+	//
+	// Types above cannot answer that question: it counts what was *leased*, so a
+	// worker that is connected and polling a queue with no work in it looks
+	// exactly like a worker that is not there. That difference is the whole of
+	// "is anybody serving this?", and reading the wrong one reports a healthy
+	// idle queue as unserved (api/processlookup.go).
+	Serves    []string `json:"serves,omitempty"`
+	FirstSeen int64    `json:"firstSeen"`
+	LastSeen  int64    `json:"lastSeen"`
+	Leased    int64    `json:"leased"`
+	Pulled    int64    `json:"pulled"`
+	Completed int64    `json:"completed"`
+	Failed    int64    `json:"failed"`
 }
 
 // workerRegistry accumulates what the workers endpoint reports.
@@ -117,6 +128,23 @@ func (r *workerRegistry) leased(worker, jobType string, n int) {
 	st.Leased += int64(n)
 	st.Types[jobType] += int64(n)
 	r.inFlight[jobType] += int64(n)
+}
+
+// polls records that a worker asked for a job type, whether or not it got one.
+//
+// The subscription rather than the work: an idle poll is the strongest evidence
+// there is that somebody is serving a queue, and it is the only evidence a queue
+// with no work in it can produce.
+func (r *workerRegistry) polls(worker, jobType string) {
+	jobType = strings.TrimSpace(jobType)
+	if jobType == "" {
+		return
+	}
+	st := r.seen(worker)
+	if !slices.Contains(st.Serves, jobType) {
+		st.Serves = append(st.Serves, jobType)
+		slices.Sort(st.Serves)
+	}
 }
 
 // completed records a job a worker finished, and takes it out of flight.
@@ -221,11 +249,28 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 		types    = []jobTypeStat{}
 		list     = []workerStat{}
 		unserved = []unservedConnector{}
+		breakers = []breakerView{}
 		scanErr  error
 		reachErr error
 	)
+	// The incident tally is taken before the loop turn and off the loop, because it is
+	// a walk of the whole incident family plus a point read per parked token — the one
+	// unbounded read this view makes, and the shape ADR-0266 took off the single writer
+	// everywhere else. It was inside the turn below, so opening the Workers view on a
+	// flooded engine dispatched tens of thousands of reads onto the goroutine that
+	// executes process instances (ADR-0365).
+	//
+	// Two reads of slightly different moments, then, rather than one of a single
+	// moment: a queue depth from the turn beside an incident count from just before it.
+	// For a view that is polled and describes a moving engine that is the same trade
+	// the overlay makes, and it is worth strictly more than a consistent answer nobody
+	// can get while the loop is held.
+	incidents, incErr := s.incidentsByJobType()
+	if incErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "count incidents: "+incErr.Error())
+		return
+	}
 	s.do(func() {
-		incidents := s.incidentsByJobType()
 		users := s.jobTypeUsers()
 		for _, e := range s.jobTypes.All() {
 			inProcess := s.jobRunner.Handles(e.Index)
@@ -255,6 +300,11 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 			types = append(types, st)
 		}
 		list = s.workers.list()
+		// What is being *held*, which no other row on this view can say. A queue that
+		// is deep because nobody is serving it and one that is deep because the engine
+		// has stopped serving it look identical from the type row, and only one of them
+		// is something an operator should go and fix (ADR-0340).
+		breakers = s.breakers.openBreakers(s.jobTypes.Name)
 		reachable, err := s.reachableDeployments()
 		if err != nil {
 			reachErr = err
@@ -290,6 +340,7 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, map[string]any{
 		"workers": list, "types": types, "supervised": supervised,
 		"unservedConnectors": unserved, "jobTypeCollisions": collisions,
+		"breakers": breakers,
 	})
 }
 
@@ -459,18 +510,23 @@ func (s *Server) unservedConnectors(reachable map[uint64]bool) []unservedConnect
 // which still carries its type; a timer incident has no job and is not counted
 // here — it belongs to the Incidents view, not to a worker's queue. Runs on the
 // run-loop goroutine.
-func (s *Server) incidentsByJobType() map[int32]int64 {
+func (s *Server) incidentsByJobType() (map[int32]int64, error) {
 	out := map[int32]int64{}
-	_ = s.store.Incidents(func(_ uint64, inc *model.IncidentValue) error {
-		if inc.JobKey == 0 {
+	err := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+		return rv.Incidents(func(_ uint64, inc *model.IncidentValue) error {
+			if inc.JobKey == 0 {
+				return nil
+			}
+			if jv, ok, err := rv.GetJob(inc.JobKey); err == nil && ok {
+				out[jv.JobType]++
+			}
 			return nil
-		}
-		if jv, ok, err := s.store.GetJob(inc.JobKey); err == nil && ok {
-			out[jv.JobType]++
-		}
-		return nil
+		})
 	})
-	return out
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // jobTypeUsers maps each job type to the deployed definitions whose service or send

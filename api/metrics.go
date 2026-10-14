@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -43,10 +44,16 @@ type durabilityCollector struct {
 	recoverySeconds  *prometheus.Desc
 	recoveryReplayed *prometheus.Desc
 	openJobs         *prometheus.Desc
+	openIncidents    *prometheus.Desc
 	pendingTimers    *prometheus.Desc
 	subscriptions    *prometheus.Desc
+	buffered         *prometheus.Desc
 	exporterPosition *prometheus.Desc
 	exporterLag      *prometheus.Desc
+	breakersOpen     *prometheus.Desc
+	breakerTrips     *prometheus.Desc
+	breakerProbes    *prometheus.Desc
+	breakerRefused   *prometheus.Desc
 }
 
 func newDurabilityCollector(s *Server) *durabilityCollector {
@@ -75,12 +82,29 @@ func newDurabilityCollector(s *Server) *durabilityCollector {
 		recoveryReplayed: d("recovery_replayed_records",
 			"Records startup recovery read from the log; a checkpoint lets it skip whole segments (ADR-0131)."),
 		openJobs:      d("open_jobs", "Jobs currently waiting for a worker."),
+		openIncidents: d("open_incidents", "Tokens parked on an unresolved incident, waiting for an operator (ADR-0061)."),
 		pendingTimers: d("pending_timers", "Timers currently waiting to fire."),
 		subscriptions: d("message_subscriptions", "Message subscriptions currently waiting to correlate."),
+		buffered: d("buffered_messages",
+			"Messages kept for a subscription that has not opened yet (ADR-0370), past their time until the sweep drops them."),
 		exporterPosition: d("exporter_position",
 			"Highest log position the OpenSearch exporter has provably indexed (ADR-0114)."),
 		exporterLag: d("exporter_lag_positions",
 			"Log positions the exporter still trails the durable applied position by."),
+		// The circuit breaker (ADR-0340), as aggregates. A breakdown by Worker is what an
+		// operator actually wants when one of these fires — and it is deliberately not
+		// here: a Worker's name comes from a deployed model, so a label carrying it would
+		// be a label whose values the data invents, which is the one thing ADR-0142's
+		// cardinality rule forbids. GET /api/v1/workers answers "which target", bounded,
+		// the way that rule says a per-thing breakdown should be answered.
+		breakersOpen: d("worker_breakers_open",
+			"Targets whose jobs a circuit breaker is currently holding back (ADR-0340)."),
+		breakerTrips: d("worker_breaker_trips_total",
+			"Times a target has been judged down and its jobs held back, since this server started."),
+		breakerProbes: d("worker_breaker_probes_total",
+			"Jobs admitted as a probe to test whether a held target has recovered."),
+		breakerRefused: d("worker_breaker_refused_total",
+			"Dispatch attempts turned away because their target was being held back."),
 	}
 }
 
@@ -99,8 +123,14 @@ func (c *durabilityCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.recoverySeconds
 	ch <- c.recoveryReplayed
 	ch <- c.openJobs
+	ch <- c.openIncidents
 	ch <- c.pendingTimers
 	ch <- c.subscriptions
+	ch <- c.buffered
+	ch <- c.breakersOpen
+	ch <- c.breakerTrips
+	ch <- c.breakerProbes
+	ch <- c.breakerRefused
 	// The exporter descriptors are deliberately absent: they are only collected when an
 	// exporter exists, and an unchecked collector is how Prometheus permits that.
 }
@@ -177,12 +207,24 @@ func (c *durabilityCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	// What is currently open and waiting, from the engine-wide counters applyToState
-	// maintains (ADR-0142 slice 4). Incidents are absent on purpose: they are also
-	// removed by the unconditional delete that runs when any element terminates, with no
-	// event of its own to count, so a counter for them would need a read on the engine's
-	// hottest path. See the ADR.
+	// maintains (ADR-0142 slice 4).
 	if n, err := s.store.OpenJobs(); err == nil {
 		gauge(c.openJobs, float64(n))
+	}
+	// Incidents are the one open-work number that is *counted* at scrape time rather
+	// than read from a maintained total, and the asymmetry is the decision, not an
+	// oversight. An incident leaves state two ways — resolved by an operator, and
+	// dropped with the element instance it sits on when a cancel or an interrupting
+	// boundary event terminates that element — and only the first announces itself with
+	// an event. A maintained counter would therefore drift downward-blind, reporting
+	// parked work that is long gone, and the fix would be a read on the engine's hottest
+	// path. The scan cannot drift, because it counts the keys that are actually there.
+	//
+	// It is affordable precisely where a scan usually is not: the family holds one key
+	// per stuck token, and that population is what an operator is expected to keep near
+	// zero. A scrape costs what is broken, not what is running.
+	if n, err := s.store.IncidentCount(); err == nil {
+		gauge(c.openIncidents, float64(n))
 	}
 	if n, err := s.store.PendingTimers(); err == nil {
 		gauge(c.pendingTimers, float64(n))
@@ -190,6 +232,33 @@ func (c *durabilityCollector) Collect(ch chan<- prometheus.Metric) {
 	if n, err := s.store.MessageSubscriptions(); err == nil {
 		gauge(c.subscriptions, float64(n))
 	}
+	if n, err := s.store.BufferedMessageCount(); err == nil {
+		gauge(c.buffered, float64(n))
+	}
+
+	// The breaker's aggregates. Read on the loop, because that is where its state lives
+	// (I3), and cheap: the collection is the size of what is currently wrong, and the
+	// totals are one map of small structs.
+	var open, trips, probes, refused float64
+	s.do(func() {
+		for _, e := range s.breakers.byKey {
+			if e.state != breakerClosed {
+				open++
+			}
+		}
+		for _, n := range s.breakers.stats {
+			trips += float64(n.trips)
+			probes += float64(n.probes)
+			refused += float64(n.refused)
+		}
+	})
+	gauge(c.breakersOpen, open)
+	counter := func(desc *prometheus.Desc, v float64) {
+		ch <- prometheus.MustNewConstMetric(desc, prometheus.CounterValue, v)
+	}
+	counter(c.breakerTrips, trips)
+	counter(c.breakerProbes, probes)
+	counter(c.breakerRefused, refused)
 
 	// Lag is only meaningful with an exporter. A zero on a server that exports nothing
 	// would read exactly like a caught-up one.
@@ -225,14 +294,75 @@ func (s *Server) buildMetrics() error {
 		return err
 	}
 	s.proc.SetMetrics(em)
+	// The single writer's own latency. Attached here rather than when the loop is built
+	// because the registry does not exist yet at that point — and safely, because
+	// SetMetrics stores atomically: the loop is already running and already being
+	// dispatched onto by the time this runs.
+	rm := newRunLoopMetrics()
+	if err := reg.Register(rm.collectors()...); err != nil {
+		return err
+	}
+	s.runLoop.SetMetrics(rm)
+	// What the FEEL assistant's requests came to (feelgeneration.go): design-time
+	// counters, pushed per request, nowhere near the engine.
+	fm := newFeelAssistantMetrics()
+	if err := reg.Register(fm.collectors()...); err != nil {
+		return err
+	}
+	s.feelMetrics = fm
 	s.metrics = reg
 	return nil
 }
 
-// handleMetrics serves the Prometheus exposition. It is unauthenticated, like /healthz:
-// that is what a scrape expects, and the cardinality rule (ADR-0142) means the body
-// carries only aggregates — no instance data, no variable payloads, no identifiers.
-// Put a reverse proxy in front of anything exposed beyond the host.
+// runLoopMetrics is the single writer's own latency (see [runloop.Metrics]): two
+// pre-resolved histograms the loop pushes into from its own goroutine.
+//
+// It is separate from engineMetrics because it measures a different thing. A batch is
+// work the processor did; a turn is work *somebody dispatched*, and the turns that hurt
+// most are not batches at all — publishing a checkpoint and resolving a compaction cut
+// are neither, and both once held the writer for seconds
+// (ADR-0382).
+//
+// It satisfies runloop.Metrics structurally, so that package never imports Prometheus.
+type runLoopMetrics struct {
+	held   prometheus.Histogram
+	waited prometheus.Histogram
+}
+
+func newRunLoopMetrics() *runLoopMetrics {
+	histogram := func(name, help string) prometheus.Histogram {
+		return prometheus.NewHistogram(prometheus.HistogramOpts{
+			Namespace: metrics.Namespace, Name: name, Help: help,
+			// 100µs to ~13s. The top matters more here than anywhere else: a turn is
+			// the whole server standing still, so the range has to reach the failures
+			// worth alerting on rather than saturate at the first one.
+			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 18),
+		})
+	}
+	return &runLoopMetrics{
+		held: histogram("runloop_turn_held_seconds",
+			"How long one dispatched closure occupied the single writer. While it is held nothing else is served, read-only requests included (ADR-0239)."),
+		waited: histogram("runloop_turn_wait_seconds",
+			"How long a caller queued before the writer took its closure — the delay a request actually experiences, as opposed to the turn that caused it."),
+	}
+}
+
+func (m *runLoopMetrics) collectors() []prometheus.Collector {
+	return []prometheus.Collector{m.held, m.waited}
+}
+
+// TurnTaken implements runloop.Metrics. It runs on the loop goroutine, inside the very
+// duration the next turn will report, so it does no more than two observations.
+func (m *runLoopMetrics) TurnTaken(waited, held time.Duration) {
+	m.waited.Observe(waited.Seconds())
+	m.held.Observe(held.Seconds())
+}
+
+// handleMetrics serves the Prometheus exposition. The handler itself does no auth;
+// the route is mounted with accessAuthenticated (ADR-0198), so with --auth on a
+// scraper reaches it with an API token of scope metrics and a signed-in person
+// reaches it too. The cardinality rule (ADR-0142) means the body carries only
+// aggregates — no instance data, no variable payloads, no identifiers.
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	s.metrics.Handler().ServeHTTP(w, r)
 }
@@ -254,14 +384,15 @@ type engineMetrics struct {
 	syncFailures   prometheus.Counter
 	commitFailures prometheus.Counter
 	queueDepth     prometheus.Gauge
-	// Job lifecycle (ADR-0142 slice 5). Four pre-resolved counters rather than one
-	// labelled by outcome: the values would be a closed enum and so allowed, but a
-	// label lookup per batch is exactly what rule 1 forbids, and four fields cost
-	// nothing.
-	jobsCreated   prometheus.Counter
-	jobsCompleted prometheus.Counter
-	jobsFailed    prometheus.Counter
-	jobsCanceled  prometheus.Counter
+	// Job lifecycle (ADR-0142 slice 5). Pre-resolved counters rather than one labelled
+	// by outcome: the values would be a closed enum and so allowed, but a label lookup
+	// per batch is exactly what rule 1 forbids, and a field each costs nothing.
+	jobsCreated      prometheus.Counter
+	jobsActivated    prometheus.Counter
+	jobsCompleted    prometheus.Counter
+	jobsFailed       prometheus.Counter
+	jobsLeaseTimeout prometheus.Counter
+	jobsCanceled     prometheus.Counter
 }
 
 func newEngineMetrics() *engineMetrics {
@@ -287,12 +418,14 @@ func newEngineMetrics() *engineMetrics {
 			prometheus.ExponentialBuckets(0.0001, 2, 15)),
 		commitSeconds: histogram("state_commit_seconds", "Duration of making a batch's state visible.",
 			prometheus.ExponentialBuckets(0.0001, 2, 15)),
-		syncFailures:   counter("wal_sync_failures_total", "Batches whose group-commit fsync failed; nothing they wrote is durable."),
-		commitFailures: counter("state_commit_failures_total", "Batches whose events are durable but whose state commit failed."),
-		jobsCreated:    counter("jobs_created_total", "Jobs that became available to a worker."),
-		jobsCompleted:  counter("jobs_completed_total", "Jobs a worker finished successfully."),
-		jobsFailed:     counter("jobs_failed_total", "Worker-reported job failures; one with retries left is retried, one without parks with an incident (ADR-0061)."),
-		jobsCanceled:   counter("jobs_canceled_total", "Jobs removed without being worked — their element was interrupted, terminated, or its instance cancelled."),
+		syncFailures:     counter("wal_sync_failures_total", "Batches whose group-commit fsync failed; nothing they wrote is durable."),
+		commitFailures:   counter("state_commit_failures_total", "Batches whose events are durable but whose state commit failed."),
+		jobsCreated:      counter("jobs_created_total", "Jobs that became available to a worker."),
+		jobsActivated:    counter("jobs_activated_total", "Leases taken: a worker pulled a job and holds it (ADR-0007). Flat against a rising created count means nothing is pulling."),
+		jobsCompleted:    counter("jobs_completed_total", "Jobs a worker finished successfully."),
+		jobsFailed:       counter("jobs_failed_total", "Worker-reported job failures; one with retries left is retried, one without parks with an incident (ADR-0061)."),
+		jobsLeaseTimeout: counter("jobs_lease_timeouts_total", "Leases that elapsed with no report, returning the job to the index — the only trace of a worker that took work and vanished, which the failure counter never sees."),
+		jobsCanceled:     counter("jobs_canceled_total", "Jobs removed without being worked — their element was interrupted, terminated, or its instance cancelled."),
 		queueDepth: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: metrics.Namespace, Name: "command_queue_depth",
 			Help: "Commands queued for the partition writer after the last batch, including its follow-ups.",
@@ -304,7 +437,8 @@ func (m *engineMetrics) collectors() []prometheus.Collector {
 	return []prometheus.Collector{
 		m.batches, m.commands, m.events, m.batchEvents, m.syncSeconds,
 		m.commitSeconds, m.syncFailures, m.commitFailures, m.queueDepth,
-		m.jobsCreated, m.jobsCompleted, m.jobsFailed, m.jobsCanceled,
+		m.jobsCreated, m.jobsActivated, m.jobsCompleted, m.jobsFailed,
+		m.jobsLeaseTimeout, m.jobsCanceled,
 	}
 }
 
@@ -321,8 +455,10 @@ func (m *engineMetrics) BatchCommitted(s engine.BatchStats) {
 	// Job transitions the batch made durable. Adding zero is free and keeps the branch
 	// count down, so these are unconditional.
 	m.jobsCreated.Add(float64(s.Jobs.Created))
+	m.jobsActivated.Add(float64(s.Jobs.Activated))
 	m.jobsCompleted.Add(float64(s.Jobs.Completed))
 	m.jobsFailed.Add(float64(s.Jobs.Failed))
+	m.jobsLeaseTimeout.Add(float64(s.Jobs.TimedOut))
 	m.jobsCanceled.Add(float64(s.Jobs.Canceled))
 	if s.Events == 0 {
 		return

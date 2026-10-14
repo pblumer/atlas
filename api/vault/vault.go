@@ -25,9 +25,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pblumer/atlas/api/sidecar"
+	"github.com/pblumer/atlas/internal/ownerfile"
 )
 
 // Environment variables that configure the vault master key. The key is 32 bytes
@@ -72,6 +74,10 @@ type Vault struct {
 	dir   string
 	aead  cipher.AEAD
 	keyID string
+	// mu guards the get-or-create of a subject's data key in personal.go, and nothing
+	// else. It exists because that one path is entered from HTTP handlers rather than
+	// from the run loop; the reason it is needed there is argued at dataKeyAEAD.
+	mu sync.Mutex
 }
 
 // New opens (creating if needed) the vault directory and builds the
@@ -180,8 +186,26 @@ func (v *Vault) Delete(name string) error {
 }
 
 // List returns value-free metadata for every stored secret, oldest first. Non-record
-// files are ignored.
+// files are ignored, and so are the per-subject data keys of ADR-0314: those are not
+// credentials an operator manages, and showing them here would invite deleting one —
+// which is an erasure of business data, not the removal of a secret. [Vault.DataSubjects]
+// is their own view.
 func (v *Vault) List() ([]Meta, error) {
+	all, err := v.listAll()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Meta, 0, len(all))
+	for _, m := range all {
+		if !IsDataKeyName(m.Name) {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+// listAll is List without the data-key filter: every record in the directory.
+func (v *Vault) listAll() ([]Meta, error) {
 	entries, err := os.ReadDir(v.dir)
 	if err != nil {
 		return nil, fmt.Errorf("vault: read dir: %w", err)
@@ -232,7 +256,8 @@ func parseKey(raw string) ([]byte, error) {
 // ResolveKey sources the master key with operator precedence (ADR-0070): an
 // operator key from the environment (ATLAS_VAULT_KEY / ATLAS_VAULT_KEY_FILE) wins and
 // is never written to disk; absent one, the key is loaded from keyFile, or generated
-// into it (mode 0600) so the vault is on by default without provisioning. source is
+// into it (readable by this account only) so the vault is on by default without
+// provisioning. source is
 // "env", "file", or "generated" — the caller logs the generated case, which trades a
 // weaker at-rest guarantee (key beside the ciphertext) for turnkey operation.
 func ResolveKey(keyFile string) (key []byte, source string, err error) {
@@ -247,7 +272,8 @@ func ResolveKey(keyFile string) (key []byte, source string, err error) {
 }
 
 // loadOrCreateKeyFile returns the master key stored at path, generating and persisting
-// a fresh 32-byte key (0600, parent 0700, fsynced) when the file does not yet exist.
+// a fresh 32-byte key (this account's alone, parent 0700, fsynced) when the file does
+// not yet exist.
 // It is the default key source when no operator key is set (ADR-0070).
 func loadOrCreateKeyFile(path string) ([]byte, string, error) {
 	data, err := os.ReadFile(path)
@@ -268,16 +294,38 @@ func loadOrCreateKeyFile(path string) ([]byte, string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, "", fmt.Errorf("vault: create key dir: %w", err)
 	}
-	if err := os.WriteFile(path, []byte(hex.EncodeToString(key)), 0o600); err != nil {
+	if err := writeKeyFile(path, []byte(hex.EncodeToString(key))); err != nil {
 		return nil, "", fmt.Errorf("vault: write key file: %w", err)
-	}
-	if err := os.Chmod(path, 0o600); err != nil { // ensure 0600 even if the file pre-existed under a umask
-		return nil, "", fmt.Errorf("vault: chmod key file: %w", err)
 	}
 	if err := sidecar.FsyncDir(filepath.Dir(path)); err != nil {
 		return nil, "", err
 	}
 	return key, "generated", nil
+}
+
+// writeKeyFile creates the key file, makes it this account's alone, and only then
+// writes the key, so the secret is never in a file anyone else may read — not even
+// between writing it and restricting it. Mode 0600 alone did that on Unix only;
+// Windows ignores it and leaves the file with its directory's inherited rights, which
+// can include every local user (internal/ownerfile). The content is fsynced before the
+// directory is, so a crash cannot keep the name and lose the key the vault is
+// encrypted with.
+func writeKeyFile(path string, data []byte) (err error) {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
+	if err = ownerfile.Restrict(path); err == nil {
+		if _, err = f.Write(data); err == nil {
+			err = f.Sync()
+		}
+	}
+	return err
 }
 
 // keyFromEnv sources the master key from ATLAS_VAULT_KEY, or from the file at

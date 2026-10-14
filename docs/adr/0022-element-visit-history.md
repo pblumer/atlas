@@ -1,6 +1,7 @@
 # ADR-0022: Retain a per-element token-visit history for the Operations overlay
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-22
 - **Deciders:** Atlas engine maintainers
 

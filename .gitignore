@@ -6,6 +6,12 @@
 *.dylib
 /bin/
 /dist/
+# `go build ./cmd/atlas` in the repository root writes the binary here, next to
+# the sources. It was committed that way once and shipped in two source archives.
+/atlas
+# The Windows version resource the release workflow writes from the tag; a
+# committed one would stamp a stale version into every Windows build.
+/cmd/atlas/*.syso
 
 # Test and coverage
 *.test
@@ -22,6 +28,9 @@ go.work.sum
 # api/web/vendor/*/ATLAS-VENDORED.txt), so following that recipe leaves a
 # node_modules here. The built artifact is committed; what built it is not.
 /node_modules/
+
+# a vendored bundle's build inputs are committed; its install tree is not
+api/web/vendor/*/src/node_modules/
 
 # Profiling
 *.prof

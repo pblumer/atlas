@@ -1,6 +1,7 @@
 # ADR-0082: Event subprocesses (message- and timer-triggered, interrupting and non-interrupting)
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
@@ -15,6 +16,11 @@
 > **message** and **timer** triggers are in scope; error/signal/escalation-triggered
 > event subprocesses depend on error and signal events (ROADMAP Milestone 2, not built)
 > and are deferred.
+>
+> **As built (2026-10-11).** Those triggers have landed: an event subprocess starts on a
+> message, timer, signal ([ADR-0088](0088-signal-events.md)), error
+> ([ADR-0089](0089-error-events.md)), escalation ([ADR-0125](0125-escalation-events.md)) or
+> condition ([ADR-0137](0137-conditional-events.md)) — `compiler/scope_compile.go`.
 >
 > **Delivered (Phase 1, compiler):** `triggeredByEvent` (on `<subProcess>`) and
 > `isInterrupting` (on the start event) are parsed; an event subprocess compiles to an

@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "# 🔑 Bestellung freigeben\n\nPrüfe die Account-Bestellung. Typ, Kategorie, Aktivierung und der vorgeschlagene UPN kommen aus der DMN-Regel `KontotypMapping`. Bei **Freigabe** setzt du das Initialpasswort; der Entra-Worker legt das Konto in blumer.net an."
+      "text": "# 🔑 Bestellung freigeben\n\nPrüfe die Account-Bestellung. Kategorie und Aktivierung kommen aus der DMN-Regel `KontotypMapping`. UPN und Anzeigename bildet der Entra-Worker beim Anlegen selbst aus Vor- und Nachname: `jml-test-<kürzel>-<vorname>.<nachname>@contoso.com`. Bei **Freigabe** setzt du das Initialpasswort; der Entra-Worker legt das Konto in contoso.com an."
     },
     {
       "key": "kategorie",
@@ -13,17 +13,16 @@
       "disabled": true
     },
     {
-      "key": "upn",
+      "key": "vorname",
       "type": "textfield",
-      "label": "User Principal Name",
+      "label": "Vorname",
       "disabled": true
     },
     {
-      "key": "displayName",
+      "key": "nachname",
       "type": "textfield",
-      "label": "Anzeigename",
-      "description": "Vorschlag – bei Bedarf anpassen.",
-      "validate": { "required": true }
+      "label": "Nachname",
+      "disabled": true
     },
     {
       "key": "begruendung",
@@ -36,7 +35,7 @@
       "type": "radio",
       "label": "Entscheidung",
       "values": [
-        { "label": "Freigeben – Konto in blumer.net anlegen", "value": "anlegen" },
+        { "label": "Freigeben – Konto in contoso.com anlegen", "value": "anlegen" },
         { "label": "Bestellung ablehnen", "value": "ablehnen" }
       ],
       "validate": { "required": true }

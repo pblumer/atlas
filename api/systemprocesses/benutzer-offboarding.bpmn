@@ -42,7 +42,7 @@
 
     <serviceTask id="bestaetigung_mail" name="Bestaetigung senden">
       <extensionElements>
-        <atlas:mailConnector connector="Patrick Blumer"
+        <atlas:mailConnector connector="mail"
           to="=email"
           subject="Offboarding durchgefuehrt"
           body="=&quot;Hallo,\n\ndas Konto '&quot; + benutzername + &quot;' wurde zum &quot; + letzter_tag + &quot; deaktiviert.\n\nGrund: &quot; + grund + &quot;\n\nViele Gruesse\nIhre Benutzerverwaltung&quot;"/>

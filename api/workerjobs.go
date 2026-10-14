@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"github.com/pblumer/atlas/api/vault"
 	"net/http"
 	"strings"
 
@@ -51,6 +52,10 @@ const (
 	jobRunInFlight  = "in flight"
 	jobRunCompleted = "completed"
 	jobRunFailed    = "failed"
+	// jobRunErrorThrown is a job its worker ended with a BPMN error (ADR-0089): not a
+	// failure — the work reached an answer the model has a path for, or an incident when
+	// it has none — and not a completion either.
+	jobRunErrorThrown = "error thrown"
 )
 
 // jobRun is one job a worker leased, as the console shows it.
@@ -204,6 +209,16 @@ func renderJobVars(vars map[string]any) string {
 func renderReturnedVars(vars []model.VariableValue) string {
 	m := make(map[string]any, len(vars))
 	for i := range vars {
+		// A value the worker returned under a declared personal name is sealed by the
+		// time it gets here, and this row is a record of *what a worker reported*, not a
+		// place to read the value: it is labelled rather than printed as an envelope
+		// (ADR-0314).
+		if vars[i].Kind == model.VarJSON {
+			if env, ok := vault.ParseEnvelope(vars[i].Text); ok {
+				m[vars[i].Name] = "enciphered for data subject " + env.Subject
+				continue
+			}
+		}
 		m[vars[i].Name] = nativeVar(&vars[i])
 	}
 	return renderJobVars(m)

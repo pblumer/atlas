@@ -1,10 +1,15 @@
 # ADR-0157: Every side-effecting task on a worker process — `atlas worker`, optional supervision, and a Workers console
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 
-> **Implementation status (2026-08-20): step 1 partially delivered.** The
+> **Implementation status (2026-08-20): step 1 partially delivered.** *Superseded by
+> the front-matter `Implementation: Landed` line above, 2026-09-09: the global job-type
+> registry, type-keyed long-poll, lease fencing, the Workers view, `atlas worker`,
+> off-loop handlers and supervision are all delivered. The dated account below is kept
+> as the record of what was true when it was written.* The
 > engine-wide job-type table exists (`jobtype.Registry`) and every deploy and
 > reload resolves its processes through it, so a job created from now on carries
 > an index that means the same thing in every definition. Three things are worth

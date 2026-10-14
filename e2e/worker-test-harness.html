@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas worker check e2e harness</title>
+    <!-- Drives the real api/web/workerdialog.js check flow against a mock `api` that
+         records what reaches POST /api/v1/connectors/test. That body is the whole
+         point: the server tells a probe from a send by whether `to` is empty
+         (api/connectors.go), so "which mode did the operator choose" is answered by
+         one field, and a dialog that got it wrong would send mail to somebody who
+         asked for a connection check. The page scaffolding is the test's own —
+         app.js boots the whole console on import and cannot be loaded here. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="card" style="padding: 18px; max-width: 720px">
+      <button class="btn" id="check-mail">Check mail worker</button>
+      <button class="btn" id="check-sql">Check SQL worker</button>
+      <pre id="posted">—</pre>
+      <pre id="toasts">—</pre>
+      <pre id="result">—</pre>
+    </div>
+    <script type="module">
+      import { testWorkerFlow } from "/workerdialog.js";
+
+      const MAIL = {
+        id: "c1", name: "gmail_auth", kind: "mail", provider: "gmail",
+        endpoint: "", sender: "atlas@example.org", credentialsRef: "vault:gmail",
+      };
+      // Every other Worker Type dials and stops, so it is checked without a question.
+      const SQL = {
+        id: "c2", name: "crm_db", kind: "postgres", provider: "postgres",
+        endpoint: "", sender: "", credentialsRef: "vault:crm",
+      };
+
+      const posted = document.getElementById("posted");
+      const toastBox = document.getElementById("toasts");
+      const resultBox = document.getElementById("result");
+      const toasts = [];
+
+      const api = async (method, path, body) => {
+        window.__posted = (window.__posted || []).concat([{ method, path, body }]);
+        posted.textContent = JSON.stringify(window.__posted);
+        // The server answers a failed check with 200 ok:false; only the transport
+        // failing is an error, and neither is what this harness is about.
+        return { ok: true, detail: body.to ? `Sent to ${body.to}` : "Connected" };
+      };
+
+      const toast = (msg, kind) => {
+        toasts.push(kind ? `${kind}: ${msg}` : msg);
+        toastBox.textContent = toasts.join("\n");
+      };
+
+      const run = (worker) => async () => {
+        window.__posted = [];
+        posted.textContent = "—";
+        resultBox.textContent = String(await testWorkerFlow({ api, toast, worker }));
+      };
+      document.getElementById("check-mail").addEventListener("click", run(MAIL));
+      document.getElementById("check-sql").addEventListener("click", run(SQL));
+      window.__ready = true;
+    </script>
+  </body>
+</html>

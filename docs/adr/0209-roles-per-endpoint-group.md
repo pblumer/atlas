@@ -1,6 +1,7 @@
 # ADR-0209: Roles per endpoint group
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-28
 - **Deciders:** Atlas maintainers
 

@@ -21,7 +21,26 @@ import (
 // can route a click without parsing the kind separately.
 const (
 	KindApplication = "application"
-	KindProcess     = "process"
+	// KindProcess is one *deployment*: a definition held by one runtime since one
+	// moment, and the thing that has instances, counters, incidents and a state
+	// (ADR-0401 §2). The name stays `process` because that is what every reader,
+	// route and export already calls it, and renaming a shipped node kind would cost
+	// more than the precision is worth — what the split needed was a second kind for
+	// the half that was missing, not a new word for this one.
+	KindProcess = "process"
+	// KindDefinition is what a model *is*, independent of any server holding it:
+	// process id plus version (ADR-0401 §2). It has no state, no counters and no
+	// runtime, because none of those are properties of a model — they belong to a
+	// deployment of it.
+	//
+	// It is drawn only where a definition has more than one deployment. On a single
+	// runtime a definition has exactly one, always — the collector reads the latest
+	// deployment per process id — so a definition node there would stand in a fixed
+	// 1:1 relation to a process node, which is a field rather than a second thing,
+	// and would spend the measured 400-node budget (ADR-0211 §7) to restate what the
+	// deployment already says. Where there are several it is the thing they have in
+	// common, which is what makes "this process runs in three domains" a drawing.
+	KindDefinition = "definition"
 	// KindWorker is one configured Worker — a target and identity of a Worker Type
 	// (ADR-0203). The store behind it is still the worker store and the model
 	// still names it with connector="…"; those are the contracts that cannot move
@@ -53,6 +72,19 @@ const (
 	// *stale* — every other node is read from local state while the request is being
 	// served, so it can neither fail to be contacted nor go out of date.
 	KindTarget = "target"
+	// KindCatalog is one service catalogue (ADR-0312): what a group of people may
+	// order, and the arrangement of it. It is a design-time record like every other
+	// node here, and — unlike a process or a peer — nothing can be asked how it is,
+	// so it carries no observation at all.
+	KindCatalog = "catalog"
+	// KindProduct is one catalogue item: a service that provisions itself, or a
+	// product assembled from several that do. One kind and not two, because Atlas
+	// holds one record for both and the difference is in the edges: a thing with
+	// parts is a whole, and the same record offered alone is a service. Deriving two
+	// kinds from that shape would invent a distinction the store does not make, and
+	// the store is right — the same laptop is a product in one catalogue and a part
+	// of a workplace bundle in another.
+	KindProduct = "product"
 )
 
 // Edge kinds.
@@ -60,9 +92,58 @@ const (
 	EdgeContains = "contains"
 	EdgeCalls    = "calls"
 	// EdgeUses is a process depending on something that is not a process: a
-	// configured worker, or a decision it delegates to.
+	// configured worker, or a decision it delegates to. A product uses the processes
+	// that provision and revoke it, which is the same relationship seen from the
+	// catalogue's side: the thing that needs work done, pointing at what does it.
 	EdgeUses = "uses"
+	// EdgeOffers is a catalogue putting a product in front of the people it reaches.
+	// Deliberately not EdgeContains: an application *holds* its processes and they
+	// exist nowhere else, while a product is referenced by catalogues rather than
+	// owned by one (ADR-0315) — two catalogues offering one laptop are two offers of
+	// one thing, not two laptops.
+	EdgeOffers = "offers"
+	// EdgeComposition and EdgeAggregation are the arrangement of a product: the part
+	// that always comes with the whole, and the part offered beside it.
+	//
+	// They are kept apart here for the reason the catalogue keeps them apart: they
+	// are different promises to whoever orders. They are also the first two edges on
+	// this landscape that are *exactly* what ArchiMate means by those words, which is
+	// why the projection can name them instead of declaring a loss.
+	EdgeComposition = "composition"
+	EdgeAggregation = "aggregation"
+	// EdgeRequires is precedence between two products: the one this points at has to
+	// be provisioned first. It is what the fulfilment order is computed from, and the
+	// only catalogue edge whose direction means "after".
+	EdgeRequires = "requires"
+	// EdgeDeploys runs from a definition to a deployment of it (ADR-0401 §2). It is
+	// the one edge on this picture whose two ends are different *kinds* of thing
+	// rather than two resources: a model, and a runtime holding it.
+	//
+	// Deliberately not EdgeContains, which says an application holds processes that
+	// exist nowhere else. A definition is the opposite case — the whole point of
+	// drawing it is that the same model exists in more than one place.
+	EdgeDeploys = "deploys"
 )
+
+// catalogEdgeKinds is which stored arrangement edges this picture draws, and how.
+//
+// An allowlist rather than a pass-through, and the three spellings happening to
+// match is not a reason to write it as one: an edge kind added to the store later
+// would otherwise appear on the landscape in whatever ink the renderer defaulted to,
+// having been read by nobody.
+//
+// **Incompatibility is deliberately absent.** `excludes` means "these two must never
+// be held by the same person" (ADR-0342) — the one catalogue edge that means the
+// opposite of every other line on this canvas. Drawn in the same ink it would read as
+// a dependency, and a reader would take "the clerk who creates a supplier must not
+// approve payments to it" for "one needs the other". It is named in the derived
+// notation's loss list instead, which is where this picture says what it does not
+// draw.
+var catalogEdgeKinds = map[string]string{
+	"composition": EdgeComposition,
+	"aggregation": EdgeAggregation,
+	"requires":    EdgeRequires,
+}
 
 // Provenance says how a node is known (ADR-0211 §2). The three are the point of
 // overlaying a model onto the mesh: without them you have two pictures and no
@@ -93,7 +174,10 @@ type Application struct {
 // target depends on deploy-time facts and call overrides (ADR-0076), not on
 // anything the compiled model carries.
 type Call struct {
-	ElementID       string
+	ElementID string
+	// ElementIndex is the same element by the identity the per-element counters are
+	// keyed on (ADR-0080). It is what lets this edge carry a traversal count.
+	ElementIndex    int32
 	CalledProcessID string
 	TargetKey       uint64
 }
@@ -106,8 +190,24 @@ type Call struct {
 // that name is configured.
 type WorkerUse struct {
 	ElementID string
-	Name      string
-	TargetID  string
+	// ElementIndex is the same element by the identity the per-element counters are
+	// keyed on. See [Call.ElementIndex].
+	ElementIndex int32
+	Name         string
+	TargetID     string
+}
+
+// DecisionUse is one business rule task and the local decision it calls.
+//
+// A slice of these rather than of decision ids, which is what this carried before: one
+// decision called from two tasks is one edge reached from two places, and the edge's
+// count is their sum (ADR-0400). Collapsing them to the decision first loses half of
+// it, and the compiler's own de-duplicating enumeration is still the right one for the
+// deploy-time gate that reads it.
+type DecisionUse struct {
+	DecisionID string
+	// ElementIndex is the calling business rule task. See [Call.ElementIndex].
+	ElementIndex int32
 }
 
 // Worker is one configured worker as the mesh sees it — a target and identity of a
@@ -140,15 +240,19 @@ type Decision struct {
 
 // Process is one deployed process, with the call activities it makes.
 type Process struct {
-	Key           uint64
-	ProcessID     string
-	Name          string
-	Version       int32
+	Key       uint64
+	ProcessID string
+	Name      string
+	Version   int32
+	// RuntimeID is the runtime holding this deployment (ADR-0401 §1). Empty means the
+	// runtime deriving the graph, which is every process a local collector reads — a
+	// server does not have to tell itself where it is.
+	RuntimeID     string
 	ApplicationID string
 	CanView       bool
 	Calls         []Call
 	Workers       []WorkerUse
-	Decisions     []string
+	Decisions     []DecisionUse
 	// State is the observation state (ADR-0189 §6) the server read for this
 	// process, and Reason is the sentence behind it. Empty means unbound: no
 	// observation applies, which is not a finding.
@@ -159,8 +263,25 @@ type Process struct {
 	// it, carried as a number so a reader can sort by it and a picture can show
 	// which of two degraded processes is the worse one.
 	Incidents int
+	// OldestIncident is when the earliest of them was raised, as Unix nanoseconds,
+	// and zero where there are none — or where every one of them predates the field
+	// (ADR-0272's RaisedAt), which is a fact about the record rather than about the
+	// process and must not be read as "raised at the epoch".
+	OldestIncident int64
 	// Sites are the places in this process where that work is parked.
 	Sites []IncidentSite
+	// DeployedAt is when this definition was deployed, in Unix seconds. It is the
+	// window every traversal count on this process's edges is counted over, because
+	// the counter is keyed by definition key and a redeploy starts a fresh one.
+	DeployedAt int64
+	// ElementVisits is the cumulative activation count of this definition's elements,
+	// keyed by element index — ADR-0080's maintained counter, read in O(elements).
+	//
+	// Nil when the collector could not read it, which is the same distinction Runtime
+	// makes below and for the same reason: an unread counter and an element nothing has
+	// reached are different facts, and only one of them is worth saying out loud. An
+	// element absent from a non-nil map has been read and holds nothing, which is zero.
+	ElementVisits map[int32]int64
 	// Runtime is what the engine has recorded about this definition's instances:
 	// how many are live, how many have finished, and when it last did anything. It
 	// is nil where the collector could not read it, which is not the same fact as
@@ -235,8 +356,77 @@ type Draft struct {
 	CanView       bool
 }
 
+// ProductCatalog is one service catalogue as the mesh sees it (ADR-0312): what it
+// offers, and how what it offers is arranged.
+//
+// The arrangement lives on the catalogue rather than on the products because it *is*
+// the catalogue's: the same laptop is ordered with a docking station in one catalogue
+// and alone in another, and neither catalogue is wrong. Two catalogues that say
+// different things about one pair therefore produce two edges between one pair of
+// nodes, which is the fact rather than a defect in the drawing.
+type ProductCatalog struct {
+	ID      string
+	Name    string
+	CanView bool
+	// Items are the products this catalogue offers, by id.
+	Items []string
+	Edges []CatalogEdge
+}
+
+// CatalogEdge is one arrangement edge as stored, before the mesh decides whether it
+// is drawable. Kind is the catalogue's own spelling (composition, aggregation,
+// requires, excludes) rather than a mesh edge kind, because deciding which of them
+// this picture draws is exactly this package's job and not the store's.
+type CatalogEdge struct {
+	From string
+	To   string
+	Kind string
+}
+
+// Product is one catalogue item: what is offered, and the two processes that make it
+// real. CanView follows the item's home catalogue (ADR-0315), which is the same rule
+// the product listing applies — a product is edited through one catalogue, and that
+// is the catalogue that decides who may read it.
+type Product struct {
+	ID          string
+	Name        string
+	HomeCatalog string
+	CanView     bool
+	// ProvisionProcess and DeprovisionProcess are BPMN process ids, which is what a
+	// product binds: what runs is whatever is deployed when the order line is
+	// reached, so the binding names an id and never a version.
+	ProvisionProcess   string
+	DeprovisionProcess string
+	// State is the item's catalogue state as the store spells it — "draft",
+	// "active", "withdrawn" (see [catalog.State]) — and it is carried rather than
+	// reduced to a flag.
+	//
+	// Three values and not a boolean, because the two that are not active are not
+	// the same thing and a reader narrowing by this is usually asking about
+	// precisely that difference: a draft is an item somebody is still writing, a
+	// withdrawn one is an item that was real and was retired. Collapsed into
+	// "not active" they become one heap, and "what did we retire" — the question
+	// that sends somebody to this picture in the first place — can no longer be
+	// asked at all.
+	State string
+	// Approval is the item's approval rule kind, as [catalog.ApprovalKind] spells
+	// it: "none", "fixed", "role", "superior", or the name a registered process is
+	// known by. Empty from a store that has no rule on the item.
+	//
+	// The kind and not a "needs approval" boolean, for the reason above and one
+	// more: the set is open — a fifth kind is modelled and registered under a name
+	// rather than built in — so the fact is a string this package must not try to
+	// enumerate. Whether that adds up to "requires approval" is a reading, and a
+	// reading belongs where the picture is drawn.
+	Approval string
+}
+
 // Landscape is everything the mesh derives from, already filtered for this caller.
 type Landscape struct {
+	// RuntimeID is the runtime these facts were read off — this server, for a local
+	// collection (ADR-0401 §1). Every process here inherits it unless it carries its
+	// own, which is what a subgraph read from a peer would.
+	RuntimeID    string
 	Applications []Application
 	Processes    []Process
 	// Drafts are the saved diagrams nobody has deployed, and are empty unless the
@@ -244,6 +434,12 @@ type Landscape struct {
 	Drafts    []Draft
 	Workers   []Worker
 	Decisions []Decision
+	// Catalogs and Products are the service catalogue (ADR-0312), drawn always
+	// rather than on request like the drafts: a catalogue is part of what this
+	// server runs, not a plan somebody saved, and an installation that does not use
+	// the portal has none and pays nothing for them.
+	Catalogs []ProductCatalog
+	Products []Product
 	// Targets are the peers this server can promote to, and what asking them
 	// produced. Filled in two halves: the collector names them on the run loop, and
 	// [ReachOut] supplies each one's state off it.
@@ -253,6 +449,16 @@ type Landscape struct {
 	// knows it, and it must reach the payload: without it a process the scan never
 	// reached would be published as healthy on no evidence at all.
 	PartialStatus bool
+	// ObservedAt is when these facts were read off the server, in Unix seconds, and
+	// zero from a collector that does not date its work.
+	//
+	// It is on the landscape rather than only in [Options] because a collector may
+	// answer from something it read earlier: the facts are what is dated, and a
+	// picture stamped with the moment it was *served* would claim a freshness nobody
+	// measured — the undated "all green" of §10, with a timestamp on it, which is
+	// worse than none. A collector that reads afresh every time sets it to now and
+	// nothing changes.
+	ObservedAt int64
 }
 
 // ModelElement is one bound ArchiMate element: what the architect called it, and
@@ -292,8 +498,32 @@ var overlayKind = map[string]string{
 	KeyConnectorID:   KindWorker,
 }
 
+// The subjects a starmap can be drawn about.
+//
+// They are two pictures and not one picture with more on it, which is what the first
+// cut of the catalogue got wrong. The landscape answers "what does this server run
+// and what depends on what"; an operator reading it for a stuck process does not want
+// a hundred products in the way, and — the part that is not a matter of taste — every
+// product spends the size budget (§7), so a large catalogue could collapse somebody
+// else's landscape to applications without them ever having asked to see it.
+//
+// The product map answers the other question: what is offered, what each product is
+// assembled from, and which processes have to run for it to be delivered. It carries
+// the processes the products *bind* and nothing else of the estate — not the workers
+// those processes use, not the applications that hold them, not the peers. One hop,
+// because the second hop is the landscape's question and the landscape is one click
+// away.
+const (
+	// SubjectLandscape is the default: the estate as it runs.
+	SubjectLandscape = ""
+	// SubjectProducts is the catalogue and what provisions it.
+	SubjectProducts = "products"
+)
+
 // Options tunes one derivation.
 type Options struct {
+	// Subject is which of the two pictures to derive; empty is the landscape.
+	Subject string
 	// Overlays are the Panorama models compared against this landscape. Empty
 	// leaves the mesh exactly as the derivation alone made it.
 	Overlays []Overlay
@@ -318,10 +548,52 @@ type Node struct {
 	// Application is the owning application's node id, for grouping. Empty on
 	// application, restricted, and unresolved nodes.
 	Application string `json:"application,omitempty"`
+	// Catalog is the catalogue node a product is grouped under, and empty on every
+	// other kind. It is its home catalogue (ADR-0315) where that catalogue is on this
+	// picture, and otherwise the first catalogue here that offers it — a product
+	// whose home this reader cannot see is still somewhere, and a collapsed picture
+	// has to put it there.
+	//
+	// Separate from Application rather than sharing it: that field carries a process
+	// application, and one field holding two kinds of container is how a reader ends
+	// up asking which one they have.
+	Catalog string `json:"catalog,omitempty"`
+	// ProductState and ApprovalKind are a product node's two catalogue facets, and
+	// are empty on every other kind — see [Product.State] and [Product.Approval]
+	// for why each carries the store's own spelling rather than a flag.
+	//
+	// ProductState is deliberately *not* the State field further down. That one is
+	// the observation state behind Severity — whether this thing is healthy — and
+	// these two are what the catalogue says the offering is. A withdrawn product
+	// whose provisioning process is green is an ordinary state of affairs, and one
+	// field answering both questions is how a reader ends up reading the wrong one.
+	//
+	// They reach only products this caller may see: a product they may not is drawn
+	// as a restricted placeholder of another kind entirely and never gets here, so
+	// no facet of a hidden offering leaves the server.
+	ProductState string `json:"productState,omitempty"`
+	ApprovalKind string `json:"approvalKind,omitempty"`
 	// ProcessID and Version identify a process node well enough to navigate to the
-	// Operations view (L2) without a second lookup.
+	// Operations view (L2) without a second lookup. On a definition node they are the
+	// identity itself rather than a navigation aid (ADR-0401 §2).
 	ProcessID string `json:"processId,omitempty"`
 	Version   int32  `json:"version,omitempty"`
+	// RuntimeID is the runtime holding this deployment — the other half of its
+	// estate-wide name (ADR-0401 §1). Empty on a definition node, which belongs to no
+	// runtime, and on the kinds that are estate-wide by nature: a capability, a value
+	// stream, a product and a published interface are named without one, and needing
+	// to qualify one of those by the server it sits on would mean it was modelled at
+	// the wrong altitude.
+	//
+	// Not to be confused with Runtime further down, which is instance counters. This
+	// field says *where* the deployment is; that one says what has run in it.
+	RuntimeID string `json:"runtimeId,omitempty"`
+	// Definition is the definition node a deployment realises, and is set only where
+	// that definition is drawn — which is where it has more than one deployment. Empty
+	// otherwise, including on the single-runtime case that is every installation
+	// today: the definition is still known there, it is simply the deployment's own
+	// (ProcessID, Version) and needs no second node to hold it.
+	Definition string `json:"definition,omitempty"`
 	// WorkerType is a worker node's Worker Type ("rest", "mail", …). Never its
 	// endpoint and never its credential reference — see [Worker].
 	WorkerType string `json:"workerType,omitempty"`
@@ -343,6 +615,27 @@ type Node struct {
 	// empty when the severity is the node's own. ADR-0211 §4 requires it: a red
 	// parent that cannot say which child is red is not actionable.
 	SeverityFrom string `json:"severityFrom,omitempty"`
+	// Holds is how many nodes a domain's own landscape holds (ADR-0402 §2), and zero on
+	// every other kind. It is what makes the estate's budget legible: a domain standing
+	// for four hundred nodes and one standing for four are the same size on the picture,
+	// and only this says they are not.
+	Holds int `json:"holds,omitempty"`
+	// DrawnBy names the credential whose reach produced a domain's answer (ADR-0402 §1),
+	// and is empty on every other kind and on this runtime's own domain. A federated read
+	// is as wide as the credential that made it, and the picture states that rather than
+	// leaving a reader to discover it.
+	DrawnBy string `json:"drawnBy,omitempty"`
+	// Restricted is how many of a domain's [Holds] nodes stood in as placeholders for
+	// resources the credential that drew it may not see. Set on a domain node only,
+	// and read against that node rather than against the picture: [Graph.Restricted]
+	// counts what *this* reader may not see in *this* graph, and this counts what
+	// somebody else's credential could not see in somebody else's.
+	//
+	// Keeping the two apart is the whole point of ADR-0402 §1's disclosure rule. A
+	// federated subgraph is as wide as the credential that fetched it (ADR-0410), so a
+	// domain whose reach covered half of it has to say so beside the count — an
+	// incompleteness that is stated is a fact, one that is not is a discovery.
+	Restricted int `json:"restricted,omitempty"`
 	// Incidents is how many unresolved incidents the engine holds against this node.
 	// Only a process node can carry one — an incident belongs to a token, and only a
 	// process has tokens — so it is absent everywhere else rather than zero, because
@@ -352,6 +645,25 @@ type Node struct {
 	// node is in, and this says how much of it there is. A node with a count is
 	// always in a state that reports one, so the two can never disagree.
 	Incidents int `json:"incidents,omitempty"`
+	// OldestIncident is when the earliest unresolved incident on this node was
+	// raised, as Unix nanoseconds. It is the one number that says *how long this has
+	// been wrong*, which is the question a count cannot answer: four hundred
+	// incidents raised in the last five minutes is a worker that has just fallen
+	// over, and three standing since Friday is a process nobody is coming back to.
+	//
+	// The oldest rather than the newest, and rather than an average. The newest says
+	// only that something happened lately, which Runtime.LastActivity already says
+	// better; an average is not a fact about any incident, so nothing can be pointed
+	// at. The oldest is the age of the *problem* — a process where one token parked
+	// on Friday and three hundred piled up behind it has been stuck since Friday.
+	//
+	// A collapsed application carries the earliest of the processes it stands for,
+	// by the same argument its summed count makes: it is standing in for them.
+	//
+	// Absent rather than zero where there is nothing to date, which includes an
+	// incident raised before the engine recorded the moment: "not known" and "raised
+	// at the epoch" are different facts and only one of them is drawable.
+	OldestIncident int64 `json:"oldestIncident,omitempty"`
 	// Sites are where in the process that work is parked (see [IncidentSite]).
 	//
 	// Only a process node carries them, and a collapsed application deliberately
@@ -382,11 +694,23 @@ type Node struct {
 // binding catalog already applies — a deployment target is org-wide infrastructure
 // with no sharing scope of its own.
 //
-// No edges are derived to it, and that absence is deliberate rather than pending. A
-// promotion is an act, not a stored relationship: this server does not record which
-// of its applications is running over there, so any line drawn from one to a target
-// would be an assertion nobody made. What it does know is that the peer exists and
-// whether it answers, and that is exactly what is drawn.
+// No edges are derived to it, and that absence is deliberate rather than pending —
+// but not for the reason this comment used to give. It said a promotion is an act and
+// not a stored relationship, and that this server does not record which of its
+// applications is running over there. It does: `deploymentTarget.Bindings` maps a
+// local application id to the id the same application has on that target, written on
+// the first successful promotion (`api/promote.go`, ADR-0129 option C1) and read back
+// on every later one.
+//
+// What that map is, precisely, is the record of **a promotion that happened** — not
+// evidence that the application is still deployed there, which nothing local can
+// know. So the join is a fact and the current state is not, which is why the join
+// belongs to the estate altitude that draws exactly that
+// (ADR-0402 §4: the only
+// estate-wide edges that are facts are the application joins a promotion recorded)
+// rather than to this picture, where a line between an application and a target would
+// read as "runs there now". What L0 knows about a target is that the peer exists and
+// whether it answers, and that is what is drawn.
 type Target struct {
 	ID   string
 	Name string
@@ -399,16 +723,59 @@ type Target struct {
 }
 
 // Edge is one directed relationship between two nodes.
+//
+// From, To and Kind are its identity: three call activities to one target are one
+// dependency, and the derivation deduplicates on exactly those three. Taken and
+// TakenSince are facts *about* that identity and are never part of it — a count in the
+// key would turn one dependency back into several.
 type Edge struct {
 	From string `json:"from"`
 	To   string `json:"to"`
 	Kind string `json:"kind"`
+	// Taken is how many times the elements behind this edge were activated, summed:
+	// two business rule tasks calling one decision are one edge reached from two
+	// places, and the count is theirs together (ADR-0400). It is read from the
+	// cumulative per-element counter ADR-0080 already maintains, so it costs a join
+	// rather than an index.
+	//
+	// **Nil and zero are different facts.** Nil means the counter was not read — the
+	// same absence [Process.Runtime] uses — or that this edge kind has no element to
+	// anchor on. Zero means it was read and nothing has taken this path, which is a
+	// real answer and the one that must never be rendered as a verdict: a quarterly
+	// reconciliation, a compensation branch and an error handler are each correctly
+	// zero for months and each load-bearing.
+	Taken *int64 `json:"taken,omitempty"`
+	// Promoted is how many applications an estate join stands for (ADR-0402 §4): one
+	// edge between two domains, and the number of recorded promotions along it. Zero
+	// on every other kind of edge, where it would be a claim about nothing.
+	Promoted int `json:"promoted,omitempty"`
+	// TakenSince is when the counting started, in Unix seconds: the moment the source
+	// definition was deployed, because the counter is keyed by definition key and a
+	// redeploy starts a fresh one. It is the window without which Taken says nothing,
+	// so it travels with it and is zero exactly when Taken is nil.
+	TakenSince int64 `json:"takenSince,omitempty"`
 }
 
 // Graph is one derived mesh.
 type Graph struct {
 	Nodes []Node `json:"nodes"`
 	Edges []Edge `json:"edges"`
+	// RuntimeID is the runtime that derived this subgraph, and it is the half that
+	// makes every key in the document mean something (ADR-0401 §1). A node id here
+	// carries a key, a key carries its partition but not its installation, and two
+	// installations both mint partition 0 counter 1 — so "a bare key is never
+	// published estate-wide", and this is what stops these from being bare.
+	//
+	// Qualifying the document rather than each id is deliberate: the estate-wide name
+	// is the pair `(runtimeId, key)`, and both halves already existed, so nothing new
+	// is minted and no shipped id scheme moves. A reader stitching several subgraphs
+	// is the one that has to qualify per node, and it has what it needs to.
+	//
+	// Empty where the server could not read its own identity, which is a fact about
+	// the reading and not an estate of one: an absent runtime id means these keys
+	// cannot be placed, and a consumer must refuse to join them rather than assume
+	// they are local.
+	RuntimeID string `json:"runtimeId,omitempty"`
 	// Restricted is how many placeholder nodes stand in for resources this caller
 	// may not see. The legend states it, so a filtered picture says that it is
 	// filtered instead of looking complete.
@@ -442,13 +809,46 @@ type Graph struct {
 
 func applicationNodeID(id string) string { return KindApplication + ":" + id }
 func processNodeID(key uint64) string    { return fmt.Sprintf("%s:%d", KindProcess, key) }
-func workerNodeID(id string) string      { return KindWorker + ":" + id }
+
+// definitionNodeID names a definition by what it is rather than by any key: process id
+// plus version (ADR-0401 §2). No runtime qualifies it, which is the point — the same
+// id derived on two servers has to come out the same or the two could never be joined.
+//
+// ADR-0401 gives the deployed model's checksum as a tie-breaker, and it is deliberately
+// not here. The record left open whether to take it over the XML or the compiled form,
+// and measuring both answered it: neither is usable as it stands.
+//
+// Over seven real models, an XML checksum splits a definition an operator sees as one —
+// nudging only the diagram changed the XML every time while leaving the compiled form
+// byte-identical every time, which is exactly what the layout transplant does
+// (ADR-0124/0251). Over the compiled form it is worse in a different direction: the
+// compiled form has no serialization at all, so a checksum means inventing a canonical
+// encoding and freezing it forever; its three maps leak iteration order into the hash
+// unless the encoding sorts them (measured: unsorted, the same model hashed differently
+// within one process); and its values are intern-table indices, so the hash is a
+// function of the compiler's private struct — removing any of six probed fields moved
+// it. Since a definition is recompiled from stored XML on every start
+// (`api/deploystore.go`), that last one means the same model would get a new identity
+// after any Atlas upgrade that touches the compiler. G2 touched it last week.
+//
+// So the tie-breaker wants a third thing neither option named: a designed, public,
+// layout-immune projection of the executable model. That is its own piece of work, and
+// nothing needs it yet — the finding it enables, "these two claim the same version and
+// are not the same bytes", needs two runtimes, and there are none until ADR-0402 is
+// decided and built. Adding the field now with the wrong content would put that finding
+// into the picture as a false positive on every layout nudge.
+func definitionNodeID(processID string, version int32) string {
+	return fmt.Sprintf("%s:%s:%d", KindDefinition, processID, version)
+}
+func workerNodeID(id string) string { return KindWorker + ":" + id }
 
 // draftNodeID keys a draft by its BPMN process id, which is the only identity a
 // draft has — there is no deployment key to key it by, and that absence is the
 // whole difference between it and a process node.
 func draftNodeID(processID string) string { return KindDraft + ":" + processID }
 func decisionNodeID(id string) string     { return KindDecision + ":" + id }
+func catalogNodeID(id string) string      { return KindCatalog + ":" + id }
+func productNodeID(id string) string      { return KindProduct + ":" + id }
 func restrictedNodeID(ordinal int) string { return fmt.Sprintf("%s:%d", KindRestricted, ordinal) }
 func targetNodeID(id string) string       { return KindTarget + ":" + id }
 
@@ -491,18 +891,25 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	}
 	sort.Slice(visible, func(i, j int) bool { return visible[i].Key < visible[j].Key })
 
-	g := Graph{Nodes: []Node{}, Edges: []Edge{}, ObservedAt: opts.ObservedAt}
+	g := Graph{Nodes: []Node{}, Edges: []Edge{}, ObservedAt: opts.ObservedAt, RuntimeID: land.RuntimeID}
+	// Which of the two pictures this is (see the subjects above). The halves below are
+	// gated on it rather than filtered afterwards, because the size budget and the
+	// collapse are about what is *on* the picture: a product filtered out in the
+	// browser would still have taken an operator's landscape apart on the way there.
+	productMap := opts.Subject == SubjectProducts
 
 	appIDs := make([]string, 0, len(visibleApps))
 	for id := range visibleApps {
 		appIDs = append(appIDs, id)
 	}
 	sort.Strings(appIDs)
-	for _, id := range appIDs {
-		g.Nodes = append(g.Nodes, Node{
-			ID: applicationNodeID(id), Kind: KindApplication,
-			Name: visibleApps[id].Name, Provenance: ProvenanceDerived,
-		})
+	if !productMap {
+		for _, id := range appIDs {
+			g.Nodes = append(g.Nodes, Node{
+				ID: applicationNodeID(id), Kind: KindApplication,
+				Name: visibleApps[id].Name, Provenance: ProvenanceDerived,
+			})
+		}
 	}
 
 	// Restricted placeholders are keyed internally by the hidden resource — kind and
@@ -522,26 +929,80 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	// unresolved is keyed by its node id, which already carries the kind.
 	unresolved := map[string]string{}
 	// Edges are deduplicated: three call activities to one target are one dependency.
-	seenEdge := map[Edge]bool{}
+	//
+	// The key is the identity triple with the traversal fact stripped off, which is the
+	// whole reason this is an index rather than a set: a repeat is not dropped, its
+	// count is *added* to the edge already there. Two business rule tasks calling one
+	// decision are one edge whose count is theirs together (ADR-0400), and keying on
+	// the whole Edge would instead have produced two edges differing only in a number.
+	//
+	// The indices are valid only while the graph is being built. The sort at the end of
+	// this function reorders g.Edges and invalidates every one of them, so an addEdge
+	// call placed after it would add a count to an unrelated edge — the one failure mode
+	// this join has, and the one that would look plausible on screen. Every call is
+	// above that sort, and a new one belongs above it too.
+	edgeAt := map[Edge]int{}
 	addEdge := func(e Edge) {
-		if !seenEdge[e] {
-			seenEdge[e] = true
+		key := Edge{From: e.From, To: e.To, Kind: e.Kind}
+		i, seen := edgeAt[key]
+		if !seen {
+			edgeAt[key] = len(g.Edges)
 			g.Edges = append(g.Edges, e)
+			return
 		}
+		if e.Taken == nil {
+			return
+		}
+		if g.Edges[i].Taken == nil {
+			// The first contributor carried no count and this one does: adopt it whole,
+			// window included, rather than summing onto an absence.
+			g.Edges[i].Taken = e.Taken
+			g.Edges[i].TakenSince = e.TakenSince
+			return
+		}
+		sum := *g.Edges[i].Taken + *e.Taken
+		g.Edges[i].Taken = &sum
 	}
 
-	for _, p := range visible {
-		node := Node{
+	// taken resolves one anchored element into the traversal fact its edge carries.
+	// Nil where the counter was not read for this process — never a zero, which would
+	// be a claim about traffic on no evidence (ADR-0400).
+	taken := func(p Process, element int32) (*int64, int64) {
+		if p.ElementVisits == nil {
+			return nil, 0
+		}
+		n := p.ElementVisits[element]
+		return &n, p.DeployedAt
+	}
+
+	// processNode is one deployed process as the picture draws it, with everything the
+	// engine has to say about it. Both subjects use it: the landscape draws every
+	// visible process, and the product map draws the ones a product binds — and there
+	// the state is the point, because "the process that provisions this is degraded"
+	// is the finding somebody opened the product map for.
+	processNode := func(p Process) Node {
+		runtime := p.RuntimeID
+		if runtime == "" {
+			runtime = land.RuntimeID
+		}
+		return Node{
 			ID: processNodeID(p.Key), Kind: KindProcess, Name: p.Name,
 			Provenance: ProvenanceDerived, ProcessID: p.ProcessID, Version: p.Version,
-			State: p.State, Reason: p.Reason, Incidents: p.Incidents, Sites: p.Sites,
+			RuntimeID: runtime,
+			State:     p.State, Reason: p.Reason, Incidents: p.Incidents,
+			OldestIncident: p.OldestIncident, Sites: p.Sites,
 			Runtime: p.Runtime,
 		}
-		if _, ok := visibleApps[p.ApplicationID]; ok {
-			node.Application = applicationNodeID(p.ApplicationID)
-			addEdge(Edge{From: node.Application, To: node.ID, Kind: EdgeContains})
+	}
+	if !productMap {
+		for _, p := range visible {
+			node := processNode(p)
+			if _, ok := visibleApps[p.ApplicationID]; ok {
+				node.Application = applicationNodeID(p.ApplicationID)
+				addEdge(Edge{From: node.Application, To: node.ID, Kind: EdgeContains})
+			}
+			g.Nodes = append(g.Nodes, node)
 		}
-		g.Nodes = append(g.Nodes, node)
 	}
 
 	// Drafts, where the caller asked for them. They are drawn beside the processes of
@@ -550,114 +1011,272 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	// activities and drawing edges from them would be drawing the dependencies of a
 	// process that does not exist yet — a plan, rendered in the same ink as the
 	// facts around it, which is exactly what ADR-0211 §3 forbids.
+	// Declared out here because the collapse below stands for them: a collapsed
+	// application says how many nodes it holds, and a draft it holds is one of them.
 	var visibleDrafts []Draft
-	for _, d := range land.Drafts {
-		if d.CanView {
-			visibleDrafts = append(visibleDrafts, d)
-		}
-	}
-	sort.Slice(visibleDrafts, func(i, j int) bool {
-		return visibleDrafts[i].ProcessID < visibleDrafts[j].ProcessID
-	})
-	for _, d := range visibleDrafts {
-		node := Node{
-			ID: draftNodeID(d.ProcessID), Kind: KindDraft, Name: d.Name,
-			Provenance: ProvenanceDerived, ProcessID: d.ProcessID,
-		}
-		if _, ok := visibleApps[d.ApplicationID]; ok {
-			node.Application = applicationNodeID(d.ApplicationID)
-			addEdge(Edge{From: node.Application, To: node.ID, Kind: EdgeContains})
-		}
-		g.Nodes = append(g.Nodes, node)
-	}
-
-	// Dependencies are walked in a second pass so every visible process node already
-	// exists; a placeholder is minted only for a target genuinely not among them.
-	//
-	// Workers and decisions become nodes only where a process references them. The
-	// mesh is the dependency picture, not an inventory: a configured worker nothing
-	// uses is not a landscape edge, and putting it on screen would bury the ones
-	// that are.
-	workers := map[string]Worker{}
-	for _, w := range land.Workers {
-		workers[w.ID] = w
-	}
-	decisions := map[string]Decision{}
-	for _, d := range land.Decisions {
-		decisions[d.ID] = d
-	}
-	usedWorkers := map[string]bool{}
-	usedDecisions := map[string]bool{}
-
-	for _, p := range visible {
-		from := processNodeID(p.Key)
-		for _, c := range p.Calls {
-			target, ok := byKey[c.TargetKey]
-			switch {
-			case c.TargetKey != 0 && ok && target.CanView:
-				addEdge(Edge{From: from, To: processNodeID(target.Key), Kind: EdgeCalls})
-			case c.TargetKey != 0 && ok:
-				addEdge(Edge{From: from, To: restrictedOrdinal(processNodeID(target.Key)), Kind: EdgeCalls})
-			default:
-				// No deployment provides the called process — or the resolved key is
-				// not in the landscape at all, which is the same finding from the
-				// caller's side. The called process id is safe to name: it is in this
-				// caller's own model, which they can already read.
-				id := unresolvedNodeID(KindProcess, c.CalledProcessID)
-				unresolved[id] = c.CalledProcessID
-				addEdge(Edge{From: from, To: id, Kind: EdgeCalls})
+	// Everything from here to the catalogue is the landscape's half: the drafts a
+	// reader asked for, what each process depends on, and the workers and decisions
+	// those dependencies reach. The product map draws none of it — it is the estate,
+	// and the estate is the other picture.
+	if !productMap {
+		for _, d := range land.Drafts {
+			if d.CanView {
+				visibleDrafts = append(visibleDrafts, d)
 			}
 		}
-		for _, u := range p.Workers {
-			target, ok := workers[u.TargetID]
-			switch {
-			case u.TargetID != "" && ok && target.CanView:
-				usedWorkers[target.ID] = true
-				addEdge(Edge{From: from, To: workerNodeID(target.ID), Kind: EdgeUses})
-			case u.TargetID != "" && ok:
-				addEdge(Edge{From: from, To: restrictedOrdinal(workerNodeID(target.ID)), Kind: EdgeUses})
-			default:
-				// The model asks for a worker nobody configured, so the task would
-				// fail at run time. This is the question a model cannot answer about
-				// itself, and the name is safe: it is in this caller's own model.
-				id := unresolvedNodeID(KindWorker, u.Name)
-				unresolved[id] = u.Name
-				addEdge(Edge{From: from, To: id, Kind: EdgeUses})
-			}
-		}
-		for _, ref := range p.Decisions {
-			target, ok := decisions[ref]
-			switch {
-			case ok && target.CanView:
-				usedDecisions[target.ID] = true
-				addEdge(Edge{From: from, To: decisionNodeID(target.ID), Kind: EdgeUses})
-			case ok:
-				addEdge(Edge{From: from, To: restrictedOrdinal(decisionNodeID(target.ID)), Kind: EdgeUses})
-			default:
-				id := unresolvedNodeID(KindDecision, ref)
-				unresolved[id] = ref
-				addEdge(Edge{From: from, To: id, Kind: EdgeUses})
-			}
-		}
-	}
-
-	for _, id := range sortedKeys(usedWorkers) {
-		w := workers[id]
-		// Name and Worker Type only. The record also holds an endpoint and a
-		// credential reference; a landscape picture is opened by anyone with modeler
-		// access, and neither belongs in one (ADR-0211 §10, I6).
-		g.Nodes = append(g.Nodes, Node{
-			ID: workerNodeID(w.ID), Kind: KindWorker, Name: w.Name,
-			Provenance: ProvenanceDerived, WorkerType: w.Type,
-			State: w.State, Reason: w.Reason,
+		sort.Slice(visibleDrafts, func(i, j int) bool {
+			return visibleDrafts[i].ProcessID < visibleDrafts[j].ProcessID
 		})
+		for _, d := range visibleDrafts {
+			node := Node{
+				ID: draftNodeID(d.ProcessID), Kind: KindDraft, Name: d.Name,
+				Provenance: ProvenanceDerived, ProcessID: d.ProcessID,
+			}
+			if _, ok := visibleApps[d.ApplicationID]; ok {
+				node.Application = applicationNodeID(d.ApplicationID)
+				addEdge(Edge{From: node.Application, To: node.ID, Kind: EdgeContains})
+			}
+			g.Nodes = append(g.Nodes, node)
+		}
+
+		// Dependencies are walked in a second pass so every visible process node already
+		// exists; a placeholder is minted only for a target genuinely not among them.
+		//
+		// Workers and decisions become nodes only where a process references them. The
+		// mesh is the dependency picture, not an inventory: a configured worker nothing
+		// uses is not a landscape edge, and putting it on screen would bury the ones
+		// that are.
+		workers := map[string]Worker{}
+		for _, w := range land.Workers {
+			workers[w.ID] = w
+		}
+		decisions := map[string]Decision{}
+		for _, d := range land.Decisions {
+			decisions[d.ID] = d
+		}
+		usedWorkers := map[string]bool{}
+		usedDecisions := map[string]bool{}
+
+		for _, p := range visible {
+			from := processNodeID(p.Key)
+			for _, c := range p.Calls {
+				target, ok := byKey[c.TargetKey]
+				n, since := taken(p, c.ElementIndex)
+				switch {
+				case c.TargetKey != 0 && ok && target.CanView:
+					addEdge(Edge{From: from, To: processNodeID(target.Key), Kind: EdgeCalls, Taken: n, TakenSince: since})
+				case c.TargetKey != 0 && ok:
+					addEdge(Edge{From: from, To: restrictedOrdinal(processNodeID(target.Key)), Kind: EdgeCalls, Taken: n, TakenSince: since})
+				default:
+					// No deployment provides the called process — or the resolved key is
+					// not in the landscape at all, which is the same finding from the
+					// caller's side. The called process id is safe to name: it is in this
+					// caller's own model, which they can already read.
+					id := unresolvedNodeID(KindProcess, c.CalledProcessID)
+					unresolved[id] = c.CalledProcessID
+					addEdge(Edge{From: from, To: id, Kind: EdgeCalls, Taken: n, TakenSince: since})
+				}
+			}
+			for _, u := range p.Workers {
+				target, ok := workers[u.TargetID]
+				n, since := taken(p, u.ElementIndex)
+				switch {
+				case u.TargetID != "" && ok && target.CanView:
+					usedWorkers[target.ID] = true
+					addEdge(Edge{From: from, To: workerNodeID(target.ID), Kind: EdgeUses, Taken: n, TakenSince: since})
+				case u.TargetID != "" && ok:
+					addEdge(Edge{From: from, To: restrictedOrdinal(workerNodeID(target.ID)), Kind: EdgeUses, Taken: n, TakenSince: since})
+				default:
+					// The model asks for a worker nobody configured, so the task would
+					// fail at run time. This is the question a model cannot answer about
+					// itself, and the name is safe: it is in this caller's own model.
+					id := unresolvedNodeID(KindWorker, u.Name)
+					unresolved[id] = u.Name
+					addEdge(Edge{From: from, To: id, Kind: EdgeUses, Taken: n, TakenSince: since})
+				}
+			}
+			for _, ref := range p.Decisions {
+				target, ok := decisions[ref.DecisionID]
+				n, since := taken(p, ref.ElementIndex)
+				switch {
+				case ok && target.CanView:
+					usedDecisions[target.ID] = true
+					addEdge(Edge{From: from, To: decisionNodeID(target.ID), Kind: EdgeUses, Taken: n, TakenSince: since})
+				case ok:
+					addEdge(Edge{From: from, To: restrictedOrdinal(decisionNodeID(target.ID)), Kind: EdgeUses, Taken: n, TakenSince: since})
+				default:
+					id := unresolvedNodeID(KindDecision, ref.DecisionID)
+					unresolved[id] = ref.DecisionID
+					addEdge(Edge{From: from, To: id, Kind: EdgeUses, Taken: n, TakenSince: since})
+				}
+			}
+		}
+
+		for _, id := range sortedKeys(usedWorkers) {
+			w := workers[id]
+			// Name and Worker Type only. The record also holds an endpoint and a
+			// credential reference; a landscape picture is opened by anyone with modeler
+			// access, and neither belongs in one (ADR-0211 §10, I6).
+			g.Nodes = append(g.Nodes, Node{
+				ID: workerNodeID(w.ID), Kind: KindWorker, Name: w.Name,
+				Provenance: ProvenanceDerived, WorkerType: w.Type,
+				State: w.State, Reason: w.Reason,
+			})
+		}
+		for _, id := range sortedKeys(usedDecisions) {
+			d := decisions[id]
+			g.Nodes = append(g.Nodes, Node{
+				ID: decisionNodeID(d.ID), Kind: KindDecision, Name: d.Name,
+				Provenance: ProvenanceDerived,
+			})
+		}
 	}
-	for _, id := range sortedKeys(usedDecisions) {
-		d := decisions[id]
-		g.Nodes = append(g.Nodes, Node{
-			ID: decisionNodeID(d.ID), Kind: KindDecision, Name: d.Name,
-			Provenance: ProvenanceDerived,
-		})
+
+	// Hoisted out of the block below because the collapse needs them: which catalogues
+	// are on the picture, which products reached it, and which catalogue each one
+	// folds into.
+	var visibleCatalogs []ProductCatalog
+	var drawnOrder []string
+	foldInto := map[string]string{}
+	if productMap {
+		// --- The catalogue -------------------------------------------------------
+		//
+		// Two facts meet here that nothing else on this server puts on one picture: what
+		// is offered, and what has to run for it to be delivered. A product names the
+		// process that provisions it, and a product whose process is not deployed is an
+		// order that will park with somebody waiting for a laptop. The catalogue screen
+		// cannot make that finding — it cannot see the engine — and the Operations view
+		// cannot either, because it has never heard of the catalogue.
+		// The processes the products reach, in the order they were first bound. On the
+		// landscape they are already drawn; here they are drawn because a product named
+		// them.
+		bound := map[uint64]bool{}
+		var boundOrder []uint64
+		products := map[string]Product{}
+		for _, it := range land.Products {
+			products[it.ID] = it
+		}
+		// A product binds a process *id* and a derived process node is keyed by its
+		// deployment key, so the two are joined through this index rather than by string
+		// surgery on a node id. The landscape carries one entry per process id at its
+		// current version, so the first is the only one.
+		processByID := make(map[string]Process, len(land.Processes))
+		for _, p := range land.Processes {
+			if _, seen := processByID[p.ProcessID]; !seen {
+				processByID[p.ProcessID] = p
+			}
+		}
+
+		// productRef resolves one item id to whatever an edge should point at: the
+		// product, a placeholder for one this caller may not see, or the unresolved shape
+		// for one that is not here at all. The three are the same three the call
+		// activities above resolve to, for the same reason — "not yours" and "not here"
+		// send somebody to two different places.
+		productRef := func(id string) string {
+			it, known := products[id]
+			switch {
+			case known && it.CanView:
+				return productNodeID(it.ID)
+			case known:
+				return restrictedOrdinal(productNodeID(it.ID))
+			default:
+				nodeID := unresolvedNodeID(KindProduct, id)
+				unresolved[nodeID] = id
+				return nodeID
+			}
+		}
+
+		for _, c := range land.Catalogs {
+			if c.CanView {
+				visibleCatalogs = append(visibleCatalogs, c)
+			}
+		}
+		sort.Slice(visibleCatalogs, func(i, j int) bool { return visibleCatalogs[i].ID < visibleCatalogs[j].ID })
+
+		// drawn is which products reach the picture, in the order they were first
+		// offered; foldInto is the catalogue each one collapses into when the graph is
+		// over budget (see [Node.Catalog]).
+		drawn := map[string]bool{}
+		for _, c := range visibleCatalogs {
+			from := catalogNodeID(c.ID)
+			g.Nodes = append(g.Nodes, Node{
+				ID: from, Kind: KindCatalog, Name: c.Name, Provenance: ProvenanceDerived,
+			})
+			for _, id := range c.Items {
+				addEdge(Edge{From: from, To: productRef(id), Kind: EdgeOffers})
+				it, known := products[id]
+				if !known || !it.CanView {
+					continue
+				}
+				if !drawn[id] {
+					drawn[id] = true
+					drawnOrder = append(drawnOrder, id)
+				}
+				// Home wins wherever it is on the picture; otherwise the first catalogue
+				// here that offers it, which the sort above makes deterministic.
+				if _, have := foldInto[id]; !have || it.HomeCatalog == c.ID {
+					foldInto[id] = c.ID
+				}
+			}
+			for _, e := range c.Edges {
+				kind, drawable := catalogEdgeKinds[e.Kind]
+				if !drawable {
+					continue
+				}
+				addEdge(Edge{From: productRef(e.From), To: productRef(e.To), Kind: kind})
+			}
+		}
+
+		sort.Strings(drawnOrder)
+		for _, id := range drawnOrder {
+			it := products[id]
+			node := Node{
+				ID: productNodeID(id), Kind: KindProduct, Name: it.Name,
+				Provenance: ProvenanceDerived,
+				// What the catalogue says this offering is. Only ever reached for a
+				// product this caller may view — the branch above sends the others to a
+				// restricted placeholder — so this is not a second place to get the
+				// visibility rule right.
+				ProductState: it.State, ApprovalKind: it.Approval,
+			}
+			if home, ok := foldInto[id]; ok {
+				node.Catalog = catalogNodeID(home)
+			}
+			g.Nodes = append(g.Nodes, node)
+			// The two processes that make the promise real. Resolved exactly as a call
+			// activity is, because it is the same question asked by a different referrer.
+			for _, processID := range []string{it.ProvisionProcess, it.DeprovisionProcess} {
+				if processID == "" {
+					continue
+				}
+				target, known := processByID[processID]
+				switch {
+				case known && target.CanView:
+					// On the product map the process is not on the picture yet — this is
+					// the only thing that puts it there, and it arrives with everything
+					// the engine has to say about it, because "the process that provisions
+					// this is degraded" is the finding somebody opened this picture for.
+					if !bound[target.Key] {
+						bound[target.Key] = true
+						boundOrder = append(boundOrder, target.Key)
+					}
+					addEdge(Edge{From: node.ID, To: processNodeID(target.Key), Kind: EdgeUses})
+				case known:
+					addEdge(Edge{From: node.ID, To: restrictedOrdinal(processNodeID(target.Key)), Kind: EdgeUses})
+				default:
+					missing := unresolvedNodeID(KindProcess, processID)
+					unresolved[missing] = processID
+					addEdge(Edge{From: node.ID, To: missing, Kind: EdgeUses})
+				}
+			}
+		}
+
+		if productMap {
+			sort.Slice(boundOrder, func(i, j int) bool { return boundOrder[i] < boundOrder[j] })
+			for _, key := range boundOrder {
+				g.Nodes = append(g.Nodes, processNode(byKey[key]))
+			}
+		}
 	}
 
 	placeholders := sortedKeys(restricted)
@@ -686,10 +1305,14 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		})
 	}
 
-	// The peers, last, and unconditionally: a target that was asked and did not
-	// answer is the finding this whole kind exists to carry, so dropping it for
-	// having no state would delete exactly the row somebody needs.
+	// The peers, last, and unconditionally on the landscape: a target that was asked
+	// and did not answer is the finding this whole kind exists to carry, so dropping
+	// it for having no state would delete exactly the row somebody needs. They are not
+	// on the product map at all — nothing a catalogue offers is promoted to a peer.
 	for _, t := range land.Targets {
+		if productMap {
+			break
+		}
 		g.Nodes = append(g.Nodes, Node{
 			ID: targetNodeID(t.ID), Kind: KindTarget, Name: t.Name,
 			Provenance: ProvenanceDerived, State: t.State, Reason: t.Reason,
@@ -702,7 +1325,74 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	// it is deliberately not covered by a contrived test. It is here because the next
 	// edge kinds (releases, targets) will make it reachable, and a comparator that is
 	// only total by accident sorts unstably the day that happens.
-	applyOverlays(&g, opts.Overlays, visible)
+	// The comparison against a drawn model is the landscape's: ADR-0189 §4 has binding
+	// keys for an application, a process and a worker, and none for a catalogue or a
+	// product — so on the product map there is nothing an overlay could match, and a
+	// modelled-but-absent node would be an application drawn onto a picture that has
+	// deliberately left every application out.
+	if !productMap {
+		applyOverlays(&g, opts.Overlays, visible)
+	}
+
+	// The definition half of ADR-0401 §2, drawn only where it says something.
+	//
+	// This runs over the deployment nodes already on the graph rather than over
+	// land.Processes, which is what makes it subject-agnostic: the landscape draws
+	// every visible process and the product map draws the ones a product binds, and a
+	// definition shared by two deployments is the same finding on either. It has to
+	// stay above the sort below, for the reason addEdge does — but for a different
+	// one: addEdge holds slice indices, and this holds none. It reads node ids, which
+	// the sort does not touch.
+	//
+	// A deployment with no runtime id cannot take part. That is not a technicality: two
+	// records of one definition are two deployments only if something tells them apart,
+	// and without a runtime id they may be the same deployment counted twice — which
+	// is what a collector that could not read its own identity would hand over. Drawing
+	// a definition there would assert an estate on the strength of a failed read.
+	byDefinition := map[string][]int{}
+	for i, n := range g.Nodes {
+		if n.Kind != KindProcess || n.ProcessID == "" || n.RuntimeID == "" {
+			continue
+		}
+		id := definitionNodeID(n.ProcessID, n.Version)
+		byDefinition[id] = append(byDefinition[id], i)
+	}
+	definitionIDs := make([]string, 0, len(byDefinition))
+	for id := range byDefinition {
+		definitionIDs = append(definitionIDs, id)
+	}
+	sort.Strings(definitionIDs) // map order must not reach the payload
+	for _, id := range definitionIDs {
+		at := byDefinition[id]
+		runtimes := map[string]struct{}{}
+		for _, i := range at {
+			runtimes[g.Nodes[i].RuntimeID] = struct{}{}
+		}
+		if len(runtimes) < 2 {
+			continue
+		}
+		// The name is a label for the reader, not part of the identity — that is
+		// (ProcessID, Version) and nothing else. Taken from the first deployment, which
+		// is deterministic because the nodes were appended in a fixed order.
+		//
+		// Two deployments of one definition disagreeing about the name would mean the
+		// same process id at the same version compiled from different models, which is
+		// the "same version, different bytes" finding — and detecting that needs the
+		// checksum definitionNodeID deliberately does not have yet. So the label is one
+		// of them rather than a claim that both agree, and the day the tie-breaker
+		// exists it is the thing that turns the disagreement into a finding instead of
+		// a silently arbitrary caption.
+		first := g.Nodes[at[0]]
+		g.Nodes = append(g.Nodes, Node{
+			ID: id, Kind: KindDefinition, Name: first.Name,
+			Provenance: ProvenanceDerived,
+			ProcessID:  first.ProcessID, Version: first.Version,
+		})
+		for _, i := range at {
+			g.Nodes[i].Definition = id
+			addEdge(Edge{From: id, To: g.Nodes[i].ID, Kind: EdgeDeploys})
+		}
+	}
 
 	sort.SliceStable(g.Edges, func(i, j int) bool {
 		if g.Edges[i].From != g.Edges[j].From {
@@ -715,6 +1405,13 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	})
 
 	if opts.MaxNodes > 0 && len(g.Nodes) > opts.MaxNodes {
+		if productMap {
+			children := map[string]int{}
+			for _, id := range drawnOrder {
+				children[foldInto[id]]++
+			}
+			return clusterProducts(g, visibleCatalogs, children, land.PartialStatus)
+		}
 		return cluster(g, visible, visibleDrafts, appIDs, visibleApps, land.PartialStatus)
 	}
 	applyStatus(&g, land.PartialStatus)
@@ -806,6 +1503,14 @@ func applyOverlays(g *Graph, overlays []Overlay, visible []Process) {
 		if n.Kind == KindRestricted || n.Kind == KindUnresolved || n.Kind == KindDraft {
 			continue
 		}
+		// Nor a catalogue or a product, for a third reason again. Drift is a claim
+		// about a resource a model *could* have declared, and ADR-0189 §4 defines no
+		// binding key for either — so counting them would report a debt nobody can
+		// ever pay off, growing by one every time somebody adds a product. When a key
+		// exists for them, they join the count and this line goes.
+		if n.Kind == KindCatalog || n.Kind == KindProduct {
+			continue
+		}
 		g.Unmodeled++
 	}
 }
@@ -832,6 +1537,10 @@ func cluster(full Graph, visible []Process, drafts []Draft, appIDs []string,
 	// a collapsed application stands for all of them, and reporting one child's
 	// number against the whole would understate what is parked behind it.
 	incidents := map[string]int{}
+	// And their age survives as the *earliest* of them, for the same reason read the
+	// other way round: the collapsed node stands for all of them, so how long it has
+	// been in trouble is how long the longest-parked of its processes has been.
+	oldest := map[string]int64{}
 	// And so does the instance tally, summed for the same reason: the collapsed node
 	// stands for all of them. LastActivity is the latest of theirs rather than a sum,
 	// because a timestamp is not a quantity — the question it answers is "has
@@ -844,6 +1553,10 @@ func cluster(full Graph, visible []Process, drafts []Draft, appIDs []string,
 		children[p.ApplicationID]++
 		processChildren[p.ApplicationID]++
 		incidents[p.ApplicationID] += p.Incidents
+		if p.OldestIncident > 0 && (oldest[p.ApplicationID] == 0 ||
+			p.OldestIncident < oldest[p.ApplicationID]) {
+			oldest[p.ApplicationID] = p.OldestIncident
+		}
 		if p.Runtime != nil {
 			acc := runtime[p.ApplicationID]
 			if acc == nil {
@@ -873,6 +1586,12 @@ func cluster(full Graph, visible []Process, drafts []Draft, appIDs []string,
 	out := Graph{
 		Nodes: []Node{}, Edges: []Edge{},
 		Restricted: full.Restricted, Clustered: true, ObservedAt: full.ObservedAt,
+		// Carried like the other two: a collapsed picture is still this runtime's, and
+		// dropping the id here would make every over-budget installation unjoinable —
+		// an absent runtime id means "these keys cannot be placed" (ADR-0401 §1), which
+		// is a true thing to say about a failed read and a false one to say about a
+		// large estate.
+		RuntimeID: full.RuntimeID,
 	}
 	for _, id := range appIDs {
 		node := Node{
@@ -884,8 +1603,39 @@ func cluster(full Graph, visible []Process, drafts []Draft, appIDs []string,
 			node.Reason = fmt.Sprintf("worst of %d collapsed process(es): %s",
 				processChildren[id], p.Reason)
 			node.Incidents = incidents[id]
+			node.OldestIncident = oldest[id]
 		}
 		out.Nodes = append(out.Nodes, node)
+	}
+	applyStatus(&out, partial)
+	return out
+}
+
+// clusterProducts is the same answer for the other subject: over budget, the product
+// map collapses to the catalogues, each saying how many products it stands for.
+//
+// Catalogues survive for the reason applications do in cluster above — they are what
+// holds the things being collapsed, and leaving them out would take the whole picture
+// away rather than shrink it, which is the truncated-but-complete-looking graph
+// ADR-0211 §7 refuses. They carry no state to aggregate, so a collapsed catalogue is
+// its name and how much it stands for.
+func clusterProducts(full Graph, catalogs []ProductCatalog, children map[string]int,
+	partial bool) Graph {
+	out := Graph{
+		Nodes: []Node{}, Edges: []Edge{},
+		Restricted: full.Restricted, Clustered: true, ObservedAt: full.ObservedAt,
+		// Carried like the other two: a collapsed picture is still this runtime's, and
+		// dropping the id here would make every over-budget installation unjoinable —
+		// an absent runtime id means "these keys cannot be placed" (ADR-0401 §1), which
+		// is a true thing to say about a failed read and a false one to say about a
+		// large estate.
+		RuntimeID: full.RuntimeID,
+	}
+	for _, c := range catalogs {
+		out.Nodes = append(out.Nodes, Node{
+			ID: catalogNodeID(c.ID), Kind: KindCatalog, Name: c.Name,
+			Provenance: ProvenanceDerived, Children: children[c.ID],
+		})
 	}
 	applyStatus(&out, partial)
 	return out

@@ -42,10 +42,9 @@ import (
 // unauthenticated-by-them and must stay small and predictable; a label map is a
 // place free-form text otherwise accumulates without limit.
 const (
-	maxNodeLabels    = 20
-	maxNodeLabelLen  = 200
-	maxNodeFieldLen  = 200
-	maxNodeBodyBytes = 16 << 10
+	maxNodeLabels   = 20
+	maxNodeLabelLen = 200
+	maxNodeFieldLen = 200
 )
 
 // nodeIdentity is the operator-owned half of the descriptor, persisted under the
@@ -88,6 +87,14 @@ type nodeDescriptor struct {
 	Features []string `json:"features"`
 }
 
+// featurePanoramaMesh is the feature id a peer advertises when it serves the derived
+// landscape read. It is named rather than spelled twice because a federated estate
+// read decides ADR-0402 §3's fifth
+// state — *the peer answered, and does not serve this view* — by looking for exactly
+// this id in a peer's descriptor, and an id that drifted between the advertisement
+// and the check would report every peer as a version boundary.
+const featurePanoramaMesh = "panorama.mesh"
+
 // nodeFeatures maps each advertised feature id to the route that proves it. The
 // ids are deliberately coarse — a correlator asks "can I read observations here",
 // not "which query parameters does this build accept" — and named for what they
@@ -99,7 +106,7 @@ var nodeFeatures = map[string]string{
 	"observations.runtime":   "GET /api/v1/processes/{key}/runtime",
 	"applications.releases":  "GET /api/v1/applications/{id}/releases",
 	"panorama.models":        "GET /api/v1/panorama/models",
-	"panorama.mesh":          "GET /api/v1/panorama/mesh",
+	featurePanoramaMesh:      "GET /api/v1/panorama/mesh",
 	"panorama.bindings":      "GET /api/v1/panorama/models/{id}/bindings",
 	"panorama.c4":            "GET /api/v1/panorama/models/{id}/c4",
 }
@@ -229,7 +236,7 @@ type updateNodeReq struct {
 // handleUpdateNode sets the operator-owned half of the descriptor. Absent fields
 // are left alone, so setting an environment does not silently clear a name.
 func (s *Server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxNodeBodyBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Registration))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -272,6 +279,9 @@ func (s *Server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
 		if saveErr = s.settings.saveNode(identity); saveErr != nil {
 			return
 		}
+		// The server namespace reports the node's name and environment to the instances
+		// that read them (ADR-0456).
+		s.noteNode(identity)
 		desc, saveErr = s.describeNode()
 	})
 	switch {

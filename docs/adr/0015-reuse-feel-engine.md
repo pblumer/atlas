@@ -1,6 +1,7 @@
 # ADR-0015: Reuse the external FEEL engine behind an `expr` boundary
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-22
 - **Deciders:** Atlas maintainers
 

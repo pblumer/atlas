@@ -88,7 +88,7 @@ func runAndReadDish(t *testing.T, x deployTestHarness, key uint64, processID str
 		ProcessID string `json:"processId"`
 		State     string `json:"state"`
 	}
-	_ = json.Unmarshal(ib, &insts)
+	_ = json.Unmarshal(listRows(t, ib), &insts)
 	var instKey uint64
 	for _, in := range insts {
 		if in.ProcessID == processID && in.State == "active" {

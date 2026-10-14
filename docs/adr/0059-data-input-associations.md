@@ -1,6 +1,7 @@
 # ADR-0059: Data input associations — read a data object into an activity
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Patrick Blumer
 

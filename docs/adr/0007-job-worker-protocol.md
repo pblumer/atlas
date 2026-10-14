@@ -1,6 +1,7 @@
 # ADR-0007: Job worker protocol
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-06-11
 - **Deciders:** Core team
 
@@ -129,6 +130,12 @@ unambiguous — a worker that lists an instance's jobs can lease and work them t
    — but a lease epoch on the job, presented on completion, is what closes it.
 4. **Activation and timeout counters** (ADR-0142 slice 5 deferred them for want of these
    events; `JobActivated` and `JobTimedOut` now exist).
+
+> **As built (2026-10-11).** All four have landed since this list was written: the global
+> job-type registry (`jobtype/registry.go`) and the type-keyed pull
+> `POST /api/v1/jobs/activate`; long-poll (`api/jobwait.go`); fencing, by a lease epoch the
+> worker presents as `leaseToken` and `holdsLease` checks on every report (`api/handlers.go`);
+> and the counters `jobs_activated_total` and `jobs_lease_timeouts_total` (`api/metrics.go`).
 
 ## Links
 

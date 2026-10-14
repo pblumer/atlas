@@ -29,7 +29,7 @@ type setLayoutRequest struct {
 // why.
 func (s *Service) HandleSetLayout(w http.ResponseWriter, r *http.Request) {
 	var payload setLayoutRequest
-	if !decodeJSON(w, r, &payload) {
+	if !s.decodeJSON(w, r, &payload) {
 		return
 	}
 	if payload.ExpectedRevision < 1 {

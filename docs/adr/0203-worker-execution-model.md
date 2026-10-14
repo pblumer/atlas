@@ -1,6 +1,7 @@
 # ADR-0203: Worker execution model and integration terminology
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-27
 - **Deciders:** Atlas maintainers
 

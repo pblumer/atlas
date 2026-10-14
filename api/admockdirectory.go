@@ -30,12 +30,6 @@ import (
 // outbox it stays off the run loop: [ad.MockView] holds its own lock, so a Console
 // polling this cannot slow a running process down.
 
-// maxADMockReport bounds one report. It is generous next to the outbox's message
-// limit because a directory is not a message — [worker.maxReportedEntries] entries with
-// their attributes is the shape of it — and it exists so a body is refused before
-// being read into memory rather than after.
-const maxADMockReport = 8 << 20
-
 // handleADMockDirectory serves the mock directories this server's workers reported,
 // which is what Operations › Mock directory renders.
 //
@@ -61,7 +55,7 @@ func (s *Server) handleADMockDirectory(w http.ResponseWriter, _ *http.Request) {
 // deleted has to leave the view with it.
 func (s *Server) handleReportADMockDirectory(w http.ResponseWriter, r *http.Request) {
 	var snap ad.MockSnapshot
-	if err := json.NewDecoder(io.LimitReader(r.Body, maxADMockReport)).Decode(&snap); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Payload)).Decode(&snap); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid mock directory report: "+err.Error())
 		return
 	}

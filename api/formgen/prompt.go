@@ -23,7 +23,7 @@ import (
 // here, no token and no variable to answer into, and a model told otherwise asks which
 // case it is working on.
 func systemPrompt() string {
-	return `You write forms for Atlas, a BPMN workflow engine. A form is filled in by a person: it either starts a process or completes one of its human steps. What they type lands in the process's variables.
+	return `You write forms for atlas, a BPMN workflow engine. A form is filled in by a person: it either starts a process or completes one of its human steps. What they type lands in the process's variables.
 
 Answer with one JSON document and nothing else — no explanation before it, no offer to adjust it after, no markdown fence.
 

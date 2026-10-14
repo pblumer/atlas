@@ -1,0 +1,32 @@
+{
+  "type": "default",
+  "id": "arbeitsplatz-geraet",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Ausstattung wählen\n\nWelches Gerät braucht die neue Person? Davon hängt ab, welche Maske als Nächstes kommt."
+    },
+    {
+      "key": "geraet",
+      "type": "radio",
+      "label": "Gerät",
+      "values": [
+        { "label": "Laptop", "value": "Laptop" },
+        { "label": "Desktop", "value": "Desktop" },
+        { "label": "Kein Gerät", "value": "Kein Gerät" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "arbeitsort",
+      "type": "radio",
+      "label": "Arbeitsort",
+      "values": [
+        { "label": "Büro", "value": "Büro" },
+        { "label": "Homeoffice", "value": "Homeoffice" },
+        { "label": "Beides", "value": "Beides" }
+      ],
+      "validate": { "required": true }
+    }
+  ]
+}

@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/internal/ownerfile"
 )
 
 func testVaultKey(t *testing.T) []byte {
@@ -263,9 +265,9 @@ func TestLoadOrCreateKeyFile(t *testing.T) {
 	if err != nil || src1 != "generated" || len(k1) != 32 {
 		t.Fatalf("first call: key=%d src=%q err=%v, want 32-byte generated", len(k1), src1, err)
 	}
-	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("key file: mode=%v err=%v, want 0600", info.Mode().Perm(), err)
+	// Mode 0600 on Unix; on Windows, which ignores modes, a DACL for this account only.
+	if err := ownerfile.Check(path); err != nil {
+		t.Fatalf("key file: %v, want it readable by this account only", err)
 	}
 	k2, src2, err := loadOrCreateKeyFile(path)
 	if err != nil || src2 != "file" || !bytes.Equal(k1, k2) {
@@ -469,5 +471,19 @@ func TestVaultListSortByCreatedAt(t *testing.T) {
 	}
 	if len(metas) != 2 || metas[0].Name != "older" {
 		t.Errorf("List order = %+v, want older (createdAt 100) first", metas)
+	}
+}
+
+// TestAKeyFileThatCannotBeCreatedIsAnError: a generated key that never reached the
+// disk must fail the start, not be handed back as if it would be there next time —
+// the next start would generate another and every secret sealed with this one would
+// be lost.
+func TestAKeyFileThatCannotBeCreatedIsAnError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "vault.key")
+	if err := os.Mkdir(path, 0o700); err != nil { // a directory where the file belongs
+		t.Fatalf("Mkdir: %v", err)
+	}
+	if err := writeKeyFile(path, []byte("key")); err == nil {
+		t.Fatal("writeKeyFile over a directory = nil, want an error")
 	}
 }

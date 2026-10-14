@@ -1,6 +1,7 @@
 # ADR-0210: Federated authentication
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-29
 - **Deciders:** Atlas maintainers
 

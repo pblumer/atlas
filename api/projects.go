@@ -76,7 +76,7 @@ func newID() (string, error) {
 
 // handleCreateProject creates a named project. Body: {"name": "..."}.
 func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -114,7 +114,9 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		if rec.Key, saveErr = s.deriveApplicationKey(rec); saveErr != nil {
 			return
 		}
-		saveErr = s.projects.Save(rec)
+		if saveErr = s.projects.Save(rec); saveErr == nil {
+			s.noteApplication(rec)
+		}
 	})
 	if saveErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "create project: "+saveErr.Error())
@@ -185,7 +187,7 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 // existing user.
 func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -278,6 +280,7 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 		if saveErr = s.projects.Save(rec); saveErr != nil {
 			return
 		}
+		s.noteApplication(rec)
 		// Audit the access-control changes — visibility flips and ownership transfers,
 		// each only when the value actually changed (ADR-0184). A
 		// rename is not an access change and is not recorded.
@@ -391,6 +394,13 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		if delErr = s.grantAudit.deleteForApplication(id); delErr != nil {
 			return
 		}
+		// Its constants on this installation are configuration of this application alone
+		// (ADR-0453): gone with it, before it, for the
+		// same self-healing order.
+		if delErr = s.appConstants.Delete(id); delErr != nil {
+			return
+		}
+		s.forgetApplication(id)
 		if delErr = s.projects.Delete(id); delErr != nil {
 			return
 		}

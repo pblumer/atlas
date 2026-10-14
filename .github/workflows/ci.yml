@@ -10,15 +10,97 @@ permissions:
   contents: read
 
 jobs:
+  # What kind of change is this? A pull request that only touches docs/ takes the
+  # `docs` job below instead of the two heavy ones, because the race detector, the
+  # coverage floor, the benchmark harness and a browser cannot be moved by a markdown
+  # file — and a change of two lines in an ADR paid twenty-four minutes for them.
+  #
+  # The gate is a job-level `if`, not a workflow-level `paths-ignore`. The difference
+  # matters if these checks are ever made required: a workflow that never runs leaves
+  # its check pending forever and blocks the merge, while a job skipped by `if` reports
+  # as skipped, which branch protection accepts. The check names also stay put either
+  # way, so nothing outside this file has to learn about the split.
+  #
+  # Only a pull request takes the short path. A push to main runs the full sequence
+  # whatever it carries: it is the last reading before the code is the branch everyone
+  # builds on, and it costs nothing anybody is waiting for.
+  changes:
+    name: what changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history, so the base of the pull request is present to diff against.
+          fetch-depth: 0
+
+      - name: Classify the diff
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "$EVENT: the full sequence runs, whatever changed."
+            exit 0
+          fi
+          # --no-renames so a file moved out of docs/ lists its old path too; three dots
+          # so this is what the branch changed, not what main changed underneath it.
+          files="$(git diff --name-only --no-renames "$BASE_SHA...$HEAD_SHA")"
+          echo "Changed files:"
+          echo "$files" | sed 's/^/  /'
+          if [ -z "$files" ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "An empty diff is not a docs change; taking the full sequence rather than guessing."
+            exit 0
+          fi
+          if echo "$files" | grep -qv '^docs/'; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "Something outside docs/ changed: the full sequence."
+          else
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+            echo "Only docs/ changed: the docs job."
+          fi
+
   check:
-    name: build · vet · fmt · race · cover
+    name: build · vet · fmt · race
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     # Same reasoning as the e2e job below: the expensive failure mode is the hang,
     # not the error, and this job had no ceiling at all — a wedged test would have
-    # held a runner for the six-hour default. It takes ~14 minutes today, and the
-    # race step's per-package timeout is raised below, so the cap is what keeps that
-    # from turning one stuck package into hours of runner time.
-    timeout-minutes: 30
+    # held a runner for the six-hour default. The race step's per-package timeout is
+    # raised below, so the cap is what keeps one stuck package from turning into
+    # hours of runner time.
+    #
+    # The number below is a ceiling on a hang, and it has stopped being one twice.
+    #
+    # At 30 it was the race step and the coverage floor in one job: 24m30s plus
+    # 3m59s, 82% of the cap rather than the "under half" the split was aiming for.
+    # The floor is a *second full test run* that shares nothing with this one but the
+    # checkout, so it is its own job now — keep that rule: if a step here ever needs
+    # a second full pass over the tree, it wants a job, not a bigger number.
+    #
+    # The split was necessary and not sufficient. Two runs of the same tree an hour
+    # apart on 2026-09-16 drew runners 51% apart — api alone took 1352s (22m32) on
+    # one and 2048s (34m08) on the other — and the run after that died at the
+    # *per-package* limit inside the step (FAIL api 1500.065s) on a machine where
+    # engine, conformance, mcp and state were all two to six times slower than two
+    # hours earlier. Nothing in those diffs touched any of them.
+    #
+    # Both limits bound the same run, so they are set together, and their *order*
+    # matters more than either number: the per-package limit below must fire first,
+    # because Go names the package and prints a goroutine dump, while this cap
+    # cancels the job with no line saying why. 45m below, 60 here — enough that the
+    # slowest package on the slowest draw still reports itself. This is a hang
+    # ceiling and not a deadline: the job measures ~27m on a fast draw and ~39m on a
+    # slow one.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -28,7 +110,24 @@ jobs:
           go-version: '1.26'
           check-latest: true
 
-      # For the What's New generator below; it is plain ESM with no dependencies.
+      # Nothing in the Go build needs Node. This step is here because it decides
+      # *which* node is on PATH, and connector/script's sandbox test starts whichever
+      # one it finds.
+      #
+      # With this step that is the toolcache node, which sits outside the sandbox
+      # runtime roots, so the JavaScript case skips (documented in the test as "does
+      # not count as proof of anything") and Python carries the ATLAS_SANDBOX_E2E
+      # requirement. Without it the test finds the image's /usr/local/bin/node, which
+      # *is* inside those roots, so the case runs — and fails, because that node reads
+      # /etc/ssl/openssl.cnf on startup and the strict policy does not grant it:
+      #
+      #     node did not start inside the strict sandbox: exit status 13
+      #     OpenSSL configuration error: ... Permission denied ... /etc/ssl/openssl.cnf
+      #
+      # That failure is real and predates this file — removing the step is what exposes
+      # it, not what causes it (issue #1002). Keeping the step is the environment CI
+      # has always had rather than a way of hiding anything, and the test's own skip
+      # accounting is what keeps that honest.
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -49,36 +148,42 @@ jobs:
             exit 1
           fi
 
-      # The Console "What's New" feed is generated from CHANGELOG.md and committed
-      # (ADR-0012 keeps the web UI buildless, so nothing regenerates it at build or
-      # runtime). Nothing else notices when a CHANGELOG entry lands without the
-      # generator having been re-run — the feed just silently stops at the last time
-      # someone remembered. Re-run it here and fail on any diff.
-      - name: What's New feed is up to date
-        run: |
-          node scripts/whats-new/gen.mjs
-          if ! git diff --quiet -- api/web/whats-new.json; then
-            echo "api/web/whats-new.json is stale. Run 'make whats-new' and commit the result."
-            echo "(Add curated DE/EN prose in scripts/whats-new/overrides/<id>.json — see scripts/whats-new/README.md.)"
-            git --no-pager diff -- api/web/whats-new.json
-            exit 1
-          fi
-
-      # The api package needs 8-10 minutes of Go's default 10-minute *per-package*
-      # timeout on its own, so the default leaves no headroom and the step fails on
-      # runner variance rather than on a defect: it passed at 526s on one run and
-      # timed out at 600s on the next, where the only change between them was a
-      # single line in an unrelated test file. Nothing is skipped or quarantined by
-      # raising it — every test still runs, and a real hang still ends the job well
-      # inside the job's 30-minute cap above.
+      # The api package needs most of this on its own, so a tight limit fails the step
+      # on runner variance rather than on a defect. That has now happened at two
+      # limits, and a third was measured close enough to count:
+      #
+      #   - At Go's 10-minute default it passed at 526s on one run and timed out at
+      #     600s on the next, where the only change between them was a single line in
+      #     an unrelated test file.
+      #   - At 25m it timed out at 1500s on a run where the same package had taken
+      #     1254s two hours earlier. That runner was slower across the board, not
+      #     just here: engine 82s → 219s, conformance 8s → 45s, mcp 19s → 48s,
+      #     state 4s → 17s. Nothing in the diff touched any of them.
+      #   - The widest pair measured on one tree is 1352s and 2048s, an hour apart on
+      #     2026-09-16. 35m clears the second of those by 52 seconds, which is the
+      #     same coin toss one draw further out; 45m clears it by a third.
+      #
+      # Nothing is skipped or quarantined by raising it — every test still runs, and
+      # a real hang still ends the step below the job's cap above, which is the point
+      # of the pairing: this limit names the package, the cap says nothing.
+      #
+      # The number buys headroom; it does not fix the cause. api is most of what this
+      # step measures, and a limit raised three times is a package that wants
+      # splitting or parallelising — issue #1001.
       #
       # `make race` and the documented command in AGENTS.md carry the same flag, so
       # a contributor's local run matches this one. Change one and change the rest.
       - name: Test (race detector)
-        run: go test -race -timeout=25m ./...
-
-      - name: Coverage floor (>= 95%, ADR-0018)
-        run: ./scripts/check-coverage.sh 95
+        env:
+          # This runner can enforce the script sandbox, so the end-to-end check that an
+          # interpreter really starts inside it has to run rather than skip. `go test`
+          # hides skips unless it is given -v, so a guard that quietly stopped guarding
+          # anything would look exactly like a guard that passed (ADR-0303).
+          #
+          # Deliberately not in `make race`: a contributor's kernel may have no Landlock
+          # at all, and there the skip is the correct answer rather than a failure.
+          ATLAS_SANDBOX_E2E: required
+        run: go test -race -timeout=45m ./...
 
       # Smoke-run the benchmark harness (programme B): one iteration each, just to
       # prove it compiles and executes. No performance threshold is enforced on PR
@@ -87,8 +192,247 @@ jobs:
       - name: Benchmark harness smoke
         run: go test -run=^$ -bench=. -benchtime=1x ./benchmarks/
 
+  # The repository-wide statement floor (ADR-0018), in its own job.
+  #
+  # It is here rather than beside the race step because it is a **second full run of
+  # the test suite** — instrumented for coverage instead of for races — and the two
+  # share nothing but the checkout. Sequenced behind the race detector it added four
+  # minutes to a job that already needed twenty-five, and the pair outgrew the cap
+  # that was supposed to catch a hang; run side by side they each finish in a
+  # fraction of their own ceiling, and neither can cancel the other by being slow.
+  #
+  # It buys wall-clock too, which is the smaller reason and worth naming as the
+  # smaller one: the two runs now overlap rather than queue. What it does not change
+  # is what a contributor does — `make check` is still build, vet, fmt, race and
+  # cover in sequence, because one laptop has one set of cores and splitting there
+  # would buy nothing.
+  #
+  # Because it is a full run of the suite it sets up Node for the reason spelled out
+  # at the race job's own Node step: connector/script's sandbox test runs here too
+  # and starts whichever node it finds. It does *not* carry ATLAS_SANDBOX_E2E, which
+  # is deliberate and matches what the single job did before the split — that
+  # variable turns one skip into a required run, and one of the two passes is enough.
+  cover:
+    name: cover · statement floor
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    # Forty, for the pairing the race job above spells out rather than for this
+    # job's duration: `check-coverage.sh` carries `-timeout=25m` per package, the
+    # rest of the run takes four to five minutes around it, and a cap of 30 would
+    # have cancelled a hung package a minute before Go could name it. A cap that
+    # fires first turns a diagnosable timeout into a silent cancellation.
+    #
+    # The run itself is nowhere near either number — 5m12s measured here, ~9m on a
+    # slow draw — and that is the point: this is a hang-catcher with headroom it can
+    # be shown to have, not a deadline the suite has to beat.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      # See the race job's Node step: this decides which node the sandbox test starts.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Coverage floor (>= 95%, ADR-0018)
+        run: ./scripts/check-coverage.sh 95
+
+  # The storage packages on the one platform the release ships a binary for and no
+  # job here ran on.
+  #
+  # release.yml builds atlas.exe from this tree, but every other job runs on Linux, so
+  # a Windows-only defect reached a server before any runner saw it: the WAL reopened
+  # its newest segment append-only, a handle Windows will not truncate, and every
+  # start after the first stopped with "Access is denied". The code was correct Go and
+  # passed the whole suite; only the file system underneath it differed.
+  #
+  # So this runs the packages whose correctness *is* file-system behaviour — the log,
+  # checkpoints, the state store, the design-time stores' write discipline, and the
+  # directory fsync they share — on a Windows runner. Not the whole suite: the rest is
+  # platform-neutral Go that the Linux jobs already stand for.
+  #
+  # engine is here for its recovery tests: write through the processor, close, reopen,
+  # replay the log and compare with live state (ADR-0001). They are the only tests that
+  # drive the storage packages through a restart the way a server does, and a restart
+  # is exactly where the WAL failed. The whole package runs rather than a -run pattern:
+  # the recovery tests are named a dozen ways across as many files, and a pattern would
+  # quietly miss the next one. engine imports nothing that starts a process or talks to
+  # a network — only the log, the store, checkpoints and the compiler — so whatever
+  # else fails here on Windows is storage behaviour too.
+  #
+  # CGO_ENABLED=0 because that is how release.yml builds atlas.exe, which also rules
+  # out the race detector (it needs cgo). Races are the race job's to catch — nothing
+  # about them is Windows-specific — and this job exists for what is. The shipped
+  # binary is built first, natively, so a change that breaks the Windows build fails
+  # on its pull request instead of on the release tag.
+  windows:
+    name: windows · storage
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: windows-latest
+    # Paired with the per-package limit on the Test step, which has to fire first so Go
+    # names the package. The storage packages take seconds on Linux and engine about half
+    # a minute without the race detector; nearly all of this job is setting up Go and
+    # compiling on a Windows runner.
+    timeout-minutes: 25
+    env:
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      - name: Build atlas.exe
+        run: go build -o atlas.exe ./cmd/atlas
+
+      - name: Test storage packages and engine recovery
+        run: go test -timeout=10m ./wal/... ./checkpoint/... ./state/... ./api/sidecar/... ./internal/... ./engine/...
+
+  # The api tree on Windows, in a job beside the storage one rather than inside it.
+  #
+  # api is most of the server: the HTTP handlers, logins, the design-time stores and
+  # their files, the worker supervisor. It had never run on Windows either, and every
+  # defect the storage job has found so far was a file-system difference that showed
+  # only once the code ran there — so it runs there too.
+  #
+  # Its own job for the reason the cover job is its own job: api is a long run, and
+  # sequenced behind the storage packages it would hold their answer back and share
+  # their limits. On Linux without the race detector it takes about four and a half
+  # minutes; engine took seven times as long on the Windows runner as on Linux, and
+  # nothing says api will do better. So the limits are the race job's pair, for the
+  # race job's reason — 45m per package so Go names a stuck one before the 60-minute
+  # cap cancels the job without a word. They bound a hang, not a duration measured
+  # here.
+  #
+  # CGO_ENABLED=0 as in the storage job: it is how atlas.exe is built, and races stay
+  # the race job's. The worker-supervisor tests start their worker through `sh` and
+  # skip themselves where there is none.
+  #
+  # The Worker Types (connector/) run here too. They are what a server executes on its
+  # tasks' behalf — in process or supervised by it — so on a Windows server they run on
+  # Windows as well; the script Worker Type in particular starts interpreters, and
+  # process handling is where Windows differs most. They cost this job next to nothing:
+  # api imports every one of them — all but two mocks and a template the tests use —
+  # so they are compiled anyway, and their tests take under twenty seconds on Linux and
+  # run beside api's rather than after them. The job keeps
+  # its name so a branch rule that requires it keeps matching. Their tests skip an
+  # interpreter the runner does not have, so what runs is what this image provides.
+  windows-api:
+    name: windows · api
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      - name: Test api and the Worker Types
+        run: go test -timeout=45m ./api/... ./connector/...
+
+  # Everything a docs-only change can actually break, and nothing else.
+  #
+  # "Documentation" is not inert here. docs/adr is a Go package whose tests read every
+  # record *and* every ADR-NNNN citation in the repository, so a renamed record or a
+  # mistyped citation fails here exactly as it would in the full job. The guards that
+  # live elsewhere and read this tree are covered too — api/releasedkinds_internal_test.go
+  # parses each record's Status line, and api/releasenotes reads the CHANGELOG.md the
+  # binary embeds.
+  #
+  # So this runs the whole test suite rather than a list of test names: an enumeration
+  # would be correct on the day it was written and quietly wrong the day somebody adds
+  # another test that reads docs/. What it leaves out is only the instrumentation that
+  # cannot be moved by a markdown file — the race detector (no markdown ever raced), the
+  # coverage floor (docs carry no statements), the benchmark smoke, and a browser.
+  docs:
+    name: docs · records and the guards that read them
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'true'
+    runs-on: ubuntu-latest
+    # Paired with the per-package limit on the Test step below: that limit names the
+    # package it stopped, this cap only keeps a hang off a runner for the six-hour
+    # default. Raised from 20 with the limit, so the limit is always the one that fires.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      # This job runs `go test ./...` as well, so it needs the same node placement the
+      # race job's own Node step explains — connector/script's sandbox test does not
+      # care which job it is running in.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # docs/adr carries Go (number.go and the guards), so the formatting rule reaches
+      # into this tree like any other.
+      - name: Format check
+        run: |
+          out="$(gofmt -l docs)"
+          if [ -n "$out" ]; then
+            echo "These files are not gofmt-formatted:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./docs/...
+
+      # A per-package limit and a job cap, the same pairing as the race step above: the
+      # limit names the package, the cap only stops a hang.
+      #
+      # This step ran with neither, on the reasoning that without the race detector api
+      # is minutes rather than a quarter of an hour and Go's 10-minute default is ample
+      # again. The margin was thinner than that reads:
+      #
+      #   - api without -race measures ~180s on a developer machine.
+      #   - On 2026-09-16 this step failed at `FAIL api 600.055s` — Go's default — on a
+      #     pull request whose whole diff was six lines of Markdown under docs/adr.
+      #   - A re-run of that same commit the next morning passed, with the whole
+      #     `go test ./...` taking about five minutes. The cause was the runner, not the
+      #     tree.
+      #
+      # That is the runner variance the race step documents at length: two to six times
+      # slower across packages a diff never touched. 20m clears a sixfold slowdown of the
+      # measured 180s, and the job's 30-minute cap keeps the same gap above it that 45m
+      # and 60m keep above there, so the per-package limit fires first and says which
+      # package rather than the cap killing the job and saying nothing.
+      #
+      # A docs-only change cannot make api slower, so every failure this prevents was
+      # going to be diagnosed from scratch by whoever hit it. It buys headroom and does
+      # not fix the cause — api is most of what this step measures here too, issue #1001.
+      - name: Test
+        run: go test -timeout=20m ./...
+
   e2e:
     name: e2e · token simulation
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     # A browser job's failure mode is the hang, not the error: a stalled apt mirror or a
     # wedged browser holds the runner for the six-hour default. Well above the ~1 minute

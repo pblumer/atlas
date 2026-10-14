@@ -85,8 +85,8 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 	// to read: an empty list and a hidden one look the same to the reader.
 	realProjects := srv.projects
 	srv.projects = brokenStore(newProjectStore(filepath.Join(t.TempDir(), "gone")))
-	for _, p := range []string{"/api/v1/drafts", "/api/v1/dmnrefs", "/api/v1/forms", "/api/v1/decisions",
-		"/api/v1/playground/scenarios"} {
+	for _, p := range []string{"/api/v1/drafts", "/api/v1/dmnrefs", "/api/v1/dmn-drafts", "/api/v1/forms",
+		"/api/v1/decisions", "/api/v1/playground/scenarios"} {
 		if got := do(http.MethodGet, p, ""); got != http.StatusInternalServerError {
 			t.Fatalf("GET %s with broken projects = %d, want 500", p, got)
 		}
@@ -116,6 +116,7 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 	must(srv.drafts.Save(draft{ProcessID: "d1", ProjectID: "pdir", XML: "<x/>", SavedAt: 1}))
 	must(srv.dmnrefs.Save(dmnRef{ID: "r1", Name: "R", ModelRef: "m", ProjectID: "pdir", CreatedAt: 1}))
 	must(srv.forms.Save(form{ID: "f1", Name: "F", ProjectID: "pdir", Schema: "{}", SavedAt: 1}))
+	must(srv.dmnDrafts.Save(dmnDraft{ID: "dd1", Name: "D", ProjectID: "pdir", XML: "<definitions/>", SavedAt: 1}))
 	must(srv.drafts.Save(draft{ProcessID: "d2", XML: "<x/>", SavedAt: 1})) // ungrouped, for a move target test
 	must(srv.playgroundScenarios.Save(playgroundScenario{
 		ID: "s1", Name: "S", ProcessID: "d1", ProjectID: "pdir", SavedAt: 1,
@@ -137,6 +138,14 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 		{"update dmnref (authorizeArtifact source)", "PATCH", "/api/v1/dmnrefs/r1", `{"name":"X"}`},
 		{"create dmnref (authorizeTargetProject)", "POST", "/api/v1/dmnrefs", `{"name":"N","modelRef":"m","projectId":"pdir"}`},
 		{"create draft (authorizeTargetProject)", "POST", "/api/v1/drafts?projectId=pdir", scopeBPMN("newp")},
+		// A decision draft is a design-time artifact like the rest, so every door into
+		// it inherits its application's scope (ADR-0321, ADR-0071).
+		{"decision draft xml (authorizeArtifact)", "GET", "/api/v1/dmn-drafts/dd1/xml", ""},
+		{"delete decision draft (authorizeArtifact)", "DELETE", "/api/v1/dmn-drafts/dd1", ""},
+		{"overwrite decision draft (authorizeArtifact source)", "POST", "/api/v1/dmn-drafts",
+			`{"id":"dd1","xml":"<definitions/>"}`},
+		{"create decision draft (authorizeTargetProject)", "POST", "/api/v1/dmn-drafts",
+			`{"projectId":"pdir","xml":"<definitions/>"}`},
 		{"move draft into target (authorizeTargetProject)", "PATCH", "/api/v1/drafts/d2", `{"projectId":"pdir"}`},
 		// Opening a Playground sandbox on a draft reads that draft, so it goes through
 		// the same authorization — and fails the same way when the project cannot be
@@ -165,6 +174,7 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 	must(os.MkdirAll(srv.dmnrefs.FileFor("rdir"), 0o755))
 	must(os.MkdirAll(srv.forms.FileFor("fdir"), 0o755))
 	must(os.MkdirAll(srv.playgroundScenarios.FileFor("sdir"), 0o755))
+	must(os.MkdirAll(srv.dmnDrafts.FileFor("dddir"), 0o755))
 	storeErr := []struct {
 		name, method, path, body string
 	}{
@@ -176,6 +186,9 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 		{"delete form get error", "DELETE", "/api/v1/forms/fdir", ""},
 		{"save form existing-read error", "POST", "/api/v1/forms", `{"id":"fdir","schema":{}}`},
 		{"playground draft read error", "POST", "/api/v1/playground/sessions", `{"source":"draft","ref":"ddir"}`},
+		{"delete decision draft get error", "DELETE", "/api/v1/dmn-drafts/dddir", ""},
+		{"save decision draft existing-read error", "POST", "/api/v1/dmn-drafts",
+			`{"id":"dddir","xml":"<definitions/>"}`},
 		{"read scenario get error", "GET", "/api/v1/playground/scenarios/sdir", ""},
 		{"delete scenario get error", "DELETE", "/api/v1/playground/scenarios/sdir", ""},
 		{"save scenario existing-read error", "POST", "/api/v1/playground/scenarios",

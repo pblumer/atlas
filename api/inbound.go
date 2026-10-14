@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/expr"
 
 	"github.com/pblumer/atlas/api/httpapi"
@@ -72,28 +73,32 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		httpapi.Error(w, code, msg)
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var p struct {
-		WatchedSubject string `json:"watchedSubject"`
-		Recursive      bool   `json:"recursive"`
-		MessageName    string `json:"messageName"`
-		CorrelationKey string `json:"correlationKey"`
-		Enabled        *bool  `json:"enabled"`
-		StartFromTip   *bool  `json:"startFromTip"`
-		JQL            string `json:"jql"`
-		SpreadsheetID  string `json:"spreadsheetId"`
-		WatchRange     string `json:"watchRange"`
-		HeaderRow      bool   `json:"headerRow"`
-		FolderID       string `json:"folderId"`
-		ChannelID      string `json:"channelId"`
-		CursorField    string `json:"cursorField"`
-		LagSeconds     int    `json:"lagSeconds"`
-		PollSeconds    int    `json:"pollSeconds"`
-		MaxPerHour     int    `json:"maxPerHour"`
+		WatchedSubject string   `json:"watchedSubject"`
+		Recursive      bool     `json:"recursive"`
+		MessageName    string   `json:"messageName"`
+		CorrelationKey string   `json:"correlationKey"`
+		Enabled        *bool    `json:"enabled"`
+		StartFromTip   *bool    `json:"startFromTip"`
+		JQL            string   `json:"jql"`
+		SpreadsheetID  string   `json:"spreadsheetId"`
+		WatchRange     string   `json:"watchRange"`
+		HeaderRow      bool     `json:"headerRow"`
+		FolderID       string   `json:"folderId"`
+		ChannelID      string   `json:"channelId"`
+		MailFolder     string   `json:"mailFolder"`
+		IncludeBody    bool     `json:"includeBody"`
+		AllowedSenders []string `json:"allowedSenders"`
+		RequireDmarc   bool     `json:"requireDmarcPass"`
+		CursorField    string   `json:"cursorField"`
+		LagSeconds     int      `json:"lagSeconds"`
+		PollSeconds    int      `json:"pollSeconds"`
+		MaxPerHour     int      `json:"maxPerHour"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -111,13 +116,23 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 			httpapi.Error(w, http.StatusBadRequest, "correlationKey is not a valid FEEL expression: "+err.Error())
 			return
 		}
+		// A key that can only ever be null compiles cleanly (ADR-0388) and then
+		// correlates every event to nothing: the worker looks healthy, the sender gets
+		// its 2xx, and no instance is ever woken. Refused where a syntax error already
+		// is, because by the time an event arrives there is nobody left to tell
+		// (ADR-0392).
+		if err := expr.CheckCallsError(corr); err != nil {
+			httpapi.Error(w, http.StatusBadRequest, "correlationKey cannot work: "+err.Error())
+			return
+		}
 	}
 	// What the rest of the shape must be depends on the worker's kind, and the kind
 	// is in the store — so it is read before the record is built rather than checked
 	// after it (ADR-0214).
 	var (
-		kind    string
-		kindErr error
+		kind     string
+		provider string
+		kindErr  error
 	)
 	s.do(func() {
 		conn, ok, e := s.connectors.Get(connID)
@@ -126,7 +141,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 			return
 		}
 		if ok {
-			kind = conn.Kind
+			kind, provider = conn.Kind, conn.Provider
 		}
 	})
 	if kindErr != nil {
@@ -153,26 +168,44 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		ID: id, ConnectorID: connID, WatchedSubject: subject, Recursive: p.Recursive,
 		MessageName: messageName, CorrelationKey: corr, Enabled: enabled,
 		StartFromTip: startFromTip, CreatedAt: time.Now().Unix(),
-		JQL:           strings.TrimSpace(p.JQL),
-		SpreadsheetID: strings.TrimSpace(p.SpreadsheetID),
-		WatchRange:    strings.TrimSpace(p.WatchRange),
-		HeaderRow:     p.HeaderRow,
-		FolderID:      strings.TrimSpace(p.FolderID),
-		ChannelID:     strings.TrimSpace(p.ChannelID),
-		CursorField:   strings.TrimSpace(p.CursorField),
-		LagSeconds:    p.LagSeconds,
-		PollSeconds:   p.PollSeconds,
-		MaxPerHour:    p.MaxPerHour,
+		JQL:              strings.TrimSpace(p.JQL),
+		SpreadsheetID:    strings.TrimSpace(p.SpreadsheetID),
+		WatchRange:       strings.TrimSpace(p.WatchRange),
+		HeaderRow:        p.HeaderRow,
+		FolderID:         strings.TrimSpace(p.FolderID),
+		ChannelID:        strings.TrimSpace(p.ChannelID),
+		MailFolder:       strings.TrimSpace(p.MailFolder),
+		IncludeBody:      p.IncludeBody,
+		AllowedSenders:   p.AllowedSenders,
+		RequireDmarcPass: p.RequireDmarc,
+		CursorField:      strings.TrimSpace(p.CursorField),
+		LagSeconds:       p.LagSeconds,
+		PollSeconds:      p.PollSeconds,
+		MaxPerHour:       p.MaxPerHour,
 	}
 	if msg := validateInboundWatch(kind, &rec); msg != "" {
 		httpapi.Error(w, http.StatusBadRequest, msg)
 		return
 	}
+	// Gmail keeps about a week of history and has no beginning to list a mailbox
+	// from, so a backfill watch would quietly start at the tip anyway. Said here,
+	// where the person asking for it can change their mind.
+	if kind == connectorKindMail && strings.EqualFold(provider, mail.ProviderGmail) && !rec.StartFromTip {
+		httpapi.Error(w, http.StatusBadRequest, "a Gmail watch cannot backfill: Gmail cannot list a mailbox "+
+			"from its beginning, so a watch starts at the newest message. Leave startFromTip on.")
+		return
+	}
 	var (
-		claimed bool
-		saveErr error
+		claimed             bool
+		ownerItem, ownerKey string
+		saveErr             error
 	)
 	s.do(func() {
+		// A name a catalogue product's action owns is no Worker's to publish: the
+		// event would drive the lifecycle around the order (ADR-0429 §1).
+		if ownerItem, ownerKey, saveErr = s.catalogOwnerOfName(rec.MessageName); saveErr != nil || ownerItem != "" {
+			return
+		}
 		// The claim on a message name, from the other side (ADR-0205): pointing this
 		// worker at a name some definition the claimant cannot reach already
 		// listens for would deliver their events to it, silently.
@@ -184,6 +217,9 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 	switch {
 	case saveErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "save subscription: "+saveErr.Error())
+		return
+	case ownerItem != "":
+		catalogOwnedRefusal(w, rec.MessageName, ownerItem, ownerKey)
 		return
 	case claimed:
 		claimRefusal(w, rec.MessageName, "A deployed process you cannot reach already listens for this "+
@@ -198,7 +234,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 // re-validates the correlation key when one is supplied.
 func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -211,6 +247,11 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 		Enabled        *bool   `json:"enabled"`
 		StartFromTip   *bool   `json:"startFromTip"`
 		MaxPerHour     *int    `json:"maxPerHour"`
+		// A mail watch's policy knobs (ADR-0438): what an event
+		// carries and who may start a process with one.
+		IncludeBody      *bool     `json:"includeBody"`
+		AllowedSenders   *[]string `json:"allowedSenders"`
+		RequireDmarcPass *bool     `json:"requireDmarcPass"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -228,8 +269,9 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 	// claim and is checked like one (ADR-0205). Without this the update endpoint
 	// would be the way around the create endpoint's door.
 	var (
-		reclaimed string
-		claimErr  error
+		reclaimed           string
+		ownerItem, ownerKey string
+		claimErr            error
 	)
 	if p.MessageName != nil || (p.Enabled != nil && *p.Enabled) {
 		s.do(func() {
@@ -247,6 +289,12 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 			if cur.Enabled && want == cur.MessageName {
 				return
 			}
+			// The same door as on create: a rename or an enable onto a name a
+			// catalogue product's action owns (ADR-0429 §1).
+			if ownerItem, ownerKey, claimErr = s.catalogOwnerOfName(want); claimErr != nil || ownerItem != "" {
+				reclaimed = want
+				return
+			}
 			var blocked bool
 			if blocked, claimErr = s.definitionBlockingClaim(r, want); blocked {
 				reclaimed = want
@@ -256,22 +304,46 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 			httpapi.Error(w, http.StatusInternalServerError, "read subscriptions: "+claimErr.Error())
 			return
 		}
+		if reclaimed != "" && ownerItem != "" {
+			catalogOwnedRefusal(w, reclaimed, ownerItem, ownerKey)
+			return
+		}
 		if reclaimed != "" {
 			claimRefusal(w, reclaimed, "A deployed process you cannot reach already listens for this "+
 				"message name, and would receive these events. Publish under a different name.")
 			return
 		}
 	}
-	if p.CorrelationKey != nil && feelExpr(*p.CorrelationKey) != "" {
-		if _, err := expr.CompileAuto(feelExpr(*p.CorrelationKey)); err != nil {
+	// The allow-list is held to the same shape on the edit road as on create.
+	var allowed []string
+	if p.AllowedSenders != nil {
+		var err error
+		if allowed, err = mail.NormalizeAllowedSenders(*p.AllowedSenders); err != nil {
+			httpapi.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	// Both gates, exactly as on create: a key that cannot work must not reach the
+	// store by the edit road either.
+	var corr string
+	if p.CorrelationKey != nil {
+		corr = feelExpr(*p.CorrelationKey)
+	}
+	if corr != "" {
+		if _, err := expr.CompileAuto(corr); err != nil {
 			httpapi.Error(w, http.StatusBadRequest, "correlationKey is not a valid FEEL expression: "+err.Error())
+			return
+		}
+		if err := expr.CheckCallsError(corr); err != nil {
+			httpapi.Error(w, http.StatusBadRequest, "correlationKey cannot work: "+err.Error())
 			return
 		}
 	}
 	var (
-		rec     inboundSubscription
-		found   bool
-		saveErr error
+		rec      inboundSubscription
+		found    bool
+		saveErr  error
+		badField string
 	)
 	s.do(func() {
 		var e error
@@ -313,6 +385,28 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 		if p.MaxPerHour != nil {
 			rec.MaxPerHour = *p.MaxPerHour
 		}
+		if p.IncludeBody != nil || p.AllowedSenders != nil || p.RequireDmarcPass != nil {
+			// Only a mail watch reads these; on any other the edit is refused rather
+			// than stored where nothing will ever look at it.
+			conn, ok, e := s.connectors.Get(rec.ConnectorID)
+			if e != nil {
+				saveErr = e
+				return
+			}
+			if !ok || conn.Kind != connectorKindMail {
+				badField = "includeBody, allowedSenders and requireDmarcPass belong to a mail watch"
+				return
+			}
+			if p.IncludeBody != nil {
+				rec.IncludeBody = *p.IncludeBody
+			}
+			if p.AllowedSenders != nil {
+				rec.AllowedSenders = allowed
+			}
+			if p.RequireDmarcPass != nil {
+				rec.RequireDmarcPass = *p.RequireDmarcPass
+			}
+		}
 		saveErr = s.inboundSubs.Save(rec)
 	})
 	switch {
@@ -321,6 +415,9 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 		return
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no subscription with that id")
+		return
+	case badField != "":
+		httpapi.Error(w, http.StatusBadRequest, badField)
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, rec)

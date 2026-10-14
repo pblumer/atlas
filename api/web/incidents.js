@@ -9,24 +9,41 @@
 // budget, so it asks — which also gives room to say that a timer incident re-arms and
 // ignores the count, something window.prompt had nowhere to put.
 
-import { editWorkerFlow } from "./workerdialog.js";
+import { editWorkerFlow, createWorkerFlow } from "./workerdialog.js";
 import { loadFormViewer, formFieldKeys } from "./formviewer.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-// incidentKind is what parked: a service-task job whose retries ran out, or a
-// job-less timer whose FEEL schedule stopped resolving (ADR-0064/0111). The server
-// says so directly; the jobKey fallback keeps an older response readable.
+// incidentKind is what parked: a service-task job whose retries ran out, a BPMN
+// error nothing caught (ADR-0089), a token that used up its execution budget
+// (ADR-0272), or a job-less timer whose FEEL schedule stopped resolving
+// (ADR-0064/0111). The server says so directly; the jobKey fallback keeps an older
+// response readable.
 const incidentKind = (inc) => inc.type || (inc.jobKey ? "job" : "timer");
 
-// incidentPill renders the job/timer cause as the colored pill the incidents table
-// established: red for a parked job, amber for a timer that stopped resolving.
+// incidentPill renders the cause as the colored pill the incidents table established:
+// red for a parked job or an uncaught error, amber for the rest, and the server's name
+// for the kind as its label.
 export function incidentPill(inc) {
-  return incidentKind(inc) === "job"
-    ? `<span class="pill err"><span class="dot"></span>job</span>`
-    : `<span class="pill warn"><span class="dot"></span>timer</span>`;
+  const kind = incidentKind(inc);
+  const tone = kind === "job" || kind === "error" ? "err" : "warn";
+  return `<span class="pill ${tone}"><span class="dot"></span>${esc(kind)}</span>`;
 }
+
+// resolveNotes says what resolving does to the kinds that spend no retries: a timer
+// re-arms, and an uncaught error is thrown again (ADR-0089). Any other kind resumes
+// work that takes the granted retries.
+const resolveNotes = {
+  timer: {
+    one: "This timer re-arms against the instance's current variables. If its schedule still doesn't resolve, the incident is raised again.",
+    many: "Each timer re-arms against its instance's current variables. One whose schedule still doesn't resolve raises its incident again.",
+  },
+  error: {
+    one: "The error is thrown again. A handler that has come into reach catches it; while none does, the incident is raised again.",
+    many: "Each error is thrown again. One a handler now catches takes its error path; the others raise their incident again.",
+  },
+};
 
 // fmtRaised renders an incident's raisedAt (unix nanoseconds, frozen into the
 // event) as a local timestamp.
@@ -49,18 +66,34 @@ export function incidentWorkerChip(inc) {
 // change what the task is configured to *talk to*. A mail task parked on an SMTP host
 // that will not authenticate is not fixed by correcting the data, by retrying, or by
 // declaring the work done — it is fixed by pointing its worker somewhere else
-// (ADR-0160). When the referenced worker does not exist at all there is nothing to
-// open, so the button becomes the way to the Console, where it can be created.
+// (ADR-0160).
 //
-// This is the diagram-side row only. The Operations incidents table puts the same two
+// When no worker of that name exists, the act is to create it, and that is offered
+// here too. It used to be a link to the Console, which is the pre-ADR-0160 detour that
+// ADR-0160 exists to remove — read the incident, carry the name and the Worker Type in
+// your head, find the add form, fill it in, navigate back, resolve — and it was offered
+// for exactly the message that started ADR-0158: `no worker registered as X`. Since the
+// model states both the name and the type, there is nothing left for the Console to be
+// asked, so the same dialog opens with those two fixed (ADR-0287).
+//
+// The link survives for the one case that has no answer here: an incident that names a
+// worker but not its Worker Type (an older record, or a reference the runtime resolved
+// by name alone). There is nothing to create *as*, and guessing a type would create the
+// wrong worker under the right name.
+//
+// This is the diagram-side row only. The Operations incidents table puts the same
 // non-primary actions behind the ⋯ menu every other table there uses, because a third
 // visible button pushed that table past the width of its card (ADR-0163) — so the two
-// surfaces render the action differently on purpose, over the same fixWorkerFlow.
+// surfaces render the action differently on purpose, over the same two flows.
 function incidentWorkerAction(inc) {
   if (!inc.connector) return "";
   if (!inc.connectorId) {
-    return `<a class="btn neutral sm" href="#/console/workers"
-      title="No worker is configured under this name — add one under Console &rsaquo; Workers">&#9881; Configure &#8599;</a>`;
+    if (!inc.connectorKind) {
+      return `<a class="btn neutral sm" href="#/console/workers"
+        title="No worker is configured under this name, and the incident does not say which Worker Type it should be — pick one under Console &rsaquo; Workers">&#9881; Configure &#8599;</a>`;
+    }
+    return `<button class="btn neutral sm" data-add-conn="${esc(String(inc.elementInstanceKey))}" data-inc="${esc(String(inc.elementInstanceKey))}"
+      title="No worker is configured under this name — create it here, under the name and Worker Type the model states, and retry against it">&#9881; Create worker&hellip;</button>`;
   }
   return `<button class="btn neutral sm" data-fix-conn="${esc(String(inc.connectorId))}" data-inc="${esc(String(inc.elementInstanceKey))}"
     title="Change what this task talks to — endpoint, provider, credential — and retry against it">&#9881; Worker&hellip;</button>`;
@@ -106,10 +139,22 @@ export function incidentRowHTML(inc, { label = "", showInstance = true } = {}) {
 // incidentPanelHTML wraps those rows in the block that leads the live view's
 // variables panel and the replay's Details tab: a count, a way to the full list, and
 // every incident in view.
-export function incidentPanelHTML(list, { truncated = false, rows = "" } = {}) {
-  if (!list.length) return "";
+export function incidentPanelHTML(list, { truncated = false, rows = "", total = null } = {}) {
+  // How many are parked, which is not how many rows there are: under a flood the rows
+  // are a page
+  // (ADR-0366). Callers that know the real total pass it; the ones whose list
+  // *is* everything (the replay's details) leave it out and the two coincide.
+  const parked = Number.isFinite(total) ? total : list.length;
+  if (!parked) return "";
+  // Rows past the page are not lost, they are elsewhere — so the header says how many
+  // of them this block is showing, and the link beside it is where the rest live. An
+  // operator reading "5 452 incidents" over a hundred rows must not conclude the other
+  // 5 352 went unrecorded.
+  const shown = list.length < parked
+    ? `<span class="muted" style="font-size:11px">&middot; showing ${list.length}, resolve the rest in <a href="#/operations/incidents">Incidents</a></span>`
+    : "";
   return `<div class="vp-incidents">
-    <div class="vp-head"><span class="vp-title">&#9888; ${list.length}${truncated ? "+" : ""} incident${list.length === 1 ? "" : "s"}</span>
+    <div class="vp-head"><span class="vp-title">&#9888; ${parked}${truncated && list.length >= parked ? "+" : ""} incident${parked === 1 ? "" : "s"}</span> ${shown}
       <span class="vp-actions"><a class="replay-link" href="#/operations/incidents" title="Every unresolved incident on this server">All incidents &#8599;</a></span></div>
     ${rows}</div>`;
 }
@@ -132,23 +177,25 @@ export async function resolveIncidentQuick({ api, toast, key }) {
 
 // askResolveRetries opens the resolve dialog and resolves to the retry budget the
 // operator granted, or null if they cancelled. A modal rather than window.prompt:
-// the count needs the explanation that a timer incident ignores it, and prompt has
-// nowhere to put one.
+// the count needs the explanation that a timer or error incident ignores it, and
+// prompt has nowhere to put one.
 function askResolveRetries(inc) {
   return new Promise((resolve) => {
-    const timer = incidentKind(inc) === "timer";
+    const kind = incidentKind(inc);
+    const note = resolveNotes[kind];
+    const noRetries = !!note;
     const ov = document.createElement("div");
     ov.className = "modal-ov";
     ov.innerHTML = `
       <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Resolve incident">
         <div class="modal-head"><h2>Resolve incident</h2></div>
         <div class="modal-body">
-          <p class="muted" style="margin:0 0 10px">${timer
-            ? "This timer re-arms against the instance's current variables. If its schedule still doesn't resolve, the incident is raised again."
+          <p class="muted" style="margin:0 0 10px">${noRetries
+            ? note.one
             : "The parked job goes back on the activatable index and a worker retries it. If the cause is unfixed it fails again and a new incident is raised."}</p>
           ${inc.message ? `<p class="inc-modal-msg">${esc(inc.message)}</p>` : ""}
-          <label class="field"><span>Retries to grant${timer ? " (ignored by a timer incident)" : ""}</span>
-            <input id="inc-retries" type="number" min="1" step="1" value="1" ${timer ? "disabled" : ""}/></label>
+          <label class="field"><span>Retries to grant${noRetries ? ` (ignored by ${kind === "error" ? "an error" : "a timer"} incident)` : ""}</span>
+            <input id="inc-retries" type="number" min="1" step="1" value="1" ${noRetries ? "disabled" : ""}/></label>
         </div>
         <div class="modal-foot">
           <button class="btn neutral" data-inc-cancel title="Close without resolving the incident">Cancel</button>
@@ -163,7 +210,7 @@ function askResolveRetries(inc) {
       if (e.key === "Enter" && document.body.contains(ov)) go();
     };
     const go = () => {
-      const n = timer ? 1 : parseInt(input.value, 10);
+      const n = noRetries ? 1 : parseInt(input.value, 10);
       if (!Number.isInteger(n) || n <= 0) { input.focus(); return; }
       close(n);
     };
@@ -171,8 +218,8 @@ function askResolveRetries(inc) {
     ov.querySelector("[data-inc-cancel]").addEventListener("click", () => close(null));
     ov.querySelector("[data-inc-go]").addEventListener("click", go);
     ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
-    (timer ? ov.querySelector("[data-inc-go]") : input).focus();
-    if (input && !timer) input.select();
+    (noRetries ? ov.querySelector("[data-inc-go]") : input).focus();
+    if (input && !noRetries) input.select();
   });
 }
 
@@ -189,6 +236,156 @@ export async function resolveIncidentFlow({ api, toast, incident }) {
   } catch (e) {
     toast(e.message || "Resolve failed", "warn");
     return false;
+  }
+}
+
+// ---------- Many at a time (ADR-0337) ----------
+//
+// One broken worker parks every instance that reaches its task, and then the four
+// per-incident ways out above are all the wrong size: the fix was applied once, and
+// clearing what it parked is a thousand clicks through a dialog that asks for a retry
+// budget each time. The two flows below are that same resolve over a *set* — a whole
+// cause from the summary, or the rows an operator ticked — over the server's bulk
+// endpoint, which bounds each call and says whether more is left.
+
+// resolveBatches drains one bulk-resolve selection, repeating while the server reports
+// that its per-call cap was hit. The guard is a stop against a server that kept saying
+// "more" — better a wrong count than a page that loops forever.
+async function resolveBatches(api, body) {
+  let resolved = 0, notFound = 0;
+  for (let guard = 0; guard < 1000; guard++) {
+    const res = await api("POST", "/api/v1/incidents/resolve", body);
+    resolved += res.resolved || 0;
+    notFound += res.notFound || 0;
+    if (!res.remaining) break;
+  }
+  return { resolved, notFound };
+}
+
+// causeScope writes one summary group as the selector the server evaluates. The
+// compiled element index rides along with the BPMN id because the id is the one thing
+// a group can be missing — an instance whose definition is no longer deployed has no
+// compiled process to resolve it — and a scope that quietly dropped the element would
+// resolve the whole definition instead of the line that was clicked.
+function causeScope(group, retries) {
+  const body = { processDefKey: group.processDefKey, type: group.type, retries };
+  if (group.elementId) body.elementId = group.elementId;
+  if (Number.isInteger(group.elementIndex)) body.elementIndex = group.elementIndex;
+  return body;
+}
+
+// askBulkResolve asks for the retry budget once for the whole set, and says plainly
+// what a bulk retry does when the cause is still broken — which is the mistake this
+// action makes cheap to repeat. Resolves to the budget, or null when cancelled.
+function askBulkResolve({ title, count, kind, message, note }) {
+  const what = resolveNotes[kind];
+  const noRetries = !!what;
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML = `
+      <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Resolve incidents">
+        <div class="modal-head"><h2>${esc(title)}</h2></div>
+        <div class="modal-body">
+          <p class="muted" style="margin:0 0 10px">${noRetries
+            ? what.many
+            : "Each parked job goes back on the activatable index and a worker retries it. <b>Fix the cause first</b> — a retry against an unfixed cause fails again and parks the same tokens with a new incident."}</p>
+          ${note ? `<p class="muted" style="margin:0 0 10px">${note}</p>` : ""}
+          ${message ? `<p class="inc-modal-msg">${esc(message)}</p>` : ""}
+          <label class="field"><span>Retries to grant each${noRetries ? ` (ignored by ${kind === "error" ? "an error" : "a timer"} incident)` : ""}</span>
+            <input id="inc-bulk-retries" type="number" min="1" step="1" value="1" ${noRetries ? "disabled" : ""}/></label>
+        </div>
+        <div class="modal-foot">
+          <button class="btn neutral" data-inc-cancel title="Close without resolving anything">Cancel</button>
+          <button class="btn" data-inc-go title="Clear these incidents and retry their work">Resolve ${count}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const input = ov.querySelector("#inc-bulk-retries");
+    const close = (value) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(value); };
+    const go = () => {
+      const n = noRetries ? 1 : parseInt(input.value, 10);
+      if (!Number.isInteger(n) || n <= 0) { input.focus(); return; }
+      close(n);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") close(null);
+      if (e.key === "Enter" && document.body.contains(ov)) go();
+    };
+    document.addEventListener("keydown", onKey);
+    ov.querySelector("[data-inc-cancel]").addEventListener("click", () => close(null));
+    ov.querySelector("[data-inc-go]").addEventListener("click", go);
+    ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
+    (noRetries ? ov.querySelector("[data-inc-go]") : input).focus();
+    if (input && !noRetries) input.select();
+  });
+}
+
+// resolveCauseFlow clears a whole cause: every incident on one element of one
+// definition, which is what a flood actually is. The scope posted is the group's own
+// key — the same predicate the rows below it were listed with — so what the operator
+// read and what the server resolves are one query. Resolves the number cleared, or 0.
+export async function resolveCauseFlow({ api, toast, group }) {
+  const retries = await askBulkResolve({
+    title: `Resolve ${group.count} incident${group.count === 1 ? "" : "s"} on ${group.elementId || "this element"}?`,
+    count: group.count,
+    kind: group.type,
+    message: group.message,
+    note: group.messageVaries
+      ? "These incidents do not all carry the same message — the one below is a sample."
+      : "",
+  });
+  if (retries === null) return 0;
+  try {
+    const { resolved } = await resolveBatches(api, causeScope(group, retries));
+    toast(`Resolved ${resolved} incident${resolved === 1 ? "" : "s"}`, "ok");
+    return resolved;
+  } catch (e) {
+    toast("Bulk resolve failed: " + (e && e.message ? e.message : e), "err");
+    return 0;
+  }
+}
+
+// resolveCauseQuick is the cause-sized twin of resolveIncidentQuick: clear everything
+// behind one cause with a single attempt each, no dialog. It is what "& retry" means on
+// a worker the operator has just corrected from a cause — the fix was applied to the
+// thing all of them share, so retrying one of them and leaving the rest parked would be
+// an odd half-measure. Resolves the number cleared.
+export async function resolveCauseQuick({ api, toast, group }) {
+  try {
+    const { resolved } = await resolveBatches(api, causeScope(group, 1));
+    toast(`Resolved ${resolved} incident${resolved === 1 ? "" : "s"} — retrying`, "ok");
+    return resolved;
+  } catch (e) {
+    toast("Bulk resolve failed: " + (e && e.message ? e.message : e), "err");
+    return 0;
+  }
+}
+
+// resolveSelectionFlow clears the rows an operator ticked — the hand-picked set, for
+// when a cause is only partly fixed, or when the page is showing several. Resolves the
+// number cleared, or 0.
+export async function resolveSelectionFlow({ api, toast, incidents }) {
+  if (!incidents.length) return 0;
+  const retries = await askBulkResolve({
+    title: `Resolve ${incidents.length} selected incident${incidents.length === 1 ? "" : "s"}?`,
+    count: incidents.length,
+    // One kind for the whole set says what resolving does to it; a mix asks for retries.
+    kind: incidents.every((inc) => incidentKind(inc) === incidentKind(incidents[0])) ? incidentKind(incidents[0]) : "job",
+  });
+  if (retries === null) return 0;
+  try {
+    const { resolved, notFound } = await resolveBatches(api, {
+      keys: incidents.map((inc) => inc.elementInstanceKey),
+      retries,
+    });
+    toast(notFound
+      ? `Resolved ${resolved}; ${notFound} were already gone`
+      : `Resolved ${resolved} incident${resolved === 1 ? "" : "s"}`, "ok");
+    return resolved;
+  } catch (e) {
+    toast("Bulk resolve failed: " + (e && e.message ? e.message : e), "err");
+    return 0;
   }
 }
 
@@ -518,7 +715,7 @@ function askCompletion(inc) {
 // is a fact frozen when the token parked (I6), while the worker is live state that
 // may already have been edited. Resolves "resolved" when the incident was also
 // cleared, "saved" when only the worker was changed, and null when nothing happened.
-export async function fixWorkerFlow({ api, toast, incident }) {
+export async function fixWorkerFlow({ api, toast, incident, retry, extraLabel = "Save & retry" }) {
   let workers = [];
   try {
     workers = (await api("GET", "/api/v1/connectors")) || [];
@@ -538,7 +735,7 @@ export async function fixWorkerFlow({ api, toast, incident }) {
   const res = await editWorkerFlow({
     api, toast, worker: c,
     intro: `${incident.elementId || "This task"} is parked on this worker: ${incident.message || "(no message)"}`,
-    extraLabel: "Save & retry",
+    extraLabel,
     okToast: "",
   });
   if (!res) return null;
@@ -546,7 +743,40 @@ export async function fixWorkerFlow({ api, toast, incident }) {
     toast("Worker updated — the incident is still open", "ok");
     return "saved";
   }
-  return (await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey })) ? "resolved" : "saved";
+  // What "& retry" resolves is the caller's to say: one incident from a row, or the
+  // whole cause from the summary — the fix was to the thing all of them share.
+  const retried = retry
+    ? await retry()
+    : await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey });
+  return retried ? "resolved" : "saved";
+}
+
+// addWorkerFlow creates the worker the parked task names, then retries it. It is
+// fixWorkerFlow's other half: that one opens a record that exists, this one is what an
+// operator needs when the message is `no worker registered as X` and the honest answer
+// is that nobody ever created X (ADR-0287).
+//
+// The name and the Worker Type are the incident's — which is to say the deployed
+// model's (ADR-0036/0041) — so neither is typed and neither can be got wrong. Resolves
+// "resolved" when the incident was also cleared, "saved" when only the worker was
+// created, and null when nothing happened.
+export async function addWorkerFlow({ api, toast, incident, retry, extraLabel = "Add & retry" }) {
+  if (!incident.connector || !incident.connectorKind) return null;
+  const res = await createWorkerFlow({
+    api, toast, name: incident.connector, kind: incident.connectorKind,
+    intro: `${incident.elementId || "This task"} is parked on this worker: ${incident.message || "(no message)"}`,
+    extraLabel,
+    okToast: "",
+  });
+  if (!res) return null;
+  if (!res.extra) {
+    toast("Worker added — the incident is still open", "ok");
+    return "saved";
+  }
+  const retried = retry
+    ? await retry()
+    : await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey });
+  return retried ? "resolved" : "saved";
 }
 
 // bindIncidentActions wires one surface's incident block: the actions on every row,
@@ -556,7 +786,7 @@ export async function fixWorkerFlow({ api, toast, incident }) {
 // budget. onChanged runs after anything actually changed, so the caller can re-poll.
 // `incidents()` returns the rows currently on screen.
 export function bindIncidentActions(root, { api, toast, incidents, onChanged, resolve = "quick", within = "" }) {
-  const sel = ["[data-resolve]", "[data-fix-vars]", "[data-fix-conn]", "[data-complete]", "[data-repair]"]
+  const sel = ["[data-resolve]", "[data-fix-vars]", "[data-fix-conn]", "[data-add-conn]", "[data-complete]", "[data-repair]"]
     .map((s) => (within ? `${within} ${s}` : s)).join(", ");
   root.addEventListener("click", async (ev) => {
     const btn = ev.target.closest(sel);
@@ -575,9 +805,11 @@ export function bindIncidentActions(root, { api, toast, incidents, onChanged, re
             ? !!(await fixVariablesFlow({ api, toast, incident }))
             : btn.dataset.fixConn
               ? !!(await fixWorkerFlow({ api, toast, incident }))
-              : resolve === "ask"
-                ? await resolveIncidentFlow({ api, toast, incident })
-                : await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey });
+              : btn.dataset.addConn
+                ? !!(await addWorkerFlow({ api, toast, incident }))
+                : resolve === "ask"
+                  ? await resolveIncidentFlow({ api, toast, incident })
+                  : await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey });
       if (changed && onChanged) await onChanged();
     } finally {
       btn.disabled = false;

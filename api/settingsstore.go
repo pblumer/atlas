@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pblumer/atlas/api/brandimage"
 	"github.com/pblumer/atlas/api/sidecar"
 	"github.com/pblumer/atlas/connector/ldif"
 )
@@ -125,6 +126,7 @@ type settingsStore struct {
 	sqlFile  string // sqlmock.json
 	oidcFile string // oidcmapping.json
 	nodeFile string // node.json
+	confFile string // confirmation.json
 }
 
 // newSettingsStore opens (creating if needed) the settings directory.
@@ -140,7 +142,52 @@ func newSettingsStore(dir string) (*settingsStore, error) {
 		sqlFile:  filepath.Join(dir, "sqlmock.json"),
 		oidcFile: filepath.Join(dir, "oidcmapping.json"),
 		nodeFile: filepath.Join(dir, "node.json"),
+		confFile: filepath.Join(dir, "confirmation.json"),
 	}, nil
+}
+
+// confirmationSetting is how long a business-architecture record's confirmation stays
+// fresh (ADR-0304). Design-time operator
+// configuration, like the theme and the registration setting, so it lives beside them.
+//
+// It is configurable at all — unlike the two places this repository already dates
+// something it cannot verify, which fix twelve months in a test — because those govern
+// content here, maintained by people who share one cadence, and this governs a
+// customer's own map reviewed by their business architects. A bank on a quarterly
+// governance cycle and a four-person team on an annual one cannot share a constant, and
+// an interval they cannot set is one they route around by not filling the field in.
+//
+// The obvious abuse is a hundred-year interval that silences the check. It is accepted
+// and made legible instead: this is one number in one place, and every answer that
+// applies it says which interval it applied.
+type confirmationSetting struct {
+	// HorizonMonths is how many months a confirmation stays fresh. Zero means the
+	// installation has said nothing and the default applies; a negative value switches
+	// the check off, which an operator may legitimately want while a map is being
+	// built.
+	HorizonMonths int `json:"horizonMonths"`
+}
+
+// getConfirmation returns the stored confirmation setting and whether a record exists.
+// A missing file returns (zero, false, nil): nobody has decided, so the default applies.
+func (s *settingsStore) getConfirmation() (confirmationSetting, bool, error) {
+	data, err := os.ReadFile(s.confFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return confirmationSetting{}, false, nil
+		}
+		return confirmationSetting{}, false, fmt.Errorf("settingsstore: read confirmation: %w", err)
+	}
+	var c confirmationSetting
+	if err := json.Unmarshal(data, &c); err != nil {
+		return confirmationSetting{}, false, fmt.Errorf("settingsstore: decode confirmation: %w", err)
+	}
+	return c, true, nil
+}
+
+// saveConfirmation writes the confirmation setting durably.
+func (s *settingsStore) saveConfirmation(c confirmationSetting) error {
+	return sidecar.WriteJSON(s.dir, s.confFile, c)
 }
 
 // getTheme returns the stored theme, or the zero value (the built-in default
@@ -237,16 +284,11 @@ func (s *settingsStore) saveOIDCMapping(m oidcMapping) error {
 // for its type, so no metadata sidecar is needed — the logo is stored as exactly
 // "logo.png" or "logo.svg".
 
-// logoExts is the fixed, ordered set of logo file extensions. Iterating a slice
-// (not the maps below) keeps getLogo deterministic if both files ever coexist.
-var logoExts = []string{"png", "svg"}
-
-// logoExtByType maps an accepted upload content type to its stored extension, and
-// logoTypeByExt is the reverse used to report the type on read.
-var (
-	logoExtByType = map[string]string{"image/png": "png", "image/svg+xml": "svg"}
-	logoTypeByExt = map[string]string{"png": "image/png", "svg": "image/svg+xml"}
-)
+// The accepted formats and their stored extensions come from [brandimage], which
+// is also what a catalogue's own mark reads: one decision about what an uploaded
+// brand image may be, in one place.
+// The instance's own mark takes the mark set (brandimage.Mark): a PNG or an SVG.
+var logoExts = brandimage.Mark.Exts()
 
 func (s *settingsStore) logoPath(ext string) string {
 	return filepath.Join(s.dir, "logo."+ext)
@@ -260,7 +302,8 @@ func (s *settingsStore) getLogo() (data []byte, contentType string, ok bool, err
 	for _, ext := range logoExts {
 		b, readErr := os.ReadFile(s.logoPath(ext))
 		if readErr == nil {
-			return b, logoTypeByExt[ext], true, nil
+			ct, _ := brandimage.Mark.TypeFor(ext)
+			return b, ct, true, nil
 		}
 		if !os.IsNotExist(readErr) {
 			return nil, "", false, fmt.Errorf("settingsstore: read logo: %w", readErr)
@@ -271,9 +314,9 @@ func (s *settingsStore) getLogo() (data []byte, contentType string, ok bool, err
 
 // saveLogo writes the logo durably under the extension for contentType, then drops
 // any previously-stored other format so a switch (e.g. PNG → SVG) never leaves a
-// stale file getLogo could serve. contentType must be one of logoExtByType.
+// stale file getLogo could serve. contentType must be one brandimage.Mark accepts.
 func (s *settingsStore) saveLogo(data []byte, contentType string) error {
-	ext, ok := logoExtByType[contentType]
+	ext, ok := brandimage.Mark.ExtFor(contentType)
 	if !ok {
 		return fmt.Errorf("settingsstore: unsupported logo type %q", contentType)
 	}

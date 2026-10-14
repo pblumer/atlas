@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"github.com/pblumer/atlas/limits"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -110,7 +111,7 @@ func TestDiscoveryIsRefusedWhenItIsNotTheProviderItClaimedToBe(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			ts, _ := discoveryServer(t, tc.doc)
-			p := newOIDCProvider(OIDCConfig{Issuer: ts.URL, ClientID: "atlas"})
+			p := newOIDCProvider(OIDCConfig{Issuer: ts.URL, ClientID: "atlas"}, limits.Default())
 			_, err := p.endpoints(context.Background(), time.Now())
 			if err == nil {
 				t.Fatal("accepted a discovery document that must be refused")
@@ -122,7 +123,7 @@ func TestDiscoveryIsRefusedWhenItIsNotTheProviderItClaimedToBe(t *testing.T) {
 	}
 
 	t.Run("a provider that is not there", func(t *testing.T) {
-		p := newOIDCProvider(OIDCConfig{Issuer: "http://127.0.0.1:1", ClientID: "atlas"})
+		p := newOIDCProvider(OIDCConfig{Issuer: "http://127.0.0.1:1", ClientID: "atlas"}, limits.Default())
 		if _, err := p.endpoints(context.Background(), time.Now()); err == nil {
 			t.Error("an unreachable provider produced no error")
 		}
@@ -133,7 +134,7 @@ func TestDiscoveryIsRefusedWhenItIsNotTheProviderItClaimedToBe(t *testing.T) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}))
 		defer ts.Close()
-		p := newOIDCProvider(OIDCConfig{Issuer: ts.URL, ClientID: "atlas"})
+		p := newOIDCProvider(OIDCConfig{Issuer: ts.URL, ClientID: "atlas"}, limits.Default())
 		_, err := p.endpoints(context.Background(), time.Now())
 		if err == nil || !strings.Contains(err.Error(), "503") {
 			t.Errorf("error = %v, want it to carry the status the provider gave", err)
@@ -148,7 +149,7 @@ func TestTheDiscoveryDocumentIsReused(t *testing.T) {
 		return `{"issuer":"` + base + `","authorization_endpoint":"` + base +
 			`/a","token_endpoint":"` + base + `/t","jwks_uri":"` + base + `/j"}`
 	})
-	p := newOIDCProvider(OIDCConfig{Issuer: ts.URL, ClientID: "atlas"})
+	p := newOIDCProvider(OIDCConfig{Issuer: ts.URL, ClientID: "atlas"}, limits.Default())
 	now := time.Now()
 	for i := 0; i < 3; i++ {
 		if _, err := p.endpoints(context.Background(), now); err != nil {
@@ -293,7 +294,7 @@ func TestAnExternalIdentityLookupTakesBothHalves(t *testing.T) {
 // discovery, so a provider whose document cannot be read has no keys either — and
 // that has to be an error rather than an empty set nothing verifies against.
 func TestAKeySetIsOnlyAsGoodAsTheDocumentThatNamesIt(t *testing.T) {
-	p := newOIDCProvider(OIDCConfig{Issuer: "http://127.0.0.1:1", ClientID: "atlas"})
+	p := newOIDCProvider(OIDCConfig{Issuer: "http://127.0.0.1:1", ClientID: "atlas"}, limits.Default())
 	if _, err := p.keySet(context.Background(), time.Now(), false); err == nil {
 		t.Error("an unreachable provider produced a key set")
 	}
@@ -307,7 +308,7 @@ func TestAKeySetIsOnlyAsGoodAsTheDocumentThatNamesIt(t *testing.T) {
 		return `{"issuer":"` + base + `","authorization_endpoint":"` + base +
 			`/a","token_endpoint":"` + base + `/t","jwks_uri":"` + base + `/nothing"}`
 	})
-	p = newOIDCProvider(OIDCConfig{Issuer: ts.URL, ClientID: "atlas"})
+	p = newOIDCProvider(OIDCConfig{Issuer: ts.URL, ClientID: "atlas"}, limits.Default())
 	if _, err := p.keySet(context.Background(), time.Now(), false); err == nil {
 		t.Error("a jwks_uri that answers 404 produced a key set")
 	}
@@ -321,14 +322,14 @@ func TestAnExchangeAgainstAProviderThatIsNotThere(t *testing.T) {
 		return `{"issuer":"` + base + `","authorization_endpoint":"` + base +
 			`/a","token_endpoint":"http://127.0.0.1:1/t","jwks_uri":"` + base + `/j"}`
 	})
-	p := newOIDCProvider(OIDCConfig{Issuer: ts.URL, ClientID: "atlas"})
+	p := newOIDCProvider(OIDCConfig{Issuer: ts.URL, ClientID: "atlas"}, limits.Default())
 	_, err := p.exchange(context.Background(), "code", "verifier", "https://atlas.example/cb", time.Now())
 	if err == nil || !strings.Contains(err.Error(), "token exchange") {
 		t.Errorf("error = %v, want the exchange to name itself", err)
 	}
 
 	// And when discovery itself is what fails, the exchange never happens.
-	broken := newOIDCProvider(OIDCConfig{Issuer: "http://127.0.0.1:1", ClientID: "atlas"})
+	broken := newOIDCProvider(OIDCConfig{Issuer: "http://127.0.0.1:1", ClientID: "atlas"}, limits.Default())
 	if _, err := broken.exchange(context.Background(), "c", "v", "r", time.Now()); err == nil {
 		t.Error("an exchange proceeded without a token endpoint to send it to")
 	}

@@ -70,7 +70,7 @@ func TestParseTimerSchedule(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			s, err := parseTimerSchedule(&tc.def)
+			s, err := parseTimerSchedule(strictFEEL, &tc.def)
 			if err != nil {
 				t.Fatalf("parseTimerSchedule: %v", err)
 			}
@@ -107,7 +107,7 @@ func TestParseTimerScheduleErrors(t *testing.T) {
 		{"bad cron field count", xmlTimerEventDefinition{TimeCycle: "0 * * *"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := parseTimerSchedule(&tc.def); err == nil {
+			if _, err := parseTimerSchedule(strictFEEL, &tc.def); err == nil {
 				t.Fatalf("expected error, got nil")
 			}
 		})

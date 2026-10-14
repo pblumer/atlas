@@ -5,17 +5,27 @@
 // about which of them apply, and the same "check it before you save" button. So the
 // dialog lives here and both call it.
 //
-// It edits an existing record only. Creating a worker is a different act (it picks a
-// Worker Type and a name, and the name is the binding every model references,
-// ADR-0036/0041), and it keeps its inline form in the Console; what the two share is
-// the shape of a Worker Type's fields, exported as workerShape so the rules cannot
-// drift apart.
+// It opens on an existing record, and — since the incident that names a worker nobody
+// configured (ADR-0158's "no worker registered as X") — on one that does not exist yet.
+// Creating from the Console stays its inline form there, because that is where a
+// Worker Type and a name are *chosen*; creating from an incident chooses neither, since
+// the model already states both, so it is the same dialog with those two fields fixed
+// and a POST instead of a PATCH (ADR-0287). What
+// every surface shares either way is the shape of a Worker Type's fields, exported as
+// workerShape so the rules cannot drift apart.
 //
 // Deleting one lives here too (ADR-0163). It is not a dialog on the same record, but
 // it asks the same kind of question — what does this worker's configuration mean
 // for the models that resolve through it — and putting it here is what makes it
 // reachable from a test at all: app.js boots the whole console on import, so anything
 // left in it is only ever exercised by hand.
+
+// What this Worker Type needs at the provider before any of these fields mean
+// anything — the same text the Modeler's panel shows beside the type, and the deep
+// link into this server's own handbook (ADR-0289).
+// An operator opening this dialog on an empty record is the other half of the audience
+// the panel's block was written for.
+import { workerKindDocHTML } from "./workertypedocs.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -38,6 +48,14 @@ export function workerCreateBody(form) {
     credentialsRef: get("credentialsRef"),
   };
   if (body.kind === "mail") body.provider = get("provider") || "smtp";
+  // An SMTP mail Worker reads its mailbox over IMAP when it names an endpoint for it
+  // (ADR-0438); the native providers read through their own API, so
+  // the field belongs to SMTP alone and a value left in it for another provider stays
+  // behind rather than being refused by the server.
+  if (workerShape(body.kind, body.provider).mailbox) {
+    const mailbox = get("mailboxEndpoint");
+    if (mailbox) body.mailboxEndpoint = mailbox;
+  }
   // An agent's provider is its wire format, and its model is the one piece of a
   // Worker's configuration that is neither endpoint nor credential
   // (ADR-0255).
@@ -97,6 +115,11 @@ export function workerShape(kind, provider) {
   // Discord is Google Sheets' shape: one API base for everyone, so the credential is
   // the whole configuration and there is no endpoint to author.
   const discord = kind === "discord";
+  // S3 is the one bundle kind whose endpoint is still worth authoring, and it carries
+  // two meanings at once: empty is AWS at the region the bundle names, and anything else
+  // is the store the installation runs — which is also what decides that its buckets are
+  // addressed in the path rather than in the hostname.
+  const s3 = kind === "s3";
   // Active Directory is Remedy's shape: an LDAP URL to dial and a bind account to dial
   // it with, neither derivable from the other. It is the newest kind to stop carrying
   // its directory in the model (ADR-0206).
@@ -107,6 +130,10 @@ export function workerShape(kind, provider) {
   // temis's: each protocol has a public default, and an operator names one only for a
   // gateway, a proxy or a self-hosted deployment.
   const agent = kind === "agent";
+  // A CloudEvents endpoint is where push delivery sends the event feed: an https URL
+  // and, optionally, the vault key sent as its bearer token. No task names it; the
+  // Worker's Feed… panel subscribes it to the feed.
+  const cloudevents = kind === "cloudevents";
   // The three SQL products. Their whole configuration is one secret — a connection
   // string has no public half — so there is no endpoint to author: what the Console
   // shows is a redacted label the server derived from the string itself.
@@ -117,6 +144,10 @@ export function workerShape(kind, provider) {
   return {
     mail,
     sql,
+    // An SMTP mail Worker can name an IMAP endpoint, which is what lets it read the
+    // mailbox it sends from (ADR-0438). Gmail and Graph read through the
+    // API they send with; preview has no mailbox at all.
+    mailbox: mail && !native && !preview,
     // The example for this product's connection string, empty for a kind that has
     // none. Both the create form and the edit dialog read it from here, so the two
     // cannot disagree about what a SQL Server DSN looks like.
@@ -148,22 +179,30 @@ export function workerShape(kind, provider) {
     // An agent's key is required *unless* an endpoint is named — a self-hosted endpoint
     // may legitimately need none — so the form asks for it without insisting, and the
     // server refuses a record with neither.
-    credRef: preview ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad ? "required" : "optional")),
+    credRef: preview ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad || s3 ? "required" : "optional")),
     modelPlaceholder: provider === "chat-completions" ? "gpt-4o" : "claude-opus-5",
     endpointPlaceholder: agent
       ? (provider === "chat-completions"
         ? "https://api.openai.com/v1/chat/completions (optional)"
         : "https://api.anthropic.com/v1/messages (optional)")
+      : cloudevents
+      ? "https://billing.example.com/atlas/events"
       : mail
       ? "smtp.office365.com:587"
+      : s3
+      ? "https://minio.example:9000 (empty = AWS)"
       : (ad ? "ldaps://dc.example.com:636"
         : (remedy ? "https://helix.example.com:8008" : (jira ? "https://acme.atlassian.net" : "https://temis.internal"))),
     credRefLabel: agent
       ? "API key reference (a vault key holding the key)"
+      : cloudevents
+      ? "Bearer token reference (optional; a vault key holding the token)"
       : ad
       ? "Credential reference (vault {bindDN, password})"
       : discord
       ? "Credential reference (vault {botToken})"
+      : s3
+      ? "Credential reference (vault {accessKeyId, secretAccessKey, region})"
       : googlesheets
       ? "Credential reference (vault Google auth bundle)"
       : jira
@@ -175,10 +214,14 @@ export function workerShape(kind, provider) {
           : (bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)"))),
     credRefPlaceholder: agent
       ? "anthropic_api_key (a vault key holding the key)"
+      : cloudevents
+      ? "billing_feed_token (a vault key holding the token)"
       : ad
       ? "ad_prod_bind (vault {bindDN, password})"
       : discord
       ? "discord_team (vault {botToken})"
+      : s3
+      ? "s3_archiv (vault {accessKeyId, secretAccessKey, region})"
       : googlesheets
       ? "google_sheets_auth (vault JSON bundle)"
       : jira
@@ -189,9 +232,13 @@ export function workerShape(kind, provider) {
         : (entra ? "entra_blumer (vault {tenantId, clientId, clientSecret})"
           : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token")))),
     hint: agent
-      ? "The model an <b>agent-driven ad-hoc subprocess</b> asks which of its tools to run next. Its <b>API key</b> is a vault key named here \u2014 never a value \u2014 and the endpoint is optional: each wire format has a public default, so name one only for a gateway, a proxy or a self-hosted deployment. A round is one model call, minutes long and able to hang, so Atlas never runs it itself: it supervises a worker for this kind and picks the model up as soon as you save, with no restart. <b>Messages</b> is Anthropic's format (also OpenRouter's <code>/api/v1/messages</code>); <b>Chat Completions</b> is OpenAI's, and anything calling itself OpenAI-compatible \u2014 that one has no default model, so name it."
+      ? "The model an <b>agent-driven ad-hoc subprocess</b> asks which of its tools to run next. Its <b>API key</b> is a vault key named here \u2014 never a value \u2014 and the endpoint is optional: each wire format has a public default, so name one only for a gateway, a proxy or a self-hosted deployment. A round is one model call, minutes long and able to hang, so atlas never runs it itself: it supervises a worker for this kind and picks the model up as soon as you save, with no restart. <b>Messages</b> is Anthropic's format (also OpenRouter's <code>/api/v1/messages</code>); <b>Chat Completions</b> is OpenAI's, and anything calling itself OpenAI-compatible \u2014 that one has no default model, so name it."
+      : cloudevents
+      ? "Where the <b>event feed</b> is pushed: atlas POSTs the outcomes of product actions, every right granted and revoked, and every incident raised and resolved to this <b>https</b> address as CloudEvents batches (<code>application/cloudevents-batch+json</code>), and sends the token behind the reference as <code>Authorization: Bearer</code>. Nothing is sent until you subscribe the worker to the feed: <b>Feed…</b> in its menu, where you can narrow it to some catalogues. A refused batch is held and retried, never skipped; the receiver deduplicates by each event's <code>id</code>."
       : discord
-      ? "The credential reference names a vault bundle holding the bot token \u2014 never a value: <code>{\"botToken\": \"\u2026\"}</code>, from <b>Discord Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Reset Token</b>. Store the token alone; Atlas composes the <code>Bot </code> scheme itself. There is no endpoint to name \u2014 Discord\u0027s API base is the same for everyone \u2014 so the field stays empty unless you sit behind a proxy. The bot must be <b>invited to the server</b> and hold <b>View Channel</b> and <b>Send Messages</b> in every channel a process writes to: a missing grant comes back as code 50001, <i>Missing Access</i>, not as a bad token."
+      ? "The credential reference names a vault bundle holding the bot token \u2014 never a value: <code>{\"botToken\": \"\u2026\"}</code>, from <b>Discord Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Reset Token</b>. Store the token alone; atlas composes the <code>Bot </code> scheme itself. There is no endpoint to name \u2014 Discord\u0027s API base is the same for everyone \u2014 so the field stays empty unless you sit behind a proxy. The bot must be <b>invited to the server</b> and hold <b>View Channel</b> and <b>Send Messages</b> in every channel a process writes to: a missing grant comes back as code 50001, <i>Missing Access</i>, not as a bad token."
+      : s3
+      ? "The credential reference names a vault bundle holding the access key \u2014 never a value: <code>{\"accessKeyId\": \"\u2026\", \"secretAccessKey\": \"\u2026\", \"region\": \"eu-central-1\"}</code>, plus <code>\"sessionToken\"</code> for a key issued by STS. The <b>region belongs in the bundle</b> because the request signature is computed with it. Leave the <b>endpoint empty for AWS</b>; for MinIO, Ceph, Garage, R2 or Wasabi enter the store\u0027s base URL \u2014 which is also what tells atlas to address buckets in the path. The <b>bucket is not part of this record</b>: a task names it, so one key can serve several."
       : googlesheets
       ? "The credential reference names a JSON auth bundle in the vault \u2014 never a secret value. A <b>service account</b> is the normal shape: <code>{\"method\": \"serviceAccount\", \"clientEmail\": \"\u2026@\u2026.iam.gserviceaccount.com\", \"privateKey\": \"-----BEGIN PRIVATE KEY-----\u2026\"}</code>, copied out of the JSON key file Google hands out. A service account owns nothing by itself: <b>share each spreadsheet or folder with its address</b>, exactly as you would with a colleague, or it will read a 403 where you see a document."
       : ad
@@ -203,8 +250,8 @@ export function workerShape(kind, provider) {
       : (preview
         ? "Needs nothing else: messages are framed exactly as they would be sent and land in <b>Operations &rsaquo; Outbox</b> instead of going out. The way to try a mail task before you own a mail server."
         : (native
-          ? "The credential reference names a JSON auth bundle in the vault — never a secret value. A Google OAuth client still in <i>Testing</i> expires its refresh token after 7 days."
-          : "Host and port of the submission server. Without a port, 587 is assumed (465 for <code>smtps://</code>)."))),
+          ? "The credential reference names a JSON auth bundle in the vault — never a secret value. A Google OAuth client still in <i>Testing</i> expires its refresh token after 7 days. To <b>read</b> the mailbox — a watch, or a task that lists, files or answers mail — the same credential also needs read access: <code>Mail.Read</code> (or <code>Mail.ReadWrite</code> to change it) for Microsoft, <code>gmail.readonly</code> (and <code>gmail.modify</code>) for Gmail."
+          : "Host and port of the submission server. Without a port, 587 is assumed (465 for <code>smtps://</code>). The sender logs in with the password the token reference names; leave the reference empty for an internal relay that admits this server by its address (often port 25) — the worker then sends without logging in. Name an <b>IMAP endpoint</b> too and the same mailbox can be read — by a watch, or a task that lists, files or answers mail; it logs in as the sender with the same credential, and always over TLS."))),
   };
 }
 
@@ -249,39 +296,68 @@ export async function editWorkerFlow({ api, toast, worker, intro = "", extraLabe
   return { saved: true, extra: choice.extra };
 }
 
-// askWorker renders the dialog and resolves to {patch, extra}, or null. The fields
-// re-shape as the provider changes, because "which of these do I have to fill in" is a
-// property of the provider and finding that out from a rejected save is a worse way to
-// learn it.
-function askWorker({ api, worker, intro, extraLabel }) {
+// createWorkerFlow opens the same dialog on a worker that does not exist yet and
+// POSTs it. `name` and `kind` come from whoever knows them — today the incident, which
+// reads them off the model's own reference — and are shown fixed rather than typed:
+// the name is the binding every deployed model resolves through (ADR-0036/0041), so a
+// worker created under a near-miss of it would leave the parked task parked and the
+// operator looking at a worker that seems right.
+//
+// Resolves {saved, extra} after the create, or null when nothing was written.
+export async function createWorkerFlow({ api, toast, name, kind, intro = "", extraLabel = "", okToast = "Worker added" }) {
+  const choice = await askWorker({ api, worker: { name, kind, enabled: true }, intro, extraLabel, create: true });
+  if (!choice) return null;
+  try {
+    await api("POST", "/api/v1/connectors", choice.body);
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    toast(/403|forbidden/i.test(msg) ? "Adding a worker needs an admin account" : "Could not add the worker: " + msg, "warn");
+    return null;
+  }
+  if (okToast) toast(okToast, "ok");
+  return { saved: true, extra: choice.extra };
+}
+
+// askWorker renders the dialog and resolves to {patch, extra} — or {body, extra} when
+// `create` is set, since a create sends a whole record and an edit sends only what
+// changed — or null when nothing was confirmed. The fields re-shape as the provider
+// changes, because "which of these do I have to fill in" is a property of the provider
+// and finding that out from a rejected save is a worse way to learn it.
+function askWorker({ api, worker, intro, extraLabel, create = false }) {
   return new Promise((resolve) => {
     const c = worker || {};
     const ov = document.createElement("div");
     ov.className = "modal-ov";
     ov.innerHTML = `
       <div class="modal confirm-modal conn-modal" role="dialog" aria-modal="true" aria-labelledby="conn-edit-title">
-        <div class="modal-head"><h2 id="conn-edit-title">Worker &middot; ${esc(c.name || "")}</h2></div>
+        <div class="modal-head"><h2 id="conn-edit-title">${create ? "New worker" : "Worker"} &middot; ${esc(c.name || "")}</h2></div>
         <div class="modal-body">
           ${intro ? `<p class="inc-modal-msg">${esc(intro)}</p>` : ""}
           ${c.problem ? `<p class="conn-problem"><b>Not usable right now:</b> ${esc(c.problem)}</p>` : ""}
-          <p class="muted" style="margin:0 0 10px">The name is what every model references, so it is fixed here — changing it would leave those tasks looking for a worker that no longer exists. Everything else takes effect at once; a parked task retries against the new configuration.</p>
+          <p class="muted" style="margin:0 0 10px">${create
+            ? "The name and the Worker Type are the model's, not yours to pick here — they are what the parked task states, and a worker created under anything else would leave it parked. Fill in what it takes to reach the target; it is live as soon as you save."
+            : "The name is what every model references, so it is fixed here — changing it would leave those tasks looking for a worker that no longer exists. Everything else takes effect at once; a parked task retries against the new configuration."}</p>
           <div class="conn-fields">
-            <label class="field"><span>Kind</span><input value="${esc(c.kind || "")}" disabled/></label>
+            <label class="field conn-f-name" style="flex:1 1 200px"><span>Name</span><input id="conn-name" value="${esc(c.name || "")}" disabled/></label>
+            <label class="field"><span>Kind</span><input id="conn-kind" value="${esc(c.kind || "")}" disabled/></label>
             <label class="field conn-f-provider"><span class="conn-provider-label">Provider</span><select id="conn-provider"></select></label>
             <label class="field conn-f-endpoint" style="flex:1 1 220px"><span class="conn-endpoint-label">Endpoint</span><input id="conn-endpoint" value="${esc(c.endpoint || "")}"/></label>
             <label class="field conn-f-sender" style="flex:1 1 200px"><span>Sender</span><input id="conn-sender" value="${esc(c.sender || "")}" placeholder="bot@example.com"/></label>
+            <label class="field conn-f-mailbox" style="flex:1 1 220px"><span>IMAP endpoint (optional)</span><input id="conn-mailbox" value="${esc(c.mailboxEndpoint || "")}" placeholder="imaps://imap.example.com:993"/></label>
             <label class="field conn-f-model" style="flex:1 1 200px"><span>Default model</span><input id="conn-model" value="${esc(c.model || "")}" title="What a task that names no model of its own asks. A task or an agent container may name one, and then that one runs."/></label>
             <label class="field conn-f-credref" style="flex:1 1 200px"><span class="conn-credref-label">Token reference</span><input id="conn-credref" value="${esc(c.credentialsRef || "")}"/></label>
+            <label class="field conn-f-connstr" style="flex:1 1 100%"><span>Connection string</span><input id="conn-connstr" type="password" autocomplete="new-password"/></label>
           </div>
           <label class="conn-enabled"><input type="checkbox" id="conn-enabled"${c.enabled ? " checked" : ""}/> <span>Enabled — a disabled worker is skipped, and its tasks park</span></label>
           <p class="muted conn-hint" style="margin:8px 0 0;font-size:12.5px"></p>
+          <div class="conn-setup" style="margin:10px 0 0">${workerKindDocHTML(c.kind)}</div>
           <p class="conn-test-result" style="margin:8px 0 0;font-size:12.5px" hidden></p>
         </div>
         <div class="modal-foot">
           <button class="btn neutral" data-conn-cancel title="Close without saving">Cancel</button>
           <button class="btn neutral conn-f-test" data-conn-test title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
-          <button class="btn${extraLabel ? " neutral" : ""}" data-conn-save title="Save the worker changes">Save</button>
-          ${extraLabel ? `<button class="btn" data-conn-extra title="Save the changes and retry the parked task">${esc(extraLabel)}</button>` : ""}
+          <button class="btn${extraLabel ? " neutral" : ""}" data-conn-save title="${create ? "Add this worker" : "Save the worker changes"}">${create ? "Add worker" : "Save"}</button>
+          ${extraLabel ? `<button class="btn" data-conn-extra title="${create ? "Add this worker and retry the parked task" : "Save the changes and retry the parked task"}">${esc(extraLabel)}</button>` : ""}
         </div>
       </div>`;
     document.body.appendChild(ov);
@@ -289,8 +365,10 @@ function askWorker({ api, worker, intro, extraLabel }) {
     const providerSel = ov.querySelector("#conn-provider");
     const endpointIn = ov.querySelector("#conn-endpoint");
     const senderIn = ov.querySelector("#conn-sender");
+    const mailboxIn = ov.querySelector("#conn-mailbox");
     const modelIn = ov.querySelector("#conn-model");
     const credRefIn = ov.querySelector("#conn-credref");
+    const connStrIn = ov.querySelector("#conn-connstr");
     const enabledIn = ov.querySelector("#conn-enabled");
     const testOut = ov.querySelector(".conn-test-result");
 
@@ -314,11 +392,22 @@ function askWorker({ api, worker, intro, extraLabel }) {
       if (modelIn) modelIn.placeholder = sh.modelPlaceholder || "";
       show(".conn-f-endpoint", sh.endpoint);
       show(".conn-f-sender", sh.sender);
+      show(".conn-f-mailbox", sh.mailbox);
       show(".conn-f-credref", sh.credRef !== "none");
+      // Two fields the edit dialog has no business showing. The name is the heading
+      // when it is fixed and already stored; on a create it is what the operator is
+      // about to commit to, so it is on the form, disabled, where it can be read back.
+      // A connection string is a SQL worker's whole configuration and is sealed into
+      // the vault on the way in (ADR-0188) — so there is one to type on a create and
+      // never one to show back on an edit.
+      show(".conn-f-name", create);
+      show(".conn-f-connstr", create && sh.sql);
+      show(".conn-enabled", !create);
       show(".conn-f-test", sh.test);
       endpointIn.placeholder = sh.endpointPlaceholder;
       ov.querySelector(".conn-credref-label").textContent = sh.credRefLabel;
       credRefIn.placeholder = sh.credRefPlaceholder;
+      connStrIn.placeholder = sh.dsnPlaceholder;
       ov.querySelector(".conn-hint").innerHTML = sh.hint;
     };
     providerSel.addEventListener("change", sync);
@@ -331,14 +420,17 @@ function askWorker({ api, worker, intro, extraLabel }) {
       testOut.textContent = "Checking…";
       btn.disabled = true;
       try {
-        // A SQL worker is checked through the vault reference it already has: the
-        // dialog never shows a connection string back, so there is nothing typed here
-        // to check instead. Which is the case that matters — an operator opens this
-        // dialog because a worker *stopped* working.
+        // On an edit, a SQL worker is checked through the vault reference it already
+        // has: the dialog never shows a connection string back, so there is nothing
+        // typed here to check instead. Which is the case that matters — an operator
+        // opens this dialog because a worker *stopped* working. On a create the string
+        // is right there on the form, and checking it before it is sealed is the last
+        // moment the operator can still fix it in the field they are looking at.
         const res = await api("POST", "/api/v1/connectors/test", {
           name: c.name, kind: c.kind, provider: providerSel.value,
           endpoint: endpointIn.value.trim(), sender: senderIn.value.trim(),
           credentialsRef: credRefIn.value.trim(),
+          connectionString: create && shape().sql ? connStrIn.value.trim() : "",
         });
         testOut.className = "conn-test-result " + (res.ok ? "ok" : "err");
         testOut.textContent = (res.ok ? "✓ " : "✕ ") + (res.detail || (res.ok ? "Works." : "Failed."));
@@ -350,6 +442,26 @@ function askWorker({ api, worker, intro, extraLabel }) {
 
     const close = (value) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(value); };
     const onKey = (e) => { if (e.key === "Escape") close(null); };
+    // A create goes through workerCreateBody, the same function the Console's add form
+    // posts through, rather than assembling a second body here — "which fields does a
+    // create carry" is one decision (ADR-0160), and two copies of it is how the Console
+    // and this dialog would come to disagree about, say, an agent's model. The form it
+    // reads is synthesized from what this kind actually shows: a hidden field carries no
+    // value here, so nothing a shape hides can reach the server.
+    const createBody = (sh) => {
+      const f = new FormData();
+      f.set("name", c.name || "");
+      f.set("kind", c.kind || "");
+      if (sh.provider) f.set("provider", providerSel.value);
+      if (sh.endpoint) f.set("endpoint", endpointIn.value.trim());
+      if (sh.sender) f.set("sender", senderIn.value.trim());
+      if (sh.mailbox) f.set("mailboxEndpoint", mailboxIn.value.trim());
+      if (sh.model) f.set("model", modelIn.value.trim());
+      if (sh.credRef !== "none") f.set("credentialsRef", credRefIn.value.trim());
+      if (sh.sql) f.set("connectionString", connStrIn.value.trim());
+      return workerCreateBody(f);
+    };
+
     // The patch carries every field this kind and provider actually use — the server
     // re-runs the kind's full validation on the resulting record (ADR-0160), so it has
     // to see what the operator is looking at. A field the shape hides is *omitted*,
@@ -360,12 +472,19 @@ function askWorker({ api, worker, intro, extraLabel }) {
     // about the provider and not about which fields a form drew.
     const submit = (extra) => {
       const sh = shape();
+      if (create) {
+        close({ body: createBody(sh), extra });
+        return;
+      }
       const patch = { enabled: enabledIn.checked };
       if (sh.endpoint) patch.endpoint = endpointIn.value.trim();
       if (sh.credRef !== "none") patch.credentialsRef = credRefIn.value.trim();
       if (sh.mail) {
         patch.provider = providerSel.value;
         patch.sender = senderIn.value.trim();
+        // The IMAP endpoint is SMTP's alone. Hidden for any other provider, it is left
+        // out like every hidden field; the server clears it when the provider changes.
+        if (sh.mailbox) patch.mailboxEndpoint = mailboxIn.value.trim();
       }
       if (sh.model) {
         patch.provider = providerSel.value;
@@ -373,6 +492,7 @@ function askWorker({ api, worker, intro, extraLabel }) {
       }
       close({ patch, extra });
     };
+
     document.addEventListener("keydown", onKey);
     ov.querySelector("[data-conn-cancel]").addEventListener("click", () => close(null));
     ov.querySelector("[data-conn-save]").addEventListener("click", () => submit(false));
@@ -380,8 +500,11 @@ function askWorker({ api, worker, intro, extraLabel }) {
     if (extraBtn) extraBtn.addEventListener("click", () => submit(true));
     ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
     // Focus what this kind is most often opened to change: an agent's model, a mail
-    // worker's transport, everything else its endpoint.
-    (sh0.model ? modelIn : (c.kind === "mail" ? providerSel : endpointIn)).focus();
+    // worker's transport, everything else its endpoint. On a create the same holds,
+    // except for the kinds with no endpoint to type — there the credential is the
+    // configuration, so that is where the cursor belongs.
+    const first = sh0.model ? modelIn : (c.kind === "mail" ? providerSel : endpointIn);
+    (create && first === endpointIn && !sh0.endpoint ? credRefIn : first).focus();
   });
 }
 
@@ -571,5 +694,133 @@ export async function deleteWorkerFlow({ api, worker }) {
     }
     await api("DELETE", url + "?force=true");
     return true;
+  }
+}
+
+// --- Checking a worker from the row -----------------------------------------
+//
+// The check has two modes, and they are not degrees of the same thing: a probe
+// connects, upgrades and authenticates and stops at the door, and a send puts a
+// real message in a real person's inbox. The server tells them apart by whether
+// `to` is empty (api/connectors.go), which is the right contract for an API and was
+// the wrong question to put to a person: it was asked as a window.prompt saying
+// "leave empty to only check the connection", so "stop at the door" had to be
+// expressed by typing nothing into the same box that means "send mail to this
+// address", and a stray character sent it.
+//
+// And a prompt is refusable. A sandboxed frame, or the "prevent this page from
+// creating additional dialogs" box somebody ticks once, makes window.prompt return
+// null without opening — indistinguishable from Cancel, so the check silently did
+// not happen on a page where the operator had just asked for it. A dialog the page
+// draws itself cannot be suppressed by the browser and cannot be mistaken for a
+// cancellation.
+
+// askTestRecipient resolves to the recipient the operator chose — "" for a probe —
+// or null if they cancelled.
+function askTestRecipient(c) {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML = `
+      <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Check worker">
+        <div class="modal-head"><h2>Check "${esc(c.name || "")}"</h2></div>
+        <div class="modal-body">
+          <label class="field"><span>What to check</span>
+            <select id="wt-mode">
+              <option value="probe">The connection and the credential</option>
+              <option value="send">Send a real test message</option>
+            </select></label>
+          <label class="field" id="wt-to-field" hidden><span>To</span>
+            <input id="wt-to" type="email" autocomplete="off" placeholder="name@example.org"/></label>
+          <p class="muted small" id="wt-what"></p>
+        </div>
+        <div class="modal-foot">
+          <button class="btn neutral" data-wt-cancel>Cancel</button>
+          <button class="btn" data-wt-go>Check</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+
+    const mode = ov.querySelector("#wt-mode");
+    const toField = ov.querySelector("#wt-to-field");
+    const toIn = ov.querySelector("#wt-to");
+    const what = ov.querySelector("#wt-what");
+    const go = ov.querySelector("[data-wt-go]");
+
+    // What each mode actually does, said where the choice is made. A probe proves
+    // the worker can be reached and admitted; only a send proves the provider does
+    // something with a message — and only a send is visible to somebody else.
+    const sync = () => {
+      const sending = mode.value === "send";
+      toField.hidden = !sending;
+      go.textContent = sending ? "Send" : "Check";
+      what.textContent = sending
+        ? "A message arrives in that inbox, from this worker. Nothing is stored and no process runs."
+        : "Connect, authenticate, disconnect. Nothing is sent and nobody is written to.";
+      if (sending) toIn.focus();
+    };
+    mode.addEventListener("change", sync);
+    sync();
+
+    let settled = false;
+    const close = (value) => {
+      if (settled) return;
+      settled = true;
+      ov.remove();
+      document.removeEventListener("keydown", onKey);
+      resolve(value);
+    };
+    const submit = () => {
+      if (mode.value !== "send") { close(""); return; }
+      const to = toIn.value.trim();
+      // Checked here and not only at the provider: a send with a malformed address
+      // fails somewhere inside the provider's error vocabulary, and the operator
+      // reads that as "the worker is broken" rather than as "that is not an address".
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { toIn.focus(); toIn.select(); return; }
+      close(to);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); close(null); return; }
+      if (e.key === "Enter" && ov.contains(document.activeElement)) { e.preventDefault(); submit(); }
+    };
+    document.addEventListener("keydown", onKey);
+    ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(null); });
+    ov.querySelector("[data-wt-cancel]").addEventListener("click", () => close(null));
+    go.addEventListener("click", submit);
+    mode.focus();
+  });
+}
+
+// testWorkerFlow is the row's "Check…": ask a mail worker what kind of check this
+// is, run it, and say what came back. Resolves true when the worker answered ok,
+// false on a failure or a cancellation — the caller reloads nothing either way,
+// since a check changes no state.
+//
+// It lives here rather than in app.js for the reason the delete flow does: app.js
+// boots the whole console on import, so anything left inside it is only ever
+// exercised by hand — and what this decides (which mode was chosen, whether an
+// address is an address, what reaches the server) is worth exercising.
+export async function testWorkerFlow({ api, toast, worker }) {
+  const c = worker || {};
+  let to = "";
+  // Only mail has a second half: every other Worker Type's check dials and stops,
+  // because the equivalent of "send one to see" would be running a statement.
+  if (c.kind === "mail") {
+    to = await askTestRecipient(c);
+    if (to === null) return false;
+  }
+  // A check can take seconds and the menu it was started from is already gone, so
+  // without a word here nothing at all happens until the result lands.
+  toast(`Checking "${c.name}"…`);
+  try {
+    const res = await api("POST", "/api/v1/connectors/test", {
+      name: c.name, kind: c.kind, provider: c.provider, endpoint: c.endpoint,
+      sender: c.sender, credentialsRef: c.credentialsRef, to,
+    });
+    toast(res.detail || (res.ok ? "Worker works" : "Check failed"), res.ok ? "ok" : "warn");
+    return !!res.ok;
+  } catch (err) {
+    toast("Check failed: " + (err && err.message ? err.message : err), "warn");
+    return false;
   }
 }

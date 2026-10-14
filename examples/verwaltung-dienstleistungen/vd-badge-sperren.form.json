@@ -1,0 +1,30 @@
+{
+  "type": "default",
+  "id": "vd-badge-sperren",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Badge sperren · Block the badge**\n\nBadge im Zutrittssystem sperren. · Block the badge in the access system."
+    },
+    {
+      "key": "recipient",
+      "type": "textfield",
+      "label": "Inhaber · Holder",
+      "disabled": true
+    },
+    {
+      "key": "grund",
+      "type": "textfield",
+      "label": "Grund · Reason",
+      "disabled": true
+    },
+    {
+      "key": "gesperrt",
+      "type": "checkbox",
+      "label": "Im Zutrittssystem gesperrt · Blocked in the access system",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

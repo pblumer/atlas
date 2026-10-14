@@ -218,3 +218,77 @@ func TestBooleanVariableIsIndexed(t *testing.T) {
 		t.Errorf("gesperrt=false = %v, want nothing", got)
 	}
 }
+
+// SetVariableIndexed is how a variable joins or leaves the value index after it has
+// already been written — the command behind a process declaring a variable
+// searchable once instances of it are already running.
+//
+// It had no test at all. These pin the three answers it gives, because two of them
+// are "do nothing" and a no-op is exactly the kind of behaviour that rots unnoticed.
+
+// Turning membership on moves an existing variable into the index, so an instance
+// that was already running when the declaration arrived becomes findable.
+func TestSetVariableIndexedAddsAnExistingVariableToTheIndex(t *testing.T) {
+	s := openStore(t)
+	putIndexedVar(t, s, 10, "identityId", "MT-1998", false)
+	if got := found(t, s, "identityId", "MT-1998", false); len(got) != 0 {
+		t.Fatalf("found %v before the variable was indexed, want none", got)
+	}
+
+	commit(t, s, func(tx *state.Tx) error {
+		return tx.SetVariableIndexed(10, "identityId", true)
+	})
+
+	if got := found(t, s, "identityId", "MT-1998", false); !reflect.DeepEqual(got, []uint64{10}) {
+		t.Errorf("found %v, want the instance that holds the value", got)
+	}
+}
+
+// And turning it off removes the entry, so the index never answers with a value the
+// caller has stopped declaring.
+func TestSetVariableIndexedRemovesTheEntryAgain(t *testing.T) {
+	s := openStore(t)
+	putIndexedVar(t, s, 11, "identityId", "MT-1998", true)
+	if got := found(t, s, "identityId", "MT-1998", false); len(got) != 1 {
+		t.Fatalf("found %v, want the indexed variable", got)
+	}
+
+	commit(t, s, func(tx *state.Tx) error {
+		return tx.SetVariableIndexed(11, "identityId", false)
+	})
+
+	if got := found(t, s, "identityId", "MT-1998", false); len(got) != 0 {
+		t.Errorf("found %v after membership was turned off, want none", got)
+	}
+}
+
+// A variable that is gone must be a no-op rather than an error. The command emits
+// nothing in that case, but the fold has to survive replaying an event whose
+// variable a later record deleted — which is the recovery property, not a niggle.
+func TestSetVariableIndexedIsANoOpForAVariableThatIsGone(t *testing.T) {
+	s := openStore(t)
+	commit(t, s, func(tx *state.Tx) error {
+		if err := tx.SetVariableIndexed(12, "neverExisted", true); err != nil {
+			return err
+		}
+		// And for one that is already in the state being asked for.
+		return tx.SetVariableIndexed(12, "neverExisted", false)
+	})
+	if got := found(t, s, "neverExisted", "", false); len(got) != 0 {
+		t.Errorf("found %v for a variable that was never written", got)
+	}
+}
+
+// Asking for the state a variable already holds writes nothing — and, in particular,
+// does not re-put the record, which would move its index entry through the maintain
+// path for no reason.
+func TestSetVariableIndexedLeavesAVariableAlreadyInStepAlone(t *testing.T) {
+	s := openStore(t)
+	putIndexedVar(t, s, 13, "identityId", "MT-1998", true)
+	commit(t, s, func(tx *state.Tx) error {
+		return tx.SetVariableIndexed(13, "identityId", true)
+	})
+	if got := found(t, s, "identityId", "MT-1998", false); !reflect.DeepEqual(got, []uint64{13}) {
+		t.Errorf("found %v, want the one entry unchanged", got)
+	}
+}

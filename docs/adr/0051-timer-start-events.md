@@ -1,12 +1,20 @@
 # ADR-0051: Timer start events (duration, date, cycle)
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas engine team
 
 > **Draft for review.** This ADR proposes the design; no code has been written
 > against it yet. It supersedes nothing — it fills a gap left open by ADR-0035
 > (message start events) and the Milestone 2 timer note in `ROADMAP.md`.
+>
+> **Implementation note (2026-09-09).** The paragraph above is the record as it was
+> written and is kept for that reason; it has not been true for some time. Duration,
+> date and cycle timer starts compile, schedule, fire and replay, with recovery tests.
+> The note stayed because nothing in the process ever revisited a merged record — the
+> problem `ADR-0298` exists to fix, and why this record now
+> carries an `Implementation` line that a test keeps honest.
 
 ## Context and problem statement
 

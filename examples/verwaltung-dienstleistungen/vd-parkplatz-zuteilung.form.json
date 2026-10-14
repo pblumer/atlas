@@ -1,0 +1,36 @@
+{
+  "type": "default",
+  "id": "vd-parkplatz-zuteilung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Parkplatz zuteilen · Assign a parking space**\n\nEinen freien Platz für dieses Fahrzeug zuteilen und die Person informieren. · Assign a free space for this vehicle and tell the person."
+    },
+    {
+      "key": "recipient",
+      "type": "textfield",
+      "label": "Empfänger · Recipient",
+      "disabled": true
+    },
+    {
+      "key": "kennzeichen",
+      "type": "textfield",
+      "label": "Kennzeichen · Licence plate",
+      "disabled": true
+    },
+    {
+      "key": "fahrzeug",
+      "type": "textfield",
+      "label": "Fahrzeug · Vehicle",
+      "disabled": true
+    },
+    {
+      "key": "parkplatz",
+      "type": "textfield",
+      "label": "Parkplatznummer · Space number",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

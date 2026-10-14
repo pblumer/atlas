@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Start a process</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='52' fill='%23000'/%3E%3Cpath fill='%23fff' fill-rule='evenodd' d='M128 26 244 214 12 214ZM128 172 178 214 78 214ZM111 72H145V99H172V133H145V160H111V133H84V99H111Z'/%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='52' fill='%23000'/%3E%3Cpath fill='%23fff' d='M142.1 201.7A68 68 0 0 1 24 174.5L57.5 152.3A33 33 0 0 0 115.3 179.2Z'/%3E%3Cpath fill='%23fff' d='M22.2 162.7A68 68 0 0 1 106.5 92L119.7 117.1L98 126A33 33 0 0 0 59 146.7Z'/%3E%3Cpath fill='%23fff' d='M126 92H160V226H126Z'/%3E%3Cpath fill='%23fff' d='M189.5 38H210.5V62.5H235V83.5H210.5V108H189.5V83.5H165V62.5H189.5Z'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/vendor/form-js/form-js.css" />
 <!-- The Atlas → form-js theming bridge. It is what carries the org's brand colour
      into the rendered form's fields, labels, focus ring and buttons; the page's own
@@ -49,7 +49,7 @@
 </head>
 <body>
   <div class="wrap">
-    <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 256 256"><path fill="currentColor" fill-rule="evenodd" d="M128 34 236 206 20 206ZM128 166 174 206 82 206ZM115 77H141V102H166V128H141V153H115V128H90V102H115Z"/></svg></span> <b>Atlas</b></div>
+    <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 256 256"><path fill="currentColor" d="M146 189.6A60 60 0 0 1 42.3 167.5L69.5 145.6A31 31 0 0 0 123.7 170.9Z"/><path fill="currentColor" d="M40.6 159.4A60 60 0 0 1 114.5 92.8L125.4 113.3L107.5 120.9A31 31 0 0 0 70.5 141.4Z"/><path fill="currentColor" d="M133 93H162V211H133Z"/><path fill="currentColor" d="M184.5 53H199.5V70.5H217V85.5H199.5V103H184.5V85.5H167V70.5H184.5Z"/></svg></span> <b>atlas</b></div>
     <div class="card" id="card"><p class="muted">Loading&hellip;</p></div>
   </div>
   <script type="module">
@@ -74,14 +74,116 @@
     syncFromServer();
     syncLogoFromServer();
 
+    // A public wizard (ADR-0449). When the process holds one, the start hands this
+    // visitor a pass: kept for this tab, so a reload resumes the sitting, and sent with
+    // every later screen in an Authorization header. Nothing else about the instance
+    // reaches this page.
+    const passKey = "atlas.pass." + token;
+    const readPass = () => { try { return sessionStorage.getItem(passKey) || ""; } catch { return ""; } };
+    const keepPass = (p) => {
+      try { if (p) sessionStorage.setItem(passKey, p); else sessionStorage.removeItem(passKey); } catch { /* no storage: no resume */ }
+    };
+    // How long to wait before each look for the next screen while a worker or a timer
+    // stands between two: soon at first, then less often, for about two minutes.
+    const WAIT = [1000, 2000, 4000, 8000, 15000, 30000, 60000];
+
+    function thankYou() {
+      keepPass("");
+      card.innerHTML = `<div class="done"><div class="check">&#10003;</div>
+        <h1 style="margin:0 0 6px">Thank you</h1>
+        <p class="muted">Your submission has been received.</p></div>`;
+    }
+
+    function unavailable(message) {
+      card.innerHTML = `<h1>Unavailable</h1><p class="muted err">${esc(message)}</p>`;
+    }
+
+    function showError(message) {
+      let el = card.querySelector(".submit-err");
+      if (!el) { el = document.createElement("p"); el.className = "muted err submit-err"; card.querySelector(".actions").appendChild(el); }
+      el.textContent = message;
+    }
+
+    // wizardCall asks the public wizard routes with the pass. A 404 means the pass opens
+    // nothing any more — the sitting ended, or was abandoned — and is forgotten.
+    async function wizardCall(method, path, body) {
+      const headers = { Authorization: "Bearer " + readPass() };
+      if (body) headers["Content-Type"] = "application/json";
+      const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+      if (res.status === 404) {
+        keepPass("");
+        const err = new Error("This form is finished or no longer available.");
+        err.gone = true;
+        throw err;
+      }
+      if (!res.ok) {
+        if (res.status === 429) throw new Error("Too many requests — please try again shortly.");
+        const msg = res.status === 400 ? ((await res.json().catch(() => ({}))).error || "") : "";
+        throw new Error(msg ? "Please check your answers: " + msg : "Could not submit. Please try again.");
+      }
+      return res.json();
+    }
+
+    // showWizard renders where the sitting stands: the next screen, a wait while it is
+    // being prepared, or the end.
+    async function showWizard(w, attempt = 0) {
+      if (w.state === "step" && w.step) return showStep(w.step);
+      if (w.state === "pending") {
+        if (attempt >= WAIT.length) {
+          card.innerHTML = `<h1>Still preparing</h1>
+            <p class="muted">Your answers are saved. The next step is taking longer than usual.</p>
+            <div class="actions"><button class="submit" id="again">Check again</button></div>`;
+          document.getElementById("again").addEventListener("click", () => resume(0));
+          return;
+        }
+        card.innerHTML = `<h1>One moment</h1><p class="muted">Your answers are saved. Preparing the next step&hellip;</p>`;
+        setTimeout(() => resume(attempt + 1), WAIT[attempt]);
+        return;
+      }
+      thankYou();
+    }
+
+    async function resume(attempt) {
+      try { await showWizard(await wizardCall("GET", "/public/wizard/step"), attempt); }
+      catch (e) { unavailable(e.message); }
+    }
+
+    async function showStep(step) {
+      card.innerHTML = `<h1>${esc(step.title || "Next step")}</h1>
+        ${step.documentation ? `<p class="muted">${esc(step.documentation)}</p>` : ""}
+        <div id="form"></div>
+        <div class="actions"><button class="submit" id="submit" title="Submit this step and continue">Continue</button></div>`;
+      const form = new Form({ container: document.getElementById("form") });
+      await form.importSchema(step.schema || { type: "default", components: [] }, step.data || {});
+      document.getElementById("submit").addEventListener("click", async (e) => {
+        const btn = e.currentTarget;
+        const { data, errors } = form.submit();
+        if (errors && Object.keys(errors).length) return; // form-js highlights the fields
+        btn.disabled = true;
+        try {
+          await showWizard(await wizardCall("POST", `/public/wizard/steps/${step.taskKey}/complete`, { variables: data }));
+        } catch (err) {
+          if (err.gone) { unavailable(err.message); return; }
+          btn.disabled = false;
+          showError(err.message);
+        }
+      });
+    }
+
     async function main() {
+      // A pass kept by this tab resumes its sitting. One that opens nothing any more is
+      // forgotten, and the page offers the start form again.
+      if (readPass()) {
+        try { await showWizard(await wizardCall("GET", "/public/wizard/step")); return; }
+        catch (e) { if (!e.gone) { unavailable(e.message); return; } }
+      }
       let def;
       try {
         const res = await fetch(`/public/forms/${encodeURIComponent(token)}/schema`);
         if (!res.ok) throw new Error(res.status === 404 ? "This link is no longer valid." : "HTTP " + res.status);
         def = await res.json();
       } catch (e) {
-        card.innerHTML = `<h1>Unavailable</h1><p class="muted err">${e.message}</p>`;
+        unavailable(e.message);
         return;
       }
       card.innerHTML = `<h1>${esc(def.processName || "Start a process")}</h1>
@@ -101,14 +203,17 @@
             body: JSON.stringify({ variables: data }),
           });
           if (!res.ok) throw new Error(res.status === 429 ? "Too many requests — please try again shortly." : "Could not submit. Please try again.");
-          card.innerHTML = `<div class="done"><div class="check">&#10003;</div>
-            <h1 style="margin:0 0 6px">Thank you</h1>
-            <p class="muted">Your submission has been received.</p></div>`;
+          const out = await res.json().catch(() => ({}));
+          // A start into a public wizard carries on to its first screen.
+          if (out.wizard && out.wizard.pass) {
+            keepPass(out.wizard.pass);
+            await showWizard(out.wizard);
+            return;
+          }
+          thankYou();
         } catch (err) {
           btn.disabled = false;
-          let e2 = card.querySelector(".submit-err");
-          if (!e2) { e2 = document.createElement("p"); e2.className = "muted err submit-err"; card.querySelector(".actions").appendChild(e2); }
-          e2.textContent = err.message;
+          showError(err.message);
         }
       });
     }

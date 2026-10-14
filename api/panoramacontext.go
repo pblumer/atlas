@@ -218,7 +218,7 @@ func (s *Server) metricInstanceFor(query panorama.ContextQuery) (instance, reaso
 		if host := s.hostOfRuntime(query.Value); host != "" {
 			return host, ""
 		}
-		return "", "No deployment target here has reported this runtime, so Atlas " +
+		return "", "No deployment target here has reported this runtime, so atlas " +
 			"knows no address the metrics store would identify it by."
 	}
 	return "", "Atlas's metrics carry no per-element labels by design, so a metrics " +
@@ -279,6 +279,10 @@ func contextUnidentifiableReason(key string) string {
 	case panorama.KeyReleaseID:
 		return "A release is a record of what shipped, not something the engine emits " +
 			"events for, so the event log has nothing to say about one."
+	case panorama.KeyCapabilityKey, panorama.KeyValueStreamKey:
+		return "A capability says what the organisation must be able to do, and the " +
+			"event log records process instances — so it can only be asked about the " +
+			"processes that realise one, and not about the capability itself."
 	}
 	return "The event log records nothing that identifies a resource of this kind."
 }
@@ -445,7 +449,7 @@ func (s *Server) metricContext(ctx context.Context, target contextTarget) panora
 	switch {
 	case !any:
 		result.State = panorama.ContextEmpty
-		result.Reason = "The metrics store holds no Atlas series for this node in the " +
+		result.Reason = "The metrics store holds no atlas series for this node in the " +
 			"window asked about. It may not be scraping it, or may have aged the " +
 			"window out."
 	default:
@@ -496,7 +500,7 @@ func (s *Server) eventContext(ctx context.Context, target contextTarget) panoram
 	case errors.Is(err, opensearch.ErrSearchRefused):
 		result.State = panorama.ContextRefused
 		result.Reason = "The event log store declined the query. Its credentials here may " +
-			"not carry read access to the index Atlas writes."
+			"not carry read access to the index atlas writes."
 		return result
 	case err != nil:
 		result.State = panorama.ContextUnreachable

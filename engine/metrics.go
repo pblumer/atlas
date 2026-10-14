@@ -47,18 +47,26 @@ type BatchStats struct {
 // BatchStats rather than a separate call so it inherits the same durability ordering:
 // a job is counted as created only once the event that created it is on disk.
 //
-// The lease-based worker protocol (ADR-0007) is not built yet, so activations, lease
-// expiries and timeouts have no events to count and are absent rather than reported as
-// a permanent zero — a zero timeout counter on an engine that cannot time out reads as
-// "nothing is timing out", which is true but misleading.
+// The six counts are the job's whole durable lifecycle. Created and Completed alone
+// would answer "is the queue growing", and no more: the two lease transitions carry the
+// facts a create/complete/fail triple structurally cannot.
 type JobStats struct {
 	// Created counts jobs that became available to a worker.
 	Created int
+	// Activated counts leases taken — a worker pulled a job and now holds it
+	// (ADR-0007). Without it, a queue nobody is pulling from and a queue being worked
+	// through are the same picture: jobs created, none finished yet.
+	Activated int
 	// Completed counts jobs a worker finished successfully.
 	Completed int
 	// Failed counts worker-reported failures. A failure with retries left leaves the
 	// job open for another attempt; one without parks it with an incident (ADR-0061).
 	Failed int
+	// TimedOut counts leases that elapsed with no report, returning the job to the
+	// index. This is the only durable trace of a worker that took work and vanished:
+	// Failed never sees it, because a worker that dies reports nothing. A rate above
+	// roughly zero means workers are crashing, or the lease is shorter than the work.
+	TimedOut int
 	// Canceled counts jobs removed without being worked — their element was
 	// interrupted, terminated, or its instance cancelled.
 	Canceled int

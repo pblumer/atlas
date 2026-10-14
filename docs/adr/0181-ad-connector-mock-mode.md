@@ -1,6 +1,7 @@
 # ADR-0181: Mock mode for the Active Directory connector
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-25
 - **Deciders:** Atlas maintainers
 

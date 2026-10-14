@@ -154,3 +154,56 @@ func TestDeleteApplicationToolIsIdempotent(t *testing.T) {
 		t.Fatalf("list applications = %s, deleted application still visible", listed)
 	}
 }
+
+// atlas_application_constants and atlas_server_constants report what the processes require
+// of this installation — an application's constants and the installation's own — so an
+// agent can explain a start refused for a missing one (ADR-0453,
+// ADR-0456).
+func TestHeldConstantsTools(t *testing.T) {
+	atlas := newAtlas(t)
+	created := callOne(t, atlas, "atlas_create_application", map[string]any{"name": "MCP Constants"})
+	var app struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(created), &app); err != nil || app.ID == "" {
+		t.Fatalf("create application = %q (err=%v), want an id", created, err)
+	}
+	const bound = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
+  <process id="mcp-bound" isExecutable="true">
+    <extensionElements><atlas:constants>
+      <atlas:constant name="TENANT_ID" type="string" source="application"/>
+      <atlas:constant name="REGION" source="server"/>
+    </atlas:constants></extensionElements>
+    <startEvent id="s"/>
+    <endEvent id="e"/>
+    <sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+  </process>
+</definitions>`
+	callOne(t, atlas, "atlas_save_draft", map[string]any{"xml": bound, "projectId": app.ID})
+	callOne(t, atlas, "atlas_publish_application", map[string]any{"id": app.ID})
+
+	got := callOne(t, atlas, "atlas_application_constants", map[string]any{"id": app.ID})
+	var view struct {
+		Required []struct {
+			Name      string   `json:"name"`
+			Processes []string `json:"processes"`
+			State     string   `json:"state"`
+		} `json:"required"`
+	}
+	if err := json.Unmarshal([]byte(got), &view); err != nil {
+		t.Fatalf("decode constants = %q: %v", got, err)
+	}
+	if len(view.Required) != 1 || view.Required[0].Name != "TENANT_ID" || view.Required[0].State != "missing" ||
+		len(view.Required[0].Processes) != 1 || view.Required[0].Processes[0] != "mcp-bound" {
+		t.Fatalf("constants = %s, want TENANT_ID missing, required by mcp-bound", got)
+	}
+
+	got = callOne(t, atlas, "atlas_server_constants", map[string]any{})
+	view.Required = nil
+	if err := json.Unmarshal([]byte(got), &view); err != nil {
+		t.Fatalf("decode server constants = %q: %v", got, err)
+	}
+	if len(view.Required) != 1 || view.Required[0].Name != "REGION" || view.Required[0].State != "missing" {
+		t.Fatalf("server constants = %s, want REGION missing", got)
+	}
+}

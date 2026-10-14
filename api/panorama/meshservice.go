@@ -67,6 +67,36 @@ func NewMesh(loop *runloop.Loop, collect LandscapeCollector, overlays OverlayCol
 	return &Mesh{loop: loop, collect: collect, overlays: overlays, maxNodes: maxNodes, now: now}
 }
 
+// subjectOf reads which of the two pictures the caller asked for.
+//
+// An allowlist of one, and anything else is the landscape: a subject this build does
+// not know is a stale saved view or a hand-edited URL, and the estate is the answer
+// that cannot mislead — a picture that silently drew nothing because a word was
+// misspelled would read as an instance with nothing on it.
+func subjectOf(r *http.Request) string {
+	if r.URL.Query().Get("view") == SubjectProducts {
+		return SubjectProducts
+	}
+	return SubjectLandscape
+}
+
+// Derive is the landscape this caller would be served, handed to something that draws
+// a different picture out of it — today the estate altitude's local domain, which is
+// this server's own landscape counted rather than drawn
+// (ADR-0402 §2).
+//
+// It writes the failure response itself and reports false, exactly as HandleGraph
+// does, because the two must not come to disagree about what a collection that could
+// not run looks like: a shutting-down loop is a 503 and never an empty picture.
+//
+// Deriving the whole landscape to take a number off it is deliberate. The estate says
+// how many nodes a domain holds, and a reader who expands that domain has to find the
+// same number: counting anything cheaper here would be a second derivation, and two
+// derivations of one picture eventually disagree.
+func (m *Mesh) Derive(w http.ResponseWriter, r *http.Request) (Graph, bool) {
+	return m.derive(w, r)
+}
+
 // HandleGraph serves the whole-instance mesh for the calling principal.
 func (m *Mesh) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	graph, ok := m.derive(w, r)
@@ -151,6 +181,11 @@ func (m *Mesh) derive(w http.ResponseWriter, r *http.Request) (Graph, bool) {
 	// oldest moment any fact in this answer could have been read. A picture that
 	// dates itself later than its contents is the one an export must never carry:
 	// it would make a stale landscape look freshly checked.
+	//
+	// It is a *fallback*. A collector that answers from facts it read earlier dates
+	// them itself (Landscape.ObservedAt), and that date wins below — this one is only
+	// for a collector that does not say, where "no later than the turn that ran it"
+	// is the strongest true thing available.
 	var observedAt int64
 	if m.now != nil {
 		observedAt = m.now().Unix()
@@ -193,10 +228,16 @@ func (m *Mesh) derive(w http.ResponseWriter, r *http.Request) (Graph, bool) {
 	if reach != nil {
 		reach(r.Context(), &land)
 	}
+	// The facts' own date, where the collector gave one. A landscape answered from a
+	// cache is as old as what it holds, not as young as the request that asked for it.
+	if land.ObservedAt > 0 {
+		observedAt = land.ObservedAt
+	}
 	// Derived off the loop: this is pure CPU over a snapshot the loop already
 	// produced, and holding the single-writer goroutine through it would make every
 	// other design-time request wait on one caller's graph.
 	return DeriveGraph(land, Options{
+		Subject:  subjectOf(r),
 		MaxNodes: m.maxNodes, Overlays: overlays, ObservedAt: observedAt,
 	}), true
 }

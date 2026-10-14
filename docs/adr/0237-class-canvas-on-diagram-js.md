@@ -1,6 +1,7 @@
 # ADR-0237: The class canvas on diagram-js
 
-- **Status:** Proposed (amended 2026-09-07: the marquee is a mode; the two bundles are one; the object diagram joined them)
+- **Status:** Accepted (amended 2026-09-07: the marquee is a mode; the two bundles are one; the object diagram joined them)
+- **Implementation:** Landed
 - **Date:** 2026-09-03
 - **Deciders:** Patrick Blumer
 

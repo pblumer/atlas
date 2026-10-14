@@ -1,6 +1,7 @@
 # ADR-0198: The Prometheus exposition moves behind the boundary
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 

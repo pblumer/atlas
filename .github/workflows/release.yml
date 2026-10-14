@@ -5,8 +5,9 @@ name: Release
 #   git tag -a v0.1.0 -m "Atlas v0.1.0" && git push origin v0.1.0
 #
 # This builds the single binary for every supported platform, stamps the tag
-# into the version string via -ldflags (see api.Version / mcp.serverVersion),
-# and publishes a GitHub Release with the archives and a SHA256SUMS file.
+# into the version string via -ldflags (see api.Version / mcp.serverVersion)
+# and, for Windows, into the executable's version resource, and publishes a
+# GitHub Release with the archives and a SHA256SUMS file.
 #
 # The binary embeds the web UI (go:embed) and is pure Go with no CGO, so every
 # target cross-compiles from the linux runner — no per-OS runner needed.
@@ -68,7 +69,28 @@ jobs:
           ldflags="-s -w -X ${mod}/api.Version=${version} -X ${mod}/mcp.serverVersion=${version}"
 
           bin="atlas"
-          [ "${GOOS}" = "windows" ] && bin="atlas.exe"
+          if [ "${GOOS}" = "windows" ]; then
+            bin="atlas.exe"
+            # Explorer's Properties → Details reads the file and product version
+            # from a VERSIONINFO resource, which -ldflags cannot write. go-winres
+            # writes one as cmd/atlas/rsrc_windows_<arch>.syso, and go build links
+            # a .syso of the main package whose suffix matches the target. The
+            # fixed, numeric version takes the leading x.y.z (0.0.0 for a dry
+            # run); the strings carry the version as tagged. --manifest none adds
+            # the version and nothing else. go-winres runs here, so it is built
+            # for the runner: GOOS and GOARCH are cleared for go run alone, after
+            # --arch has been expanded from them. The name is the wordmark, set
+            # lowercase as in the Console's page titles (docs/brand/README.md).
+            GOOS= GOARCH= go run github.com/tc-hib/go-winres@v0.3.3 simply \
+              --arch "${GOARCH}" \
+              --out cmd/atlas/rsrc \
+              --manifest none \
+              --product-name "atlas" \
+              --file-description "atlas – BPMN workflow engine" \
+              --original-filename "${bin}" \
+              --product-version "${version}" \
+              --file-version "${version}"
+          fi
           go build -trimpath -ldflags "${ldflags}" -o "${bin}" ./cmd/atlas
 
           name="atlas_${version}_${GOOS}_${GOARCH}"

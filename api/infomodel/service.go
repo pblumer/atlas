@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/pblumer/atlas/limits"
 	"io"
 	"net/http"
 	"strings"
@@ -13,10 +14,6 @@ import (
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/api/token"
 )
-
-// maxJSONBytes caps a model document. A class diagram a person can read is small;
-// this is generous enough that the cap is never the thing a modeler meets.
-const maxJSONBytes = 4 << 20
 
 var (
 	errBodyTooLarge = errors.New("request body is too large")
@@ -53,11 +50,17 @@ type Service struct {
 	access AccessResolver
 	newID  IDGenerator
 	now    Clock
+
+	// Limits are the installation's resource budgets. New sets them to
+	// [limits.Default]; the server overwrites them with its own once it has read the
+	// environment, so every ceiling in this service is the one operators configured
+	// (ADR-0291).
+	Limits limits.Limits
 }
 
 // New builds the service.
 func New(loop *runloop.Loop, store *Store, access AccessResolver, newID IDGenerator, now Clock) *Service {
-	return &Service{loop: loop, store: store, access: access, newID: newID, now: now}
+	return &Service{loop: loop, store: store, access: access, newID: newID, now: now, Limits: limits.Default()}
 }
 
 // HandleSubset serves the authoring subset: what may be created, what may be drawn
@@ -78,10 +81,39 @@ type createRequest struct {
 	Documentation string `json:"documentation"`
 }
 
+// HandleValidate judges a document the caller is holding and has not saved
+// (ADR-0364).
+//
+// It exists for the same reason HandleSubset does, one step further on. The subset is
+// served so the canvas refuses mid-drag exactly what the server refuses on write; the
+// *verdict* was not, so everything the subset cannot express — a store naming a class
+// nothing declares, an attribute typed with something gone, a lifecycle whose states
+// drifted from its enumeration — stayed invisible until Save, and was then reported
+// about an edit the author had stopped thinking about.
+//
+// Duplicating Validate into the browser would answer that and is exactly what
+// ADR-0230 refused for the far smaller relationship matrix: two copies of a rule set
+// are two rule sets, and the one the author sees would drift from the one the server
+// enforces. So the verdict is served instead.
+//
+// Three properties make it cheap enough to ask on every edit. It reads no stored
+// model, so it needs no loop turn and no application scope: like the subset, asking
+// discloses nothing about what exists. It writes nothing. And an invalid document is
+// a 200 carrying findings rather than an error — a model mid-edit is *expected* to be
+// invalid, and answering the normal case with a fault would teach the canvas to
+// ignore it.
+func (s *Service) HandleValidate(w http.ResponseWriter, r *http.Request) {
+	var model Model
+	if !s.decodeJSON(w, r, &model) {
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, Validate(model))
+}
+
 // HandleCreate starts an empty information model for an application.
 func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	var payload createRequest
-	if !decodeJSON(w, r, &payload) {
+	if !s.decodeJSON(w, r, &payload) {
 		return
 	}
 	payload.ApplicationID = strings.TrimSpace(payload.ApplicationID)
@@ -210,7 +242,7 @@ type updateRequest struct {
 // deploy resolving `itemSubjectRef` against it never meets a half-model.
 func (s *Service) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	var payload updateRequest
-	if !decodeJSON(w, r, &payload) {
+	if !s.decodeJSON(w, r, &payload) {
 		return
 	}
 
@@ -466,6 +498,17 @@ func (s *Service) VocabularyOnLoop(applicationID string) (*Vocabulary, error) {
 	return NewVocabulary(models), nil
 }
 
+// ModelsOnLoop is every stored model, newest first. Like VocabularyOnLoop it runs
+// inside an existing loop turn, so callers must already hold one.
+//
+// It answers no access question, deliberately: the catalogue reading that needs it
+// also needs the application's *processes*, which only the server can reach, so it
+// is one turn on the server's side that filters the models and gathers the processes
+// together. A model this returns has not been authorized for anybody yet.
+func (s *Service) ModelsOnLoop() ([]Model, error) {
+	return s.store.LoadAll()
+}
+
 const notFound = "no such information model"
 
 func (s *Service) readModel(r *http.Request, id string) (Model, *operationRefusal, error) {
@@ -530,8 +573,8 @@ func writeReadOutcome(w http.ResponseWriter, refusal *operationRefusal, err erro
 	return false
 }
 
-func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
-	return decodeJSONLimit(w, r, dst, maxJSONBytes)
+func (s *Service) decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeJSONLimit(w, r, dst, s.budgets().ModelUpload)
 }
 
 func decodeJSONLimit(w http.ResponseWriter, r *http.Request, dst any, limit int64) bool {
@@ -556,4 +599,15 @@ func requestActor(r *http.Request) string {
 		return principal.Username
 	}
 	return ""
+}
+
+// budgets is how this service reads a ceiling. It defaults a Service built as a
+// struct literal to [limits.Default], because the zero Limits is every ceiling at
+// zero and a ceiling of zero admits nothing — a failure that looks like a bad
+// request rather than like missing configuration. New always sets them.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }

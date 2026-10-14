@@ -84,10 +84,11 @@ const sessionCookie = "atlas_session"
 const defaultSessionTTL = 12 * time.Hour
 
 // session is one logged-in identity. Roles and group ids are snapshotted here so a
-// request can be authorized from the session alone (see Principal). Group ids are
-// then kept live: a membership change pushes into the snapshot
-// (ADR-0185), so it takes effect without a re-login. Roles
-// remain a login-time snapshot.
+// request can be authorized from the session alone (see Principal). Both are then
+// kept live: a group membership change (ADR-0185) and a role change
+// (ADR-0281) each push into the snapshot, so an
+// administrative edit takes effect on the account's next request rather than at
+// its next login.
 //
 // The two timestamps below are what an administrator sees as presence
 // (ADR-0228). They answer different questions and are
@@ -127,9 +128,9 @@ func newSessionStore(ttl time.Duration) *sessionStore {
 
 // create opens a session for a user and returns its opaque token. Roles and group
 // ids are snapshotted here so a request can be authorized from the session alone
-// (see Principal). A role change takes effect on the user's next login; a group
-// membership change takes effect live, pushed into the snapshot by the group
-// handlers (ADR-0185).
+// (see Principal). Both stay live afterwards: the group handlers push a
+// membership change into the snapshot (ADR-0185) and the user handler pushes a
+// role change (setUserRoles).
 func (s *sessionStore) create(u User, groupIDs []string) (string, error) {
 	token, err := randomHex(32)
 	if err != nil {
@@ -216,6 +217,38 @@ func (s *sessionStore) setUserGroupMembership(userID, groupID string, member boo
 			sess.groupIDs = next
 			s.byToken[tok] = sess
 		}
+	}
+}
+
+// setUserRoles replaces the role snapshot in every live session of a user, so an
+// administrative role change is enforced from that account's next request rather
+// than from its next login.
+//
+// Roles were the one part of the session snapshot that stayed frozen while group
+// ids were kept live (ADR-0185). That asymmetry was the bug: a demotion answered
+// 200, showed a narrowed account in the console, and left the old rights in force
+// for the rest of a twelve-hour session. Roles decide strictly more than group
+// membership does, so they cannot be the slower of the two to take effect.
+//
+// A demotion narrows the session; it does not end it. Dropping the session would
+// be a heavier answer than the question asks — the account is still the same
+// person, still signed in, now with fewer rights — and it is what destroyUser is
+// for when the account itself is disabled. A grant travels the same path, so the
+// two directions cannot drift apart.
+//
+// The slice is copied, so a caller that keeps mutating what it passed can never
+// rewrite a live session's rights, and no two sessions share a backing array.
+// A user with no live session is a no-op: their next login snapshots the
+// now-current roles.
+func (s *sessionStore) setUserRoles(userID string, roles []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for tok, sess := range s.byToken {
+		if sess.userID != userID {
+			continue
+		}
+		sess.roles = append([]string(nil), roles...)
+		s.byToken[tok] = sess
 	}
 }
 
@@ -338,16 +371,15 @@ func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 	if tok, ok := bearerToken(r); ok {
 		if s.internalToken != "" &&
 			subtle.ConstantTimeCompare([]byte(tok), []byte(s.internalToken)) == 1 {
-			// The server's own credential, handed to the processes it supervises
-			// (superviseenv.go). It carries the legacy roles — everything a signed-in
-			// account could do before roles existed, and still not admin — because that
-			// is exactly what it could do the day before this shipped, and a supervised
-			// worker that stops leasing jobs on upgrade is the outage this whole record
-			// set out not to cause.
+			// The server's own credential is handed to supervised workers. The roles
+			// satisfy the worker routes' role checks; the fail-closed worker scope is
+			// what prevents this machine credential from reaching the product API if a
+			// child process leaks it.
 			return &httpapi.Principal{
 				UserID:   servicePrincipalName,
 				Username: servicePrincipalName,
 				Roles:    legacyRoles(),
+				Scope:    apiScopeWorker,
 			}
 		}
 		// A deploy token identifies a peer Atlas publishing here (ADR-0129). The
@@ -381,6 +413,9 @@ func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 				// could would be a much worse leak.
 				Roles: rec.roles(),
 				Scope: rec.scope(),
+				// And over what, where the credential states it (ADR-0410). Empty
+				// narrows nothing, so a token minted before this existed is unchanged.
+				Reach: rec.Reach,
 			}
 		}
 		// An OAuth access token identifies a *person* who approved an application to

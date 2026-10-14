@@ -1,6 +1,7 @@
 # ADR-0083: An O(1) instances summary — per-definition finished-count and last-activity counters
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 

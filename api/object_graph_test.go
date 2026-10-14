@@ -138,7 +138,7 @@ func startObjectGraphInstance(t *testing.T, ts *httptest.Server, appID string) u
 		Key   uint64 `json:"key"`
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(body, &instances); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &instances); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	for _, in := range instances {
@@ -259,7 +259,7 @@ func TestInstanceObjectGraphWithoutAModelDegrades(t *testing.T) {
 		Key   uint64 `json:"key"`
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(body, &instances); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &instances); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	var key uint64

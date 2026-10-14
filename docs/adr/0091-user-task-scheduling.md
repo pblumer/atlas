@@ -1,6 +1,7 @@
 # ADR-0091: User-task scheduling — priority and due date
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas maintainers
 

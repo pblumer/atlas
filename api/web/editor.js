@@ -10,17 +10,34 @@ import { attachJSONEditor } from "./json-editor.js";
 import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } from "./entra-attrmask.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { devLang } from "./dev-lang.js";
-import { openDmnEditor } from "./dmn-editor.js";
+// The decision editor is a page of its own (ADR-0320),
+// so this module navigates to it rather than opening it. Nothing of dmn-js is loaded
+// here any more.
 import { tokenSimulationModule } from "./token-simulation.js";
 import { attachIdCheck } from "./idcheck.js";
-import { migrateInstanceFlow } from "./migrationdialog.js";
+import { migrateInstanceFlow, migrateProcessFlow, runningByDefinition } from "./migrationdialog.js";
 // Which keys a form-js schema binds — the Developer View reads it to offer a linked
 // form's fields as variables, the incident's repair form reads it to know which keys a
 // submit may write (ADR-0169). One description of it, in one place.
 import { formFieldKeys, formFieldTypes, formRefusalNames, loadFormViewer,
   scrollToFirstInvalidField, withLoadDeadline } from "./formviewer.js";
+// The typed start-variable fields, shared with the Tasks app: a process with a start
+// form still asks for the declared start variables the form does not bind.
+import {
+  START_VAR_TYPES, typedDeployFieldHTML, readTypedDeployBody, wireStartJSONEditors,
+  uncoveredStartVariables, extraStartFieldsHTML, keepConstantNameInCapitals, NAMESPACE_INFO, isNamespaceInfo,
+} from "./startvars.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
+import { frozenMark } from "./frozen-decisions.js";
+// Which record the Modeler has open — the draft or version N — and who created and last
+// changed it (ADR-0452).
+import { attachShownVersion } from "./shown-version.js";
+// The document behind the diagram as text, corrected in place and applied back onto the
+// canvas — the bar menu's "XML source", shared with the decision editor.
+import { openXmlSource, closeXmlSource } from "./xml-source.js";
+import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
+import { openDecisionGraph } from "./decision-graph.js";
 // Documentation prose is Markdown (ADR-0250). The replay
 // renders it with the same module the Tasks app uses, so the same text cannot mean two
 // things depending on which surface a reader is standing in front of.
@@ -31,10 +48,24 @@ import { attachPlayground } from "./playground.js";
 // class canvas and Panorama use (ADR-0237). Fetched on demand, so the replay's
 // other tabs do not pay for it.
 import { loadCanvasBundle } from "./canvas-bundle.js";
+// A list this view rebuilds has to ask for its sorting and its filter row back
+// (ADR-0286 rule 4) — the route's one pass is long over by then. The record words that
+// rule as "calls enhanceViewTables()", which is right for the three lists that live in
+// app.js and wrong from here: app.js is the shell's entry module and runs initShell(),
+// the router and three server syncs at module scope, so importing it would boot the
+// whole application inside each of the thirty-five e2e harnesses that mount this view
+// on its own. table.js is a leaf with no side effects, and one table is all this view
+// rebuilds.
+import { enhanceTable } from "./table.js";
 import { groupifyPanel, groupController } from "./pgroup.js";
 // Counts on the runtime views are five and six digits on a busy server, so every
 // number a badge or a count pill prints goes through the same grouping (numfmt.js).
 import { fmtCount } from "./numfmt.js";
+// What a Worker Type needs before a task of it can run — the provider-side steps, the
+// shape of its vault secret, and the handbook card that says it at length. The panel is
+// where that question is asked (ADR-0289), so the answer
+// is rendered beside the fields rather than left in another tab.
+import { workerTypeDocHTML } from "./workertypedocs.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -210,10 +241,21 @@ let collab; // active live collaboration session (ADR-0140), closed on remount
 // two overlaid diagrams, mismatched instance keys, a leaked poll timer.
 let generation = 0;
 
+// leaveForDecision is this mount's "may we leave now" question, published for the
+// business-rule-task panel: authoring a decision is a navigation
+// (ADR-0320), and the panel is nowhere near the draft
+// machinery that has to run first. Replaced on every mount, so it always answers for
+// the diagram on screen.
+let leaveForDecision = async () => true;
+// pendingAdopt is what a decision authored for one of this diagram's tasks left
+// behind. The panel consumes it the first time it renders that task and clears it, so
+// the decision is adopted exactly once — on the way back, not on every later open.
+let pendingAdopt = null;
+
 // docTitle refines the browser tab title with a loaded subject (a diagram or
 // process name), matching app.js's "<subject> · Atlas" scheme so open tabs are
 // distinguishable. The router sets a route-based title first; this sharpens it.
-function docTitle(label) { document.title = label ? `${label} · Atlas` : "Atlas"; }
+function docTitle(label) { document.title = label ? `${label} · atlas` : "atlas"; }
 
 // cleanup tears down the current modeler and any live poll. app.js calls it (via
 // window.__atlasCleanup) when navigating away so nothing keeps running.
@@ -226,9 +268,12 @@ export function cleanup() {
   if (onBarMenuDismiss) { document.removeEventListener("click", onBarMenuDismiss); onBarMenuDismiss = null; }
   if (onVarsKey) { document.removeEventListener("keydown", onVarsKey, true); onVarsKey = null; }
   if (onCalleeClick) { onCalleeClick.root.removeEventListener("click", onCalleeClick.fn); onCalleeClick = null; }
+  if (shownVersion) { shownVersion.destroy(); shownVersion = null; }
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
+  closeXmlSource(); // the canvas it was showing is going away with the editor
   destroyObjectCanvas();
+  destroyLifecycleCanvas();
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
 window.__atlasCleanup = cleanup;
@@ -237,6 +282,10 @@ window.__atlasCleanup = cleanup;
 // (null when no editor is open). Module-level, like `current`, because cleanup()
 // has to reach it from outside a mount.
 let playground = null;
+
+// shownVersion is the bar's "what is open" chip for the editor currently mounted, so
+// cleanup() can take its document listener down and Save and Deploy can refresh it.
+let shownVersion = null;
 
 // objectCanvas is the replay Data tab's object diagram, for the same reason and in
 // the same way: it is a live diagram-js instance, so leaving the view has to take it
@@ -250,6 +299,18 @@ function destroyObjectCanvas() {
   if (!objectCanvas) return;
   try { objectCanvas.canvas.destroy(); } catch { /* already gone */ }
   objectCanvas = null;
+}
+
+// lifecycleCanvas is the same thing for the Data tab's third reading: the state
+// machine a class declares with this instance's own life drawn on it (ADR-0259 §4).
+// A separate record rather than a mode of objectCanvas, because the two are different
+// notations of different documents and sharing one slot would mean one of them
+// silently tearing the other down.
+let lifecycleCanvas = null;
+function destroyLifecycleCanvas() {
+  if (!lifecycleCanvas) return;
+  try { lifecycleCanvas.canvas.destroy(); } catch { /* already gone */ }
+  lifecycleCanvas = null;
 }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
@@ -269,6 +330,106 @@ const isValidTtl = (s) => {
   if (parts.every((p) => p === undefined)) return false; // no components → empty duration
   return parts.some((p) => p !== undefined && Number(p) > 0); // must be strictly positive
 };
+
+// searchableProblem mirrors the compiler's reading of atlas:searchable (ADR-0244;
+// compiler/parse.go): a comma-separated list of variable names, forgiving about
+// spacing, in which a nameless entry or a repeated name fails the deploy rather
+// than silently indexing nothing. Returns the warning to show, or "" when the
+// declaration is one the deploy will accept. Like isValidTtl it only warns while
+// authoring; the deploy is the authority.
+const searchableProblem = (s) => {
+  const raw = String(s || "").trim();
+  if (!raw) return "";
+  const seen = new Set();
+  for (const part of raw.split(",")) {
+    const name = part.trim();
+    if (!name) return "Searchable variables: an entry has no name — check for a doubled or trailing comma";
+    if (seen.has(name)) return `Searchable variables: "${name}" is named twice`;
+    seen.add(name);
+  }
+  return "";
+};
+
+// personalProblem mirrors the compiler's reading of atlas:personal and
+// atlas:dataSubject (ADR-0314; compiler/parse.go). Four of the five refusals are
+// cross-checks between declarations rather than a malformed list, which is exactly why
+// they are worth showing while authoring: a modeller who declares personal data and no
+// subject has written something that cannot be deployed at all, and finding that out at
+// deploy time means finding it after the model is finished.
+const personalProblem = (personal, subject, searchable) => {
+  const names = String(personal || "").trim();
+  const subj = String(subject || "").trim();
+  const seen = new Set();
+  if (names) {
+    for (const part of names.split(",")) {
+      const name = part.trim();
+      if (!name) return "Personal variables: an entry has no name — check for a doubled or trailing comma";
+      if (seen.has(name)) return `Personal variables: "${name}" is named twice`;
+      seen.add(name);
+    }
+  }
+  if (subj.includes(",")) return "Data subject: name one variable — a value is enciphered under exactly one subject's key";
+  if (seen.size && !subj) return "Personal variables need a Data subject: without the variable holding that person's id there is no key to encipher under, and nothing to destroy on an erasure request";
+  if (subj && !seen.size) return "Data subject is declared but nothing is personal, so it enciphers nothing";
+  if (subj && seen.has(subj)) return `Data subject "${subj}" cannot itself be personal: it is what says whose key opens a value`;
+  for (const part of String(searchable || "").split(",")) {
+    const name = part.trim();
+    if (name && seen.has(name)) return `"${name}" cannot be both personal and searchable: a personal value is indexed as ciphertext, so no search could match it`;
+  }
+  return "";
+};
+
+// SEARCHABLE_STRUCTURED_TYPES are the types the value index cannot hold. It answers
+// equality and prefix over a byte string, so a structured value is left out rather than
+// stored under its exact encoding (ADR-0244) — a declaration naming one indexes nothing
+// while looking like it works.
+const SEARCHABLE_STRUCTURED_TYPES = new Set(["json", "object", "array"]);
+
+// searchableMarksHTML renders one chip per declared searchable name, marked where the
+// model cannot honour the declaration. It is the answer to the failure this feature has
+// no other way of showing: a declared name that nothing ever writes, or writes as JSON,
+// indexes nothing — the deploy accepts it, the search stays empty, and no screen says
+// why.
+//
+// Two severities, because the two cases differ in what the author should do. Red is
+// certain: a repeated name is refused by the deploy, and a name the model itself says
+// holds a structured value can never be indexed. Amber is a question, not a verdict: the
+// static analysis behind the Variables panel sees what the *diagram* writes, and a
+// variable can also arrive from outside the model — a worker's output mapping the panel
+// cannot read, or an operator's write through the API — so an unknown name is "check
+// this", most often a typo, and never an error.
+function searchableMarksHTML(raw, modeler) {
+  const catalog = new Map();
+  try {
+    for (const v of collectDiagramVariables(modeler)) if (!catalog.has(v.name)) catalog.set(v.name, v);
+  } catch { /* best-effort: no catalog means no marks, never a broken panel */ }
+  const seen = new Set();
+  const chips = [];
+  for (const part of String(raw || "").split(",")) {
+    const name = part.trim();
+    if (!name) continue;
+    let cls = "", why = "";
+    const known = catalog.get(name);
+    if (seen.has(name)) {
+      cls = " sv-err";
+      why = `Named twice — the deploy refuses a repeated name.`;
+    } else if (!known) {
+      cls = " sv-warn";
+      why = `Nothing in this diagram writes a variable called "${name}". `
+        + `If that is a typo the index stays empty for it; if it is written from outside the model `
+        + `— a worker's output, or the variables API — this is fine.`;
+    } else if (SEARCHABLE_STRUCTURED_TYPES.has(known.type)) {
+      cls = " sv-err";
+      why = `${known.source} writes ${name} as ${known.type}. Only text, a number or true/false is `
+        + `indexed, so the index stays empty for this name.`;
+    } else {
+      why = known.type ? `${known.source} · ${known.type}` : known.source;
+    }
+    seen.add(name);
+    chips.push(`<span class="chip${cls}" title="${esc(why)}">${esc(name)}</span>`);
+  }
+  return chips.join("");
+}
 
 // --- Variable presentation (shared by the live and replay views) ---
 //
@@ -341,37 +502,14 @@ function decVal(x, fallback) {
   return x;
 }
 
-// Decision-trace presentation, shared with the Operations decision-detail page
-// (temis Operate style): values compact, and a decision table rendered as a matrix
-// with the matched rule highlighted and each cell tinted by whether its condition
-// held. decTablesOf/decMatchedNums read an evaluation's (already-parsed) trace.
-const decFmtVal = (v) => (v === null || v === undefined ? "null" : typeof v === "string" ? v : JSON.stringify(v));
-const decCellText = (t) => { const s = (t ?? "").trim(); return s === "" || s === "-" ? "–" : s; };
-const decTablesOf = (d) => { const t = decVal(d.trace, null); return (t && Array.isArray(t.tables)) ? t.tables : []; };
-const decMatchedNums = (d) => {
-  const nums = [];
-  for (const t of decTablesOf(d)) for (const r of (t.rules || [])) if (r.matched) nums.push(r.index + 1);
-  return [...new Set(nums)];
-};
-function decMiniTable(tt, n) {
-  const matched = (tt.rules || []).filter((r) => r.matched).map((r) => r.index + 1);
-  const policy = (tt.hitPolicy || "U") + (tt.aggregation ? " " + tt.aggregation : "");
-  const head = matched.length ? `Rule ${matched.join(", ")} fired` : "no rule fired";
-  const ins = tt.inputs || [];
-  const hr = `<tr><th class="mcol-idx">#</th>${ins.map((i) =>
-    `<th>${esc(i.expression)} <code>= ${esc(decFmtVal(i.value))}</code></th>`).join("")}<th>&rarr;</th></tr>`;
-  const body = (tt.rules || []).map((r) => {
-    const cells = ins.map((_, k) => {
-      const c = r.conditions && r.conditions[k];
-      const cls = c ? (c.matched ? "mcell is-ok" : "mcell is-no") : "mcell is-skip";
-      return `<td class="${cls}">${c ? esc(decCellText(c.entry)) : ""}</td>`;
-    }).join("");
-    const out = r.matched && r.outputs ? esc(r.outputs.map(decFmtVal).join(", ")) : "";
-    return `<tr class="mrule${r.matched ? " is-hit" : ""}"><td class="mcol-idx">${r.index + 1}</td>${cells}<td class="mout">${out}</td></tr>`;
-  }).join("");
-  return `<div class="mtable"><div class="mtable-head">${n ? `Table ${n} · ` : ""}${esc(head)}<span class="mtable-policy">${esc(policy)}</span></div>` +
-    `<table class="mgrid">${hr}${body}</table></div>`;
-}
+// Decision-trace presentation. The matrix comes from dmn-trace.js — one renderer, shared with
+// Operations → Decisions and the decision editor's Test panel, so a trace looks the
+// same wherever it is read. Only the unwrapping differs here: a replay's evaluation
+// carries its trace as a value that may still need decoding.
+const decFmtVal = traceValue;
+const decTablesOf = (d) => traceTablesOf(decVal(d.trace, null));
+const decMatchedNums = (d) => matchedRuleNumbers(decVal(d.trace, null));
+const decMiniTable = (tt, n) => renderTraceTable(tt, n);
 
 // decCard renders one decision evaluation: a header, its input pills, and its result
 // rows. Each result carries a "Rule N" badge; a row backed by a decision table is
@@ -395,11 +533,42 @@ function decCard(d, i) {
           ${oi === 0 ? badge : ""}
         </div>`).join("")}</div>`
     : '<span class="muted">none</span>';
+  // Every card carries the way in to the full account — the decision's graph with
+  // this case on it (decision-graph.js). The hover table above is a glance; this is
+  // the thing to open when somebody has to be shown how a case was decided, and it
+  // is a button rather than a hover because a gesture nobody can see is not an
+  // affordance.
+  //
+  // data-decat identifies the evaluation, and it is the server's exact decimal
+  // string rather than d.at: a nanosecond timestamp is past what a browser holds in
+  // a number, so the parsed value is rounded (…033700 arrives as …033800) and would
+  // address an evaluation that does not exist. The viewer wiring the click supplies
+  // the instance it belongs to.
   return `<div class="dec-card2">
-    <div class="dec-card2-h"><b>${esc(d.decisionId)}</b>${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
+    <div class="dec-card2-h"><b>${esc(d.decisionId)}</b>${decVersionChip(d)}${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
     <div class="dec-sect2"><span class="dec-sect2-l">Inputs</span>${pills}</div>
     <div class="dec-sect2"><span class="dec-sect2-l">Result</span>${result}</div>
+    <div class="dec-sect2"><span class="dec-sect2-l"></span>
+      <button type="button" class="dec-open" data-decat="${esc(d.atKey || String(d.at))}"
+        title="Open this decision's requirements graph with this case drawn on it">How this was decided &rarr;</button>
+    </div>
   </div>`;
+}
+
+// decVersionChip names the deployed version that answered, when the evaluation
+// record carries it (ADR-0423): which
+// version ran is what latest decides when the task runs, and without it an operator
+// sees a table and cannot tell which one. An evaluation recorded before the key was
+// shows nothing rather than a guess; one answered by the model deployed with the
+// process says so.
+function decVersionChip(d) {
+  if (d && d.decisionVersion) {
+    return ` <span class="res-rule" title="Decision deployment ${esc(String(d.decisionKey || ""))}">v${esc(String(d.decisionVersion))}</span>`;
+  }
+  if (d && d.decisionKey) {
+    return ` <span class="muted" title="The model deployed together with the process answered">model deployed with the process</span>`;
+  }
+  return "";
 }
 
 // renderVarsBody lays out a variable list: scalars as a labeled field grid, JSON
@@ -523,6 +692,27 @@ function editorCrumbs(project, current) {
     `<span class="crumb-current">${esc(current)}</span></nav>`;
 }
 
+// markFrozenDeployment appends the frozen-decision mark to the crumbs of a deployed
+// definition opened in the Modeler. Best-effort: a listing that cannot be read costs
+// the mark, never the editor.
+async function markFrozenDeployment(root, api, key, gen) {
+  let here = null;
+  try {
+    const procs = await api("GET", "/api/v1/processes");
+    here = (procs || []).find((x) => String(x.key) === String(key)) || null;
+  } catch { return; }
+  if (gen !== generation) return; // navigated away while asking
+  const frozen = frozenMark(here);
+  const crumbs = root.querySelector(".editor-bar .crumbs");
+  if (!frozen || !crumbs || crumbs.querySelector(".frozen-mark")) return;
+  const pill = document.createElement("span");
+  pill.className = `pill${frozen.behind ? " warn" : ""} frozen-mark`;
+  pill.style.marginLeft = "8px";
+  pill.title = frozen.title;
+  pill.textContent = frozen.label;
+  crumbs.appendChild(pill);
+}
+
 // The editor bar carries what the author reaches for constantly and a menu for the rest
 // (ADR-0229, revised in one part by ADR-0240). It used to
 // carry seven buttons in one weight, which said that re-flowing the diagram and shipping
@@ -532,10 +722,11 @@ function editorCrumbs(project, current) {
 // Left of the rule is what the bar *shows*: Variables, a two-state button whose look is
 // drawn from `aria-pressed` (F4). Right of it is what the bar *does*: Deploy, the only
 // filled button because it is the only one here that leaves the browser, and Save beside
-// it as the one pressed most. Token simulation, Auto-layout, Export XML and Documentation
-// are in the menu, where a toggle reads as on by its check rather than by a pressed
-// button. Every control kept its id, so what each one does is still wired where it was.
-export async function mountEditor(root, { api, toast, key, draftId, projectId, project }) {
+// it as the one pressed most. Token simulation, Auto-layout, Export XML, XML source and
+// Documentation are in the menu, where a toggle reads as on by its check rather than by a
+// pressed button. Every control kept its id, so what each one does is still wired where
+// it was.
+export async function mountEditor(root, { api, toast, key, draftId, projectId, project, adopt }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
@@ -544,6 +735,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     <div class="editor">
       <div class="editor-bar">
         ${editorCrumbs(project, crumb)}
+        <div class="shown-version" id="shown-version" hidden></div>
         <div class="etabs">
           <button data-tab="design" class="active" title="Draw the diagram and its flow">Design</button>
           <button data-tab="implement" title="Configure the technical details of each element">Implement</button>
@@ -553,7 +745,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <button class="btn neutral toggle" id="vars-toggle" type="button" aria-pressed="false" title="Show the variables this diagram writes, and who writes them (F4)">Variables</button>
         <span class="bar-div" aria-hidden="true"></span>
         <button class="btn neutral" id="save" title="Save this diagram as a draft">Save</button>
-        <button class="btn" id="deploy" title="Deploy this single diagram. To ship a whole process application, use Publish on the application (ADR-0128).">Deploy</button>
+        <button class="btn" id="deploy" title="Deploy this single diagram. A draft is saved first, so it stays what runs; a deployed version opened here is deployed as a new version and leaves the draft alone. To ship a whole process application, use Publish on the application (ADR-0128).">Deploy</button>
         <div class="dropdown">
           <button class="icon-btn bar-more" id="bar-more" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="Everything else this diagram can do">&#8943;</button>
           <div class="dropdown-menu" id="bar-menu" hidden>
@@ -562,6 +754,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
             <button id="autolayout" type="button" title="Re-flow the diagram into a clean left-to-right layout (F8)"><span class="mi-icon">&#8649;</span>Auto-layout</button>
             <button id="savelayout" type="button" hidden title="Save this layout onto the deployed definition — the picture changes, the process does not: same key, same version, same running instances"><span class="mi-icon">&#128190;</span>Save layout to deployment</button>
             <button id="export" type="button" title="Download this diagram as BPMN XML"><span class="mi-icon">&#8595;</span>Export XML</button>
+            <button id="xmlsource" type="button" title="Show this diagram as BPMN XML, and correct it in place"><span class="mi-icon mi-code">&lt;/&gt;</span>XML source</button>
             <button id="docexport" type="button" title="Publish this process as a structured PDF — the diagram plus every element's documentation and notes — as a numbered version you can share (ADR-0143)"><span class="mi-icon">&#128196;</span>Documentation</button>
           </div>
         </div>
@@ -641,7 +834,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
           <button type="button" data-sev="error" title="Show only errors">Errors</button>
           <button type="button" data-sev="warning" title="Show only warnings">Warnings</button>
         </span>
-        <span class="muted" id="prob-version">Checked against the Atlas compiler</span>
+        <span class="muted" id="prob-version">Checked against the atlas compiler</span>
         <span class="prob-caret" id="prob-caret" aria-hidden="true">▾</span>
       </div>
     </div>`;
@@ -683,6 +876,13 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   } catch (e) {
     toast("could not open diagram: " + e.message, "err");
   }
+  // A deployment whose latest-bound decisions were frozen when it was deployed says
+  // so beside its name (ADR-0423). The binding field on its tasks reads what a deploy
+  // from here will do, which is not what this deployment does — and Deploy, on this
+  // bar, is the remedy.
+  if (key != null && draftId == null) {
+    markFrozenDeployment(root, api, key, gen);
+  }
 
   // identity.draftId is the draft this editing session addresses — the id the diagram
   // was opened under, null for one that has never been saved. It is not the same thing
@@ -696,18 +896,38 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   // editable draft is the same process, so the collision is the point rather than an
   // accident — it is offered as an explicit overwrite instead of a flat refusal.
   const identity = { draftId: draftId != null ? draftId : null, fromDeployment: draftId == null && key != null };
+  // importedEdit says this session has replaced the canvas by importing a document of
+  // its own making — an applied XML source, an auto-layout. That is an edit the undo
+  // stack cannot see, because the import starts it afresh, so the question of whether
+  // leaving loses work reads it beside the stack (makeKeepEdits).
+  identity.importedEdit = false;
   // ownId is the id this session may save onto without colliding with somebody else:
   // the draft it opened, or — for a deployed definition being pulled back into a draft
   // — that process's own id, where landing on the existing draft is the point and is
   // confirmed rather than refused. Everything else is a foreign artifact.
   const openedProcessId = ((draftKeyProcess(modeler) || {}).id || "");
   identity.ownId = () => identity.draftId || (identity.fromDeployment ? openedProcessId : "") || "";
+  // savedXML is the document this session last saved as its draft, null until it has
+  // saved one. Deploy reads it to know whether the draft already holds what is about to
+  // be deployed.
+  identity.savedXML = null;
+
+  // Which record is open, read afresh on every refresh: a first Save moves the session
+  // from a version (or from nothing) onto a draft.
+  if (gen === generation) {
+    shownVersion = attachShownVersion(root.querySelector("#shown-version"), {
+      api, which: () => ({ draftId: identity.draftId, key }),
+    });
+    shownVersion.refresh();
+  }
 
   const rerender = wireProperties(root, modeler, api, projectId, toast, identity);
-  const refreshBadges = makeImplementBadges(root, modeler);
+  const refreshBadges = makeImplementBadges(root, modeler, api);
   refreshBadges(); // reflect the initial tab for the diagram just imported
   const refreshPoolCaptions = makePoolProcessCaptions(modeler);
   refreshPoolCaptions(); // name the process each pool runs, on the diagram just imported
+  const refreshDataStates = makeDataStateLabels(modeler);
+  refreshDataStates(); // show each data object's [state] on the diagram just imported
   // The Playground is a mode rather than a level of detail: it takes over the bar
   // and a side panel, so the tab toggle switches it on instead of only re-rendering
   // the properties panel (ADR-0215).
@@ -723,7 +943,33 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   // leaves this diagram for the one it calls, so the drill-down owns the save that
   // has to happen first — hence the saveDraft it is handed (ADR-0076).
   wireCalleeNavigation(root, modeler, api, toast, identity, saveDraft);
+  // "＋ New decision" on a business rule task is the same kind of door, and it is
+  // opened from the properties panel rather than from here — so this mount publishes
+  // the question the panel has to ask before it navigates, and the identity it must
+  // read the draft's id back off afterwards.
+  leaveForDecision = async () => (await makeKeepEdits(modeler, identity, saveDraft, "authoring a decision", true)())
+    ? { ok: true, processId: identity.draftId || "" }
+    : { ok: false, processId: "" };
+  pendingAdopt = adopt || null;
+  // Coming back from the decision editor, select the task the decision was authored
+  // for. Without this the adoption would sit waiting until the author happened to
+  // click that task again, and "press one button, model the decision, come back to a
+  // wired task" would be true only for somebody who knew to click.
+  if (pendingAdopt && pendingAdopt.elementId) {
+    try {
+      const el = modeler.get("elementRegistry").get(pendingAdopt.elementId);
+      if (el) {
+        modeler.get("selection").select(el);
+        try { modeler.get("canvas").scrollToElement(el); } catch { /* older bpmn-js */ }
+      } else {
+        pendingAdopt = null; // the task is gone; nothing to adopt into
+      }
+    } catch { pendingAdopt = null; }
+  }
   wireEditorVars(root, modeler, api);
+  // What this installation holds for the namespaces, for the Variables panel and
+  // completion to offer; the panel redraws when it arrives.
+  loadHeldConstants(api, projectId).then(() => root.dispatchEvent(new CustomEvent("held-constants")));
   wireProblems(root, modeler, api, projectId);
   wireResizer(root, modeler);
   wireTokenSim(root, modeler);
@@ -752,7 +998,33 @@ function unsupportedReason(bo) {
   for (const d of (bo.eventDefinitions || [])) {
     if (UNSUPPORTED_EVENT_DEFS[d.$type]) return UNSUPPORTED_EVENT_DEFS[d.$type];
   }
-  return null;
+  return conditionalStartReason(bo) || eventGatewayReason(bo);
+}
+
+// eventGatewayReason flags the two kinds of event-based gateway atlas does not run. It
+// runs the exclusive deferred choice inside a running instance (ADR-0110); a gateway that
+// starts the instance (instantiate) or waits for every event (a Parallel
+// eventGatewayType) the compiler refuses at deploy (event-gateway.kind, #804), and the
+// badge says so while the author is still drawing. The moddle reads instantiate as a
+// boolean; a model written by hand may still carry it as text.
+function eventGatewayReason(bo) {
+  if (bo.$type !== "bpmn:EventBasedGateway") return null;
+  const instantiate = String(bo.instantiate).toLowerCase() === "true";
+  const parallel = String(bo.eventGatewayType || "").toLowerCase() === "parallel";
+  if (!instantiate && !parallel) return null;
+  return "atlas runs an event-based gateway only as the exclusive deferred choice inside a running instance: the first event wins and the others are withdrawn. An instantiating or parallel event gateway is refused at deploy; to start the process on any of several events, use message, timer or signal start events";
+}
+
+// conditionalStartReason flags the one event definition whose support depends on where
+// it stands. An event subprocess's conditional start is its trigger and runs while the
+// parent scope does (ADR-0137); any other conditional start has no instance whose
+// variables the condition could read. At process level the compiler refuses it at deploy
+// (start.conditional); the badge says so while the author is still drawing.
+function conditionalStartReason(bo) {
+  if (bo.$type !== "bpmn:StartEvent") return null;
+  if (!(bo.eventDefinitions || []).some((d) => d.$type === "bpmn:ConditionalEventDefinition")) return null;
+  if (bo.$parent && bo.$parent.triggeredByEvent) return null;
+  return "A conditional start event runs only inside an event subprocess: before an instance exists there are no variables for its condition to read. Use a conditional catch, boundary event or event subprocess, or start with the message or timer that observes the condition";
 }
 
 // A data object's declared type is BPMN's itemSubjectRef, and it is a *reference*
@@ -979,7 +1251,16 @@ function wireProblems(root, modeler, api, applicationId) {
     caretEl.style.visibility = total === 0 ? "hidden" : "";
 
     if (total === 0) {
-      summaryEl.textContent = "No problems";
+      // "No problems" is a claim, and it is only true when something looked. A diagram
+      // filed under no application is resolved against no information model, so every
+      // data check — the declared class, the members a write targets, the data states —
+      // is skipped rather than passed. Reporting that as a clean bill is the one
+      // reading a reader must not be given, because it is indistinguishable from
+      // having earned it.
+      summaryEl.textContent = applicationId ? "No problems" : "No problems found — data not checked";
+      summaryEl.title = applicationId ? ""
+        : "This diagram is not filed under an application, so there is no information model to check "
+          + "its data objects against. Open it from its application, or deploy it from there.";
     } else {
       const parts = [];
       if (errors) parts.push(`${errors} error${errors === 1 ? "" : "s"}`);
@@ -1036,7 +1317,7 @@ function wireProblems(root, modeler, api, applicationId) {
     // finding quotes that id — avoiding a doubled row for the same element.
     problems = [...server, ...unsupported.filter((u) =>
       !flagged.has(u.element) && !server.some((p) => (p.message || "").includes(`"${u.element}"`)))];
-    if (res.version) versionEl.textContent = `Checked against Atlas ${res.version}`;
+    if (res.version) versionEl.textContent = `Checked against atlas ${res.version}`;
     render();
   };
   const scheduleValidate = () => {
@@ -1365,6 +1646,10 @@ function implMarker(bo) {
   if (bo.$type === "bpmn:SendTask") {
     // The send task's kind badge (ADR-0112): a message throw, a Worker Type, or (plain job
     // worker) nothing — the filled send-task arrow bpmn-js draws is that kind's own symbol.
+    // A shop task has none here: its badge is the shop badge, which sits beside the
+    // envelope rather than over it (shopBadgeOf), and it is asked first, as sendTaskKind
+    // asks it, so a leftover messageRef cannot cover the envelope with the Message badge.
+    if (findExt(bo, SEND_SHOP_KIND.ext)) return null;
     if (bo.messageRef) return { label: SEND_MESSAGE_KIND.name, icon: SEND_MESSAGE_KIND.glyph };
     const kind = serviceTaskKind(bo);
     if (!kind.glyph) return null;
@@ -1403,7 +1688,165 @@ function drawImplBadges(modeler) {
       }));
     } catch { /* shape without graphics (e.g. mid-import) — skip */ }
   });
+  return ids.concat(drawShopBadges(modeler), drawWizardBadges(modeler));
+}
+
+// WIZARD_KINDS are the two values of atlas:wizard (ADR-0449), with what the panel and
+// the badge call them. Anything else is not a wizard to the engine, and the Problems
+// panel says so.
+const WIZARD_KINDS = {
+  internal: {
+    option: "Yes — for signed-in people",
+    title: "Wizard: one sitting of one signed-in person (ADR-0449)",
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#2a7f8f"/><path d="M4 8h8" stroke="#fff" stroke-width="1.2"/><circle cx="4" cy="8" r="1.8" fill="#fff"/><circle cx="8" cy="8" r="1.8" fill="#fff"/><circle cx="12" cy="8" r="1.8" fill="#fff"/></svg>`,
+  },
+  public: {
+    option: "Yes — for the anonymous visitor of a public start link",
+    title: "Public wizard: one sitting of the anonymous visitor who started it (ADR-0449)",
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#b8641e"/><path d="M4 8h8" stroke="#fff" stroke-width="1.2"/><circle cx="4" cy="8" r="1.8" fill="#fff"/><circle cx="8" cy="8" r="1.8" fill="#fff"/><circle cx="12" cy="8" r="1.8" fill="#fff"/></svg>`,
+  },
+};
+
+// WIZARD_BADGE_SPOT is the top-right corner of the subprocess: an expanded subprocess
+// writes its name from the top-left, and a collapsed one draws its marker at the bottom.
+const WIZARD_BADGE_SPOT = { top: 4, right: 26 };
+
+// drawWizardBadges marks the wizard subprocesses (ADR-0449) and returns the overlay ids it
+// added. drawImplBadges calls it, so the badge shows where the implementation badges do.
+function drawWizardBadges(modeler) {
+  const ids = [];
+  let overlays, registry;
+  try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+  catch { return ids; } // modeler torn down mid-flight
+  registry.forEach((el) => {
+    const bo = el.businessObject;
+    const kind = bo && bo.$type === "bpmn:SubProcess" && !bo.triggeredByEvent && WIZARD_KINDS[bo.wizard];
+    if (!kind) return;
+    try {
+      ids.push(overlays.add(el.id, "wizard-badge", {
+        position: WIZARD_BADGE_SPOT,
+        html: `<span class="wizard-badge" title="${esc(kind.title)}">${kind.glyph}</span>`,
+      }));
+    } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+  });
   return ids;
+}
+
+// wizardHTML is a subprocess's Wizard section (ADR-0449): whether it is one sitting of one
+// person, walked screen by screen, and for whom. A value the panel does not know is shown
+// as it stands rather than silently replaced; the Problems panel says why it is refused.
+function wizardHTML(bo) {
+  const v = bo.wizard || "";
+  const opt = (value, label) => `<option value="${value}" ${v === value ? "selected" : ""}>${label}</option>`;
+  const unknown = v && !WIZARD_KINDS[v] ? `<option value="${esc(v)}" selected>${esc(v)} — not a kind atlas knows</option>` : "";
+  return `<h3>Wizard</h3>
+    <label class="field"><span>One sitting of one person</span>
+      <select id="f-wizard">
+        ${opt("", "No — an ordinary subprocess")}
+        ${opt("internal", WIZARD_KINDS.internal.option)}
+        ${opt("public", WIZARD_KINDS.public.option)}
+        ${unknown}
+      </select></label>
+    <p class="muted" style="font-size:12px">A wizard's user tasks are the screens of one multi-step form, and the gateways between them decide which screen follows which answer. Attach an interrupting <b>timer boundary event</b> to say when an unfinished sitting is abandoned; a public wizard cannot be published without one. Leave the steps of a public wizard unassigned: they belong to whoever started it. In the Tasks app, a signed-in person who submits one screen lands on the next; the visitor of a public start link is carried the same way on the public page.</p>`;
+}
+
+// shopOwners holds, per diagram instance, which message names product actions own: a Map
+// from name to [{ product, action }], set when the listing arrives. Present but null means
+// it was asked for and has not answered — or failed, which leaves it so: no receive task is
+// then the shop's, and nothing else changes. Kept per instance rather than per call because
+// a runtime view redraws its badges on every poll and must not ask again each time.
+const shopOwners = new WeakMap();
+
+// productActionOwners reads the listing's product actions into that Map.
+function productActionOwners(list) {
+  const out = new Map();
+  for (const s of messageSourcesOf(list, "product-action")) {
+    const name = (s.messageName || "").trim();
+    if (!name) continue;
+    const owners = out.get(name) || [];
+    const product = s.productName || s.productId || "?";
+    const action = s.action || "?";
+    if (!owners.some((o) => o.product === product && o.action === action)) owners.push({ product, action });
+    out.set(name, owners);
+  }
+  return out;
+}
+
+// loadShopOwners asks the server once per diagram instance which names product actions
+// own, and calls redraw when it knows. Without an api (a harness, a static render) it asks
+// nothing, and only the send task's declaration marks anything.
+function loadShopOwners(modeler, api, redraw) {
+  if (!api || !modeler || shopOwners.has(modeler)) return;
+  shopOwners.set(modeler, null);
+  let req;
+  try { req = Promise.resolve(api("GET", "/api/v1/message-sources")); } catch { return; }
+  req.then((list) => {
+    shopOwners.set(modeler, productActionOwners(list));
+    redraw();
+  }).catch(() => { /* no listing: no receive task is marked */ });
+}
+
+// shopBadgeOf says whether a task is the shop's, and in which way, as the badge's tooltip —
+// or null. It is derived and never stored (ADR-0429 §6): a send task from its declared
+// <atlas:shopTask>, in any mode; a receive task from a product action owning its message,
+// which is all that makes a receive the shop's (§4). Events are not marked: the
+// implementation badges mark tasks only, and an event's envelope is its whole symbol.
+function shopBadgeOf(bo, owners) {
+  if (!bo) return null;
+  if (bo.$type === "bpmn:SendTask") {
+    const shop = findExt(bo, SEND_SHOP_KIND.ext);
+    if (!shop) return null;
+    return shop.mode === "command" ? "Shop: commands a product action" : "Shop: states how a product action ended";
+  }
+  if (bo.$type === "bpmn:ReceiveTask") {
+    const name = ((bo.messageRef && bo.messageRef.name) || "").trim();
+    const own = name && owners ? owners.get(name) : null;
+    if (!own || !own.length) return null;
+    return `Shop: waits for product action ${own.map((o) => `${o.action} of ${o.product}`).join(", ")}`;
+  }
+  return null;
+}
+
+// SHOP_BADGE_SPOT is where the shop badge sits on a task: beside the envelope bpmn-js draws
+// in the top-left corner (x 6–27, y 5–19 for a send task; an instantiating receive task's
+// ring reaches x 24), on the same band and clear of it. The implementation badge covers
+// that corner on purpose; on a send or receive task the envelope there says which way the
+// message goes, so the shop badge must leave it showing — a reader with any other BPMN
+// tool sees the same send or receive task.
+const SHOP_BADGE_SPOT = { top: 3, left: 31 };
+
+// drawShopBadges marks the shop's tasks (shopBadgeOf) and returns the overlay ids it added.
+// drawImplBadges calls it, so the shop badge is drawn exactly where the implementation
+// badges are — the Implement tab and the runtime views, never the Design view.
+function drawShopBadges(modeler) {
+  const ids = [];
+  let overlays, registry;
+  try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+  catch { return ids; } // modeler torn down mid-flight
+  const owners = shopOwners.get(modeler) || null;
+  registry.forEach((el) => {
+    const title = shopBadgeOf(el.businessObject, owners);
+    if (!title) return;
+    try {
+      ids.push(overlays.add(el.id, "shop-badge", {
+        position: SHOP_BADGE_SPOT,
+        html: `<span class="shop-badge" title="${esc(title)}">${SEND_SHOP_KIND.glyph}</span>`,
+      }));
+    } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+  });
+  return ids;
+}
+
+// watchShopBadges is a read-only view's half of the receive task's shop badge: it asks for
+// the listing once for this viewer and, when it answers, redraws the shop badges in place.
+// The view's own drawImplBadges calls draw them from then on, the poll's included.
+function watchShopBadges(viewer, api) {
+  loadShopOwners(viewer, api, () => {
+    let overlays;
+    try { overlays = viewer.get("overlays"); } catch { return; } // view torn down meanwhile
+    try { overlays.remove({ type: "shop-badge" }); } catch { /* none drawn */ }
+    drawShopBadges(viewer);
+  });
 }
 
 // makeImplementBadges gates drawImplBadges on the Modeler's Implement tab: the Design
@@ -1412,7 +1855,12 @@ function drawImplBadges(modeler) {
 // Worker Type and a plain worker, is exactly what the author is working with. Returns a
 // refresh function the tab toggle and diagram-change events call; it is a no-op off the
 // Implement tab, where it clears any badges the author left behind.
-function makeImplementBadges(root, modeler) {
+//
+// The shop badge on a receive task needs the server's listing of who owns which message
+// (ADR-0429 §6). It is asked for the first time the Implement tab shows, not before — the
+// Design view draws no badge, so it has no question to ask — and once for the diagram;
+// its answer redraws through this same refresh, so it too is gated on the tab.
+function makeImplementBadges(root, modeler, api) {
   let ids = []; // overlay ids currently on the canvas, so we can remove ours only
 
   const clear = () => {
@@ -1425,6 +1873,7 @@ function makeImplementBadges(root, modeler) {
   const refresh = () => {
     clear();
     if (activeTab(root) !== "implement") return;
+    loadShopOwners(modeler, api, refresh);
     ids = drawImplBadges(modeler);
   };
 
@@ -1489,6 +1938,90 @@ function makePoolProcessCaptions(modeler) {
     ids = [];
   };
   const refresh = () => { clear(); ids = drawPoolProcessCaptions(modeler); };
+  modeler.on("element.changed", refresh);
+  modeler.on("elements.changed", refresh);
+  modeler.on("import.done", refresh);
+  return refresh;
+}
+
+// drawDataStateLabels writes each data object's data state under its name — the
+// `[ARCHIVIERT]` in square brackets BPMN puts below the box, and the one thing that
+// tells two boxes of the same object apart. A process that draws `identitaet` six times
+// draws six identical boxes without it, and the repetition reads as noise rather than
+// as a life. bpmn-js parses `<dataState>` into the business object and renders nothing
+// with it, so this label is ours to draw; the Properties panel has been able to *edit*
+// the state all along, which is how a diagram ends up carrying states nothing shows.
+//
+// The state is drawn with its **role**, not as one uniform caption, because the same
+// string means two different things depending on which way the association runs:
+//
+//   - A state on a box a write points at is the target state the compiler puts on the
+//     `DataOutputAssociation` (ADR-0058). The engine advances the object into it, the
+//     transition lands in the log, and `CheckDataFlow` matches it against the class's
+//     lifecycle (ADR-0259). It executes.
+//   - A state on a box that is only *read* is dropped — "its state ignored on a read"
+//     (`compiler/parse.go`). It never reaches the compiled model, so no engine acts on
+//     it and no check can reach it, not even the typo check. It documents a
+//     precondition and nothing more.
+//
+// Drawing both the same way would have the diagram claim something the model does not
+// do, so the second one is set back and its hover title says why. That is the whole
+// difference in treatment: same notation, same place, one of them quieter.
+//
+// The caption rides under the *label*, not under the symbol: a data object's name is an
+// external label the author can drag anywhere, and a state left behind at the symbol
+// would come adrift from the name it qualifies. A nameless reference has no label to
+// follow, so its state sits under the symbol instead.
+function drawDataStateLabels(modeler) {
+  const ids = [];
+  let overlays, registry;
+  try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+  catch { return ids; } // modeler torn down mid-flight
+  registry.forEach((el) => {
+    const bo = el.businessObject;
+    // The reference carries the state; its own label element carries the same business
+    // object, so the label is skipped or every state would be drawn twice.
+    if (!bo || bo.$type !== "bpmn:DataObjectReference" || el.type === "label") return;
+    const state = ((bo.dataState && bo.dataState.name) || "").trim();
+    if (!state) return;
+    // A write is an *incoming* data output association: the activity's output lands in
+    // this box, and this box's state is where it lands.
+    const written = (el.incoming || []).some(
+      (c) => ((c.businessObject || {}).$type || "") === "bpmn:DataOutputAssociation");
+    const title = written
+      ? `Data state: ${state} — a write here moves the object into it, and the deploy checks it against the class's lifecycle.`
+      : `Data state: ${state} — nothing writes it here. A state on a box that is only read is dropped when the model compiles, so it documents what this step expects; the engine never acts on it and no check reads it.`;
+    // Sit the caption directly under the name. The label's own bounds give both the
+    // baseline to clear and the centre to hang from; without a label there is only the
+    // symbol, and the caption goes under that.
+    const lbl = el.label;
+    const top = lbl ? (lbl.y + lbl.height) - el.y + 1 : (el.height || 0) + 5;
+    const left = lbl ? (lbl.x + lbl.width / 2) - el.x : (el.width || 0) / 2;
+    try {
+      ids.push(overlays.add(el.id, "atlas-data-state", {
+        position: { top, left },
+        html: `<div class="data-state-label"><span class="ds-text${written ? "" : " ds-unwritten"}" title="${esc(title)}">[${esc(state)}]</span></div>`,
+      }));
+    } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+  });
+  return ids;
+}
+
+// makeDataStateLabels keeps the data-state captions in step with edits: the state typed
+// in the panel, an association drawn or deleted (which is what decides whether a state
+// executes), a label dragged elsewhere. Like the pool captions and unlike the
+// implementation badges these are not tab-gated — a data state is part of what the
+// model *says*, readable at any level of detail, not an implementation nicety. Returns
+// a refresh function; the initial call reflects the just-imported diagram.
+function makeDataStateLabels(modeler) {
+  let ids = []; // overlay ids currently on the canvas, so we remove only ours
+  const clear = () => {
+    let overlays;
+    try { overlays = modeler.get("overlays"); } catch { ids = []; return; }
+    for (const id of ids) { try { overlays.remove(id); } catch { /* gone */ } }
+    ids = [];
+  };
+  const refresh = () => { clear(); ids = drawDataStateLabels(modeler); };
   modeler.on("element.changed", refresh);
   modeler.on("elements.changed", refresh);
   modeler.on("import.done", refresh);
@@ -1726,6 +2259,21 @@ function variablesForCompletion(modeler, element) {
       if (name) byName.set(name, { name, detail: "task variable · local" });
     }
   } catch { /* best-effort */ }
+  // What the process could read from its namespaces but has not declared: offered like
+  // the rest, and declared on the process when picked, so the model keeps saying what
+  // it reads (ADR-0456).
+  try {
+    const bo = processOf(modeler, element);
+    for (const m of undeclaredMembers(bo)) {
+      if (!byName.has(m.path)) {
+        byName.set(m.path, {
+          name: m.path,
+          detail: `${m.ns} ${m.info ? "info" : "constant"} · declares it`,
+          onAccept: () => declareMember(modeler, bo, m),
+        });
+      }
+    }
+  } catch { /* best-effort */ }
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -1819,6 +2367,13 @@ async function instanceSamples(modeler, api, opts = {}) {
 // The newest version is preferred, but a version deployed a minute ago has no
 // instances yet — then its predecessor's values still describe the same variables,
 // so the walk continues rather than reporting nothing.
+//
+// What comes back is a page of that version's instances, and a page is all this wants:
+// the result is a *sample* of what the variables look like, cut to
+// MAX_SAMPLE_INSTANCES rows below, and nothing here counts it or reports a total. The
+// listing is newest-first within a definition, so the sample is of recent instances
+// rather than of whichever ones the cap happened to reach
+// (ADR-0365).
 async function fetchSamples(api, processId) {
   const procs = await api("GET", "/api/v1/processes");
   const versions = (procs || [])
@@ -1829,7 +2384,7 @@ async function fetchSamples(api, processId) {
     let rows;
     try { rows = await api("GET", "/api/v1/instances?process=" + encodeURIComponent(v.key)); }
     catch { return []; }
-    const found = (rows || [])
+    const found = ((rows && rows.items) || [])
       .filter((r) => r.processDefKey === v.key)
       // Running instances first (their values are the live ones), then newest first.
       .sort((a, b) => (a.state === b.state ? b.key - a.key : a.state === "active" ? -1 : 1))
@@ -2025,6 +2580,14 @@ function collectDiagramVariables(modeler) {
       for (const v of readStartVariables(rootBo)) {
         push(v.name, "Start", "", "start variable", "Process", v.type || "");
       }
+      // A constant is a variable every instance carries from its start
+      // (ADR-0454), so expressions and completion offer it like one — a process constant
+      // by its name, one the installation holds by the path it is read under
+      // (application.NAME, server.NAME; ADR-0456).
+      for (const c of readConstants(rootBo)) {
+        if (!c.source) push(c.name, "Process", "", "process constant", "Process", c.type || "");
+        else push(`${c.source}.${c.name}`, "Process", "", `${c.source} ${c.info ? "info" : "constant"}`, "Process", c.type || "");
+      }
     }
   } catch { /* best-effort */ }
   try {
@@ -2200,9 +2763,24 @@ function wireEditorVars(root, modeler, api) {
     const vars = collectDiagramVariables(modeler).filter((v) =>
       !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q) ||
       (v.source || "").toLowerCase().includes(q));
+    // What the process could read from its namespaces and does not declare yet — the
+    // constants this installation holds and the facts each namespace carries — under the
+    // list, each with the one click that declares it (ADR-0456).
+    let available = [];
+    try { available = undeclaredMembers(rootProcess(modeler)).filter((m) => !q || m.path.toLowerCase().includes(q)); } catch { /* best-effort */ }
+    const availableHTML = available.length
+      ? `<div class="vars-available" id="vars-available">
+          <div class="vars-available-head">Available, not declared yet</div>
+          ${available.map((m) => `<div class="var-row var-row-available" data-avail="${esc(m.path)}">
+            <div class="var-head"><div class="var-name">${esc(m.path)}</div><span class="vtag">${esc(m.type)}</span>
+              <button type="button" class="btn neutral var-declare" data-declare="${esc(m.path)}"
+                title="Declare ${esc(m.path)} on this process, so its instances carry it">Declare</button></div>
+            <div class="var-meta">${esc(m.ns)} ${m.info ? "info" : "constant"}</div></div>`).join("")}
+        </div>`
+      : "";
     if (!vars.length) {
       list.innerHTML = `<p class="vars-empty">${q ? "No matching variables." :
-        "No variables yet. They appear as you add start variables, a linked form's fields, script or decision result variables, output mappings, and data objects."}</p>`;
+        "No variables yet. They appear as you add start variables, a linked form's fields, script or decision result variables, output mappings, and data objects."}</p>${availableHTML}`;
       return;
     }
     // Group by category so a linked form's fields read as their own section
@@ -2217,7 +2795,7 @@ function wireEditorVars(root, modeler, api) {
     const order = ["Form", "Process"];
     const rank = (c) => { const i = order.indexOf(c); return i < 0 ? order.length : i; };
     const cats = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
-    list.innerHTML = cats.length === 1
+    list.innerHTML = (cats.length === 1
       ? groups.get(cats[0]).map(rowHTML).join("")
       : cats.map((cat) => {
           const col = collapsedCats.has(cat);
@@ -2229,8 +2807,10 @@ function wireEditorVars(root, modeler, api) {
             </button>
             <div class="vars-group-body">${groups.get(cat).map(rowHTML).join("")}</div>
           </div>`;
-        }).join("");
+        }).join("")) + availableHTML;
   };
+  // The installation's constants arrive after the editor mounts; draw them when they do.
+  root.addEventListener("held-constants", render);
 
   // The toggle is a two-state button on the bar, and `aria-pressed` is the whole of that
   // state: the pressed look is drawn from the attribute (app.css `.btn.toggle`), so there
@@ -2273,6 +2853,13 @@ function wireEditorVars(root, modeler, api) {
     }).catch(() => { /* leave what is on screen */ });
   });
   list.addEventListener("click", (e) => {
+    const dec = e.target.closest(".var-declare");
+    if (dec) {
+      const bo = rootProcess(modeler);
+      const m = undeclaredMembers(bo).find((x) => x.path === dec.dataset.declare);
+      if (m) declareMember(modeler, bo, m); // element.changed redraws the list
+      return;
+    }
     // A structure opens and closes in place. Toggled on the row's own state rather
     // than by re-rendering the list, so the panel does not jump under the reader.
     const op = e.target.closest(".var-peek");
@@ -2583,6 +3170,26 @@ function upsertExt(modeler, element, type, props) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
+// calledDecisionVersion reads the atlas:version a business rule task's
+// zeebe:calledDecision names ("" when none). The attribute is Atlas's own, so bpmn-js
+// keeps it among the element's unknown attributes rather than as a property
+// (ADR-0423).
+function calledDecisionVersion(cd) {
+  if (!cd) return "";
+  const v = typeof cd.get === "function" ? cd.get("atlas:version") : (cd.$attrs && cd.$attrs["atlas:version"]);
+  return v ? String(v) : "";
+}
+
+// setCalledDecisionVersion writes atlas:version on the task's zeebe:calledDecision,
+// or removes it when version is "", through the modeling API so it takes part in
+// undo/redo like every other edit here.
+function setCalledDecisionVersion(modeler, element, version) {
+  const cd = findExt(element.businessObject, "zeebe:CalledDecision");
+  if (!cd || calledDecisionVersion(cd) === (version || "")) return;
+  cd.set("atlas:version", version || undefined);
+  modeler.get("modeling").updateProperties(element, { extensionElements: element.businessObject.extensionElements });
+}
+
 // removeExt drops an element's extension element of `type`, if present, through
 // the modeling API (undo/redo aware). Used to unlink a form (drop the whole
 // zeebe:FormDefinition rather than leave an empty formId behind).
@@ -2761,15 +3368,24 @@ const SERVICE_TASK_KINDS = [
       { key: "queryParameters", label: "Query parameters", type: "map", childType: "atlas:QueryParam", fx: true, hint: "Appended to the request URL. A value may be a FEEL expression (fx)." },
       { group: "Authentication" },
       {
+        // oauth2 is the REST worker's alone (ADR-0152): the client-credentials grant needs
+        // a token endpoint and a client id, which only <atlas:restConnector> carries.
         key: "authType", label: "Type", type: "select", reRender: true,
-        options: [{ v: "", l: "None" }, { v: "basic", l: "Basic" }, { v: "bearer", l: "Bearer token" }, { v: "apiKey", l: "API key" }],
+        options: [{ v: "", l: "None" }, { v: "basic", l: "Basic" }, { v: "bearer", l: "Bearer token" }, { v: "apiKey", l: "API key" }, { v: "oauth2", l: "OAuth2 client credentials" }],
       },
       { key: "authUsername", label: "Username", showIf: (v) => v.authType === "basic" },
       { key: "authApiKeyName", label: "API key header name", placeholder: "X-API-Key", showIf: (v) => v.authType === "apiKey" },
       {
+        key: "authTokenUrl", label: "Token URL", placeholder: "https://login.example.com/oauth2/token",
+        showIf: (v) => v.authType === "oauth2",
+        hint: "The token endpoint the worker obtains an access token from with the client-credentials grant, reusing it until shortly before it expires.",
+      },
+      { key: "authClientId", label: "Client ID", showIf: (v) => v.authType === "oauth2" },
+      { key: "authScope", label: "Scope", placeholder: "api://example/.default", showIf: (v) => v.authType === "oauth2", hint: "Optional. Sent with the token request when the provider asks for one." },
+      {
         key: "authSecret", label: "Secret reference", placeholder: "MY_TOKEN",
-        showIf: (v) => v.authType === "basic" || v.authType === "bearer" || v.authType === "apiKey",
-        hint: "The credential lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the secret value.",
+        showIf: (v) => v.authType === "basic" || v.authType === "bearer" || v.authType === "apiKey" || v.authType === "oauth2",
+        hint: "The credential lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the secret value. For OAuth2 it is the client secret.",
       },
       { group: "Output" },
       { key: "resultVariable", label: "Result variable", resultType: "json", placeholder: "response", hint: "The JSON response is written into this process variable (leave empty to discard it)." },
@@ -3266,24 +3882,78 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "mail", name: "E-Mail Outbound", group: "Messaging & events", desc: "Send an e-mail via a mail provider", icon: "M",
-    // An envelope on a warm amber tile reads "outbound mail" at a glance — the mail
-    // Worker Type's counterpart to REST's globe and clio's event stream. The
+    id: "mail", name: "E-Mail", group: "Messaging & events", desc: "Send an e-mail, or read and manage the Worker's mailbox", icon: "M",
+    // An envelope on a warm amber tile reads "mail" at a glance — the mail Worker
+    // Type's counterpart to REST's globe and clio's event stream. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white envelope strokes.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#e5484d"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
     ext: "atlas:MailConnector",
     fields: [
       { group: "Mail worker" },
-      { key: "connector", label: "Worker", datalist: "mail", placeholder: "office365", hint: "The configured mail Worker this task sends through, by the name it has under Workers in the Console. Its host, credentials and default sender live on the server, never in the model." },
-      { group: "Message" },
-      { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, hint: "Comma-separated recipients. A value may be a FEEL expression (fx)." },
-      { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true },
-      { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, hint: "Delivered but never shown in the message headers." },
-      { key: "from", label: "From", placeholder: "leave empty for the Worker's default sender", fx: true },
-      { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true },
-      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, hint: "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion." },
-      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
+      { key: "connector", label: "Worker", datalist: "mail", placeholder: "office365", hint: "The configured mail Worker this task sends through or whose mailbox it works with, by the name it has under Workers in the Console. Its host, credentials and default sender live on the server, never in the model. Reading or changing a mailbox needs access to that Worker: a deploy by somebody it is not shared with is refused." },
+      {
+        // Empty is send, which is every mail task authored before mailboxes existed
+        // (ADR-0438) — so an untouched task keeps meaning what it meant.
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "", l: "Send message" },
+          { v: "list", l: "List messages" },
+          { v: "get", l: "Read message" },
+          { v: "move", l: "Move message" },
+          { v: "mark-read", l: "Mark as read" },
+          { v: "mark-unread", l: "Mark as unread" },
+          { v: "delete", l: "Delete message (to the trash)" },
+          { v: "reply", l: "Reply to message" },
+        ],
+      },
+      { group: "Message", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" },
+      { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, showIf: (v) => !v.operation || v.operation === "send", hint: "Comma-separated recipients. A value may be a FEEL expression (fx)." },
+      { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
+      { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send", hint: "Delivered but never shown in the message headers." },
+      { key: "from", label: "From", placeholder: "leave empty for the Worker's default sender", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
+      { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
+      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply", hint: (v) => (v.operation === "reply"
+        ? "The reply's text. It goes to the original's Reply-To, or its From, under \"Re: \" and its subject, threaded beneath it."
+        : "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion.") },
+      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
+      { group: "Mailbox", showIf: (v) => !!v.operation && v.operation !== "send" && v.operation !== "reply" },
+      {
+        key: "folder", label: "Folder", placeholder: "INBOX", fx: true, showIf: (v) => v.operation === "list",
+        hint: "The folder to list — an IMAP folder name, a Gmail label id (INBOX, Label_…) or a Microsoft folder id or well-known name (inbox, archive). Empty is the inbox.",
+      },
+      {
+        key: "messageId", label: "Message", placeholder: "=mail.messageId", fx: true,
+        showIf: (v) => !!v.operation && v.operation !== "send" && v.operation !== "list",
+        hint: "The message this operation acts on: the messageId a mail watch published, or one a List messages answered. Usually a FEEL expression (fx), e.g. =messageId.",
+      },
+      {
+        key: "destination", label: "Move to", placeholder: "Archiv", fx: true, showIf: (v) => v.operation === "move",
+        hint: "The folder the message is filed into — an IMAP folder name, a Gmail label id, a Microsoft folder id or well-known name. In Gmail a move adds this label and takes the message out of the inbox.",
+      },
+      {
+        key: "maxResults", label: "Maximum messages", placeholder: "25", showIf: (v) => v.operation === "list",
+        hint: "Caps what lands in the result variable, newest first. Empty uses 25; at most 100.",
+      },
+      {
+        key: "unreadOnly", label: "Which", type: "select", showIf: (v) => v.operation === "list",
+        options: [{ v: "", l: "All messages" }, { v: "true", l: "Unread messages only" }],
+      },
+      {
+        key: "includeBody", label: "Text", type: "select", showIf: (v) => v.operation === "list" || v.operation === "get",
+        options: [{ v: "", l: "Envelope only" }, { v: "true", l: "Include the text" }],
+        hint: "The envelope is sender, recipients, subject, date, attachment names and sizes and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB; attachment content is never read. What a process receives, every operator of a shared server can read — include the text only where the process needs it.",
+      },
+      { group: "Output", showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" },
+      {
+        key: "resultVariable", label: "Result variable",
+        resultType: (v) => (v.operation === "list" ? "array" : v.operation === "move" ? "string" : "object"),
+        placeholder: "mail",
+        showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move",
+        hint: (v) => (v.operation === "move"
+          ? "Optional. Receives the message's id in its new folder — the same id for Gmail and Microsoft, a new one for IMAP."
+          : "Receives what the mailbox answered: " + (v.operation === "list" ? "a list of messages, newest first." : "the message.")),
+      },
     ],
   },
   {
@@ -3681,6 +4351,129 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "s3", name: "S3 Object Storage", group: "Files",
+    desc: "Put a document in a bucket, find it again by prefix, and hand somebody a link that opens it",
+    icon: "S",
+    // A bucket on storage grey: the thing an object goes into, which is what this Worker
+    // Type is about — its counterpart to Jira's ticked issue and Sheets' grid. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the fill
+    // and the white marks.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#3f7f6e"/><path d="M3.6 4.6h8.8l-.9 7a1.2 1.2 0 0 1-1.2 1H5.7a1.2 1.2 0 0 1-1.2-1z" fill="#fff"/><ellipse cx="8" cy="4.6" rx="4.4" ry="1.3" fill="#fff"/><ellipse cx="8" cy="4.6" rx="2.6" ry=".7" fill="#3f7f6e"/></svg>`,
+    ext: "atlas:S3Connector",
+    fields: [
+      { group: "S3 worker" },
+      { key: "connector", label: "Worker", datalist: "s3", placeholder: "archiv", hint: "The configured S3 Worker this task acts as, by the name it has under Workers in the Console. Its access key and region live on the server, never in the model." },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "put-object", l: "Put object" },
+          { v: "get-object", l: "Read object" },
+          { v: "head-object", l: "Check object" },
+          { v: "list-objects", l: "List objects" },
+          { v: "copy-object", l: "Copy object" },
+          { v: "delete-object", l: "Delete object" },
+          { v: "presign-get", l: "Link to download" },
+          { v: "presign-put", l: "Link to upload" },
+        ],
+      },
+      {
+        key: "bucket", label: "Bucket", placeholder: "rechnungen", fx: true,
+        hint: "The bucket this task acts in — one name, never a path. May be a FEEL expression (fx).",
+      },
+      {
+        key: "key", label: "Key", placeholder: "=\"faelle/\" + vorgang.nummer + \"/antrag.pdf\"", fx: true,
+        showIf: (v) => v.operation && v.operation !== "list-objects",
+        hint: "The object's whole path inside the bucket, without a leading slash. Usually a FEEL expression (fx) built from the case it belongs to. Note that a retry re-runs this task with the same variables, so a key built from a timestamp or a random value writes a second object instead of overwriting the first.",
+      },
+      {
+        key: "content", label: "Content", placeholder: "=antwort", fx: true,
+        showIf: (v) => v.operation === "put-object",
+        hint: "What to store. It travels through a process variable, so it is capped at that variable's own budget — 1 MiB unless this installation raised it. For anything larger use Link to upload and let the browser that has the document send it straight to the store.",
+      },
+      {
+        key: "encoding", label: "Content is", type: "select",
+        options: [{ v: "", l: "Text — the characters as they are" }, { v: "base64", l: "Base64 — decode it before storing" }],
+        showIf: (v) => v.operation === "put-object" || v.operation === "get-object",
+        hint: "Text is right for JSON, CSV, XML and a letter. Base64 is what a binary needs to survive a process variable at all, and what a form's uploaded file already is. On a read it decides the same thing in reverse.",
+      },
+      {
+        key: "contentType", label: "Content type", placeholder: "application/pdf", fx: true,
+        showIf: (v) => v.operation === "put-object" || v.operation === "presign-put",
+        hint: (v) => (v.operation === "presign-put"
+          ? "Optional, and stronger than it looks: a type set here is bound into the URL, so whoever uploads must send exactly this one. That is what stops a link minted for a PDF being used to store something else."
+          : "What the bytes are, e.g. application/pdf or text/csv. Without it the store guesses, and a browser opening the object later downloads it instead of showing it."),
+      },
+      {
+        key: "prefix", label: "Prefix", placeholder: "=\"faelle/\" + vorgang.nummer + \"/\"", fx: true,
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Only keys that start with this are listed — which is what searching an object store means, because S3 has no query language. May be a FEEL expression (fx).",
+      },
+      {
+        key: "delimiter", label: "Delimiter", placeholder: "/",
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Optional. Keys sharing a segment are rolled up into common prefixes instead of listed one by one, so \"/\" makes a listing read like a folder. They come back in the result's prefixes.",
+      },
+      {
+        key: "startAfter", label: "Start after", placeholder: "=seite.nextStartAfter", fx: true,
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Optional. Resumes after this key, exclusive. A truncated page answers with nextStartAfter, so passing it back here is how a loop pages a prefix forward without re-reading what it already has.",
+      },
+      {
+        key: "maxKeys", label: "Maximum keys", placeholder: "1000",
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Caps what may land in the result variable. Empty uses 1000, which is also the most the store returns in one call; a larger value is refused at deploy rather than silently answered with 1000.",
+      },
+      {
+        key: "sourceBucket", label: "From bucket", placeholder: "eingang", fx: true,
+        showIf: (v) => v.operation === "copy-object",
+        hint: "The bucket the object is copied from. The copy happens inside the store, so the bytes never pass through atlas — which is what makes archiving a large document a step a process can take.",
+      },
+      {
+        key: "sourceKey", label: "From key", placeholder: "=eingang.key", fx: true,
+        showIf: (v) => v.operation === "copy-object",
+        hint: "The key the object is copied from. May be a FEEL expression (fx), e.g. the key an earlier List objects found.",
+      },
+      {
+        key: "expiresIn", label: "Valid for (seconds)", placeholder: "3600",
+        showIf: (v) => v.operation === "presign-get" || v.operation === "presign-put",
+        hint: "How long the link works. Empty uses one hour; seven days is the most the signature allows. Keep it short: the URL is a key to that one object for anyone who has it, and it lands in a process variable like any other value.",
+      },
+      {
+        key: "meta", label: "Metadata & headers", type: "map", childType: "atlas:S3Meta", fx: true,
+        showIf: (v) => v.operation === "put-object" || v.operation === "copy-object",
+        hint: "Extra request headers. A plain name becomes user metadata on the object (x-amz-meta-<name>), which is where a case number belongs; a name starting with x-amz- is sent as itself, which is how you reach server-side encryption or a storage class. On a copy these replace the source's metadata rather than adding to it — the store offers no third option.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable",
+        resultType: () => "object",
+        placeholder: "datei",
+        // Delete is the one operation the store answers with 204 No Content, so a result
+        // variable there would name a value that is never written — the panel hides it
+        // rather than letting an author expect one (the compiler refuses it too).
+        showIf: (v) => v.operation && v.operation !== "delete-object",
+        hint: (v) => {
+          switch (v.operation) {
+            case "list-objects":
+              return "The page lands here: =seite.objects is the list (1-based, so the first is =seite.objects[1].key), =seite.prefixes the rolled-up folders, =seite.truncated whether there is more, and =seite.nextStartAfter where to carry on.";
+            case "get-object":
+              return "The document lands in =datei.content, with =datei.contentType and =datei.size beside it. An object larger than a process variable's budget (1 MiB by default) fails the task rather than arriving cut short — use Link to download for those.";
+            case "head-object":
+              return "Whether the object is there is =datei.exists, and when it is, =datei.size, =datei.contentType and =datei.lastModified come with it. A missing object is an answer here, not an incident.";
+            case "presign-get":
+            case "presign-put":
+              return "The link lands in =datei.url, with =datei.expiresAt beside it. Put it in a user task, a mail or a message — whoever opens it reaches the store directly, so the document never passes through atlas.";
+            case "copy-object":
+              return "The copy's identity lands here: =datei.key, =datei.etag and the source it came from. Leave empty to discard it.";
+            default:
+              return "The stored object's identity lands here — =datei.etag, and =datei.versionId on a versioned bucket. Leave empty to discard it.";
+          }
+        },
+      },
+    ],
+  },
+  {
     id: "aitask", name: "AI Task", group: "Applications",
     desc: "Ask a language model one question and put the answer in a process variable",
     icon: "A",
@@ -3792,7 +4585,7 @@ const SERVICE_TASK_KINDS = [
   ],
 },
   {
-    id: "userconnector", name: "User Provisioning", group: "Directory & identity", desc: "Create, set the password of, or disable an Atlas login", icon: "U",
+    id: "userconnector", name: "User Provisioning", group: "Directory & identity", desc: "Create, set the password of, or disable an atlas login", icon: "U",
     // A person mark on a teal tile reads "user account" at a glance. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white figure strokes.
@@ -3811,7 +4604,7 @@ const SERVICE_TASK_KINDS = [
         ],
       },
       { group: "Account" },
-      { key: "username", label: "Username", placeholder: "=benutzername", fx: true, hint: "The Atlas login to create, update, or disable. May be a FEEL expression (fx)." },
+      { key: "username", label: "Username", placeholder: "=benutzername", fx: true, hint: "The atlas login to create, update, or disable. May be a FEEL expression (fx)." },
       { key: "email", label: "E-mail", placeholder: "=email", fx: true, showIf: (v) => !v.operation || v.operation === "create" },
       { key: "displayName", label: "Display name", placeholder: '=vorname + " " + nachname', fx: true, showIf: (v) => !v.operation || v.operation === "create" },
       {
@@ -4138,7 +4931,7 @@ const PLACEMENT_TAIL = {
       that job type; these kinds keep working and are being moved out of the engine.`,
     "engine-only": `Its work changes this server&rsquo;s own state rather than calling anything out,
       so there is nothing to move onto a worker.`,
-    "worker": `Its jobs wait for a worker process serving this job type — Atlas supervises one for
+    "worker": `Its jobs wait for a worker process serving this job type — atlas supervises one for
       the kinds it offloads by default. That process holds the configured Worker&rsquo;s endpoint and
       credential, so the credential lives where it is used; <b>Workers</b> in the Console shows which
       names are served and which are configured nowhere (ADR-0168).`,
@@ -4185,6 +4978,66 @@ function placementNoticeHTML(id, context) {
   return `<p class="stkind-notice${cls}">${lead} ${tail}</p>`;
 }
 
+// WORKER_TYPE_INFO_GROUP is the title the setup section carries in the panel, and the
+// key its collapsed state is remembered under. One title for every Worker Type on
+// purpose: "I do not want to read this" is a statement about the section, not about
+// Jira in particular, and the other groups behave the same way.
+const WORKER_TYPE_INFO_GROUP = "Setup";
+
+// workerTypeInfoHTML wraps what a Worker Type says about itself — where its work runs,
+// and what has to exist before it runs at all — in a collapsible group.
+//
+// It used to stand open above the fields, which is right the first time and wrong every
+// time after: on a 270px panel it is most of a screen, and an author who has already
+// configured this type is scrolling past it to reach the field they came for. It is a
+// group now, with the same chevron as Operation or Failure handling, and it starts
+// folded unless this server has no Worker of the type configured — the case the section
+// was written for. An explicit toggle wins over that and is remembered for the session,
+// as with every other group.
+//
+// `namesAWorker` says whether a task of this type states a configured Worker at all —
+// see kindNamesAWorker. A type that configures nothing has a setup worth one read, so it
+// starts folded whatever this server has.
+// `context` picks the placement notice's wording, or is null where the caller has
+// already placed that notice itself and only the setup belongs in the group.
+function workerTypeInfoHTML(id, namesAWorker, context = "workerType") {
+  const inner = (context ? placementNoticeHTML(id, context) : "") + workerTypeDocHTML(id);
+  if (!inner) return "";
+  const open = namesAWorker && !configuredKinds.has(id);
+  return `<div class="io-group wt-group" data-group="${esc(WORKER_TYPE_INFO_GROUP)}"
+       data-standalone-group="1" data-open-default="${open ? "1" : "0"}">
+    <div class="io-group-head" title="What this Worker Type needs before a task of it runs">
+      <span class="io-group-title">${esc(WORKER_TYPE_INFO_GROUP)}</span>
+      <span class="io-group-chevron" aria-hidden="true">&#9662;</span>
+    </div>
+    <div class="io-group-body">${inner}</div>
+  </div>`;
+}
+
+// kindNamesAWorker: does a task of this kind state the name of a configured Worker? It
+// is the catalog's own answer — the field that asks for one — rather than a second list
+// to keep in step. It compares rather than declares, on purpose: the Worker-picker drift
+// guard scans this file for a field declaring the connector key, so an object written in
+// that shape — even as an argument — is a field it then reports as missing its picker.
+function kindNamesAWorker(kind) {
+  return (kind.fields || []).some((f) => f.key === "connector");
+}
+
+// wireWorkerTypeInfo gives that group its collapse behaviour. It runs after every
+// render, beside groupifyPanel, because the panel is rebuilt on each selection and the
+// group is standalone markup that groupifyPanel deliberately leaves alone.
+function wireWorkerTypeInfo(body, ctl) {
+  for (const group of body.querySelectorAll(".wt-group")) {
+    if (group.dataset.wired === "1") continue;
+    group.dataset.wired = "1";
+    ctl.setDefault(WORKER_TYPE_INFO_GROUP, group.dataset.openDefault === "1");
+    group.classList.toggle("collapsed", ctl.isCollapsed(WORKER_TYPE_INFO_GROUP));
+    group.querySelector(".io-group-head").addEventListener("click", () => {
+      ctl.onToggle(WORKER_TYPE_INFO_GROUP, group.classList.toggle("collapsed"));
+    });
+  }
+}
+
 // stKindHeadingHTML renders the heading above the chosen kind's fields.
 //
 // When the kind supplies its own field groups (Mail provider, Message, Failure handling…)
@@ -4218,7 +5071,7 @@ function serviceTaskKindHTML(bo) {
   return `<h3>Worker type</h3>
     <input type="text" id="f-stkind-filter" placeholder="Search Worker type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
-    ${stKindHeadingHTML(cur)}${placementNoticeHTML(cur.id, "workerType")}${stKindFieldsHTML(cur, ext)}`;
+    ${stKindHeadingHTML(cur)}${workerTypeInfoHTML(cur.id, kindNamesAWorker(cur))}${stKindFieldsHTML(cur, ext)}`;
 }
 
 // SEND_MESSAGE_KIND is the send task's Message kind (ADR-0112): a correlating throw in task
@@ -4231,14 +5084,199 @@ const SEND_MESSAGE_KIND = {
   glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#4666ff"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
 };
 
+// SEND_SHOP_KIND is the send task's Shop kind (ADR-0429 §4): the point where a product's
+// process states how the action it is carrying out ended, or where a process asks a held
+// position of a product for an action of its own. Like the Message kind it is not a Worker
+// Type — the server serves its job itself, so there is no Worker to name and no credential to
+// hold — and a service task cannot carry it, so it too lives outside SERVICE_TASK_KINDS and
+// has its own fields (shopTaskFieldsHTML). Unlike the Message kind it is declared rather than
+// inferred: the <atlas:shopTask> extension is the whole of it, and exactly what the compiler
+// parses.
+const SEND_SHOP_KIND = {
+  id: "shop", name: "Shop", icon: "S", group: "Messaging & events",
+  desc: "Reports how a product action ended, or asks a held position for one (ADR-0429).",
+  glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c2298a"/><path d="M4.2 6.2h7.6l-.6 6.3H4.8z" fill="#fff"/><path d="M6.3 6.2V5a1.7 1.7 0 0 1 3.4 0v1.2" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
+  ext: "atlas:ShopTask",
+};
+
+// SEND_TASK_KINDS is everything a send task's picker offers: its two kinds of its own, then
+// the service task's catalog. The picker's first render and its refresh once the configured
+// Workers are known both read it, so the two cannot offer different lists.
+const SEND_TASK_KINDS = [SEND_MESSAGE_KIND, SEND_SHOP_KIND, ...SERVICE_TASK_KINDS];
+
+// SHOP_ACTION_KEY is the shape of a product action's key (ADR-0429 §1, after ADR-0305). The
+// field stays free text, because a process may be modelled before its product declares the
+// action; the shape is the one thing that can be checked without the catalogue, and a key
+// outside it can never match one.
+const SHOP_ACTION_KEY = /^[a-z0-9-]{1,64}$/;
+
+// SHOP_OUTCOMES is the closed list of how an action ends (ADR-0429 §3). Closed for the same
+// reason the effects are: a consumer of the published fact can rely on it.
+const SHOP_OUTCOMES = [
+  { v: "completed", l: "Completed — the action did what was asked" },
+  { v: "rejected", l: "Rejected — it was refused, e.g. by an approver" },
+  { v: "failed", l: "Failed — it was attempted and did not succeed" },
+];
+
+// SHOP_TASK_MODES are the modes a shop send task can be in (ADR-0429 §4), each with the
+// fields it carries beside `mode` itself, in the order the panel shows them. The select, the
+// fields and the save all read this list, and a save clears every field the chosen mode does
+// not carry: the compiler refuses a command that states an outcome, and the other mode's
+// leftovers would only look like configuration.
+//
+// A field marked fx holds a literal or an '=' expression, like the Worker Types' fx fields.
+// A command's order and position are such values because the instance computes them — a
+// leaver process finds them in the inventory — while its product and action are literals, so
+// the task names exactly one thing it may ask for (§10, decision 1).
+const SHOP_TASK_MODES = [
+  {
+    v: "outcome", l: "Outcome — report how the action ended",
+    hint: "On reaching this send task the server records how the action this instance is carrying out ended, for the order, position and command the instance holds (orderId, positionId, commandId), and the token continues. It names no Worker and carries no credential.",
+    fields: [
+      {
+        key: "action", label: "Action", placeholder: "password-reset",
+        hint: "The key of the product action this branch answers, as the catalogue declares it on the product whose process this is.",
+      },
+      {
+        key: "outcome", label: "Outcome", type: "select", options: SHOP_OUTCOMES,
+        hint: "Model one shop send task for each way the action can end, on the branch that ends it that way.",
+      },
+    ],
+  },
+  {
+    v: "command", l: "Command — ask a held position for an action",
+    hint: "On reaching this send task the process asks a held position of the product for an operator or system action, or its return, in the name of this process's application. The product must name that application among those it is commanded by; the provision, and an action only a customer may ask for, are refused when the task runs. It names no Worker and carries no credential.",
+    fields: [
+      {
+        key: "product", label: "Product", placeholder: "mailbox",
+        hint: "The catalogue product whose held position is asked, by its id.",
+      },
+      {
+        key: "action", label: "Action", placeholder: "deprovision",
+        hint: "The key of the action to ask for, as the product declares it.",
+      },
+      {
+        key: "order", label: "Order", fx: true, placeholder: "= leaver.orderId",
+        hint: "The order that holds the position: a literal id, or a FEEL expression (fx) over the instance's variables.",
+      },
+      {
+        key: "position", label: "Position", fx: true, placeholder: "mailbox",
+        hint: "The position on that order, likewise a literal or a FEEL expression (fx).",
+      },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "commandId",
+        hint: "Receives the id of the command the action runs under. Leave empty to discard it.",
+      },
+    ],
+  },
+];
+
+// shopTaskMode returns the mode entry a stored mode names, or the first one: an element
+// imported without a mode is read as an outcome, as the compiler reads it, rather than shown
+// blank.
+function shopTaskMode(v) {
+  return SHOP_TASK_MODES.find((m) => m.v === v) || SHOP_TASK_MODES[0];
+}
+
+// shopActionKeyProblem says what is wrong with a typed action key, or "" when nothing is.
+// An empty key is not flagged here: a freshly chosen Shop kind starts without one, and the
+// field's own hint already says what belongs there.
+function shopActionKeyProblem(v) {
+  const key = (v || "").trim();
+  if (key === "" || SHOP_ACTION_KEY.test(key)) return "";
+  return "Not an action key: a key is lower-case letters, digits and dashes, 1 to 64 characters (password-reset), so no product can declare this one.";
+}
+
+// shopTaskFieldsHTML renders the Shop kind's fields over the task's <atlas:shopTask>: the
+// mode, then the fields that mode carries. The action key's problem is rendered from the
+// stored value too, so a key saved as typed is still flagged when the task is opened again.
+function shopTaskFieldsHTML(bo) {
+  const shop = findExt(bo, SEND_SHOP_KIND.ext) || {};
+  const mode = shopTaskMode(shop.mode);
+  const modes = SHOP_TASK_MODES.map((m) =>
+    `<option value="${esc(m.v)}" ${m === mode ? "selected" : ""}>${esc(m.l)}</option>`).join("");
+  let fields = "";
+  for (const f of mode.fields) {
+    const value = shop[f.key] || "";
+    if (f.type === "select") {
+      const opts = f.options.map((o) => {
+        const { v, l } = selectOption(o);
+        return `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(l)}</option>`;
+      }).join("");
+      fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-shop-${f.key}">${opts}</select></label>`;
+    } else if (f.fx) {
+      // A one-row textarea, as the Worker Types' fx fields are, so the fx toggle wired
+      // after render can host the FEEL editor in place.
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <textarea id="f-shop-${f.key}" rows="1" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(value)}</textarea></label>`;
+    } else {
+      // The action and the product suggest what the catalogue declares (ADR-0429 §6); the
+      // lists are filled once the message sources arrive, and the fields stay free text.
+      const suggest = f.key === "action" || f.key === "product" ? ` list="f-shop-${f.key}-keys"` : "";
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <input type="text" id="f-shop-${f.key}" value="${esc(value)}" placeholder="${esc(f.placeholder || "")}" autocomplete="off" spellcheck="false"${suggest}/></label>`;
+      if (suggest) fields += `<datalist id="f-shop-${f.key}-keys"></datalist>`;
+    }
+    if (f.key === "action") {
+      const problem = shopActionKeyProblem(value);
+      fields += `<p class="muted" id="f-shop-action-err" style="font-size:12px;color:var(--danger)" ${problem ? "" : "hidden"}>${esc(problem)}</p>`;
+    }
+    if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(f.hint)}</p>`;
+  }
+  return `<h3>Shop</h3>
+    <label class="field"><span>Mode</span><select id="f-shop-mode">${modes}</select></label>
+    ${fields}
+    <p class="muted" style="font-size:12px">${esc(mode.hint)}</p>`;
+}
+
+// shopActionSuggestions are the action keys and products a shop task may name, from the
+// product-action rows of the message sources. A task stating an outcome answers an action
+// of the product that binds its own process, so it is offered those; a command names its
+// product, so it is offered that product's actions, or every product's while none is named.
+// The provision is left out of a command's: the order starts it and a process cannot.
+function shopActionSuggestions(sources, mode, processId, product) {
+  const all = messageSourcesOf(sources, "product-action");
+  const commandable = all.filter((r) => r.effect !== "provision");
+  const rows = mode === "command"
+    ? commandable.filter((r) => !product || r.productId === product)
+    : all.filter((r) => r.processId === processId && r.effect !== "provision" && r.effect !== "deprovision");
+  const actions = new Map();
+  for (const r of rows) {
+    if (r.action && !actions.has(r.action)) actions.set(r.action, `${r.productName || r.productId || ""} · ${r.effect || ""}`);
+  }
+  // A command picks its product from every product it could command, whichever is named.
+  const products = new Map();
+  for (const r of mode === "command" ? commandable : []) {
+    if (r.productId && !products.has(r.productId)) products.set(r.productId, r.productName || r.productId);
+  }
+  const sorted = (m) => [...m.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  return { actions: sorted(actions), products: sorted(products) };
+}
+
+// fillShopSuggestions fills the shop task's action and product datalists.
+function fillShopSuggestions(body, suggestions) {
+  const fill = (id, entries) => {
+    const dl = body.querySelector("#" + id);
+    if (dl) dl.innerHTML = entries.map(([v, l]) => `<option value="${esc(v)}" label="${esc(l)}"></option>`).join("");
+  };
+  fill("f-shop-action-keys", suggestions.actions);
+  fill("f-shop-product-keys", suggestions.products);
+}
+
 // sendTaskKind returns the kind a send task currently represents (ADR-0112). It is detected by
-// what the task carries: a messageRef → Message; a Worker Type extension → that type; a
-// taskDefinition → Job worker. With none of those, the send task is the Message kind by default —
-// so selecting Message (which clears the other kinds' extensions) keeps the message picker visible
-// until a message is chosen, and a fresh send task starts as a plain message send. Without this
-// default, the Message kind would be undetectable while messageRef is still empty.
+// what the task carries: a messageRef → Message; an <atlas:shopTask> → Shop (ADR-0429); a
+// Worker Type extension → that type; a taskDefinition → Job worker. With none of those, the send
+// task is the Message kind by default — so selecting Message (which clears the other kinds'
+// extensions) keeps the message picker visible until a message is chosen, and a fresh send task
+// starts as a plain message send. Without this default, the Message kind would be undetectable
+// while messageRef is still empty.
+//
+// The order is the compiler's: a send task carrying both a messageRef and a shop task compiles
+// as a message send, so it is shown as one. The panel never writes both — choosing Shop clears
+// the messageRef — so only a hand-edited model can carry them together.
 function sendTaskKind(bo) {
   if (bo && bo.messageRef) return SEND_MESSAGE_KIND;
+  if (findExt(bo, SEND_SHOP_KIND.ext)) return SEND_SHOP_KIND;
   for (const k of SERVICE_TASK_KINDS) {
     if (k.id !== "worker" && findExt(bo, k.ext)) return k;
   }
@@ -4246,21 +5284,24 @@ function sendTaskKind(bo) {
   return SEND_MESSAGE_KIND;
 }
 
-// sendTaskKindHTML renders the send task's kind picker: the Message kind plus the service
-// task's Worker Type / job-worker catalog, then either the shared message picker (Message
-// kind) or the chosen type's field form (ADR-0112). The picker reuses the .stkind-row markup,
-// so the existing filter/click wiring drives it.
+// sendTaskKindHTML renders the send task's kind picker: the Message and Shop kinds plus the
+// service task's Worker Type / job-worker catalog, then the shared message picker (Message
+// kind), the shop task's fields (Shop kind, ADR-0429) or the chosen type's field form
+// (ADR-0112). The picker reuses the .stkind-row markup, so the existing filter/click wiring
+// drives it.
 function sendTaskKindHTML(modeler, bo) {
   const cur = sendTaskKind(bo);
   const picker = `<h3>Type</h3>
-    <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. message, mail)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
-    <div id="f-stkind-list">${stKindRowsHTML([SEND_MESSAGE_KIND, ...SERVICE_TASK_KINDS], cur.id)}</div>`;
+    <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. message, shop, mail)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
+    <div id="f-stkind-list">${stKindRowsHTML(SEND_TASK_KINDS, cur.id)}</div>`;
   if (cur.id === "message") {
     return picker + messageFieldsHTML(modeler, bo,
       "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
   }
+  if (cur.id === SEND_SHOP_KIND.id) return picker + shopTaskFieldsHTML(bo);
   const ext = findExt(bo, cur.ext) || {};
-  return picker + stKindHeadingHTML(cur) + placementNoticeHTML(cur.id, "workerType") + stKindFieldsHTML(cur, ext);
+  return picker + stKindHeadingHTML(cur) + workerTypeInfoHTML(cur.id, kindNamesAWorker(cur)) +
+    stKindFieldsHTML(cur, ext);
 }
 
 // applyServiceTaskKind switches a service task to a catalog kind by writing that
@@ -4287,17 +5328,40 @@ function applyServiceTaskKind(modeler, element, kindId) {
   upsertExt(modeler, element, kind.ext, defaults);
 }
 
-// applySendTaskKind switches a send task between its Message kind and the Worker Type / job-worker
-// kinds (ADR-0112). The three kinds are mutually exclusive at compile time, so switching to
-// Message drops every Worker Type / taskDefinition extension (the message picker then sets
-// the messageRef), and switching to a Worker Type / worker clears any messageRef first.
+// applySendTaskKind switches a send task between its Message kind, its Shop kind (ADR-0429) and
+// the Worker Type / job-worker kinds (ADR-0112). The kinds are mutually exclusive at compile
+// time, so switching to Message drops every Worker Type / taskDefinition / shop extension (the
+// message picker then sets the messageRef), and switching to a Worker Type / worker clears any
+// messageRef and shop task first.
+//
+// Switching to Shop leaves the element carrying the shop task and nothing else that says what
+// it does: no messageRef, no operationRef — a send task with one compiles as a message send
+// (ADR-0112) — no task definition and no Worker extension. The mode and the outcome start on
+// their first choices, written rather than implied, so the model says what the panel shows.
 function applySendTaskKind(modeler, element, kindId) {
   if (kindId === "message") {
     for (const k of SERVICE_TASK_KINDS) removeExt(modeler, element, k.ext);
+    removeExt(modeler, element, SEND_SHOP_KIND.ext);
     return;
   }
   const bo = element.businessObject;
   if (bo && bo.messageRef) linkMessage(modeler, element, bo, null);
+  if (kindId === SEND_SHOP_KIND.id) {
+    if (bo && bo.operationRef) {
+      try { modeler.get("modeling").updateProperties(element, { operationRef: undefined }); } catch { /* stale */ }
+    }
+    for (const k of SERVICE_TASK_KINDS) removeExt(modeler, element, k.ext);
+    // Picking Shop again on a shop task keeps what it already states.
+    if (findExt(bo, SEND_SHOP_KIND.ext)) return;
+    const mode = SHOP_TASK_MODES[0];
+    const defaults = { mode: mode.v };
+    for (const f of mode.fields) {
+      if (f.type === "select") defaults[f.key] = selectOption(f.options[0]).v;
+    }
+    upsertExt(modeler, element, SEND_SHOP_KIND.ext, defaults);
+    return;
+  }
+  removeExt(modeler, element, SEND_SHOP_KIND.ext);
   applyServiceTaskKind(modeler, element, kindId);
 }
 
@@ -4364,6 +5428,13 @@ function ioMapDefaultName(kind) {
 function ioMapTitle(kind, target) {
   const t = (target || "").trim();
   return t || (kind === "in" ? "Input mapping" : "Output mapping");
+}
+
+// dataWriteTitle is the collapsed-card label for one write of a data output
+// association: the member it targets, or what an empty target actually means — the
+// whole object, which is a different write and not a missing one.
+function dataWriteTitle(target) {
+  return (target || "").trim() || "the whole object";
 }
 
 // ioTrashIcon is the small trash glyph used to delete a mapping card (styled red by
@@ -4843,7 +5914,8 @@ function messageFieldsHTML(modeler, med, hint) {
   ).join("");
   const fields = current ? `
     <label class="field"><span>Message name</span>
-      <input type="text" id="f-msgname" value="${esc(current.name || "")}" placeholder="payment-received"/></label>
+      <input type="text" id="f-msgname" value="${esc(current.name || "")}" placeholder="payment-received" autocomplete="off"/></label>
+    <datalist id="f-msgname-sources"></datalist>
     <p class="muted" style="font-size:12px" id="f-msgsources"></p>
     <label class="field"><span>Correlation key (FEEL)</span>
       <textarea id="f-corrkey" rows="1" placeholder="orderId">${esc(messageCorrelationKey(current))}</textarea></label>
@@ -4879,26 +5951,266 @@ function messageFieldsHTML(modeler, med, hint) {
 //
 // A failed fetch leaves the line empty, like every other server-fed hint in this panel:
 // an author who cannot reach the server is not helped by being told so twice.
-function fillMessageSources(api, el, name) {
+//
+// The listing names two more sources than watches (ADR-0429 §6), and the line names them
+// too, so the author sees every source of the name in one place: the product action that
+// owns it, and the deployed processes waiting for it. Only watches are counted as
+// publishing it, which is what the line has always meant.
+function fillMessageSources(api, el, name, sources) {
   if (!api || !el) return;
   const want = (name || "").trim();
   if (!want) return;
-  api("GET", "/api/v1/message-sources").then((list) => {
-    const mine = (list || []).filter((s) => s && s.messageName === want);
-    if (!mine.length) {
-      el.innerHTML = `<span class="muted">No inbound event watch on this server publishes <b>${esc(want)}</b>. `
-        + `That is fine when the message is thrown inside a model or posted to <code>/api/v1/messages</code> — `
-        + `for a Jira or clio event, add a watch under <b>Workers → Events</b> in the Console.</span>`;
-      return;
-    }
-    const parts = mine.map((s) => {
-      const what = s.description ? ` — ${esc(s.description)}` : "";
-      const off = s.enabled ? "" : ' <span class="pill warn">off</span>';
-      return `<li>${esc(s.kind)} <b>${esc(s.connectorName)}</b>${what}${off}</li>`;
-    }).join("");
-    el.innerHTML = `Published by ${mine.length} inbound event watch${mine.length > 1 ? "es" : ""}:`
-      + `<ul style="margin:4px 0 0 16px;padding:0">${parts}</ul>`;
+  (sources || api("GET", "/api/v1/message-sources")).then((list) => {
+    if (!Array.isArray(list)) return; // not a listing: no hint, as for a failed fetch
+    const named = (s) => (s.messageName || "").trim() === want;
+    const watches = messageSourcesOf(list, "inbound-watch").filter(named);
+    const actions = messageSourcesOf(list, "product-action").filter(named);
+    const waiting = messageSourcesOf(list, "process").filter(named);
+    el.innerHTML = watchSourcesHTML(want, watches, actions.length > 0)
+      + productOwnersHTML(actions, watches.some((s) => s.enabled))
+      + waitingProcessesHTML(waiting);
   }).catch(() => { /* no hint; the field works the same */ });
+}
+
+// watchSourcesHTML is the hint's account of the inbound watches publishing a name. With
+// none, it says where watches are configured — unless a product action owns the name: no
+// watch may publish an action's message (ADR-0429 §1), so that advice would send the author
+// to a door that refuses them.
+function watchSourcesHTML(want, watches, ownedByProduct) {
+  if (!watches.length) {
+    if (ownedByProduct) return "";
+    return `<span class="muted">No inbound event watch on this server publishes <b>${esc(want)}</b>. `
+      + `That is fine when the message is thrown inside a model or posted to <code>/api/v1/messages</code> — `
+      + `for a Jira or clio event, add a watch under <b>Workers → Events</b> in the Console.</span>`;
+  }
+  const parts = watches.map((s) => {
+    const what = s.description ? ` — ${esc(s.description)}` : "";
+    const off = s.enabled ? "" : ' <span class="pill warn">off</span>';
+    return `<li>${esc(s.kind)} <b>${esc(s.connectorName)}</b>${what}${off}</li>`;
+  }).join("");
+  return `Published by ${watches.length} inbound event watch${watches.length > 1 ? "es" : ""}:`
+    + `<ul style="margin:4px 0 0 16px;padding:0">${parts}</ul>`;
+}
+
+// productOwnersHTML names the product action that owns a message name: the order sends it
+// when somebody asks for the action (ADR-0429 §2). Products that share a lifecycle process
+// share its names, so there may be more than one. A watch that also publishes the name is
+// the trap the record's context describes, and the catalogue's publish check refuses it, so
+// the line says so where the name is set.
+function productOwnersHTML(actions, alsoWatched) {
+  if (!actions.length) return "";
+  const owners = [...new Set(actions.map((s) =>
+    `<b>${esc(s.action || "?")}</b> of <b>${esc(s.productName || s.productId || "?")}</b>`
+      + (s.effect ? ` (${esc(s.effect)})` : "")))];
+  const clash = alsoWatched
+    ? ' <span class="pill warn">watched</span> Publishing the catalogue refuses an action whose message an inbound watch publishes.'
+    : "";
+  return `<div style="margin-top:4px">Owned by product action${owners.length > 1 ? "s" : ""} ${owners.join(", ")}`
+    + ` — the order sends it.${clash}</div>`;
+}
+
+// waitingProcessesHTML names the deployed processes whose newest version waits for a
+// message name, and where: at a message start or at a catch.
+function waitingProcessesHTML(waiting) {
+  if (!waiting.length) return "";
+  const where = new Map(); // "process element" → its HTML, so a place is named once
+  for (const s of waiting) {
+    const pid = s.processId || "?";
+    const at = s.element || "";
+    where.set(`${pid} ${at}`, `<code>${esc(pid)}</code>${at ? ` (${esc(at)})` : ""}`);
+  }
+  const named = [...where.keys()].sort().map((k) => where.get(k));
+  const n = new Set(waiting.map((s) => s.processId)).size;
+  return `<div style="margin-top:4px">Waited for by deployed process${n > 1 ? "es" : ""} ${named.join(", ")}.</div>`;
+}
+
+// messageSourceKind says which kind of source a GET /api/v1/message-sources row is
+// (ADR-0429 §6): an inbound watch, a product action, or a deployed process waiting for the
+// message. A server older than the field sends inbound watches and nothing else, so a row
+// without one is a watch — which is what it meant there.
+function messageSourceKind(s) {
+  return (s && s.sourceKind) || "inbound-watch";
+}
+
+// messageSourcesOf returns the listing's rows of one kind. A row of a kind this Modeler does
+// not know belongs to none, so what a newer server adds is left out rather than read as a
+// watch; an answer that is not a list holds no rows.
+function messageSourcesOf(list, kind) {
+  if (!Array.isArray(list)) return [];
+  return list.filter((s) => s && typeof s === "object" && messageSourceKind(s) === kind);
+}
+
+// MESSAGE_SOURCE_PREFIX marks a #f-msgref option that names a message a source knows — a
+// Worker event, a product action, a waiting process — rather than a message the diagram
+// already declares. Choosing one declares it (ADR-0429 §6).
+const MESSAGE_SOURCE_PREFIX = "__source__:";
+
+// NOT_FOR_AN_ACTION marks a Worker event offered in a process a catalogue product binds.
+// The catalogue's publish check refuses an action whose message an inbound watch publishes
+// (ADR-0429 §1), so a watch's name is the wrong pick for the receive an action is waiting
+// at — the trap of the record's context, made visible where the name is set. It is a
+// warning and not a lock: such a process may wait for a watch's event for a reason of its
+// own, beside its actions.
+const NOT_FOR_AN_ACTION = {
+  text: " — not for a product action",
+  title: "A catalogue product binds this process, and publishing the catalogue refuses an action whose message an inbound watch publishes.",
+};
+
+// receivesMessages reports whether a message-bearing element waits for its message rather
+// than throwing it: a start event (process-level or event subprocess), an intermediate
+// catch, a boundary event, a receive task. Only these are offered the Worker events and
+// the product actions. A watch's name is one the engine receives; offered to a throw it
+// would make the model a second sender of a name a Worker already sends, which is rarely
+// what the author means. An action's message is the order's to send (ADR-0429 §2), so a
+// throw is never offered one either.
+function receivesMessages(bo) {
+  const t = bo && bo.$type;
+  return t === "bpmn:StartEvent" || t === "bpmn:IntermediateCatchEvent" ||
+    t === "bpmn:BoundaryEvent" || t === "bpmn:ReceiveTask";
+}
+
+// throwsMessages reports whether a message-bearing element publishes its message: an
+// intermediate throw, an end event, a send task of the Message kind (the only kind whose
+// panel holds the message picker). These are offered the deployed processes waiting for a
+// name, which is the question a sender has: who is listening.
+function throwsMessages(bo) {
+  const t = bo && bo.$type;
+  return t === "bpmn:IntermediateThrowEvent" || t === "bpmn:EndEvent" || t === "bpmn:SendTask";
+}
+
+// workerEventChoices folds the server's inbound watches into one choice per message name,
+// naming every worker that publishes it, sorted by name. Two watches on two workers may
+// publish one name, and the author picks the name, not the watch. A name the diagram
+// already declares as a message is left out (declared): it is in the list above already,
+// and offering it twice would invite a second message of the same name. A name only
+// disabled watches publish is kept and marked, because "it exists but is off" is what
+// the author needs to know, not a reason to hide it. Only the listing's inbound watches
+// are read; its product actions and processes are other sources with groups of their own.
+function workerEventChoices(sources, declared) {
+  const byName = new Map();
+  for (const s of messageSourcesOf(sources, "inbound-watch")) {
+    const name = (s.messageName || "").trim();
+    if (!name || (declared && declared.has(name))) continue;
+    const c = byName.get(name) || { name, workers: [], enabled: false };
+    const who = s.connectorName || s.connectorId || "";
+    const what = who && s.kind ? `${who} (${s.kind})` : who || s.kind || "";
+    if (what && !c.workers.includes(what)) c.workers.push(what);
+    c.enabled = c.enabled || !!s.enabled;
+    byName.set(name, c);
+  }
+  return [...byName.values()]
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    .map((c) => ({ name: c.name, workers: c.workers.join(", ") + (c.enabled ? "" : " — off") }));
+}
+
+// sourceChoices folds one kind of the listing's rows into one choice per message name,
+// sorted by name, labelled with what describe(row) says of every row naming it — products
+// that share a lifecycle process share its names, and two processes may wait for one. As
+// with the Worker events, a name the diagram declares is left out (declared), and a name
+// every row of which is off is kept and marked.
+function sourceChoices(rows, declared, describe) {
+  const byName = new Map();
+  for (const s of rows) {
+    const name = (s.messageName || "").trim();
+    if (!name || (declared && declared.has(name))) continue;
+    const c = byName.get(name) || { name, parts: [], enabled: false };
+    const what = describe(s);
+    if (what && !c.parts.includes(what)) c.parts.push(what);
+    c.enabled = c.enabled || s.enabled !== false;
+    byName.set(name, c);
+  }
+  return [...byName.values()]
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    .map((c) => ({ name: c.name, label: c.parts.sort().join(", ") + (c.enabled ? "" : " — off") }));
+}
+
+// productActionChoices offers each product action's message, labelled with the product,
+// the action's key and its effect: "Mailbox · storage-extend (change)".
+function productActionChoices(sources, declared) {
+  return sourceChoices(messageSourcesOf(sources, "product-action"), declared, (s) =>
+    `${s.productName || s.productId || "?"} · ${s.action || "?"}${s.effect ? ` (${s.effect})` : ""}`);
+}
+
+// waitingProcessChoices offers each name a deployed process waits for, labelled with the
+// process and where its newest version waits: "billing · catch".
+function waitingProcessChoices(sources, declared) {
+  return sourceChoices(messageSourcesOf(sources, "process"), declared, (s) =>
+    [s.processId, s.element].filter(Boolean).join(" · "));
+}
+
+// productBindsProcess reports whether a catalogue product binds the process with this id:
+// one of the listing's product actions names it as the process it runs in. The listing
+// holds the actions of the catalogues the caller maintains only, so a product somebody
+// else maintains is not seen; the publish check stays the last word.
+function productBindsProcess(sources, processId) {
+  return !!processId && messageSourcesOf(sources, "product-action").some((s) => s.processId === processId);
+}
+
+// addSourceGroup puts one group of a source's names into the message picker, before
+// "New message", once per render. Every option declares its name when picked
+// (MESSAGE_SOURCE_PREFIX); mark, when given, is appended to each and explains itself in
+// the option's title.
+function addSourceGroup(select, data, label, choices, mark) {
+  if (!select || !choices.length || select.querySelector(`optgroup[data-${data}]`)) return;
+  const group = document.createElement("optgroup");
+  group.label = label;
+  group.setAttribute(`data-${data}`, "");
+  for (const c of choices) {
+    const opt = document.createElement("option");
+    opt.value = MESSAGE_SOURCE_PREFIX + c.name;
+    opt.textContent = (c.label ? `${c.name} — ${c.label}` : c.name) + (mark ? mark.text : "");
+    if (mark) opt.title = mark.title;
+    group.appendChild(opt);
+  }
+  select.insertBefore(group, select.querySelector('option[value="__new__"]'));
+}
+
+// offerWorkerEvents adds the "Events from Workers" group: the names the server's inbound
+// watches publish. In a process a catalogue product binds, each is marked as not for a
+// product action (NOT_FOR_AN_ACTION).
+function offerWorkerEvents(select, sources, declared, productBound) {
+  const choices = workerEventChoices(sources, declared).map((c) => ({ name: c.name, label: c.workers }));
+  addSourceGroup(select, "worker-events", "Events from Workers", choices, productBound ? NOT_FOR_AN_ACTION : null);
+}
+
+// offerMessageSources puts the names the server knows in front of the author who would
+// otherwise have to type them, grouped by where they come from (ADR-0429 §6). An element
+// that waits for a message is offered the Worker events and the product actions; one that
+// throws is offered the deployed processes waiting for a name, and never a product action,
+// whose message is the order's to send. The name field suggests the same names, declared
+// ones included. Picking one declares a message of that name; the field stays free text,
+// because a message may be modelled before its source exists, and the publish checks
+// remain the last word. It runs once the listing arrives, so the picker is usable at once
+// and gains the groups a moment later; a failed listing leaves it as it was.
+function offerMessageSources(select, fname, datalist, sources, modeler, bo) {
+  const declared = new Set(listMessages(modeler).map((m) => (m.name || "").trim()).filter(Boolean));
+  let suggested;
+  if (receivesMessages(bo)) {
+    offerWorkerEvents(select, sources, declared, productBindsProcess(sources, owningProcessId(bo)));
+    addSourceGroup(select, "product-actions", "Product actions", productActionChoices(sources, declared));
+    suggested = [
+      ...workerEventChoices(sources, null).map((c) => ({ name: c.name, label: c.workers })),
+      ...productActionChoices(sources, null),
+    ];
+  } else if (throwsMessages(bo)) {
+    addSourceGroup(select, "waiting-processes", "Processes waiting for it", waitingProcessChoices(sources, declared));
+    suggested = waitingProcessChoices(sources, null);
+  } else {
+    return;
+  }
+  if (!datalist) return;
+  // A name two sources know is suggested once, under the first.
+  const seen = new Set();
+  const unique = suggested.filter((c) => {
+    if (seen.has(c.name)) return false;
+    seen.add(c.name);
+    return true;
+  });
+  datalist.innerHTML = unique
+    .map((c) => `<option value="${esc(c.name)}" label="${esc(c.label)}"></option>`).join("");
+  // A receiver's field points at the list from the start; a throw's only once there is
+  // something to suggest, so a server with no waiting process leaves it plain.
+  if (fname && datalist.id && unique.length) fname.setAttribute("list", datalist.id);
 }
 
 // messagesManagerHTML lists the model's messages for central management (add,
@@ -4948,10 +6260,23 @@ function timerDefOf(bo) {
 // all three; a catch or interrupting boundary fires once, so they omit the
 // recurring cycle (ADR-0051/0054). Iteration order (duration, date, cycle) is
 // the detection precedence in timerScheduleOf.
+//
+// feel says what an fx expression in that kind must yield, with an example over the
+// instance's variables — the engine accepts a first-class FEEL temporal or the text
+// the literal parser would take (ADR-0057).
 const TIMER_KINDS = {
-  duration: { prop: "timeDuration", label: "Duration", placeholder: "PT30M" },
-  date: { prop: "timeDate", label: "Date & time", placeholder: "2026-08-01T09:00:00Z" },
-  cycle: { prop: "timeCycle", label: "Cycle", placeholder: "R/PT1H  ·  0 * * * *" },
+  duration: {
+    prop: "timeDuration", label: "Duration", placeholder: "PT30M",
+    feel: `a <b>duration</b> in days and time (not months or years, whose length depends on the calendar) or its ISO-8601 text — e.g. <b>= wartezeit</b> or <b>= duration("P" + string(tage) + "D")</b>`,
+  },
+  date: {
+    prop: "timeDate", label: "Date & time", placeholder: "2026-08-01T09:00:00Z",
+    feel: `a <b>date and time</b> (or a date, read as its midnight) or its RFC 3339 text — e.g. <b>= frist</b> or <b>= date and time(termin)</b>`,
+  },
+  cycle: {
+    prop: "timeCycle", label: "Cycle", placeholder: "R/PT1H  ·  0 * * * *",
+    feel: `the text of a repeating interval or a cron expression — e.g. <b>= "R/PT" + string(stunden) + "H"</b>`,
+  },
 };
 
 // timerScheduleOf reports which kind a timer currently holds and its expression
@@ -4965,8 +6290,11 @@ function timerScheduleOf(timer) {
 }
 
 // timerFieldsHTML renders the Type picker (restricted to the kinds valid in this
-// context) and the schedule-expression input, followed by a context note.
-function timerFieldsHTML(timer, kinds, note) {
+// context) and the schedule field, followed by a context note and what an expression
+// in it must yield. The field is a value-or-expression field: the implement tab gives
+// it the fx switch, and the compiler reads an '=' body as FEEL (ADR-0055/0056).
+// constant marks a timer start, whose expression has no instance to read from.
+function timerFieldsHTML(timer, kinds, note, { constant = false } = {}) {
   const detected = timerScheduleOf(timer);
   const kind = kinds.includes(detected.kind) ? detected.kind : kinds[0];
   const meta = TIMER_KINDS[kind];
@@ -4974,12 +6302,15 @@ function timerFieldsHTML(timer, kinds, note) {
   const opts = kinds
     .map((k) => `<option value="${k}" ${k === kind ? "selected" : ""}>${TIMER_KINDS[k].label}</option>`)
     .join("");
+  const feel = constant
+    ? `Switch on <b>fx</b> for a FEEL expression. A timer start has no instance yet, so the expression may read <b>no variables</b>; the deploy evaluates it once and refuses one that does not yield a valid ${esc(meta.label.toLowerCase())}.`
+    : `Switch on <b>fx</b> for a FEEL expression, evaluated when the timer is armed against the instance's variables. It must yield ${meta.feel}. If it yields neither, no timer is set: an incident is raised on the event, and resolving it once the data is fixed arms the timer again.`;
   return `<h3>Timer</h3>
     <label class="field"><span>Type</span>
       <select id="f-timerkind">${opts}</select></label>
     <label class="field"><span>${meta.label}</span>
-      <input type="text" id="f-timerval" value="${esc(body)}" placeholder="${esc(meta.placeholder)}"/></label>
-    <p class="muted" style="font-size:12px">${note}</p>`;
+      <textarea id="f-timerval" rows="1" spellcheck="false" placeholder="${esc(meta.placeholder)}">${esc(body)}</textarea></label>
+    <p class="muted" style="font-size:12px">${note} ${feel}</p>`;
 }
 
 // messageDefOf returns an event's bpmn:MessageEventDefinition, or null.
@@ -5163,7 +6494,7 @@ function deleteSignal(modeler, sigId) {
 // name, shared so every event using the signal stays in sync. Unlike a message there is
 // no correlation key: a signal broadcasts by name alone. sed is the
 // bpmn:SignalEventDefinition.
-function signalFieldsHTML(modeler, sed, hint) {
+function signalFieldsHTML(modeler, sed, hint, listens) {
   const current = sed.signalRef;
   const options = listSignals(modeler).map((s) =>
     `<option value="${esc(s.id)}"${current && current.id === s.id ? " selected" : ""}>${esc(s.name || s.id)}</option>`
@@ -5172,15 +6503,52 @@ function signalFieldsHTML(modeler, sed, hint) {
     <label class="field"><span>Signal name</span>
       <input type="text" id="f-signame" value="${esc(current.name || "")}" placeholder="order-cancelled"/></label>
     <p class="muted" style="font-size:12px">Shared with every event that uses this signal — a broadcast reaches every catch, boundary, event subprocess, and start event of the same name.</p>` : "";
+  // A receiving element is offered the events atlas emits as signals (ADR-0435); the
+  // group is filled from the event catalogue once it answers, and #f-sigevent says
+  // what the chosen atlas.* name means and what it carries.
   return `<h3>Signal</h3>
     <label class="field"><span>Signal</span>
-      <select id="f-sigref">
+      <select id="f-sigref" data-listens="${listens ? "1" : ""}">
         <option value="">— none —</option>
         ${options}
+        ${listens ? `<optgroup label="Events atlas emits" id="f-sig-events"></optgroup>` : ""}
         <option value="__new__">＋ New signal…</option>
       </select></label>
     ${fields}
+    <div id="f-sigevent"></div>
     <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// SIGNAL_EVENT_PREFIX marks a picker option that names a catalogued event rather than
+// a signal of this model; choosing it reuses or creates the model's signal of that name.
+const SIGNAL_EVENT_PREFIX = "__event__:";
+
+// eventCatalog is the event catalogue, asked for once per page (ADR-0435). A modeler
+// may read it; a refusal or a server without it leaves the picker as it was.
+let eventCatalogReq = null;
+function eventCatalog(api) {
+  if (!eventCatalogReq) {
+    try { eventCatalogReq = Promise.resolve(api("GET", "/api/v1/event-catalog")).then((c) => (c && c.entries) || [], () => []); }
+    catch { eventCatalogReq = Promise.resolve([]); }
+  }
+  return eventCatalogReq;
+}
+
+// signalEventNote says what a catalogued atlas.* signal means and what a listener
+// receives, personal data named; and on a throw, that the name is atlas's own.
+function signalEventNote(entries, name, listens) {
+  const n = String(name || "").trim();
+  if (!n.startsWith("atlas.")) return "";
+  const e = entries.find((x) => !x.shaped && x.type === n);
+  if (!listens) {
+    return `<p class="hint warn">${esc(n)} is a name atlas emits${e ? "" : " (or reserves)"}: a model that throws it speaks for atlas. Use a name of your own.</p>`;
+  }
+  if (!e) return `<p class="hint warn">atlas emits no event named ${esc(n)}; this element would wait for something that never comes.</p>`;
+  const personal = (e.payload || []).filter((f) => f.data === "personal").map((f) => f.name);
+  return `<p class="hint" data-event="${esc(e.type)}">${esc((e.meaning || {}).en || "")}${
+    personal.length ? ` The listener receives personal data: ${personal.map(esc).join(", ")}. ` +
+      "Only an administrator may deploy a model that listens to it." : ""
+  } <a href="/#/console/events" target="_blank" rel="noopener">Events ↗</a></p>`;
 }
 
 // signalsManagerHTML lists the model's signals for central management (add, rename,
@@ -5543,10 +6911,6 @@ function tokenBearing(el) {
   return !NOT_A_TOKEN_HOLDER.test(bo.$type || "");
 }
 
-// The scalar types a declared start variable can take, matching what the server
-// accepts (parseStartVariables) and what the typed Deploy form coerces to.
-const START_VAR_TYPES = ["string", "number", "boolean", "json"];
-
 // readStartVariables returns the start variables a process declares via its
 // atlas:StartForm extension element: [{name, type, default, required}]. Empty
 // when none are declared.
@@ -5558,6 +6922,82 @@ function readStartVariables(bo) {
     default: v.default || "",
     required: !!v.required,
   }));
+}
+
+// readConstants returns the constants a process declares via its atlas:Constants
+// extension element: [{name, type, value, source, info}] (ADR-0454). Empty when
+// none are declared.
+//
+// source is "application" or "server" for a constant whose value the installation holds —
+// read as application.NAME or server.NAME, its value then only a fallback (ADR-0453,
+// ADR-0456) — and "" for a process constant. info marks a fact the
+// namespace carries (server.environment), which Atlas fills rather than an operator.
+function readConstants(bo) {
+  const cs = findExt(bo, "atlas:Constants");
+  return ((cs && cs.constants) || []).map((c) => {
+    const source = c.source === "application" || c.source === "server" ? c.source : "";
+    return {
+      name: c.name || "",
+      type: START_VAR_TYPES.includes(c.type) ? c.type : "string",
+      value: c.value || "",
+      source,
+      info: !!source && isNamespaceInfo(source, c.name || ""),
+    };
+  });
+}
+
+// HELD is what this installation holds for the namespaces a model reads from — the
+// constants of the diagram's application and the installation's own, with the names
+// deployed processes already read — so the Variables panel and completion can offer what
+// a model has not declared yet, and declare it when picked (ADR-0456).
+// Loaded once per editor; best-effort, because a Modeler without it still edits.
+const HELD = { application: [], server: [] };
+
+async function loadHeldConstants(api, projectId) {
+  HELD.application = [];
+  HELD.server = [];
+  const names = (view) => {
+    const out = new Map();
+    for (const c of (view && view.constants) || []) out.set(c.name, c.type || "string");
+    for (const r of (view && view.required) || []) if (!out.has(r.name)) out.set(r.name, r.type || "string");
+    return [...out].map(([name, type]) => ({ name, type }));
+  };
+  try { HELD.server = names(await api("GET", "/api/v1/server/constants")); } catch { /* offline: offer none */ }
+  if (projectId && projectId !== "ungrouped") {
+    try {
+      HELD.application = names(await api("GET", `/api/v1/applications/${encodeURIComponent(projectId)}/constants`));
+    } catch { /* not readable here: offer none */ }
+  }
+}
+
+// undeclaredMembers lists what a process could read from its namespaces but does not
+// declare yet: the constants this installation holds, and the facts each namespace carries.
+function undeclaredMembers(bo) {
+  const declared = new Set(readConstants(bo).filter((c) => c.source).map((c) => `${c.source}.${c.name}`));
+  const out = [];
+  const add = (ns, name, type, info) => {
+    const path = `${ns}.${name}`;
+    if (!declared.has(path) && !out.some((m) => m.path === path)) out.push({ ns, name, type: type || "string", info, path });
+  };
+  for (const ns of ["application", "server"]) {
+    for (const c of HELD[ns]) add(ns, c.name, c.type, false);
+    for (const f of NAMESPACE_INFO[ns]) add(ns, f, "string", true);
+  }
+  return out;
+}
+
+// declareMember adds the declaration a picked namespace member needs — <atlas:constant
+// name source/> — to the process that reads it, so what the model reads is what it says it
+// reads. For a pool's process the participant shape carries the change.
+function declareMember(modeler, bo, m) {
+  const list = readConstants(bo).map((c) => ({ name: c.name, type: c.type, default: c.value, source: c.source }));
+  if (list.some((c) => c.source === m.ns && c.name === m.name)) return;
+  list.push({ name: m.name, type: m.type || "string", default: "", source: m.ns });
+  const rootEl = modeler.get("canvas").getRootElement();
+  if (!bo || rootEl.businessObject === bo) { writeConstants(modeler, list); return; }
+  const pool = modeler.get("elementRegistry").find((el) => el.businessObject && el.businessObject.processRef === bo);
+  if (pool) writeConstants(modeler, list, pool, bo);
+  else writeConstants(modeler, list);
 }
 
 // writeStartVariables persists the declared start variables onto the process
@@ -5610,26 +7050,38 @@ function dataObjectNames(procBo) {
 // target variable). Empty bodies clear the assignment, so a stateless association
 // carries no dangling element (ADR-0058/0059/0060).
 function setAssignment(modeler, element, bo, fromBody, toBody) {
+  setAssignments(modeler, element, bo, [{ from: fromBody, to: toBody }]);
+}
+
+// setAssignments rebuilds a data association's <assignment> list from panel rows.
+// BPMN declares `assignment [0..*]` on a data association, and a write arrow uses all
+// of it: one arrow may set several members of one object
+// (ADR-0350). A read uses one, and reaches here
+// through setAssignment with a single row.
+//
+// A row with neither a value nor a target is dropped rather than written as an empty
+// assignment — an association with no assignments at all is ADR-0058's state-only
+// transition, and an empty one would say the same thing less clearly.
+function setAssignments(modeler, element, bo, rows) {
   const modeling = modeler.get("modeling");
   const moddle = modeler.get("moddle");
   try {
-    if (!fromBody && !toBody) {
-      modeling.updateModdleProperties(element, bo, { assignment: [] });
-      return;
-    }
-    const asg = moddle.create("bpmn:Assignment", {});
-    asg.$parent = bo;
-    if (fromBody) {
-      const f = moddle.create("bpmn:FormalExpression", { body: fromBody });
-      f.$parent = asg;
-      asg.from = f;
-    }
-    if (toBody) {
-      const t = moddle.create("bpmn:FormalExpression", { body: toBody });
-      t.$parent = asg;
-      asg.to = t;
-    }
-    modeling.updateModdleProperties(element, bo, { assignment: [asg] });
+    const asgs = rows.filter((r) => r.from || r.to).map((r) => {
+      const asg = moddle.create("bpmn:Assignment", {});
+      asg.$parent = bo;
+      if (r.from) {
+        const f = moddle.create("bpmn:FormalExpression", { body: r.from });
+        f.$parent = asg;
+        asg.from = f;
+      }
+      if (r.to) {
+        const t = moddle.create("bpmn:FormalExpression", { body: r.to });
+        t.$parent = asg;
+        asg.to = t;
+      }
+      return asg;
+    });
+    modeling.updateModdleProperties(element, bo, { assignment: asgs });
   } catch { /* stale */ }
 }
 
@@ -5663,22 +7115,94 @@ function writeStartVariables(modeler, list, targetEl, targetBo) {
   else modeling.updateModdleProperties(targetEl, bo, { extensionElements: ext });
 }
 
+// writeConstants persists the process's constants the way writeStartVariables persists
+// its start variables, into atlas:Constants (ADR-0454). The row
+// editor holds a constant's value where it holds a start variable's default; the value is
+// written even when empty, because an empty string is a value a string constant may have.
+function writeConstants(modeler, list, targetEl, targetBo) {
+  const moddle = modeler.get("moddle");
+  const modeling = modeler.get("modeling");
+  const onRoot = !targetEl;
+  const rootEl = modeler.get("canvas").getRootElement();
+  if (onRoot) { targetEl = rootEl; targetBo = rootEl.businessObject; }
+  const bo = targetBo;
+  let ext = bo.extensionElements;
+  if (!ext) { ext = moddle.create("bpmn:ExtensionElements", { values: [] }); ext.$parent = bo; }
+  let cs = (ext.values || []).find((v) => v.$type === "atlas:Constants");
+  const clean = list.filter((v) => (v.name || "").trim() !== "");
+  if (clean.length === 0) {
+    if (cs) ext.values = (ext.values || []).filter((v) => v !== cs);
+  } else {
+    if (!cs) { cs = moddle.create("atlas:Constants"); cs.$parent = ext; ext.values = [...(ext.values || []), cs]; }
+    cs.constants = clean.map((v) => {
+      const props = {
+        name: v.name.trim(),
+        type: START_VAR_TYPES.includes(v.type) ? v.type : "string",
+        value: v.default || "",
+      };
+      // Held by the installation — the application's or its own: the value is only its
+      // fallback, and an empty one is no fallback at all, so it is not written.
+      if (v.source === "application" || v.source === "server") {
+        props.source = v.source;
+        if (!v.default) delete props.value;
+      }
+      const c = moddle.create("atlas:Constant", props);
+      c.$parent = cs;
+      return c;
+    });
+  }
+  if (onRoot) modeling.updateProperties(targetEl, { extensionElements: ext });
+  else modeling.updateModdleProperties(targetEl, bo, { extensionElements: ext });
+}
+
+// The two declarations the process panel edits as rows: the start variables a start
+// asks for, and the constants every instance starts with and nobody is asked for
+// (ADR-0454). One row editor serves both: a constant has a value
+// where a start variable has a default, and no "required", because nobody supplies it.
+const START_VAR_DECL = { list: "#sv-list", add: "#sv-add", constant: false };
+const CONSTANT_DECL = { list: "#cv-list", add: "#cv-add", constant: true };
+
 // startVarRowHTML renders one editable declaration row. Values are escaped for
 // the attributes; the type <select> marks the current option. For json-typed
 // variables, the default field is a textarea (upgraded to a JSON editor after
 // the row is inserted into the DOM by wireStartVars).
-function startVarRowHTML(v) {
+function startVarRowHTML(v, constant = false) {
   const opts = START_VAR_TYPES
     .map((t) => `<option value="${t}"${t === v.type ? " selected" : ""}>${t}</option>`).join("");
+  const bound = constant && (v.source === "application" || v.source === "server");
+  // A fact a namespace carries (server.environment) is named by Atlas, not the author: its
+  // name, type and source are fixed, and only a fallback can be given.
+  const info = bound && isNamespaceInfo(v.source, v.name);
+  const what = bound ? "Fallback value" : constant ? "Value" : "Default value";
+  // A start variable's default is what an instance starts with when its start does not
+  // supply the variable, on every start path (ADR-0455) — not
+  // only what the start forms prefill. Said where it is typed.
+  const tip = constant ? ""
+    : ' title="What an instance starts with when its start does not supply this variable (API, timer, message, signal, call activity); the start forms prefill it"';
   const defaultField = v.type === "json"
-    ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='{"key": "value"}' aria-label="Default value (JSON)">${esc(v.default)}</textarea>`
-    : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="default" aria-label="Default value"/>`;
+    ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='${bound ? "fallback (optional)" : '{"key": "value"}'}' aria-label="${what} (JSON)"${tip}>${esc(v.default)}</textarea>`
+    : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="${bound ? "fallback (optional)" : constant ? "value" : "default"}" aria-label="${what}"${tip}/>`;
+  // A constant takes its value from the process model, or from what the installation
+  // holds — for the application, or for every application — read as application.NAME or
+  // server.NAME (ADR-0456).
+  const src = constant ? (v.source || "") : "";
+  const source = constant
+    ? `<select class="sv-source" aria-label="Source"${info ? " disabled" : ""} title="Where the value comes from: the process model, the application's constant on each installation (application.NAME), or the installation's own (server.NAME)">
+        <option value=""${src === "" ? " selected" : ""}>process</option>
+        <option value="application"${src === "application" ? " selected" : ""}>application</option>
+        <option value="server"${src === "server" ? " selected" : ""}>server</option>
+      </select>`
+    : "";
+  // A constant is never asked for, so "required" has nothing to mean on it.
+  const required = constant ? ""
+    : `<label class="sv-req" title="Required"><input type="checkbox" class="sv-required"${v.required ? " checked" : ""}/> req</label>`;
   return `<div class="sv-row${v.type === "json" ? " sv-row-json" : ""}">
-    <input type="text" class="sv-name" value="${esc(v.name)}" placeholder="customer" aria-label="Variable name"/>
-    <select class="sv-type" aria-label="Type">${opts}</select>
+    <input type="text" class="sv-name${constant && !info ? " sv-const-name" : ""}" value="${esc(v.name)}" placeholder="${constant ? "TENANT_ID" : "customer"}" aria-label="${constant ? "Constant name" : "Variable name"}"${info ? ` readonly title="${esc(v.source)}.${esc(v.name)} is filled by Atlas"` : ""}/>
+    <select class="sv-type" aria-label="Type"${info ? " disabled" : ""}>${opts}</select>
+    ${source}
     ${defaultField}
-    <label class="sv-req" title="Required"><input type="checkbox" class="sv-required"${v.required ? " checked" : ""}/> req</label>
-    <button type="button" class="sv-del icon-btn" title="Remove" aria-label="Remove variable">✕</button>
+    ${required}
+    <button type="button" class="sv-del icon-btn" title="Remove" aria-label="${constant ? "Remove constant" : "Remove variable"}">✕</button>
   </div>`;
 }
 
@@ -5697,10 +7221,16 @@ function startVarRowHTML(v) {
 // shown for the *selected* participant, so its save would rebuild the panel and
 // tear down an in-progress JSON editor — the pool passes savePreservingPanel to
 // keep the panel intact, mirroring how FEEL fields self-save.
-function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
-  const listEl = body.querySelector("#sv-list");
-  const addBtn = body.querySelector("#sv-add");
+//
+// decl says which declaration the rows edit: START_VAR_DECL (the default) or
+// CONSTANT_DECL, which reads and writes the process's constants instead.
+function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn(), decl = START_VAR_DECL) {
+  const listEl = body.querySelector(decl.list);
+  const addBtn = body.querySelector(decl.add);
   if (!listEl || !addBtn) return;
+  const required = (row) => !decl.constant && row.querySelector(".sv-required").checked;
+  const source = (row) => (decl.constant && row.querySelector(".sv-source").value) || "";
+  const write = decl.constant ? writeConstants : writeStartVariables;
 
   const editors = new Map(); // row DOM node → attachJSONEditor handle
 
@@ -5719,29 +7249,36 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
     name: row.querySelector(".sv-name").value,
     type: row.querySelector(".sv-type").value,
     default: row.querySelector(".sv-default").value,
-    required: row.querySelector(".sv-required").checked,
+    required: required(row),
+    source: source(row),
   }));
-  const persist = () => wrap(() => { try { writeStartVariables(modeler, collect(), targetEl, targetBo); } catch { /* stale */ } });
+  const persist = () => wrap(() => { try { write(modeler, collect(), targetEl, targetBo); } catch { /* stale */ } });
 
   listEl.addEventListener("change", (e) => {
-    // When the type dropdown changes to or from "json", rebuild the row so the
-    // default field switches between <input> and the JSON editor.
-    const sel = e.target.closest(".sv-type");
+    // When the type dropdown changes to or from "json", or a constant's source
+    // changes, rebuild the row so the value field switches between <input> and the
+    // JSON editor, and says whether it is a value or a fallback.
+    const sel = e.target.closest(".sv-type, .sv-source");
     if (sel) {
       const row = sel.closest(".sv-row");
+      const type = row.querySelector(".sv-type").value;
       const data = {
         name: row.querySelector(".sv-name").value,
-        type: sel.value,
-        default: sel.value === "json" ? "" : row.querySelector(".sv-default").value,
-        required: row.querySelector(".sv-required").checked,
+        type,
+        default: sel.classList.contains("sv-type") && type === "json" ? "" : row.querySelector(".sv-default").value,
+        required: required(row),
+        source: source(row),
       };
       // Destroy any existing JSON editor for this row.
       if (editors.has(row)) { editors.get(row).destroy(); editors.delete(row); }
-      row.outerHTML = startVarRowHTML(data);
+      row.outerHTML = startVarRowHTML(data, decl.constant);
       attachEditors();
     }
     persist();
   });
+  // A constant's name is written in capitals (ADR-0454, amended): applied while it is
+  // typed, so what is saved is what the server accepts.
+  if (decl.constant) keepConstantNameInCapitals(listEl, ".sv-const-name");
   listEl.addEventListener("click", (e) => {
     const del = e.target.closest(".sv-del");
     if (del) {
@@ -5752,7 +7289,7 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
     }
   });
   addBtn.addEventListener("click", () => {
-    listEl.insertAdjacentHTML("beforeend", startVarRowHTML({ name: "", type: "string", default: "", required: false }));
+    listEl.insertAdjacentHTML("beforeend", startVarRowHTML({ name: "", type: "string", default: "", required: false }, decl.constant));
     listEl.querySelector(".sv-row:last-child .sv-name").focus();
   });
 
@@ -5774,18 +7311,225 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   let vocab = { classes: [], models: [], loaded: false };
   const classNamed = (name) => vocab.classes.find((c) => c.name === name) || null;
 
-  // A <datalist> is invisible: nothing on the field says a vocabulary exists at all,
-  // so the one link this whole feature turns on was made by remembering a class name
-  // and typing it correctly. The picker says what has been modelled, and each option
-  // carries the business key — the fact that tells two similarly named classes apart,
-  // and the thing somebody is actually trying to recall.
+  // The value the last entry of a picker carries. It is never written to the model:
+  // choosing it opens a text field and waits for a name, which is what keeps ADR-0230's
+  // rule alive — a diagram is routinely drawn before the vocabulary it names exists, so
+  // naming a class, or a state, that nothing declares yet has to stay possible.
+  // It is told apart by a marker on the option and not by its value, because every
+  // value a class or a state could plausibly be named is a value somebody will one day
+  // name one.
+  const OTHER = `value="" data-other="1"`;
+  const choseOther = (sel) => !!(sel.selectedOptions[0] && sel.selectedOptions[0].dataset.other);
+  // A value the list does not contain keeps an option of its own rather than being
+  // dropped on sight: reading a document must never quietly rewrite it. The reason it
+  // is off the list rides along, because that is the whole point of showing it.
+  const strayOptionHTML = (current, listed, why) => (current && !listed
+    ? `<option value="${esc(current)}" selected>${esc(current)} — ${esc(why)}</option>` : "");
+  // A text field revealed by choosing "another…", so the escape is a field and not the
+  // whole control.
+  const otherFieldHTML = (id, label, placeholder) =>
+    `<label class="field" id="${id}-field" hidden><span>${esc(label)}</span>
+      <input type="text" id="${id}" value="" placeholder="${esc(placeholder)}" spellcheck="false"/></label>`;
+
+  // The one link this whole feature turns on was made by remembering a class name and
+  // typing it correctly: the vocabulary sat in an invisible <datalist>, and nothing on
+  // the field said one existed. It is a list now — the same question the information
+  // model's own editor asks with a <select> (an attribute's type, a data store's class),
+  // asked the same way here.
   //
-  // It fills the field rather than being the field. The value stays free text because
-  // it has to (ADR-0230): a diagram is routinely drawn before its vocabulary exists.
-  function classPickerHTML(current) {
-    if (!vocab.classes.length) return "";
+  // Each option carries the business key, because that is the fact that tells two
+  // similarly named classes apart, and the thing somebody is actually trying to recall.
+  // The members a write may target, offered rather than remembered
+  // (ADR-0060, and the second half of the question ADR-0230 exists for).
+  //
+  // A data output association writes into one member of a structured object, and the
+  // path was free text: `customer.nmae` deploys, runs, and writes a member nobody will
+  // ever read. The class already declares what the members *are*, so the field asks
+  // the same question the class picker and the state picker ask, the same way.
+  //
+  // This is a claim about the *shape of the target*, not about what a FEEL expression
+  // can see. A data object is not a process variable — nothing binds one into the
+  // expression scope — so the members belong here, on the path being written, and
+  // nowhere that would suggest they can be read (see the note on the field itself).
+  //
+  // One level of nesting, and the depth is the point rather than a shortcut: a dotted
+  // path proves the member is structured, and where its declared type is another class
+  // in the model, that class says what is inside it. Below that the model is saying the
+  // same thing again, and a picker that walks it forever is a picker nobody can read.
+  function memberOptionsHTML(cls, current) {
+    const seen = [];
+    const option = (path, label) => {
+      seen.push(path);
+      return `<option value="${esc(path)}"${path === current ? " selected" : ""}>${esc(label)}</option>`;
+    };
+    const shape = (a) => {
+      const mult = a.multiplicity && a.multiplicity !== "1" ? `[${a.multiplicity}]` : "";
+      // Joined rather than concatenated: an untyped member has a multiplicity and no
+      // type, and the two glued together read as a gap where a word should be.
+      const said = [a.type, mult].filter(Boolean).join(" ");
+      return said ? ` · ${esc(said)}` : "";
+    };
+    let out = "";
+    for (const a of cls.attributes || []) {
+      if (!a.name) continue;
+      const key = (cls.identity || []).includes(a.name) ? "⚿ " : "";
+      out += option(a.name, `${key}${a.name}${shape(a)}`);
+      // Only where the model says what is inside: an attribute typed as another class
+      // it knows. An untyped member is exactly the case the derived model reports as a
+      // gap, and guessing its members here would be the same false knowledge.
+      const inner = a.type && classNamed(a.type);
+      if (!inner || inner.stereotype === "enumeration") continue;
+      const nested = (inner.attributes || []).filter((x) => x.name)
+        .map((x) => option(`${a.name}.${x.name}`, `${a.name}.${x.name}${shape(x)}`)).join("");
+      if (nested) out += `<optgroup label="inside ${esc(a.name)} · ${esc(a.type)}">${nested}</optgroup>`;
+    }
+    return { html: out, lists: (path) => seen.includes(path) };
+  }
+
+  // attrs is what identifies the control to its handlers. A write arrow carries a row
+  // per member now, so the id that was enough for one field is not enough for a list.
+  function memberSelectHTML(cls, current, attrs = `id="f-assoc-to"`) {
+    const { html, lists } = memberOptionsHTML(cls, current);
+    if (!html) return "";
+    return `<select ${attrs} title="The members ${esc(cls.name)} declares">
+      <option value=""${current ? "" : " selected"}>— the whole object —</option>
+      ${html}${strayOptionHTML(current, lists(current), `not a member of ${cls.name}`)}
+      <option ${OTHER}>Another member, not modelled yet…</option>
+    </select>`;
+  }
+
+  // enumTypingMember resolves the member a write path targets and answers with the
+  // «enumeration» that types it, or null. One level of nesting, exactly as the member
+  // picker walks it and for the same reason.
+  function enumTypingMember(cls, path) {
+    if (!cls || !path) return null;
+    let current = cls;
+    const segments = path.split(".");
+    for (let i = 0; i < segments.length; i++) {
+      const attr = (current.attributes || []).find((a) => a.name === segments[i]);
+      if (!attr) return null;
+      const next = attr.type && classNamed(attr.type);
+      if (i < segments.length - 1) {
+        if (!next) return null;
+        current = next;
+        continue;
+      }
+      return next && next.stereotype === "enumeration" && (next.literals || []).length ? next : null;
+    }
+    return null;
+  }
+
+  // literalOf reads a stored FEEL value back as the literal it names, or "" when it
+  // names none. A picker that could not recognise its own output would reset to the
+  // first option every time the panel re-rendered, quietly rewriting the model.
+  function literalOf(fromBody, enumeration) {
+    const raw = String(fromBody || "").trim().replace(/^=\s*/, "").trim();
+    const m = /^"([^"\\]*)"$/.exec(raw) || /^'([^'\\]*)'$/.exec(raw);
+    if (!m) return "";
+    return (enumeration.literals || []).includes(m[1]) ? m[1] : "";
+  }
+
+  // The values a member typed by an «enumeration» may take, offered rather than
+  // remembered (ADR-0351). It is the
+  // fourth of the four questions the model can answer — after which class, which state
+  // and which member — and the only one that was still free text, so `= "aktive"`
+  // deployed, ran, and wrote a string nothing would ever match.
+  //
+  // The escape is not optional here the way it is on the other pickers. A value is a
+  // FEEL expression and a computed one is a real thing to want, so the list always ends
+  // in a way out; a picker that cannot be left would be lying about what this field is.
+  // `stored` is what the model holds, so a value that is not one of the literals — an
+  // expression, or a literal the enumeration has not caught up with — opens on the
+  // escape rather than on "not set". A picker that showed "not set" over a value the
+  // model *does* hold would erase it on the next save.
+  function literalSelectHTML(enumeration, current, stored, attrs) {
+    const lit = (enumeration.literals || []).map((l) =>
+      `<option value="${esc(l)}"${l === current ? " selected" : ""}>${esc(l)}</option>`).join("");
+    const other = !current && String(stored || "").trim() !== "";
+    return `<select ${attrs} title="The values ${esc(enumeration.name)} declares">
+      <option value=""${current || other ? "" : " selected"}>— not set —</option>
+      ${lit}
+      <option ${OTHER}${other ? " selected" : ""}>A FEEL expression instead…</option>
+    </select>`;
+  }
+
+  // One write of a data output association: what goes in, and which member it lands in.
+  // BPMN gives a data association `assignment [0..*]`, so a step that captures a form's
+  // worth of fields is one arrow with a row per field rather than one arrow per field
+  // (ADR-0350). Before that the only one-arrow
+  // option was a FEEL context literal, which draws well and tells the model nothing —
+  // the members inside it cannot be read at deploy time, so the write is unchecked and
+  // the class derives as memberless.
+  //
+  // The card is the I/O mapping editor's, reused rather than restyled: the same
+  // question deserves the same control, and an author who has met one knows this one.
+  function dataWriteCardHTML(i, cls, fromBody, toBody) {
+    const picker = cls ? memberSelectHTML(cls, toBody, `class="dw-to"`) : "";
+    // Where the member is typed by an «enumeration», the value is a closed set and is
+    // offered as one. A value the list does not contain — a FEEL expression, or a
+    // literal the model has not caught up with — keeps the free field, revealed.
+    const enumeration = enumTypingMember(cls, toBody);
+    const chosen = enumeration ? literalOf(fromBody, enumeration) : "";
+    const freeValue = `<label class="field"${enumeration && chosen ? " hidden" : ""} id="f-dw-expr-${i}-field">
+        <span>${enumeration ? "FEEL expression" : "FEEL value"} <i class="io-fx" title="This value is a FEEL expression">fx</i></span>
+        <input type="text" class="dw-from" id="f-dw-expr-${i}" value="${esc(fromBody || "")}" placeholder="=amount * 1.19" spellcheck="false"/></label>`;
+    const valueField = enumeration
+      ? `<label class="field"><span>Value <span class="muted">(${esc(enumeration.name)})</span></span>
+          ${literalSelectHTML(enumeration, chosen, fromBody, `class="dw-lit"`)}</label>
+         ${freeValue}`
+      : freeValue;
+    return `<div class="io-map" data-write="1" data-i="${i}">
+      <div class="io-map-head">
+        <span class="io-map-chevron" aria-hidden="true">▾</span>
+        <span class="io-map-title">${esc(dataWriteTitle(toBody))}</span>
+        <button type="button" class="io-map-del" title="Delete write" aria-label="Delete write">${ioTrashIcon}</button>
+      </div>
+      <div class="io-map-body">
+        <label class="field"><span>Target member <span class="muted">(optional)</span></span>
+          ${picker || `<input type="text" class="dw-to" value="${esc(toBody || "")}" placeholder="name"/>`}</label>
+        ${picker ? otherFieldHTML(`f-dw-other-${i}`, "Member path", "customer.name") : ""}
+        ${valueField}
+      </div>
+    </div>`;
+  }
+
+  // dataWritesGroupHTML renders an arrow's writes as one collapsible group, the shape
+  // the I/O mapping and agent-parameter groups already use — so the add button, the
+  // count badge and the collapse memory behave the way an author knows.
+  //
+  // The badge earns its place here more than it does there. Five writes on one arrow
+  // are five rows behind a panel where five arrows were five things on the canvas, and
+  // the count is what the arrow can still say about itself without being opened.
+  // It is the whole panel, not a section of one: the group carries the heading the
+  // write arrow used to have, so there is no <h3> above it left holding nothing. A
+  // heading whose section is empty renders as a chevron that toggles nothing, which
+  // reads as broken — the same trap stKindHeadingHTML names.
+  function dataWritesGroupHTML(cls, assignments, objectName, hints) {
+    const cards = assignments.map((a, i) => dataWriteCardHTML(i, cls,
+      (a.from && a.from.body) || "", (a.to && a.to.body) || "")).join("");
+    return `<div class="io-group" data-write-group="1" data-group="Writes" data-standalone-group="1">
+      <div class="io-group-head">
+        <span class="io-group-title">Writes ${esc(objectName)}</span>
+        <button type="button" class="io-group-add" title="Add a write" aria-label="Add a write">＋</button>
+        <span class="io-group-count" title="Writes">${assignments.length}</span>
+        <span class="io-group-chevron" aria-hidden="true">▾</span>
+      </div>
+      <div class="io-group-body">
+        <div class="io-map-list" id="data-writes">${cards}</div>
+        ${hints}
+      </div>
+    </div>`;
+  }
+
+  function classSelectHTML(current) {
     const byModel = new Map();
     for (const c of vocab.classes) {
+      // An «enumeration» is machinery of the model — an attribute's type, or the states
+      // a lifecycle takes (ADR-0306) — and no process carries one as a data object. The
+      // difference reading already says so where it excludes them from the backlog for
+      // exactly that reason; offering one here contradicted it, and a data object typed
+      // as a closed set of strings is not a thing the engine can carry.
+      if (c.stereotype === "enumeration") continue;
       if (!byModel.has(c.modelId)) byModel.set(c.modelId, { name: c.modelName, classes: [] });
       byModel.get(c.modelId).classes.push(c);
     }
@@ -5795,9 +7539,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         return `<option value="${esc(c.name)}"${c.name === current ? " selected" : ""}>${esc(c.name)}${
           key ? ` · key ${esc(key)}` : ""}</option>`;
       }).join("")}</optgroup>`).join("");
-    return `<div class="field-actions">
-      <select id="f-itemtype-pick" title="The classes this application models">
-        <option value="">Pick from the information model…</option>${groups}</select></div>`;
+    return `<select id="f-itemtype" title="The classes this application models">
+      <option value=""${current ? "" : " selected"}>— none —</option>
+      ${groups}${strayOptionHTML(current, vocab.classes.some((c) => c.name === current), "not modelled yet")}
+      <option ${OTHER}>Another class, not modelled yet…</option>
+    </select>`;
   }
 
   // What the type points at, drawn rather than named. A class name read back as text
@@ -5876,7 +7622,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   const panelObserver = new MutationObserver(() => {
     if (groupifying) return;
     groupifying = true;
-    try { groupifyPanel(body, groupCtl); } finally { groupifying = false; }
+    try {
+      groupifyPanel(body, groupCtl);
+      wireWorkerTypeInfo(body, groupCtl);
+    } finally { groupifying = false; }
   });
   panelObserver.observe(body, { childList: true });
 
@@ -5944,7 +7693,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         <h3>Start variables</h3>
         <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
         <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
-        <p class="muted" style="font-size:12px">Declared on this pool's process, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks. The engine ignores the declaration; it's authoring metadata.</p>`;
+        <p class="muted" style="font-size:12px">Declared on this pool's process, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks. With a start form, the ones the form does not ask for are asked beneath it. The engine ignores the declaration; it's authoring metadata, so an instance started through the API gets no default. A value nobody enters is a constant, below.</p>
+        <h3>Constants</h3>
+        <div id="cv-list">${readConstants(proc).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value, source: c.source }, true)).join("")}</div>
+        <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
+        <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Its name is written in capitals (TENANT_ID). Set its source to <b>application</b> or <b>server</b> and it is read as <code>application.NAME</code> or <code>server.NAME</code>, taking what the application — or the installation, for every application — holds on each installation (the application's Constants tab, Admin → Engine → Server constants), with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
     }
     body.innerHTML = `${poolFields}
       <p class="muted" style="font-size:12px">The pool is a <b>participant</b> that executes the process below. The elements live in that process — the pool only labels who runs it.</p>
@@ -5975,7 +7728,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     wireDocumentation(body, modeler, element, bo);
     wireDocumentation(body, modeler, element, proc, "f-procdoc");
-    if (activeTab(root) === "implement") wireStartVars(body, modeler, element, proc, savePreservingPanel);
+    if (activeTab(root) === "implement") {
+      wireStartVars(body, modeler, element, proc, savePreservingPanel);
+      wireStartVars(body, modeler, element, proc, savePreservingPanel, CONSTANT_DECL);
+    }
   }
 
   // wirePoolId makes a pool's ID editable, the same way the element ID and Process ID
@@ -6010,7 +7766,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             <h3>Start variables</h3>
             <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
             <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
-            <p class="muted" style="font-size:12px">Declared here, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks — instead of raw JSON. The engine ignores the declaration; it's authoring metadata.</p>`;
+            <p class="muted" style="font-size:12px">Declared here, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks — instead of raw JSON. With a start form on the start event, the ones the form does not ask for are asked beneath it, on Deploy &amp; run, Start instance and the Tasks app's Start. The engine ignores the declaration; it's authoring metadata, so an instance started through the API or a public link gets no default. A value nobody enters is a constant, below.</p>
+            <h3>Constants</h3>
+            <div id="cv-list">${readConstants(rootBo).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value, source: c.source }, true)).join("")}</div>
+            <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
+            <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Its name is written in capitals (TENANT_ID). Set its source to <b>application</b> or <b>server</b> and it is read as <code>application.NAME</code> or <code>server.NAME</code>, taking what the application — or the installation, for every application — holds on each installation (the application's Constants tab, Admin → Engine → Server constants), with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
         }
         body.innerHTML = `
           <h3>Process</h3>
@@ -6026,6 +7786,12 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           <p class="muted" style="font-size:12px">A self-cleaning <b>time-to-live</b> for instances of this process, as an ISO-8601 duration (e.g. <code>P7D</code> = 7 days, <code>PT12H</code> = 12 hours, <code>PT30M</code> = 30 minutes). An instance that outlives its TTL is automatically terminated and moved to history — where it stays queryable and can still be exported. It bounds how long an instance may <i>run</i>, not how long its record is kept; <b>History TTL</b> below decides that. Leave empty for no TTL (instances live until they complete or are cancelled). Set it above the longest run you legitimately expect.</p>
           <label class="field"><span>History TTL</span><input type="text" id="f-phttl" value="${esc(rootBo.historyTtl || "")}" placeholder="P30D"/></label>
           <p class="muted" style="font-size:12px">How long a <b>finished</b> instance of this process is kept before it is deleted for good, as an ISO-8601 duration (e.g. <code>P30D</code> = 30 days). Completed and terminated instances stay listed, queryable and exportable until it elapses; then retention removes the instance and everything it carried — variables, step history, decisions. Leave empty to fall back to the server-wide retention age, if the operator configured one. The delete is permanent and only ever happens once the instance's events are safely exported.</p>
+          <label class="field"><span>Searchable variables</span><input type="text" id="f-psearch" value="${esc(rootBo.searchable || "")}" placeholder="identityId, item"/></label>
+          <div id="f-psearch-marks" class="sv-marks"></div>
+          <p class="muted" style="font-size:12px">The variable names this process wants to be <b>found by</b>, comma-separated. A declared name is answered from a value index, so searching <code>identityId=MT-1998</code> over this version in Operations costs the number of matches instead of a read through every instance &mdash; and a trailing <code>*</code> asks for a prefix. Indexed is a variable at the instance's <b>top level</b> whose value is text, a number or true/false and stays under 256 bytes; a JSON structure or a variable local to one activity is not. A declared name is matched <b>exactly</b>, upper and lower case included, while an undeclared one keeps the read-through search it always had. Declaring nothing costs nothing, so name the one or two business keys you actually search by &mdash; a status that thousands of instances share is a poor declaration. It applies to instances started after the next deploy.</p>
+          <label class="field"><span>Personal variables</span><input type="text" id="f-ppersonal" value="${esc(rootBo.personal || "")}" placeholder="vorname, nachname"/></label>
+          <label class="field"><span>Data subject variable</span><input type="text" id="f-psubject" value="${esc(rootBo.dataSubject || "")}" placeholder="personalnummer"/></label>
+          <p class="muted" style="font-size:12px">The variables that hold <b>personal data</b>, comma-separated, and the one variable holding the <b>id of the person</b> they are about. A declared name is enciphered under a key belonging to that person before it ever reaches the engine, and erasing the person destroys that one key &mdash; which makes every copy of every value unreadable at once, including the backups nobody can reach any more. The price is that the engine can no longer read the value: a declared variable may be written, carried and handed to a worker, but it may <b>not appear in any expression</b> the engine evaluates &mdash; no gateway or flow condition, no input/output mapping, no script. Build what you need from it inside the worker that needs the result, where the plaintext exists for one call. The deploy refuses a model that breaks this, and refuses the two declarations apart: personal data with no subject could never be erased, and a subject with nothing personal enciphers nothing.</p>
           ${startVarsHTML}
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
@@ -6067,11 +7833,48 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           if (v && !isValidTtl(v)) toast("History TTL must be a positive ISO-8601 duration, e.g. P30D or PT12H", "err");
           try { modeling.updateProperties(rootEl, { historyTtl: v || undefined }); } catch { /* ignore */ }
         });
+        // The marks are painted as the author types, not on change: the point of them is
+        // to answer "did I spell it right" while the name is being written.
+        const searchEl = body.querySelector("#f-psearch");
+        const searchMarks = body.querySelector("#f-psearch-marks");
+        const paintSearchMarks = () => { searchMarks.innerHTML = searchableMarksHTML(searchEl.value, modeler); };
+        paintSearchMarks();
+        searchEl.addEventListener("input", paintSearchMarks);
+        searchEl.addEventListener("change", (e) => {
+          const v = (e.target.value || "").trim();
+          // Same discipline as the TTLs: warn about a declaration the compiler will
+          // refuse (ADR-0244), but store what was typed rather than dropping it.
+          const problem = searchableProblem(v);
+          if (problem) toast(problem, "err");
+          try { modeling.updateProperties(rootEl, { searchable: v || undefined }); } catch { /* ignore */ }
+          // A name declared searchable *and* personal is refused by the deploy, so the
+          // warning belongs here too — the mistake can be made from either field.
+          warnPersonal();
+        });
+        // The personal declaration and its data subject are checked together, because
+        // four of the five things the deploy refuses are disagreements *between* them.
+        const personalEl = body.querySelector("#f-ppersonal");
+        const subjectEl = body.querySelector("#f-psubject");
+        const warnPersonal = () => {
+          const problem = personalProblem(personalEl.value, subjectEl.value, searchEl.value);
+          if (problem) toast(problem, "err");
+        };
+        personalEl.addEventListener("change", (e) => {
+          const v = (e.target.value || "").trim();
+          try { modeling.updateProperties(rootEl, { personal: v || undefined }); } catch { /* ignore */ }
+          warnPersonal();
+        });
+        subjectEl.addEventListener("change", (e) => {
+          const v = (e.target.value || "").trim();
+          try { modeling.updateProperties(rootEl, { dataSubject: v || undefined }); } catch { /* ignore */ }
+          warnPersonal();
+        });
         body.querySelector("#f-pexec").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { isExecutable: e.target.checked }); } catch { /* ignore */ }
         });
         wireDocumentation(body, modeler, rootEl, rootBo);
         wireStartVars(body, modeler);
+        wireStartVars(body, modeler, undefined, undefined, undefined, CONSTANT_DECL);
         wireMessagesManager(body, modeler, () => show(null));
         wireSignalsManager(body, modeler, () => show(null));
         wireErrorsManager(body, modeler, () => show(null));
@@ -6179,21 +7982,57 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       }
       const known = classNamed(itemType);
       const unresolved = itemType && vocab.loaded && !known;
+      // The states a data state may name are the ones its class declares (ADR-0259).
+      // Until a class carried a lifecycle there was nothing to list and the field could
+      // only be free text — which is how `order [aproved]` gets written once and then
+      // never matches anything again. Where a lifecycle exists the states are a closed
+      // set of facts about that class, so they are offered as one.
+      const declared = (known && known.lifecycle && known.lifecycle.states) || [];
+      // Why the picker is not a picker, when it is not one. Until now the field simply
+      // became plain text and the panel said nothing at all — and the two reasons for
+      // that are completely different remedies, so leaving the reader to guess between
+      // them was the worst of the three possible answers.
+      //
+      // The one that actually bites: a diagram deployed outside an application has no
+      // application, so it has no information model, so nothing resolves — and the
+      // Problems panel says "No problems" for the same reason, which reads as a clean
+      // model rather than as a check that never ran. Neither field is broken; there is
+      // simply nothing behind them, and now the panel says so and says what to do.
+      const noApplication = !projectId;
+      const nothingModelled = projectId && vocab.loaded && !vocab.classes.length;
       html += `<h3>Data object</h3>
-        <label class="field"><span>Type <span class="muted">(the class this datum is)</span></span>
-          <input type="text" id="f-itemtype" list="f-itemtype-list" value="${esc(itemType)}" placeholder="Order"/></label>
-        <datalist id="f-itemtype-list">${vocab.classes.map((c) => `<option value="${esc(c.name)}"></option>`).join("")}</datalist>
-        ${classPickerHTML(itemType)}
+        <label class="field"><span>Class <span class="muted">(what this datum is)</span></span>
+          ${vocab.classes.length ? classSelectHTML(itemType)
+            : `<input type="text" id="f-itemtype" value="${esc(itemType)}" placeholder="Order"/>`}</label>
+        ${vocab.classes.length ? otherFieldHTML("f-itemtype-other", "Class name", "Order") : ""}
+        ${noApplication ? `<p class="im-nomatch">This diagram is not filed under an application, so there is
+          no information model to resolve a class against — and nothing here can be checked, which is why the
+          Problems panel is empty rather than clean. Open this process's <b>draft</b> from its application, or
+          deploy it from there, and the classes it models are offered here.</p>` : ""}
+        ${nothingModelled ? `<p class="im-nomatch">This application models no data yet, so there is no class to
+          point at. Draw one under <b>Data › Model</b> and it is offered here.
+          <a href="#/data" target="_blank" rel="noopener">Open Data ↗</a></p>` : ""}
         ${known ? classCardHTML(known) : ""}
         ${unresolved ? `<p class="im-nomatch">No class called <b>${esc(itemType)}</b> is modelled in this
           application yet — the Problems panel lists it, and a deploy is not refused for it.
           ${vocab.models.length ? `<button type="button" class="btn ghost small" id="f-itemtype-create"
             data-name="${esc(itemType)}">+ Model it now</button>` : ""}</p>` : ""}
         <label class="field"><span>Data state</span>
-          <input type="text" id="f-datastate" value="${esc(stateName)}" placeholder="received"/></label>
+          ${declared.length ? `<select id="f-datastate" title="The states ${esc(known.name)} declares">
+              <option value=""${stateName ? "" : " selected"}>— none —</option>
+              ${declared.map((s) => `<option value="${esc(s.name)}"${s.name === stateName ? " selected" : ""}>${
+                esc(s.name)}${s.initial ? " · start" : ""}${s.final ? " · final" : ""}</option>`).join("")}
+              ${strayOptionHTML(stateName, declared.some((s) => s.name === stateName), `not a state of ${known.name}`)}
+              <option ${OTHER}>Another state, not declared yet…</option>
+            </select>`
+            : `<input type="text" id="f-datastate" value="${esc(stateName)}" placeholder="received"/>`}</label>
+        ${declared.length ? otherFieldHTML("f-datastate-other", "State name", "received") : ""}
+        ${declared.length ? `<p class="muted" style="font-size:12px">These are the states
+          <b>${esc(known.name)}</b> declares in its lifecycle — <a href="#/data/m/${encodeURIComponent(known.modelId)}"
+          target="_blank" rel="noopener">open it ↗</a> to add one.</p>` : ""}
         <label class="field checkbox"><input type="checkbox" id="f-collection" ${collection ? "checked" : ""}/> <span>Collection (a list of items)</span></label>
         ${pointsTo}
-        <p class="muted" style="font-size:12px">The <b>Type</b> is the class this datum is, from the application's information model under <b>Data</b> — BPMN's <code>itemSubjectRef</code>. It is what lets two processes agree that their <code>order</code> is the same kind of thing, and what a write to a member of this object is checked against. A data object carries a value <i>and</i> a <b>data state</b> — <code>order [received]</code> → <code>[approved]</code>. The state set here is where the object starts each instance; a <b>data output association</b> (an arrow from an activity to this object) advances it and writes its value, a <b>data input association</b> reads it back, and the full state history is recorded per instance and survives restart. The <b>Name</b> is how the engine identifies it.</p>`;
+        <p class="muted" style="font-size:12px">The <b>Class</b> is what this datum is, from the application's information model under <b>Data</b> — BPMN's <code>itemSubjectRef</code>. It is what lets two processes agree that their <code>order</code> is the same kind of thing, and what a write to a member of this object is checked against. A data object carries a value <i>and</i> a <b>data state</b> — <code>order [received]</code> → <code>[approved]</code>. The state set here is where the object starts each instance; a <b>data output association</b> (an arrow from an activity to this object) advances it and writes its value, a <b>data input association</b> reads it back, and the full state history is recorded per instance and survives restart. The <b>Name</b> is how the engine identifies it.</p>`;
     }
 
     // A data association is the arrow between an activity and a data object — it is
@@ -6205,10 +8044,25 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       const fromBody = (asg.from && asg.from.body) || "";
       const toBody = (asg.to && asg.to.body) || "";
       if (bo.$type === "bpmn:DataOutputAssociation") {
-        html += `<h3>Writes data object</h3>
-          <label class="field"><span>FEEL value</span><input type="text" id="f-assoc-from" value="${esc(fromBody)}" placeholder="=amount * 1.19"/></label>
-          <label class="field"><span>Target member <span class="muted">(optional)</span></span><input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="name"/></label>
-          <p class="muted" style="font-size:12px">When the activity completes it writes <b>${esc(dataRefName(bo.targetRef))}</b>: the <b>FEEL value</b> (over the instance's variables) becomes the object's value, and its data state advances to the one on the target reference. Leave <b>Target member</b> empty to write the whole object; set it (e.g. <code>name</code>) to update just that field of a structured object and keep the rest.</p>`;
+        // The class of the object being written, so the member can be picked from what
+        // it declares rather than typed from memory. A reference bpmn-js hands back as
+        // a one-element list is unwrapped the way dataRefName unwraps it.
+        const targetRef = Array.isArray(bo.targetRef) ? bo.targetRef[0] : bo.targetRef;
+        const writes = classNamed(itemTypeOf(targetRef && targetRef.dataObjectRef));
+        if (!vocab.loaded && vocabReady) {
+          vocabReady.then(() => { try { show(element); } catch { /* the panel moved on */ } });
+        }
+        // One row per <assignment>, and one empty row for an arrow that has none yet,
+        // so the arrow that writes one member looks and edits as it always did.
+        const rows = (bo.assignment && bo.assignment.length) ? bo.assignment : [{}];
+        const hints = `<p class="muted io-group-hint">When the activity completes it writes <b>${esc(dataRefName(bo.targetRef))}</b>: each write's <b>FEEL value</b> (over the instance's variables) goes into its <b>Target member</b>, and the object's data state advances to the one on the target reference. Leave <b>Target member</b> empty to write the whole object; set it (e.g. <code>name</code>) to update just that field and keep the rest. Several writes are applied <b>in order</b> and recorded as <b>one</b> change to the object, so one activity that fills in a whole record is one arrow and not one arrow per field.</p>
+          ${writes ? `<p class="muted io-group-hint">The members offered are the ones
+            <b>${esc(writes.name)}</b> declares — <a href="#/data/m/${encodeURIComponent(writes.modelId)}"
+            target="_blank" rel="noopener">open it ↗</a> to add one. They say what this object is
+            <i>shaped</i> like, which is a different thing from what a <b>FEEL value</b> above can
+            read: that expression sees the instance's <b>variables</b>, and a data object is not one
+            of them.</p>` : ""}`;
+        html += dataWritesGroupHTML(writes, rows, dataRefName(bo.targetRef), hints);
       } else {
         html += `<h3>Reads data object</h3>
           <label class="field"><span>Target variable</span><input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="order"/></label>
@@ -6230,8 +8084,15 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         html += sendTaskKindHTML(modeler, bo);
         // A message-kind send task is a throw, not an activity the engine can loop
         // (the compiler skips it), so the loop section is offered only for the
-        // job-backed kinds — matching what actually runs.
-        if (sendTaskKind(bo).id !== "message") html += multiInstanceHTML(bo);
+        // job-backed kinds — matching what actually runs. A shop task is job-backed, and its
+        // mode decides the rest: an outcome is the one report of the one command its
+        // instance carries out (ADR-0429 §3), so a second report changes nothing and there
+        // is nothing to loop, while a command may well be asked once per position — a
+        // leaver process returning each right the leaver holds.
+        const sendKind = sendTaskKind(bo);
+        const reportsOutcome = sendKind === SEND_SHOP_KIND &&
+          shopTaskMode((findExt(bo, SEND_SHOP_KIND.ext) || {}).mode).v === "outcome";
+        if (sendKind.id !== "message" && !reportsOutcome) html += multiInstanceHTML(bo);
       } else if (isActivity(bo)) {
         const t = bo.$type;
         html += `
@@ -6319,29 +8180,49 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               </select></label>
             ${placementNoticeHTML(brtKind, brtKind)}`;
           if (mode === "connector") {
+            // The same setup block the Worker Type panel carries, and collapsible for
+            // the same reason: a temis Worker is configured exactly like the rest, and
+            // this is the other place it is chosen. The placement notice above stays
+            // where it is — it belongs to the Evaluation field it sits under, and it is
+            // one paragraph rather than a screen.
+            html += workerTypeInfoHTML("temis", true, null);
             html += `<label class="field"><span>Worker</span>
               <input type="text" id="f-connector" list="dl-connector" autocomplete="off" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/>
               <datalist id="dl-connector"></datalist></label>
               <p class="muted" id="nt-connector" style="font-size:12px"></p>`;
           }
-          const binding = cd.bindingType === "deployment" ? "deployment" : "latest";
+          // Three bindings (ADR-0423): the
+          // newest version when the task runs, one deployed version the author picks
+          // (atlas:version), or the model deployed with the process. A binding this
+          // panel does not offer — Camunda's versionTag — is shown as it is and kept,
+          // rather than rewritten to latest on the next save; the deploy refuses it.
+          const pinnedVersion = calledDecisionVersion(cd);
+          const binding = pinnedVersion ? "version"
+            : cd.bindingType === "deployment" ? "deployment"
+            : (cd.bindingType && cd.bindingType !== "latest") ? cd.bindingType
+            : "latest";
+          const unknownBinding = !["latest", "version", "deployment"].includes(binding);
           const bindingField = mode === "local" ? `
             <label class="field"><span>Binding</span>
               <select id="f-brt-binding">
-                <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest deployed version</option>
-                <option value="deployment" ${binding === "deployment" ? "selected" : ""}>Deployment — pinned to this deploy</option>
-              </select></label>` : "";
+                <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest version when the task runs</option>
+                <option value="version" ${binding === "version" ? "selected" : ""}>Version — a deployed version you choose</option>
+                <option value="deployment" ${binding === "deployment" ? "selected" : ""}>Deployment — the model deployed with this process</option>
+                ${unknownBinding ? `<option value="${esc(binding)}" selected>${esc(binding)} — not supported, the deploy refuses it</option>` : ""}
+              </select></label>
+            <label class="field" id="f-brt-version-wrap"${binding === "version" ? "" : " hidden"}><span>Version</span>
+              <select id="f-brt-version"><option value="${esc(pinnedVersion)}">${pinnedVersion ? "v" + esc(pinnedVersion) : "— choose a deployed version —"}</option></select></label>` : "";
           html += `<label class="field"><span>Decision</span>
               <select id="f-decision-pick"><option value="">${cd.decisionId ? esc(cd.decisionId) + " (current)" : "— choose a decision —"}</option></select></label>
             <div style="display:flex; gap:8px; margin:-4px 0 6px">
-              <button type="button" class="btn ghost" id="f-dmn-new" title="Create a new decision">＋ Neue Decision</button>
-              <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"} title="Edit the selected decision">Bearbeiten</button>
+              <button type="button" class="btn ghost" id="f-dmn-new" title="Create a new decision">＋ New decision</button>
+              <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"} title="Edit the selected decision">Edit</button>
             </div>
             <label class="field"><span>Decision ID <span class="field-derived">derived</span></span>
               <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="pick a decision above" readonly title="Set by the decision picked above — no need to type it"/></label>
             <label class="field"><span>Result variable</span>
               <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>${bindingField}
-            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its id, inputs and result variable. <b>Latest</b> evaluates the newest deployed version; <b>Deployment</b> pins to the version deployed with this process.</p>
+            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its id, inputs and result variable. <b>Latest</b> evaluates the newest deployed version each time the task runs, so a newly deployed version takes effect without redeploying the process. <b>Version</b> evaluates the version you choose, whatever is deployed after it; it is an atlas setting, and Camunda ignores it and runs the newest. <b>Deployment</b> evaluates the model deployed together with this process.</p>
             <h3>Failure handling</h3>
             <label class="field"><span>Retries</span>
               <input type="number" id="f-brt-retries" min="1" step="1" value="${esc(cd.retries || "")}" placeholder="3"/></label>
@@ -6349,6 +8230,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             <h3>Decision inputs</h3>
             <p class="muted" style="font-size:12px">Each row feeds one decision input. Pick a variable from the list or type any FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>
+            <div id="dmn-inputs-drift" class="dmn-drift" hidden></div>
             <datalist id="dmn-vars-dl">${varOpts}</datalist>
             <datalist id="dmn-inputs-dl">${inNameOpts}</datalist>`;
         } else if (t === "bpmn:UserTask") {
@@ -6398,6 +8280,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // the marker, so the panel and the icon agree on every activity.
         html += multiInstanceHTML(bo);
       } else if (bo.$type === "bpmn:SubProcess") {
+        // Whether it is a wizard comes first: it says what the subprocess is to the
+        // person filling it in, where the mappings below say what crosses its edge
+        // (ADR-0449). An event subprocess is never offered it.
+        if (!bo.triggeredByEvent) html += wizardHTML(bo);
         // An embedded subprocess is a scope, so it takes the same generic
         // zeebe:ioMapping editor as a task (ADR-0074) — but no task-type selector, a
         // subprocess is not a task. Input mappings write a variable into the
@@ -6509,11 +8395,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date"], `The event waits, then continues (ADR-0054).
             <b>Duration</b> waits that long (<b>PT30S</b>, <b>PT5M</b>, <b>P1DT2H</b>); <b>Date &amp; time</b> waits until that instant.
-            A catch fires once, so it has no cycle. A FEEL expression is allowed in either.`);
+            A catch fires once, so it has no cycle.`);
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).");
+          html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).", true);
         } else if (link) {
           html += linkFieldsHTML(link, "This is the landing point of a <b>link throw</b> with the same name in the same scope (an off-page connector). It does not wait — a token arriving via the link flows straight on. Draw it with no incoming sequence flow.");
         } else if (cond) {
@@ -6529,7 +8415,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this event the message is published; any instance waiting on it with a matching correlation key continues.");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.");
+          html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.", false);
         } else if (escl) {
           html += escalationFieldsHTML(modeler, escl, "On reaching this event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, and the token then continues on its outgoing flow (unless an interrupting catch aborts it). Uncaught, it is harmless.");
         } else if (link) {
@@ -6575,11 +8461,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               : "A non-interrupting boundary may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R/PT1H</b>) or cron (<b>0 * * * *</b>) — firing a fresh token each time.";
             html += timerFieldsHTML(timer, kinds, `The event fires relative to the activity (ADR-0054).
               <b>Duration</b> fires that long after it starts (<b>PT30S</b>, <b>PT5M</b>); <b>Date &amp; time</b> at a fixed instant.
-              ${cycleNote} A FEEL expression is allowed in any type.`);
+              ${cycleNote}`);
           } else if (msg) {
             html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
           } else if (sig) {
-            html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.");
+            html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.", true);
           } else if (escl) {
             html += escalationFieldsHTML(modeler, escl, "The event fires when the attached activity raises a matching escalation — an escalation throw/end event inside it, or one propagating up from a called process. Interrupting cancels the activity and routes out this event; non-interrupting runs the handler while the activity keeps going.");
           } else if (cond) {
@@ -6620,11 +8506,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               : "A non-interrupting timer may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R3/PT1H</b>) or cron (<b>0 * * * *</b>) — firing the handler each time.";
             html += timerFieldsHTML(timer, kinds, `The event subprocess fires on this schedule while its scope runs (ADR-0082).
               <b>Duration</b> fires that long after the scope is entered; <b>Date &amp; time</b> at a fixed instant.
-              ${cycleNote} A FEEL expression is allowed in any type.`);
+              ${cycleNote}`);
           } else if (msg) {
             html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
           } else if (sig) {
-            html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.");
+            html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.", true);
           } else if (escl) {
             html += escalationFieldsHTML(modeler, escl, "The event subprocess fires when its enclosing scope raises a matching escalation. Interrupting terminates the scope's other work first; non-interrupting runs this handler alongside the still-running scope.");
           } else if (cond) {
@@ -6640,12 +8526,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date", "cycle"], `A timer start event fires on this schedule with no incoming token (ADR-0051).
             <b>Duration</b> and <b>Date &amp; time</b> fire once — that long after deploy, or at that instant;
-            <b>Cycle</b> recurs, either an ISO-8601 repeating interval (<b>R/PT1H</b>, <b>R3/P1D</b>) or a cron expression (<b>0 * * * *</b>).
-            A FEEL expression is allowed in any type.`);
+            <b>Cycle</b> recurs, either an ISO-8601 repeating interval (<b>R/PT1H</b>, <b>R3/P1D</b>) or a cron expression (<b>0 * * * *</b>).`, { constant: true });
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "A signal start event: broadcasting this signal starts a new instance of this process, matched by signal name. One broadcast starts every deployed process with a matching signal start.");
+          html += signalFieldsHTML(modeler, sig, "A signal start event: broadcasting this signal starts a new instance of this process, matched by signal name. One broadcast starts every deployed process with a matching signal start.", true);
         } else {
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
@@ -6672,7 +8557,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.");
+          html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.", false);
         } else if (err) {
           html += errorFieldsHTML(modeler, err, "On reaching this end event the error is thrown, aborting its scope and propagating up to the nearest matching error boundary or error event subprocess. Uncaught, it raises an incident.");
         } else if (escl) {
@@ -6696,7 +8581,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // the diagram claim behavior it doesn't have (ADR-0133).
     if (bo.loopCharacteristics && !html.includes("f-mi-mode")) {
       html += `<h3>Loop</h3>
-        <p class="muted" style="font-size:12px">This element carries a <b>loop marker</b> Atlas does not execute here — it will run <b>once</b>, whatever the icon suggests. Loops run on <b>activities</b>: every task kind, call activities and subprocesses (a message-kind send task is a throw, not an activity). Remove the marker (the wrench icon on the shape) or move the work to one of those.</p>`;
+        <p class="muted" style="font-size:12px">This element carries a <b>loop marker</b> atlas does not execute here — it will run <b>once</b>, whatever the icon suggests. Loops run on <b>activities</b>: every task kind, call activities and subprocesses (a message-kind send task is a throw, not an activity). Remove the marker (the wrench icon on the shape) or move the work to one of those.</p>`;
     }
     body.innerHTML = html;
 
@@ -6731,6 +8616,18 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       });
     }
 
+    // Choosing the last entry of a picker shows the field that takes the name it has
+    // never heard of, and puts the caret in it: the escape has to be one gesture, or
+    // it is not an escape.
+    const reveal = (id) => {
+      const field = body.querySelector(`#${id}-field`);
+      const input = body.querySelector(`#${id}`);
+      if (!field || !input) return;
+      field.hidden = false;
+      input.value = "";
+      input.focus();
+    };
+
     // The type lives on the underlying <dataObject>, not on the reference — the same
     // place the compiler reads it from, and the same reason the name is written
     // through to it above: the reference is a view of the object, not the object.
@@ -6743,18 +8640,21 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       show(element); // re-render so the class card, or the note, appears or clears
     };
     if (fitemtype && bo.dataObjectRef) {
-      fitemtype.addEventListener("change", (e) => setItemType((e.target.value || "").trim()));
+      fitemtype.addEventListener("change", (e) => {
+        // "Another class…" is not a class called anything: it opens the field below and
+        // waits, so picking from the list and naming something the list has never heard
+        // of end in the same one write rather than two paths that can come to differ.
+        if (e.target.tagName === "SELECT" && choseOther(e.target)) return reveal("f-itemtype-other");
+        setItemType((e.target.value || "").trim());
+      });
     }
-    // The picker fills the field and then goes through the same one write, so picking
-    // a class and typing its name are the same edit rather than two paths that can
-    // come to differ.
-    const ftypepick = body.querySelector("#f-itemtype-pick");
-    if (ftypepick && bo.dataObjectRef) {
-      ftypepick.addEventListener("change", (e) => {
-        const v = e.target.value;
-        if (!v) return;
-        if (fitemtype) fitemtype.value = v;
-        setItemType(v);
+    const fitemother = body.querySelector("#f-itemtype-other");
+    if (fitemother && bo.dataObjectRef) {
+      // Blurring it empty leaves the type as it was. Reaching for the escape and
+      // changing your mind is not the same gesture as clearing the field.
+      fitemother.addEventListener("change", (e) => {
+        const v = (e.target.value || "").trim();
+        if (v) setItemType(v); else show(element);
       });
     }
 
@@ -6811,19 +8711,31 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       });
     }
 
+    const setDataState = (v) => {
+      try {
+        let ds;
+        if (v) {
+          ds = modeler.get("moddle").create("bpmn:DataState", { name: v });
+          ds.$parent = bo;
+        }
+        // Setting dataState to undefined clears the [state] label.
+        modeling.updateModdleProperties(element, bo, { dataState: ds || undefined });
+      } catch { /* stale */ }
+    };
     const fdatastate = body.querySelector("#f-datastate");
     if (fdatastate) {
       fdatastate.addEventListener("change", (e) => {
+        if (e.target.tagName === "SELECT" && choseOther(e.target)) return reveal("f-datastate-other");
+        setDataState((e.target.value || "").trim());
+      });
+    }
+    const fdsother = body.querySelector("#f-datastate-other");
+    if (fdsother) {
+      fdsother.addEventListener("change", (e) => {
         const v = (e.target.value || "").trim();
-        try {
-          let ds;
-          if (v) {
-            ds = modeler.get("moddle").create("bpmn:DataState", { name: v });
-            ds.$parent = bo;
-          }
-          // Setting dataState to undefined clears the [state] label.
-          modeling.updateModdleProperties(element, bo, { dataState: ds || undefined });
-        } catch { /* stale */ }
+        // Re-rendered rather than left as typed, so a state the class does not declare
+        // shows up in the list saying so, instead of only in the Problems panel.
+        if (v) { setDataState(v); show(element); } else { show(element); }
       });
     }
     const fcollection = body.querySelector("#f-collection");
@@ -6859,12 +8771,131 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     const assocFrom = body.querySelector("#f-assoc-from");
     const assocTo = body.querySelector("#f-assoc-to");
+    const assocToOther = body.querySelector("#f-assoc-to-other");
     if (assocFrom || assocTo) {
-      const applyAssoc = () => setAssignment(modeler, element, bo,
+      const applyAssoc = (member) => setAssignment(modeler, element, bo,
         assocFrom ? assocFrom.value.trim() : "",
-        assocTo ? assocTo.value.trim() : "");
-      if (assocFrom) assocFrom.addEventListener("change", applyAssoc);
-      if (assocTo) assocTo.addEventListener("change", applyAssoc);
+        member !== undefined ? member : (assocTo ? assocTo.value.trim() : ""));
+      if (assocFrom) assocFrom.addEventListener("change", () => applyAssoc());
+      if (assocTo) {
+        assocTo.addEventListener("change", (e) => {
+          if (e.target.tagName === "SELECT" && choseOther(e.target)) return reveal("f-assoc-to-other");
+          applyAssoc();
+        });
+      }
+      if (assocToOther) {
+        assocToOther.addEventListener("change", (e) => {
+          // Re-rendered rather than left as typed, so a path the class does not declare
+          // comes back in the list saying so instead of looking like any other member.
+          applyAssoc(e.target.value.trim());
+          show(element);
+        });
+      }
+    }
+
+    // The writes of a data output association: one row per <assignment>, which BPMN
+    // allows any number of (ADR-0350). The group
+    // behaves like an I/O mapping group — add, delete, collapse — because it is the
+    // same shape, and an author has already learned it.
+    const dwGroup = body.querySelector("[data-write-group]");
+    if (dwGroup) {
+      const dwList = dwGroup.querySelector("#data-writes");
+      const cards = () => [...dwList.querySelectorAll("[data-write]")];
+      const targetRef = Array.isArray(bo.targetRef) ? bo.targetRef[0] : bo.targetRef;
+      const writesClass = classNamed(itemTypeOf(targetRef && targetRef.dataObjectRef));
+      // A row sitting on "another member…" means the text field beside it, not the
+      // empty value that option carries — which is the value that means the whole
+      // object. Reading the select would silently turn a member write into one.
+      const rowTo = (card) => {
+        const to = card.querySelector(".dw-to");
+        if (to.tagName === "SELECT" && choseOther(to)) {
+          const other = card.querySelector(`#f-dw-other-${card.dataset.i}`);
+          return other ? other.value.trim() : "";
+        }
+        return (to.value || "").trim();
+      };
+      // The value is the literal picker's when the member is typed by an «enumeration»
+      // and a literal is chosen; the free expression field otherwise, which is also
+      // where the picker's escape sends the author
+      // (ADR-0351).
+      const rowFrom = (card) => {
+        const free = () => (card.querySelector(".dw-from").value || "").trim();
+        const lit = card.querySelector(".dw-lit");
+        if (!lit || choseOther(lit)) return free();
+        return lit.value ? `="${lit.value}"` : "";
+      };
+      const readRows = () => cards().map((card) => ({ from: rowFrom(card), to: rowTo(card) }));
+      const saveWrites = () => savePreservingPanel(() => setAssignments(modeler, element, bo, readRows()));
+      const count = () => {
+        const c = dwGroup.querySelector(".io-group-count");
+        if (c) c.textContent = String(cards().length);
+      };
+      const wireRow = (card) => {
+        const to = card.querySelector(".dw-to");
+        const title = card.querySelector(".io-map-title");
+        card.querySelector(".io-map-head").addEventListener("click", (e) => {
+          if (e.target.closest(".io-map-del")) return;
+          card.classList.toggle("collapsed");
+        });
+        to.addEventListener("change", (e) => {
+          if (e.target.tagName === "SELECT" && choseOther(e.target)) return reveal(`f-dw-other-${card.dataset.i}`);
+          title.textContent = dataWriteTitle(rowTo(card));
+          saveWrites();
+          // Re-rendered, because which control the *value* is depends on what the member
+          // is: an «enumeration»-typed member is picked from a list and anything else is
+          // typed. saveWrites has already read every field, so nothing half-typed is lost.
+          show(element);
+        });
+        const lit = card.querySelector(".dw-lit");
+        if (lit) {
+          lit.addEventListener("change", (e) => {
+            if (choseOther(e.target)) return reveal(`f-dw-expr-${card.dataset.i}`);
+            saveWrites();
+            show(element);
+          });
+        }
+        const other = card.querySelector(`#f-dw-other-${card.dataset.i}`);
+        if (other) {
+          other.addEventListener("change", () => {
+            saveWrites();
+            show(element);
+          });
+        }
+        card.querySelector(".dw-from").addEventListener("change", saveWrites);
+        card.querySelector(".io-map-del").addEventListener("click", (e) => {
+          e.stopPropagation();
+          card.remove();
+          count();
+          saveWrites();
+        });
+      };
+      cards().forEach(wireRow);
+      // Open by default, unlike the mapping groups it borrows its shape from. Those sit
+      // among a dozen sections on a task; this is the whole content of a write arrow's
+      // panel, and starting it folded would answer "what does this arrow write" with a
+      // chevron. An author's own toggle still wins.
+      groupCtl.setDefault("Writes", true);
+      dwGroup.classList.toggle("collapsed", groupCtl.isCollapsed(dwGroup.dataset.group || ""));
+      dwGroup.querySelector(".io-group-head").addEventListener("click", (e) => {
+        if (e.target.closest(".io-group-add")) return;
+        groupCtl.onToggle((dwGroup.dataset.group || "").trim(), dwGroup.classList.toggle("collapsed"));
+      });
+      dwGroup.querySelector(".io-group-add").addEventListener("click", (e) => {
+        e.stopPropagation();
+        dwGroup.classList.remove("collapsed");
+        groupCtl.onToggle((dwGroup.dataset.group || "").trim(), false);
+        // One past the highest index in the list, not the list's length: deleting a row
+        // and adding one would otherwise reuse an index still on screen, and two rows
+        // sharing an id is an escape field that opens the wrong row.
+        const next = cards().reduce((m, c) => Math.max(m, Number(c.dataset.i)), -1) + 1;
+        const tmp = document.createElement("div");
+        tmp.innerHTML = dataWriteCardHTML(next, writesClass, "", "");
+        const card = tmp.firstElementChild;
+        dwList.appendChild(card);
+        wireRow(card);
+        count();
+        card.querySelector(".dw-from").focus();
+      });
     }
 
     // The badges describe THIS server, which only the server knows, and the panel is
@@ -6967,20 +8998,85 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       const curKindId = (sendPicker ? sendTaskKind(bo) : serviceTaskKind(bo)).id;
       loadConfiguredKinds(api, () => {
         if (!stlist.isConnected) return; // the panel moved on while the request was out
-        stlist.innerHTML = stKindRowsHTML(
-          sendPicker ? [SEND_MESSAGE_KIND, ...SERVICE_TASK_KINDS] : SERVICE_TASK_KINDS, curKindId);
+        stlist.innerHTML = stKindRowsHTML(sendPicker ? SEND_TASK_KINDS : SERVICE_TASK_KINDS, curKindId);
       });
       stlist.addEventListener("click", (e) => {
         const row = e.target.closest(".stkind-row");
         if (!row) return;
         try {
-          // A send task's picker includes the Message kind (ADR-0112); a service task's does not.
+          // A send task's picker includes the Message and Shop kinds (ADR-0112, ADR-0429); a
+          // service task's does not.
           if (bo.$type === "bpmn:SendTask") applySendTaskKind(modeler, element, row.dataset.kind);
           else applyServiceTaskKind(modeler, element, row.dataset.kind);
           show(element);
         } catch { /* stale */ }
       });
     }
+
+    // Shop send task (ADR-0429 §4): the mode and the fields that mode carries, rendered by
+    // shopTaskFieldsHTML. The kind is not in SERVICE_TASK_KINDS, so the catalog's generic
+    // wiring below never sees these fields. Every save writes the whole <atlas:shopTask> from
+    // the panel — the mode, its fields, and every other mode's fields cleared — so the element
+    // states one mode's contract and nothing left over from another.
+    const fshopmode = body.querySelector("#f-shop-mode");
+    if (fshopmode) {
+      const saveShopTask = () => savePreservingPanel(() => {
+        const mode = shopTaskMode(fshopmode.value);
+        const props = { mode: mode.v };
+        for (const m of SHOP_TASK_MODES) for (const f of m.fields) props[f.key] = undefined;
+        for (const f of mode.fields) {
+          const el = body.querySelector("#f-shop-" + f.key);
+          // An empty field is written as no attribute rather than an empty one, so a
+          // missing action reads as missing to the compiler and not as the key "".
+          if (el) props[f.key] = (el.value || "").trim() || undefined;
+          // A select the newly chosen mode brings is not on screen yet. It starts on its
+          // first choice, as it does when the kind is chosen, so the model says what the
+          // re-rendered panel will show.
+          else if (f.type === "select") props[f.key] = selectOption(f.options[0]).v;
+        }
+        upsertExt(modeler, element, SEND_SHOP_KIND.ext, props);
+      });
+      // A mode decides which fields there are, so choosing one re-renders them.
+      fshopmode.addEventListener("change", () => { saveShopTask(); show(element); });
+      // An fx field gets the same value-or-expression toggle as a Worker Type's: the
+      // textarea stays the value the save reads, '=' prefixed when it is an expression,
+      // which is what the compiler keys on.
+      const shopFields = shopTaskMode(fshopmode.value).fields;
+      const shopFx = shopFields.some((f) => f.fx) ? {
+        variables: variablesForCompletion(modeler, element),
+        validate: api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null,
+      } : null;
+      for (const f of shopFields) {
+        const el = body.querySelector("#f-shop-" + f.key);
+        if (!el) continue;
+        el.addEventListener("change", saveShopTask);
+        if (f.fx) attachExpressionToggle(el, shopFx);
+      }
+      // The key's shape is said while it is typed rather than first at deploy. What was
+      // typed is still saved on change: the text is the author's to correct, and a hint
+      // beside it says more than a field that quietly reverts.
+      const faction = body.querySelector("#f-shop-action");
+      const factionErr = body.querySelector("#f-shop-action-err");
+      if (faction && factionErr) {
+        faction.addEventListener("input", () => {
+          const problem = shopActionKeyProblem(faction.value);
+          factionErr.textContent = problem;
+          factionErr.hidden = !problem;
+        });
+      }
+      // The keys the catalogue declares, offered beside the free text. A listing that
+      // fails leaves the fields as they were.
+      if (api) {
+        const fproduct = body.querySelector("#f-shop-product");
+        api("GET", "/api/v1/message-sources").then((list) => {
+          const offer = () => fillShopSuggestions(body, shopActionSuggestions(list, shopTaskMode(fshopmode.value).v,
+            owningProcessId(bo), fproduct ? fproduct.value.trim() : ""));
+          offer();
+          if (fproduct) fproduct.addEventListener("change", offer);
+        }).catch(() => { /* no suggestions; the fields work the same */ });
+      }
+    }
+
     const stKind = serviceTaskKind(bo);
     const stModdle = modeler.get("moddle");
     // readMapField rebuilds a map field's moddle children (headers/query params)
@@ -7112,11 +9208,91 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
 
     const fdecision = body.querySelector("#f-decisionid");
     const fresultvar = body.querySelector("#f-resultvar");
+    // What the picked decision says it is given, once the catalog has answered. Null
+    // until then, and null for a decision typed in by hand that the catalog does not
+    // know — in both cases there is nothing to compare against and nothing is said.
+    let declaredInputs = null;
+    // renderDecisionDrift says where this task's input mapping and the decision's own
+    // inputs disagree.
+    //
+    // It is the same drift the decision editor reports one level down, at the place it
+    // does the most damage. Inside a model a name that nothing provides does not
+    // deploy; here it does. A business rule task may map whatever it likes — the
+    // mapping is FEEL over the instance's variables, and the engine has no way to know
+    // that "amount" was meant to be "amount due" — so an input the decision declares
+    // and the task never maps arrives null, every rule that tests it falls through,
+    // and the process carries on with whatever the table's last row says. That is a
+    // wrong answer, not a failure, and nothing downstream distinguishes them.
+    //
+    // A note and not a refusal: a decision may legitimately be given fewer inputs than
+    // it declares (a table that tests only some of them), and an expression may
+    // legitimately feed a name the catalog does not list for a decision addressed by
+    // hand. Said once, next to the rows, where it can be acted on.
+    const renderDecisionDrift = () => {
+      const note = body.querySelector("#dmn-inputs-drift");
+      if (!note) return;
+      const wrap = body.querySelector("#dmn-inputs");
+      if (!declaredInputs || !wrap) { note.hidden = true; note.innerHTML = ""; return; }
+      const mapped = new Set([...wrap.querySelectorAll(".dmn-input-row")]
+        .map((row) => (row.querySelector(".dmn-in-target").value || "").trim())
+        .filter(Boolean));
+      const declared = new Set(declaredInputs.map((i) => i.name).filter(Boolean));
+      const missing = [...declared].filter((n) => !mapped.has(n));
+      const extra = [...mapped].filter((n) => !declared.has(n));
+      const parts = [];
+      if (missing.length) {
+        parts.push(`The decision reads ${missing.map((n) => `<b>${esc(n)}</b>`).join(", ")}, and `
+          + `no row feeds ${missing.length > 1 ? "them" : "it"}. `
+          + `${missing.length > 1 ? "They arrive" : "It arrives"} empty, and the rules that `
+          + `test ${missing.length > 1 ? "them" : "it"} do not match.`);
+      }
+      if (extra.length) {
+        parts.push(`${extra.map((n) => `<b>${esc(n)}</b>`).join(", ")} `
+          + `${extra.length > 1 ? "are" : "is"} fed and the decision does not declare `
+          + `${extra.length > 1 ? "them" : "it"}. `
+          + `${extra.length > 1 ? "They are" : "It is"} ignored.`);
+      }
+      note.hidden = parts.length === 0;
+      note.innerHTML = parts.map((t) => `<p>${t}</p>`).join("");
+    };
     const fbinding = body.querySelector("#f-brt-binding");
+    const fversion = body.querySelector("#f-brt-version");
+    const fversionWrap = body.querySelector("#f-brt-version-wrap");
     const fbrtretries = body.querySelector("#f-brt-retries");
     // currentBinding preserves the decision binding (ADR-0063) across every save of
-    // the called decision, so editing the id/result variable never drops it.
-    const currentBinding = () => (fbinding && fbinding.value === "deployment") ? "deployment" : "latest";
+    // the called decision, so editing the id/result variable never drops it. A fixed
+    // version is written as atlas:version beside a latest bindingType, which is what
+    // a Camunda engine reads; a binding the panel does not offer is written back as
+    // it was found.
+    const currentBinding = () => {
+      const v = fbinding ? fbinding.value : "latest";
+      if (v === "version") return "latest";
+      return v || "latest";
+    };
+    const currentVersion = () => (fbinding && fbinding.value === "version" && fversion && fversion.value) || "";
+    // fillVersions lists the deployed versions of the chosen decision, newest first,
+    // keeping the one the task already names even when it is no longer deployed —
+    // the deploy then says so, which is better than the panel quietly changing it.
+    const fillVersions = async () => {
+      if (!fversion) return;
+      const id = (fdecision.value || "").trim();
+      const keep = fversion.value;
+      let rows = [];
+      if (id) {
+        try { rows = (await api("GET", `/api/v1/decision-deployments?decisionId=${encodeURIComponent(id)}`)) || []; } catch { rows = []; }
+      }
+      const opts = [`<option value="">— choose a deployed version —</option>`];
+      const seen = new Set();
+      for (const r of rows) {
+        const v = String(r.version || "");
+        if (!v || seen.has(v)) continue;
+        seen.add(v);
+        opts.push(`<option value="${esc(v)}">v${esc(v)}${r.current ? " — current" : ""}</option>`);
+      }
+      if (keep && !seen.has(keep)) opts.push(`<option value="${esc(keep)}">v${esc(keep)} — not deployed</option>`);
+      fversion.innerHTML = opts.join("");
+      fversion.value = keep;
+    };
     const calledDecisionProps = () => ({
       decisionId: (fdecision.value || "").trim(),
       resultVariable: (fresultvar.value || "").trim(),
@@ -7128,10 +9304,21 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     });
     const saveDecision = () => savePreservingPanel(() => {
       upsertExt(modeler, element, "zeebe:CalledDecision", calledDecisionProps());
+      setCalledDecisionVersion(modeler, element, currentVersion());
     });
     if (fdecision) fdecision.addEventListener("change", saveDecision);
     if (fresultvar) fresultvar.addEventListener("change", saveDecision);
-    if (fbinding) fbinding.addEventListener("change", saveDecision);
+    if (fbinding) {
+      fbinding.addEventListener("change", () => {
+        if (fversionWrap) fversionWrap.hidden = fbinding.value !== "version";
+        if (fbinding.value === "version") fillVersions();
+        saveDecision();
+      });
+    }
+    if (fversion) {
+      fversion.addEventListener("change", saveDecision);
+      if (fbinding && fbinding.value === "version") fillVersions();
+    }
     if (fbrtretries) fbrtretries.addEventListener("change", saveDecision);
 
     // Evaluation mode: local (embedded DMN) vs a temis worker (central). The
@@ -7188,25 +9375,90 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const inProject = new Set((scoped || []).map(decKey));
         const seen = new Set();
         const catalog = [];
-        const optionFor = (d) => {
-          const label = d.model ? `${d.name} · ${d.model}` : d.name;
-          return `<option value="${esc(d.id)}" data-key="${esc(decKey(d))}"${d.id === cur ? " selected" : ""}>${esc(label)}</option>`;
-        };
-        const takeGroup = (list) => {
-          const out = [];
+        // One group per decision file, this application's files first. A flat list
+        // ordered by where an entry happened to come from put a decision service
+        // below every decision it is made of; the file is the unit an author thinks
+        // in, so it is the unit the list is cut into.
+        const files = new Map();
+        const take = (list, mine) => {
           for (const d of list || []) {
             if (seen.has(decKey(d))) continue;
             seen.add(decKey(d));
             catalog.push(d);
-            out.push(optionFor(d));
+            // Keyed by handle where there is one. An entry with none reached the
+            // catalog because it is deployed, not because a reference points at it,
+            // so it is grouped by the model name it reports and marked as such.
+            const key = d.modelRef || "\u0000deployed\u0000" + (d.model || "");
+            let f = files.get(key);
+            if (!f) {
+              f = {
+                model: d.model || d.modelRef || "(unnamed model)",
+                mine: mine,
+                deployed: !d.modelRef,
+                items: [],
+              };
+              files.set(key, f);
+            }
+            f.items.push(d);
           }
-          return out;
         };
-        const projectOpts = takeGroup(scoped);
-        const otherOpts = takeGroup((all || []).filter((d) => !inProject.has(decKey(d))));
-        const parts = [`<option value="">— choose a decision —</option>`];
-        if (projectOpts.length) parts.push(`<optgroup label="This project">${projectOpts.join("")}</optgroup>`);
-        if (otherOpts.length) parts.push(`<optgroup label="${projectOpts.length ? "Other decisions" : "Available decisions"}">${otherOpts.join("")}</optgroup>`);
+        take(scoped, true);
+        take((all || []).filter((d) => !inProject.has(decKey(d))), false);
+        // noteFor says what an author has to know about an entry before picking it,
+        // in one line beside the name.
+        //
+        // Two of the three cost something if they are missing. "not deployed" means
+        // the decision is in the model, the task saves, and the deploy preflight
+        // refuses it later — about a decision picked minutes ago. "internal to X"
+        // means the pick reaches past a decision service into one of its workings:
+        // it runs and answers correctly, which is exactly why nothing else will ever
+        // mention it, and the service's author has lost the freedom the interface
+        // exists to give them (DMN §10.4).
+        const noteFor = (d, service) => {
+          const notes = [];
+          if (d.service) notes.push("decision service");
+          else if (service && service.internal) notes.push(`internal to ${service.name} — bypasses it`);
+          else if (service) notes.push("published by " + service.name);
+          if (!d.deployed) notes.push("not deployed");
+          return notes.join(" · ");
+        };
+        const optionFor = (d, note) => {
+          const label = note ? `${d.name} — ${note}` : d.name;
+          return `<option value="${esc(d.id)}" data-key="${esc(decKey(d))}"${d.id === cur ? " selected" : ""}>${esc(label)}</option>`;
+        };
+        // Within a file: the published interfaces, then the decisions that are
+        // somebody's to call, then the workings of a service last.
+        //
+        // The order is the recommendation. All three are selectable, because refusing
+        // one here would refuse nothing — the decision id on a task is a free-text
+        // field and the picker is a convenience, so a ban in the dropdown moves the
+        // practice from visible to invisible rather than stopping it. What the order
+        // and the note do instead is make the boundary-respecting pick the easy one,
+        // and leave the other reading as what it is.
+        const groupFor = (f) => {
+          const services = f.items.filter((d) => d.service);
+          const decisions = f.items.filter((d) => !d.service);
+          const belongsTo = new Map(); // decision id → { name, internal }
+          for (const s of services) {
+            const internal = new Set(s.internal || []);
+            for (const m of s.members || []) {
+              if (!belongsTo.has(m)) belongsTo.set(m, { name: s.name, internal: internal.has(m) });
+            }
+          }
+          const isInternal = (d) => !!(belongsTo.get(d.id) || {}).internal;
+          const opts = services
+            .map((d) => optionFor(d, noteFor(d)))
+            .concat(decisions.filter((d) => !isInternal(d))
+              .map((d) => optionFor(d, noteFor(d, belongsTo.get(d.id)))))
+            .concat(decisions.filter(isInternal)
+              .map((d) => optionFor(d, noteFor(d, belongsTo.get(d.id)))));
+          const where = f.deployed
+            ? " — deployed only"
+            : !f.mine && projectId ? " — other application" : "";
+          return `<optgroup label="${esc(f.model + where)}">${opts.join("")}</optgroup>`;
+        };
+        const parts = [`<option value="">— choose a decision —</option>`]
+          .concat(Array.from(files.values(), groupFor));
         fpick.innerHTML = parts.join("");
         fpick._catalog = catalog;
         // Offer the current decision's full declared inputs in the name combobox,
@@ -7216,6 +9468,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (curDec && dl && Array.isArray(curDec.inputs) && curDec.inputs.length) {
           dl.innerHTML = curDec.inputs.map((inp) => `<option value="${esc(inp.name)}"></option>`).join("");
         }
+        // The catalog is also what makes the drift note possible: it is the only place
+        // that says what the decision is given, derived from its requirements graph.
+        declaredInputs = (curDec && Array.isArray(curDec.inputs)) ? curDec.inputs : null;
+        renderDecisionDrift();
       }).catch(() => { /* leave the placeholder; manual entry still works */ });
 
       // applyPick sets the decision id + result variable and auto-fills the input
@@ -7230,6 +9486,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           if (p.target) prev[p.target] = (p.source || "").replace(/^=\s*/, "");
         }
         savePreservingPanel(() => {
+          const previousId = (fdecision.value || "").trim();
           upsertExt(modeler, element, "zeebe:CalledDecision", {
             // Picking a decision fills in the id and result variable; everything else
             // the task already carries (binding, retry budget) survives the pick.
@@ -7237,6 +9494,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             decisionId: d.id,
             resultVariable: (fresultvar.value || "").trim() || (d.output && d.output.name) || d.id,
           });
+          // A version belongs to the decision it was chosen for: a different decision
+          // starts without one, and the panel asks for it again.
+          if (d.id !== previousId) setCalledDecisionVersion(modeler, element, "");
           const rows = (d.inputs || []).map((inp) => ({ target: inp.name, source: prev[inp.name] || inp.name }));
           saveDecisionInputs(modeler, element, rows);
         });
@@ -7249,11 +9509,16 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (d) applyPick(d);
       });
 
-      // Author-a-decision: the embedded dmn-js editor (ADR-0051). "＋ Neue Decision"
-      // creates a model + reference and adopts it; "Bearbeiten" opens the current
-      // decision's local model in place. After authoring, the catalog is re-fetched
-      // and the authored decision is adopted (id + inputs + result), so inputs and
-      // output flow in automatically — no separate upload step.
+      // Author-a-decision. "＋ New decision" creates a decision and this task adopts
+      // it; "Edit" opens the one already selected. Both leave this diagram for the
+      // decision editor's own page (ADR-0320) — it used
+      // to be a window over this one, which is the thing that record ends.
+      //
+      // Adoption survives the trip: the decision editor stashes what it saved, app.js
+      // hands it back when this diagram remounts, and the block below applies it. So
+      // the author still presses one button, models the decision, comes back, and
+      // finds the id, the input mappings and the result variable filled in — the
+      // ADR-0062 flow, over a navigation instead of a modal.
       const adoptAuthored = async (result) => {
         if (!result) return;
         const scope = projectId ? "?projectId=" + encodeURIComponent(projectId) : "";
@@ -7263,10 +9528,29 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           decisions.find((x) => x.modelRef === result.modelRef);
         if (d) applyPick(d); else show(element);
       };
+      // Coming back from the decision editor: adopt once, for the task it was
+      // authored for, then forget it.
+      if (pendingAdopt && pendingAdopt.elementId === element.id) {
+        const rec = pendingAdopt;
+        pendingAdopt = null;
+        adoptAuthored(rec);
+      }
+      // leaveForDecision saves this diagram (or asks) and reports the draft id the
+      // round trip has to come back to. Without one — a deployed definition opened
+      // read-only — the decision is still authored, just without a way home, so it is
+      // opened plainly and the author picks it afterwards.
+      const openDecisionPage = async (suffix) => {
+        const left = await leaveForDecision();
+        if (!left.ok) return;
+        const home = left.processId
+          ? "/for/" + encodeURIComponent(left.processId) + "/" + encodeURIComponent(element.id)
+          : "";
+        location.hash = "#/modeler/dmn/" + suffix + home;
+      };
       const fnew = body.querySelector("#f-dmn-new");
       if (fnew) {
-        fnew.addEventListener("click", async () => {
-          adoptAuthored(await openDmnEditor({ api, toast, projectId }));
+        fnew.addEventListener("click", () => {
+          openDecisionPage("new" + (projectId ? "/p/" + encodeURIComponent(projectId) : ""));
         });
       }
       const fedit = body.querySelector("#f-dmn-edit");
@@ -7274,10 +9558,19 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         fedit.addEventListener("click", async () => {
           const cur = (fpick._catalog || []).find((x) => x.id === (fdecision?.value || "").trim());
           if (!cur || !cur.modelRef) {
-            toast && toast("Diese Decision hat kein lokal editierbares Modell.", "err");
+            toast && toast("This decision has no locally editable model.", "err");
             return;
           }
-          adoptAuthored(await openDmnEditor({ api, toast, projectId, modelRef: cur.modelRef }));
+          // The panel knows the model handle; the editor's route addresses the
+          // reference that points at it, so resolve the one from the other.
+          let refs = [];
+          try { refs = (await api("GET", "/api/v1/dmnrefs")) || []; } catch { /* reported below */ }
+          const ref = refs.find((r) => r.modelRef === cur.modelRef);
+          if (!ref) {
+            toast && toast("This decision has no reference to open — add it to an application first.", "err");
+            return;
+          }
+          openDecisionPage("e/" + encodeURIComponent(ref.id));
         });
       }
     }
@@ -7297,6 +9590,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const source = row.querySelector(".dmn-in-source");
         target.addEventListener("change", saveInputs);
         source.addEventListener("change", saveInputs);
+        // The note is about the names in the rows, so it follows the typing rather than
+        // the save: a row edited and not yet committed is exactly when it is useful.
+        target.addEventListener("input", renderDecisionDrift);
         target.addEventListener("input", () => {
           const rows = [...inputsWrap.querySelectorAll(".dmn-input-row")];
           if (row === rows[rows.length - 1] && target.value.trim() !== "") {
@@ -7639,6 +9935,18 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
 
     const fmsgref = body.querySelector("#f-msgref");
+    // One listing of the server's message sources — inbound watches, product actions, the
+    // processes waiting for a name — serves the picker's groups, the name field's
+    // suggestions and the line under it, so a render asks once.
+    const msgSources = fmsgref && api ? api("GET", "/api/v1/message-sources") : null;
+    const msgBo = element.businessObject;
+    if (fmsgref && msgSources && (receivesMessages(msgBo) || throwsMessages(msgBo))) {
+      const fname = body.querySelector("#f-msgname");
+      if (fname && receivesMessages(msgBo)) fname.setAttribute("list", "f-msgname-sources");
+      msgSources
+        .then((list) => offerMessageSources(fmsgref, fname, body.querySelector("#f-msgname-sources"), list, modeler, msgBo))
+        .catch(() => { /* no sources offered; the picker works the same */ });
+    }
     if (fmsgref) {
       fmsgref.addEventListener("change", () => {
         const med = messageRefHolder(element.businessObject);
@@ -7647,6 +9955,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         savePreservingPanel(() => {
           if (v === "__new__") {
             linkMessage(modeler, element, med, createMessage(modeler, ""));
+          } else if (v.startsWith(MESSAGE_SOURCE_PREFIX)) {
+            // A Worker event becomes a message of this diagram under the same name —
+            // the one already declared when there is one, so a name is never split into
+            // two messages with two correlation keys.
+            const name = v.slice(MESSAGE_SOURCE_PREFIX.length);
+            const declared = listMessages(modeler).find((m) => (m.name || "").trim() === name);
+            linkMessage(modeler, element, med, declared || createMessage(modeler, name));
           } else if (v === "") {
             linkMessage(modeler, element, med, null);
           } else {
@@ -7658,13 +9973,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     const fmsgname = body.querySelector("#f-msgname");
     if (fmsgname) {
-      fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value);
+      fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value, msgSources);
       fmsgname.addEventListener("change", () => {
         const med = messageRefHolder(element.businessObject);
         if (med && med.messageRef) med.messageRef.name = (fmsgname.value || "").trim();
-        // Renaming the message changes which watches feed it, so the line is re-read
-        // rather than left describing the name that was there a moment ago.
-        fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value);
+        // Renaming the message changes which watches feed it, so the line is redrawn for
+        // the new name from the same listing, rather than left describing the old one.
+        fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value, msgSources);
       });
     }
     const fcorrkey = body.querySelector("#f-corrkey");
@@ -7676,6 +9991,21 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     const fsigref = body.querySelector("#f-sigref");
     if (fsigref) {
+      const listens = fsigref.dataset.listens === "1";
+      const sigNote = body.querySelector("#f-sigevent");
+      eventCatalog(api).then((entries) => {
+        if (!fsigref.isConnected) return;
+        const group = fsigref.querySelector("#f-sig-events");
+        if (group) {
+          const mine = new Set(listSignals(modeler).map((x) => x.name));
+          group.innerHTML = entries.filter((e) => e.listenable && (e.channels || []).includes("signal"))
+            .map((e) => `<option value="${esc(SIGNAL_EVENT_PREFIX + e.type)}" title="${esc((e.meaning || {}).en || "")}">${
+              esc(e.type)}${mine.has(e.type) ? "" : " — new"}</option>`).join("");
+          if (!group.children.length) group.remove();
+        }
+        const sed = signalDefOf(element.businessObject);
+        if (sigNote && sed && sed.signalRef) sigNote.innerHTML = signalEventNote(entries, sed.signalRef.name, listens);
+      });
       fsigref.addEventListener("change", () => {
         const sed = signalDefOf(element.businessObject);
         if (!sed) return;
@@ -7685,6 +10015,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             linkSignal(modeler, element, sed, createSignal(modeler, ""));
           } else if (v === "") {
             linkSignal(modeler, element, sed, null);
+          } else if (v.startsWith(SIGNAL_EVENT_PREFIX)) {
+            // A catalogued event: the model's signal of that name, made once.
+            const name = v.slice(SIGNAL_EVENT_PREFIX.length);
+            linkSignal(modeler, element, sed, listSignals(modeler).find((x) => x.name === name) || createSignal(modeler, name));
           } else {
             linkSignal(modeler, element, sed, listSignals(modeler).find((s) => s.id === v));
           }
@@ -7697,6 +10031,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       fsigname.addEventListener("change", () => {
         const sed = signalDefOf(element.businessObject);
         if (sed && sed.signalRef) sed.signalRef.name = (fsigname.value || "").trim();
+        // A renamed signal may now be, or no longer be, a name atlas emits.
+        const note = body.querySelector("#f-sigevent");
+        const sel = body.querySelector("#f-sigref");
+        if (note && sel) {
+          eventCatalog(api).then((entries) => {
+            if (note.isConnected) note.innerHTML = signalEventNote(entries, fsigname.value, sel.dataset.listens === "1");
+          });
+        }
       });
     }
     const ferrref = body.querySelector("#f-errref");
@@ -7947,6 +10289,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         try { modeling.updateProperties(element, { completionCondition: cexpr }); } catch { /* stale */ }
       }));
     }
+    const fwizard = body.querySelector("#f-wizard");
+    if (fwizard) {
+      fwizard.addEventListener("change", () => savePreservingPanel(() => {
+        // Only a kind is written, so an ordinary subprocess stays attribute-free.
+        try { modeling.updateProperties(element, { wizard: fwizard.value || undefined }); } catch { /* stale */ }
+      }));
+    }
     const fadhoccancel = body.querySelector("#f-adhoccancel");
     if (fadhoccancel) {
       fadhoccancel.addEventListener("change", () => savePreservingPanel(() => {
@@ -7977,6 +10326,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       for (const sel of ["#f-assignee", "#f-groups", "#f-due"]) {
         attachExpressionToggle(body.querySelector(sel), { variables: feelVars, validate });
       }
+      // A timer's schedule is one too (ADR-0055/0056). A timer start has no instance to
+      // read from — its expression must be constant — so it is offered no variables.
+      const timerStart = element.businessObject.$type === "bpmn:StartEvent" && !isEventSubStart(element);
+      attachExpressionToggle(body.querySelector("#f-timerval"), { variables: timerStart ? [] : feelVars, validate });
     }
   }
 
@@ -8030,35 +10383,6 @@ export function parseStartVariables(raw) {
   return { variables: obj };
 }
 
-// typedDeployFieldHTML renders one typed input for a declared start variable,
-// prefilled with its default. A boolean is a true/false/— select; a number an
-// input[type=number]; a string a text input; a json a textarea upgraded to a
-// JSON editor after insertion. Required fields carry data-required so
-// readTypedDeployBody can enforce them.
-function typedDeployFieldHTML(v) {
-  const req = v.required ? ' <span class="req-star" title="required">*</span>' : "";
-  const dr = v.required ? ' data-required="1"' : "";
-  const cap = `<span>${esc(v.name)} <span class="muted">(${v.type})</span>${req}</span>`;
-  let input;
-  if (v.type === "boolean") {
-    const d = v.default;
-    input = `<select class="dv-field" data-name="${esc(v.name)}" data-type="boolean"${dr}>
-      <option value=""${d === "" ? " selected" : ""}>—</option>
-      <option value="true"${d === "true" ? " selected" : ""}>true</option>
-      <option value="false"${d === "false" ? " selected" : ""}>false</option>
-    </select>`;
-  } else if (v.type === "number") {
-    input = `<input type="number" step="any" class="dv-field" data-name="${esc(v.name)}" data-type="number"${dr} value="${esc(v.default)}" placeholder="0"/>`;
-  } else if (v.type === "json") {
-    // A textarea, upgraded to a JSON editor by wireDeployJSONEditors() after
-    // the panel is inserted into the DOM.
-    input = `<textarea class="dv-field dv-json" data-name="${esc(v.name)}" data-type="json"${dr} rows="3" spellcheck="false" placeholder='{ "key": "value" }'>${esc(v.default)}</textarea>`;
-  } else {
-    input = `<input type="text" class="dv-field" data-name="${esc(v.name)}" data-type="string"${dr} value="${esc(v.default)}"/>`;
-  }
-  return `<label class="field">${cap}${input}</label>`;
-}
-
 // startVarsFormHTML is the body of a start-variables panel — the editor's
 // Deploy & run and the Live view's Start instance both use it: a typed form when
 // the process declares start variables, otherwise a free-form JSON textarea.
@@ -8082,45 +10406,186 @@ function readStartFormBody(bodyEl) {
   return json ? parseStartVariables(json.value) : readTypedDeployBody(bodyEl);
 }
 
-// readTypedDeployBody turns the typed Deploy form into an instance request body,
-// coercing each field to its declared type and enforcing required fields. Empty
-// optional fields are omitted. Throws Error(message) on a bad number, invalid
-// JSON, or a missing required value.
-function readTypedDeployBody(bodyEl) {
-  const vars = {};
-  const missing = [];
-  bodyEl.querySelectorAll(".dv-field").forEach((el) => {
-    const { name, type } = el.dataset;
-    const raw = el.value.trim();
-    if (raw === "") { if (el.dataset.required === "1") missing.push(name); return; }
-    if (type === "number") {
-      const n = Number(raw);
-      if (!Number.isFinite(n)) throw new Error(`"${name}" must be a number`);
-      vars[name] = n;
-    } else if (type === "boolean") {
-      vars[name] = raw === "true";
-    } else if (type === "json") {
-      try {
-        vars[name] = JSON.parse(raw);
-      } catch (e) {
-        throw new Error(`"${name}": invalid JSON — ${e.message}`);
+// askStartForm renders a process's start form in a modal and resolves with the
+// variables to start with, or null when the person backs out. Beneath the form it asks
+// for the declared start variables the form does not bind (startvars.js), so what Send
+// resolves with is both halves of what the process says it starts with: the form's
+// data, and the declared values. Without that second half a declared value the form
+// never asks for is simply missing from the instance — a script that reads it gets null.
+//
+// Deploy & run asks before deploying, so Cancel leaves the server exactly as it was;
+// the Live view's Start instance asks before starting. `texts` names what Send and
+// Cancel do on the surface that opened it, and the way out when the form cannot load.
+function askStartForm(api, formId, declared, texts = {}) {
+  const sendTitle = texts.send || "Deploy this diagram and start an instance with these values";
+  const cancelTitle = texts.cancel || "Close without deploying or starting anything";
+  const fallback = texts.fallback || "Deploy only still works, and the process can be started from the Tasks app once its form loads.";
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML = `
+      <div class="modal startform-modal" role="dialog" aria-modal="true" aria-label="Start form">
+        <div class="modal-head"><h2>Start values</h2></div>
+        <div class="modal-body">
+          <div class="startform-host" id="sf-host"></div>
+          <div class="startform-extra" id="sf-extra"></div>
+          <p class="err" id="sf-err"></p>
+        </div>
+        <div class="modal-foot">
+          <button class="btn neutral" data-sf-cancel title="${esc(cancelTitle)}">Cancel</button>
+          <button class="btn" data-sf-send disabled title="${esc(sendTitle)}">Send</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const host = ov.querySelector("#sf-host");
+    const extraHost = ov.querySelector("#sf-extra");
+    const errEl = ov.querySelector("#sf-err");
+    const sendBtn = ov.querySelector("[data-sf-send]");
+    let form = null;
+    let closed = false;
+    const close = (result) => {
+      closed = true;
+      if (form) { try { form.destroy(); } catch { /* noop */ } }
+      ov.remove();
+      document.removeEventListener("keydown", onKey);
+      resolve(result);
+    };
+    const onKey = (e) => { if (e.key === "Escape") close(null); };
+    document.addEventListener("keydown", onKey);
+    ov.querySelector("[data-sf-cancel]").addEventListener("click", () => close(null));
+    ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
+
+    // loadIntoHost renders the form, and is what Try again calls to render it after a
+    // failure. Both halves carry a deadline (formviewer.js): a viewer bundle or a
+    // definition that never arrives used to leave "Loading form…" standing for the
+    // rest of the session — no error, no retry, and a Send that stayed disabled
+    // beside it. Nothing here can hang without saying so any more.
+    const loadIntoHost = () => {
+      // A retry after a half-built form (the viewer came, the schema did not) would
+      // otherwise wipe its container out from under it and leave it running.
+      if (form) { try { form.destroy(); } catch { /* noop */ } form = null; }
+      host.innerHTML = `<p class="muted">Loading form…</p>`;
+      extraHost.innerHTML = "";
+      errEl.textContent = "";
+      Promise.all([
+        loadFormViewer(),
+        withLoadDeadline(api("GET", "/api/v1/forms/" + encodeURIComponent(formId)), "The form definition"),
+      ])
+        .then(async ([{ Form }, def]) => {
+          // Cancelled while it loaded: instantiating form-js now would put a live
+          // form, with its timers and listeners, into a container already detached.
+          if (closed) return;
+          const schema = (def && def.schema) || {};
+          host.innerHTML = "";
+          form = new Form({ container: host });
+          await form.importSchema(schema, {});
+          if (closed) { try { form.destroy(); } catch { /* noop */ } form = null; return; }
+          // Which declared variables the form leaves out is only known once its schema
+          // is here, so the extra fields arrive with the form rather than before it.
+          extraHost.innerHTML = extraStartFieldsHTML(uncoveredStartVariables(declared, schema));
+          wireStartJSONEditors(extraHost);
+          sendBtn.disabled = false;
+          sendBtn.focus();
+        })
+        .catch((e) => {
+          if (closed) return;
+          // The form is the way in and it did not load. Say so, offer the retry that
+          // costs nothing (whatever did arrive is cached), and name the way out that
+          // still works rather than a Send that would start with nothing.
+          host.innerHTML = `<p class="err">Could not load the start form: ${esc(e.message)}</p>
+            <p class="muted">${esc(fallback)}</p>
+            <button type="button" class="btn ghost small" data-sf-retry
+              title="Load the start form again">Try again</button>`;
+          host.querySelector("[data-sf-retry]").addEventListener("click", loadIntoHost);
+        });
+    };
+    loadIntoHost();
+
+    sendBtn.addEventListener("click", () => {
+      if (!form) return;
+      const { data, errors } = form.submit();
+      if (errors && Object.keys(errors).length > 0) {
+        // "Fix the highlighted fields" is what this used to say, which asks the person
+        // to go find a colour instead of telling them what is missing. The same answer
+        // the Tasks app gives, in this dialog's own language: the Modeler is English
+        // throughout, and the console's catalogue is German-first (ADR-0267) — so the
+        // names come from the shared helper and the sentence around them is this
+        // screen's.
+        const { shown, rest } = formRefusalNames(form, errors);
+        const more = rest > 0 ? ` and ${rest} more field${rest === 1 ? "" : "s"}` : "";
+        errEl.textContent = `Still to fill in: ${shown.join(", ")}${more}.`;
+        scrollToFirstInvalidField("sf-host");
+        return;
       }
-    } else {
-      vars[name] = raw;
-    }
+      // The declared half is checked the way Deploy & run has always checked it: a
+      // missing required value or malformed JSON keeps the dialog open and says which.
+      let declaredVars;
+      try { declaredVars = readTypedDeployBody(extraHost).variables || {}; }
+      catch (e) { errEl.textContent = e.message; return; }
+      errEl.textContent = "";
+      // The two halves bind different names by construction; the form wins all the
+      // same, because it is the half somebody laid out for the purpose.
+      close({ ...declaredVars, ...(data || {}) });
+    });
   });
-  if (missing.length) throw new Error(`required: ${missing.join(", ")}`);
-  return Object.keys(vars).length ? { variables: vars } : {};
 }
 
-// wireDeployJSONEditors upgrades every json-typed textarea (.dv-json) and the
-// free-form start-variables textarea (.sv-json) in the given container to a
-// professional JSON editor. Called after startVarsFormHTML inserts the panel
-// HTML, so the DOM elements exist.
-function wireDeployJSONEditors(container) {
-  for (const ta of container.querySelectorAll(".dv-json, .sv-json")) {
-    attachJSONEditor(ta, { rows: 3 });
+// importOver replaces what the modeler shows with xml, keeping the author's viewport,
+// and resolves to the import's warnings. When the import fails it puts the diagram
+// that was there back before rethrowing. bpmn-js refuses a document that is not BPMN
+// while parsing it, with the canvas untouched, but one that is BPMN and has nothing it
+// can draw — no diagram, no process — only after it has cleared the canvas; a refused
+// import must not cost the diagram it was meant to change.
+async function importOver(modeler, xml) {
+  const { xml: before } = await modeler.saveXML({ format: true });
+  const canvas = modeler.get("canvas");
+  let vb = null;
+  try { vb = canvas.viewbox(); } catch { /* nothing drawn yet */ }
+  const keepView = () => { if (vb) { try { canvas.viewbox(vb); } catch { /* ignore */ } } };
+  try {
+    const { warnings } = await modeler.importXML(xml);
+    keepView();
+    return { warnings: warnings || [] };
+  } catch (e) {
+    // The document came out of this modeler a moment ago, so it reads back.
+    try { await modeler.importXML(before); keepView(); } catch { /* nothing better to restore */ }
+    throw e;
   }
+}
+
+// markImportedEdit records that the canvas now holds work this session put there by an
+// import. An import is not a command: it starts the undo stack afresh and fires none of
+// the element events the live session listens to, so both are told explicitly — or the
+// editor would believe the diagram was nothing to lose, leaving without asking and
+// letting a collaborator's draft be pulled over it (ADR-0140).
+function markImportedEdit(identity) {
+  identity.importedEdit = true;
+  if (collab && collab.markDirty) collab.markDirty();
+}
+
+// makeKeepEdits builds the "may we leave this diagram now" question every action that
+// navigates away has to ask: true once this diagram's work is safe. A session that
+// addresses a draft saves it; one that does not has nowhere to put the edits without
+// inventing a draft, so it asks before discarding. `what` names the act in that
+// question, so the author reads what they are about to trade.
+//
+// saveNew widens the first case to a diagram that has never been saved at all, for an
+// action where minting a draft is plainly what the author wants — authoring a decision
+// for a task they have just drawn. It stays off for a deployed definition opened
+// read-only, where a save would fork a draft nobody asked for.
+function makeKeepEdits(modeler, identity, saveDraft, what, saveNew) {
+  return async () => {
+    let dirty = false;
+    try { dirty = modeler.get("commandStack").canUndo(); } catch { /* no stack, nothing to lose */ }
+    // An applied XML source or an auto-layout replaced the canvas through an import,
+    // which starts the undo stack afresh — so the stack alone would call that diagram
+    // untouched.
+    if (identity.importedEdit) dirty = true;
+    if (!dirty) return true;
+    if (identity.draftId != null) return await saveDraft(false);
+    if (saveNew && !identity.fromDeployment) return await saveDraft(false);
+    return window.confirm(`This diagram has unsaved changes, and ${what} discards them.\n\nContinue?`);
+  };
 }
 
 // deploymentKey is the definition this editor was opened on, or null for a draft
@@ -8149,6 +10614,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       const path = "/api/v1/drafts?from=" + encodeURIComponent(identity.draftId || "") +
         (projectId ? "&projectId=" + encodeURIComponent(projectId) : "");
       const d = await api("POST", path, xml, true);
+      identity.savedXML = xml;
       root.querySelector(".crumb-current").textContent = d.name || d.processId || "Draft";
       docTitle(`${d.name || d.processId || "Draft"} · Modeler`);
       // Draft is now persisted: clear the collab unsaved-work guard so a co-editor's
@@ -8173,6 +10639,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
         identity.fromDeployment = false;
         history.replaceState(null, "", "#/modeler/draft/" + encodeURIComponent(d.processId));
       }
+      if (shownVersion) shownVersion.refresh();
       return true;
     } catch (e) {
       // A 409 says another draft already holds this process id, and the save refused
@@ -8208,7 +10675,11 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     try {
       const { xml } = await modeler.saveXML({ format: true });
       const relaid = await api("POST", "/api/v1/layout", xml, true);
-      await modeler.importXML(typeof relaid === "string" ? relaid : String(relaid));
+      // An import like the XML source's Apply, and so the same two consequences: a
+      // document the modeler cannot draw puts the diagram back rather than leaving an
+      // empty canvas, and a re-flowed one is unsaved work the editor has to know about.
+      await importOver(modeler, typeof relaid === "string" ? relaid : String(relaid));
+      markImportedEdit(identity);
       modeler.get("canvas").zoom("fit-viewport");
       toast("Diagram auto-laid out", "ok");
     } catch (e) {
@@ -8281,6 +10752,23 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       URL.revokeObjectURL(a.href);
     } catch (e) { toast("export failed: " + e.message, "err"); }
   });
+
+  // XML source: the diagram as BPMN XML, read off the canvas — so it is what the author
+  // is looking at, saved or not — and, once corrected, imported back onto it. What
+  // reaches the canvas goes through repairModel like any diagram opened from the
+  // server, so a hand-written dangling reference is declared rather than dropped, and
+  // it is marked as the unsaved edit it is (markImportedEdit).
+  root.querySelector("#xmlsource").addEventListener("click", () => openXmlSource({
+    kind: "BPMN",
+    subject: "diagram",
+    toast,
+    read: async () => (await modeler.saveXML({ format: true })).xml,
+    apply: async (text) => {
+      const res = await importOver(modeler, repairModel(text));
+      markImportedEdit(identity);
+      return res;
+    },
+  }));
 
   // Documentation (ADR-0143): publish the process as a structured PDF — the
   // diagram plus every element's prose — as an immutable numbered version, and
@@ -8442,121 +10930,32 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     // A process whose start event links a form already says what it starts with, in a
     // form somebody designed. Asking for the same values again as hand-typed JSON is
     // both duplicate work and a worse way to enter them, so the panel names the form
-    // and Deploy & run opens it.
+    // and Deploy & run opens it — together with the declared start variables the form
+    // does not ask for, which the form must not silently drop.
     const fid = startFormId(modeler);
-    dbody.innerHTML = fid
+    const declared = bo ? readStartVariables(bo) : [];
+    // A version opened read-only is not the draft, and deploying it does not make it
+    // one: the draft — what the application publishes — stays as it was. Said here,
+    // before the deploy, because afterwards is when it would be missed.
+    const fromVersion = identity.fromDeployment
+      ? `<p class="deploy-from-version" id="deploy-from-version">This diagram was opened from a deployed
+          version, not from the draft. Deploying makes a new version and leaves the draft as it is — publishing
+          the application would deploy the draft again. <b>Save</b> first if the draft should hold this diagram.</p>`
+      : "";
+    dbody.innerHTML = fromVersion + (fid
       ? `<p class="muted" style="margin:0">This process starts with the form
           <b>${esc((formFieldCache.get(fid) || {}).name || fid)}</b>. <b>Deploy &amp; run</b> opens it,
-          and what you submit becomes the instance's start variables.</p>`
-      : startVarsFormHTML(bo ? readStartVariables(bo) : []);
-    wireDeployJSONEditors(dbody);
+          and what you submit becomes the instance's start variables.${declared.length
+            ? " The start variables declared on the process that the form does not ask for are asked beneath it."
+            : ""}</p>`
+      : startVarsFormHTML(declared));
+    wireStartJSONEditors(dbody);
     dactions.hidden = false;
     dpanel.hidden = false;
     derr.textContent = "";
     const first = dbody.querySelector(".sv-json, .dv-field");
     if (first) first.focus();
   };
-
-  // askStartForm renders the process's own start form in a modal and resolves with the
-  // variables to start with, or null when the author backs out — in which case nothing
-  // is deployed either: "Deploy & run" is one action, and cancelling it should leave
-  // the server exactly as it was. Asking before deploying is what makes that possible.
-  function askStartForm(formId) {
-    return new Promise((resolve) => {
-      const ov = document.createElement("div");
-      ov.className = "modal-ov";
-      ov.innerHTML = `
-        <div class="modal startform-modal" role="dialog" aria-modal="true" aria-label="Start form">
-          <div class="modal-head"><h2>Start values</h2></div>
-          <div class="modal-body">
-            <div class="startform-host" id="sf-host"></div>
-            <p class="err" id="sf-err"></p>
-          </div>
-          <div class="modal-foot">
-            <button class="btn neutral" data-sf-cancel title="Close without deploying or starting anything">Cancel</button>
-            <button class="btn" data-sf-send disabled title="Deploy this diagram and start an instance with these values">Send</button>
-          </div>
-        </div>`;
-      document.body.appendChild(ov);
-      const host = ov.querySelector("#sf-host");
-      const errEl = ov.querySelector("#sf-err");
-      const sendBtn = ov.querySelector("[data-sf-send]");
-      let form = null;
-      let closed = false;
-      const close = (result) => {
-        closed = true;
-        if (form) { try { form.destroy(); } catch { /* noop */ } }
-        ov.remove();
-        document.removeEventListener("keydown", onKey);
-        resolve(result);
-      };
-      const onKey = (e) => { if (e.key === "Escape") close(null); };
-      document.addEventListener("keydown", onKey);
-      ov.querySelector("[data-sf-cancel]").addEventListener("click", () => close(null));
-      ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
-
-      // loadIntoHost renders the form, and is what Try again calls to render it after a
-      // failure. Both halves carry a deadline (formviewer.js): a viewer bundle or a
-      // definition that never arrives used to leave "Loading form…" standing for the
-      // rest of the session — no error, no retry, and a Send that stayed disabled
-      // beside it. Nothing here can hang without saying so any more.
-      const loadIntoHost = () => {
-        // A retry after a half-built form (the viewer came, the schema did not) would
-        // otherwise wipe its container out from under it and leave it running.
-        if (form) { try { form.destroy(); } catch { /* noop */ } form = null; }
-        host.innerHTML = `<p class="muted">Loading form…</p>`;
-        errEl.textContent = "";
-        Promise.all([
-          loadFormViewer(),
-          withLoadDeadline(api("GET", "/api/v1/forms/" + encodeURIComponent(formId)), "The form definition"),
-        ])
-          .then(async ([{ Form }, def]) => {
-            // Cancelled while it loaded: instantiating form-js now would put a live
-            // form, with its timers and listeners, into a container already detached.
-            if (closed) return;
-            host.innerHTML = "";
-            form = new Form({ container: host });
-            await form.importSchema((def && def.schema) || {}, {});
-            if (closed) { try { form.destroy(); } catch { /* noop */ } form = null; return; }
-            sendBtn.disabled = false;
-            sendBtn.focus();
-          })
-          .catch((e) => {
-            if (closed) return;
-            // The form is the way in and it did not load. Say so, offer the retry that
-            // costs nothing (whatever did arrive is cached), and name the way out that
-            // still works rather than a Send that would start with nothing.
-            host.innerHTML = `<p class="err">Could not load the start form: ${esc(e.message)}</p>
-              <p class="muted">Deploy only still works, and the process can be started from
-              the Tasks app once its form loads.</p>
-              <button type="button" class="btn ghost small" data-sf-retry
-                title="Load the start form again">Try again</button>`;
-            host.querySelector("[data-sf-retry]").addEventListener("click", loadIntoHost);
-          });
-      };
-      loadIntoHost();
-
-      sendBtn.addEventListener("click", () => {
-        if (!form) return;
-        const { data, errors } = form.submit();
-        if (errors && Object.keys(errors).length > 0) {
-          // "Fix the highlighted fields" is what this used to say, which asks the author
-          // to go find a colour instead of telling them what is missing. The same
-          // answer the Tasks app gives, in this dialog's own language: the Modeler is
-          // English throughout, and the console's catalogue is German-first
-          // (ADR-0267) — so the names come from the shared helper and the sentence
-          // around them is this screen's.
-          const { shown, rest } = formRefusalNames(form, errors);
-          const more = rest > 0 ? ` and ${rest} more field${rest === 1 ? "" : "s"}` : "";
-          errEl.textContent = `Still to fill in: ${shown.join(", ")}${more}.`;
-          scrollToFirstInvalidField("sf-host");
-          return;
-        }
-        errEl.textContent = "";
-        close(data || {});
-      });
-    });
-  }
 
   deployBtn.addEventListener("click", () => { dpanel.hidden ? openDeploy() : closeDeploy(); });
   root.querySelector("#deploy-cancel").addEventListener("click", closeDeploy);
@@ -8574,7 +10973,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       // because a straight-through process has already finished by the time the
       // roundtrip link is built.
       const list = await api("GET", `/api/v1/instances?process=${encodeURIComponent(defKey)}&limit=1`);
-      const mine = (list || []).filter((r) => r.processDefKey === defKey);
+      const mine = ((list && list.items) || []).filter((r) => r.processDefKey === defKey);
       if (mine.length) {
         const inst = mine.reduce((a, b) => (b.key > a.key ? b : a));
         return `#/operations/p/${defKey}/i/${inst.key}`;
@@ -8618,7 +11017,8 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       const fid = startFormId(modeler);
       if (fid) {
         // Ask before deploying: a Cancel here leaves nothing behind on the server.
-        const vars = await askStartForm(fid);
+        const bo = rootProcess(modeler);
+        const vars = await askStartForm(api, fid, bo ? readStartVariables(bo) : []);
         if (vars === null) return;
         body = { variables: vars };
       } else {
@@ -8632,6 +11032,26 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     derr.textContent = "";
     try {
       const { xml } = await modeler.saveXML({ format: true });
+      // Deploying from a draft saves it first, so the draft stays what runs
+      // (ADR-0452). Without it a change could be deployed
+      // and missing from the draft the application opens — and the next Publish,
+      // which deploys the drafts, would deploy over it. A new diagram is saved too:
+      // its first deploy is plainly meant to be kept. A version opened read-only is
+      // not saved, because that would overwrite a draft nobody asked to replace; the
+      // panel says so instead (openDeploy).
+      if (!identity.fromDeployment && xml !== identity.savedXML) {
+        // A changed process id makes the save a rename, which reopens the editor under
+        // the new id — a deploy cannot ride along with that navigation.
+        const pid = (draftKeyProcess(modeler) || {}).id || "";
+        if (identity.draftId != null && pid && pid !== identity.draftId) {
+          derr.textContent = "The process id changed since the last save. Save first (it renames the draft), then deploy.";
+          return;
+        }
+        if (!(await saveDraft(false))) {
+          derr.textContent = "Not deployed: the draft could not be saved first.";
+          return;
+        }
+      }
       // Carry the editor's project so the deployment files under the same folder as
       // its draft on the Modeler home (ADR-0034); omitted when editing outside a
       // project, which deploys to Ungrouped.
@@ -8657,6 +11077,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
           (dep.warnings || []).length ? "warn" : "ok");
         showDeploySuccess(msg, `#/operations/p/${dep.key}`, dep.warnings);
       }
+      if (shownVersion) shownVersion.refresh();
     } catch (e) {
       // The Atlas compiler rejects elements it can't execute yet — surface that
       // inline in the panel so the entered variables aren't lost.
@@ -8690,14 +11111,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
 // one that does not (a deployed definition opened read-only, or a diagram never saved)
 // has nowhere to put them without inventing a draft, so it asks before discarding.
 function wireCalleeNavigation(root, modeler, api, toast, identity, saveDraft) {
-  // keepEdits answers "may we leave now": true once this diagram's work is safe.
-  const keepEdits = async () => {
-    let dirty = false;
-    try { dirty = modeler.get("commandStack").canUndo(); } catch { /* no stack, nothing to lose */ }
-    if (!dirty) return true;
-    if (identity.draftId != null) return await saveDraft(false);
-    return window.confirm("This diagram has unsaved changes, and opening the called process discards them.\n\nContinue?");
-  };
+  const keepEdits = makeKeepEdits(modeler, identity, saveDraft, "opening the called process");
 
   const openCallee = async (pid) => {
     pid = (pid || "").trim();
@@ -8866,6 +11280,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // Resolve the process this definition version belongs to, and all its versions,
   // so the version picker can offer them. One /processes call feeds both.
   let procName = `definition ${key}`;
+  let processId = ""; // the BPMN process id every version shares; "" when unresolved
   let versions = []; // [{key, version, name}], newest first
   // The stamp on a diagram somebody has adjusted since it was deployed
   // (ADR-0251). It rides the listing this already fetches,
@@ -8873,15 +11288,32 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // reader would otherwise compare the picture against a printed copy and conclude
   // that the process was redeployed.
   let layoutNote = "";
+  // And the mark on a definition whose latest-bound decisions were frozen when it was
+  // deployed (ADR-0423): what its instances evaluate is not what the binding reads,
+  // and this is the view somebody opens to find out why an instance decided as it did.
+  let frozenNote = "";
+  // What this definition starts with, as the server compiled it: its start form and
+  // its declared start variables. Read off the listing rather than the diagram,
+  // because a collaboration's diagram holds every pool's start event and only the
+  // listing says which one is this definition's.
+  let startForm = "";
+  let startVars = [];
   try {
     const procs = await api("GET", "/api/v1/processes");
     const here = procs.find((x) => x.key === key);
     if (here) {
       procName = here.name || here.processId;
+      processId = here.processId;
+      startForm = here.startFormId || "";
+      startVars = Array.isArray(here.startVariables) ? here.startVariables : [];
+      const frozen = frozenMark(here);
+      if (frozen) {
+        frozenNote = ` <span class="pill${frozen.behind ? " warn" : ""} frozen-mark" title="${esc(frozen.title)}">${esc(frozen.label)}</span>`;
+      }
       if (here.diagramUpdatedAt) {
         const when = new Date(here.diagramUpdatedAt * 1000).toLocaleString();
         layoutNote = `<span class="muted live-layout-note" title="Only the drawing was changed — the process, its version and its instances are the deployed ones${
-          here.diagramUpdatedBy ? `, adjusted by ${esc(here.diagramUpdatedBy)}` : ""}">layout adjusted ${esc(when)}</span>`;
+          here.diagramUpdatedBy ? `, adjusted by ${esc(here.diagramUpdatedByName || here.diagramUpdatedBy)}` : ""}">layout adjusted ${esc(when)}</span>`;
       }
       docTitle(`${procName} · Operations`);
       versions = procs
@@ -8900,7 +11332,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     <div class="editor live">
       <div class="editor-bar">
         <a class="btn neutral" href="#/operations">&larr; Instances</a>
-        <span class="crumbs" style="margin-left:8px">Live &middot; <b>${esc(procName)}</b>${layoutNote}</span>
+        <span class="crumbs" style="margin-left:8px">Live &middot; <b>${esc(procName)}</b>${layoutNote}${frozenNote}</span>
         <label class="bar-select"><span>Version</span>
           <select id="version-sel">${versionOptions}</select></label>
         <label class="bar-select"><span>Instance</span>
@@ -8908,6 +11340,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         <div style="flex:1"></div>
         <a class="btn neutral" id="edit-modeler" href="#/modeler/d/${key}" title="Open this definition in the Modeler">✎ Edit in Modeler</a>
         <button class="btn" id="start" title="Start a new instance of this process">Start instance</button>
+        <button class="btn neutral" id="migrate-version" hidden>&#8644; Migrate instances&hellip;</button>
         <button class="btn ghost danger" id="cancel-inst" hidden title="Cancel the running instance">Cancel instance</button>
         <a class="btn" id="replay-inst" hidden title="Replay this instance step by step">&#9654; Replay</a>
         <a class="btn" id="collab-link" hidden>⇄ Collaboration replay</a>
@@ -9028,6 +11461,8 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   const overlays = viewer.get("overlays");
   const registry = viewer.get("elementRegistry");
   drawImplBadges(viewer); // show type icons at once, before the first poll lands
+  drawDataStateLabels(viewer); // [state] captions: model content, so every view shows them
+  watchShopBadges(viewer, api); // a receive task is the shop's once the listing says so
   const countEl = root.querySelector("#inst-count");
   const tokenEl = root.querySelector("#token-count");
   const incidentPill = root.querySelector("#incident-pill");
@@ -9039,7 +11474,17 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   let varsHTML = "";               // last rendered variables markup, to skip no-op rebuilds
   let decisions = [];              // the selected instance's DMN decision evaluations (ADR-0066)
   let incidents = [];              // unresolved incidents in view, from the runtime poll (ADR-0061/0150)
-  let incidentsTruncated = false;  // more elements are parked than the overlay lists
+  let incidentsTruncated = false;  // more tokens are parked than the *detail* list holds
+  // incidentTotal is how many tokens are parked, which is not incidents.length: that
+  // list is a bounded page of details and under a flood it is a hundred rows out of
+  // thousands. Reading the count off the page made it a floor presented as a total, and
+  // a page the server's bounded scan never reached made it a zero presented as a total —
+  // a process with every token parked drawing as healthy
+  // (ADR-0366).
+  let incidentTotal = 0;
+  // Whether the server's counts are the whole truth. False only when it could not take
+  // the reading at all, in which case what is on screen is a floor and says so.
+  let incidentCountsExact = true;
   let curDecs = [];                // the evaluations the decision panel is showing (backs the hover popover)
   let focusEl = null;              // a business rule task the operator is inspecting, or null
   // "all" or an instance key (as a string). A deep-linked instance (Deploy & run's
@@ -9074,6 +11519,10 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   let searchQuery = "";     // the active instance search; "" means the plain listing
   let searchDraft = "";     // what is currently typed, kept across the 1.5s poll's rebuilds
   let searchError = "";     // what the last search failed with, shown in the panel
+  // searchTruncated is the server's word that the result was cut at its cap, not a
+  // count of what came back. The two differ exactly when it matters: at the cap, an
+  // operator hunting one instance reads "Search results (200)" as "it is not here".
+  let searchTruncated = false;
   // archiveState is what the exported event log had to say about a search this
   // server's own store could not answer: "" when it was not consulted, otherwise
   // available / empty / notConfigured / refused / unreachable. It is kept apart from
@@ -9107,11 +11556,16 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     const q = `/api/v1/instances?process=${encodeURIComponent(key)}&state=${state}&limit=${PANEL_PAGE}` +
       (cursor ? `&before=${encodeURIComponent(cursor)}` : "") +
       (elementFilter ? `&element=${encodeURIComponent(elementFilter)}` : "");
-    const { data, headers } = await apiRaw("GET", q);
+    // The page, its cap and its cursor all come off the body now
+    // (ADR-0378).
+    const page = await api("GET", q);
     return {
-      rows: (data || []).filter((r) => r.processDefKey === key),
-      more: headers.get("X-Instances-Truncated") === "true",
-      cursor: headers.get("X-Instances-Next-Cursor") || "",
+      rows: ((page && page.items) || []).filter((r) => r.processDefKey === key),
+      more: !!(page && page.truncated),
+      cursor: (page && page.nextCursor) || "",
+      // page.total is deliberately not read here. The panel's "80 of 150" already comes
+      // from the runtime counters, which the poll beside this fetches anyway; taking it
+      // from the listing as well would give the same number two moments to disagree in.
     };
   }
 
@@ -9135,7 +11589,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // what is listed is the instances on one element — two different populations, and
     // putting them in one label is how a filter reads as a truncated page.
     const label = searchQuery
-      ? `Search results (${instances.length})`
+      ? `Search results (${searchTruncated ? `the first ${instances.length}` : instances.length})`
       : elementFilter
         ? `At ${elementLabel(elementFilter)} (${listedAll() ? instances.length : `${instances.length}+`})`
         : `All instances (${listedAll() ? instances.length : `${instances.length} of ${total}`})`;
@@ -9271,10 +11725,20 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     }
     let rows;
     archiveState = "";
+    searchTruncated = false;
     try {
+      // The result is capped, and the response says when the cap bit. Counting the rows
+      // instead would put "Search results (200)" on a query that matched thousands —
+      // and an operator looking for one instance would read that as "it is not here"
+      // (ADR-0378).
+      //
+      // X-Archive-State is the one signal still in a header, and deliberately: it says
+      // the rows describe instances history retention has already deleted, which is
+      // about what the rows *are*, not about how many of them came back.
       const { data, headers } = await apiRaw("GET",
         `/api/v1/instances/search?process=${encodeURIComponent(key)}&q=${encodeURIComponent(q)}`);
-      rows = data || [];
+      rows = (data && data.items) || [];
+      searchTruncated = !!(data && data.truncated);
       archiveState = headers.get("X-Archive-State") || "";
     } catch (e) {
       searchError = e.message;
@@ -9346,6 +11810,20 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     }
     if (inst.correlationKey) {
       bits.push(metaItem("correlationKey", `<code>${esc(inst.correlationKey)}</code>`, "The message correlation key this instance started with"));
+    }
+    // A forked instance's work is in another instance, and an operator reading this one
+    // needs to be able to get there (ADR-0389). It matters
+    // most on the predecessor: "terminated" on its own reads as somebody cancelling it,
+    // where the truth is that its work moved to another version.
+    if (inst.successorInstanceKey) {
+      bits.push(metaItem("continued as",
+        `<a class="replay-link" href="#/operations/i/${inst.successorInstanceKey}">${esc(String(inst.successorInstanceKey))}</a>`,
+        "This instance was ended and its work continued in a new instance of another version"));
+    }
+    if (inst.predecessorInstanceKey) {
+      bits.push(metaItem("continues",
+        `<a class="replay-link" href="#/operations/i/${inst.predecessorInstanceKey}">${esc(String(inst.predecessorInstanceKey))}</a>`,
+        "This instance continues the work of an instance that ran an earlier version"));
     }
     return bits.length ? `<div class="vp-meta">${bits.join("")}</div>` : "";
   };
@@ -9507,7 +11985,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         notConfigured: "Instances this server no longer holds are not searchable: no event log is exported. " +
           "Enable the OpenSearch exporter to make purged history findable.",
         refused: "The event log store declined the query, so purged history was not searched. " +
-          "Its credentials here may not carry read access to the index Atlas writes.",
+          "Its credentials here may not carry read access to the index atlas writes.",
         unreachable: "The event log store could not be reached, so purged history was not searched — " +
           "which is not the same as there having been none.",
       }[archiveState] || "";
@@ -9595,6 +12073,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   function livePanelHTML() {
     return incidentPanelHTML(incidents, {
       truncated: incidentsTruncated,
+      total: incidentTotal,
       rows: incidents.map((inc) => incidentRowHTML(inc, { label: inc.elementId })).join(""),
     });
   }
@@ -9612,6 +12091,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (current !== viewer) return; // navigated away mid-flight
     overlays.clear();
     drawImplBadges(viewer); // type icons are static; overlays.clear() reaped them
+    drawDataStateLabels(viewer); // and so are the [state] captions the same clear() took
     for (const [id, marker] of marked) canvas.removeMarker(id, marker);
     marked = [];
     // The element the listing is filtered to is outlined on the diagram, so the chip
@@ -9644,6 +12124,13 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // "still running" for a process that has been failing for hours (ADR-0150).
     incidents = rt.incidents || [];
     incidentsTruncated = !!rt.incidentsTruncated;
+    incidentCountsExact = rt.incidentCountsExact !== false;
+    // The count comes off the element, never off the rows: rt.elements carries the
+    // server's exact per-element count, and the detail list beside it is a page. An
+    // element can therefore be marked red with no row of its own, which is the point —
+    // the alternative is a stuck task drawn as a healthy one
+    // (ADR-0366).
+    incidentTotal = Number.isFinite(rt.incidentTotal) ? rt.incidentTotal : incidents.length;
     const incidentsByElement = new Map();
     for (const inc of incidents) {
       const arr = incidentsByElement.get(inc.elementId) || [];
@@ -9688,8 +12175,15 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       marked.push([e.elementId, marker]);
       // A parked element is drawn red over its live-token green, and says why: the
       // badge carries the incident message, the panel below carries the resolve.
+      //
+      // How many is e.incidents, the server's count for this element — not the length
+      // of the details it also sent. Under a flood those differ by orders of magnitude,
+      // and they used to be the same number: the badge said "50" on a task holding 5 400
+      // because fifty was how many rows of that task fitted on the page
+      // (ADR-0366).
       const elIncidents = incidentsByElement.get(e.elementId) || [];
-      if (elIncidents.length) {
+      const parked = Number.isFinite(e.incidents) ? e.incidents : elIncidents.length;
+      if (parked > 0) {
         canvas.addMarker(e.elementId, "atlas-incident");
         marked.push([e.elementId, "atlas-incident"]);
         // The word "incident" is not on the badge: the shape is already outlined red,
@@ -9697,12 +12191,14 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         // pill's job is to point at *which* shape — and a pill wide enough to spell it
         // out is a pill that lands on the name of the thing it is pointing at.
         // The count is grouped like every other count on a diagram (numfmt.js).
-        const many = elIncidents.length > 1 ? ` ${fmtCount(elIncidents.length)}` : "";
-        const what = elIncidents.length === 1 ? "1 incident" : `${fmtCount(elIncidents.length)} incidents`;
+        const many = parked > 1 ? ` ${fmtCount(parked)}` : "";
+        const what = parked === 1 ? "1 incident" : `${fmtCount(parked)}${incidentCountsExact ? "" : "+"} incidents`;
+        // The message is a sample from the details, and there may be none to sample:
+        // an element the detail page did not reach is still counted and still marked.
+        const sample = elIncidents.length && elIncidents[0].message ? ` — ${esc(elIncidents[0].message)}` : "";
         overlays.add(e.elementId, "incident", {
           position: badgeSpot(shape, "bl"),
-          html: `<div class="incident-badge" role="img" aria-label="${esc(what)}" title="${esc(what)}${
-            elIncidents[0].message ? ` — ${esc(elIncidents[0].message)}` : ""}">&#9888;${many}</div>`,
+          html: `<div class="incident-badge" role="img" aria-label="${esc(what)}" title="${esc(what)}${sample}">&#9888;${many}</div>`,
         });
       }
       // An armed branch shows no live count of its own: the tokens on it are the
@@ -9760,8 +12256,26 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     }
     countEl.textContent = fmtCount(rt.instances);
     tokenEl.textContent = fmtCount(rt.tokens);
-    incidentEl.textContent = fmtCount(incidents.length) + (incidentsTruncated ? "+" : "");
-    incidentPill.hidden = incidents.length === 0;
+    // The pill is the diagram's headline number, so it says how many tokens are parked
+    // — and it appears whenever any are. Hiding it on an empty *detail* list is how a
+    // definition standing behind another's flood came to render as healthy: the rows
+    // were none, the incidents were not (ADR-0366).
+    //
+    // A reading the server could not take is the one case where the number is unknown,
+    // and unknown is shown as unknown: a zero here would be this same defect again, one
+    // failure mode along.
+    if (!incidentCountsExact) {
+      incidentEl.textContent = incidentTotal > 0 ? `${fmtCount(incidentTotal)}+` : "?";
+      incidentPill.hidden = false;
+      incidentPill.title = "The engine could not count what is parked right now, so this is a floor. "
+        + "The Incidents view is the authoritative list.";
+    } else {
+      incidentEl.textContent = fmtCount(incidentTotal);
+      incidentPill.hidden = incidentTotal === 0;
+      incidentPill.title = incidentTotal === 1
+        ? "1 token is parked behind an unresolved incident"
+        : `${fmtCount(incidentTotal)} tokens are parked behind unresolved incidents`;
+    }
     runningCount = rt.instances || 0;
     finishedCount = rt.finished || 0;
     renderVariables();
@@ -9784,7 +12298,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     let all;
     try { all = await api("GET", url); }
     catch { return; }
-    liveTasks = all.filter((t) => t.processDefKey === key);
+    liveTasks = ((all && all.items) || []).filter((t) => t.processDefKey === key);
   }
 
   // refreshDecisions pulls the selected instance's DMN decision evaluations so the
@@ -9980,6 +12494,31 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   }
 
   root.querySelector("#refresh").addEventListener("click", poll);
+
+  // Migrating the version on screen: every running instance of it, whichever one the
+  // picker has isolated — a single instance moves from its replay. Offered only when
+  // there is another version to move to, which is fixed for the life of this view; the
+  // running count is not, and the dialog says per version what it holds (ADR-0162).
+  const migrateBtn = root.querySelector("#migrate-version");
+  const thisVersion = versions.find((v) => v.key === key);
+  if (processId && thisVersion && versions.length > 1) {
+    migrateBtn.hidden = false;
+    migrateBtn.title = `Move every running instance of v${thisVersion.version} — not only the one selected — onto another deployed version of this process`;
+    migrateBtn.addEventListener("click", async () => {
+      // This view counts its own version only, and the picker has to say which of the
+      // others hold instances too. The summary is one row per definition, not a scan.
+      let running = null;
+      try { running = runningByDefinition(await api("GET", "/api/v1/instances/summary")); }
+      catch { /* best-effort: the picker then states no counts rather than wrong ones */ }
+      await migrateProcessFlow({
+        api, toast, processId, processName: procName, versions, fromKey: key,
+        runningOf: running ? (v) => running.get(String(v.key)) || 0 : undefined,
+        // The moved instances leave this version's counts and diagram, so re-read now
+        // rather than on the next tick.
+        onDone: poll,
+      });
+    });
+  }
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);
   bindVarCopy(varPanel, toast);
   varsPanelCtl = wireVarsPanel(root, viewer);
@@ -10068,6 +12607,36 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (setElementFilter(tokenBearing(el) ? el.id : "")) poll();
     else if (leavingDecision) renderVariables();
   });
+  // Double-clicking a business rule task opens the decision behind it — its
+  // requirements graph with this case drawn on it (decision-graph.js), the same
+  // gesture and the same window the replay answers with. The single click beside it
+  // filters the panel to the task; this one goes the whole way in.
+  //
+  // Live, "this case" is the newest evaluation the task has made: there is no
+  // playhead here, so the case on the diagram is simply the latest one.
+  const openDecisionFor = (d, label) => openDecisionGraph({
+    api, instanceKey: selected, at: d.atKey || d.at, decisionId: d.decisionId, taskLabel: label,
+  });
+  const openLatestDecision = (elementId, label) => {
+    if (selected === "all") {
+      toast("Select a single instance (top-left) to see how its decision was made.", "err");
+      return;
+    }
+    const made = decisions.filter((d) => d.elementId === elementId);
+    if (!made.length) {
+      toast("This business rule task has not decided anything in this instance yet.", "err");
+      return;
+    }
+    openDecisionFor(made[made.length - 1], label);
+  };
+  viewer.on("element.dblclick", 1500, ({ element }) => {
+    const el = (element && element.labelTarget) || element;
+    const bo = el && el.businessObject;
+    if (!bo || bo.$type !== "bpmn:BusinessRuleTask") return;
+    openLatestDecision(el.id, bo.name || bo.id);
+    return false;
+  });
+
   // A click that lands on no shape at all is the same instruction — "the process,
   // not an element of it" — and bpmn-js does not always report one as an
   // element.click, so the canvas carries it. Anything inside a shape's hit area or
@@ -10079,6 +12648,15 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // The ⚖ badge (a diagram overlay) and the panel's "← Variables" button are HTML,
   // so they're wired by delegation on the view root.
   root.addEventListener("click", (ev) => {
+    const open = ev.target.closest(".dec-open");
+    if (open) {
+      ev.preventDefault();
+      // The card names its own evaluation, so a task that decided several times
+      // opens the round the reader clicked rather than the newest one.
+      const d = decisions.find((x) => String(x.atKey || x.at) === open.dataset.decat);
+      if (d) openDecisionFor(d, decisionLabel(d.elementId));
+      return;
+    }
     const badge = ev.target.closest(".decision-badge");
     if (badge) {
       ev.preventDefault();
@@ -10110,14 +12688,39 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   const openPanel = () => {
     const bo = rootProcess(viewer);
     startBody.innerHTML = startVarsFormHTML(bo ? readStartVariables(bo) : []);
-    wireDeployJSONEditors(startBody);
+    wireStartJSONEditors(startBody);
     panel.hidden = false;
     errEl.textContent = "";
     const first = startBody.querySelector(".sv-json, .dv-field");
     if (first) first.focus();
   };
 
-  startBtn.addEventListener("click", () => { panel.hidden ? openPanel() : closePanel(); });
+  const startWith = async (body) => {
+    await api("POST", `/api/v1/processes/${key}/instances`, body);
+    const n = body.variables ? Object.keys(body.variables).length : 0;
+    toast(n ? `Started a new instance with ${n} variable${n === 1 ? "" : "s"}` : "Started a new instance", "ok");
+  };
+
+  // A definition whose start event links a form starts the way Deploy & run starts it:
+  // the form in a modal, with the declared start variables it does not ask for beneath
+  // it. The typed panel alone asked for the declaration and dropped the form's fields —
+  // the same gap the other way round.
+  const startViaForm = async () => {
+    const vars = await askStartForm(api, startForm, startVars, {
+      send: "Start an instance with these values",
+      cancel: "Close without starting anything",
+      fallback: "The process can also be started from the Tasks app once its form loads.",
+    });
+    if (vars === null) return;
+    try { await startWith({ variables: vars }); }
+    catch (e) { toast("Start failed: " + e.message, "err"); return; }
+    await poll();
+  };
+
+  startBtn.addEventListener("click", () => {
+    if (startForm) { closePanel(); startViaForm(); return; }
+    panel.hidden ? openPanel() : closePanel();
+  });
   root.querySelector("#start-cancel").addEventListener("click", closePanel);
 
   goBtn.addEventListener("click", async () => {
@@ -10126,9 +12729,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     catch (e) { errEl.textContent = e.message; return; }
     goBtn.disabled = true;
     try {
-      await api("POST", `/api/v1/processes/${key}/instances`, body);
-      const n = body.variables ? Object.keys(body.variables).length : 0;
-      toast(n ? `Started a new instance with ${n} variable${n === 1 ? "" : "s"}` : "Started a new instance", "ok");
+      await startWith(body);
       closePanel();
       await poll();
     } catch (e) {
@@ -10264,6 +12865,8 @@ export async function mountCollaboration(root, { api, toast, key }) {
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");
   drawImplBadges(viewer); // static type icons; this view never clears overlays
+  drawDataStateLabels(viewer); // [state] captions, static for the same reason
+  watchShopBadges(viewer, api); // a receive task is the shop's once the listing says so
   // A pool's call activity drills in like everywhere else (ADR-0076). This view has no
   // single instance to mean — it replays the exchange between pools, not one caller —
   // so the "+" opens the called process's own live view.
@@ -10580,6 +13183,8 @@ export async function mountTaskProcess(container, { api, instanceKey, activeElem
     const canvas = v.get("canvas");
     const registry = v.get("elementRegistry");
     try { drawImplBadges(v); } catch { /* best-effort type icons */ }
+    try { drawDataStateLabels(v); } catch { /* best-effort [state] captions */ }
+    watchShopBadges(v, api); // a receive task is the shop's once the listing says so
 
     const frames = tl.frames || [];
     const steps = tl.steps || [];
@@ -10646,6 +13251,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <div id="m-inc-wrap" hidden><label>Incidents</label><span class="pill err" id="m-inc"><span class="dot"></span><b id="m-inc-n">0</b></span></div>
         </div>
         <div style="flex:1"></div>
+        <a class="btn neutral" id="rp-forklink" hidden></a>
         <button class="btn neutral" id="rp-migrate" hidden title="Move this instance to another deployed version of its process">&#8644; Migrate&hellip;</button>
         <a class="btn neutral" id="rp-live" title="Open this instance's live view">Live view</a>
         <a class="btn neutral" id="rp-instances" href="#/operations" title="Back to this process's instances">&larr; Instances</a>
@@ -10729,6 +13335,22 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // rather than all the way to the top-level Instances list (still one click away in the
   // nav bar). Deep-linking straight to a replay lands there too, on the instance's process.
   root.querySelector("#rp-instances").href = `#/operations/p/${tl.processDefKey}`;
+  // A forked instance's story spans two keys (ADR-0389): this
+  // replay ends where the work left, or begins where it arrived. Either way the rest of
+  // it is one click away — without the link, an instance that stops mid-diagram reads as
+  // a defect, and one that starts mid-diagram reads as a ghost.
+  const forkLink = root.querySelector("#rp-forklink");
+  if (tl.successorInstanceKey) {
+    forkLink.hidden = false;
+    forkLink.href = `#/operations/i/${tl.successorInstanceKey}`;
+    forkLink.textContent = `Continued as ${tl.successorInstanceKey} \u2192`;
+    forkLink.title = "This instance was ended and its work continued in a new instance of another version";
+  } else if (tl.predecessorInstanceKey) {
+    forkLink.hidden = false;
+    forkLink.href = `#/operations/i/${tl.predecessorInstanceKey}`;
+    forkLink.textContent = `\u2190 Continues ${tl.predecessorInstanceKey}`;
+    forkLink.title = "This instance continues the work of an instance that ran an earlier version";
+  }
   // Migrating is offered only where it means something: an instance still running has
   // tokens to rebind, a finished one has none, and the button would be an invitation to
   // an action the engine would refuse (ADR-0162).
@@ -10769,6 +13391,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const registry = viewer.get("elementRegistry");
   const overlays = viewer.get("overlays");
   drawImplBadges(viewer); // static type icons; only the count badges are re-drawn
+  drawDataStateLabels(viewer); // static [state] captions, drawn once with them
+  watchShopBadges(viewer, api); // a receive task is the shop's once the listing says so
   const eventBus = viewer.get("eventBus");
   const layer = canvas.getLayer("atlas-replay", 900); // moving token dot rides above the diagram
   const dotLayer = canvas.getLayer("atlas-tokens", 899); // static per-frame token dots
@@ -10812,6 +13436,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   let playhead = 0;  // number of frames walked so far (0..frames.length)
   let animToken = 0; // bumped to supersede an in-flight animation
   let incidents = [];    // this instance's unresolved incidents, from the runtime poll (ADR-0061/0151)
+  // How many tokens of this instance are parked, and how many on each element — the
+  // server's counts, which are not the length of the rows above: those are a page, and
+  // an instance can hold more parked tokens than one page holds (a wide fan-out behind
+  // one broken worker). Reading the numbers off the rows capped them at the page
+  // (ADR-0366).
+  let incidentTotal = 0;
+  let incidentsByElement = new Map();
   let decisions = [];    // this instance's DMN decision evaluations (ADR-0066)
   let curDecs = [];      // the evaluations the Decisions tab is currently showing (backs the hover popover)
   let dataObjects = [];  // this instance's BPMN data objects, with their state trail (ADR-0053)
@@ -10820,8 +13451,18 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // list is the type-free scan of what the instance holds, the object diagram the
   // instance-level twin of the class diagram under Data › Model. The choice is
   // remembered because it is about how a person reads data, not about this instance.
-  let dataView = localStorage.getItem("atlas.replay.datadiagram") === "1" ? "diagram" : "list";
+  const DATA_VIEWS = ["list", "diagram", "lifecycle"];
+  const savedView = localStorage.getItem("atlas.replay.dataview");
+  let dataView = DATA_VIEWS.includes(savedView) ? savedView
+    : (localStorage.getItem("atlas.replay.datadiagram") === "1" ? "diagram" : "list");
   let objectGraph = null; // the derived diagram, fetched on demand
+  // The lifecycle traces, fetched on demand and dropped whenever the objects move —
+  // a trace is a reading of a trail, so it is stale the moment the trail grows.
+  let lifecycleTraces = null;
+  // Which object's machine is on screen, by name. Several objects can each declare
+  // one and only one machine can be drawn, so the reader picks — and the pick has to
+  // survive the poll that re-renders this tab.
+  let lifecycleOf = null;
   let varFilter = "";    // Variables-tab name filter (persists across scrubs)
   let curVarList = [];   // the variable set the Variables tab is currently showing
   // Keys (scope\u0000name) the selected element itself wrote, when the Output side is
@@ -10846,6 +13487,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   };
 
   function stepLabel(s) {
+    if (s && s.action === "fork") {
+      // Both directions in one label, because the row has to say which way the work went
+      // without the reader having to know which instance they have open.
+      const f = s.fork || {};
+      const where = f.instanceKey ? ` ${f.instanceKey}` : "";
+      const ver = f.version ? ` (v${f.version})` : "";
+      return f.direction === "in"
+        ? `Continues instance${where}${ver}`
+        : `Continued as instance${where}${ver}`;
+    }
     if (s && s.action === "migrate") {
       const m = s.migration || {};
       // Name both ends the way an operator reads a process — by version — and fall back
@@ -10921,9 +13572,15 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (visitsChanged) drawBadges();
 
     const nextIncidents = rt.incidents || [];
+    const nextTotal = Number.isFinite(rt.incidentTotal) ? rt.incidentTotal : nextIncidents.length;
     const sig = (list) => list.map((i) => `${i.elementInstanceKey}:${i.raisedAt}`).join(",");
-    if (sig(nextIncidents) === sig(incidents)) return;
+    if (sig(nextIncidents) === sig(incidents) && nextTotal === incidentTotal) return;
     incidents = nextIncidents;
+    incidentTotal = nextTotal;
+    incidentsByElement = new Map();
+    for (const e of rt.elements || []) {
+      if (e.incidents > 0) incidentsByElement.set(e.elementId, e.incidents);
+    }
     drawIncidentBadges();
     renderOverlay();   // the stuck element's outline, at whatever frame the playhead is on
     renderHistory();   // its row in the instance history
@@ -10937,7 +13594,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // stuck element is outlined and badged, its history row is flagged, and the Details
   // panel resolves it with the same one-click action the live view uses.
   const incidentByEik = (eik) => incidents.find((i) => String(i.elementInstanceKey) === String(eik)) || null;
-  const incidentElementIds = () => new Set(incidents.map((i) => i.elementId).filter(Boolean));
+  // Every element holding a parked token, counted rather than listed: under a page cap
+  // the rows cover only some of them, and an element left out would be drawn as though
+  // its token were simply waiting.
+  const incidentElementIds = () => new Set([
+    ...incidentsByElement.keys(),
+    ...incidents.map((i) => i.elementId).filter(Boolean),
+  ]);
 
   // drawIncidentBadges puts the live view's ⚠ badge on every element holding one. It
   // keeps its own overlay ids, so a refresh replaces exactly these. Like the live
@@ -10950,13 +13613,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       const shape = registry.get(elId);
       if (!shape) continue;
       const list = incidents.filter((i) => i.elementId === elId);
-      const many = list.length > 1 ? ` ${fmtCount(list.length)}` : "";
-      const what = list.length === 1 ? "1 incident" : `${fmtCount(list.length)} incidents`;
+      // The count is the element's, the message a sample from whatever rows this page
+      // carried for it — an element past the page is still counted and still badged.
+      const parked = incidentsByElement.get(elId) || list.length;
+      const many = parked > 1 ? ` ${fmtCount(parked)}` : "";
+      const what = parked === 1 ? "1 incident" : `${fmtCount(parked)} incidents`;
+      const sample = list.length && list[0].message ? ` — ${esc(list[0].message)}` : "";
       try {
         incBadgeIds.push(overlays.add(elId, "atlas-incident", {
           position: badgeSpot(shape, "bl"),
-          html: `<div class="incident-badge" role="img" aria-label="${esc(what)}" title="${esc(what)}${
-            list[0].message ? ` — ${esc(list[0].message)}` : ""}">&#9888;${many}</div>`,
+          html: `<div class="incident-badge" role="img" aria-label="${esc(what)}" title="${esc(what)}${sample}">&#9888;${many}</div>`,
         }));
       } catch { /* element not in this diagram */ }
     }
@@ -10967,8 +13633,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   function updateIncidentMeta() {
     const wrap = root.querySelector("#m-inc-wrap");
     if (!wrap) return;
-    wrap.hidden = incidents.length === 0;
-    root.querySelector("#m-inc-n").textContent = fmtCount(incidents.length);
+    wrap.hidden = incidentTotal === 0;
+    root.querySelector("#m-inc-n").textContent = fmtCount(incidentTotal);
   }
 
   // incidentBlock renders the incidents this panel is responsible for: the selected
@@ -10979,7 +13645,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const list = step
       ? incidents.filter((i) => String(i.elementInstanceKey) === String(step.elementInstanceKey))
       : incidents;
+    // Unfiltered, the block speaks for the whole instance, so it says how many tokens
+    // are parked in it rather than how many rows this page carried. Filtered to one
+    // element instance the two coincide: an element instance holds at most one incident.
     return incidentPanelHTML(list, {
+      total: step ? list.length : incidentTotal,
       rows: list.map((i) => incidentRowHTML(i, { label: elementLabelOf(i.elementId), showInstance: false })).join(""),
     });
   }
@@ -11058,6 +13728,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const m = s && s.manual;
     if (!m) return "";
     const who = m.actor ? esc(m.actor) : "an operator";
+    // A BPMN error thrown by hand (ADR-0089) is the other intervention a job can take:
+    // the error path, not a finish, so it must not read as a completion.
+    if (m.action === "throwJobError") {
+      return `<div class="ops-manual">
+      <h4>&#9888; Error thrown manually</h4>
+      <p>This task's job was ended by hand with the BPMN error <code>${esc(m.errorCode || "")}</code> by
+        <b>${who}</b>${m.at ? ` on ${esc(fmtDateTime(m.at))}` : ""} — the worker did not report it.</p>
+      <p class="ops-manual-reason">${esc(m.reason || "")}</p>
+    </div>`;
+    }
     return `<div class="ops-manual">
       <h4>&#10003; Completed manually</h4>
       <p>This task was finished by hand by <b>${who}</b>${m.at ? ` on ${esc(fmtDateTime(m.at))}` : ""} —
@@ -11160,6 +13840,38 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     </div>`;
   }
 
+  // forkDetail is the Details panel for a fork row: where this instance's work went, or
+  // where it came from, and why somebody decided that
+  // (ADR-0389). It says plainly what a fork costs, because
+  // the consequence is easy to misread in both directions — the predecessor looks
+  // cancelled, and the successor looks like it started in the middle of the diagram.
+  function forkDetail(s) {
+    const f = s.fork || {};
+    const who = f.actor ? esc(f.actor) : "an operator";
+    const other = f.instanceKey
+      ? `<a href="#/operations/i/${esc(String(f.instanceKey))}">${esc(String(f.instanceKey))}</a>${
+        f.version ? ` <span class="hint">(version ${esc(String(f.version))})</span>` : ""}`
+      : `<span class="hint">no longer available</span>`;
+    const out = f.direction !== "in";
+    return `<dl class="ops-props">
+      <dt>Event</dt><dd>${out ? "Continued in a new instance" : "Continues an earlier instance"}</dd>
+      <dt>${out ? "Continued as" : "Continues"}</dt><dd>${other}</dd>
+      <dt>Date</dt><dd>${esc(fmtDateTime(f.at || s.at))}</dd>
+      <dt>By</dt><dd>${who}</dd>
+    </dl>
+    <div class="ops-mig">
+      <h4>&#8599; The work moved to another instance</h4>
+      <p>${out
+    ? `This instance's tokens could not be carried onto the newer version, so it was ended here and its
+         work continued in the instance above, with its variables and data objects. Everything it already did
+         stays on this instance, exactly as it ran — and its open jobs, tasks and incidents ended with it.`
+    : `This instance did not start at a start event: it continues the work of the instance above, which ran an
+         earlier version and could not be moved onto this one. Its variables and data objects came across; its
+         earlier steps are on that instance.`}</p>
+      <p class="ops-mig-reason">${esc(f.reason || "")}</p>
+    </div>`;
+  }
+
   // renderDetail fills the Details tab for the selected element instance (or the
   // process instance when nothing is selected), mirroring Operate's element panel.
   function renderDetail() {
@@ -11168,6 +13880,10 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     // below — the first of which treats "no element instance" as "nothing selected".
     if (selMig >= 0 && steps[selMig] && steps[selMig].migration) {
       detailEl.innerHTML = migrationDetail(steps[selMig]);
+      return;
+    }
+    if (selMig >= 0 && steps[selMig] && steps[selMig].fork) {
+      detailEl.innerHTML = forkDetail(steps[selMig]);
       return;
     }
     if (!selEik) {
@@ -11557,15 +14273,19 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
             title="What this instance holds, as a list">List</button>
           <button type="button" data-dview="diagram"${dataView === "diagram" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}
             title="The same data as objects, linked the way the information model says they relate">Diagram</button>
+          <button type="button" data-dview="lifecycle"${dataView === "lifecycle" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}
+            title="The states a class declares, with the ones this instance has been through and what moved it">Lifecycle</button>
         </span>
       </div>`;
   }
 
   function renderDataObjects() {
-    if (dataObjects.length && dataView === "diagram") return renderObjectDiagram();
+    if (dataObjects.length && dataView === "diagram") { destroyLifecycleCanvas(); return renderObjectDiagram(); }
+    if (dataObjects.length && dataView === "lifecycle") { destroyObjectCanvas(); return renderLifecycleOverlay(); }
     // Every other reading replaces this tab's body wholesale, so a canvas standing in
     // it goes now rather than being left bound to markup that no longer exists.
     destroyObjectCanvas();
+    destroyLifecycleCanvas();
     if (!dataObjects.length) {
       dataEl.innerHTML = `<p class="ops-empty">This process declares no data objects. Draw a data object on the diagram and give an activity a data association, and the data it carries — its value, its state, and where each value came from — appears here.</p>`;
       return;
@@ -11580,7 +14300,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const writtenBy = (h, i) => {
       if (h.producedBy) return `<span class="do-by">${esc(doLabel(h.producedBy))}</span>`;
       if (i === 0) return `<span class="do-by none" title="No element wrote this — it is the value the object was seeded with when the instance was created">seeded</span>`;
-      return `<span class="do-by none" title="This write cannot be attributed: the instance ran before Atlas recorded which element writes a data object, or the definition that element belonged to is gone">unknown</span>`;
+      return `<span class="do-by none" title="This write cannot be attributed: the instance ran before atlas recorded which element writes a data object, or the definition that element belonged to is gone">unknown</span>`;
     };
     const rows = dataObjects.map((d) => {
       const open = !!openTrails[d.name];
@@ -11615,7 +14335,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <td class="do-t-by">${writtenBy(h, i)}</td>
           <td class="do-t-at">${esc(fmtClock(h.at))}</td>
         </tr>`).join("");
-      return head + `<tr class="do-trail"><td colspan="6">
+      // data-dt-detail: the trail is not a row of this table's data, it is what the
+      // row above it opens into. The shared enhancer reads that attribute to carry it
+      // along when the list is sorted and to hide it with its row when a filter removes
+      // one — without it the trail is sorted as a stranger and lands under somebody
+      // else's object (ADR-0286). The Variables tab's <tr class="v-struct"> says the
+      // same thing about itself, for the same reason.
+      return head + `<tr class="do-trail" data-dt-detail><td colspan="6">
         <div class="do-trail-box">
           <div class="do-trail-h">State trail · every durable write to <b>${esc(d.name)}</b></div>
           <table class="do-trail-table"><tbody>${entries || `<tr><td class="muted">nothing recorded yet</td></tr>`}</tbody></table>
@@ -11628,6 +14354,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <tbody>${rows}</tbody>
         </table>
       </div>`;
+    // A whole new table, so a whole new enhancement: the route's pass ran once, before
+    // the first element was ever selected. Without this the list arrives with its
+    // filter row and loses it on the reader's first click — which is worse than never
+    // having had one, because it looks like the search broke rather than like there is
+    // none. Only this one table: the Variables tab's frame is built once and only its
+    // <tbody> is rewritten afterwards, so it keeps what the route's pass gave it.
+    enhanceTable(dataEl.querySelector(".do-table"));
   }
 
   // renderObjectDiagram draws the instance's objects and the lines between them.
@@ -11730,6 +14463,153 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     stage.querySelector('[data-tool="fit"]').addEventListener("click", () => objectCanvas?.canvas.fit());
   }
 
+  // renderLifecycleOverlay draws the state machine a data object's class declares,
+  // with this instance's own life on it (ADR-0259 §4): the states it has been
+  // through, the one it is in now, the moves it made and the element that made each.
+  //
+  // Nothing here is a new fact. The trail was already on disk with attribution and
+  // the machine was already in the information model; the overlay is reading one
+  // against the other, and it is read *on the server* for the reason the object graph
+  // is — which declared transition a move corresponds to is model semantics, and a
+  // second copy of that rule here would be a second place for it to be wrong.
+  //
+  // This is the same relationship the object diagram has to the class diagram, which
+  // is why UML was the right notation in the first place: the standard already draws
+  // the type and the instance as two pictures, and that is Atlas's design-time /
+  // run-time line.
+  async function renderLifecycleOverlay() {
+    if (!lifecycleTraces) {
+      destroyLifecycleCanvas();
+      dataEl.innerHTML = dataHead() + `<p class="ops-empty">Reading the declared lifecycles…</p>`;
+      try {
+        lifecycleTraces = await api("GET", `/api/v1/instances/${key}/lifecycle`);
+      } catch (e) {
+        dataEl.innerHTML = dataHead() + `<p class="ops-empty err">Could not read the lifecycles: ${esc(e.message)}</p>`;
+        return;
+      }
+      if (current !== viewer) return; // navigated away while it was read
+      if (!Array.isArray(lifecycleTraces)) lifecycleTraces = [];
+    }
+    const traces = lifecycleTraces;
+    if (!traces.length) {
+      destroyLifecycleCanvas();
+      // Three different silences, and only the first is worth spelling out: a class
+      // without a lifecycle is the normal case, not a gap somebody should feel bad
+      // about. The way to add one is named, because that is the useful half.
+      const typed = dataObjects.some((d) => d.itemType);
+      dataEl.innerHTML = dataHead() + `<p class="ops-empty">${typed
+        ? `No class behind this instance's data objects declares a lifecycle yet. Open the class under
+           <b>Data › Model</b> and draw one, and the states it moves through appear here — with the ones
+           this instance has been through, and what moved it.`
+        : `These data objects declare no class, so there is no lifecycle to read them against.
+           Set a data object's <b>Type</b> in the Modeler and model that class under <b>Data</b>.`}</p>`;
+      return;
+    }
+    // One machine can be drawn at a time, so several objects means the reader picks.
+    // The pick survives a poll: this tab re-renders on every frame that lands, and a
+    // picker that reset itself would be unusable on a running instance.
+    if (!traces.some((x) => x.object === lifecycleOf)) lifecycleOf = traces[0].object;
+    const tr = traces.find((x) => x.object === lifecycleOf);
+    // Already showing exactly this: leave it alone. This tab re-renders whenever an
+    // element is selected and again on every live poll, so on a running instance the
+    // drawing would be rebuilt on a timer — throwing away the zoom and the pan the
+    // reader had just set, which are two of the things moving onto diagram-js was for.
+    // The traces are *replaced* when the objects move and never mutated, so identity
+    // is the whole test.
+    if (lifecycleCanvas && lifecycleCanvas.traces === traces && lifecycleCanvas.object === tr.object
+        && dataEl.contains(lifecycleCanvas.el)) return;
+
+    // Moves the machine does not join, folded onto one edge per pair so a datum that
+    // went round three times illegally draws one dashed line and not three on top of
+    // each other. They are drawn rather than only listed because what happened is the
+    // point of an overlay — dashed and in the danger colour, so it can never be read
+    // as something the model says.
+    const strays = new Map();
+    for (const u of tr.undeclared || []) {
+      const id = `undeclared:${u.from}\u0001${u.to}`;
+      const at = strays.get(id) || { id, from: u.from, to: u.to, undeclared: true, taken: 0 };
+      at.taken++;
+      at.lastBy = u.by || at.lastBy;
+      strays.set(id, at);
+    }
+    const machine = {
+      states: tr.states || [],
+      transitions: [...(tr.transitions || []), ...strays.values()],
+    };
+
+    const notes = [];
+    for (const s of tr.unknown || []) {
+      notes.push(`This object was written into <b>${esc(s)}</b>, which <b>${esc(tr.class)}</b> does not
+        declare — so it is not on the drawing. Either the process writes the wrong string, or the state
+        is real and the class has not been told about it.`);
+    }
+    for (const u of tr.undeclared || []) {
+      notes.push(`<b>${esc(u.from)} → ${esc(u.to)}</b>${u.by ? ` by <b>${esc(doLabel(u.by))}</b>` : ""}
+        ${u.at ? `at ${esc(fmtClock(u.at))} ` : ""}is a move <b>${esc(tr.class)}</b> declares no transition for.`);
+    }
+    if ((tr.transitions || []).some((x) => x.ambiguous && x.taken)) {
+      notes.push(`Two transitions join the same pair of states, and the trail records states rather than
+        transition ids — so both are marked and neither can be told to be the one that ran.`);
+    }
+
+    const picker = traces.length > 1
+      ? `<label class="og-pick"><span>Object</span><select id="lc-pick">${traces.map((x) =>
+          `<option value="${esc(x.object)}"${x.object === lifecycleOf ? " selected" : ""}>${
+            esc(x.object)} · ${esc(x.class)}</option>`).join("")}</select></label>`
+      : "";
+
+    dataEl.innerHTML = dataHead() + `
+      <div class="lc-bar">
+        <span class="lc-of"><b>${esc(tr.object)}</b> as <span class="do-class">${esc(tr.class)}</span></span>
+        ${tr.current
+          ? `<span class="lc-now">now <span class="do-state">${esc(tr.current)}</span></span>`
+          : `<span class="lc-now none">carries no state yet</span>`}
+        ${picker}
+      </div>
+      <div class="og-stage">
+        <div class="og-canvas" id="lc-canvas"></div>
+        <div class="og-tools">
+          <button type="button" class="icon-btn" data-lctool="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+          <button type="button" class="icon-btn" data-lctool="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+          <button type="button" class="icon-btn" data-lctool="fit" title="Fit diagram" aria-label="Fit diagram">⊡</button>
+        </div>
+      </div>
+      ${notes.length ? `<div class="og-notes">${notes.map((n) => `<p>${n}</p>`).join("")}</div>` : ""}`;
+
+    const el = dataEl.querySelector("#lc-canvas");
+    let uml;
+    try {
+      uml = (await loadCanvasBundle()).uml;
+    } catch {
+      el.innerHTML = `<p class="ops-empty err">Could not load the diagram canvas.</p>`;
+      return;
+    }
+    // The bundle is a fetch, so this tab may have been re-rendered — or left — while
+    // it was in flight. Drawing into an element nothing shows any more would leave a
+    // live canvas nobody can reach and nothing tears down.
+    if (current !== viewer || !dataEl.contains(el)) return;
+    destroyLifecycleCanvas();
+    // Not editable: this is a reading of what happened, and the document it draws
+    // belongs to the information model, which is where it is authored.
+    const canvas = new uml.StateCanvas(el, { editable: false });
+    lifecycleCanvas = { canvas, el, object: tr.object, traces };
+    canvas.render(machine);
+
+    const stage = el.parentElement;
+    stage.querySelector('[data-lctool="zoom-in"]').addEventListener("click", () => lifecycleCanvas?.canvas.zoom(1.2));
+    stage.querySelector('[data-lctool="zoom-out"]').addEventListener("click", () => lifecycleCanvas?.canvas.zoom(1 / 1.2));
+    stage.querySelector('[data-lctool="fit"]').addEventListener("click", () => lifecycleCanvas?.canvas.fit());
+  }
+
+  // Which object's machine is drawn. A <select> answers with change and not click,
+  // so it is its own delegated listener on the same re-rendering body.
+  dataEl.addEventListener("change", (e) => {
+    const pick = e.target.closest("#lc-pick");
+    if (!pick || !dataEl.contains(pick)) return;
+    lifecycleOf = pick.value;
+    renderDataObjects();
+  });
+
   // The trail toggles are inside a body that re-renders, so they are wired by
   // delegation rather than re-bound on every render.
   dataEl.addEventListener("click", (e) => {
@@ -11754,7 +14634,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const view = e.target.closest("[data-dview]");
     if (!view || !dataEl.contains(view)) return;
     dataView = view.dataset.dview;
-    localStorage.setItem("atlas.replay.datadiagram", dataView === "diagram" ? "1" : "0");
+    localStorage.setItem("atlas.replay.dataview", dataView);
     renderDataObjects();
   });
 
@@ -11954,7 +14834,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
 
   // What the out section says about itself on an instance whose log cannot name the
   // writer — so the reader knows why a neighbouring branch's variable may be listed.
-  const LEGACY_OUT_HINT = "This instance ran before Atlas recorded which element wrote " +
+  const LEGACY_OUT_HINT = "This instance ran before atlas recorded which element wrote " +
     "each variable, so this is everything that changed while the element ran — on " +
     "parallel branches that includes the other branch's writes.";
 
@@ -12270,6 +15150,17 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <span class="ops-htime">${esc(fmtClock(s.at))}</span>
         </div>`;
       }
+      if (s.action === "fork") {
+        // Drawn like the migration rule: the work does not continue below this row, it
+        // continues in another instance — which is the one thing the row exists to say
+        // (ADR-0389).
+        return `<div class="ops-hrow mig fork" data-i="${i}" data-eik="0"
+            title="${esc((s.fork && s.fork.reason) || "Forked to another instance")}">
+          <span class="ops-hicon mig">&#8599;</span>
+          <span class="ops-hname">${esc(stepLabel(s))}</span>
+          <span class="ops-htime">${esc(fmtClock(s.at))}</span>
+        </div>`;
+      }
       const done = s.endAt > 0;
       const inc = incidentByEik(s.elementInstanceKey);
       const icon = inc ? "&#9888;" : done ? "&#10003;" : "&#9679;";
@@ -12297,7 +15188,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       pause();
       if (i < 0) { selectElement("", 0); return; }
       const s = steps[i];
-      if (s.action === "migrate") {
+      if (s.action === "migrate" || s.action === "fork") {
         // It names no element, so there is nothing to select on the diagram and nothing
         // to animate — but the playhead still moves, so the surrounding steps read in
         // the order they happened.
@@ -12464,7 +15355,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const sig = (list) => list.map((d) => `${d.name}:${d.state}:${(d.history || []).length}:${d.at}`).join(",");
     if (sig(next) === sig(dataObjects)) return;
     dataObjects = next;
-    objectGraph = null; // derived from these objects, so it is stale the moment they move
+    // Both derived readings are read *from* these objects, so both are stale the
+    // moment they move — and a trace of a trail that has since grown is worse than no
+    // trace, because it says the datum stopped where it did not.
+    objectGraph = null;
+    lifecycleTraces = null;
     renderDataObjects();
   }
 
@@ -12511,6 +15406,52 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     }
     toast(`No child instance ran here — opening the called process “${pid}”.`, "ok");
     location.hash = `#/operations/p/${dep.key}`;
+  });
+
+  // Double-clicking a business rule task opens the decision it made: its requirements
+  // graph with this case drawn on it, the rules that fired, and the answer
+  // (decision-graph.js). It is the same gesture a call activity answers with the
+  // process behind it — "show me what is inside this box" — and a decision is the one
+  // other element whose contents are a model of their own.
+  //
+  // A task that decided more than once (a loop, a multi-instance round) holds one
+  // record per round, so the one opened is the round being replayed: the newest that
+  // had already happened at the frame on screen, and before any of them have, the
+  // first. Opening the last round while the playhead sits before it would answer a
+  // question about a different case than the one on the diagram.
+  const decisionForElement = (elementId) => {
+    const made = decisions.filter((d) => d.elementId === elementId);
+    if (!made.length) return null;
+    const at = playhead > 0 && playhead <= frames.length ? frames[playhead - 1].at : 0;
+    const done = at ? made.filter((d) => d.at <= at) : [];
+    return done.length ? done[done.length - 1] : made[0];
+  };
+  // Which round is a comparison of timestamps, where a browser's rounding — a couple
+  // of hundred nanoseconds at this magnitude — cannot reach across two rounds. Which
+  // record is an identity, so that one goes by the server's exact key.
+  const openDecisionFor = (d, label) => openDecisionGraph({
+    api, instanceKey: key, at: d.atKey || d.at, decisionId: d.decisionId, taskLabel: label,
+  });
+  eventBus.on("element.dblclick", 1500, (e) => {
+    const el = (e.element && e.element.labelTarget) || e.element;
+    const bo = el && el.businessObject;
+    if (!bo || bo.$type !== "bpmn:BusinessRuleTask") return;
+    const d = decisionForElement(el.id);
+    if (!d) {
+      toast("This business rule task has not decided anything in this instance.", "err");
+      return false;
+    }
+    pause(); // the graph is read standing still, not while the token walks on
+    openDecisionFor(d, bo.name || bo.id);
+    return false; // and never the label editor underneath
+  });
+  // The Decisions tab's cards carry the same door, for the reader who is scrolling the
+  // list rather than looking at the diagram.
+  decEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".dec-open");
+    if (!btn || !decEl.contains(btn)) return;
+    const d = decisions.find((x) => String(x.atKey || x.at) === btn.dataset.decat);
+    if (d) openDecisionFor(d, decLabel(d.elementId));
   });
 
   // The Details panel's incident actions are HTML inside a tab body that re-renders,

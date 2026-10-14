@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -206,6 +207,47 @@ func TestRunPassesSourceAndVars(t *testing.T) {
 	}
 }
 
+// TestRunDoesNotExposeTheWorkerEnvironment is the privilege boundary between the
+// worker and model-authored code. The worker needs ATLAS_TOKEN to lease and complete
+// jobs, but the interpreter it starts must never receive that credential or any
+// other deployment secret inherited by the worker process.
+func TestRunDoesNotExposeTheWorkerEnvironment(t *testing.T) {
+	t.Setenv("ATLAS_TOKEN", "worker-token")
+	t.Setenv("ATLAS_OIDC_CLIENT_SECRET", "oidc-secret")
+	t.Setenv("DATABASE_URL", "postgres://user:password@db/atlas")
+	t.Setenv("PATH", os.Getenv("PATH"))
+
+	var gotEnv []string
+	e := &CmdExec{
+		Lang: Python,
+		run: func(_ context.Context, _ string, _ []string, env []string) ([]byte, error) {
+			gotEnv = append([]string(nil), env...)
+			return []byte(`"ok"`), nil
+		},
+	}
+	if _, err := e.Run(context.Background(), `result = "ok"`, map[string]any{"name": "Anna"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	env := map[string]string{}
+	for _, kv := range gotEnv {
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			env[kv[:i]] = kv[i+1:]
+		}
+	}
+	for _, name := range []string{"ATLAS_TOKEN", "ATLAS_OIDC_CLIENT_SECRET", "DATABASE_URL"} {
+		if value, exposed := env[name]; exposed {
+			t.Errorf("model-authored script received %s=%q", name, value)
+		}
+	}
+	if env[varsEnv] == "" || env[srcEnv] == "" {
+		t.Errorf("script contract missing: %s=%q %s=%q", varsEnv, env[varsEnv], srcEnv, env[srcEnv])
+	}
+	if _, ok := env["PATH"]; !ok {
+		t.Error("PATH was not preserved for interpreter and child-process resolution")
+	}
+}
+
 // TestHandlerElementGone: a job whose element instance is already gone (e.g. the
 // instance completed) is a no-op — no error, no output — so a stale job can't
 // disturb a finished instance.
@@ -303,14 +345,14 @@ func TestRunTimesOut(t *testing.T) {
 // POSIX utility that is always present: it returns the command's stdout, and a
 // missing binary surfaces an error (which leaves a job pending).
 func TestExecCommand(t *testing.T) {
-	out, err := execCommand(context.Background(), "printf", []string{"ok"}, nil)
+	out, err := execCommand(context.Background(), "printf", []string{"ok"}, nil, defaultMaxOutput)
 	if err != nil {
 		t.Fatalf("execCommand: %v", err)
 	}
 	if string(out) != "ok" {
 		t.Errorf("stdout = %q, want ok", out)
 	}
-	if _, err := execCommand(context.Background(), "atlas-no-such-binary-xyz", nil, nil); err == nil {
+	if _, err := execCommand(context.Background(), "atlas-no-such-binary-xyz", nil, nil, defaultMaxOutput); err == nil {
 		t.Error("execCommand of a missing binary succeeded, want an error")
 	}
 }
@@ -321,7 +363,7 @@ func TestExecCommandSurfacesStderr(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("sh not available")
 	}
-	_, err := execCommand(context.Background(), "sh", []string{"-c", "echo boom 1>&2; exit 3"}, nil)
+	_, err := execCommand(context.Background(), "sh", []string{"-c", "echo boom 1>&2; exit 3"}, nil, defaultMaxOutput)
 	if err == nil {
 		t.Fatal("execCommand of a failing command succeeded, want an error")
 	}

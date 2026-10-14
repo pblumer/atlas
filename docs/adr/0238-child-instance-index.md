@@ -1,6 +1,7 @@
 # ADR-0238: A reverse index from call activity to child instance
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-03
 - **Deciders:** Atlas engine team
 

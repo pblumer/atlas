@@ -1,25 +1,30 @@
 # Account-Bestellung (Entra ID) 🧩
 
-Eine Atlas-**Applikation mit öffentlichem Start-Formular**, **DMN-gesteuertem
+Eine atlas-**Applikation mit öffentlichem Start-Formular**, **DMN-gesteuertem
 Kontotyp-Mapping**, menschlicher Freigabe und **Entra-Provisionierung** — plus ein
 **einbettbares HTML+JS-Widget**, das die Bestellung von einer beliebigen Website aus
-startet. Schreibt scharf gegen **blumer.net**, aber fail-closed nur gegen klar
-benannte **Test-Objekte**.
+startet. Schreibt scharf gegen **contoso.com**, und nur gegen klar benannte
+**Test-Objekte**: das `jml-test-`-Präfix steckt im `attributes`-Ausdruck des
+create-user-Tasks, also im Modell.
+
+Tenant und Worker-Name sind **Platzhalter**: `contoso.com` steht für den eigenen
+Entra-Tenant, `contoso` für den Namen, unter dem der Entra-Worker konfiguriert ist.
+Beides ist vor dem Deployen im Modell, in den Formularen, im Widget und in der
+UPN-Prüfung auf die eigenen Werte zu setzen.
 
 ## Der Ablauf
 
 ```
-Start (öffentliches Formular account-order: Vorname, Nachname, Kontotyp, Begründung)
+Start (öffentliches Formular account-order: Personalnummer, Vorname, Nachname,
+                                            Kontotyp, Begründung)
   → [DMN] Profil bestimmen   KontotypMapping: A/E/T/S → { kuerzel, accountEnabled,
                              kategorie, usageLocation }
-  → [Script+Output-Mappings] mailNick, upn = jml-test-<kuerzel>-<mailNick>@blumer.net,
-                             displayName, kategorie
-  → (X) Test-Objekt?   ── sonst ──▶ Ende "Kein Test-Objekt"  (kein Entra-Aufruf)
-        │ jml-test-*@blumer.net
-  → 🔑 Freigabe (account-freigabe) – Admin setzt Initialpasswort
+  → [Script] kategorie aus dem Profil übernehmen
+  → 🔑 Freigabe (account-freigabe) – zeigt Vor- und Nachname, Admin setzt Initialpasswort
   → (X) Freigegeben?   ── ablehnen ▶ Ende "Abgelehnt"
         │ anlegen
-  → [entra create-user] accountEnabled & usageLocation aus dem DMN-Profil
+  → [entra create-user] baut UPN, mailNickname und Anzeigenamen selbst aus Vorname,
+                        Nachname und kuerzel; accountEnabled & usageLocation aus dem Profil
   → Ende "Konto bereitgestellt"
 ```
 
@@ -27,20 +32,43 @@ Start (öffentliches Formular account-order: Vorname, Nachname, Kontotyp, Begrü
 
 | Typ | kürzel | accountEnabled | Kategorie | UPN-Beispiel |
 |---|---|---|---|---|
-| **A** Administrativ | `a` | **true** | Administrativ | `jml-test-a-anna.muster@blumer.net` |
-| **E** Bildung/Extern | `e` | **true** | Bildung/Extern | `jml-test-e-…@blumer.net` |
-| **T** Test | `t` | **false** | Test | `jml-test-t-…@blumer.net` |
-| **S** Service/Dienst | `s` | **false** | Dienstkonto | `jml-test-s-…@blumer.net` |
+| **A** Administrativ | `a` | **true** | Administrativ | `jml-test-a-anna.muster@contoso.com` |
+| **E** Bildung/Extern | `e` | **true** | Bildung/Extern | `jml-test-e-…@contoso.com` |
+| **T** Test | `t` | **false** | Test | `jml-test-t-…@contoso.com` |
+| **S** Service/Dienst | `s` | **false** | Dienstkonto | `jml-test-s-…@contoso.com` |
 
 Der Typ wird über eine **Entscheidungstabelle** abgebildet, nicht über if/else im
 Prozess — wer die Regeln je Typ ändert, ändert die Tabelle. Das `jml-test-`-Präfix
-baut der Prozess (nicht die Tabelle), damit die **Test-Objekt-Grenze eine
-Prozess-Invariante** bleibt.
+steht nicht in der Tabelle, damit die **Test-Objekt-Grenze im Modell sichtbar** bleibt.
 
-> **Eine Feinheit, die dieses Beispiel zeigt:** ein Script-Task trägt genau **ein**
-> `<zeebe:script>`. Mehrere abgeleitete Werte entstehen deshalb über
-> `zeebe:ioMapping`-**Output-Mappings** (`mailNick`, `upn`, `displayName`,
-> `kategorie`) — jeweils direkt aus schon vorhandenen Variablen.
+> **Was dieses Beispiel über Personendaten zeigt.** Der Prozess deklariert
+> `atlas:personal="vorname,nachname"` und `atlas:dataSubject="personalnummer"`
+> ([ADR-0314](../../docs/adr/0314-portal-personal-data.md)).
+> Eine so deklarierte Variable wird verschlüsselt, bevor sie ein Kommando wird, und
+> Chiffrat lässt sich nicht vergleichen oder verketten — der Compiler **verweigert**
+> deshalb ein Deployment, in dem sie in einem Ausdruck steht, den die Engine auswertet.
+>
+> Früher rechnete hier ein Script-Task `mailNick`, `upn` und `displayName` aus Vorname
+> und Nachname. Diese Rechnung steht jetzt im `attributes`-Ausdruck des
+> create-user-Tasks: **Worker-Ausdrücke wertet der Worker aus**, und dort existiert der
+> Klartext für die Dauer eines Aufrufs und wird nie im Klartext zurückgeschrieben.
+>
+> Das hat einen Preis, und er ist der ehrliche Teil: ein zweites fail-closed Gateway
+> prüfte den gebauten UPN vor jedem Schreibzugriff gegen `jml-test-*@contoso.com`. Diese
+> Prozessvariable gibt es nicht mehr, also gibt es das Gatter nicht mehr. Die Grenze
+> trägt jetzt das Literal im `attributes`-Ausdruck — im Modell sichtbar und im Review
+> prüfbar, aber **strukturell statt zur Laufzeit** geprüft.
+>
+> Der zweite Preis steht im Formular: die **Personalnummer** ist neu, und sie ist nicht
+> fachlich motiviert, sondern von der Löschbarkeit erzwungen. Verschlüsselt wird unter
+> einem Schlüssel, der zu einer Person gehört — also muss das Modell sagen, *welche*
+> Person, und zwar mit einer Kennung, die eine Löschanfrage benennen kann. Ein Vorname
+> und ein Nachname sind keine solche Kennung. Für einen Eintritt kommt sie zwangsläufig
+> von außen (aus dem HR-System), denn im Tenant existiert die Person noch nicht: das
+> Konto wird ja gerade erst bestellt. Die Nummer bleibt im Klartext — sie ist die
+> Referenz, nicht der Inhalt — ist `atlas:searchable` und darf deshalb in Ausdrücken
+> stehen, sodass ein Betreiber die Instanzen einer Person findet, bevor er deren
+> Schlüssel zerstört.
 
 ## Das einbettbare Widget
 
@@ -48,25 +76,29 @@ Prozess-Invariante** bleibt.
 Datei (kein externes CSS/JS): ein hübsches Bestellformular mit **dynamischem Verhalten
 je Kontotyp** und **Live-UPN-Vorschau**. Zwei Einbett-Wege:
 
-1. **Per `<iframe>`** (kein Serverumbau nötig) — bettet die von Atlas gerenderte
+1. **Per `<iframe>`** (kein Serverumbau nötig) — bettet die von atlas gerenderte
    Public-Form-Seite ein:
    ```html
-   <iframe src="https://atlas.blumer.cloud/public/forms/DEIN_TOKEN"
+   <iframe src="https://atlas.example.com/public/forms/DEIN_TOKEN"
            style="width:100%;max-width:560px;height:760px;border:0"></iframe>
    ```
    Oder das Widget selbst per iframe (es liest `?atlas=…&token=…` aus der URL).
 
 2. **Direkt auf einer fremden Seite** (das schöne Widget, cross-origin) — dafür muss
-   der Atlas-Server die Origin deiner Seite per CORS erlauben (ADR-0186):
+   der atlas-Server die Origin deiner Seite per CORS erlauben (ADR-0186):
    ```
    atlas serve --public-forms-cors "https://deine-seite.example"
    ```
    Ohne Token läuft das Widget im **Demo-Modus** und zeigt nur, was gesendet würde.
 
 Beide Wege posten an `POST /public/forms/{token}/start` (ADR-0029) —
-token-basiert, rate-limited, ohne Login, ohne Cookie.
+token-basiert, rate-limited, ohne Login, ohne Cookie. atlas nimmt dort nur die
+Felder des Startformulars `account-order` an; ein eigenes Widget, das weitere
+Variablen sendet, erhält **400** und startet nichts. Umgekehrt muss es die
+**Personalnummer** mitsenden: ohne sie gibt es keinen Schlüssel, unter dem Vor- und
+Nachname verschlüsselt werden könnten, und atlas lehnt den Start ab.
 
-## Deployen (über die Atlas-MCP-Tools)
+## Deployen (über die atlas-MCP-Tools)
 
 ```
 atlas_create_application     name="Account-Bestellung"                → appId
@@ -92,5 +124,5 @@ Danach `token` ins Widget setzen (`data-token` / `?token=`).
 | `account-bestellung.bpmn` | Prozess (`proc_account_bestellung`) |
 | `kontotyp.dmn` | Entscheidung `KontotypMapping` (A/E/T/S → Profil) |
 | `form-account-order.json` | Öffentliches Start-Formular |
-| `form-account-freigabe.json` | Freigabe-Formular (Admin) |
+| `form-account-freigabe.json` | Freigabe-Formular (Admin; zeigt Vor- und Nachname schreibgeschützt) |
 | `account-order-widget.html` | Einbettbares HTML+JS-Bestell-Widget |

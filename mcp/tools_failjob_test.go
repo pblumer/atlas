@@ -58,7 +58,7 @@ func incidentJobKeys(t *testing.T, atlasURL string) []incidentRow {
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	var env struct {
-		Incidents []incidentRow `json:"incidents"`
+		Incidents []incidentRow `json:"items"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode incidents %q: %v", body, err)

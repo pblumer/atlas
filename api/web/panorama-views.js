@@ -94,7 +94,18 @@ export function removeView(views, id) {
 // graph and the shape of the window, so a coordinate captured on one screen means
 // somewhere else on another — and a saved view that reopened on empty space would be
 // worse than no saved view. The pins go the same way, for the same reason.
-export function captureView({ name, term, direction, depth, notation, selected, picked, instances, drafts, trail, frameView, world, pinned, at, id }) {
+// strings normalises one of the stored "what was switched off" lists: a Set or an
+// array in, a sorted array of strings out, and an empty array for anything else.
+//
+// Sorted so a view saved twice from the same picture is the same record, and
+// filtered so a malformed stored view cannot put a number or an object where a
+// later read expects a name.
+const strings = (list) =>
+  (Array.isArray(list) || list instanceof Set
+    ? [...list].filter((v) => typeof v === "string").sort()
+    : []);
+
+export function captureView({ name, term, band, direction, depth, notation, selected, picked, instances, drafts, hiddenKinds, hiddenStates, hiddenApprovals, trail, frameView, world, pinned, at, id }) {
   const width = Math.max(world?.width || 0, 1), height = Math.max(world?.height || 0, 1);
   const zoom = frameView ? Math.min(Math.max(frameView.w / width, 0), 1) : 1;
   const centre = frameView
@@ -105,6 +116,17 @@ export function captureView({ name, term, direction, depth, notation, selected, 
     name: name.trim().slice(0, MAX_NAME),
     at: at ?? Date.now(),
     term: term || "",
+    // The band of the heat scale the picture was narrowed to, as that mark's own
+    // tally — 0 for the nothing-at-all circle, null for the whole landscape. Stored
+    // for the same reason the term is: a view is the whole question somebody saved,
+    // and reopening "the processes running a hundred or more" as the whole estate
+    // answers a different one.
+    //
+    // The tally rather than the mark's position on the row, because the marks are
+    // derived from the landscape and the landscape moves. A tally that is no longer a
+    // mark is dropped when the view is opened, which is the honest outcome: the band
+    // it named is not a band of this landscape.
+    band: Number.isFinite(band) && band >= 0 ? band : null,
     direction: direction || "dependents",
     depth: depth ?? "2",
     // The vocabulary the picture was read in. A view is the whole question somebody
@@ -119,15 +141,38 @@ export function captureView({ name, term, direction, depth, notation, selected, 
     // so that everything reading it, the frame anchor included, keeps meaning one
     // thing; a window carries its members here instead.
     picked: Array.isArray(picked) && picked.length > 1 ? [...picked] : null,
-    // Whether the picture was carrying running-instance counts. It changes what the
-    // nodes say and how much room the layout gives them, so a view that reopened
-    // without it would reopen a different picture.
+    // Whether the picture was sized by how much is running on it. The notation above
+    // now carries that — it is an entry in the same list (ADR-0211 §8) — and this
+    // stays beside it for two readers that ask the question directly: the summary
+    // line under a saved view's name, and a view stored while the counts were still a
+    // switch of their own, which reopens as the weighting it stood for.
     instances: Boolean(instances),
     // Whether saved-but-undeployed diagrams were on the picture. It is the one
     // setting whose restoration costs a fetch — the drafts are not in the payload
     // until they are asked for — which is exactly why it has to be stored: a view
     // reopened without it is not the landscape it was named for.
     drafts: Boolean(drafts),
+    // The element types that were switched off. The hidden ones and not the shown
+    // ones, which is the same polarity the live control uses and for the same
+    // reason: a view stored today is reopened against a landscape that may hold
+    // kinds nobody had an opinion about when it was saved, and those have to arrive
+    // drawn. It also makes the empty case the honest one — a view written before
+    // this control existed carries nothing here, and nothing means the picture it
+    // was named for.
+    hiddenKinds: strings(hiddenKinds),
+    // The two product facets that were switched off, carried on the same terms as
+    // the types above: the hidden ones, so a state nobody had an opinion about when
+    // this was saved arrives drawn, and an empty list is the honest reading of a
+    // view written before these controls existed.
+    //
+    // Stored as the catalogue's own spellings rather than the labels on screen. The
+    // types beside them are stored as labels because those are already translated
+    // into whichever notation the picture was read in, and there is no stable id to
+    // fall back on; a catalogue state has one, and storing "withdrawn" means a view
+    // reopened next year still selects the same products however the box is worded
+    // by then.
+    hiddenStates: strings(hiddenStates),
+    hiddenApprovals: strings(hiddenApprovals),
     // The path into the picture: every node gone into, in order. It is the narrowing
     // a saved view is most likely to be *about* — somebody who followed a dependency
     // four deep and saved it saved the walk, not the last node — and it was the one

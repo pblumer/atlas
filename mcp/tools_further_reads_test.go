@@ -63,19 +63,24 @@ func TestSearchInstancesViaTool(t *testing.T) {
 	if isErr {
 		t.Fatalf("search (hit) = (%q, isErr=%v)", hitText, isErr)
 	}
-	var hits []struct {
-		Key uint64 `json:"key"`
+	var hitPage struct {
+		Hits []struct {
+			Key uint64 `json:"key"`
+		} `json:"items"`
 	}
-	if err := json.Unmarshal([]byte(hitText), &hits); err != nil {
+	if err := json.Unmarshal([]byte(hitText), &hitPage); err != nil {
 		t.Fatalf("decode search hits %q: %v", hitText, err)
 	}
+	hits := hitPage.Hits
 	if len(hits) != 1 || hits[0].Key != key {
 		t.Fatalf("search hits = %+v, want the one instance %d", hits, key)
 	}
 
+	// A miss is an empty page, not an empty array and not an error: the agent gets the
+	// same shape whether or not anything matched, so it reads .items either way.
 	missText, isErr := toolText(t, result(t, run(t, atlas, callTool(5, "atlas_search_instances", map[string]any{"q": "customer=nobody"}))[0]))
-	if isErr || strings.TrimSpace(missText) != "[]" {
-		t.Fatalf("search (miss) = (%q, isErr=%v), want []", missText, isErr)
+	if isErr || !strings.Contains(missText, `"items":[]`) {
+		t.Fatalf("search (miss) = (%q, isErr=%v), want an empty page", missText, isErr)
 	}
 }
 
@@ -94,13 +99,15 @@ func TestSearchInstancesScopedViaTool(t *testing.T) {
 		if isErr {
 			t.Fatalf("search %v = %q", args, text)
 		}
-		var hits []struct {
-			Key uint64 `json:"key"`
+		var page struct {
+			Hits []struct {
+				Key uint64 `json:"key"`
+			} `json:"items"`
 		}
-		if err := json.Unmarshal([]byte(text), &hits); err != nil {
+		if err := json.Unmarshal([]byte(text), &page); err != nil {
 			t.Fatalf("decode %q: %v", text, err)
 		}
-		return hits
+		return page.Hits
 	}
 
 	// The instance's own definition is key 1 (atlas_create_instance was given it).

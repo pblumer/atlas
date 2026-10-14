@@ -1,0 +1,41 @@
+{
+  "type": "default",
+  "id": "arbeitsplatz-abschluss",
+  "components": [
+    {
+      "type": "text",
+      "text": "## Zusammenfassung\n\nName und Eintrittsdatum hat die Personalabteilung erfasst, die Kosten hat der Prozess geschätzt. Prüfe die Auswahl und gib sie an die IT."
+    },
+    {
+      "key": "neuePerson",
+      "type": "textfield",
+      "label": "Neue Mitarbeiterin oder neuer Mitarbeiter",
+      "disabled": true
+    },
+    {
+      "key": "eintrittsdatum",
+      "type": "datetime",
+      "subtype": "date",
+      "dateLabel": "Eintrittsdatum",
+      "disabled": true
+    },
+    {
+      "key": "geraet",
+      "type": "textfield",
+      "label": "Gerät",
+      "disabled": true
+    },
+    {
+      "key": "kosten",
+      "type": "number",
+      "label": "Geschätzte Gerätekosten in CHF (berechnet)",
+      "disabled": true
+    },
+    {
+      "key": "bestaetigt",
+      "type": "checkbox",
+      "label": "Die Auswahl ist vollständig",
+      "validate": { "required": true }
+    }
+  ]
+}

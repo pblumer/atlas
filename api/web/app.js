@@ -10,30 +10,47 @@ import {
   setServerLogo, deleteServerLogo,
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
+import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
+import { renderDrgSvg, openDecisionGraph } from "./decision-graph.js";
 import { copyText } from "./clipboard.js";
+import { installFeelAssistant } from "./feel-assistant.js";
+import { restoreSummary } from "./restore-report.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
 // is a module of its own because every surface that shows an element's documentation
 // has to agree on what the markup means — and on the escaping that keeps it inert.
 import { renderMarkdown, markdownToPlain } from "./markdown.js";
 import {
-  incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixWorkerFlow,
-  incidentWorkerChip,
+  incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixWorkerFlow, addWorkerFlow,
+  incidentWorkerChip, resolveCauseFlow, resolveCauseQuick, resolveSelectionFlow,
   repairFormFlow,
 } from "./incidents.js";
-import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWorkerUsage, deleteWorkerFlow } from "./workerdialog.js";
-import { migrateProcessFlow } from "./migrationdialog.js";
+import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWorkerUsage, deleteWorkerFlow, testWorkerFlow } from "./workerdialog.js";
+// What a Worker Type needs at the provider before any of these fields mean anything,
+// plus the deep link into this server's own handbook
+// (ADR-0289). The create form is where someone who has
+// just installed Atlas stands, so it is the surface that must not assume the reader has
+// already read the handbook.
+import { workerKindDocHTML } from "./workertypedocs.js";
+import { migrateProcessFlow, runningByDefinition } from "./migrationdialog.js";
 import { openPickModal } from "./pickmodal.js";
+import { refDeleteWarning } from "./dmnref-impact.js";
+import { versionDeleteState, holderNote } from "./decision-cleanup.js";
+import { frozenMark } from "./frozen-decisions.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
 import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./taskfolders.js";
 import { runImport } from "./infomodel-import.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
 import { formRefusalNames, loadFormViewer, scrollToFirstInvalidField } from "./formviewer.js";
+// A start form does not replace the start variables declared on the process: the ones
+// it does not ask for are asked beneath it, with the Modeler's typed fields.
+import { uncoveredStartVariables, extraStartFieldsHTML, wireStartJSONEditors, readTypedDeployBody, keepConstantNameInCapitals } from "./startvars.js";
 import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML } from "./secret-shapes.js";
 // Giving an AI assistant access, as a screen (ADR-0200). Its own module because it
 // is a self-contained page and this file is long enough; it takes its dependencies
 // as arguments so the import stays one-directional, like every other module here.
 import { viewAIAccess } from "./aiaccess.js";
+import { renderKeyFeatures, paintKeyFeatures } from "./key-features.js";
 
 const view = document.getElementById("view");
 
@@ -50,8 +67,12 @@ const superseded = (gen) => gen !== navGen;
 
 // ---------- API ----------
 // apiRaw is the fetch wrapper that also returns the response headers, for the few
-// endpoints whose headers carry pagination signals (X-Tasks-Truncated /
-// X-Tasks-Next-Cursor). Most callers want just the body — see api().
+// endpoints that say something in one. Pagination is no longer among them: a capped
+// listing carries its cap, its total and its cursor in the body
+// (ADR-0378), so the
+// remaining header readers are about other things — X-Archive-State, which says the
+// rows describe instances history retention has deleted. Most callers want just the
+// body — see api().
 export async function apiRaw(method, path, body, isXML) {
   const opts = { method };
   if (body !== undefined) {
@@ -66,7 +87,12 @@ export async function apiRaw(method, path, body, isXML) {
     // The message is the readable half; the status and the decoded body ride along for
     // the few callers that need to *act* on the failure rather than report it — a 409
     // that names what is in the way, say (ADR-0163).
-    const err = new Error((data && data.error) || res.statusText);
+    // statusText is empty over HTTP/2, which carries no reason phrase — so a body
+    // with no "error" key produced `new Error("")`, and every caller that reports
+    // err.message showed a blank box where the reason belonged. The status number
+    // is not a good message; it is a great deal better than nothing, and it says
+    // out loud that the caller is reading the wrong half of the body.
+    const err = new Error((data && data.error) || res.statusText || `HTTP ${res.status}`);
     err.status = res.status;
     err.body = data;
     throw err;
@@ -76,6 +102,32 @@ export async function apiRaw(method, path, body, isXML) {
 
 export async function api(method, path, body, isXML) {
   return (await apiRaw(method, path, body, isXML)).data;
+}
+
+// apiBytes sends a file as the request body, under its own media type.
+//
+// Separate from api() rather than a fifth parameter on it: what api() takes is a
+// value to encode, and what this takes is bytes that are already what they are. The
+// server reads the type from the header and validates the bytes against it — an
+// upload mislabelled by a browser is refused there, not here.
+//
+// The failure shape is api()'s, so a caller reports an upload the way it reports
+// everything else.
+export async function apiBytes(method, path, file) {
+  const res = await fetch(path, {
+    method,
+    body: file,
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let data = text;
+    try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
+    const err = new Error((data && data.error) || res.statusText || `HTTP ${res.status}`);
+    err.status = res.status;
+    err.body = data;
+    throw err;
+  }
 }
 
 export function toast(msg, kind) {
@@ -121,6 +173,45 @@ const mayUse = (role) => {
   return roles.includes("admin") || roles.includes(role);
 };
 
+// FEATURES is what this server serves of its optional parts, as /api/v1/info says.
+// Today that is one switch: the shop, the catalogue, the orders and the inventory,
+// which an operator turns off with --catalogue=false
+// (ADR-0434). Until the server has answered,
+// everything is offered — the stance the drawer already takes before /auth/me
+// answers — and a field an older server does not send reads as on, so a Console in
+// front of one keeps the menu it had.
+const FEATURES = { catalogue: true, loaded: false };
+
+// loadFeatures asks once — boot and the first navigation share one request — and
+// remembers only an answer: signed out, or the server mid-restart, leaves the menu as
+// it is and asks again on the next navigation rather than deciding it on a failure.
+// It resolves to the info document, or null.
+let featuresAsked = null;
+function loadFeatures() {
+  if (!featuresAsked) {
+    featuresAsked = api("GET", "/api/v1/info").then((i) => {
+      FEATURES.catalogue = !(i && i.catalogue === false);
+      FEATURES.loaded = true;
+      return i;
+    }, () => {
+      featuresAsked = null;
+      return null;
+    });
+  }
+  return featuresAsked;
+}
+
+// offered is the one predicate both menus filter by: the person holds the role, and
+// the server serves the part of Atlas the entry opens. One predicate and not a second
+// condition beside each role check, because the next menu would be the one that
+// forgot it.
+const offered = (entry) => mayUse(entry.role) && !(entry.feature && FEATURES[entry.feature] === false);
+
+// isCatalogueRoute names the Console views of the area the switch removes — the same
+// four the menus mark with feature: "catalogue".
+const isCatalogueRoute = (path) =>
+  path.startsWith("#/catalog") || path === "#/operations/reconciliation" || path === "#/tasks/recertification";
+
 const initials = (name) => {
   const s = String(name || "").trim();
   if (!s) return "?";
@@ -139,7 +230,7 @@ function updateAccount() {
     btn.title = label;
     if (menu) menu.innerHTML =
       `<div class="mlabel">Signed in as <b>${esc(AUTH.user.username)}</b></div>` +
-      `<button type="button" data-act="logout" title="Sign out of Atlas">Log out</button>`;
+      `<button type="button" data-act="logout" title="Sign out of atlas">Log out</button>`;
   } else {
     // Nobody is signed in — which is two different things. With enforcement off the
     // server is open and there is nothing to sign in to; with it on, this is the
@@ -216,7 +307,7 @@ function viewLogin() {
   view.innerHTML = `
     <div class="card" style="max-width:380px; margin:8vh auto">
       <h1>Sign in</h1>
-      <p class="muted">This Atlas instance requires you to sign in.</p>
+      <p class="muted">This atlas instance requires you to sign in.</p>
       <p id="sso-error" class="muted err" hidden>Signing in with your identity provider did not work. Try again, or ask an administrator to check the server log.</p>
       <div id="sso-providers" hidden></div>
       <form id="login-form">
@@ -301,12 +392,38 @@ function viewLogin() {
       await loadAuth();
       location.hash = "#/console";
       route();
-    } catch {
-      err.textContent = "Invalid username or password.";
+    } catch (ex) {
+      err.textContent = loginFailureText(ex);
       err.style.color = "var(--danger)";
       err.hidden = false;
     }
   });
+}
+
+// loginFailureText names what refused a sign-in, which is not always the password.
+//
+// A 401 is the only answer that is about the credentials, and it stays deliberately
+// vague — the server refuses an unknown account and a wrong password identically so
+// the login cannot be read as a directory, and the screen must not undo that.
+//
+// A 429 is the throttle (ADR-0197), and it is a different failure entirely: it
+// refuses the *attempt*, before the password is looked at, for a quarter of an hour
+// after five wrong guesses. Reporting it as a credential failure is how somebody
+// spends that quarter of an hour hunting a password that is already correct, and how
+// they land on restarting the server — the one action that clears the throttle's
+// in-memory buckets, and the only workaround the screen leaves them. Saying so leaks
+// nothing: the throttle counts attempts against names that do not exist too.
+//
+// Anything else — the store could not be read, the network went away — is not a
+// credential failure either, and it does not carry the server's wording onto a
+// pre-auth screen: what broke inside the instance belongs in its log, which is where
+// this points, the same way the federated-login error above does.
+function loginFailureText(e) {
+  switch (e?.status) {
+    case 401: return "Invalid username or password.";
+    case 429: return "Too many sign-in attempts — the password was not checked. Wait a few minutes and try again.";
+    default: return "The sign-in could not be completed. Try again, or ask an administrator to check the server log.";
+  }
 }
 
 // ---------- Dropdown menus ----------
@@ -519,10 +636,39 @@ async function deployDemo() {
 // this person holds. The Console itself is "any": its dashboard, workers and AI
 // access are everybody's, and the admin screens inside it say so individually
 // below.
+//
+// `separate: true` marks an entry that is a page of its own rather than a view of
+// this application, and it opens in its own window. The two shop surfaces are
+// the only ones: they carry the catalogue's brand instead of the console's, they
+// are written for people who never open the modeller, and they load their own
+// message catalogue — so routing to one is leaving Atlas's shell, not moving inside
+// it. Replacing the console with them in the same tab put whoever followed the
+// entry on a page whose only way back was one small link, and asked somebody who
+// was in the middle of something to lose it to look at an order.
+//
+// The back link on those pages stays regardless. It is not for this drawer — it is
+// for whoever arrives from the link in an approval notification, who has no console
+// tab behind them at all.
 const APPS = [
   { id: "console", name: "Console", route: "#/console", on: true, role: "any" },
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
+  // The shop is a page of its own, not a view of this app, so its route
+  // is a path and not a hash — written without a leading slash, because a route in
+  // this table is what the handbook appends to the site root (href="/" + route),
+  // and "//shop.html" would be a protocol-relative URL to a host of that name.
+  // It is written for people who never open the modeler
+  // — ordering a laptop and seeing where the order stands — and it carries the
+  // brand of the catalogue the visitor belongs to rather than this console's.
+  //
+  // Without this line the page existed and nothing led to it: it was built, served
+  // and reachable only by somebody who already knew the URL. Held by
+  // TestBothPortalSurfacesAreReachableFromTheMenu.
+  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue" },
+  // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
+  // catalogue means choosing from processes already deployed, never deploying one,
+  // so it is deliberately not the modeller's role — deploy is code execution.
+  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
   { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
   { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
@@ -537,6 +683,9 @@ const TOPNAV = {
     { name: "Backup", route: "#/console/backup", role: "admin" },
     { name: "Organization", route: "#/console/org", role: "admin" },
     { name: "Workers", route: "#/console/workers", role: "any" },
+    // What atlas emits (ADR-0435): a modeler chooses an event to listen to here; an
+    // administrator also sees who listens now.
+    { name: "Events", route: "#/console/events", role: "modeler" },
     { name: "AI access", route: "#/console/ai-access", role: "any" },
     { name: "Audit log", route: "#/console/audit", role: "admin" },
   ],
@@ -548,27 +697,62 @@ const TOPNAV = {
     { name: "Instances", route: "#/operations", role: "operator" },
     { name: "Incidents", route: "#/operations/incidents", badge: "incidents", role: "operator" },
     { name: "Workers", route: "#/operations/workers", role: "operator" },
+    // What waits in the message buffer for a subscription that has not opened yet
+    // (ADR-0370): the one place a message "from the past" can be seen before it arrives.
+    { name: "Messages", route: "#/operations/messages", role: "operator" },
     { name: "Outbox", route: "#/operations/outbox", role: "operator" },
     { name: "Mock directory", route: "#/operations/ad-mock", role: "admin" },
     { name: "Mock database", route: "#/operations/sql-mock", role: "admin" },
     { name: "Decisions", route: "#/operations/decisions", role: "operator" },
+    // Where Atlas and the target systems disagree about who holds what
+    // (ADR-0334). Operations rather than Catalogue: maintaining a
+    // catalogue is authoring, and acting on a finding is repair — the three acts
+    // are the operator's role on the server too.
+    { name: "Reconciliation", route: "#/operations/reconciliation", role: "operator", feature: "catalogue" },
     { name: "Call activities", route: "#/operations/call-activities", role: "any" },
   ],
   tasks: [
     { name: "Inbox", route: "#/tasks", role: "user" },
+    // No Approvals entry any more, and no page behind one: an approval is read and
+    // decided in the inbox above (ADR-0394).
+    // It was a second place for one decision, and the two had already begun to
+    // differ — one of them enforced a reason on a rejection and the other did not.
+    // The second kind of thing addressed to a person
+    // (ADR-0341). Not Operations, where reconciliation
+    // sits: a finding is repair and the operator's, while this asks a line manager
+    // whether somebody on their team still needs something — and a line manager has
+    // never opened Operations. Not one of the two shop pages either: those carry
+    // the catalogue's brand and are written for people outside the tooling.
+    { name: "Access review", route: "#/tasks/recertification", role: "user", feature: "catalogue" },
     { name: "Start", route: "#/tasks/start", role: "operator" },
   ],
   panorama: [
     { name: "Starmap", route: "#/panorama/starmap", role: "modeler" },
+    // The altitude above the Starmap (ADR-0402): the estate rather
+    // than one domain of it. Its own entry rather than a subject inside the Starmap while
+    // the altitude is new — the shipped landscape is not touched until this has been read
+    // against a real estate, and folding it in is a change of its own.
+    { name: "Estate", route: "#/panorama/estate", role: "modeler" },
     { name: "Models", route: "#/panorama", role: "modeler" },
+    // The capability register and its value streams (ADR-0305, roadmap B8): what the
+    // organisation must be able to do, read against what this server runs. Beside the
+    // drawings because a drawn Capability binds a record here (ADR-0308); the gap
+    // report is the first thing the entry shows.
+    { name: "Capabilities", route: "#/panorama/capabilities", role: "modeler" },
+    { name: "Value streams", route: "#/panorama/value-streams", role: "modeler" },
   ],
   // The two altitudes of process data, and the reason the UML class diagram was the
   // right notation: Model is the type level — what an Order *is*, shared across
   // processes — and Instances is the instance level, the actual objects running
   // processes carry. UML draws those as two different diagrams, and Atlas already
   // splits design time from run time the same way.
+  // Between the two altitudes sits the vocabulary read as a vocabulary: every class of
+  // every model together, and where each is used. Model is per document, Business
+  // objects is across them, and only the second can say that two applications model an
+  // Order twice (ADR-0338).
   data: [
     { name: "Model", route: "#/data", role: "modeler" },
+    { name: "Business objects", route: "#/data/objects", role: "modeler" },
     { name: "Instances", route: "#/data/instances", role: "operator" },
   ],
 };
@@ -595,7 +779,7 @@ function sqlWorkerTypeDesc(product, envPrefix, placeholder, binding) {
     `Values reach it as bound parameters (${placeholder}). ${binding} ` +
     `A query carries a row cap (1000 by default) and exceeding it fails the task rather than truncating, because a short result set is a wrong business answer and a process that branches on the row count would branch on it confidently. ` +
     `Configure each database below: the whole connection string is the credential, sealed into the vault. ` +
-    `Worker-only \u2014 the engine never holds a database credential \u2014 so a SQL task needs a worker, which Atlas supervises for you. ` +
+    `Worker-only \u2014 the engine never holds a database credential \u2014 so a SQL task needs a worker, which atlas supervises for you. ` +
     `Or a mockup: the Databases switch on Console \u203a Workers makes every database worker answer from prepared answers in its own memory, and a worker you run yourself reads the same decision from ATLAS_${envPrefix}_MOCK — either way a model that reads or writes a database runs end to end before anyone has a connection string.`;
 }
 
@@ -617,7 +801,7 @@ const WORKER_TYPES = [
   },
   {
     id: "mail", name: "Mail", kind: "Outbound e-mail",
-    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token) — or the “preview” provider, which needs neither and delivers to the in-app Outbox so a mail task can be tried before a real provider exists. Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored on a service task with the E-Mail Outbound Worker Type.",
+    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token) — or the “preview” provider, which needs neither and delivers to the in-app Outbox so a mail task can be tried before a real provider exists. Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. With an IMAP endpoint (SMTP) or read access (Gmail, Graph) the same Worker reads its mailbox: an inbound watch publishes new mail as messages, and a mail task lists, reads, files, marks, deletes or answers mail. Authored on a service task with the E-Mail Worker Type.",
     refs: "ADR-0041 · ADR-0079 · ADR-0093", status: "active", statusLabel: "configurable",
   },
   {
@@ -641,6 +825,11 @@ const WORKER_TYPES = [
     refs: "ADR-0041", status: "active", statusLabel: "configurable",
   },
   {
+    id: "s3", name: "S3 object storage", kind: "Files",
+    desc: "Puts an object into an S3-compatible bucket from a service task off the processor loop, reads a small one back, says whether one is there, lists what is under a prefix, copies one, deletes one, and mints a time-limited URL somebody can open or upload with. The operation, the bucket and the key are model-authored (FEEL-capable) and what the store returned is written into a result variable; the access key \u2014 an {accessKeyId, secretAccessKey, region} bundle \u2014 is managed below and resolved from the vault. The two link operations are why this reaches documents at their real size: they compute a signature and make no call, so the bytes go straight between the store and whoever opens them, while a read into a process variable stays bounded at 1 MiB. The endpoint is empty for AWS and names the host for MinIO, Ceph, Garage, R2 or Wasabi. Authored on a service task with the S3 Worker Type.",
+    refs: "ADR-0041 \u00b7 ADR-0069", status: "active", statusLabel: "configurable",
+  },
+  {
     id: "remedy", name: "BMC Remedy", kind: "ITSM",
     desc: "Creates an entry (e.g. an incident) in a BMC Remedy / Helix ITSM form from a service task off the processor loop via the AR System REST API. The form and its field values are model-authored (FEEL-capable) and the created entry's id is written into a result variable; the base URL and the {username,password} credential bundle are managed below and resolved from the vault. Authored on a service task with the BMC Remedy Worker Type.",
     refs: "ADR-0041 · ADR-0106", status: "active", statusLabel: "configurable",
@@ -652,8 +841,13 @@ const WORKER_TYPES = [
   },
   {
     id: "agent", name: "AI agent model", kind: "AI",
-    desc: "The model an agent-driven ad-hoc subprocess asks which of its tools to run next. What an agent may reach is the diagram: the contained activities no sequence flow leads to are its tools, named by their element ids, described by the modeller\u0027s own documentation. A round is one job and a tool call one activity, so the loop is durable and replayable \u2014 and it never runs in the engine, because one model call can take minutes and hang. Two wire formats: Messages (Anthropic, and OpenRouter\u0027s Messages-compatible endpoint) and Chat Completions (OpenAI, and anything OpenAI-compatible). Configure each model below: its API key lives in the vault and never enters a model, and the model named here is the default \u2014 a task or a container may name its own, so one Worker serves a cheap classification and a strong piece of advice. The same configuration also serves the AI Task: a service task that asks a model once and puts the answer in a variable, with no tools, because a step with tools is the container. Worker-only, and Atlas supervises the worker for it.",
+    desc: "The model an agent-driven ad-hoc subprocess asks which of its tools to run next. What an agent may reach is the diagram: the contained activities no sequence flow leads to are its tools, named by their element ids, described by the modeller\u0027s own documentation. A round is one job and a tool call one activity, so the loop is durable and replayable \u2014 and it never runs in the engine, because one model call can take minutes and hang. Two wire formats: Messages (Anthropic, and OpenRouter\u0027s Messages-compatible endpoint) and Chat Completions (OpenAI, and anything OpenAI-compatible). Configure each model below: its API key lives in the vault and never enters a model, and the model named here is the default \u2014 a task or a container may name its own, so one Worker serves a cheap classification and a strong piece of advice. The same configuration also serves the AI Task: a service task that asks a model once and puts the answer in a variable, with no tools, because a step with tools is the container. Worker-only, and atlas supervises the worker for it.",
     refs: "ADR-0117 \u00b7 ADR-0253 \u00b7 ADR-0254 \u00b7 ADR-0256", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "cloudevents", name: "CloudEvents endpoint", kind: "Event feed",
+    desc: "Where the event feed is pushed: a system beyond atlas \u2014 billing, a CMDB \u2014 is sent how each action asked of a held position ended, every right granted and revoked, and every incident raised and resolved, as CloudEvents batches over https, instead of pulling the feed itself. No task names this Worker; its Feed\u2026 panel subscribes it to the feed, narrowed to some catalogues if you like. atlas delivers from the feed it already holds, off the processor loop, and moves its cursor only when the endpoint accepted a batch: a refusal is held and tried again, never skipped. Administrator configuration.",
+    refs: "ADR-0429 \u00b7 ADR-0430", status: "active", statusLabel: "configured below",
   },
   {
     id: "entra", name: "Entra ID", kind: "Cloud directory",
@@ -824,6 +1018,16 @@ function initShell() {
     }
   });
 
+  // The FEEL assistant (ADR-0445): Ctrl/⌘+Shift+E anywhere, the spark
+  // in the top bar, the mini spark on every FEEL field and beside a focused dmn-js
+  // cell. Its routes are the modeler's, so the role is asked at the moment it opens —
+  // the principal is known only once /auth/me has answered.
+  installFeelAssistant({
+    api, copy: copyText, toast,
+    allowed: () => mayUse("modeler"),
+    button: document.getElementById("feel-assistant-btn"),
+  });
+
   const nav = document.getElementById("drawer-apps");
   paintApps();
   nav.addEventListener("click", closeDrawer);
@@ -847,10 +1051,13 @@ function initShell() {
     });
   }
 
-  api("GET", "/api/v1/info").then((i) => {
+  // The same answer tells the drawer what this server switched off, so it is painted
+  // again once it is known.
+  loadFeatures().then((i) => {
     document.querySelectorAll(".org").forEach((e) => { e.textContent = "Atlas Org"; });
+    paintApps();
     initHelpMenu(!!(i && i.docs));
-  }).catch(() => { initHelpMenu(false); });
+  });
 }
 
 // handbookHelp maps the current route to the most relevant handbook chapter, so
@@ -861,15 +1068,31 @@ function initShell() {
 // help — the handbook page and the menu wiring are unchanged.
 function handbookHelp(path) {
   const H = (anchor, label) => ({ anchor, label });
+  // The shop has a handbook of its own (shop-handbuch.html): building catalogues,
+  // modelling products and designing their processes. shop() points into it, and the
+  // help-context spec holds its anchors to that page as it holds H()'s to the handbook.
+  const shop = (anchor, label) => ({ anchor, label, page: "shop-handbuch.html" });
+  if (path.startsWith("#/catalog")) return shop("katalog-aufbauen", "Building a catalogue");
   if (/^#\/modeler\/dmn\//.test(path)) return H("dmn", "Learn DMN");
   if (/^#\/modeler\/form\b/.test(path)) return H("formulare", "Forms & workers");
   // An application's detail view is where its artifacts are gathered and published —
   // the workshop chapter is the one that builds exactly that, end to end.
   if (/^#\/modeler\/p\//.test(path)) return H("werkstatt", "Building an application");
   if (path.startsWith("#/modeler")) return H("designen", "Designing processes");
+  // Before the Tasks rule below, and it has to be: a prefix match on "#/tasks"
+  // would swallow it. An access review is not a user task — it is not in the engine
+  // at all — so the forms chapter would answer a question nobody asked here.
+  if (path.startsWith("#/tasks/recertification")) return H("beispiele", "Rezertifizierung");
   if (path.startsWith("#/tasks")) return H("formulare", "Tasks & forms");
   if (path.startsWith("#/operations/decisions")) return H("dmn", "Learn DMN");
   if (path.startsWith("#/operations/call-activities")) return H("elemente", "BPMN elements");
+  // Reconciliation sits in Operations and is not an operations topic. A discrepancy
+  // is a disagreement about who holds what, and the operations chapter is about
+  // incidents — a token that is stuck. Pointing there would tell a reader that a
+  // finding is a malfunction, which is the one thing this whole slice takes pains to
+  // say it is not: nothing is broken, two records disagree, and a person decides.
+  // The examples chapter is where that is actually explained.
+  if (path.startsWith("#/operations/reconciliation")) return H("beispiele", "Reconciliation");
   if (path.startsWith("#/operations")) return H("betrieb", "Operations & incidents");
   // Panorama and Data each have a chapter of their own, and both are places a
   // person arrives at without having read anything: the landscape because it is
@@ -882,13 +1105,14 @@ function handbookHelp(path) {
   // where the accounts chapter puts them.
   if (path.startsWith("#/console/ai-access")) return H("konten", "Connecting an AI assistant");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
+  if (path.startsWith("#/console/events")) return H("ereignisse", "Events");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
   // Organization pointed at the worker chapter only because the worker cards used to
   // sit on it; with those on their own page it points there instead, and Organization
   // falls through to the Console's own chapter.
   if (path.startsWith("#/console/workers")) return H("formulare", "Forms & workers");
   if (path.startsWith("#/console")) return H("schnellstart", "Quick start");
-  return H("willkommen", "Welcome to Atlas");
+  return H("willkommen", "Welcome to atlas");
 }
 
 // The help menu is built once (async, after /info resolves) but its contextual
@@ -905,8 +1129,8 @@ function setHelpContext(path) {
   helpRoutePath = path;
   const ctx = document.getElementById("help-ctx");
   if (!ctx) return;
-  const { anchor, label } = handbookHelp(path);
-  ctx.href = `/handbuch.html#${anchor}`;
+  const { anchor, label, page } = handbookHelp(path);
+  ctx.href = `/${page || "handbuch.html"}#${anchor}`;
   ctx.innerHTML = `${esc(label)} <span class="ext" aria-hidden="true">↗</span>`;
 }
 
@@ -926,12 +1150,69 @@ function initHelpMenu(docsEnabled) {
     ? `<a role="menuitem" href="/api/docs" target="_blank" rel="noopener">API Explorer <span class="ext" aria-hidden="true">↗</span></a>`
     : `<span class="help-note">API Explorer is disabled<br><span class="muted">start the server without <code>--docs=false</code></span></span>`;
   const gallery = `<a role="menuitem" href="/conformance-gallery.html" target="_blank" rel="noopener">Conformance Gallery <span class="ext" aria-hidden="true">↗</span></a>`;
-  const handbook = `<a role="menuitem" href="/handbuch.html" target="_blank" rel="noopener">Handbook <span class="ext" aria-hidden="true">↗</span></a>`;
+  // The shop handbook is the catalogue's, so it leaves the menu with the rest of the
+  // area when the server switched that off (ADR-0434).
+  const shopHandbook = `<a role="menuitem" href="/shop-handbuch.html" target="_blank" rel="noopener">Shop handbook <span class="ext" aria-hidden="true">↗</span></a>`;
+  const handbook = `<a role="menuitem" href="/handbuch.html" target="_blank" rel="noopener">Handbook <span class="ext" aria-hidden="true">↗</span></a>` +
+    (FEATURES.catalogue ? shopHandbook : "");
+  // Not a link like its neighbours: it opens the overview dialog over the current view
+  // rather than leaving it, so it carries no "opens elsewhere" mark.
+  const overview = `<button type="button" role="menuitem" data-system-overview>System Overview</button>`;
   const context = `<div class="mlabel">On this page</div>` +
     `<a id="help-ctx" role="menuitem" target="_blank" rel="noopener" href="/handbuch.html"></a>` +
     `<div class="sep"></div>`;
-  menu.innerHTML = context + handbook + explorer + gallery;
+  menu.innerHTML = context + handbook + overview + explorer + gallery;
+  // The shared document click closes the menu after this runs, as for any entry.
+  // Focus goes back to the "?" button on close — the entry itself is gone with the menu.
+  menu.querySelector("[data-system-overview]").addEventListener("click", () =>
+    openSystemOverview(document.getElementById("help-btn")));
   setHelpContext(helpRoutePath); // fill the contextual entry for the current view
+}
+
+// SYSTEM_OVERVIEW_URL is the architecture diagram as the Console serves it: a copy of
+// docs/architecture/system-overview.svg, held to that file by
+// TestTheConsoleShowsTheCurrentSystemOverview, because `//go:embed web` cannot reach
+// docs/.
+const SYSTEM_OVERVIEW_URL = "/system-overview.svg";
+
+// openSystemOverview shows the architecture diagram — apps, interfaces, the engine, its
+// embedded persistence and the worker model — in a dialog over whatever is on screen.
+// The welcome card and the help menu both open it. The diagram is sized to fit the
+// viewport whole, since what it is for is the overview; its labels are small at that
+// size, so the dialog also offers it on its own, where the browser can zoom it.
+function openSystemOverview(returnTo = document.activeElement) {
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal sysov-modal" role="dialog" aria-modal="true" aria-label="System overview">
+      <div class="modal-head">
+        <h2>System Overview</h2>
+        <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
+      </div>
+      <div class="modal-body sysov-body">
+        <img src="${SYSTEM_OVERVIEW_URL}" alt="Atlas system overview: users and clients, the apps and interfaces, the workflow engine, its embedded persistence (write-ahead log and Pebble state store) and the worker model." />
+      </div>
+      <div class="modal-foot">
+        <div class="modal-actions">
+          <a class="btn ghost" href="${SYSTEM_OVERVIEW_URL}" target="_blank" rel="noopener" title="Open the diagram on its own, where it can be zoomed">Full size ↗</a>
+          <button type="button" class="btn" data-done title="Close this dialog">Close</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => {
+    ov.remove();
+    document.removeEventListener("keydown", onKey);
+    // Back to where the person was, so a keyboard user is not dropped at the top of the page.
+    if (returnTo && returnTo.isConnected && typeof returnTo.focus === "function") returnTo.focus();
+  };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
+  ov.querySelector("[data-x]").addEventListener("click", close);
+  const done = ov.querySelector("[data-done]");
+  done.addEventListener("click", close);
+  done.focus();
 }
 
 // ---------- Operations nav incident badge ----------
@@ -988,25 +1269,43 @@ function syncIncidentBadge(appId) {
 function paintApps() {
   const nav = document.getElementById("drawer-apps");
   if (!nav) return;
-  nav.innerHTML = APPS.filter((a) => mayUse(a.role)).map((a) =>
-    `<a href="${a.route}" data-app="${a.id}">${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
+  // The "opens elsewhere" mark is a CSS ::after on the target attribute rather than
+  // a span here: it is presentation, it must not join the link's accessible name,
+  // and a glyph inside the text would change what every test reading this menu
+  // sees for a reason that has nothing to do with them.
+  nav.innerHTML = APPS.filter((a) => offered(a)).map((a) =>
+    `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
+    `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
   ).join("");
 }
 
 function setChrome(appId, route) {
   document.getElementById("app-name").textContent =
-    (APPS.find((a) => a.id === appId) || {}).name || "Atlas";
+    (APPS.find((a) => a.id === appId) || {}).name || "atlas";
   paintApps();
   const topnav = document.getElementById("topnav");
-  topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => mayUse(t.role)).map((t) =>
-    `<a href="${t.route}" class="${t.route === route ? "active" : ""}">${t.name}` +
+  topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => offered(t)).map((t) =>
+    // A `separate` entry is a page of its own and opens in one, exactly as the
+    // drawer opens it. Rendered as a plain link it would replace the console in the
+    // same tab, which is the behaviour the note above APPS argues against: the only
+    // way back is one small link, and somebody in the middle of something loses it.
+    `<a href="${t.route}"${t.separate ? ` target="_blank" rel="noopener"` : ""} ` +
+    `class="${t.route === route ? "active" : ""}">${t.name}` +
     (t.badge ? `<span class="nav-badge" data-badge="${t.badge}" hidden></span>` : "") + `</a>`
   ).join("");
+  // On a narrow screen the view names scroll sideways within the bar, and the one
+  // open may be past its edge; bring it into view so the bar says where one is.
+  const current = topnav.querySelector("a.active");
+  if (current && topnav.scrollWidth > topnav.clientWidth) {
+    const bar = topnav.getBoundingClientRect(), link = current.getBoundingClientRect();
+    topnav.scrollLeft += link.left - bar.left - (bar.width - link.width) / 2;
+  }
   syncIncidentBadge(appId); // the nav says how many tokens are stuck, before anything is opened
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
   setHelpContext(route); // keep the "?" menu's contextual help pointed at this view
-  const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.includes("/modeler/form/") || route.includes("/modeler/new") || route.includes("/operations/p/");
+  const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.includes("/modeler/form/") || route.includes("/modeler/new") || route.includes("/operations/p/") ||
+    route.includes("/modeler/dmn/new") || route.includes("/modeler/dmn/e/") || route.includes("/modeler/dmn/d/");
   document.body.classList.toggle("editor-mode", fullBleed);
   // The Tasks inbox is a wide three-pane layout, so it drops the centered
   // max-width the default content column uses while keeping normal padding.
@@ -1023,121 +1322,208 @@ function setChrome(appId, route) {
   // It is the drawing that wants the room, so this is the diagram's route and not the
   // list of models beside it, which is a list and reads better in a column.
   document.body.classList.toggle("infomodel-mode", route.startsWith("#/data/m/"));
+  // A catalogue is maintained in two columns — a list on the left, the thing being
+  // created or edited beside it on the right — and that is a working surface rather
+  // than a page to read: the centred column would divide 1120px between a table and a
+  // form, leaving both narrower than what they hold. It drops the column exactly as
+  // the Tasks inbox does, and keeps the padding. Both of its routes, because both are
+  // that shape: the catalogues and the one being created, then the products, the
+  // relations and the maintainers of one catalogue.
+  document.body.classList.toggle("catalog-mode", route.startsWith("#/catalog"));
+  // The Incidents view is two tables an operator works in, and the cause table's
+  // cells that cannot wrap — the process id, the timestamp, the controls on the action
+  // line — add up to more than the centred column holds: it scrolled inside its card,
+  // with the actions cut off at the card's edge, while a wide screen stayed empty
+  // beside it. It drops the column like the Tasks inbox does, and keeps the padding;
+  // the message column is the one that takes what the window adds.
+  document.body.classList.toggle("incidents-mode", route === "#/operations/incidents");
 }
 
-// ---------- What's New ----------
-// The Console landing page surfaces recent, user-facing features from
-// /whats-new.json, which scripts/whats-new/gen.mjs generates from CHANGELOG.md and a
-// curated bilingual overrides file (see scripts/whats-new/README.md). It is DE/EN
-// with a local toggle, and every layer is collapsible so it stays compact: the whole
-// section is a <details>, only the newest few entries show at first, and each entry
-// is a <details> whose body carries the plain-language summary, an optional
-// step-by-step tutorial, a link to the PR/ADR, and an optional "Try it" deep link.
-const WN_STRINGS = {
-  en: { title: "What's New", latest: "New", tutorial: "Try it out", more: "Show older", less: "Show fewer", empty: "" },
-  de: { title: "Neu in Atlas", latest: "Neu", tutorial: "Ausprobieren", more: "Ältere anzeigen", less: "Weniger anzeigen", empty: "" },
+// ---------- Release notes ----------
+// The Console landing page shows the release notes: CHANGELOG.md as this binary was
+// built from it, read by the server at /api/v1/release-notes
+// (ADR-0444). They replace the curated What's New
+// feed, whose per-entry translation and regeneration cost more on every change than
+// the feed gave back. The notes are English, as the CHANGELOG is; the section's own
+// labels follow the landing page's language.
+//
+// Every layer is collapsible so the section stays compact: the section, each release
+// (the newest is open; an older one loads its changes when opened) and each change.
+const RN_STRINGS = {
+  en: {
+    title: "Release notes", unreleased: "Unreleased",
+    changes: (n) => `${n} change${n === 1 ? "" : "s"}`,
+    all: "Show all changes", older: "Show older releases", changelog: "Read in the changelog",
+    loading: "Loading…", failed: "These notes could not be loaded.",
+    categories: {},
+  },
+  de: {
+    title: "Release Notes", unreleased: "Unveröffentlicht",
+    changes: (n) => `${n} Änderung${n === 1 ? "" : "en"}`,
+    all: "Alle Änderungen anzeigen", older: "Ältere Releases anzeigen", changelog: "Im Changelog lesen",
+    loading: "Wird geladen…", failed: "Diese Notes konnten nicht geladen werden.",
+    categories: {
+      Added: "Neu", Changed: "Geändert", Fixed: "Behoben", Removed: "Entfernt",
+      Deprecated: "Veraltet", Security: "Sicherheit", Notes: "Hinweise",
+    },
+  },
 };
-// Only these hash-route prefixes are accepted as a "Try it" target, so a bad or
-// hostile route in the data can never point the button somewhere unexpected.
-const WN_ROUTE_OK = /^#\/(console|modeler|operations|tasks)(\/|$)/;
-const WN_INITIAL = 4;
+const RN_INITIAL_RELEASES = 3;
+const RN_INITIAL_CHANGES = 8;
 
-function wnLang() {
+// The landing page carries two bilingual sections — the release notes and the
+// key-features tile — and they share one language: switching the tile's toggle
+// repaints both, so the page is never half English and half German. The storage key
+// keeps the name it had under What's New, so a reader's earlier choice still holds.
+const CONSOLE_LANG_KEY = "atlas.whatsnew.lang";
+function consoleLang() {
   try {
-    const s = localStorage.getItem("atlas.whatsnew.lang");
+    const s = localStorage.getItem(CONSOLE_LANG_KEY);
     if (s === "de" || s === "en") return s;
   } catch { /* ignore */ }
   return /^de/i.test(navigator.language || "") ? "de" : "en";
 }
-function wnSetLang(l) {
-  try { localStorage.setItem("atlas.whatsnew.lang", l); } catch { /* ignore */ }
+function setConsoleLang(l) {
+  try { localStorage.setItem(CONSOLE_LANG_KEY, l); } catch { /* ignore */ }
+  paintReleaseNotes(document.getElementById("release-notes-slot"), l);
+  paintKeyFeatures(document.getElementById("key-features-slot"), l, setConsoleLang);
 }
 
-// wnText resolves a {en, de} field for the active language, falling back to English.
-const wnText = (b, lang) => (b && (b[lang] != null ? b[lang] : b.en)) || "";
+// rn caches what the section has fetched, and what the reader opened, so a language
+// switch or a return to the landing page repaints without going back to the network.
+// releases maps a version to its notes: null while loading, false when that failed.
+const rn = { index: null, releases: new Map(), open: new Set(), all: new Set(), older: false };
 
-async function renderWhatsNew(slot) {
+// rnInline renders the inline markdown the notes keep — `code`, **bold** and *emphasis*.
+// It escapes first, so the tags it adds are the only markup in the result.
+function rnInline(s) {
+  return esc(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/(^|[\s(])\*([^*\s](?:[^*]*[^*\s])?)\*(?=[\s.,;:!?)]|$)/g, "$1<i>$2</i>");
+}
+
+const rnLink = (link, label) => link && /^https?:\/\//.test(link.url)
+  ? `<a class="rn-link" href="${esc(link.url)}" target="_blank" rel="noopener">${esc(label)} <span class="ext" aria-hidden="true">↗</span></a>`
+  : "";
+
+async function renderReleaseNotes(slot) {
   if (!slot) return;
   let doc;
-  try {
-    const res = await fetch("/whats-new.json", { headers: { Accept: "application/json" } });
-    if (!res.ok) return; // no What's New shipped; leave the slot empty and silent
-    doc = await res.json();
-  } catch { return; } // offline or malformed — the landing page works without it
-  const entries = (doc && Array.isArray(doc.entries)) ? doc.entries : [];
-  if (entries.length) paintWhatsNew(slot, entries, wnLang());
+  try { doc = await api("GET", "/api/v1/release-notes"); } catch { return; } // the landing page works without it
+  const releases = doc && Array.isArray(doc.releases) ? doc.releases : [];
+  if (!releases.length) return;
+  rn.index = releases;
+  if (!rn.open.size) rn.open.add(releases[0].version);
+  paintReleaseNotes(slot, consoleLang());
 }
 
-function wnEntryHTML(e, lang, t) {
-  const title = esc(wnText(e.title, lang));
-  const when = e.date
-    ? `<span class="wn-date">${esc(e.date)}</span>`
-    : `<span class="wn-date wn-new">${esc(t.latest)}</span>`;
-  const tags = (e.tags || []).map((tag) => `<span class="chip">${esc(tag)}</span>`).join("");
-  const summary = esc(wnText(e.summary, lang));
-
-  let tutorial = "";
-  const steps = e.tutorial && wnText(e.tutorial, lang);
-  if (Array.isArray(steps) && steps.length) {
-    tutorial = `<div class="wn-tutorial"><div class="wn-tut-label">${esc(t.tutorial)}</div>` +
-      `<ol>${steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol></div>`;
-  }
-
-  const links = [];
-  if (e.link && /^https?:\/\//.test(e.link.url)) {
-    links.push(`<a class="wn-link" href="${esc(e.link.url)}" target="_blank" rel="noopener">${esc(e.link.label)} <span class="ext" aria-hidden="true">↗</span></a>`);
-  }
-  if (e.try && WN_ROUTE_OK.test(e.try.route || "")) {
-    links.push(`<a class="btn neutral wn-try" href="${esc(e.try.route)}">${esc(wnText(e.try.label, lang))} →</a>`);
-  }
-  const linksHTML = links.length ? `<div class="wn-links">${links.join("")}</div>` : "";
-
-  return `<details class="wn-item">` +
-    `<summary>${when}<span class="wn-item-title">${title}</span>${tags}</summary>` +
-    `<div class="wn-body"><p>${summary}</p>${tutorial}${linksHTML}</div>` +
-    `</details>`;
+// rnLoad fetches one release's notes once, and again only after a failure.
+function rnLoad(slot, version) {
+  const have = rn.releases.get(version);
+  if (have || have === null) return;
+  rn.releases.set(version, null);
+  api("GET", "/api/v1/release-notes/" + encodeURIComponent(version))
+    .then((r) => rn.releases.set(version, r))
+    .catch(() => rn.releases.set(version, false))
+    .finally(() => rnFill(slot, version, consoleLang()));
 }
 
-function paintWhatsNew(slot, entries, lang) {
-  const t = WN_STRINGS[lang] || WN_STRINGS.en;
-  const head = entries.slice(0, WN_INITIAL).map((e) => wnEntryHTML(e, lang, t)).join("");
-  const rest = entries.slice(WN_INITIAL);
-  const restHTML = rest.length
-    ? `<div class="wn-rest" hidden>${rest.map((e) => wnEntryHTML(e, lang, t)).join("")}</div>` +
-      `<button type="button" class="wn-more" title="Show older What’s-new entries">${esc(t.more)} (${rest.length})</button>`
+// rnFill repaints one release's body in place, leaving the rest of the section — and
+// whatever the reader has opened in it — alone.
+function rnFill(slot, version, lang) {
+  if (!slot) return;
+  const t = RN_STRINGS[lang] || RN_STRINGS.en;
+  for (const d of slot.querySelectorAll(".rn-release")) {
+    if (d.dataset.version === version) d.querySelector(".rn-body").innerHTML = rnBodyHTML(version, t);
+  }
+}
+
+function rnChangeHTML(c, t) {
+  const cat = t.categories[c.category] || c.category || "";
+  return `<details class="rn-change"><summary>` +
+    (cat ? `<span class="chip rn-cat">${esc(cat)}</span>` : "") +
+    `<span class="rn-change-title">${rnInline(c.title || "")}</span></summary>` +
+    `<div class="rn-change-body">${c.text ? `<p>${rnInline(c.text)}</p>` : ""}` +
+    `${c.link ? rnLink(c.link, c.link.label) : ""}</div></details>`;
+}
+
+function rnBodyHTML(version, t) {
+  const r = rn.releases.get(version);
+  if (r === false) return `<p class="muted">${esc(t.failed)}</p>`;
+  if (!r) return `<p class="muted">${esc(t.loading)}</p>`;
+  const intro = (r.intro || []).map((b) => b.kind === "list"
+    ? `<ul class="rn-intro">${(b.items || []).map((i) => `<li>${rnInline(i)}</li>`).join("")}</ul>`
+    : `<p class="rn-intro">${rnInline(b.text || "")}</p>`).join("");
+  const changes = r.changes || [];
+  const shown = rn.all.has(version) ? changes : changes.slice(0, RN_INITIAL_CHANGES);
+  const list = shown.length ? `<div class="rn-changes">${shown.map((c) => rnChangeHTML(c, t)).join("")}</div>` : "";
+  const more = shown.length < changes.length
+    ? `<button type="button" class="rn-more" data-all="${esc(version)}">${esc(t.all)} (${changes.length})</button>`
     : "";
+  return intro + list + `<div class="rn-foot">${more}${rnLink(r.link, t.changelog)}</div>`;
+}
+
+function rnReleaseHTML(s, t) {
+  const name = s.version === "Unreleased" ? t.unreleased : s.version;
+  return `<details class="rn-release" data-version="${esc(s.version)}"${rn.open.has(s.version) ? " open" : ""}>` +
+    `<summary><span class="rn-version">${esc(name)}</span>` +
+    (s.date ? `<span class="rn-date">${esc(s.date)}</span>` : "") +
+    `<span class="rn-count">${esc(t.changes(s.changeCount || 0))}</span></summary>` +
+    `<div class="rn-body">${rnBodyHTML(s.version, t)}</div></details>`;
+}
+
+function paintReleaseNotes(slot, lang) {
+  if (!slot || !rn.index) return;
+  const t = RN_STRINGS[lang] || RN_STRINGS.en;
+  const shown = rn.older ? rn.index : rn.index.slice(0, RN_INITIAL_RELEASES);
+  const hidden = rn.index.length - shown.length;
   slot.innerHTML =
-    `<div class="card whats-new"><details class="wn-root" open>` +
-    `<summary class="wn-head"><span class="wn-title">${esc(t.title)}</span>` +
-    `<span class="wn-lang">` +
-    `<button type="button" data-lang="en" class="${lang === "en" ? "active" : ""}" title="Show these notes in English">EN</button>` +
-    `<button type="button" data-lang="de" class="${lang === "de" ? "active" : ""}" title="Show these notes in German">DE</button>` +
-    `</span></summary>` +
-    `<div class="wn-list">${head}${restHTML}</div>` +
+    `<div class="card release-notes"><details class="rn-root" open>` +
+    `<summary class="rn-head"><span class="rn-title">${esc(t.title)}</span></summary>` +
+    `<div class="rn-list">${shown.map((s) => rnReleaseHTML(s, t)).join("")}</div>` +
+    (hidden > 0 ? `<button type="button" class="rn-more" data-older>${esc(t.older)} (${hidden})</button>` : "") +
     `</details></div>`;
 
-  // The language toggle lives inside the <summary>; stop the click from also toggling
-  // the section open/closed, switch language, remember it, and repaint in place.
-  slot.querySelectorAll(".wn-lang button").forEach((b) => b.addEventListener("click", (ev) => {
-    ev.preventDefault();
-    ev.stopPropagation();
-    const l = b.dataset.lang;
-    wnSetLang(l);
-    paintWhatsNew(slot, entries, l);
+  // A release loads its changes the first time it is opened.
+  slot.querySelectorAll(".rn-release").forEach((d) => d.addEventListener("toggle", () => {
+    const v = d.dataset.version;
+    if (d.open) { rn.open.add(v); rnLoad(slot, v); } else rn.open.delete(v);
   }));
-  const more = slot.querySelector(".wn-more");
-  if (more) more.addEventListener("click", () => {
-    const r = slot.querySelector(".wn-rest");
-    if (r) r.hidden = false;
-    more.remove();
-  });
+  // Assigned rather than added: the slot outlives every repaint, and a listener per
+  // repaint would answer one click several times.
+  slot.onclick = (e) => {
+    const btn = e.target instanceof Element && e.target.closest(".rn-more");
+    if (!btn) return;
+    if (btn.dataset.all) {
+      // Appended rather than repainted, so a change the reader has open stays open.
+      const v = btn.dataset.all, r = rn.releases.get(v);
+      const list = btn.closest(".rn-body")?.querySelector(".rn-changes");
+      rn.all.add(v);
+      if (!r || !list) { rnFill(slot, v, consoleLang()); return; }
+      const t = RN_STRINGS[consoleLang()] || RN_STRINGS.en;
+      list.insertAdjacentHTML("beforeend", r.changes.slice(RN_INITIAL_CHANGES).map((c) => rnChangeHTML(c, t)).join(""));
+      btn.remove();
+    } else {
+      rn.older = true;
+      paintReleaseNotes(slot, consoleLang());
+    }
+  };
+  for (const v of rn.open) rnLoad(slot, v);
 }
 
 // ---------- Views ----------
 async function viewConsoleDashboard() {
   view.innerHTML = `
+    <div id="catalogue-stranded-slot"></div>
     <div class="card">
-      <h1>Welcome to Atlas</h1>
+      <div class="welcome-head">
+        <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
+          hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
+        }</span>
+        <h1>Welcome to atlas</h1>
+        <span id="welcome-version" class="welcome-version muted"></span>
+      </div>
       <p class="muted">Atlas is a durable, high-throughput BPMN&nbsp;2.x workflow engine that runs
       from a single self-contained binary. This Console manages deployments and shows engine health;
       the Modeler lets you design and deploy BPMN models in the browser.</p>
@@ -1150,9 +1536,10 @@ async function viewConsoleDashboard() {
         <a class="btn" href="#/modeler">Open Modeler</a>
         <a class="btn ghost" href="#/console/engine">View engine</a>
         <a class="btn ghost" href="/handbuch.html" target="_blank" rel="noopener">Handbook ↗</a>
+        <button type="button" class="btn ghost" data-system-overview title="Show how atlas is built, from the apps down to its persistence">System Overview</button>
       </div>
     </div>
-    <div id="whats-new-slot"></div>
+    <div id="release-notes-slot"></div>
     <div class="grid2" style="margin-top:18px">
       <div class="card">
         <div class="between"><h2>Deployments</h2><a href="#/modeler">View all</a></div>
@@ -1166,8 +1553,25 @@ async function viewConsoleDashboard() {
           <div class="stat"><b id="s-ei">0</b><span>active element instances</span></div>
         </div>
       </div>
-    </div>`;
-  renderWhatsNew(document.getElementById("whats-new-slot")); // fills its own slot; safe if it fails
+    </div>
+    <div id="key-features-slot"></div>`;
+  view.querySelector("[data-system-overview]").addEventListener("click", () => openSystemOverview());
+  // What switching the catalogue off strands (ADR-0434): asked only where it can have
+  // an answer — the catalogue off, and an administrator looking — so nobody else pays a
+  // request for it. Fills its own slot, and is silent when nothing is stranded.
+  if (!FEATURES.catalogue && mayUse("admin")) renderCatalogueStranded(document.getElementById("catalogue-stranded-slot"));
+  renderReleaseNotes(document.getElementById("release-notes-slot")); // fills its own slot; safe if it fails
+  // The key-features tile sits below the dashboard's own tiles: what Atlas is, for
+  // someone who arrived here without having read the README. Fills its own slot,
+  // and is silent if the asset is missing.
+  renderKeyFeatures(document.getElementById("key-features-slot"), consoleLang(), setConsoleLang);
+  // The running version next to the heading, so "which build is this?" is answered
+  // on the first screen rather than only on the admin-only Engine view. Loaded on
+  // its own and silent on failure: a missing badge must not cost the dashboard.
+  api("GET", "/api/v1/info").then((i) => {
+    const el = document.getElementById("welcome-version");
+    if (el) el.textContent = versionLabel(i);
+  }).catch(() => {});
   try {
     const [procs, stats] = await Promise.all([
       api("GET", "/api/v1/processes"),
@@ -1179,6 +1583,36 @@ async function viewConsoleDashboard() {
     document.getElementById("s-pi").textContent = stats.activeProcessInstances;
     document.getElementById("s-ei").textContent = stats.activeElementInstances;
   } catch (e) { toast(e.message, "err"); }
+}
+
+// renderCatalogueStranded tells an administrator, on the dashboard, which processes
+// are still working orders on a server that switched the catalogue off. The start
+// writes the same as a log line, and a log line is lost wherever nobody reads the
+// start. Read live, so the notice goes away once those instances are finished or
+// ended. Silent on failure and when nothing is stranded: it is an addition to a page
+// that works without it.
+async function renderCatalogueStranded(slot) {
+  if (!slot) return;
+  let s;
+  try { s = await api("GET", "/api/v1/catalogue-switch"); } catch { return; }
+  const total = s ? (s.shopProcessInstances || 0) + (s.productProcessInstances || 0) : 0;
+  if (!s || s.catalogue !== false || total === 0) return;
+  const rows = (s.processes || []).map((p) =>
+    `<li><code>${esc(p.processId)}</code> — ${esc(String(p.instances))} running</li>`).join("");
+  slot.innerHTML = `
+    <div class="card catalogue-stranded" role="status">
+      <h2>Orders left mid-way by the switched-off catalogue</h2>
+      <p>The shop, the catalogue, the orders and the inventory are switched off on this server
+      (<code>--catalogue=false</code>), but ${total} process instance${total === 1 ? " is" : "s are"} still working orders.
+      Each fails at its next call to the order routes and, its retries spent, raises an incident.</p>
+      <ul>${rows}</ul>
+      <p class="muted">Switch the catalogue back on and retry those incidents to finish the orders,
+      or end the instances deliberately.</p>
+      <div class="row">
+        <a class="btn ghost" href="#/operations/incidents">Open incidents</a>
+        <a class="btn ghost" href="#/operations">Instances</a>
+      </div>
+    </div>`;
 }
 
 async function viewConsoleEngine() {
@@ -1197,11 +1631,19 @@ async function viewConsoleEngine() {
   view.innerHTML += `
     <div class="card" id="node-card" style="margin-top:14px">
       <h2>This node</h2>
-      <p class="muted">The identity this server presents to other Atlas servers (ADR-0189). The id is
+      <p class="muted">The identity this server presents to other atlas servers (ADR-0189). The id is
       minted once and survives restarts — it is what a landscape view correlates against, and what an
       architecture model binds to with <code>atlas.runtimeId</code>. The name is for people; the id is
       for machines, and changing the name never changes the id.</p>
       <div id="node-info" class="muted">loading…</div>
+    </div>`;
+  // The installation's constants, read by a process as server.NAME
+  // (ADR-0456) — beside the node identity, whose name and environment
+  // a process can read as server.name and server.environment.
+  view.innerHTML += `
+    <div class="card" id="server-constants-card" style="margin-top:14px">
+      <h2>Server constants</h2>
+      <div id="server-constants"><p class="muted">loading…</p></div>
     </div>`;
   view.innerHTML += `
     <div class="card" id="build-card" style="margin-top:14px">
@@ -1222,6 +1664,7 @@ async function viewConsoleEngine() {
     document.getElementById("build-info").innerHTML = buildInfoHTML(info);
     mountNodeCard(node);
   } catch (e) { toast(e.message, "err"); }
+  renderServerConstants(document.getElementById("server-constants"));
 }
 
 // nodeInfoHTML renders the node descriptor. The id is shown in full and
@@ -1258,8 +1701,14 @@ function mountNodeCard(node) {
   const slot = document.getElementById("node-info");
   if (!slot) return;
   const editable = mayUse("admin");
+  // The form gets a heading of its own: under the descriptor's table it read as more of
+  // the table, and was missed. A process reads the name and the environment as server.name
+  // and server.environment when its model declares them (ADR-0456).
   slot.innerHTML = nodeInfoHTML(node) + (editable ? `
-    <form id="node-form" class="row" style="gap:10px; margin-top:12px; flex-wrap:wrap; align-items:flex-end">
+    <h3 id="node-form-head" style="margin:16px 0 4px">Name this node</h3>
+    <p class="muted" style="margin:0 0 4px; font-size:12px">For people, and for processes that read
+      <code>server.name</code> and <code>server.environment</code>. Changing them never changes the runtime id.</p>
+    <form id="node-form" class="row" style="gap:10px; margin-top:8px; flex-wrap:wrap; align-items:flex-end">
       <label class="field" style="margin:0"><span>Name</span>
         <input id="node-name" type="text" maxlength="200" placeholder="e.g. Zurich primary"
           value="${esc(node.name || "")}" /></label>
@@ -1285,6 +1734,16 @@ function mountNodeCard(node) {
 // buildInfoHTML renders the version/VCS metadata from GET /api/v1/info: the version
 // string, the git commit (short) with a dirty marker, the build time, and the Go
 // toolchain. A missing revision means the binary was built outside a git checkout.
+// versionLabel is the short form of the build metadata for the dashboard heading:
+// the product version and, when the binary carries one, the same 12-character
+// commit prefix the Engine view's Build card shows, so the two can be compared.
+function versionLabel(i) {
+  i = i || {};
+  const parts = [i.version ? "v" + i.version : ""];
+  if (i.revision) parts.push(i.revision.slice(0, 12) + (i.modified ? " (modified)" : ""));
+  return parts.filter(Boolean).join(" · ");
+}
+
 function buildInfoHTML(i) {
   i = i || {};
   const rev = i.revision ? i.revision.slice(0, 12) + (i.modified ? " (modified)" : "") : "unknown (built outside a git checkout)";
@@ -1358,9 +1817,22 @@ async function viewConsoleLogs() {
   window.__atlasCleanup = () => clearInterval(timer);
 }
 
+// constantChangeHTML renders one name a "constants" audit event changed: added with its
+// value, removed with the value it had, or changed from one value (and type) to another.
+function constantChangeHTML(c) {
+  const val = (v, t) => `<code>${esc(v)}</code>${t && t !== "string" ? ` <span class="muted small">${esc(t)}</span>` : ""}`;
+  const name = `<b>${esc(c.name)}</b>`;
+  switch (c.change) {
+    case "added": return `${name} added: ${val(c.to, c.toType)}`;
+    case "removed": return `${name} removed (was ${val(c.from, c.fromType)})`;
+    default: return `${name} ${val(c.from, c.fromType)} → ${val(c.to, c.toType)}`;
+  }
+}
+
 // viewConsoleAudit is the global admin audit view (ADR-0184): the access-control
 // history across every application in one place — who shared, revoked, changed
-// visibility, or transferred ownership, and when. Admin-only on the server; a
+// visibility, or transferred ownership, and when — and every change to the constants an
+// application or the installation holds (ADR-0184, amended). Admin-only on the server; a
 // signed-in non-admin gets a notice rather than an error card. Subject and owner ids
 // are resolved to names via the principals directory when it loads.
 async function viewConsoleAudit() {
@@ -1377,12 +1849,13 @@ async function viewConsoleAudit() {
               <option value="unshare">Revoke</option>
               <option value="visibility">Visibility</option>
               <option value="transfer">Transfer</option>
+              <option value="constants">Constants</option>
             </select>
           </label>
           <button class="btn neutral" id="audit-refresh" title="Reload the audit log">Refresh</button>
         </div>
       </div>
-      <p class="muted">Access-control changes across every application — shares, revokes, visibility changes, and ownership transfers — newest first. The 200 most recent are shown.</p>
+      <p class="muted">Access-control changes across every application — shares, revokes, visibility changes, and ownership transfers — and changes to the constants an application or this installation holds, newest first.</p>
       <div id="audit-out">loading…</div>
     </div>`;
 
@@ -1402,19 +1875,22 @@ async function viewConsoleAudit() {
       case "unshare": return `removed ${esc(nameOf(e.subjectId))}${isGroup(e.subjectId) ? " (group)" : ""}`;
       case "visibility": return `visibility ${esc(e.from)} → ${esc(e.to)}`;
       case "transfer": return `ownership ${esc(nameOf(e.from))} → ${esc(nameOf(e.to))}`;
+      // What each constant was and became (ADR-0456): the values
+      // are identifiers, kept so the log answers what an instance started with.
+      case "constants": return (e.constants || []).map(constantChangeHTML).join("<br>");
       default: return esc(e.action);
     }
   };
   const actionPill = (a) => {
-    const cls = { share: "ok", unshare: "err", visibility: "warn", transfer: "warn" }[a] || "";
+    const cls = { share: "ok", unshare: "err", visibility: "warn", transfer: "warn", constants: "warn" }[a] || "";
     return `<span class="pill ${cls}">${esc(a)}</span>`;
   };
 
   const out = document.getElementById("audit-out");
   const load = async (action) => {
-    let events;
+    let page;
     try {
-      events = await api("GET", "/api/v1/audit" + (action ? "?action=" + encodeURIComponent(action) : ""));
+      page = await api("GET", "/api/v1/audit" + (action ? "?action=" + encodeURIComponent(action) : ""));
     } catch (e) {
       if (superseded(gen)) return;
       if (/admin/i.test(e.message)) {
@@ -1425,23 +1901,34 @@ async function viewConsoleAudit() {
       return;
     }
     if (superseded(gen)) return;
-    if (!events || !events.length) {
-      out.innerHTML = `<p class="muted">No access-control changes recorded yet.</p>`;
+    const events = (page && page.items) || [];
+    if (!events.length) {
+      out.innerHTML = `<p class="muted">No changes recorded yet.</p>`;
       return;
     }
+    // The endpoint counts every match and then returns a window of it, so this total is
+    // the number of changes rather than the number on screen
+    // (ADR-0378).
+    const cut = page.truncated
+      ? `<p class="muted small">Showing the newest ${events.length} of ${page.total}. Narrow by action, or ask for more with ?limit=.</p>`
+      : "";
     const rows = events.map((e) => `
       <tr>
         <td class="muted small" style="white-space:nowrap">${esc(fmtTime(e.at))}</td>
         <td>${actionPill(e.action)}</td>
-        <td>${esc(e.applicationName || e.applicationId)}</td>
+        <td>${e.applicationId ? esc(e.applicationName || e.applicationId) : `<span class="muted">Server (every application)</span>`}</td>
         <td>${detail(e)}</td>
         <td>${esc(e.actorName || e.actorId || "—")}</td>
       </tr>`).join("");
-    out.innerHTML = `
+    out.innerHTML = `${cut}
       <table class="table" data-dt-key="audit">
         <thead><tr><th>When</th><th>Action</th><th>Application</th><th>Change</th><th>By</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
+    // Refresh and the action picker rebuild the table itself, not just its rows, and
+    // the route's one enhancement pass is long past — so the new table needs its sort
+    // headers and filter row again.
+    enhanceViewTables();
   };
 
   await load("");
@@ -1517,7 +2004,13 @@ async function viewConsoleBackup() {
         const data = await res.json().catch(() => null);
         if (!res.ok) throw new Error((data && data.error) || res.statusText);
         status.textContent = onOk(data || {});
-        toast("Restore complete", "ok");
+        // A restore that held records back is not a restore that succeeded quietly:
+        // the records it declined are the operator's next decision, so the toast says
+        // so rather than going green over a partial result
+        // (ADR-0357).
+        const held = (data && data.skipped) || 0;
+        toast(held ? `Restored, but ${held} deployed definition(s) were not taken` : "Restore complete",
+          held ? "warn" : "ok");
       } catch (e) {
         status.textContent = "Restore failed: " + (e && e.message || e);
         toast("Restore failed", "error");
@@ -1527,8 +2020,8 @@ async function viewConsoleBackup() {
 
   wireRestore(
     "restore-file", "restore-btn", "restore-status", "/api/v1/restore",
-    "Restore from this file? Artifacts sharing an id will be overwritten.",
-    (d) => `Restored ${d.restored || 0} file(s).` + (d.restartRequired ? " Restart the server to activate restored deployments." : ""),
+    "Restore from this file? Artifacts sharing an id will be overwritten. Deployed definitions whose key is already in use here are NOT taken — a key belongs to the installation that issued it.",
+    (d) => restoreSummary(d),
   );
   wireRestore(
     "restore-full-file", "restore-full-btn", "restore-full-status", "/api/v1/restore/full",
@@ -1540,7 +2033,7 @@ async function viewConsoleBackup() {
 // userForm renders the create or edit form for a user. In edit mode the username
 // is immutable (it identifies existing sessions and references) and the password
 // has its own action, so neither appears here.
-// GRANTABLE_ROLES is the four roles an account can be given, in the order the form
+// GRANTABLE_ROLES is the roles an account can be given, in the order the form
 // offers them, each with what it lets the person do. The wording matters more than
 // it looks: an administrator picking roles is deciding who may deploy a model,
 // which is code execution, and "modeler" alone does not say that.
@@ -1549,6 +2042,8 @@ const GRANTABLE_ROLES = [
   { id: "modeler", name: "Modeller", what: "author drafts, forms and decisions — and deploy them" },
   { id: "operator", name: "Operator", what: "start, cancel and repair instances; read runtime data" },
   { id: "user", name: "User", what: "work on tasks and read what they are given" },
+  { id: "productmanager", name: "Product manager", what: "maintain the shop's catalogues and products, and publish releases" },
+  { id: "feedreader", name: "Feed reader", what: "read the event feed of action outcomes, granted and revoked rights and incidents, and nothing else" },
 ];
 
 function userForm(u) {
@@ -1568,7 +2063,87 @@ function userForm(u) {
       <div class="field"><b>Roles</b><div class="muted" style="margin:2px 0 6px">What this account may do. Untick everything and it can only sign in.</div>${boxes}</div>
       ${isEdit ? `<label class="field inline"><input type="checkbox" name="disabled"${u.disabled ? " checked" : ""}> Disabled</label>` : ""}
       <div class="row" style="margin-top:4px"><button class="btn" type="submit" title="${isEdit ? "Save changes to this user" : "Create the user account"}">${isEdit ? "Save changes" : "Create user"}</button></div>
-    </form></div>`;
+    </form>
+    ${isEdit ? avatarField(u) : ""}</div>`;
+}
+
+// avatarField is the picture, outside the form on purpose.
+//
+// Everything above it is one PATCH of the record; a picture is bytes on a route of
+// its own and lands the moment it is chosen. Inside the form it would sit beside a
+// Save button it does not obey — a person would pick a file, press Save, and be
+// told the user was updated while the picture they chose went nowhere.
+//
+// Offered only when editing. A picture belongs to an account, and there is no
+// account to hang it on until the create has returned an id.
+function avatarField(u) {
+  const src = `/api/v1/users/${encodeURIComponent(u.id)}/avatar`;
+  return `<div class="avatar-field" data-uid="${esc(u.id)}" style="border-top:1px solid var(--border); margin-top:14px; padding-top:12px">
+    <b>Picture</b>
+    <p class="muted" style="margin:2px 0 8px">Shown beside this person's name wherever atlas names
+      them — a task list, an approval, the shop's recipient picker. PNG or JPEG.
+      ${u.avatarSource === "entra"
+    ? "This one came from the directory; uploading here replaces it, and the mirror will not put it back."
+    : ""}</p>
+    <div class="row" style="align-items:center">
+      <img class="user-avatar-preview" src="${esc(src)}" alt=""
+        style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:1px solid var(--border)" hidden>
+      <span class="user-avatar-none muted" style="font-size:12px" hidden>No picture.</span>
+      <input type="file" class="avatar-file" accept="image/png,image/jpeg" aria-label="Choose a picture">
+      <button class="btn ghost" type="button" data-avact="upload">Upload</button>
+      <button class="btn ghost" type="button" data-avact="remove">Remove</button>
+    </div>
+  </div>`;
+}
+
+// wireAvatarField hangs the two buttons off whichever edit form is open.
+//
+// The upload does not go through api(): that helper sends JSON, and this route
+// takes the bytes themselves under the Content-Type the file already carries —
+// the same shape the catalogue's brand mark uses, and for the same reason.
+function wireAvatarField(slot, reload) {
+  const box = slot.querySelector(".avatar-field");
+  if (!box) return;
+  const id = box.dataset.uid;
+  const img = box.querySelector(".user-avatar-preview");
+  const none = box.querySelector(".user-avatar-none");
+  // Whether there is a picture is answered by the image itself: it loads or it
+  // 404s. Reading avatarSource instead would believe a record over the bytes.
+  const has = () => { img.hidden = false; none.hidden = true; };
+  const hasNot = () => { img.hidden = true; none.hidden = false; };
+  img.addEventListener("load", has);
+  img.addEventListener("error", hasNot);
+  if (img.complete) (img.naturalWidth ? has : hasNot)();
+
+  box.addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-avact]");
+    if (!b) return;
+    b.disabled = true;
+    try {
+      if (b.dataset.avact === "upload") {
+        const file = box.querySelector(".avatar-file").files[0];
+        if (!file) { toast("Choose a PNG or JPEG first", "err"); return; }
+        // No size check here. The server carries the limit, it is configurable, and
+        // a number copied into this page would go stale silently — its refusal
+        // names the actual figure.
+        const res = await fetch(`/api/v1/users/${encodeURIComponent(id)}/avatar`, {
+          method: "PUT", body: file,
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          let data = null;
+          try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
+          throw new Error((data && data.error) || text || `HTTP ${res.status}`);
+        }
+        toast("Picture updated", "ok");
+      } else {
+        await api("DELETE", `/api/v1/users/${encodeURIComponent(id)}/avatar`);
+        toast("Picture removed", "ok");
+      }
+      reload();
+    } catch (err) { toast(err.message, "err"); } finally { b.disabled = false; }
+  });
 }
 
 // rolesFrom reads the ticked roles back off the form.
@@ -1753,7 +2328,12 @@ async function viewConsoleWorkers() {
     // Kind-specific first: these are the reasons an operator came to this row rather
     // than to any other, and they exist on no other kind.
     if (c.kind === "clio") items.push({ label: "Provision access…", icon: "🔑", act: "provision" });
-    if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets" || c.kind === "discord") items.push({ label: "Events…", icon: "⇄", act: "subs" });
+    if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets" || c.kind === "discord" || c.kind === "mail") items.push({ label: "Events…", icon: "⇄", act: "subs" });
+    // A CloudEvents endpoint is subscribed to the event feed, which is administrator
+    // configuration: the panel lists what the worker is sent and how delivery stands.
+    // The feed carries the engine's facts too, so it stays when the service catalogue
+    // is switched off (ADR-0435 §6).
+    if (c.kind === "cloudevents" && mayUse("admin")) items.push({ label: "Feed…", icon: "⇉", act: "feed" });
     // Every Worker Type the check covers: mail connects and authenticates (or sends a
     // test message), a SQL worker dials its connection string. workerShape is the one
     // place that knows, so the menu does not go stale the next type that gains one.
@@ -1854,7 +2434,7 @@ async function viewConsoleWorkers() {
       operation against a directory in its own memory: no domain controller is touched, and nothing
       in a model changes. It still refuses what Active Directory refuses — creating the same account
       twice, a password over an unencrypted connection, an account that is not there. Switching
-      restarts the worker; Atlas keeps running.</p>
+      restarts the worker; atlas keeps running.</p>
       <label style="display:flex; align-items:center; gap:10px; margin-bottom:10px">
         <input type="checkbox" id="admock-on" ${adMock.enabled ? "checked" : ""}>
         <span>Serve Active Directory tasks against a mockup</span>
@@ -1912,7 +2492,7 @@ async function viewConsoleWorkers() {
       PostgreSQL worker answers statements from prepared answers in its own memory: no database is
       touched, no connection string is needed, and nothing in a model changes. One switch covers all
       three — simulating one product while really writing to another looks like a full mockup run,
-      which is the one thing it must never look like. Switching restarts the workers; Atlas keeps
+      which is the one thing it must never look like. Switching restarts the workers; atlas keeps
       running.</p>
       <label style="display:flex; align-items:center; gap:10px; margin-bottom:10px">
         <input type="checkbox" id="sqlmock-on" ${sqlMock.enabled ? "checked" : ""}>
@@ -2011,7 +2591,7 @@ async function viewConsoleWorkers() {
       <div class="between" style="padding:16px 18px 0"><h1 style="margin:0">Workers</h1></div>
       <h2 style="padding:0 18px; margin:12px 0 4px">Worker catalog</h2>
       <p class="muted" style="padding:0 18px; margin:6px 0 12px">The Worker Types available to
-      this Atlas instance. A <b>Worker Type</b> is a capability; a configured worker below binds
+      this atlas instance. A <b>Worker Type</b> is a capability; a configured worker below binds
       that capability to one concrete target and identity, org-wide and shared across every
       process.</p>
       <table><tbody>${WORKER_TYPES.map(workerTypeRow).join("")}</tbody></table>
@@ -2063,7 +2643,7 @@ async function viewConsoleOrg() {
   const presencePill = (p) => {
     const state = (p && p.state) || "offline";
     if (state === "online") {
-      return `<span class="pill ok" title="Signed in and using Atlas — last action ${esc(ago(p.lastActiveAt))}"><span class="dot"></span>online</span>`;
+      return `<span class="pill ok" title="Signed in and using atlas — last action ${esc(ago(p.lastActiveAt))}"><span class="dot"></span>online</span>`;
     }
     if (state === "idle") {
       return `<span class="pill warn" title="Signed in, but nothing done since ${esc(ago(p.lastActiveAt))}"><span class="dot"></span>idle</span>`;
@@ -2078,9 +2658,17 @@ async function viewConsoleOrg() {
   const statusPill = (u) => u.disabled
     ? `<span class="pill warn"><span class="dot"></span>disabled</span>`
     : `<span class="pill ok"><span class="dot"></span>active</span>`;
+  // A face in the roster, and only for the accounts that have one. The record says
+  // so (avatarSource), which is why it is on the projection at all: a row per
+  // account that mostly 404s would be a request per row for nothing.
+  const userFace = (u) => (u.avatarSource
+    ? `<img src="/api/v1/users/${encodeURIComponent(u.id)}/avatar" alt=""
+         style="width:22px; height:22px; border-radius:50%; object-fit:cover; vertical-align:middle; margin-right:6px">`
+    : "");
   const userRow = (u) => `<tr data-id="${esc(u.id)}">
-      <td><span class="chip">${esc(u.username)}</span>${
-        me && u.id === me.id ? ' <span class="muted" style="font-size:12px">(you)</span>' : ""}</td>
+      <td>${userFace(u)}<span class="chip">${esc(u.username)}</span>${
+        me && u.id === me.id ? ' <span class="muted" style="font-size:12px">(you)</span>' : ""}
+        <div class="muted" style="font-size:12px; margin-top:4px"><code>${esc(u.id)}</code></div></td>
       <td>${esc(u.displayName || "—")}${u.email ? `<div class="muted" style="font-size:12px">${esc(u.email)}</div>` : ""}</td>
       <td>${roleChips(u.roles)}</td>
       <td>${statusPill(u)}</td>
@@ -2104,7 +2692,10 @@ async function viewConsoleOrg() {
           Every route names the role that reaches it: <span class="chip">admin</span> for this page and the
           rest of the instance's configuration, <span class="chip">modeler</span> to deploy and to author,
           <span class="chip">operator</span> to run what is deployed, <span class="chip">user</span> for a
-          person's own task list.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
+          person's own task list, <span class="chip">productmanager</span> to maintain the shop's
+          catalogues without administering the instance, <span class="chip">feedreader</span> to read
+          the event feed a CMDB or a billing system follows — what an <code>events</code> API token
+          carries, and nothing more.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
           administrators see it: <b>online</b> means somebody did something in the last five minutes,
           <b>idle</b> that a session is open but untouched, <b>offline</b> that no browser is reporting.
           It is read from the live sessions and never stored — a restart shows nobody.` : ""}</p>
@@ -2141,6 +2732,7 @@ async function viewConsoleOrg() {
       : `<div class="muted" style="font-size:12px; margin-top:8px">Every user is a member.</div>`;
     return `<tr data-id="${esc(g.id)}">
       <td><span class="chip">${esc(g.name)}</span>
+        <div class="muted" style="font-size:12px; margin-top:4px"><code>${esc(g.id)}</code></div>
         <div style="margin-top:6px">${chips}</div>
         ${addCtl}</td>
       <td style="text-align:right; white-space:nowrap; vertical-align:top">
@@ -2155,7 +2747,7 @@ async function viewConsoleOrg() {
       </div>
       <p class="muted" style="padding:0 18px; margin:6px 0 12px">A named set of users. Share a project
       with a group and every member gets that role (ADR-0180). A membership change
-      takes effect on the member's next sign-in.</p>
+      applies from that member's next request — they do not have to sign out and in.</p>
       <table data-dt-key="groups">
         <thead><tr><th>Group</th><th></th></tr></thead>
         <tbody id="group-rows">${groups.map(groupRow).join("")
@@ -2219,6 +2811,7 @@ async function viewConsoleOrg() {
           ev.preventDefault();
           saveUser(u.id, new FormData(ev.target), reload, u);
         });
+        wireAvatarField(slot, reload);
         slot.scrollIntoView({ block: "nearest" });
         break;
       case "password": resetUserPassword(u, reload); break;
@@ -2290,7 +2883,14 @@ function wireOrgPresence(showPresence, presencePill) {
 // SSO_ROLES is what a rule may grant. `user` is missing on purpose — everybody who
 // can sign in at all holds it, so offering it as a grant would suggest it could be
 // withheld.
-const SSO_ROLES = ["admin", "modeler", "operator"];
+//
+// `productmanager` belongs here and its absence was a real gap rather than a
+// cosmetic one. Where this mapping is on, it *owns* the roles: a role granted by
+// hand in the form above is replaced at that person's next sign-in. So in an
+// installation whose accounts come from the provider — which is the installation
+// this mapping exists for — a role the form offers and this list does not is a role
+// that cannot be held for longer than one login, however carefully it was granted.
+const SSO_ROLES = ["admin", "modeler", "operator", "productmanager", "feedreader"];
 
 function ssoRuleRow(rule, groups) {
   const roles = new Set(rule.roles || []);
@@ -2324,6 +2924,10 @@ function ssoCard(provider, mapping, groups) {
   }
   const m = mapping || { enabled: false, claim: "", rules: [] };
   const rules = m.rules || [];
+  // The rules table is `no-enhance`: it is a grid of inputs rather than a list of data,
+  // so its cells carry no text for the shared enhancer to sort or filter on — a filter
+  // typed into it would hide every rule — and the order is the order they were written
+  // in (ADR-0286).
   return `
     <div class="card" id="sso-card" style="margin-top:18px">
       <div class="between"><h2>Single sign-on</h2>
@@ -2349,7 +2953,7 @@ function ssoCard(provider, mapping, groups) {
       <p class="muted" style="margin:6px 0 14px; font-size:12px">A claim name, or a dotted path for the
       providers that nest it — <code>groups</code>, <code>roles</code>,
       <code>realm_access.roles</code>.</p>
-      <table>
+      <table class="no-enhance">
         <thead><tr><th style="width:26%">Claim value</th><th style="width:28%">Grants roles</th>
           <th>Adds to groups</th><th></th></tr></thead>
         <tbody id="sso-rules">${rules.map((r) => ssoRuleRow(r, groups)).join("")}</tbody>
@@ -2429,7 +3033,8 @@ function appearanceCard() {
         <div class="between"><h3 style="margin:0">Logo</h3>
           <button type="button" class="btn ghost sm" id="logo-remove"${hasLogoCached() ? "" : " hidden"} title="Remove the uploaded logo and restore the built-in mark">Remove logo</button></div>
         <p class="muted" style="margin:6px 0 12px">Replace the built-in mark with your organisation's logo —
-        a PNG or SVG up to 512&nbsp;KiB, shown in the top bar and on the login screen for everyone on this instance.</p>
+        a PNG or SVG up to 512&nbsp;KiB, shown in the top bar, on the Console's landing page and on the
+        login screen for everyone on this instance.</p>
         <div class="logo-controls">
           <span class="mark logo-sample${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
             hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
@@ -2639,18 +3244,22 @@ async function viewModelerHome() {
   const projRows = document.getElementById("proj-rows");
 
   const renderProjects = async () => {
-    let projects = [], drafts = [], refs = [], forms = [];
+    let projects = [], drafts = [], refs = [], forms = [], decDrafts = [];
     try {
-      [projects, drafts, refs, forms] = await Promise.all([
+      [projects, drafts, refs, forms, decDrafts] = await Promise.all([
         api("GET", "/api/v1/applications"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
+        api("GET", "/api/v1/dmn-drafts"),
       ]);
     } catch (e) { projRows.innerHTML = `<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`; return; }
 
     const known = new Set(projects.map((p) => p.id));
-    const all = [...drafts, ...refs, ...forms];
+    // A decision that exists only as a draft is still one of the application's
+    // artifacts, so it counts (ADR-0321); a draft on a decision
+    // that is in the model is that decision, already counted as its reference.
+    const all = [...drafts, ...refs, ...forms, ...decDrafts.filter((d) => !d.refId)];
     const countIn = (pid) => all.filter((a) => (a.projectId || "") === pid).length;
     const ungrouped = all.filter((a) => !a.projectId || !known.has(a.projectId));
 
@@ -2705,9 +3314,16 @@ async function viewModelerHome() {
     // from its timer/message/signal start events (ADR-0119). Flag it and offer the
     // inverse toggle.
     const inactive = g.latest.active === false;
-    const badge = inactive
+    const frozen = frozenMark(g.latest);
+    const badge = (inactive
       ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
-      : "";
+      : "") +
+      // A definition whose latest-bound decisions were frozen at its deploy does not
+      // do what its binding reads (ADR-0423), and this row is where its owner would
+      // redeploy it.
+      (frozen
+        ? ` <span class="pill${frozen.behind ? " warn" : ""} frozen-mark" title="${esc(frozen.title)}">${esc(frozen.label)}</span>`
+        : "");
     const toggleLabel = inactive ? "Activate" : "Deactivate";
     const toggleTitle = inactive
       ? "Resume automatic starts (timer/message/signal start events)"
@@ -2804,15 +3420,26 @@ async function viewProjectDetail(id) {
   const root = document.getElementById("pd");
 
   const render = async () => {
-    let projects = [], drafts = [], refs = [], forms = [];
+    let projects = [], drafts = [], refs = [], forms = [], decDrafts = [];
     try {
-      [projects, drafts, refs, forms] = await Promise.all([
+      [projects, drafts, refs, forms, decDrafts] = await Promise.all([
         api("GET", "/api/v1/applications"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
+        api("GET", "/api/v1/dmn-drafts"),
       ]);
     } catch (e) { root.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
+    // A stored DMN model nothing points at belongs to no application, which is what
+    // this view is (ADR-0330). It is only
+    // asked for here, and a failure costs the section rather than the page — a
+    // remote temis resolver has no folder to list and answers 409.
+    let orphanModels = [];
+    if (ungrouped) {
+      try {
+        orphanModels = ((await api("GET", "/api/v1/dmn-models")) || []).filter((m) => !m.referenced);
+      } catch { orphanModels = []; }
+    }
 
     const known = new Set(projects.map((p) => p.id));
     const proj = ungrouped ? { id: "ungrouped", name: "Not assigned" } : projects.find((p) => p.id === id);
@@ -2823,6 +3450,13 @@ async function viewProjectDetail(id) {
     setTitle(`${proj.name || "Application"} · Modeler`);
     const mine = (a) => ungrouped ? (!a.projectId || !known.has(a.projectId)) : a.projectId === id;
     const dl = drafts.filter(mine), rl = refs.filter(mine), fl = forms.filter(mine);
+    // A decision draft is work that has not been written to the model
+    // (ADR-0321). One on a decision that is in the model is a
+    // marker on that decision's row; one on a decision that is not is a row of its
+    // own, because nothing else in this table represents it.
+    const ddl = decDrafts.filter(mine);
+    const draftFor = new Set(ddl.filter((d) => d.refId).map((d) => d.refId));
+    const looseDecDrafts = ddl.filter((d) => !d.refId);
 
     // Scope gating (ADR-0071). Ungrouped is the un-scoped personal/legacy bucket,
     // so it stays fully writable; a real project's actions follow the caller's
@@ -2854,7 +3488,7 @@ async function viewProjectDetail(id) {
         { sep: true },
         { label: "Delete", icon: "🗑", act: "deldraft", data: { key: d.processId }, danger: true },
       );
-      return `<tr data-name="${esc((d.name || d.processId).toLowerCase())}">
+      return `<tr>
         ${nameCell("BPMN", d.name || d.processId, esc(d.processId), href)}
         <td class="muted">Diagram</td>
         <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
@@ -2864,17 +3498,54 @@ async function viewProjectDetail(id) {
       const href = `#/modeler/dmn/${encodeURIComponent(r.id)}`;
       const items = [{ label: "View", icon: "▦", href }, { label: "Validate", icon: "✔", act: "valref", data: { id: r.id } }];
       if (canWrite) items.unshift(
-        { label: "Bearbeiten", icon: "✎", act: "editref", data: { id: r.id, ref: r.modelRef, pid: r.projectId || "", name: r.name } });
+        { label: "Edit", icon: "✎", act: "editref", data: { id: r.id, ref: r.modelRef, pid: r.projectId || "", name: r.name } });
       if (canWrite) items.push(
         ...moveItems(r.projectId, "moveref", r.id),
         { sep: true },
         { label: "Delete", icon: "🗑", act: "delref", data: { id: r.id }, danger: true },
       );
-      return `<tr data-name="${esc(r.name.toLowerCase())}">
-        ${nameCell("DMN", r.name, `temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href)}
+      // A decision carrying a draft says so where the author looks for it, because
+      // what a publish would ship is the model, not that work.
+      const mark = draftFor.has(r.id) ? `<span class="chip draft-chip">Draft</span> ` : "";
+      return `<tr>
+        ${nameCell("DMN", r.name, `${mark}temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href)}
         <td class="muted">Decision ref</td>
         <td class="muted" data-sort="${r.createdAt || 0}">${esc(fmtTime(r.createdAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
+    };
+    // A decision that has never been written to the model: its draft is the only
+    // copy, so it is listed, marked, and says plainly that a publish will not carry
+    // it (ADR-0321).
+    const decDraftRow = (d) => {
+      const href = `#/modeler/dmn/d/${encodeURIComponent(d.id)}`;
+      const items = [{ label: "Open", icon: "→", href }];
+      if (canWrite) items.push(
+        { sep: true },
+        { label: "Delete", icon: "🗑", act: "deldecdraft", data: { id: d.id }, danger: true },
+      );
+      return `<tr>
+        ${nameCell("DMN", d.name || "Decision", `<span class="chip draft-chip">Draft</span> not in the model yet — a publish does not carry it`, href)}
+        <td class="muted">Decision</td>
+        <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
+        <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
+    };
+    // A model in the store that no reference points at. Nothing else in this table
+    // represents it, and nothing anywhere else in the product does either — which is
+    // the whole reason it is drawn (ADR-0330).
+    const orphanModelRow = (m) => {
+      const items = canWrite ? [
+        { label: "Add reference", icon: "+", act: "refmodel", data: { handle: m.handle, name: m.modelName || m.handle } },
+        { sep: true },
+        { label: "Delete model", icon: "🗑", act: "delmodel", data: { handle: m.handle }, danger: true },
+      ] : [];
+      const what = m.valid
+        ? `${m.decisions.length} decision${m.decisions.length === 1 ? "" : "s"}: ${esc(m.decisions.join(", "))}`
+        : "does not compile";
+      return `<tr>
+        ${nameCell("DMN", m.modelName || m.handle, `<span class="chip draft-chip">No reference</span> ${esc(m.handle)}.dmn · ${what}`, "")}
+        <td class="muted">Decision model</td>
+        <td class="muted" data-sort="0">—</td>
+        <td class="row-actions">${items.length ? dropdown("⋯", "icon-btn", items) : ""}</td></tr>`;
     };
     const formRow = (f) => {
       const href = `#/modeler/form/e/${encodeURIComponent(f.id)}`;
@@ -2883,19 +3554,22 @@ async function viewProjectDetail(id) {
         { sep: true },
         { label: "Delete", icon: "🗑", act: "delform", data: { id: f.id }, danger: true },
       );
-      return `<tr data-name="${esc((f.name || f.id).toLowerCase())}">
+      return `<tr>
         ${nameCell("FORM", f.name || f.id, esc(f.id), href)}
         <td class="muted">Form</td>
         <td class="muted" data-sort="${f.savedAt || 0}">${esc(fmtTime(f.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
 
-    const bodyRows = dl.map(draftRow).join("") + rl.map(refRow).join("") + fl.map(formRow).join("");
+    const bodyRows = dl.map(draftRow).join("") + rl.map(refRow).join("") +
+      looseDecDrafts.map(decDraftRow).join("") + orphanModels.map(orphanModelRow).join("") +
+      fl.map(formRow).join("");
     const newDiagramHref = ungrouped ? "#/modeler/new" : `#/modeler/new/p/${encodeURIComponent(id)}`;
     const newFormHref = ungrouped ? "#/modeler/form/new" : `#/modeler/form/new/p/${encodeURIComponent(id)}`;
     const createItems = [
       { header: "Blank resources" },
       { label: "BPMN diagram", icon: "⚙", href: newDiagramHref },
+      { label: "Decision (DMN)", icon: "▦", act: "newdec" },
       { label: "DMN model (upload .dmn)", icon: "▦", act: "newref" },
       { label: "Form", icon: "▤", href: newFormHref },
       { sep: true },
@@ -2923,9 +3597,9 @@ async function viewProjectDetail(id) {
       ${ungrouped ? "" : `<div class="tabs" id="pd-tabs">
         <button data-pane="artifacts" class="active" title="Show this application’s design-time artifacts">Artifacts</button>
         <button data-pane="deployments" title="Show what this application currently has deployed">Deployments</button>
+        <button data-pane="constants" title="The constants this application holds on this installation, which its processes read as application.NAME">Constants</button>
       </div>`}
       <div id="pane-artifacts">
-        <input class="filter-input" id="pd-filter" placeholder="Filter artifacts…" autocomplete="off">
         <div class="card" style="padding:0">
           <table data-dt-key="project-artifacts">
             <thead><tr><th>Name</th><th>Type</th><th>Last changed</th><th></th></tr></thead>
@@ -2939,29 +3613,31 @@ async function viewProjectDetail(id) {
       ${ungrouped ? "" : `<div id="pane-deployments" hidden>
         <p class="muted" style="padding:2px 2px 12px">What this application currently has deployed on this server.</p>
         <div id="pd-deployments"><p class="muted" style="padding:14px 2px">Loading…</p></div>
+      </div>
+      <div id="pane-constants" hidden>
+        <div id="pd-constants"><p class="muted" style="padding:14px 2px">Loading…</p></div>
       </div>`}`;
-
-    const filter = document.getElementById("pd-filter");
-    filter.addEventListener("input", () => {
-      const q = filter.value.trim().toLowerCase();
-      for (const tr of root.querySelectorAll("#pd-rows tr[data-name]"))
-        tr.hidden = q !== "" && !tr.dataset.name.includes(q);
-    });
 
     // Tabs: Artifacts (design-time) and Deployments (what's live for this
     // application, ADR-0128). The deployments pane loads lazily on first open.
     const tabs = document.getElementById("pd-tabs");
     if (tabs) {
       let loadedDeployments = false;
+      let loadedConstants = false;
       tabs.addEventListener("click", (e) => {
         const b = e.target.closest("button[data-pane]");
         if (!b) return;
         for (const t of tabs.querySelectorAll("button")) t.classList.toggle("active", t === b);
         document.getElementById("pane-artifacts").hidden = b.dataset.pane !== "artifacts";
         document.getElementById("pane-deployments").hidden = b.dataset.pane !== "deployments";
+        document.getElementById("pane-constants").hidden = b.dataset.pane !== "constants";
         if (b.dataset.pane === "deployments" && !loadedDeployments) {
           loadedDeployments = true;
           renderAppDeployments(id);
+        }
+        if (b.dataset.pane === "constants" && !loadedConstants) {
+          loadedConstants = true;
+          renderAppConstants(id);
         }
       });
     }
@@ -2971,15 +3647,19 @@ async function viewProjectDetail(id) {
         case "import": importArtifact(ungrouped ? "" : id, render); break;
         case "import-mim": importMIM(ungrouped ? "" : id, render); break;
         case "srcexport": downloadApplicationSource(id); break;
+        case "newdec": createDecision(ungrouped ? "" : id); break;
         case "newref": createDmnRef(ungrouped ? "" : id, render); break;
         case "shareproj": shareProject(proj, render); break;
         case "renproj": renameProject(id, proj.name, render); break;
         case "delproj": deleteProject(id, proj.name, () => { location.hash = "#/modeler"; }); break;
         case "valproj": validateProject(id); break;
         case "valref": validateDmnRef(b.dataset.id); break;
-        case "editref": editDmnRef({ id: b.dataset.id, modelRef: b.dataset.ref, projectId: b.dataset.pid, name: b.dataset.name }, render); break;
+        case "editref": editDmnRef({ id: b.dataset.id, modelRef: b.dataset.ref, projectId: b.dataset.pid, name: b.dataset.name }); break;
         case "deldraft": deleteDraft(b.dataset.key, render); break;
         case "delref": deleteDmnRef(b.dataset.id, render); break;
+        case "refmodel": referenceStoredModel(b.dataset.handle, b.dataset.name, render); break;
+        case "delmodel": deleteStoredModel(b.dataset.handle, render); break;
+        case "deldecdraft": deleteDecisionDraft(b.dataset.id, render); break;
         case "delform": deleteForm(b.dataset.id, render); break;
         case "movedraft": moveDraft(b.dataset.key, b.dataset.pid, render); break;
         case "moveref": moveDmnRef(b.dataset.key, b.dataset.pid, render); break;
@@ -2989,6 +3669,141 @@ async function viewProjectDetail(id) {
     if (deployBtn) deployBtn.addEventListener("click", () => publishApplication(id, render));
   };
   await render();
+}
+
+// HELD_CONSTANT_TYPES are the types a constant the installation holds takes — the four a
+// constant takes.
+const HELD_CONSTANT_TYPES = ["string", "number", "boolean", "json"];
+
+// renderAppConstants fills an application's Constants tab: what it holds on *this*
+// installation, read by its processes as application.NAME (ADR-0453). DEV, INT and PROD
+// each hold their own; the BPMN is the same on all three and only declares what it reads.
+function renderAppConstants(id) {
+  return renderHeldConstants(document.getElementById("pd-constants"), {
+    url: `/api/v1/applications/${encodeURIComponent(id)}/constants`,
+    prefix: "ac",
+    ns: "application",
+    intro: `The constants this application holds on <b>this installation</b>, which its processes read as
+      <code>application.NAME</code>. DEV, INT and PROD each hold their own: an instance takes the one held here
+      when it starts, and a running instance keeps the one it started with.`,
+    none: "No deployed process of this application reads a constant from it.",
+  });
+}
+
+// renderServerConstants fills the Server constants section of Admin → Engine: what this
+// installation holds for every application, read as server.NAME
+// (ADR-0456).
+function renderServerConstants(host) {
+  return renderHeldConstants(host, {
+    url: "/api/v1/server/constants",
+    prefix: "sc",
+    ns: "server",
+    intro: `The constants this installation holds for <b>every application</b>, which a process reads as
+      <code>server.NAME</code> — a tenant, an endpoint, anything that differs between DEV, INT and PROD and not
+      between applications. An instance takes the one held here when it starts.`,
+    none: "No deployed process reads a server constant.",
+  });
+}
+
+// renderHeldConstants draws one Constants page — an application's or the installation's:
+// what the deployed processes require, with how this installation answers each, and the
+// constants held here, editable by an administrator.
+//
+// A name a process requires and the installation does not hold is offered as an empty
+// row, so setting it is typing a value rather than retyping a name. An empty value is
+// "not set": the row is left out of the save rather than storing an empty string, which
+// would read as set while meaning nothing. A name is written in capitals (ADR-0454,
+// amended), applied while it is typed.
+async function renderHeldConstants(host, o) {
+  if (!host) return;
+  const p = o.prefix;
+  let view;
+  try { view = await api("GET", o.url); }
+  catch (e) { host.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
+  view = { ...(view || {}), constants: (view && view.constants) || [], required: (view && view.required) || [] };
+
+  // Changing a constant changes what every new instance reading it starts with, so the
+  // server keeps it to administrators (as it does a call override, ADR-0105); the page
+  // says so rather than offering a Save that comes back 403.
+  const canEdit = mayUse("admin");
+  const dis = canEdit ? "" : " disabled";
+  const states = {
+    set: `<span class="pill ok" title="This installation holds it">set</span>`,
+    missing: `<span class="pill err" title="Instances start without it, and a start from the Modeler, the Tasks app, a public link or the API is refused">missing</span>`,
+    fallback: `<span class="pill warn" title="Not held here; every process that reads it declares a fallback, which instances get">fallback</span>`,
+    "type-mismatch": `<span class="pill warn" title="Held here with another type than a process declares; instances get the type held here">type differs</span>`,
+  };
+  const reqRows = view.required.map((r) => `<tr data-req="${esc(r.name)}">
+      <td><b>${esc(r.name)}</b> <span class="muted">${esc(o.ns)}.${esc(r.name)}</span></td>
+      <td><span class="chip">${esc(r.type)}</span></td>
+      <td class="muted">${r.processes.map(esc).join(", ")}</td>
+      <td>${states[r.state] || esc(r.state)}</td>
+    </tr>`).join("");
+
+  const rows = view.constants.map((v) => ({ ...v }));
+  for (const r of view.required) {
+    if (!rows.some((v) => v.name === r.name)) rows.push({ name: r.name, type: r.type, value: "" });
+  }
+  const typeOpts = (t) => HELD_CONSTANT_TYPES
+    .map((x) => `<option value="${x}"${x === t ? " selected" : ""}>${x}</option>`).join("");
+  const rowHTML = (v) => `<tr class="hc-row">
+      <td><input type="text" class="hc-name" value="${esc(v.name)}" placeholder="TENANT_ID" aria-label="Name"${dis}/></td>
+      <td><select class="hc-type" aria-label="Type"${dis}>${typeOpts(v.type || "string")}</select></td>
+      <td><input type="text" class="hc-value" value="${esc(v.value)}" placeholder="not set" aria-label="Value"${dis}/></td>
+      <td>${canEdit ? `<button type="button" class="icon-btn hc-del" title="Remove this constant" aria-label="Remove">✕</button>` : ""}</td>
+    </tr>`;
+
+  host.innerHTML = `
+    <p class="muted" style="padding:2px 2px 12px">${o.intro}</p>
+    <h3 style="margin:6px 0">Required by the deployed processes</h3>
+    ${view.required.length ? `<div class="card" style="padding:0"><table id="${p}-required">
+        <thead><tr><th>Name</th><th>Type</th><th>Processes</th><th>Here</th></tr></thead>
+        <tbody>${reqRows}</tbody></table></div>`
+      : `<p class="muted">${esc(o.none)}</p>`}
+    <h3 style="margin:16px 0 6px">${o.ns === "server" ? "Server" : "Application"} constants on this installation</h3>
+    <div class="card" style="padding:0"><table id="${p}-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Value</th><th></th></tr></thead>
+      <tbody id="${p}-rows">${rows.map(rowHTML).join("")}</tbody></table></div>
+    ${canEdit
+      ? `<div class="row" style="margin-top:10px">
+          <button type="button" class="btn neutral" id="${p}-add" title="Add a constant">+ Add constant</button>
+          <button type="button" class="btn" id="${p}-save" title="Save the constants on this installation">Save</button>
+          <span class="err" id="${p}-err"></span></div>`
+      : `<p class="muted" style="margin-top:8px">Only an administrator can change them.</p>`}
+    ${view.updatedAt ? `<p class="muted" style="font-size:12px">Last changed ${esc(fmtTime(view.updatedAt))}${
+      view.updatedBy ? ` by ${esc(view.updatedByName || view.updatedBy)}` : ""}</p>` : ""}`;
+  if (!canEdit) return;
+
+  const tbody = host.querySelector(`#${p}-rows`);
+  tbody.addEventListener("click", (e) => {
+    const del = e.target.closest(".hc-del");
+    if (del) del.closest("tr").remove();
+  });
+  keepConstantNameInCapitals(tbody, ".hc-name");
+  host.querySelector(`#${p}-add`).addEventListener("click", () => {
+    tbody.insertAdjacentHTML("beforeend", rowHTML({ name: "", type: "string", value: "" }));
+    tbody.querySelector("tr:last-child .hc-name").focus();
+  });
+  host.querySelector(`#${p}-save`).addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const constants = [...tbody.querySelectorAll(".hc-row")]
+      .map((tr) => ({
+        name: tr.querySelector(".hc-name").value.trim(),
+        type: tr.querySelector(".hc-type").value,
+        value: tr.querySelector(".hc-value").value,
+      }))
+      .filter((v) => v.name !== "" && v.value !== "");
+    btn.disabled = true;
+    try {
+      await api("PUT", o.url, { constants });
+      toast("Constants saved for this installation", "ok");
+      await renderHeldConstants(host, o);
+    } catch (err) {
+      const errEl = host.querySelector(`#${p}-err`);
+      if (errEl) errEl.textContent = err.message;
+      btn.disabled = false;
+    }
+  });
 }
 
 // renderAppDeployments fills the Deployments tab: the application's published
@@ -3117,6 +3932,9 @@ async function renderAppDeployments(id) {
 
   for (const b of host.querySelectorAll("button[data-promote]"))
     b.addEventListener("click", () => promoteRelease(id, Number(b.dataset.promote), targets));
+  // This pane loads lazily on its first open, long after the route enhanced the view's
+  // tables — without this its lists would be the only ones with no sorting or filters.
+  enhanceViewTables();
 }
 
 // promoteRelease ships an existing release to a chosen target (ADR-0129). The
@@ -3440,6 +4258,9 @@ function openShareModal(proj, users, degraded, reload) {
     let events;
     try { events = await api("GET", `/api/v1/applications/${encodeURIComponent(p.id)}/audit`); }
     catch { host.innerHTML = ""; return; }
+    // The sharing dialog shows who changed access; a change to the application's
+    // constants is in the same history but belongs to the audit log, not here.
+    events = (events || []).filter((e) => e.action !== "constants");
     if (!events || !events.length) {
       host.innerHTML = `<div class="mlabel">Activity</div><p class="muted small">No access changes recorded yet.</p>`;
       return;
@@ -3540,6 +4361,20 @@ function pickFile(accept) {
   });
 }
 
+// createDecision opens the decision editor on a seed model, filing what it saves
+// under the application. It is the decision counterpart of "BPMN diagram" in the
+// same menu — an application can be built out of decisions with no diagram in it at
+// all, and publishing it deploys them as runtime artifacts (ADR-0319).
+//
+// It navigates rather than opening a window over this one: a decision is edited on a
+// page of its own, like a diagram and a form
+// (ADR-0320).
+function createDecision(projectId) {
+  location.hash = projectId
+    ? "#/modeler/dmn/new/p/" + encodeURIComponent(projectId)
+    : "#/modeler/dmn/new";
+}
+
 // createDmnRef adds a DMN model to a project by uploading a .dmn file: the model is
 // validated and stored in the local model folder, and a reference to it is created
 // (ADR-0034/0050). Authoring still lives in temis — this is just "pick the model
@@ -3555,7 +4390,7 @@ async function createDmnRef(projectId, reload) {
   } catch (e) {
     const modelRef = window.prompt("Couldn't upload the file (models may be served by a remote temis service).\nReference an existing temis model by name instead:");
     if (!modelRef || !modelRef.trim()) { toast("DMN model not added: " + e.message, "err"); return; }
-    const refName = (window.prompt("Reference name (how it shows in Atlas)", modelRef.trim()) || modelRef).trim();
+    const refName = (window.prompt("Reference name (how it shows in atlas)", modelRef.trim()) || modelRef).trim();
     try {
       await api("POST", "/api/v1/dmnrefs", { name: refName, modelRef: modelRef.trim(), projectId });
       toast(`Added DMN reference "${refName}"`, "ok");
@@ -3670,65 +4505,181 @@ async function importArtifact(projectId, reload) {
 }
 
 // importMIM converts a Microsoft Identity Manager (MIM/FIM) XOML workflow — or an
-// Export-FIMConfig XML that embeds one — into a BPMN draft via POST
+// Export-FIMConfig XML, which may embed several — into BPMN drafts via POST
 // /api/v1/imports/mim, then shows the per-node conversion report. The import
-// lands as a draft (never a deploy); constructs without a faithful BPMN mapping
+// lands as drafts (never a deploy); constructs without a faithful BPMN mapping
 // are preserved in atlas:mimSource and flagged for review in the report.
+//
+// The server refuses with 409 rather than landing on a process id something else
+// already holds — a draft it would replace, or a deployed process whose running
+// instances a later deploy of this model would strand (ADR-0222: no unwanted
+// overwrites, and never silently). What it answers with is the impact, which is
+// what the dialog below shows before asking.
 async function importMIM(projectId, reload) {
   const file = await pickFile(".xoml,.xml,application/xml,text/xml");
   if (!file) return;
   let text;
   try { text = await file.text(); } catch (e) { toast("Import failed: " + e.message, "err"); return; }
   const base = file.name.replace(/\.[^.]+$/, "");
-  const path = "/api/v1/imports/mim?name=" + encodeURIComponent(base) +
-    (projectId ? "&projectId=" + encodeURIComponent(projectId) : "");
+  const path = (overwrite) => "/api/v1/imports/mim?name=" + encodeURIComponent(base) +
+    (projectId ? "&projectId=" + encodeURIComponent(projectId) : "") +
+    (overwrite ? "&overwrite=true" : "");
+
   let res;
-  try { res = await api("POST", path, text, true); }
-  catch (e) { toast("MIM import failed: " + e.message, "err"); return; }
-  const r = res.report || { native: 0, preserved: 0, manualReview: 0, notes: [] };
-  toast(`Imported “${res.name || res.processId}” — ${r.native} native, ${r.preserved} preserved, ${r.manualReview} to review`, "ok");
+  try {
+    res = await api("POST", path(false), text, true);
+  } catch (e) {
+    if (e.status !== 409 || !e.body || !Array.isArray(e.body.impacts)) {
+      toast("MIM import failed: " + e.message, "err");
+      return;
+    }
+    if (!(await confirmMIMOverwrite(e.body, file.name))) {
+      toast("Import cancelled — nothing was changed", "");
+      return;
+    }
+    try { res = await api("POST", path(true), text, true); }
+    catch (e2) { toast("MIM import failed: " + e2.message, "err"); return; }
+  }
+
+  const drafts = res.drafts || [];
+  const totals = drafts.reduce((a, d) => ({
+    native: a.native + (d.report ? d.report.native : 0),
+    preserved: a.preserved + (d.report ? d.report.preserved : 0),
+    manualReview: a.manualReview + (d.report ? d.report.manualReview : 0),
+  }), { native: 0, preserved: 0, manualReview: 0 });
+  const what = drafts.length > 1
+    ? `${drafts.length} workflows`
+    : `“${res.name || res.processId}”`;
+  toast(`Imported ${what} — ${totals.native} native, ${totals.preserved} preserved, ${totals.manualReview} to review`, "ok");
   if (reload) await reload();
   showMIMReport(res);
 }
 
-// showMIMReport renders the conversion report as a modal: per-node status badges
-// (native / preserved / manual-review), the node id, the source activity and a
-// reviewer note, plus a shortcut to open the freshly created draft in the Modeler.
+// confirmMIMOverwrite shows what the import would land on and asks whether to go
+// through with it. It resolves true only on an explicit Overwrite.
+//
+// It is a modal rather than a window.confirm because the answer is not one line:
+// a deployed process with running instances turns "an id is taken" into "these
+// instances could not be migrated onto this model", and that is the part somebody
+// needs to read before deciding.
+function confirmMIMOverwrite(conflict, fileName) {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Import would overwrite" style="max-width:760px">
+        <div class="modal-head"><h2>Already in atlas</h2></div>
+        <div class="modal-body">
+          <p class="muted" style="margin:0 0 10px">Nothing has been imported yet. ${esc(fileName || "The file")} would be saved onto ${conflict.impacts.length === 1 ? "a process id that is" : "process ids that are"} already in use:</p>
+          <div style="max-height:52vh; overflow:auto">${conflict.impacts.map(mimImpactCard).join("")}</div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn neutral" data-cancel title="Leave what is there and import nothing">Cancel</button>
+          <button class="btn danger" data-ok title="Replace what is there with the imported model">Overwrite</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const close = (answer) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(answer); };
+    const onKey = (e) => { if (e.key === "Escape") close(false); };
+    document.addEventListener("keydown", onKey);
+    ov.querySelector("[data-cancel]").addEventListener("click", () => close(false));
+    ov.querySelector("[data-ok]").addEventListener("click", () => close(true));
+    ov.addEventListener("click", (e) => { if (e.target === ov) close(false); });
+  });
+}
+
+// mimImpactCard renders one process id's impact: the draft that would be
+// replaced, the deployed version sharing the id, and — the part that matters —
+// which of that version's elements the imported model no longer has, because a
+// running instance can only be migrated onto an element whose id it finds again.
+function mimImpactCard(i) {
+  const rows = [];
+  if (i.draft) {
+    rows.push(`<li><b>A draft is here</b> — “${esc(i.draft.name || i.processId)}”, last saved ${esc(fmtTime(i.draft.savedAt))}${i.draft.projectId ? ` in project <code>${esc(i.draft.projectId)}</code>` : ""}. Importing replaces it; a draft has no version history to get it back from.</li>`);
+  }
+  const d = i.deployed;
+  if (d) {
+    rows.push(`<li><b>Version ${d.version} is deployed</b> under this id (${esc(fmtTime(d.deployedAt))}), with ${d.activeInstances} running instance${d.activeInstances === 1 ? "" : "s"}. The import does not touch it — it writes the draft the next deploy of this process would use.</li>`);
+    const dropped = d.droppedElements || [];
+    if (dropped.length) {
+      rows.push(`<li>${d.keptElements} of ${d.keptElements + dropped.length} elements keep their id. These would be gone: ${dropped.slice(0, 12).map((e) => `<code>${esc(e)}</code>`).join(", ")}${dropped.length > 12 ? ` and ${dropped.length - 12} more` : ""}.</li>`);
+    }
+    if ((d.droppedDataObjects || []).length) {
+      rows.push(`<li>Data objects this model does not declare: ${d.droppedDataObjects.map((e) => `<code>${esc(e)}</code>`).join(", ")}.</li>`);
+    }
+  }
+  const risk = d && d.activeInstances > 0 && (d.droppedElements || []).length
+    ? `<div class="warn-note">Atlas migrates a running instance by matching element ids. ${d.activeInstances} instance${d.activeInstances === 1 ? " is" : "s are"} running on version ${d.version}, and ${(d.droppedElements || []).length} of its elements are not in this model — an instance standing on one of them could not be carried over to a deploy of it.</div>`
+    : "";
+  return `<div style="margin:0 0 14px"><div style="font-weight:600"><code>${esc(i.processId)}</code>${i.name && i.name !== i.processId ? ` — ${esc(i.name)}` : ""}</div>
+    <ul class="muted" style="margin:6px 0 0; padding-left:18px">${rows.join("")}</ul>${risk}</div>`;
+}
+
+// showMIMReport renders the conversion report as a modal: any document-level
+// warning, then one row per worksheet item with a status badge (native /
+// preserved / manual-review), the node it belongs to, the source activity and a
+// reviewer note, plus a shortcut to open a freshly created draft in the Modeler.
+// Items outnumber nodes — a decoded row of a MIMWAL table is its own item,
+// because it is its own read or write to re-express.
+//
+// An Export-FIMConfig export can hold several workflows, so the report is per
+// draft: one section each, and one "Open" per section rather than a single
+// destination that would be arbitrary.
 function showMIMReport(res) {
-  const r = res.report || { native: 0, preserved: 0, manualReview: 0, notes: [] };
+  const drafts = res.drafts && res.drafts.length
+    ? res.drafts
+    : [{ processId: res.processId, name: res.name, report: res.report, impact: null }];
   const color = (s) => ({ "native": "#1a7f37", "preserved": "#6a737d", "manual-review": "#9a6700" }[s] || "#6a737d");
   const badge = (s) => `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;color:#fff;white-space:nowrap;background:${color(s)}">${esc(s)}</span>`;
-  const rows = (r.notes || []).map((n) =>
-    `<tr><td>${badge(n.status)}</td><td><code>${esc(n.nodeId)}</code></td><td>${esc(n.kind)}</td><td>${esc(n.activity)}</td><td class="muted">${esc(n.detail || "")}</td></tr>`).join("");
+
+  const section = (d) => {
+    const r = d.report || { native: 0, preserved: 0, manualReview: 0, notes: [] };
+    // Document-level warnings belong to no node — an input the converter had to
+    // repair, or workflows it could not read — so they go above the table.
+    const warnings = (r.warnings || []).length
+      ? `<div class="warn-note">${(r.warnings || []).map((w) => esc(w)).join("<br>")}</div>` : "";
+    // What MIM knows about the workflow and the XOML does not say.
+    const src = d.source || {};
+    const facts = [
+      src.requestPhase ? `Request phase: <b>${esc(src.requestPhase)}</b>` : "",
+      src.runOnPolicyUpdate ? `Runs on policy update: ${esc(src.runOnPolicyUpdate)}` : "",
+      src.description ? esc(src.description) : "",
+    ].filter(Boolean).join(" · ");
+    const replaced = d.impact && (d.impact.draft || d.impact.deployed)
+      ? `<p class="muted" style="margin:0 0 10px">Replaced what was on this id.</p>` : "";
+    const rows = (r.notes || []).map((n) =>
+      `<tr><td>${badge(n.status)}</td><td><code>${esc(n.nodeId)}</code></td><td>${esc(n.kind)}</td><td>${esc(n.activity)}</td><td class="muted">${esc(n.detail || "")}</td></tr>`).join("");
+    return `<section style="margin:0 0 18px">
+      <h3 style="margin:0 0 4px; font-size:14px">${esc(d.name || d.processId)} <code class="muted">${esc(d.processId)}</code></h3>
+      ${facts ? `<p class="muted" style="margin:0 0 6px">${facts}</p>` : ""}
+      ${replaced}
+      <p class="muted" style="margin:0 0 8px">${r.native} native · ${r.preserved} preserved · ${r.manualReview} to review — counted as items of work, so a node carrying a MIMWAL table contributes one per row. Preserved and review nodes keep their original XOML in the element's <b>atlas:mimSource</b>, and their decoded rows in <b>atlas:mimCollection</b> — check them before deploying.</p>
+      ${warnings}
+      <table><thead><tr><th>Status</th><th>Node</th><th>Kind</th><th>Activity</th><th>Note</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="5" class="muted">Nothing to report.</td></tr>`}</tbody></table>
+      <p style="margin:8px 0 0"><button class="btn neutral" data-open="${esc(d.processId)}" title="Open this draft in the Modeler">Open in Modeler</button></p>
+    </section>`;
+  };
+
   const ov = document.createElement("div");
   ov.className = "modal-ov";
   ov.innerHTML = `
     <div class="modal" role="dialog" aria-modal="true" aria-label="MIM import report" style="max-width:860px">
-      <div class="modal-head"><h2>MIM import — ${esc(res.name || res.processId)}</h2></div>
-      <div class="modal-body">
-        <p class="muted" style="margin:0 0 10px">${r.native} native · ${r.preserved} preserved · ${r.manualReview} to review. Preserved and review nodes keep their original XOML in the element's <b>atlas:mimSource</b> — check them before deploying.</p>
-        <div style="max-height:52vh; overflow:auto">
-          <table><thead><tr><th>Status</th><th>Node</th><th>Kind</th><th>Activity</th><th>Note</th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="5" class="muted">No nodes.</td></tr>`}</tbody></table>
-        </div>
-      </div>
-      <div class="modal-foot">
-        <button class="btn neutral" data-close title="Close this report">Close</button>
-        <button class="btn" data-open title="Open the imported draft in the Modeler">Open in Modeler</button>
-      </div>
+      <div class="modal-head"><h2>MIM import — ${drafts.length > 1 ? `${drafts.length} workflows` : esc(drafts[0].name || drafts[0].processId)}</h2></div>
+      <div class="modal-body"><div style="max-height:62vh; overflow:auto">${drafts.map(section).join("")}</div></div>
+      <div class="modal-foot"><button class="btn" data-close title="Close this report">Close</button></div>
     </div>`;
   document.body.appendChild(ov);
   const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
   const onKey = (e) => { if (e.key === "Escape") close(); };
   document.addEventListener("keydown", onKey);
   ov.querySelector("[data-close]").addEventListener("click", close);
-  ov.querySelector("[data-open]").addEventListener("click", () => {
+  ov.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => {
     close();
-    location.hash = "#/modeler/draft/" + encodeURIComponent(res.processId);
-  });
+    location.hash = "#/modeler/draft/" + encodeURIComponent(b.getAttribute("data-open"));
+  }));
   ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
 }
-
 // a "New worker" inline form and per-row Edit / Enable-Disable / Delete. Each
 // change hits the worker API, which rebuilds the runtime registry, then the page
 // re-renders. Only a token *reference* is ever entered — never a secret value
@@ -3742,18 +4693,20 @@ function wireWorkerManagement(workers) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field provider-field" style="margin:0"><span class="provider-label">Provider</span><select name="provider"></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
+        <label class="field mailbox-field" style="margin:0;flex:1 1 200px" title="Lets this Worker read the mailbox it sends from: a watch, or a task that lists, files or answers mail. Logs in as the sender, always over TLS."><span>IMAP endpoint (optional)</span><input name="mailboxEndpoint" placeholder="imaps://imap.example.com:993"/></label>
         <label class="field model-field" style="margin:0;flex:1 1 180px"><span>Default model</span><input name="model" title="What a step that names no model of its own asks. A task or an agent container may name one, and then that one runs (ADR-0256)."/></label>
         <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
         <button class="btn" type="submit" title="Add this configured worker">Add worker</button>
         <button class="btn neutral conn-f-test" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
         <p class="conn-test-result" style="flex:1 1 100%;margin:0;font-size:12.5px" hidden></p>
-        <p class="muted conn-hint" style="flex:1 1 100%;margin:0;font-size:12.5px"></p></form>`;
+        <p class="muted conn-hint" style="flex:1 1 100%;margin:0;font-size:12.5px"></p>
+        <div class="conn-setup" style="flex:1 1 100%;margin:0"></div></form>`;
       // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
       // and (optionally) a password reference; a native provider (Gmail/Graph) needs no
       // endpoint but a credentialsRef naming a vault JSON auth bundle, and sends as the
@@ -3787,6 +4740,7 @@ function wireWorkerManagement(workers) {
       const sync = () => {
         const sh = workerShape(kindSel.value, providerSel.value);
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = sh.mail ? "" : "none"; });
+        form.querySelector(".mailbox-field").style.display = sh.mailbox ? "" : "none";
         form.querySelector(".provider-field").style.display = sh.provider ? "" : "none";
         form.querySelector(".provider-label").textContent = sh.model ? "Wire format" : "Provider";
         const modelField = form.querySelector(".model-field");
@@ -3840,6 +4794,11 @@ function wireWorkerManagement(workers) {
         const hintEl = form.querySelector(".conn-hint");
         hintEl.innerHTML = sh.hint;
         hintEl.style.display = sh.hint ? "" : "none";
+        // And the part that is not about these fields at all: what has to exist at the
+        // provider first, and where the handbook says it at length. Someone adding their
+        // first worker is the reader who most needs it and the least likely to know the
+        // handbook has a chapter for exactly this.
+        form.querySelector(".conn-setup").innerHTML = workerKindDocHTML(kindSel.value);
       };
       kindSel.addEventListener("change", () => { fillProviders(); sync(); });
       providerSel.addEventListener("change", sync);
@@ -3911,6 +4870,9 @@ function wireWorkerManagement(workers) {
         if (act === "subs") {
           await toggleInboundSubs(row, id, c.kind);
           return;
+        } else if (act === "feed") {
+          await toggleFeedSubs(row, id);
+          return;
         } else if (act === "share") {
           await toggleWorkerShare(c, viewConsoleWorkers);
           return;
@@ -3918,30 +4880,13 @@ function wireWorkerManagement(workers) {
           toggleProvisionClio(row, id, c.name);
           return;
         } else if (act === "test") {
-          // Empty recipient = stop at the door (connect, authenticate). A recipient
-          // makes it a real send, which is the only thing that proves delivery. Only
-          // mail has that second half: a database check dials and stops, because the
-          // equivalent of "send one to see" would be running a statement.
-          let to = "";
-          if (c.kind === "mail") {
-            to = window.prompt(
-              `Test "${c.name}".\n\nSend a test message to which address?\nLeave empty to only check the connection and credential.`, "");
-            if (to == null) return;
-          }
-          // The menu the button was in is already gone by now, so a disabled button is
-          // no longer the feedback it used to be: a check can take seconds, and without
-          // a word here nothing at all happens until the result lands.
-          toast(`Checking "${c.name}"…`);
+          // The dialog, the two modes and the request are one flow in
+          // workerdialog.js: what a check does — probe the door or send a real
+          // message to a real person — is a decision, and app.js is the one file a
+          // test cannot open to read it.
           btn.disabled = true;
-          try {
-            const res = await api("POST", "/api/v1/connectors/test", {
-              name: c.name, kind: c.kind, provider: c.provider, endpoint: c.endpoint,
-              sender: c.sender, credentialsRef: c.credentialsRef, to: to.trim(),
-            });
-            toast(res.detail || (res.ok ? "Worker works" : "Check failed"), res.ok ? "ok" : "warn");
-          } catch (err) {
-            toast("Check failed: " + err.message, "warn");
-          } finally { btn.disabled = false; }
+          try { await testWorkerFlow({ api, toast, worker: c }); }
+          finally { btn.disabled = false; }
           return;
         } else if (act === "toggle") {
           await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { enabled: !c.enabled });
@@ -3980,7 +4925,7 @@ function toggleProvisionClio(row, workerId, workerName) {
   const panel = document.createElement("tr");
   panel.className = "provision-row";
   panel.innerHTML = `<td colspan="3" style="background:var(--surface); padding:12px 18px">
-    <div class="muted" style="margin-bottom:8px">Provision access — Atlas mints a scoped clio key with your admin token and stores it as this worker's credential. The admin token is used once and never stored.</div>
+    <div class="muted" style="margin-bottom:8px">Provision access — atlas mints a scoped clio key with your admin token and stores it as this worker's credential. The admin token is used once and never stored.</div>
     <form id="prov-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr auto;align-items:end">
       <label class="field" style="margin:0"><span>clio admin token</span><input name="adminToken" type="password" autocomplete="off" placeholder="kid.secret (admin)" required/></label>
       <label class="field" style="margin:0"><span>Read subject</span><input name="subject" placeholder="/employees" required/></label>
@@ -4102,7 +5047,7 @@ async function toggleInboundSubs(row, workerId, kind) {
   }
   const subs = (await api("GET", "/api/v1/connectors/" + encodeURIComponent(workerId) + "/inbound-subscriptions")) || [];
   const list = subs.map((s) => `<tr data-sid="${esc(s.id)}">
-      <td><code>${esc(s.jql || s.spreadsheetId || s.folderId || s.channelId || s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}${s.spreadsheetId ? ` <span class="muted">(rows in ${esc(s.watchRange || "A:Z")})</span>` : ""}${s.folderId ? ` <span class="muted">(files ${esc(s.cursorField || "created")})</span>` : ""}${s.channelId ? ' <span class="muted">(new messages)</span>' : ""}</td>
+      <td><code>${esc(s.jql || s.spreadsheetId || s.folderId || s.channelId || s.mailFolder || s.watchedSubject)}</code>${s.mailFolder ? ` <span class="muted">(new mail${(s.allowedSenders || []).length ? " from " + esc(s.allowedSenders.join(", ")) : " from anyone"}${s.requireDmarcPass ? ", DMARC pass" : ""}${s.includeBody ? ", with body" : ", metadata only"})</span>` : ""}${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}${s.spreadsheetId ? ` <span class="muted">(rows in ${esc(s.watchRange || "A:Z")})</span>` : ""}${s.folderId ? ` <span class="muted">(files ${esc(s.cursorField || "created")})</span>` : ""}${s.channelId ? ' <span class="muted">(new messages)</span>' : ""}</td>
       <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
       <td>${s.enabled
         ? '<span class="pill ok"><span class="dot"></span>on</span>'
@@ -4113,14 +5058,19 @@ async function toggleInboundSubs(row, workerId, kind) {
   const isJira = kind === "jira";
   const isGoogle = kind === "googlesheets";
   const isDiscord = kind === "discord";
-  const what = isDiscord
-    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the messages posted in a Discord channel are published as Atlas messages, so a message starts a process. Atlas polls every 15 seconds by default; nothing has to reach this server from the internet. <b>The bot needs the Message Content intent</b> — without it Discord returns every message with an empty <code>content</code>, no error and no warning, and a correlation key over it quietly matches nothing. Enable it under <i>Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Privileged Gateway Intents</i>. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a channel the Worker also posts into has no natural end. Empty uses 60.</div>`
+  const isMail = kind === "mail";
+  const what = isMail
+    ? `<div class="muted" style="margin-bottom:8px">Inbound mail watches — the mail arriving in one folder of this Worker's mailbox is published as atlas messages, so a mail starts a process (ADR-0438). Atlas polls once a minute by default and <b>never changes the mailbox</b>: model a task to file or mark a message. <b>Who may start a process</b> is anyone who can write to the address — restrict it with <i>Allowed senders</i>, and since a sender address is a claim anybody can make, require a <b>DMARC pass</b> too. <b>What a process receives</b> is the envelope — sender, recipients, subject, attachment names and sizes — and the text only when you include it; on a shared server every operator can read what a process receives. <b>Max events/hour</b> is the loop guard; an auto-reply ping-pong is exactly the loop it stops. Empty uses 60.</div>`
+    : isDiscord
+    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the messages posted in a Discord channel are published as atlas messages, so a message starts a process. Atlas polls every 15 seconds by default; nothing has to reach this server from the internet. <b>The bot needs the Message Content intent</b> — without it Discord returns every message with an empty <code>content</code>, no error and no warning, and a correlation key over it quietly matches nothing. Enable it under <i>Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Privileged Gateway Intents</i>. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a channel the Worker also posts into has no natural end. Empty uses 60.</div>`
     : isGoogle
-    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — a spreadsheet's new rows, or the files put into a Drive folder, are published as Atlas messages so each one starts a process. Atlas polls once a minute by default; nothing has to reach this server from the internet. <b>A row watch follows the sheet's own row numbers</b>, so it sees rows appended at the end — which is what a form response sheet does. Deleting rows from the watched range renumbers the tail, and a later row landing on a number already delivered is not delivered again. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a watch fed by what its own processes write has no natural end. Empty uses 60.</div>`
+    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — a spreadsheet's new rows, or the files put into a Drive folder, are published as atlas messages so each one starts a process. Atlas polls once a minute by default; nothing has to reach this server from the internet. <b>A row watch follows the sheet's own row numbers</b>, so it sees rows appended at the end — which is what a form response sheet does. Deleting rows from the watched range renumbers the tail, and a later row landing on a number already delivered is not delivered again. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a watch fed by what its own processes write has no natural end. Empty uses 60.</div>`
     : isJira
-    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the issues a JQL matches are published as Atlas messages, so a new ticket starts a process (ADR-0214). Atlas polls; nothing has to reach this server from the internet. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`
-    : `<div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as Atlas messages (ADR-0075). <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`;
-  const source = isDiscord
+    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the issues a JQL matches are published as atlas messages, so a new ticket starts a process (ADR-0214). Atlas polls; nothing has to reach this server from the internet. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`
+    : `<div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as atlas messages (ADR-0075). <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`;
+  const source = isMail
+    ? `<label class="field" style="margin:0"><span>Folder</span><input name="mailFolder" placeholder="INBOX"/></label>`
+    : isDiscord
     ? `<label class="field" style="margin:0"><span>Channel</span><input name="channelId" placeholder="123456789012345678" required/></label>`
     : isGoogle
     ? `<label class="field" style="margin:0"><span>Watch</span><select name="googleTarget" class="input">
@@ -4131,7 +5081,12 @@ async function toggleInboundSubs(row, workerId, kind) {
     : isJira
     ? `<label class="field" style="margin:0"><span>JQL</span><input name="jql" placeholder="project = OPS AND issuetype = Bug" required/></label>`
     : `<label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="/employees" required/></label>`;
-  const extra = isDiscord
+  const extra = isMail
+    ? `<label class="field" style="grid-column:1 / span 2;margin:0"><span>Allowed senders (optional, comma-separated)</span><input name="allowedSenders" placeholder="kunde@example.com, @lieferant.ch"/></label>
+      <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center"><input type="checkbox" name="requireDmarcPass"/><span>Require a DMARC pass</span></label>
+      <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center"><input type="checkbox" name="includeBody"/><span>Include the text</span></label>
+      <div class="muted" style="grid-column:1 / -1">The folder is an IMAP folder name, a Gmail label id (<code>INBOX</code>, <code>Label_…</code>) or a Microsoft folder id or well-known name (<code>inbox</code>, <code>archive</code>); empty is the inbox. The correlation key (FEEL) sees <code>messageId</code>, <code>internetMessageId</code>, <code>from</code>, <code>fromName</code>, <code>replyTo</code>, <code>to</code>, <code>cc</code>, <code>subject</code>, <code>receivedAt</code>, <code>unread</code>, <code>hasAttachments</code>, <code>attachments</code>, <code>auth</code> (<code>spf</code>, <code>dkim</code>, <code>dmarc</code>), <code>folder</code>, <code>eventType</code> — and <code>body</code> when the text is included. These are also seeded as process variables; <code>messageId</code> is what a mail task's operation addresses. A new watch is forward-only, so the mail already in the folder is skipped.</div>`
+    : isDiscord
     ? `<div class="muted" style="grid-column:1 / -1">In Discord, enable <b>Developer Mode</b> (User Settings &rsaquo; Advanced) and use the channel's <b>Copy Channel ID</b>. A thread is itself a channel, so a thread's id works here too. The correlation key (FEEL) sees <code>messageId</code>, <code>channelId</code>, <code>content</code>, <code>authorId</code>, <code>authorName</code>, <code>authorBot</code>, <code>timestamp</code>, <code>eventType</code>, and <code>message</code> — the whole message, for anything not named here. These are also seeded as process variables on the started instance. <b>Guard against your own bot</b>: if this Worker also posts into this channel, key or condition on <code>authorBot</code>, or the watch will react to what it wrote. A new watch is forward-only, so the messages already in the channel are skipped.</div>`
     : isGoogle
     ? `<div class="google-rows" style="grid-column:1 / -1;display:flex;gap:12px;align-items:end;flex-wrap:wrap">
@@ -4172,8 +5127,8 @@ async function toggleInboundSubs(row, workerId, kind) {
     <table style="width:100%"><tbody id="subs-body">${list}</tbody></table>
     <form id="subs-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr auto;align-items:end;margin-top:10px">
       ${source}
-      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="${isGoogle ? "antrag.eingegangen" : isJira ? "jira.ticket.created" : "employee.created"}" required/></label>
-      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="${isGoogle ? "= Antragsnummer" : isJira ? "= issueKey" : "= subjectTail"}"/></label>
+      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="${isMail ? "mail.eingegangen" : isGoogle ? "antrag.eingegangen" : isJira ? "jira.ticket.created" : "employee.created"}" required/></label>
+      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="${isMail ? "= internetMessageId" : isGoogle ? "= Antragsnummer" : isJira ? "= issueKey" : "= subjectTail"}"/></label>
       <label class="field" style="margin:0"><span>Max events/hour</span><input name="maxPerHour" type="number" min="0" placeholder="60"/></label>
       <button class="btn" type="submit" title="Add this inbound event watch">Add</button>
       ${extra}
@@ -4205,7 +5160,12 @@ async function toggleInboundSubs(row, workerId, kind) {
         correlationKey: (f.get("correlationKey") || "").trim(),
         maxPerHour: Number(f.get("maxPerHour") || 0) || 0,
       };
-      if (isDiscord) {
+      if (isMail) {
+        body.mailFolder = (f.get("mailFolder") || "").trim();
+        body.allowedSenders = String(f.get("allowedSenders") || "").split(",").map((x) => x.trim()).filter(Boolean);
+        body.requireDmarcPass = f.get("requireDmarcPass") === "on";
+        body.includeBody = f.get("includeBody") === "on";
+      } else if (isDiscord) {
         body.channelId = (f.get("channelId") || "").trim();
       } else if (isGoogle) {
         const id = (f.get("googleId") || "").trim();
@@ -4239,6 +5199,104 @@ async function toggleInboundSubs(row, workerId, kind) {
       panel.remove();
       await toggleInboundSubs(row, workerId, kind);
     } catch (err) { toast("Could not delete subscription: " + err.message, "err"); }
+  });
+}
+
+// toggleFeedSubs opens, under a CloudEvents endpoint Worker's row, what that worker is
+// sent of the event feed (ADR-0433):
+// each subscription with its catalogues, whether delivery is moving — and when its
+// endpoint is failing, since when, the next attempt and what it last said — with the
+// form that adds one. Administrator configuration, like the routes behind it.
+async function toggleFeedSubs(row, workerId) {
+  const existing = row.nextElementSibling;
+  if (existing && existing.classList.contains("subs-row")) {
+    existing.remove();
+    return;
+  }
+  const [all, cats] = await Promise.all([
+    api("GET", "/api/v1/feed-subscriptions"),
+    api("GET", "/api/v1/catalogs").catch(() => []),
+  ]);
+  const subs = (all || []).filter((s) => s.workerId === workerId);
+  const catName = (id) => {
+    const c = (cats || []).find((x) => x.id === id);
+    const texts = (c && c.texts) || {};
+    return Object.values(texts).find((t) => t) || id;
+  };
+  const state = (s) => {
+    if (!s.enabled) {
+      return `<span class="pill warn" title="${esc(s.disabledReason || "Switched off.")}"><span class="dot"></span>off</span>`
+        + (s.disabledReason ? ` <span class="muted">${esc(s.disabledReason)}</span>` : "");
+    }
+    if (s.hold) {
+      return `<span class="pill err" title="${esc(s.hold.lastError)}"><span class="dot"></span>held</span>`
+        + ` <span class="muted">failing since ${esc(new Date(s.hold.failingSince).toLocaleString())},`
+        + ` next attempt ${esc(new Date(s.hold.retryAt).toLocaleString())}: ${esc(s.hold.lastError)}</span>`;
+    }
+    return '<span class="pill ok"><span class="dot"></span>on</span>'
+      + ` <span class="muted">${s.deliveredAt ? "last delivered " + esc(fmtTime(s.deliveredAt)) : "nothing delivered yet"}</span>`;
+  };
+  const list = subs.map((s) => `<tr data-sid="${esc(s.id)}" data-enabled="${s.enabled ? "1" : ""}">
+      <td>${(s.reach || []).length
+        ? s.reach.map((id) => `<span class="chip" title="${esc(id)}">${esc(catName(id))}</span>`).join(" ")
+        : '<span class="muted">the whole feed</span>'}</td>
+      <td>${state(s)}</td>
+      <td class="muted">position ${esc(String(s.cursor))}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn ghost" data-ftoggle>${s.enabled ? "Disable" : "Enable"}</button>
+        <button class="btn ghost" data-ffrom="oldest" title="Deliver again from the oldest event the feed still holds">From oldest</button>
+        <button class="btn ghost" data-ffrom="now" title="Skip to the newest event; deliver only what is recorded from now on">From now</button>
+        <button class="btn ghost danger" data-fdel title="End this subscription">Delete</button>
+      </td>
+    </tr>`).join("") || `<tr><td colspan="4" class="muted" style="padding:10px">Not subscribed. Add a subscription below to have this endpoint sent the event feed.</td></tr>`;
+  const options = (cats || []).map((c) => `<option value="${esc(c.id)}">${esc(catName(c.id))}</option>`).join("");
+  const panel = document.createElement("tr");
+  panel.className = "subs-row";
+  panel.innerHTML = `<td colspan="3" style="background:var(--surface); padding:12px 18px">
+    <div class="muted" style="margin-bottom:8px">The event feed pushed to this endpoint — how each action asked of a held position ended, every right granted and revoked, and every incident raised and resolved — as CloudEvents batches. A batch the endpoint refuses is <b>held and tried again</b>, never skipped; the receiver deduplicates by each event's <code>id</code>. Narrowed to some catalogues, it is sent only the events about the products they maintain. If the feed's retention passes a subscription that fell behind, it is switched off and says so: enable it again from the oldest event held.</div>
+    <table style="width:100%"><tbody id="feed-body">${list}</tbody></table>
+    <form id="feed-form" style="display:grid;gap:8px;grid-template-columns:2fr 1fr 1fr auto;align-items:end;margin-top:10px">
+      <label class="field" style="margin:0"><span>Catalogues (none selected: the whole feed)</span><select name="reach" multiple size="3">${options}</select></label>
+      <label class="field" style="margin:0"><span>Start</span><select name="from"><option value="oldest">from the oldest event held</option><option value="now">from now</option></select></label>
+      <label class="field" style="margin:0"><span>Events per batch</span><input name="batchSize" type="number" min="0" max="1000" placeholder="100"/></label>
+      <button class="btn" type="submit" title="Subscribe this endpoint to the event feed">Subscribe</button>
+    </form></td>`;
+  row.after(panel);
+  const reload = async () => {
+    panel.remove();
+    await toggleFeedSubs(row, workerId);
+  };
+  panel.querySelector("#feed-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    try {
+      await api("POST", "/api/v1/feed-subscriptions", {
+        workerId,
+        reach: f.getAll("reach"),
+        from: f.get("from") || "oldest",
+        batchSize: Number(f.get("batchSize") || 0) || 0,
+      });
+      toast("Subscribed to the event feed", "ok");
+      await reload();
+    } catch (err) { toast("Could not subscribe: " + err.message, "err"); }
+  });
+  panel.querySelector("#feed-body").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    const tr = btn && btn.closest("tr[data-sid]");
+    if (!tr) return;
+    const path = "/api/v1/feed-subscriptions/" + encodeURIComponent(tr.dataset.sid);
+    try {
+      if (btn.hasAttribute("data-fdel")) {
+        await api("DELETE", path);
+      } else if (btn.hasAttribute("data-ftoggle")) {
+        await api("PATCH", path, { enabled: !tr.dataset.enabled });
+      } else if (btn.dataset.ffrom) {
+        await api("PATCH", path, { from: btn.dataset.ffrom });
+      } else {
+        return;
+      }
+      await reload();
+    } catch (err) { toast("Could not change the subscription: " + err.message, "err"); }
   });
 }
 
@@ -4633,31 +5691,18 @@ function toggleSetSecret(row, name, workers, put, reload) {
   form.querySelector('[name="value"]').focus();
 }
 
-// editDmnRef opens the embedded DMN editor (ADR-0062) on a reference's model and,
-// on save, keeps the Project Explorer in sync. Editing overwrites the model in
-// place under the same handle, so the reference (and any business-rule-task
-// selection) stays valid; only the display name can drift, so a rename in the
-// editor is mirrored onto the reference here. The editor module is imported lazily
-// — same discipline as the BPMN editor — so the Modeler home stays light. When the
-// model can't be edited locally (a remote temis service, or a dangling handle) the
-// editor surfaces the failure itself and resolves to null, leaving the row as-is.
-async function editDmnRef(ref, reload) {
+// editDmnRef opens the decision editor on a reference's model. Editing overwrites
+// the model in place under the same handle, so the reference (and any
+// business-rule-task selection) stays valid; a rename in the editor is mirrored onto
+// the reference by the editor itself. A reference with no locally editable model (a
+// remote temis service, or a dangling handle) has nothing to open, and says so here
+// rather than navigating to an editor that would only report the same thing.
+function editDmnRef(ref) {
   if (!ref.modelRef) {
-    toast("Diese DMN-Referenz hat kein lokal editierbares Modell.", "err");
+    toast("This decision has no locally editable model.", "err");
     return;
   }
-  const { openDmnEditor } = await import("./dmn-editor.js");
-  const result = await openDmnEditor({ api, toast, projectId: ref.projectId || "", modelRef: ref.modelRef });
-  if (!result) return; // cancelled or failed (the editor already reported why)
-  // Editing keeps the handle; mirror a decision rename onto the reference so the
-  // Explorer label doesn't go stale.
-  const newName = (result.name || "").trim();
-  if (newName && newName !== ref.name) {
-    try {
-      await api("PATCH", `/api/v1/dmnrefs/${encodeURIComponent(ref.id)}`, { name: newName });
-    } catch (e) { toast("Modell gespeichert, Umbenennen fehlgeschlagen: " + e.message, "err"); }
-  }
-  await reload();
+  location.hash = "#/modeler/dmn/e/" + encodeURIComponent(ref.id);
 }
 
 // moveDmnRef reassigns a DMN reference to a project (or to Ungrouped when "").
@@ -4668,12 +5713,61 @@ async function moveDmnRef(id, projectId, reload) {
   await reload();
 }
 
+// referenceStoredModel puts a reference back on a model in the store that has none,
+// which is the recovery from having deleted the last one
+// (ADR-0330). It re-uses the existing
+// handle rather than re-uploading, so the model is *recovered* rather than copied —
+// a re-upload would file a second model under a suffixed handle (ADR-0222).
+async function referenceStoredModel(handle, suggested, reload) {
+  const name = (window.prompt("Reference name (how it shows in atlas)", suggested || handle) || "").trim();
+  if (!name) return;
+  try {
+    await api("POST", "/api/v1/dmnrefs", { name, modelRef: handle, projectId: "" });
+    toast(`Added DMN reference "${name}"`, "ok");
+  } catch (e) { toast("could not add DMN reference: " + e.message, "err"); return; }
+  await reload();
+}
+
+// deleteStoredModel removes a model file nothing points at — the end of the road
+// ADR-0330 opened by making it visible (ADR-0336).
+// It is offered only on an unreferenced row, and the server refuses a referenced
+// handle anyway.
+//
+// The sentence says what survives, because that is what a reader is unsure of: a
+// decision already deployed from this model keeps evaluating, since its record
+// carries its own copy and never reads the file.
+async function deleteStoredModel(handle, reload) {
+  if (!window.confirm(`Delete the model file ${handle}.dmn? Decisions already deployed from it keep running — they carry their own copy. This cannot be undone.`)) return;
+  try {
+    await api("DELETE", `/api/v1/dmn-models/${encodeURIComponent(handle)}`);
+    toast(`Deleted the model ${handle}.dmn`, "ok");
+  } catch (e) { toast("could not delete the model: " + e.message, "err"); }
+  await reload();
+}
+
 async function deleteDmnRef(id, reload) {
-  if (!window.confirm("Delete this DMN reference? The temis model itself is not affected.")) return;
+  // The impact is a read and may fail; when it does the confirm falls back to the
+  // plain sentence rather than blocking a deletion the author is entitled to make.
+  let impact = null;
+  try { impact = await api("GET", `/api/v1/dmnrefs/${encodeURIComponent(id)}/impact`); } catch { impact = null; }
+  if (!window.confirm(refDeleteWarning(impact))) return;
   try {
     await api("DELETE", `/api/v1/dmnrefs/${encodeURIComponent(id)}`);
     toast("Deleted DMN reference", "ok");
   } catch (e) { toast("could not delete reference: " + e.message, "err"); }
+  await reload();
+}
+
+// A decision that exists only as a draft has nothing behind it, so deleting the
+// draft is deleting the decision (ADR-0321) — said plainly, because
+// the same word on a decision that *is* in the model means only "throw away the
+// unsaved work".
+async function deleteDecisionDraft(id, reload) {
+  if (!window.confirm("Delete this decision draft? It has never been saved to the model, so nothing else has a copy.")) return;
+  try {
+    await api("DELETE", `/api/v1/dmn-drafts/${encodeURIComponent(id)}`);
+    toast("Deleted decision draft", "ok");
+  } catch (e) { toast("could not delete draft: " + e.message, "err"); }
   await reload();
 }
 
@@ -4746,8 +5840,16 @@ async function deployProject(id, reload) {
     rep = await res.json();
     if (res.ok && rep.deployed) {
       const n = (rep.definitions || []).length;
-      toast(n ? `Published ${n} definition${n === 1 ? "" : "s"}` : "Nothing to publish in this application", "ok");
+      const warnings = rep.warnings || [];
+      const what = n ? `Published ${n} definition${n === 1 ? "" : "s"}` : "Nothing to publish in this application";
+      toast(warnings.length
+        ? `${what} — with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
+        : what, warnings.length ? "warn" : "ok");
       await reload();
+      // After the reload, so the block is not wiped by it. A publish that deployed
+      // fine can still name a worker nobody configured; the server does not refuse it
+      // (ADR-0158), so this is the moment to say so, while the operator is here.
+      if (warnings.length) showDeployWarnings(warnings);
       return;
     }
   } catch (e) {
@@ -4757,6 +5859,35 @@ async function deployProject(id, reload) {
   // Refused (or a server error): show why and reflect any DMN results in place.
   toast(rep.reason || rep.error || "Publish refused", "err");
   for (const r of rep.references || []) applyRefStatus(r.id, r);
+}
+
+// showDeployWarnings reports what a publish deployed anyway. It is a dialog rather
+// than a block on the page because publishing reloads the view: a banner rendered into
+// it would be gone before it was read, and a toast has nowhere to put a list.
+//
+// The Modeler's own deploy has said this since ADR-0158; the publish route said
+// nothing at all, which is how a model reaches production naming a worker nobody
+// created (ADR-0287). Same class as the editor's
+// panel, so the two read alike.
+function showDeployWarnings(warnings) {
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Deploy warnings">
+      <div class="modal-head"><h2>Published, with warnings</h2></div>
+      <div class="modal-body">
+        <div class="deploy-warnings"><b>&#9888; Deployed, but this will not run as written:</b>
+          <ul>${warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>
+      </div>
+      <div class="modal-foot"><button type="button" class="btn" data-done title="Close this dialog">Close</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
+  ov.querySelector("[data-done]").addEventListener("click", close);
+  ov.querySelector("[data-done]").focus();
 }
 
 // downloadApplicationSource downloads the application's source tree (ADR-0134): a
@@ -4860,16 +5991,6 @@ function summarizeFromServer(rows) {
   return byProc;
 }
 
-// runningByDefinition keeps the per-*version* running counts the rollup above sums
-// away. The overview only ever shows the process-level total, but migrating drains one
-// deployed version onto another, so its picker has to say which version is actually
-// holding instances — a choice the summed number cannot answer (ADR-0162).
-function runningByDefinition(rows) {
-  const byDef = new Map();
-  for (const r of rows) byDef.set(String(r.processDefKey), r.active || 0);
-  return byDef;
-}
-
 async function viewInstances() {
   view.innerHTML = `
     <div class="between">
@@ -4886,10 +6007,6 @@ async function viewInstances() {
     process with a stuck token is flagged in the <b>Incidents</b> column, which opens the
     version holding it. Start the demo to park a token on a waiting task.</p>
     <div class="ops-toolbar">
-      <span class="ops-search">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
-        <input id="proc-filter" type="text" placeholder="Filter processes by name or ID…" aria-label="Filter processes" spellcheck="false"/>
-      </span>
       <form class="ops-jump" id="inst-jump" title="Open a specific instance's replay by its key">
         <input id="inst-key" type="text" inputmode="numeric" placeholder="Instance key…" aria-label="Instance key" spellcheck="false"/>
         <button class="btn neutral ops-jump-go" type="submit" title="Open this instance's replay" aria-label="Open replay">&rarr;</button>
@@ -4917,11 +6034,11 @@ async function viewInstances() {
   let allGroups = [];
   let summary = new Map();
   let runningByDef = new Map();
-  // Unresolved incidents, bucketed for the two tables below: by definition (the
-  // per-process rows) and by instance (the variable-search results). Keys are
+  // Unresolved incidents per definition, for the per-process rows. Keys are
   // stringified so a JSON number and a string key can't miss each other (ADR-0151).
+  // The per-instance bucket that used to sit beside this is gone: a search row now
+  // carries its own count (see runVarSearch).
   let incByDef = new Map();
-  let incByInstance = new Map();
   let incTruncated = false;
   // Short and fixed-width-ish (dd.mm.yyyy hh:mm): an overview column wants the day and
   // the time, not seconds, and it must not wrap onto a second line. completedAt is ns.
@@ -4931,35 +6048,44 @@ async function viewInstances() {
     })
     : "—";
 
-  // loadIncidents pulls the server's unresolved incidents once per refresh. This
-  // overview is server-wide, so it is the unscoped list — capped like the Incidents
-  // page, and a capped page is said out loud rather than quietly undercounting. It is
-  // deliberately a separate read: the summary endpoint is O(1) per definition by
-  // design (ADR-0083) and must not grow a scan.
+  // loadIncidents counts the server's unresolved incidents per definition, once per
+  // refresh, off the incident *summary* rather than off the list
+  // (ADR-0337). One column of this table needs a number, and the row
+  // list answered it by transferring every incident on the server — megabytes of
+  // near-identical JSON per refresh under the flood this column exists to flag. The
+  // summary is one line per cause whatever the population, and a per-definition count is
+  // its groups summed. It stays a separate read: the instances summary endpoint is O(1)
+  // per definition by design (ADR-0083) and must not grow a scan.
   const loadIncidents = async () => {
     try {
-      const { data, headers } = await apiRaw("GET", "/api/v1/incidents");
-      const rows = (data && data.incidents) || [];
-      incTruncated = headers.get("X-Incidents-Truncated") === "true";
+      const sum = await api("GET", "/api/v1/incidents/summary");
+      const groups = (sum && sum.groups) || [];
+      // A group the cap left out is still counted in `total`, so the column is a lower
+      // bound in exactly that case — said out loud below rather than quietly undercounted.
+      incTruncated = !!(sum && sum.groupsTruncated);
       incByDef = new Map();
-      incByInstance = new Map();
-      for (const r of rows) {
-        if (r.processDefKey) {
-          const d = String(r.processDefKey);
-          incByDef.set(d, (incByDef.get(d) || 0) + 1);
-        }
-        const i = String(r.processInstanceKey);
-        incByInstance.set(i, (incByInstance.get(i) || 0) + 1);
+      for (const g of groups) {
+        if (!g.processDefKey) continue;
+        const d = String(g.processDefKey);
+        incByDef.set(d, (incByDef.get(d) || 0) + (g.count || 0));
       }
     } catch { /* best-effort: the lists still render, just without the flags */ }
     const note = document.getElementById("ops-inc-note");
     if (note) {
       note.innerHTML = incTruncated
-        ? `<p class="muted" style="font-size:12px;margin:0 2px 8px">More incidents than one page holds — the counts below are a lower bound. Work through them in <a href="#/operations/incidents">Incidents</a>.</p>`
+        ? `<p class="muted" style="font-size:12px;margin:0 2px 8px">More causes than one page holds — the counts below are a lower bound. Work through them in <a href="#/operations/incidents">Incidents</a>.</p>`
         : "";
     }
   };
 
+  // Which search hits are stuck is answered by the server, on the row, and used to be
+  // answered here by bucketing GET /api/v1/incidents — the whole list, capped at 5 000
+  // — and flagging a key that turned up in the bucket. Past that cap the bucket is a
+  // page: an instance beyond it carried no flag and rendered as a plain "active", which
+  // is the word an operator reads as healthy. Measured at 5 200 parked instances, 200
+  // came back unflagged, and the truncation header saying so was never read. The row's
+  // own `incidents` is counted through that instance's element index and is exact
+  // (ADR-0365).
   // incidentCell renders one process row's Incidents cell: the total over every
   // version, linking to the version that actually holds them. Linking to the latest
   // version instead would land the operator on an empty diagram whenever the fault
@@ -4983,9 +6109,11 @@ async function viewInstances() {
     };
   };
 
-  // renderRows draws the process rows, narrowed by the top filter box (name or process
-  // id). Column sorting and per-column filtering are handled by the shared table
-  // enhancer over the rendered rows, so this only builds the rows and their sort keys.
+  // renderRows draws the process rows. Narrowing them is the table's own business:
+  // the Process column's filter box searches name *and* process id (the row carries
+  // both in its data-filter), which is what the box above this list used to do — so
+  // this only builds the rows and their sort keys, and the shared enhancer sorts and
+  // filters them.
   function renderRows() {
     if (!allGroups.length) {
       tbody.innerHTML = `<tr><td colspan="7" class="empty">
@@ -4993,15 +6121,7 @@ async function viewInstances() {
         <a href="#/modeler">Modeler</a>.</td></tr>`;
       return;
     }
-    const q = (document.getElementById("proc-filter").value || "").trim().toLowerCase();
-    const filtered = q
-      ? allGroups.filter((g) => ((g.latest.name || "") + " " + g.processId).toLowerCase().includes(q))
-      : allGroups;
-    if (!filtered.length) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty">No processes match “${esc(q)}”.</td></tr>`;
-      return;
-    }
-    tbody.innerHTML = filtered.map((g) => {
+    tbody.innerHTML = allGroups.map((g) => {
       const s = summary.get(g.processId) || { running: 0, finished: 0, latestCompletedAt: 0 };
       const label = g.latest.name || g.processId;
       const sub = g.latest.name
@@ -5055,13 +6175,18 @@ async function viewInstances() {
         <td class="row-actions"><a class="btn ghost" href="${openHref}">Open</a>${dropdown("⋯", "icon-btn", menuItems)}</td>
       </tr>`;
     }).join("");
+    // Bound per render, because onMenuAction binds the buttons that exist *now* and the
+    // assignment above just replaced every one of them. Bound once at mount, it found
+    // only the "Loading…" row, and every row's migrate and terminate closed the menu
+    // and did nothing else.
+    onMenuAction(tbody, onRowAction);
   }
 
   // Bulk-terminate every running instance of a process straight from the overview —
   // the coarse "drain this process" action, no drilling into a version. It drains each
   // deployed version in bounded batches (the server caps per call, reports remaining).
   // Reached from the row's ⋯ menu, so it takes a confirm before it drains anything.
-  onMenuAction(tbody, async (act, b) => {
+  async function onRowAction(act, b) {
     // Move a version's running instances onto another version rather than discarding
     // them — the answer to "the model was wrong" that keeps the work (ADR-0162).
     if (act === "migrate") {
@@ -5099,7 +6224,7 @@ async function viewInstances() {
     } catch (err) {
       toast("terminate failed: " + err.message, "err");
     }
-  });
+  }
 
   const load = async () => {
     try {
@@ -5117,7 +6242,6 @@ async function viewInstances() {
     }
   };
   document.getElementById("refresh").addEventListener("click", load);
-  document.getElementById("proc-filter").addEventListener("input", renderRows);
 
   document.getElementById("inst-jump").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -5158,13 +6282,10 @@ async function viewInstances() {
     varClear.hidden = false;
     varPanel.hidden = false;
     varPanel.innerHTML = `<div class="card"><div class="empty">Searching…</div></div>`;
-    let rows;
+    let rows, page;
     try {
-      // Refresh the incident buckets with the search: these rows are individual
-      // instances, and a stale flag on the surface an operator debugs from is worse
-      // than the extra read.
-      await loadIncidents();
-      rows = await api("GET", "/api/v1/instances/search?q=" + encodeURIComponent(q));
+      page = await api("GET", "/api/v1/instances/search?q=" + encodeURIComponent(q));
+      rows = (page && page.items) || [];
     } catch (e) {
       varPanel.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`;
       return;
@@ -5184,8 +6305,10 @@ async function viewInstances() {
         ? '<span class="pill ok"><span class="dot"></span>active</span>'
         : `<span class="pill">${esc(r.state)}</span>`;
       // A matched instance that is stuck says so here rather than only once opened —
-      // "active" alone reads as healthy (ADR-0151).
-      const incN = incByInstance.get(String(r.key)) || 0;
+      // "active" alone reads as healthy (ADR-0151). The count is the row's own, so an
+      // absent one means the server did not answer the question rather than answering
+      // it with a no (ADR-0365).
+      const incN = typeof r.incidents === "number" ? r.incidents : 0;
       const incFlag = incN
         ? ` <a class="pill err" href="#/operations/i/${r.key}" title="${esc(`${incN} unresolved incident${incN === 1 ? "" : "s"} — open the replay, where the stuck element is marked and can be resolved`)}">&#9888; ${incN}</a>`
         : "";
@@ -5201,20 +6324,29 @@ async function viewInstances() {
         <td style="text-align:right"><a class="replay-link" href="#/operations/i/${r.key}">&#9654; Replay</a></td>
       </tr>`;
     }).join("");
-    const capped = rows.length >= 200 ? ' <span class="muted">(showing first 200)</span>' : "";
+    // The server says whether it cut the result. This used to be inferred from
+    // receiving exactly 200 rows, which cannot tell a search that found 200 from one
+    // that found more (ADR-0378) — and the
+    // difference matters here, because a cut result means the instance being looked for
+    // may be among the ones not shown.
+    const cut = !!(page && page.truncated);
+    const matched = cut
+      ? `the first ${rows.length} of more`
+      : `${rows.length} instance${rows.length === 1 ? "" : "s"}`;
     // The server answers a bare instance key as a point read; everything else is
     // still a content scan. Say which, so the cost of what was just run is visible
     // rather than implied.
     const byKey = /^\d+$/.test(q) && rows.length === 1 && String(rows[0].key) === q;
     const how = byKey ? "exact instance key" : "full scan";
     varPanel.innerHTML = `
-      <p class="muted" style="font-size:12px;margin:0 2px 8px">${rows.length} instance${rows.length === 1 ? "" : "s"} matched${capped} · ${how}</p>
+      <p class="muted" style="font-size:12px;margin:0 2px 8px">${matched} matched${cut ? " — narrow the query to see the rest" : ""} · ${how}</p>
       <div class="card" style="padding:0">
         <table class="var-results" data-dt-key="instance-search">
           <thead><tr><th>Process</th><th>Version</th><th>State</th><th>Started</th><th>Matched variable(s)</th><th></th></tr></thead>
           <tbody>${body}</tbody>
         </table>
       </div>`;
+    enhanceViewTables();
   };
   document.getElementById("var-search").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -5427,17 +6559,33 @@ function overrideCell(r) {
   return sel + note;
 }
 
-// viewIncidents is the Operations "Incidents" view: every unresolved incident on
-// this server — the operator "what's stuck" list (ADR-0061). Two shapes land here:
-// a *job* incident (a service-task job whose retries ran out and parked) and a
-// job-less *timer* incident (a boundary / event-subprocess timer whose FEEL schedule
-// stopped resolving, ADR-0064/0111). Each row links to the stuck element on the live
-// diagram and to that instance's replay (ADR-0151), and resolves in place over POST
-// /incidents/{elementInstanceKey}/resolve: a job incident re-activates its job with a
-// fresh retry budget; a timer incident re-arms the element against the instance's
-// current variables (re-raising if it still fails). The list shares the task list's
-// ceiling and flags a capped page the same way (X-Incidents-Truncated), newest scan
-// order.
+// viewIncidents is the Operations "Incidents" view: what is stuck on this server, and
+// the ways out of it (ADR-0061). Two shapes of incident land here: a *job* incident (a
+// service-task job whose retries ran out and parked) and a job-less *timer* incident (a
+// boundary / event-subprocess timer whose FEEL schedule stopped resolving,
+// ADR-0064/0111).
+//
+// It opens on *causes*, not on rows (ADR-0337). One broken worker parks
+// every instance that reaches its task, so the honest reading of "3 412 incidents" is
+// one line — this element of this process, this failure, 3 412 tokens behind it — and
+// the actions that belong to a whole cause sit on that line: fix the worker it names,
+// then clear everything it parked in one call. The row list below is still there, and
+// still carries every per-incident way out, but it is now a *page* of a chosen cause
+// rather than the whole population rendered into the DOM.
+//
+// Each row links to the stuck element on the live diagram and to that instance's replay
+// (ADR-0151) and resolves in place over POST /incidents/{elementInstanceKey}/resolve: a
+// job incident re-activates its job with a fresh retry budget; a timer incident re-arms
+// the element against the instance's current variables; an error incident throws its
+// uncaught error again (each re-raising if it still fails).
+
+// How many incident rows one page of the table renders. The API's own ceiling is 5000;
+// asking for it put thousands of rows (each with an actions menu) into the DOM, which is
+// what made this view slow to open, slow to filter and slow to refresh. A cause is what
+// an operator acts on, so a page is for reading a sample of one — 200 rows is more than
+// anybody scrolls, and the shared table enhancer stays instant over it.
+const INCIDENT_ROWS_PAGE = 200;
+
 // incidentMenu is the row's non-primary actions, behind the ⋯ menu every other table
 // in the console puts them behind. Resolving is the one action that belongs on the row;
 // correcting the data and reconfiguring the integration are the two ways to make that
@@ -5456,10 +6604,34 @@ function incidentMenu(r, i) {
   items.push({ label: "Fix variables…", icon: "✎", act: "fixvars", data: { row: i } });
   if (r.connector && r.connectorId) {
     items.push({ label: "Configure worker…", icon: "⚙", act: "fixconn", data: { row: i } });
+  } else if (r.connector && r.connectorKind) {
+    // Nothing to open — the model names a worker nobody configured. Creating it is
+    // the act, and the model already states the name and the Worker Type, so it
+    // happens here rather than in the Console with the name carried in somebody's
+    // head (ADR-0287).
+    items.push({ label: "Create worker…", icon: "⚙", act: "addconn", data: { row: i } });
   } else if (r.connector) {
-    // Nothing to open — the model names a worker nobody configured, so the way out
-    // is the Console, where one is created.
+    // A worker named without its Worker Type: nothing to create it *as*, so the
+    // Console, where the type is picked, stays the answer.
     items.push({ label: "Configure worker ↗", icon: "⚙", href: "#/console/workers" });
+  }
+  return items;
+}
+
+// causeMenu is the same idea one level up: the ways out that apply to every incident of
+// a cause at once. Correcting variables is deliberately absent — that is per-instance
+// data, and there is no honest bulk form for it; what a cause shares is its *worker*.
+function causeMenu(g, i) {
+  const items = [];
+  if (g.connector && g.connectorId) {
+    items.push({ label: "Configure worker…", icon: "⚙", act: "fixconn", data: { cause: i } });
+  } else if (g.connector && g.connectorKind) {
+    items.push({ label: "Create worker…", icon: "⚙", act: "addconn", data: { cause: i } });
+  } else if (g.connector) {
+    items.push({ label: "Configure worker ↗", icon: "⚙", href: "#/console/workers" });
+  }
+  if (g.processDefKey) {
+    items.push({ label: "Open the live diagram ↗", icon: "→", href: `#/operations/p/${g.processDefKey}` });
   }
   return items;
 }
@@ -5468,69 +6640,239 @@ async function viewIncidents() {
   view.innerHTML = `
     <div class="between">
       <h1>Incidents</h1>
-      <button class="btn neutral" id="refresh" title="Reload the incident list">Refresh</button>
+      <button class="btn neutral" id="refresh" title="Reload the causes and the incident list">Refresh</button>
     </div>
-    <p class="muted">Every unresolved incident on this server — where a token is
-    stuck waiting for an operator (ADR-0061). A <b>job</b> incident is a service task
-    whose retries ran out and parked; a <b>timer</b> incident is a recurring boundary
-    or event-subprocess timer whose FEEL schedule stopped resolving (ADR-0111).
-    <b>Resolve</b> re-activates the work: a parked job retries with the budget you
-    grant, a timer re-arms against the instance's current variables — re-raising if it
-    still fails.</p>
+    <p class="muted inc-lead">Where a token is stuck waiting for an operator (ADR-0061). A <b>job</b>
+    incident is a service task whose retries ran out and parked; a <b>timer</b> incident is a
+    recurring boundary or event-subprocess timer whose FEEL schedule stopped resolving
+    (ADR-0111); an <b>error</b> incident is a BPMN error nothing caught (ADR-0089). The
+    table below groups them by <b>cause</b> — the element that parked — because
+    one broken integration parks every instance that reaches it: fix what the cause names, then
+    <b>Resolve all</b> clears everything behind it in one go. <b>Resolve</b> re-activates the work:
+    a parked job retries with the budget you grant, a timer re-arms against the instance's current
+    variables, an uncaught error is thrown again — each re-raising if it still fails.</p>
     <div id="inc-note"></div>
     <div class="card" style="padding:0">
+      <table data-dt-key="incident-causes">
+        <thead><tr><th>Process</th><th>Element</th><th>Kind</th><th>Incidents</th><th>Since</th><th>Message</th><th></th></tr></thead>
+        <tbody id="causes"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="between" style="margin-top:18px">
+      <h2 style="font-size:15px;margin:0" id="rows-title">Incidents</h2>
+      <button class="btn ghost" id="scope-clear" hidden title="Show incidents of every cause again">Show all causes</button>
+    </div>
+    <div class="card" style="padding:0">
+      <div class="tasks-bulk" id="inc-bulk" hidden></div>
       <table data-dt-key="incidents">
-        <thead><tr><th>Instance</th><th>Element</th><th>Cause</th><th>Raised</th><th>Message</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th class="row-pick"></th><th>Instance</th><th>Element</th><th>Cause</th><th>Raised</th><th>Message</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>`;
+  const causesBody = document.getElementById("causes");
   const tbody = document.getElementById("rows");
   const note = document.getElementById("inc-note");
-  let current = []; // the rendered page, so a Resolve click has the whole incident
+  const rowsTitle = document.getElementById("rows-title");
+  const scopeClear = document.getElementById("scope-clear");
 
-  const load = async () => {
+  let causes = [];        // the summary's groups: one per cause, biggest first
+  let current = [];       // the rendered row page, so an action has the whole incident
+  let scope = null;       // the cause the row list is showing, or null for all of them
+  const picked = new Set(); // elementInstanceKey of every ticked row
+
+  // The summary: one walk on the server, one line per cause, whatever the population.
+  // This is also what makes the view usable while a flood is being produced — its size
+  // does not grow with the number of parked tokens.
+  const loadCauses = async () => {
     try {
-      const { data, headers } = await apiRaw("GET", "/api/v1/incidents");
-      const rows = (data && data.incidents) || [];
-      current = rows;
-      note.innerHTML = headers.get("X-Incidents-Truncated") === "true"
-        ? `<p class="muted">Showing the first ${rows.length}. Resolve some and refresh to see the rest.</p>`
+      const sum = await api("GET", "/api/v1/incidents/summary");
+      causes = (sum && sum.groups) || [];
+      note.innerHTML = sum && sum.groupsTruncated
+        ? `<p class="muted" style="font-size:12px;margin:0 2px 8px">${sum.total} incidents over more causes than this table holds; ${sum.ungrouped} are not in a row below.</p>`
         : "";
-      if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="6" class="empty">No incidents — nothing is stuck.</td></tr>`;
+      if (!causes.length) {
+        causesBody.innerHTML = `<tr><td colspan="7" class="empty">No incidents — nothing is stuck.</td></tr>`;
         return;
       }
-      tbody.innerHTML = rows.map((r, i) => {
-        // The instance opens on the live diagram of its own version, with the token
-        // (and now the incident badge) on the stuck element; ▶ replays it step by step.
-        const inst = r.processDefKey
-          ? `<a href="#/operations/p/${r.processDefKey}/i/${r.processInstanceKey}" title="Open this instance on its live diagram">${r.processInstanceKey}</a>
-             <a class="replay-link" href="#/operations/i/${r.processInstanceKey}" title="Replay this instance step by step">&#9654;</a>`
-          : `<span title="This instance's definition is no longer deployed">${r.processInstanceKey}</span>`;
-        // The element is named by its diagram id — what the modeler and the diagram
-        // call it; the element instance key (the resolve key) and the compiled index
-        // ride along as a title for anyone cross-referencing the graph.
-        const el = `<span style="font-family:ui-monospace,monospace" title="Element instance ${r.elementInstanceKey} · compiled element index #${r.elementIndex}">${esc(r.elementId || r.elementInstanceKey)}</span>`;
-        const cause = `${incidentPill(r)}${r.jobKey ? ` <span class="muted" style="font-family:ui-monospace,monospace">${r.jobKey}</span>` : ""}`;
+      causesBody.innerHTML = causes.map((g, i) => {
+        const proc = g.processDefKey
+          ? `<a href="#/operations/p/${g.processDefKey}" title="Open this version's live diagram, where every stuck token is marked">${esc(g.processId || String(g.processDefKey))}</a>${g.version ? ` <span class="muted">v${g.version}</span>` : ""}`
+          : `<span class="muted" title="These instances' definition is no longer deployed">(undeployed)</span>`;
+        const el = `<span style="font-family:ui-monospace,monospace">${esc(g.elementId || "#" + g.elementIndex)}</span>`;
+        const msg = `${esc(g.message || "—")}${g.messageVaries
+          ? ` <span class="muted" title="The incidents in this group do not all carry the same message; this is the oldest one">· and others</span>`
+          : ""}${incidentWorkerChip(g)}`;
         return `<tr>
-          <td>${inst}</td>
+          <td data-filter="${esc((g.processId || "") + " " + (g.processDefKey || ""))}">${proc}</td>
           <td>${el}</td>
-          <td>${cause}</td>
-          <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
-          <td>${esc(r.message || "—")}${incidentWorkerChip(r)}</td>
+          <td>${incidentPill(g)}</td>
+          <td data-sort="${g.count}"><b>${g.count}</b></td>
+          <td data-sort="${g.oldestRaisedAt || 0}" class="muted nowrap" title="The oldest incident of this cause; the newest is ${esc(fmtRaised(g.newestRaisedAt))}">${esc(fmtRaised(g.oldestRaisedAt))}</td>
+          <td class="inc-msg">${msg}</td>
           <td class="row-actions">
-            <button class="btn sm" data-resolve="${i}" title="Resolve this incident">Resolve…</button>
-            ${dropdown("⋯", "icon-btn", incidentMenu(r, i))}</td>
+            <button class="btn ghost sm" data-show="${i}" title="List this cause's incidents below">Show</button>
+            ${g.processDefKey
+              ? `<button class="btn sm" data-resolve-cause="${i}" title="Clear every incident of this cause and retry its work">Resolve all…</button>`
+              // Without a definition there is nothing to scope the resolve by — every
+              // selector left would reach other processes' incidents too. The rows below
+              // still resolve, one or several at a time, by their own keys.
+              : `<span class="muted" title="These instances' definition is gone, so this cause cannot be named as a scope — resolve the rows below instead">no scope</span>`}
+            ${dropdown("⋯", "icon-btn", causeMenu(g, i))}</td>
         </tr>`;
       }).join("");
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
+      causesBody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
 
-  // One delegated handler for every row's Resolve button (the tbody persists across
-  // reloads; the rows inside it do not, so a per-row listener would leak). The dialog
-  // and the POST are the shared incident flow every surface uses (ADR-0151).
+  // scopeQuery is the row page's scope: the selected cause, written as the same
+  // selector the bulk resolve takes, so the rows shown and the incidents a "Resolve
+  // all" touches are one query asked twice.
+  const scopeQuery = () => {
+    const q = [`limit=${INCIDENT_ROWS_PAGE}`];
+    if (scope) {
+      if (scope.processDefKey) q.push(`process=${scope.processDefKey}`);
+      if (scope.elementId) q.push(`element=${encodeURIComponent(scope.elementId)}`);
+      // The compiled index as well as the id: an instance whose definition is no
+      // longer deployed has no BPMN id to scope by, and a scope with the element left
+      // out is the whole definition — a much larger set than the line clicked.
+      if (Number.isInteger(scope.elementIndex)) q.push(`elementIndex=${scope.elementIndex}`);
+      if (scope.type) q.push(`type=${encodeURIComponent(scope.type)}`);
+    }
+    return "?" + q.join("&");
+  };
+
+  const renderBulk = () => {
+    const bulk = document.getElementById("inc-bulk");
+    if (!bulk) return;
+    const n = picked.size;
+    bulk.hidden = n === 0;
+    if (!n) { bulk.innerHTML = ""; return; }
+    bulk.innerHTML = `
+      <span class="tasks-bulk-count">${n} selected</span>
+      <span class="tasks-bulk-actions">
+        <button class="btn small" id="inc-bulk-resolve" title="Clear the selected incidents and retry their work">Resolve selected…</button>
+        <button class="btn ghost small" id="inc-bulk-clear" title="Clear the current selection">Clear</button>
+      </span>`;
+    bulk.querySelector("#inc-bulk-clear").addEventListener("click", () => { picked.clear(); renderRowsFromCurrent(); });
+    bulk.querySelector("#inc-bulk-resolve").addEventListener("click", async () => {
+      const chosen = current.filter((r) => picked.has(String(r.elementInstanceKey)));
+      if (await resolveSelectionFlow({ api, toast, incidents: chosen })) {
+        picked.clear();
+        await load();
+      }
+    });
+  };
+
+  const renderRowsFromCurrent = () => {
+    if (!current.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${scope
+        ? "No incidents left on this cause — it may have been resolved already."
+        : "No incidents — nothing is stuck."}</td></tr>`;
+      renderBulk();
+      return;
+    }
+    tbody.innerHTML = current.map((r, i) => {
+      // The instance opens on the live diagram of its own version, with the token
+      // (and now the incident badge) on the stuck element; ▶ replays it step by step.
+      const inst = r.processDefKey
+        ? `<a href="#/operations/p/${r.processDefKey}/i/${r.processInstanceKey}" title="Open this instance on its live diagram">${r.processInstanceKey}</a>
+           <a class="replay-link" href="#/operations/i/${r.processInstanceKey}" title="Replay this instance step by step">&#9654;</a>`
+        : `<span title="This instance's definition is no longer deployed">${r.processInstanceKey}</span>`;
+      // The element is named by its diagram id — what the modeler and the diagram
+      // call it; the element instance key (the resolve key) and the compiled index
+      // ride along as a title for anyone cross-referencing the graph.
+      const el = `<span style="font-family:ui-monospace,monospace" title="Element instance ${r.elementInstanceKey} · compiled element index #${r.elementIndex}">${esc(r.elementId || r.elementInstanceKey)}</span>`;
+      const cause = `${incidentPill(r)}${r.jobKey ? ` <span class="muted" style="font-family:ui-monospace,monospace">${r.jobKey}</span>` : ""}`;
+      const key = String(r.elementInstanceKey);
+      return `<tr>
+        <td class="row-pick"><input type="checkbox" data-pick="${esc(key)}"${picked.has(key) ? " checked" : ""} aria-label="Select this incident"/></td>
+        <td>${inst}</td>
+        <td>${el}</td>
+        <td>${cause}</td>
+        <td data-sort="${r.raisedAt || 0}" class="nowrap">${esc(fmtRaised(r.raisedAt))}</td>
+        <td class="inc-msg">${esc(r.message || "—")}${incidentWorkerChip(r)}</td>
+        <td class="row-actions">
+          <button class="btn sm" data-resolve="${i}" title="Resolve this incident">Resolve…</button>
+          ${dropdown("⋯", "icon-btn", incidentMenu(r, i))}</td>
+      </tr>`;
+    }).join("");
+    renderBulk();
+  };
+
+  // One page of rows, scoped to the selected cause. Capped deliberately: the answer to
+  // a flood is the cause table above, not ten thousand rows in the DOM.
+  const loadRows = async () => {
+    try {
+      const page = await api("GET", "/api/v1/incidents" + scopeQuery());
+      current = (page && page.items) || [];
+      // A selection only means anything for rows that are still on the page.
+      const onPage = new Set(current.map((r) => String(r.elementInstanceKey)));
+      for (const key of [...picked]) if (!onPage.has(key)) picked.delete(key);
+      // The cap is on the response now, not in a header a reader had to know about
+      // (ADR-0378).
+      const capped = !!(page && page.truncated);
+      rowsTitle.textContent = scope
+        ? `${scope.elementId || "Element #" + scope.elementIndex} · ${scope.processId || scope.processDefKey}${capped ? ` — first ${current.length} of ${scope.count}` : ` — ${current.length}`}`
+        : capped ? `Incidents — the first ${current.length}` : `Incidents — ${current.length}`;
+      scopeClear.hidden = !scope;
+      renderRowsFromCurrent();
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
+    }
+  };
+
+  // The causes first, then the rows: a cause that has just been resolved must stop
+  // scoping the list below, or the page sits on an empty selection of something that no
+  // longer exists.
+  const load = async () => {
+    await loadCauses();
+    if (scope) {
+      scope = causes.find((g) => g.processDefKey === scope.processDefKey
+        && g.elementId === scope.elementId && g.type === scope.type) || null;
+    }
+    await loadRows();
+  };
+
+  // One delegated handler per table (each tbody persists across reloads; the rows
+  // inside it do not, so per-row listeners would leak). The dialogs and the POSTs are
+  // the shared incident flows every surface uses (ADR-0151).
+  causesBody.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-show], button[data-resolve-cause], .dropdown-menu button[data-act]");
+    if (!btn) return;
+    if (btn.dataset.show !== undefined) {
+      scope = causes[Number(btn.dataset.show)] || null;
+      picked.clear();
+      await loadRows();
+      tbody.closest(".card").scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    const g = causes[Number(btn.dataset.resolveCause ?? btn.dataset.cause)];
+    if (!g) return;
+    // A cause's worker is the fix for every incident behind it; the flows are the
+    // per-incident ones (ADR-0160/0287), which only ever needed one representative.
+    const act = btn.dataset.act;
+    const retry = () => resolveCauseQuick({ api, toast, group: g });
+    const changed = act === "fixconn"
+      ? !!(await fixWorkerFlow({ api, toast, incident: g, retry, extraLabel: `Save & retry ${g.count}` }))
+      : act === "addconn"
+        ? !!(await addWorkerFlow({ api, toast, incident: g, retry, extraLabel: `Add & retry ${g.count}` }))
+        : !!(await resolveCauseFlow({ api, toast, group: g }));
+    if (changed) {
+      picked.clear();
+      await load();
+      refreshIncidentBadge(); // don't make the nav wait out its interval to agree
+    }
+  });
+
+  tbody.addEventListener("change", (e) => {
+    const box = e.target.closest("input[type=checkbox][data-pick]");
+    if (!box) return;
+    if (box.checked) picked.add(box.dataset.pick);
+    else picked.delete(box.dataset.pick);
+    renderBulk();
+  });
+
   tbody.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-resolve], .dropdown-menu button[data-act]");
     if (!btn) return;
@@ -5550,16 +6892,20 @@ async function viewIncidents() {
         ? !!(await fixVariablesFlow({ api, toast, incident }))
         : act === "fixconn"
           ? !!(await fixWorkerFlow({ api, toast, incident }))
-          : await resolveIncidentFlow({ api, toast, incident });
+          : act === "addconn"
+            ? !!(await addWorkerFlow({ api, toast, incident }))
+            : await resolveIncidentFlow({ api, toast, incident });
     if (changed) {
       await load();
-      refreshIncidentBadge(); // don't make the nav wait out its interval to agree
+      refreshIncidentBadge();
     }
   });
 
+  scopeClear.addEventListener("click", async () => { scope = null; picked.clear(); await loadRows(); });
   document.getElementById("refresh").addEventListener("click", load);
   await load();
 }
+
 
 // viewMailOutbox is the Operations "Outbox" view: the messages a mail worker on
 // the *preview* provider delivered in-server instead of sending (ADR-0150).
@@ -5593,12 +6939,14 @@ async function viewWorkers() {
       against it is the state worth catching here &mdash; counters cover this run of the server, while the
       queue depths come from durable state.</p>
     <div class="card wk-card" id="wk-collisions" hidden></div>
+    <div class="card wk-card" id="wk-breakers" hidden></div>
     <div class="card wk-card" id="wk-types"><p class="empty">Loading&hellip;</p></div>
     <div class="card wk-card" id="wk-workers"></div>
     <div class="card wk-card" id="wk-gaps" hidden></div>
     <div class="card wk-card" id="wk-supervised" hidden></div>`;
 
   const types = document.getElementById("wk-types");
+  const breakers = document.getElementById("wk-breakers");
   const workers = document.getElementById("wk-workers");
   const collisions = document.getElementById("wk-collisions");
   const gaps = document.getElementById("wk-gaps");
@@ -5616,6 +6964,17 @@ async function viewWorkers() {
     if (secs < 3600) return `${Math.round(secs / 60)}m ago`;
     if (secs < 86400) return `${Math.round(secs / 3600)}h ago`;
     return new Date(ns / 1e6).toLocaleString();
+  };
+  // When the engine will next try a held target. "Now" rather than a negative age: a
+  // probe that is due goes out on the next round, and a row reading "-3s ago" would make
+  // an operator wonder what went wrong when nothing has.
+  const fmtNext = (ns) => {
+    if (!ns) return "\u2014";
+    const secs = Math.round((ns / 1e6 - Date.now()) / 1000);
+    if (secs <= 0) return "now";
+    if (secs < 60) return `in ${secs}s`;
+    if (secs < 3600) return `in ${Math.round(secs / 60)}m`;
+    return `in ${Math.round(secs / 3600)}h`;
   };
   // Past this a worker has almost certainly stopped rather than paused: the default
   // lease is five minutes, so anything beyond it has let its work go back on offer.
@@ -5719,7 +7078,7 @@ async function viewWorkers() {
           </tr>`;
         }).join("")}</tbody>
       </table>` : `<p class="empty">No job types yet &mdash; deploy a process with a service task.</p>`}
-      <p class="wk-note">An <b>in-process</b> type is worked by Atlas itself and cannot be leased from
+      <p class="wk-note">An <b>in-process</b> type is worked by atlas itself and cannot be leased from
         outside; relocating it to a worker means turning that handler off.</p>
       </details>`;
 
@@ -5752,7 +7111,7 @@ async function viewWorkers() {
         and name the job type it serves.</p>`}
       <p class="wk-note">Counters are since this server started and are not restored on restart.
         <b>In flight</b> is what a Worker Instance holds a lease on right now. <b>Workers held</b> is
-        what an instance reports it has credentials for &mdash; only it knows, since Atlas holds none
+        what an instance reports it has credentials for &mdash; only it knows, since atlas holds none
         for a Worker Type it has handed over. Open an instance\u2019s name for the jobs it ran.</p>`;
 
     // Opening a worker asks for its recent jobs. They are deliberately not part of the
@@ -5938,6 +7297,55 @@ async function viewWorkers() {
       collisions.innerHTML = "";
     }
 
+    // Targets whose jobs are being held back (ADR-0340). This card sits above the queue
+    // depths on purpose: a deep queue with a breaker over it and a deep queue nobody is
+    // serving look identical in the type table, and only one of them means the engine has
+    // decided to stop. Without this row, an outage that used to announce itself as a flood
+    // of incidents announces itself as nothing at all.
+    const held = (data && data.breakers) || [];
+    if (held.length) {
+      breakers.hidden = false;
+      breakers.innerHTML = `
+        <div class="wk-head"><b>Held back</b>
+          <span class="muted small">${held.length} target${held.length === 1 ? "" : "s"}</span></div>
+        <table class="no-enhance">
+          <thead><tr><th>Target</th><th>Worker type</th><th>Since</th><th>Next attempt</th>
+            <th>Last failure</th><th></th></tr></thead>
+          <tbody>${held.map((b) => `<tr class="wk-stuck">
+            <td><b>${esc(b.connector || b.jobType)}</b>${b.state === "probing"
+              ? ` <span class="pill-kv" title="One job is out right now, testing whether the target has recovered">probing</span>` : ""}</td>
+            <td><span class="pill-kv">${esc(b.jobType)}</span></td>
+            <td>${esc(fmtSeen(b.trippedAt))}</td>
+            <td>${esc(fmtNext(b.probeAt))}</td>
+            <td class="muted">${esc(b.reason || "\u2014")}</td>
+            <td><button class="btn neutral sm" data-close-breaker="${esc(b.jobType)}"
+              data-close-connector="${esc(b.connector || "")}"
+              title="Stop holding this target's jobs back now, without waiting for the next attempt">Close now</button></td>
+          </tr>`).join("")}</tbody>
+        </table>
+        <p class="wk-note">Atlas judged these targets down &mdash; three instances in a row failed against
+          each &mdash; and stopped handing out their jobs. The held work is <b>waiting, not failed</b>: no
+          retry has been spent on it and no incident raised, and it goes out by itself as soon as a target
+          answers again. One job per attempt is sent through to test that. Fix the endpoint and press
+          <b>Close now</b> if you would rather not wait; if the target is still down, the next three
+          failures simply hold it again.</p>`;
+      for (const b of breakers.querySelectorAll("[data-close-breaker]")) {
+        b.onclick = async () => {
+          b.disabled = true;
+          try {
+            await api("POST", "/api/v1/workers/breakers/close", {
+              jobType: b.dataset.closeBreaker, connector: b.dataset.closeConnector,
+            });
+            toast("Released " + (b.dataset.closeConnector || b.dataset.closeBreaker));
+          } catch (e) { toast(e.message, "err"); }
+          setTimeout(load, 400);
+        };
+      }
+    } else {
+      breakers.hidden = true;
+      breakers.innerHTML = "";
+    }
+
     // Workers nothing can serve. This is the gap handing a credential to a Worker
     // Instance opens up: Atlas used to refuse an unconfigured worker when it held every
     // credential itself, and for a Worker Type it has handed over it no longer can. The
@@ -5965,7 +7373,7 @@ async function viewWorkers() {
               || `<span class="muted">&mdash;</span>`}</td>
           </tr>`).join("")}</tbody>
         </table>
-        <p class="wk-note">These models name a worker, and neither Atlas nor any Worker Instance seen
+        <p class="wk-note">These models name a worker, and neither atlas nor any Worker Instance seen
           this run holds a configuration for it &mdash; so their tasks will park. Configure the name on
           an instance that serves this Worker Type, or point the model at one that is configured. An
           instance that has not polled yet reports nothing, so a name may clear itself on its first poll. Only versions that
@@ -6035,6 +7443,90 @@ async function viewWorkers() {
   };
 
   document.getElementById("refresh").onclick = load;
+  await load();
+}
+
+// viewBufferedMessages lists the messages kept for a subscription that has not opened yet
+// (ADR-0370): published with a time to live while nothing waited for them. It is read a
+// page at a time, narrowed to a message name and key, so the view costs what it shows.
+async function viewBufferedMessages() {
+  view.innerHTML = `
+    <div class="between">
+      <h1>Messages</h1>
+      <span><button class="btn neutral" id="refresh" title="Reload the buffer">Refresh</button></span>
+    </div>
+    <p class="muted">Messages published with a time to live while nothing waited for them
+    (ADR-0370). Each is kept until an instance starts waiting on its name and correlation
+    key &mdash; that instance then receives it at once &mdash; or until its time is up and
+    the timer sweep drops it. A message past its time is never delivered, even before the
+    sweep reaches it. A publish without a time to live is not kept, and never shows here.</p>
+    <div class="card">
+      <div class="between" style="gap:8px;margin-bottom:8px">
+        <span style="display:flex;gap:8px;flex-wrap:wrap">
+          <input id="bm-name" class="filter-input" type="search" placeholder="Message name" aria-label="Message name">
+          <input id="bm-key" class="filter-input" type="search" placeholder="Correlation key (needs a name)" aria-label="Correlation key">
+          <button class="btn neutral" id="bm-apply">Filter</button>
+        </span>
+        <span class="muted" id="bm-total"></span>
+      </div>
+      <div id="bm-list"><p class="empty">Loading&hellip;</p></div>
+      <div id="bm-more" style="margin-top:8px"></div>
+    </div>`;
+  const list = document.getElementById("bm-list");
+  const more = document.getElementById("bm-more");
+  const total = document.getElementById("bm-total");
+  const nameIn = document.getElementById("bm-name");
+  const keyIn = document.getElementById("bm-key");
+  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
+  const payload = (vars) => (vars || []).map((v) => `${esc(v.name)} = ${esc(String(v.value).slice(0, 80))}`).join("<br>") || '<span class="muted">none</span>';
+  const row = (m) => `<tr>
+      <td><b>${esc(m.name)}</b>${m.expired ? ' <span class="pill warn" title="Past its time: nothing receives it now, and the next sweep drops it">expired</span>' : ""}</td>
+      <td>${m.correlationKey ? `<span class="chip">${esc(m.correlationKey)}</span>` : '<span class="muted">none</span>'}</td>
+      <td>${m.messageId ? esc(m.messageId) : '<span class="muted">—</span>'}</td>
+      <td>${esc(fmtNano(m.bufferedAt))}</td>
+      <td>${esc(fmtNano(m.expiresAt))}</td>
+      <td>${payload(m.variables)}</td>
+    </tr>`;
+  let rows = [];
+
+  const load = async (after) => {
+    const q = new URLSearchParams({ limit: "100" });
+    const name = nameIn.value.trim();
+    const key = keyIn.value.trim();
+    if (name) q.set("name", name);
+    if (name && key) q.set("correlationKey", key);
+    if (after) q.set("after", after);
+    let data;
+    try {
+      data = await api("GET", `/api/v1/messages/buffered?${q}`);
+    } catch (e) {
+      list.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
+      more.innerHTML = "";
+      return;
+    }
+    rows = after ? rows.concat(data.messages || []) : (data.messages || []);
+    total.textContent = `${data.total} waiting in all`;
+    if (!rows.length) {
+      list.innerHTML = `<p class="empty">Nothing waits${name ? ` for <b>${esc(name)}</b>` : ""}. A message is
+        kept here only when it was published with <code>timeToLiveMs</code> and nothing was waiting for it.</p>`;
+      more.innerHTML = "";
+      return;
+    }
+    list.innerHTML = `<table class="table"><thead><tr>
+        <th>Message</th><th>Correlation key</th><th>Message id</th><th>Published</th><th>Expires</th><th>Payload</th>
+      </tr></thead><tbody>${rows.map(row).join("")}</tbody></table>`;
+    more.innerHTML = data.nextCursor
+      ? `<button class="btn ghost" id="bm-next">Load more</button>`
+      : "";
+    const next = document.getElementById("bm-next");
+    if (next) next.addEventListener("click", () => load(data.nextCursor));
+  };
+
+  document.getElementById("refresh").addEventListener("click", () => load());
+  document.getElementById("bm-apply").addEventListener("click", () => load());
+  for (const input of [nameIn, keyIn]) {
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
+  }
   await load();
 }
 
@@ -6492,54 +7984,104 @@ async function viewDecisionDetail(id) {
     result marked <b>&#8862;</b> to see the decision table with the matched rule
     highlighted — a rule that never matches (a string compared against a number, a
     stray space, a wrong type) shows its condition in red.</p>
+    <h2 style="margin-top:20px">Deployed versions</h2>
+    <p class="muted">Every version of this decision the engine holds, newest first.
+    <b>Held by</b> names the deployed processes that pinned this exact version when they
+    were deployed — they carry no copy of it, so it cannot be removed while they exist.
+    Removing a version history goes oldest first: the current version cannot go while
+    older ones remain, because the next deploy would silently fall back to one of
+    them.</p>
     <div class="card" style="padding:0">
+      <table data-dt-key="decision-versions">
+        <thead><tr><th>Version</th><th>Key</th><th>Model</th><th>Deployed</th><th>Held by</th><th></th></tr></thead>
+        <tbody id="version-rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="card" style="padding:0; margin-top:20px">
       <table data-dt-key="decision-evals">
-        <thead><tr><th>When</th><th>Instance</th><th>Element</th><th>Inputs</th><th>Result</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th>When</th><th>Instance</th><th>Element</th><th>Inputs</th><th>Result</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>
     <div class="dec-pop" id="dec-pop" hidden></div>`;
   const tbody = document.getElementById("rows");
   const pop = document.getElementById("dec-pop");
   const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
-  const fmtVal = (v) => (v === null || v === undefined ? "null" : typeof v === "string" ? v : JSON.stringify(v));
-  const cellText = (t) => { const s = (t ?? "").trim(); return s === "" || s === "-" ? "–" : s; };
-  const tablesOf = (r) => (r && r.trace && Array.isArray(r.trace.tables)) ? r.trace.tables : [];
-  const matchedNums = (r) => {
-    const nums = [];
-    for (const t of tablesOf(r)) for (const rule of (t.rules || [])) if (rule.matched) nums.push(rule.index + 1);
-    return [...new Set(nums)];
-  };
+  // The rule matrix is drawn by dmn-trace.js, the one renderer the decision
+  // editor's Test panel also uses, so a trace reads the same in both places.
+  const tablesOf = (r) => traceTablesOf(r && r.trace);
+  const matchedNums = (r) => matchedRuleNumbers(r && r.trace);
+  const miniTable = (tt, n) => renderTraceTable(tt, n);
 
-  // miniTable renders one decision table as a compact matrix (mirrors temis' Operate
-  // view): a row per rule, input columns + output, the matched rule highlighted and
-  // each cell tinted by whether its condition held.
-  const miniTable = (tt, n) => {
-    const matched = (tt.rules || []).filter((r) => r.matched).map((r) => r.index + 1);
-    const policy = (tt.hitPolicy || "U") + (tt.aggregation ? " " + tt.aggregation : "");
-    const head = matched.length ? `Rule ${matched.join(", ")} fired` : "no rule fired";
-    const ins = tt.inputs || [];
-    const hr = `<tr><th class="mcol-idx">#</th>${ins.map((i) =>
-      `<th>${esc(i.expression)} <code>= ${esc(fmtVal(i.value))}</code></th>`).join("")}<th>&rarr;</th></tr>`;
-    const body = (tt.rules || []).map((r) => {
-      const cells = ins.map((_, k) => {
-        const c = r.conditions && r.conditions[k];
-        const cls = c ? (c.matched ? "mcell is-ok" : "mcell is-no") : "mcell is-skip";
-        return `<td class="${cls}">${c ? esc(cellText(c.entry)) : ""}</td>`;
-      }).join("");
-      const out = r.matched && r.outputs ? esc(r.outputs.map(fmtVal).join(", ")) : "";
-      return `<tr class="mrule${r.matched ? " is-hit" : ""}"><td class="mcol-idx">${r.index + 1}</td>${cells}<td class="mout">${out}</td></tr>`;
+  // The deployed versions of this decision, and what holds each of them
+  // (ADR-0336). It is the only place in the product
+  // that answers "what is using this version", which is a question asked without a
+  // deletion in mind — and the place a deletion has to stand.
+  const versionRows = document.getElementById("version-rows");
+  const loadVersions = async () => {
+    let rows = [];
+    try {
+      rows = await api("GET", `/api/v1/decision-deployments?decisionId=${encodeURIComponent(id)}`) || [];
+    } catch (e) {
+      versionRows.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
+      return;
+    }
+    if (!rows.length) {
+      versionRows.innerHTML = `<tr><td colspan="6" class="empty">
+        This decision has no deployment of its own. It is evaluated from the model
+        bundled with the process that calls it.</td></tr>`;
+      return;
+    }
+    versionRows.innerHTML = rows.map((r) => {
+      // Each holder says how it holds the version (ADR-0423): frozen at its deploy,
+      // which deploying the process again undoes for new instances, or named on
+      // purpose by its task.
+      const held = (r.pinnedBy || []).length
+        ? (r.pinnedBy || []).map((p) => {
+            const how = holderNote(p);
+            return `<a href="#/operations/p/${p.key}" title="${esc(how.title)}">${esc(p.name || p.processId)}</a>` +
+              (how.label ? ` <span class="muted" title="${esc(how.title)}">${esc(how.label)}</span>` : "");
+          }).join(", ")
+        : '<span class="muted">—</span>';
+      // The server decides; this only keeps the reader from clicking into a refusal,
+      // and carries its reason as the tooltip.
+      const state = versionDeleteState(r, rows);
+      const action = state.deletable
+        ? `<button class="btn ghost" data-delver="${r.key}" title="Remove this deployed version">Delete</button>`
+        : `<span class="muted" title="${esc(state.why)}">held</span>`;
+      return `<tr>
+        <td><b>v${r.version}</b>${r.current ? ' <span class="pill ok"><span class="dot"></span>current</span>' : ""}</td>
+        <td class="muted">${r.key}</td>
+        <td class="muted">${esc(r.resourceName || r.modelName || "—")}</td>
+        <td class="muted" data-sort="${r.deployedAt || 0}">${esc(fmtTime(r.deployedAt))}${r.deployedBy ? " · " + esc(r.deployedBy) : ""}</td>
+        <td>${held}</td>
+        <td class="row-actions">${action}</td></tr>`;
     }).join("");
-    return `<div class="mtable"><div class="mtable-head">${n ? `Table ${n} · ` : ""}${esc(head)}<span class="mtable-policy">${esc(policy)}</span></div>` +
-      `<table class="mgrid">${hr}${body}</table></div>`;
+    enhanceViewTables();
   };
+  versionRows.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-delver]");
+    if (!btn) return;
+    if (!window.confirm("Remove this deployed version? Processes already pinned to it keep running against it — this is refused if any are.")) return;
+    btn.disabled = true;
+    try {
+      await api("DELETE", `/api/v1/decision-deployments/${encodeURIComponent(btn.dataset.delver)}`);
+      toast("Removed the deployed version", "ok");
+    } catch (err) {
+      // The server's refusal is the explanation: it names what is holding the
+      // version, or why the current one cannot go yet.
+      toast(err.message, "err");
+      btn.disabled = false;
+    }
+    await loadVersions();
+  });
 
   let evals = [];
   const load = async () => {
     try {
       evals = await api("GET", `/api/v1/decisions/${encodeURIComponent(id)}/evaluations`) || [];
       if (!evals.length) {
-        tbody.innerHTML = `<tr><td colspan="5" class="empty">
+        tbody.innerHTML = `<tr><td colspan="6" class="empty">
           This decision has not been evaluated yet. Start a process instance whose
           business rule task calls it.</td></tr>`;
         return;
@@ -6547,7 +8089,7 @@ async function viewDecisionDetail(id) {
       tbody.innerHTML = evals.map((r, i) => {
         const ins = r.inputs && typeof r.inputs === "object" ? Object.entries(r.inputs) : [];
         const pills = ins.length
-          ? `<div class="in-pills">${ins.map(([k, v]) => `<span class="pill-kv"><b>${esc(k)}</b> = ${esc(fmtVal(v))}</span>`).join("")}</div>`
+          ? `<div class="in-pills">${ins.map(([k, v]) => `<span class="pill-kv"><b>${esc(k)}</b> = ${esc(traceValue(v))}</span>`).join("")}</div>`
           : '<span class="muted">—</span>';
         const outs = r.outputs && typeof r.outputs === "object" ? Object.entries(r.outputs) : [];
         const nums = matchedNums(r);
@@ -6557,20 +8099,27 @@ async function viewDecisionDetail(id) {
           ? `<div class="res">${outs.map(([k, v], oi) =>
               `<div class="res-row${hoverable}" data-ev="${i}"${hoverable ? ' tabindex="0"' : ""}>
                 <span class="res-key">${esc(k)}</span>
-                <span class="res-val">${esc(fmtVal(v))}</span>
+                <span class="res-val">${esc(traceValue(v))}</span>
                 ${oi === 0 ? badge : ""}
               </div>`).join("")}</div>`
           : '<span class="muted">—</span>';
+        // The same door the replay's decision cards carry: the decision's graph with
+        // this case drawn on it. data-decat is the server's exact decimal string, not
+        // r.at — a nanosecond timestamp is past what a browser holds in a number, so
+        // the parsed value is rounded and would address an evaluation that does not
+        // exist (decision-graph.js).
         return `<tr>
           <td class="muted" data-sort="${r.at || 0}">${esc(fmtNano(r.at))}</td>
           <td><a href="#/operations/i/${r.instanceKey}" title="Replay this instance step by step">&#9654; ${r.instanceKey}</a></td>
-          <td class="muted">${esc(r.elementId || "—")}</td>
+          <td class="muted">${esc(r.elementId || "—")}${r.decisionVersion ? ` <span class="res-rule" title="The deployed version that answered">v${esc(String(r.decisionVersion))}</span>` : ""}</td>
           <td>${pills}</td>
           <td>${result}</td>
+          <td class="row-actions"><button type="button" class="dec-open" data-decat="${esc(r.atKey || String(r.at))}"
+            title="Open this decision's requirements graph with this case drawn on it">How this was decided &rarr;</button></td>
         </tr>`;
       }).join("");
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
 
@@ -6589,6 +8138,19 @@ async function viewDecisionDetail(id) {
     pop.style.top = (top < 8 ? box.bottom + 10 : top) + "px";
   };
   const hidePop = () => { pop.hidden = true; };
+  // Opening the graph is the deliberate half of the same question the hover answers
+  // in passing, and it is the one that survives being read by somebody else.
+  tbody.addEventListener("click", (e) => {
+    const btn = e.target.closest(".dec-open");
+    if (!btn || !tbody.contains(btn)) return;
+    const r = evals.find((x) => String(x.atKey || x.at) === btn.dataset.decat);
+    if (!r) return;
+    hidePop();
+    openDecisionGraph({
+      api, instanceKey: r.instanceKey, at: r.atKey || r.at,
+      decisionId: id, taskLabel: r.elementId || "",
+    });
+  });
   tbody.addEventListener("pointerover", (e) => {
     const row = e.target.closest(".res-row.hoverable");
     if (row && tbody.contains(row)) showPop(row);
@@ -6600,8 +8162,8 @@ async function viewDecisionDetail(id) {
   tbody.addEventListener("focusin", (e) => { const row = e.target.closest(".res-row.hoverable"); if (row) showPop(row); });
   tbody.addEventListener("focusout", hidePop);
 
-  document.getElementById("refresh").addEventListener("click", load);
-  await load();
+  document.getElementById("refresh").addEventListener("click", () => { load(); loadVersions(); });
+  await Promise.all([load(), loadVersions()]);
 }
 
 // ---------- Tasks (Outlook-style inbox, ADR-0028) ----------
@@ -6624,6 +8186,14 @@ function taskOrder(a, b) {
   const pa = taskPriority(a), pb = taskPriority(b);
   if (pa !== pb) return pb - pa; // higher priority first
   return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+}
+
+// openedLabel is when a task was opened as a short date and time, or "" when the
+// server did not say. It is shown on the row and is part of what the filter
+// searches, so "28.9." finds the tasks opened that day.
+function openedLabel(t) {
+  if (!t || !t.createdAt) return "";
+  return new Date(t.createdAt).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
 }
 
 // dueInfo turns a task's Unix-ms due date into a short relative label and an
@@ -6670,18 +8240,58 @@ function formRefusalMessage(form, errors) {
   return msg;
 }
 
+// wizardHistory remembers, per sitting of a wizard (ADR-0449), the titles of the screens
+// this tab has submitted, so a step can show where the person has come from. It is this
+// tab's memory and nothing more: a sitting continued in another tab starts its list
+// there, which is why a step says "Step n" and never "n of m" — the branches between the
+// screens make the total unknowable anyway.
+const wizardHistory = {
+  key: (scope) => "atlas.wizard." + scope,
+  get(scope) {
+    try { return JSON.parse(sessionStorage.getItem(this.key(scope)) || "[]"); } catch { return []; }
+  },
+  add(scope, title) {
+    try {
+      const list = this.get(scope);
+      list.push(title);
+      sessionStorage.setItem(this.key(scope), JSON.stringify(list.slice(-20)));
+    } catch { /* storage unavailable: the step shows no history */ }
+  },
+  clear(scope) {
+    try { sessionStorage.removeItem(this.key(scope)); } catch { /* storage unavailable */ }
+  },
+};
+
+// WIZARD_WAIT_DELAYS is how long the Tasks app waits before each look for a sitting's
+// next screen when a worker or a timer stands between two (ADR-0449): soon at first,
+// then less often, for about two minutes in all.
+const WIZARD_WAIT_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 60000];
+
 async function viewTasks(preselectKey) {
   // With auth on, identity is the signed-in user (server-authoritative); with auth
   // off it stays a typed, display-only identity (ADR-0045).
   const authOn = AUTH.enabled;
   const state = {
     tasks: [],
+    // wizardWait is set while the pane waits for a wizard's next screen (ADR-0449,
+    // waitForWizard): { scopeKey, gaveUp }. Null otherwise.
+    wizardWait: null,
     // filtered holds the page of a saved folder, kept apart from tasks above rather
-    // than replacing it: the built-in folders count from the unfiltered page, and
-    // overwriting it with a folder's three rows would make "All tasks" read 3.
+    // than replacing it: "All tasks" is the unfiltered page, and overwriting it with a
+    // folder's three rows would make the list read 3 wherever the operator went next.
     filtered: null,
     folders: [], // the saved folders this identity can see
     folderCounts: {}, // folder id -> open tasks, from the server's single scan
+    // The fixed folders' badges as the server counted them, over the whole open-task
+    // population. Null until that scan answers, and an em dash on screen while it is
+    // null, because a zero is a claim and "not counted yet" is not that claim.
+    //
+    // Only needed while the page below is capped: an uncapped page *is* the inbox, so
+    // counting its rows is counting the population. Capped, it is a newest-first slice,
+    // and counting that made each badge the size of the slice — a task assigned to me
+    // and sitting past it left "Assigned to me" reading 0
+    // (ADR-0365).
+    builtinCounts: null,
     countsTruncated: false, // the counting scan hit its budget, so the badges are floors
     countsScanned: 0, // how many open tasks that scan looked at
     // A deep link (…/tasks/t/{jobKey}, e.g. from the Operations live view) lands on
@@ -6700,6 +8310,16 @@ async function viewTasks(preselectKey) {
     picked: new Set(), // job keys ticked for a bulk action
     truncated: false, // the server returned a capped page (more tasks exist)
     nextCursor: null, // job key to pass as ?before= for the next (older) page
+    // Which of these rows decide an order, as job key -> {orderId, itemId}.
+    //
+    // An approval is an ordinary user task and the list does not filter those out,
+    // so they were already here — rendered like every other row, saying nothing
+    // about the product, the price or the person waiting. This is the inbox
+    // learning which of its own rows those are.
+    approvals: new Map(),
+    // The principals directory as id → name, so a task can be found by the name of
+    // the person it is about while it only holds their id (see matchesQuery).
+    names: new Map(),
   };
 
   // SORTS are the orderings the toolbar offers over the visible tasks. "smart" is
@@ -6735,7 +8355,7 @@ async function viewTasks(preselectKey) {
         <div class="tasks-toolbar">
           <span class="tasks-search">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
-            <input id="task-q" type="text" placeholder="Filter tasks…" aria-label="Filter tasks" spellcheck="false"/>
+            <input id="task-q" type="text" placeholder="${esc(tr("tasks.filter"))}" aria-label="Filter tasks" spellcheck="false"/>
           </span>
           <label class="tasks-sort">Sort
             <select id="task-sort">${Object.entries(SORTS).map(([k, s]) => `<option value="${k}"${k === state.sort ? " selected" : ""}>${esc(s.label)}</option>`).join("")}</select>
@@ -6789,9 +8409,27 @@ async function viewTasks(preselectKey) {
   })();
 
   // visible applies the folder, then the free-text query, then the chosen sort.
-  const matchesQuery = (t, q) =>
-    (taskTitle(t) + " " + (t.processId || "") + " " + (t.assignee || "") + " " +
-      (t.candidateGroups || "") + " " + (t.elementId || "")).toLowerCase().includes(q);
+  //
+  // The query reads what a task is about as well as what it is called: the values
+  // of its form's fields (the list asks for them with ?content=1), each id among them also
+  // under the name of the person it is, and the product an approval decides. A task
+  // "for Patrick Blumer" holds his id, never his name; without the directory the
+  // search for the name a person knows would find nothing. Every word of the query
+  // has to match somewhere, so "blumer macbook" narrows rather than widens.
+  const taskHaystack = (t) => {
+    const ap = state.approvals.get(t.key);
+    const content = (t.content || []).map((v) => {
+      const name = state.names.get(v);
+      return name ? v + " " + name : v;
+    });
+    return [taskTitle(t), t.processId, t.assignee, t.candidateGroups, t.elementId,
+      t.assignee && state.names.get(t.assignee), ap && approvalName(ap), openedLabel(t),
+      ...content].filter(Boolean).join(" ").toLowerCase();
+  };
+  const matchesQuery = (t, q) => {
+    const hay = taskHaystack(t);
+    return q.split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
+  };
   const visible = () => {
     const q = state.query.trim().toLowerCase();
     // A saved folder's rows were selected by the server, so the only thing left to
@@ -6830,8 +8468,20 @@ async function viewTasks(preselectKey) {
   }
 
   function renderFolders() {
+    // Where the badge comes from follows what is loaded. An uncapped page holds every
+    // open task, so counting its rows is exact and free; a capped one does not, and the
+    // number then has to come from the server's own walk. The predicates live in
+    // TASK_FOLDERS because this view filters its rows with them, and the server counts
+    // with the same four (taskfolder.BuiltinFolders) so the two readings cannot say
+    // different things (ADR-0365).
+    const builtinCount = (f) => {
+      if (!state.truncated) return state.tasks.filter((t) => f.match(t, state.me)).length;
+      return state.builtinCounts && Object.prototype.hasOwnProperty.call(state.builtinCounts, f.id)
+        ? state.builtinCounts[f.id]
+        : null;
+    };
     const builtin = TASK_FOLDERS.map((f) =>
-      folderButton(f.id, f.label, state.tasks.filter((t) => f.match(t, state.me)).length, false)).join("");
+      folderButton(f.id, f.label, builtinCount(f), false)).join("");
     // A folder is "mine" when I may edit it, which is exactly when I own it. One
     // shared with me sits under Geteilt: I work from it, I do not rewrite it.
     const mine = state.folders.filter((f) => f.editable);
@@ -6928,15 +8578,43 @@ async function viewTasks(preselectKey) {
         // with its full path (see renderDetail), where it was already more useful
         // than a truncated leaf name here.
         const id = `<span class="tasks-item-id" title="Job-Key ${t.key}">#${t.key}</span>`;
+        // When the task was opened, on the row, so a queue can be read by age without
+        // opening each task. Absent for a task the server has no time for.
+        const opened = t.createdAt
+          ? `<span class="tasks-item-opened" title="${esc(tr("tasks.opened") + " " + new Date(t.createdAt).toLocaleString())}">${esc(openedLabel(t))}</span>`
+          : "";
+        // A row that decides an order says so, and says where it is decided.
+        //
+        // It linked nowhere and was labelled nothing: the same decision also sat
+        // behind a menu entry of its own, and neither place said it was the same
+        // thing. The link names the **order line** rather than this task, because
+        // that is what the approvals page takes and it takes it for a reason of its
+        // own — a task key does not exist until the task activates, while the order
+        // and the product do, and they survive a reassignment that changes the key.
+        // Marked as what it is, and no longer a link: the decision is in this screen,
+        // and a chip that opened a second surface to take it was the drift this
+        // change removed.
+        const ap = state.approvals.get(t.key);
+        const approval = ap
+          ? `<span class="chip approval" title="This task decides an order line">Approval</span>`
+          : "";
+        // And what it decides, on the row itself. Every approval task in an inbox is
+        // called "Genehmigen", so the rows were distinguishable only by their job key:
+        // a queue of fourteen identical lines, each of which had to be opened to learn
+        // which product and whose order it was.
+        const apprLine = ap
+          ? `<span class="tasks-item-appr">${esc(approvalName(ap))}${ap.price ? ` · ${esc(ap.price)}` : ""}</span>`
+          : "";
         return `<li class="tasks-item${sel}${picked ? " picked" : ""}" data-key="${t.key}">
           ${cb}
           <div class="tasks-item-body">
             <div class="tasks-item-top">
               <span class="tasks-item-title">${hi}${esc(taskTitle(t))}</span>
+              ${approval}
               <span class="chip" title="${esc(t.processId || "")}">${esc(t.processId || "")}</span>
             </div>
             <div class="tasks-item-sub muted">
-              <span class="tasks-item-meta">${id}<span>${who}</span></span>${due}
+              <span class="tasks-item-meta">${id}${opened}<span>${who}</span>${apprLine}</span>${due}
             </div>
           </div>
         </li>`;
@@ -6947,6 +8625,7 @@ async function viewTasks(preselectKey) {
         const key = Number(li.dataset.key);
         if (state.selectMode) { togglePick(key, li); return; }
         state.selected = key;
+        state.wizardWait = null; // picking a task ends a wait for a wizard's next screen
         renderList();
         renderDetail();
       });
@@ -7044,23 +8723,80 @@ async function viewTasks(preselectKey) {
     await load();
   }
 
+  // wizardBlock marks a step of a wizard (ADR-0449) with its number in this tab's walk
+  // through the sitting and the screens before it; a task in no wizard has none.
+  function wizardBlock(t) {
+    if (!t.wizardScopeKey) return "";
+    const past = wizardHistory.get(t.wizardScopeKey);
+    const before = past.length ? `<p class="muted">Before: ${past.map((x) => esc(x)).join(" &rarr; ")}</p>` : "";
+    return `<div class="tasks-wizard"><h2>Step ${past.length + 1} of a multi-step form</h2>${before}</div>`;
+  }
+
   // completeCurrent completes the selected task, then lands on the task that slides
   // into its place (auto-advance), so an operator can clear a queue without
   // reaching for the mouse between tasks. Bound to the button and Ctrl/⌘+Enter.
   async function completeCurrent() {
     const t = state.tasks.find((x) => x.key === state.selected);
     if (!t) return;
+    if (decidedHere(t)) {
+      // The same act by keyboard, and the same reason it has no button: completing an
+      // approval with no variables is a rejection with no reason, written as if
+      // somebody had meant it.
+      toast("Use Approve or Reject above: this approval decides an order line", "err");
+      return;
+    }
     let payload;
     if (state.mountedForm) {
       const { data, errors } = state.mountedForm.submit();
       if (errors && Object.keys(errors).length > 0) { refuseIncompleteForm(errors, t); return; }
       // A file field (form-js filepicker) holds the picked File client-side, not its
-      // bytes — so read the selected file as text and submit it as the `csvText`
-      // variable a CSV-import service task parses (ADR-0087). This keeps the upload a
-      // normal user-task step rather than a side-channel endpoint.
+      // bytes, so completing the task has to do something with it. There are two
+      // answers and the task's own variables choose between them.
       const fileInput = document.querySelector("#task-form input[type=file]");
-      if (fileInput && fileInput.files && fileInput.files.length) {
-        try { data.csvText = await fileInput.files[0].text(); }
+      const picked = fileInput && fileInput.files && fileInput.files.length ? fileInput.files[0] : null;
+      // logoKatalog names the catalogue a picked image is the brand mark of. Where
+      // it is set, the image goes straight to that catalogue's logo endpoint and
+      // never becomes a process variable.
+      //
+      // # Why not carry the bytes through the process
+      //
+      // Because engine/budget.go says what that costs, in the comment on
+      // DefaultMaxVariable: past a megabyte "it is a document, and a document in a
+      // token's scope is rewritten into the log on every touch". A logo is capped at
+      // half a megabyte, which is about 683 KB once base64 has grown it — under the
+      // ceiling and rewritten into the write-ahead log at every step the process
+      // takes afterwards, for ever. ADR-0316 already refused to put these same bytes
+      // in the catalogue *record* for a weaker version of the same reason.
+      //
+      // # Why this is not a side channel
+      //
+      // It is the endpoint the Console's own catalogue screen uses, called by the
+      // same browser with the same credentials, and it applies its own rules: PNG or
+      // SVG, half a megabyte, and an administrator. The task that carries this field
+      // is assigned to administrators for exactly that reason, so nothing here grants
+      // anybody anything they did not already have.
+      //
+      // # Why the model names a catalogue and not a URL
+      //
+      // A URL would let a model make whoever completes a task issue any request it
+      // liked, as them. A catalogue id can only ever mean "put this logo on that
+      // catalogue", and the endpoint still decides whether they may.
+      const logoKatalog = (state.formVars || {}).logoKatalog;
+      if (picked && logoKatalog) {
+        try {
+          await apiBytes("PUT", "/api/v1/catalogs/" + encodeURIComponent(logoKatalog) + "/logo", picked);
+        } catch (err) {
+          // Before the completion and not after: a task that finished while its logo
+          // did not is a process that believes the catalogue is branded. Stopping
+          // here leaves the task where it is, with the file still picked.
+          toast("Logo konnte nicht hochgeladen werden: " + err.message, "err");
+          return;
+        }
+      } else if (picked) {
+        // The other answer, unchanged: read the file as text and submit it as the
+        // `csvText` variable a CSV-import service task parses (ADR-0087). This keeps
+        // that upload a normal user-task step rather than a side-channel endpoint.
+        try { data.csvText = await picked.text(); }
         catch (err) { toast(tr("tasks.complete.fileUnreadable", { error: err.message }), "err"); return; }
       }
       payload = { variables: data };
@@ -7069,7 +8805,7 @@ async function viewTasks(preselectKey) {
     if (btn) btn.disabled = true;
     const idx = visible().findIndex((x) => x.key === t.key); // the slot to land back on
     try {
-      await api("POST", "/api/v1/tasks/" + t.key + "/complete", payload);
+      const res = await api("POST", "/api/v1/tasks/" + t.key + "/complete", payload);
       toast("Task completed");
       // Reload through load(), not a bare GET: the page is capped, and its truncation
       // flag and cursor ride the response *headers*. Re-reading only the body left both
@@ -7080,6 +8816,12 @@ async function viewTasks(preselectKey) {
       // that out. The slot it occupied is re-selected below.
       state.selected = null;
       await load();
+      // A step of a wizard lands on the sitting's next screen rather than on the next
+      // slot of the queue (ADR-0449).
+      if (res && res.wizard && followWizard(res.wizard, t)) {
+        renderAll();
+        return;
+      }
       const after = visible();
       state.selected = after.length ? after[Math.min(Math.max(idx, 0), after.length - 1)].key : null;
       renderAll();
@@ -7107,6 +8849,76 @@ async function viewTasks(preselectKey) {
     scrollToFirstInvalidField("task-form");
   }
 
+  // followWizard carries the person on through a wizard (ADR-0449). It records the
+  // screen just submitted, and selects the sitting's next screen when the server has
+  // claimed one for them, or holds the pane while the sitting waits on a worker or a
+  // timer. It reports whether it chose the selection; when it did not, the queue's
+  // auto-advance does.
+  function followWizard(wz, done) {
+    wizardHistory.add(wz.scopeKey, taskTitle(done));
+    switch (wz.state) {
+      case "step":
+        if (!wz.task) return false;
+        if (!state.tasks.some((x) => x.key === wz.task.key)) state.tasks.push(wz.task);
+        state.selected = wz.task.key;
+        return true;
+      case "pending":
+        waitForWizard(wz);
+        return true;
+      case "handedOver":
+        wizardHistory.clear(wz.scopeKey);
+        toast("The next step of this form is with somebody else");
+        return false;
+      case "done":
+        wizardHistory.clear(wz.scopeKey);
+        toast("All steps of this form are done");
+        return false;
+      default:
+        return false;
+    }
+  }
+
+  // waitForWizard holds the pane on a sitting that has nothing open, and looks again,
+  // less often each time (WIZARD_WAIT_DELAYS), for its next screen among the tasks this
+  // person may see. A screen nobody holds is claimed for them, as the server does when
+  // it can answer at once. It stops when the person picks another task or leaves the
+  // view, and after the last delay it says where the screen will turn up instead.
+  function waitForWizard(wz) {
+    const gen = navGen;
+    const wait = { scopeKey: wz.scopeKey, gaveUp: false };
+    state.wizardWait = wait;
+    state.selected = null;
+    let attempt = 0;
+    const tick = async () => {
+      if (superseded(gen) || state.wizardWait !== wait) return;
+      let page = null;
+      try { page = await api("GET", "/api/v1/tasks?processInstance=" + wz.processInstanceKey); } catch { /* look again */ }
+      if (superseded(gen) || state.wizardWait !== wait) return;
+      const next = ((page && page.items) || []).find((x) => x.wizardScopeKey === wz.scopeKey);
+      if (next) {
+        if (!next.assignee && authOn) {
+          try {
+            await api("POST", "/api/v1/tasks/" + next.key + "/claim");
+            next.assignee = state.me;
+          } catch { /* taken meanwhile: it opens as whoever holds it now */ }
+          if (superseded(gen) || state.wizardWait !== wait) return;
+        }
+        state.wizardWait = null;
+        if (!state.tasks.some((x) => x.key === next.key)) state.tasks.push(next);
+        state.selected = next.key;
+        renderAll();
+        return;
+      }
+      if (attempt >= WIZARD_WAIT_DELAYS.length) {
+        wait.gaveUp = true;
+        renderDetail();
+        return;
+      }
+      setTimeout(tick, WIZARD_WAIT_DELAYS[attempt++]);
+    };
+    setTimeout(tick, WIZARD_WAIT_DELAYS[attempt++]);
+  }
+
   // destroyForm tears down the live form-js instance (if any) before the detail
   // pane is re-rendered or the selection changes, so no viewer leaks.
   function destroyForm() {
@@ -7114,6 +8926,51 @@ async function viewTasks(preselectKey) {
       try { state.mountedForm.destroy(); } catch { /* already gone */ }
       state.mountedForm = null;
     }
+    // And the variables it was filled from, so the two have one lifetime. This is
+    // hygiene rather than a fix: nothing reads them without a mounted form, and a
+    // mount always sets them, so a stale value cannot currently be reached. Kept
+    // because the day they are read from somewhere else is the day that stops
+    // being true, and the failure then is somebody's logo on another catalogue.
+    state.formVars = null;
+  }
+
+  // withPeopleNamed hands a form the people of an approval by name, beside their
+  // ids, for display: the shipped approval form's heading says for whom, and an id
+  // there is a key the approver would have to look up. The names are not form
+  // fields, so completing the form never writes them into the process — the order
+  // and the process keep ids (ADR-0314).
+  //
+  // A task that is not an approval — a provisioning step — carries the same two ids
+  // and was shown them raw. For those the names come from the principals directory
+  // (`names`, id → display name), so a form can say for whom without the process
+  // ever holding a name.
+  function withPeopleNamed(data, approval, names) {
+    const out = { ...data };
+    if (approval && approval.recipientName && out.recipientName == null) out.recipientName = approval.recipientName;
+    if (approval && approval.ordererName && out.ordererName == null) out.ordererName = approval.ordererName;
+    if (names) {
+      if (out.recipientName == null && typeof out.recipient === "string" && names.has(out.recipient)) {
+        out.recipientName = names.get(out.recipient);
+      }
+      if (out.ordererName == null && typeof out.orderer === "string" && names.has(out.orderer)) {
+        out.ordererName = names.get(out.orderer);
+      }
+    }
+    return out;
+  }
+
+  // peopleNames is the principals directory as id → display name, read once and
+  // shared by every form this page mounts. Any signed-in caller may read it
+  // (ADR-0073). A failed read answers with no names — the form then shows the ids
+  // it always showed — and is retried on the next mount rather than remembered.
+  let peopleNamesLoad = null;
+  function peopleNames() {
+    if (!peopleNamesLoad) {
+      peopleNamesLoad = api("GET", "/api/v1/principals")
+        .then((dir) => new Map((dir || []).map((p) => [p.id, p.name || p.id])))
+        .catch(() => { peopleNamesLoad = null; return new Map(); });
+    }
+    return peopleNamesLoad;
   }
 
   // mountForm loads the vendored form-js viewer, the task's bound form schema,
@@ -7124,7 +8981,7 @@ async function viewTasks(preselectKey) {
     const host = document.getElementById("task-form");
     if (!host) return;
     try {
-      const [{ Form }, def, data] = await Promise.all([
+      const [{ Form }, def, data, names] = await Promise.all([
         loadFormViewer(),
         api("GET", "/api/v1/forms/" + encodeURIComponent(t.formId)),
         // Prefill from the task's own element-instance scope — where its input-mapped
@@ -7133,13 +8990,19 @@ async function viewTasks(preselectKey) {
         // process instance when a task carries no element-instance key. A failed read
         // just yields a blank form rather than blocking the task.
         api("GET", "/api/v1/instances/" + (t.elementInstanceKey || t.processInstanceKey) + "/variables").catch(() => ({})),
+        peopleNames(),
       ]);
       if (state.selected !== t.key) return; // selection moved on; drop this mount
       host.innerHTML = "";
       const form = new Form({ container: host });
-      await form.importSchema(def.schema, data || {});
+      await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
+      // The variables the form was filled from, kept beside it. Completing the task
+      // needs one the form does not render — which catalogue a picked logo belongs
+      // to — and reading it back off the submitted data would only find the fields
+      // somebody can see and edit.
+      state.formVars = data || {};
     } catch (err) {
       host.innerHTML = `<p class="muted err">Failed to load form: ${esc(err.message)}</p>`;
     }
@@ -7208,12 +9071,233 @@ async function viewTasks(preselectKey) {
       .join("")}</tbody></table>`;
   }
 
+  // --- An approval, decided here ---------------------------------------------
+  //
+  // An approval is an ordinary user task and the inbox never filtered those out, so
+  // the rows were already here — saying nothing about the product, the price or the
+  // person waiting, and decided by opening a second surface in another tab. This is
+  // the inbox reading its own rows (#1029).
+  //
+  // The separate page stays: it is what an approval notification links to, and
+  // somebody arriving from a mail has no inbox to arrive in.
+
+  // APPROVAL_FORM is the form the three approval models Atlas ships all carry. It is
+  // what makes the two buttons below answerable: `genehmigt` and `begruendung` are
+  // that form's contract, not a general one. An installation binds a product to its
+  // own model by name (order.Line.ApprovalProcess), and that model's form may be
+  // asking for something else entirely — so it keeps its form and this block says
+  // only what is being decided.
+  const APPROVAL_FORM = "genehmigung";
+
+  // openLinkedApproval selects the approval a notification's link names.
+  //
+  // The mail names the **order line** and not the task, and deliberately: a task key
+  // does not exist until the task activates, while the order and the product do, and
+  // they survive a reassignment that changes the key. So the line is resolved against
+  // the approvals this person holds — by position first, then by product, which is
+  // what every link sent before a product could be ordered twice carries.
+  //
+  // Once. A link is an arrival, not a filter: re-selecting it after every reload
+  // would drag the person back to it each time they decided something else.
+  let linkOpened = false;
+  function openLinkedApproval() {
+    if (linkOpened) return;
+    linkOpened = true;
+    const q = new URLSearchParams((location.hash.split("?")[1] || ""));
+    const order = q.get("order");
+    const item = q.get("item");
+    if (!order || !item) return;
+    for (const [key, a] of state.approvals) {
+      if (a.orderId === order && (a.positionId === item || a.itemId === item)) {
+        state.selected = key;
+        return;
+      }
+    }
+    // Not held. The ordinary reason is that somebody else decided it, or that it was
+    // withdrawn — so the inbox opens anyway and says why the approval that was linked
+    // is not in front of them. A blank screen would read as the link being broken.
+    toast("That approval is not in your inbox: it may already be decided", "err");
+  }
+
+  // decidedHere reports whether this task is an approval this screen answers itself.
+  //
+  // It is the shipped model and nothing else: `genehmigt` and `begruendung` are that
+  // form's contract. Where it holds, the block below is the *only* way to answer in
+  // this screen — the generic Complete button and the form's own checkbox answer the
+  // same question by accident, and a task completed with no variables reads as
+  // `genehmigt = null`, which is not true, which is a rejection with no reason.
+  const decidedHere = (t) => !!t && state.approvals.has(t.key) && t.formId === APPROVAL_FORM;
+
+  // inLanguage is the entry one language selects out of a map keyed by language
+  // tags — **by the language and not by the whole tag**.
+  //
+  // A catalogue declares the tags its texts are keyed by, and `de-DE`, `fr-CH` and
+  // `pt-BR` are as correct as `de`, `fr` and `pt`. A reader's language is a
+  // language: `navigator.language` narrowed to its first subtag, because that is
+  // what the two lists below are written in. Matching whole tags, a catalogue kept
+  // in de-DE and fr-FR answers every lookup with nothing and the row falls through
+  // to whichever text the release happened to list first — the product named in a
+  // language the approver did not ask for, with nothing saying so.
+  //
+  // The same correction the shop carries (ADR-0413, as amended). It is here
+  // separately because this is a second surface reading the same maps, and the
+  // first fix did not reach it.
+  function inLanguage(texts, base) {
+    if (texts[base]) return texts[base];
+    for (const tag of Object.keys(texts)) {
+      if (texts[tag] && String(tag).toLowerCase().split("-")[0] === base) return texts[tag];
+    }
+    return "";
+  }
+
+  // readerLanguages is what this reader has a chance with, best first: their own,
+  // then the two the Console itself is written in.
+  const readerLanguages = () => [(navigator.language || "en").slice(0, 2), "en", "de"];
+
+  // approvalName is the product as the catalogue wrote it, in a language this reader
+  // has a chance with, falling back to the id. The Console is English and a catalogue
+  // need not be, so "the first text there is" beats showing an id.
+  function approvalName(a) {
+    const texts = a.texts || {};
+    for (const base of readerLanguages()) {
+      const said = inLanguage(texts, base);
+      if (said) return said;
+    }
+    const first = Object.values(texts).find((v) => v);
+    return first || a.itemId || "—";
+  }
+
+  // approvalCatalogue is the catalogue the order came from, in a language this reader
+  // has a chance with. Empty where the release's catalogue is gone, which is the one
+  // case the row is simply left out.
+  function approvalCatalogue(a) {
+    const texts = a.catalogTexts || {};
+    for (const base of readerLanguages()) {
+      const said = inLanguage(texts, base);
+      if (said) return said;
+    }
+    return Object.values(texts).find((v) => v) || "";
+  }
+
+  // approvalSiblings are the other approvals of the same order this person holds.
+  // One decision with one reason covers them, which is what /approvals/decide is for
+  // — and it refuses keys from more than one order, because one reason cannot cover
+  // two requests.
+  function approvalSiblings(key, orderId) {
+    const out = [];
+    for (const [k, a] of state.approvals) {
+      if (k !== key && a.orderId && a.orderId === orderId) out.push(k);
+    }
+    return out;
+  }
+
+  // approvalBlock is what the approver reads before deciding, and the decision.
+  function approvalBlock(t) {
+    const a = state.approvals.get(t.key);
+    if (!a) return "";
+    const row = (label, val) => val
+      ? `<div class="tasks-field"><span class="tasks-field-label muted">${label}</span><span>${val}</span></div>`
+      : "";
+    const others = approvalSiblings(t.key, a.orderId);
+    const decides = decidedHere(t)
+      ? `<div class="appr-decide">
+          <label class="appr-reason-label" for="appr-reason">Reason
+            <span class="muted">— required for a rejection, and read by the person who ordered</span></label>
+          <textarea id="appr-reason" rows="2" placeholder="Why this is refused"></textarea>
+          ${others.length ? `<label class="appr-together" for="appr-together">
+            <input type="checkbox" id="appr-together">
+            Decide the ${others.length} other position${others.length === 1 ? "" : "s"} of this order with it
+          </label>` : ""}
+          <div class="appr-buttons">
+            <button class="btn" id="appr-approve" title="Approve this order line">Approve</button>
+            <button class="btn neutral" id="appr-reject" title="Refuse this order line">Reject</button>
+          </div>
+        </div>`
+      : `<p class="muted">This approval runs on a model of its own, so what completing
+          it means belongs to its form below rather than to two buttons here.</p>`;
+    return `<div class="tasks-approval">
+      <h2>Approval</h2>
+      <div class="tasks-fields">
+        ${row("Product", `${esc(approvalName(a))} <span class="chip">${esc(a.itemId)}</span>`)}
+        ${row("Variant", a.variantId ? esc(a.variantId) : "")}
+        ${row("Cost", a.price ? esc(a.price) : "")}
+        ${row("For", esc(a.recipientName || a.recipient))}
+        ${row("Ordered by", esc(a.ordererName || a.orderer))}
+        ${row("Order", `<span class="chip">${esc(a.orderId)}</span>`)}
+        ${row("Catalogue", esc(approvalCatalogue(a)))}
+        ${(a.answers || []).map((x) => row(esc(x.label || x.key), esc(x.value))).join("")}
+        ${a.amended ? row("Order form", `<span class="muted">corrected after the order was placed</span>`) : ""}
+      </div>
+      ${decides}
+    </div>`;
+  }
+
+  // decideApproval sends the decision, for this line or for the order's lines
+  // together.
+  //
+  // A rejection with no reason is refused here and not sent. The server takes one
+  // either way — a reason is not a field it can require without breaking every model
+  // that completes an approval by other means — and an order line refused with no
+  // word to the person waiting is the one outcome this screen must not produce
+  // quietly.
+  async function decideApproval(t, approved) {
+    const a = state.approvals.get(t.key);
+    if (!a) return;
+    const reason = (document.getElementById("appr-reason") || {}).value || "";
+    if (!approved && !reason.trim()) {
+      toast("A rejection needs a reason: it is what the person who ordered is told", "err");
+      return;
+    }
+    const together = (document.getElementById("appr-together") || {}).checked;
+    const batch = together ? [t.key, ...approvalSiblings(t.key, a.orderId)] : [t.key];
+    for (const id of ["appr-approve", "appr-reject"]) {
+      const b = document.getElementById(id);
+      if (b) b.disabled = true;
+    }
+    try {
+      if (batch.length > 1) {
+        // Each is still its own process instance, so the server completes each as its
+        // own task and answers per line. A partial result is said rather than rounded
+        // off: a completion that went through has already handed its answer to its
+        // process.
+        const res = await api("POST", "/api/v1/approvals/decide",
+          { approved, reason: reason.trim(), taskKeys: batch });
+        const skipped = (res && res.skipped) || [];
+        toast(skipped.length
+          ? `Decided ${batch.length - skipped.length} of ${batch.length}; ${skipped.length} could not be`
+          : `Decided ${batch.length} positions`, skipped.length ? "err" : undefined);
+      } else {
+        await api("POST", "/api/v1/tasks/" + t.key + "/complete",
+          { variables: { genehmigt: approved, begruendung: reason.trim() } });
+        toast(approved ? "Approved" : "Rejected");
+      }
+      state.selected = null;
+      await load();
+    } catch (err) {
+      toast("Decision failed: " + err.message, "err");
+      for (const id of ["appr-approve", "appr-reject"]) {
+        const b = document.getElementById(id);
+        if (b) b.disabled = false;
+      }
+    }
+  }
+
   function renderDetail() {
     destroyForm();
     destroyProc();
     const t = state.tasks.find((x) => x.key === state.selected);
+    // A narrow screen shows the list or the task, not both side by side
+    // (ADR-0417); the grid says which.
+    const grid = detailEl.closest(".tasks");
+    if (grid) grid.classList.toggle("has-selection", !!t || !!state.wizardWait);
     if (!t) {
-      detailEl.innerHTML = `<div class="tasks-detail-empty muted">Select a task to see its details.</div>`;
+      // A wizard waiting on a worker or a timer between two screens (ADR-0449).
+      const w = state.wizardWait;
+      detailEl.innerHTML = w
+        ? `<div class="tasks-form-placeholder tasks-wizard-wait"><p class="muted">${w.gaveUp
+            ? "Your answers are saved. The next step of this form is taking longer than usual; it will appear in your inbox when it is ready."
+            : "Your answers are saved. Waiting for the next step of this form&hellip;"}</p></div>`
+        : `<div class="tasks-detail-empty muted">Select a task to see its details.</div>`;
       return;
     }
     const row = (label, val) =>
@@ -7232,10 +9316,13 @@ async function viewTasks(preselectKey) {
             `<option value="${esc(u.username)}"${u.username === t.assignee ? " selected" : ""}>${esc(u.displayName || u.username)}</option>`).join("")}
         </select>`
       : "";
-    const formArea = t.formId
-      ? `<div class="tasks-form" id="task-form"><p class="muted">Loading form&hellip;</p></div>`
-      : `<div class="tasks-form-placeholder"><p class="muted">This task has no form; completing it
-         records no variables.</p></div>`;
+    const formArea = decidedHere(t)
+      ? `<div class="tasks-form-placeholder"><p class="muted">This approval is answered above:
+         Approve or Reject sends the decision its model reads.</p></div>`
+      : t.formId
+        ? `<div class="tasks-form" id="task-form"><p class="muted">Loading form&hellip;</p></div>`
+        : `<div class="tasks-form-placeholder"><p class="muted">This task has no form; completing it
+           records no variables.</p></div>`;
     // The form and a read-only view of the whole process instance sit side by side
     // as tabs, so the assignee can flip to "what has run and what's still ahead"
     // without the form scrolling away below.
@@ -7271,15 +9358,18 @@ async function viewTasks(preselectKey) {
       ? `<div class="tasks-doc"><h2>What to do</h2><div class="md">${renderMarkdown(t.documentation)}</div></div>`
       : "";
     detailEl.innerHTML = `
+      <button class="btn ghost small tasks-back" id="task-back">\u2039 Back to the list</button>
       <header class="tasks-detail-head">
         <h1>${esc(taskTitle(t))}</h1>
         <div class="tasks-detail-actions">
           ${assignSelect}
           <button class="btn neutral" id="task-claim"${claimDisabled}${claimHint || ` title="${mine ? "Release this task back to the queue" : "Claim this task so it is assigned to you"}"`}>${claimLabel}</button>
-          <button class="btn" id="task-complete" title="Complete (Ctrl/⌘ + Enter)">Complete task</button>
+          ${decidedHere(t) ? "" : `<button class="btn" id="task-complete" title="Complete (Ctrl/⌘ + Enter)">Complete task</button>`}
         </div>
       </header>
+      ${wizardBlock(t)}
       ${docBlock}
+      ${approvalBlock(t)}
       <div class="tasks-fields">
         ${row("Process", esc(t.processId || "—"))}
         ${row("Element", `<span class="chip">${esc(t.elementId || "—")}</span>`)}
@@ -7287,6 +9377,7 @@ async function viewTasks(preselectKey) {
         ${row("Candidate groups", esc(t.candidateGroups || "—"))}
         ${t.lane ? row("Lane", esc((t.lanePath && t.lanePath.length > 1 ? t.lanePath : [t.lane]).join(" › "))) : ""}
         ${row("Priority", `${taskPriority(t)}${taskPriority(t) >= 70 ? ' <span class="prio-dot" title="High priority"></span>' : ""}`)}
+        ${row(tr("tasks.opened"), t.createdAt ? esc(new Date(t.createdAt).toLocaleString()) : "—")}
         ${row("Due", (() => { const d = dueInfo(t); return d ? `<span class="${d.overdue ? "due-text overdue" : "due-text"}" title="${esc(d.abs)}">${esc(d.label)} · ${esc(d.abs)}</span>` : "—"; })())}
         ${row("Instance", `<span class="chip">${t.processInstanceKey}</span>`)}
         ${row("Task key", `<span class="chip">${t.key}</span>`)}
@@ -7296,7 +9387,17 @@ async function viewTasks(preselectKey) {
         <div class="tasks-tabpane" id="pane-form"${tab === "form" ? "" : " hidden"}>${formArea}</div>
         ${procPane}
       </div>`;
-    document.getElementById("task-complete").addEventListener("click", () => completeCurrent());
+    const completeBtn = document.getElementById("task-complete");
+    if (completeBtn) completeBtn.addEventListener("click", () => completeCurrent());
+    for (const [id, approved] of [["appr-approve", true], ["appr-reject", false]]) {
+      const b = document.getElementById(id);
+      if (b) b.addEventListener("click", () => decideApproval(t, approved));
+    }
+    document.getElementById("task-back").addEventListener("click", () => {
+      state.selected = null;
+      renderList();
+      renderDetail();
+    });
     document.getElementById("task-claim").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
       btn.disabled = true;
@@ -7334,7 +9435,7 @@ async function viewTasks(preselectKey) {
     // Always mount the form (when the task has one) so Complete has its data even
     // while the Process tab is showing. The process diagram mounts lazily the first
     // time its tab is opened; the chosen tab is kept across task selections.
-    if (t.formId) mountForm(t);
+    if (t.formId && !decidedHere(t)) mountForm(t);
     const dtabs = document.getElementById("task-dtabs");
     dtabs.addEventListener("click", (e) => {
       const b = e.target.closest("button[data-dtab]");
@@ -7392,12 +9493,16 @@ async function viewTasks(preselectKey) {
 
   async function load() {
     try {
-      // The list is capped and newest-first; a capped page flags X-Tasks-Truncated and
-      // hands back X-Tasks-Next-Cursor for paging to older tasks (see loadOlder).
-      const { data, headers } = await apiRaw("GET", "/api/v1/tasks");
-      state.tasks = data;
-      state.truncated = headers.get("X-Tasks-Truncated") === "true";
-      state.nextCursor = headers.get("X-Tasks-Next-Cursor") || null;
+      // The list is capped and newest-first; the response says so in `truncated` and
+      // hands back `nextCursor` for paging to older tasks (see loadOlder). Reading it
+      // off the body rather than a header is the point: a header is a thing a caller
+      // has to know to ask for, and this one went unread for years
+      // (ADR-0378).
+      const [page, names] = await Promise.all([api("GET", "/api/v1/tasks?content=1"), peopleNames()]);
+      state.names = names;
+      state.tasks = (page && page.items) || [];
+      state.truncated = !!(page && page.truncated);
+      state.nextCursor = (page && page.nextCursor) || null;
       // A deep-linked task (…/tasks/t/{key}, e.g. from the Operations live view) can
       // sit outside the capped task-list page during a flood. Rather than silently
       // dropping the selection — which left the form unreachable — fetch that one task
@@ -7411,6 +9516,10 @@ async function viewTasks(preselectKey) {
         }
       }
       state.tasks.sort(taskOrder);
+      // Before the first paint, so a row is never drawn unmarked and then relabelled
+      // under somebody's eyes.
+      await loadApprovalKeys();
+      openLinkedApproval();
       renderAll();
       // Every mutation in this view (complete, claim, a bulk action) reloads through
       // here. When a saved folder is open, its page and the sidebar badges are part
@@ -7418,9 +9527,64 @@ async function viewTasks(preselectKey) {
       // it was completed from, because the unfiltered page above is not the list on
       // screen.
       if (savedFolder()) await loadFolderPage();
-      if (state.folders.length) await refreshCounts();
+      // The scan is paid when something on screen needs it: a saved folder's badge
+      // always, a fixed folder's badge only once the page it would otherwise be
+      // counted from stops holding the whole inbox. Measured at ~6 000 open tasks it is
+      // ~100ms against the ~2ms the page itself costs, which is not a price to put on
+      // every inbox load for a number the page can already answer exactly.
+      if (state.folders.length || state.truncated) await refreshCounts();
     } catch (e) {
       listEl.innerHTML = `<li class="tasks-empty err">Failed to load tasks: ${esc(e.message)}</li>`;
+    }
+  }
+
+  // loadApprovalKeys asks which of the open tasks decide an order.
+  //
+  // Keyed by job key, which both lists carry: /api/v1/tasks returns it as `key`, and
+  // /api/v1/approvals returns the same task object inside each entry. So the two are
+  // joined on the page without the server changing.
+  //
+  // Guarded, and that is not defensive habit. This is an addition to a screen that
+  // worked without it: a reader who holds no approvals, a route that answers
+  // unexpectedly, a server mid-restart — none of that is the inbox failing, and none
+  // of it may take the inbox down. A failure leaves the map empty and every row
+  // renders exactly as it did before.
+  async function loadApprovalKeys() {
+    // An approval decides an order, and a server without a catalogue takes none.
+    if (!FEATURES.catalogue) { state.approvals = new Map(); return; }
+    try {
+      const page = await api("GET", "/api/v1/approvals");
+      const next = new Map();
+      for (const a of (page && page.items) || []) {
+        if (a && a.task && a.task.key != null) {
+          // What the route already answers with, kept whole rather than reduced to
+          // the two ids the chip's link needs. The row is no longer only marked as an
+          // approval — it says what it decides, and every field of that sentence is in
+          // this response already (ADR-0311's one call).
+          next.set(a.task.key, {
+            orderId: a.orderId || "", itemId: a.itemId || "",
+            positionId: a.positionId || "", variantId: a.variantId || "",
+            recipient: a.recipient || "", orderer: a.orderer || "",
+            // The two people by name, as the server resolved them when it read the
+            // approval. The ids stay beside them: the form of the task may still
+            // read one, and a name is only for the reader.
+            recipientName: a.recipientName || "", ordererName: a.ordererName || "",
+            price: a.price || "", texts: a.texts || {},
+            // Which customer's catalogue this order came from. The page this replaced
+            // said it in the catalogue's own colours; the Console is Atlas's own
+            // surface and wears nobody's brand, so it says it in words instead — an
+            // approver deciding for two customers needs to know which one this is.
+            catalogTexts: a.catalogTexts || {},
+            // What the orderer answered on the product's form, read from the order,
+            // and whether it was corrected since
+            // (ADR-0441).
+            answers: Array.isArray(a.answers) ? a.answers : [], amended: !!a.amended,
+          });
+        }
+      }
+      state.approvals = next;
+    } catch {
+      state.approvals = new Map();
     }
   }
 
@@ -7434,14 +9598,14 @@ async function viewTasks(preselectKey) {
     // under its name.
     const saved = savedFolder();
     const into = saved ? (state.filtered || (state.filtered = [])) : state.tasks;
-    const q = "/api/v1/tasks?before=" + encodeURIComponent(state.nextCursor) +
+    const q = "/api/v1/tasks?content=1&before=" + encodeURIComponent(state.nextCursor) +
       (saved ? "&folder=" + encodeURIComponent(saved.id) : "");
     try {
-      const { data, headers } = await apiRaw("GET", q);
+      const page = await api("GET", q);
       const seen = new Set(into.map((t) => t.key));
-      for (const t of data) if (!seen.has(t.key)) into.push(t);
-      state.truncated = headers.get("X-Tasks-Truncated") === "true";
-      state.nextCursor = headers.get("X-Tasks-Next-Cursor") || null;
+      for (const t of (page && page.items) || []) if (!seen.has(t.key)) into.push(t);
+      state.truncated = !!(page && page.truncated);
+      state.nextCursor = (page && page.nextCursor) || null;
       into.sort(taskOrder);
       renderAll();
     } catch (e) {
@@ -7487,7 +9651,8 @@ async function viewTasks(preselectKey) {
       state.folders = [];
       toast(tr("tasks.folders.loadFailed", { error: e.message }), "err");
     }
-    await refreshCounts();
+    // Same rule as in load(): the walk is paid for a badge that needs it.
+    if (state.folders.length || state.truncated) await refreshCounts();
   }
 
   // refreshCounts re-reads every folder's badge. It is its own function because a
@@ -7497,12 +9662,14 @@ async function viewTasks(preselectKey) {
     try {
       const counts = await loadCounts(api, authOn ? "" : state.me);
       state.folderCounts = (counts && counts.folders) || {};
+      state.builtinCounts = (counts && counts.builtin) || null;
       state.countsTruncated = !!(counts && counts.truncated);
       state.countsScanned = (counts && counts.total) || 0;
     } catch {
       // A failed count leaves the badges as em dashes rather than as zeros: the
       // folders themselves still work, and a wrong number is worse than none.
       state.folderCounts = {};
+      state.builtinCounts = null;
     }
     renderFolders();
   }
@@ -7513,11 +9680,11 @@ async function viewTasks(preselectKey) {
     const saved = savedFolder();
     if (!saved) { state.filtered = null; renderAll(); return; }
     try {
-      const { data, headers } = await apiRaw("GET", "/api/v1/tasks?folder=" + encodeURIComponent(saved.id) +
+      const page = await api("GET", "/api/v1/tasks?content=1&folder=" + encodeURIComponent(saved.id) +
         (authOn || !state.me ? "" : "&me=" + encodeURIComponent(state.me)));
-      state.filtered = data;
-      state.truncated = headers.get("X-Tasks-Truncated") === "true";
-      state.nextCursor = headers.get("X-Tasks-Next-Cursor") || null;
+      state.filtered = (page && page.items) || [];
+      state.truncated = !!(page && page.truncated);
+      state.nextCursor = (page && page.nextCursor) || null;
       renderAll();
     } catch (e) {
       state.filtered = [];
@@ -7614,6 +9781,13 @@ async function viewStartProcess() {
       const form = new Form({ container: host });
       await form.importSchema(def.schema, {});
       state.form = form;
+      // The declared start variables this form does not ask for, beneath it. Which ones
+      // those are is only known once the schema is here.
+      const extra = detailEl.querySelector("#start-extra");
+      if (extra) {
+        extra.innerHTML = extraStartFieldsHTML(uncoveredStartVariables(p.startVariables, def.schema));
+        wireStartJSONEditors(extra);
+      }
     } catch (e) {
       host.innerHTML = `<p class="muted err">Failed to load the start form: ${esc(e.message)}</p>`;
     }
@@ -7622,11 +9796,14 @@ async function viewStartProcess() {
   function renderDetail() {
     destroyForm();
     const p = state.procs.find((x) => x.key === state.selected);
+    const grid = detailEl.closest(".tasks");
+    if (grid) grid.classList.toggle("has-selection", !!p);
     if (!p) {
       detailEl.innerHTML = `<div class="tasks-detail-empty muted">Select a process to start it via its form.</div>`;
       return;
     }
     detailEl.innerHTML = `
+      <button class="btn ghost small tasks-back" id="start-back">\u2039 Back to the list</button>
       <header class="tasks-detail-head">
         <h1>${esc(p.name || p.processId)}</h1>
         <button class="btn" id="start-go" title="Start a new instance with the form values above">Start process</button>
@@ -7636,8 +9813,14 @@ async function viewStartProcess() {
         <div class="tasks-field"><span class="tasks-field-label muted">Version</span><span>${p.version}</span></div>
       </div>
       <div class="tasks-form" id="start-form"><p class="muted">Loading form&hellip;</p></div>
+      <div class="tasks-form-extra" id="start-extra"></div>
       <div class="tasks-publish" id="start-publish"></div>`;
     renderPublish(p);
+    detailEl.querySelector("#start-back").addEventListener("click", () => {
+      state.selected = null;
+      renderList();
+      renderDetail();
+    });
     detailEl.querySelector("#start-go").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
       let variables = {};
@@ -7650,13 +9833,22 @@ async function viewStartProcess() {
           scrollToFirstInvalidField("start-form");
           return;
         }
-        variables = data;
+        // The declared half: a missing required value or malformed JSON stops the start
+        // and says which. The form's data wins on a shared name, though by construction
+        // the two bind different ones.
+        let declared = {};
+        try { declared = readTypedDeployBody(detailEl.querySelector("#start-extra")).variables || {}; }
+        catch (err) { toast(err.message, "err"); return; }
+        variables = { ...declared, ...(data || {}) };
       }
       btn.disabled = true;
       try {
-        await api("POST", `/api/v1/processes/${p.key}/instances`, { variables });
+        const res = await api("POST", `/api/v1/processes/${p.key}/instances`, { variables });
         toast("Process started");
-        location.hash = "#/tasks"; // land in the inbox where its first task appears
+        // A start that runs into a wizard opens its first screen, claimed for the
+        // starter (ADR-0449); any other lands in the inbox where its first task appears.
+        const wz = res && res.wizard;
+        location.hash = wz && wz.state === "step" && wz.task ? "#/tasks/t/" + wz.task.key : "#/tasks";
       } catch (err) { toast("Start failed: " + err.message, "err"); btn.disabled = false; }
     });
     mountStartForm(p);
@@ -7756,12 +9948,24 @@ async function viewStartProcess() {
   await load();
 }
 
+// viewSwitchedOff is what a bookmark into the catalogue's views opens on a server that
+// switched the area off: the reason, in words, instead of a view whose every call
+// answers 404 and reads as something broken.
+function viewSwitchedOff() {
+  view.innerHTML = `
+    <div class="card empty">
+      <h1>Switched off</h1>
+      <p class="muted">The shop, the catalogue, the orders and the inventory are switched off on this server (--catalogue=false). Nothing stored was removed; an administrator turns them back on at the next start.</p>
+      <a class="btn ghost" href="#/console">Back to Console</a>
+    </div>`;
+}
+
 function viewComingSoon(appId) {
   const name = (APPS.find((a) => a.id === appId) || {}).name || "This app";
   view.innerHTML = `
     <div class="card empty">
       <h1>${esc(name)}</h1>
-      <p class="muted">${esc(name)} is on the Atlas roadmap and isn't part of this build yet.</p>
+      <p class="muted">${esc(name)} is on the atlas roadmap and isn't part of this build yet.</p>
       <a class="btn ghost" href="#/console">Back to Console</a>
     </div>`;
 }
@@ -7813,7 +10017,12 @@ async function viewInfoModels() {
       <td><div class="artifact-name"><span class="chip">UML</span>
         <a href="#/data/m/${encodeURIComponent(m.id)}"><b>${esc(m.name)}</b></a></div>
         ${m.documentation ? `<div class="muted" style="font-size:12px; padding-left:54px">${esc(markdownToPlain(m.documentation))}</div>` : ""}</td>
-      <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}` : `<span class="muted">Missing application</span>`}</td>
+      <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}
+        <a class="dm-link" href="#/data/derived/${encodeURIComponent(app.id)}"
+           title="What ${esc(app.name)}'s processes actually carry, read from the processes themselves">as built →</a>
+        <a class="dm-link" href="#/data/difference/${encodeURIComponent(app.id)}"
+           title="What this model plans that ${esc(app.name)}'s processes do not build yet, and the other way round">difference →</a>`
+        : `<span class="muted">Missing application</span>`}</td>
       <td class="muted">${m.classes} ${m.classes === 1 ? "class" : "classes"}</td>
       <td class="muted">${m.associations}</td>
       <td class="muted">r${m.revision}</td>
@@ -7831,7 +10040,9 @@ async function viewInfoModels() {
       </div>
       ${writable.length ? `<div style="display:flex; gap:8px; align-items:center">
         <button class="btn ghost" data-act="import-im"
-          title="Read a class diagram somebody already drew: Atlas's own JSON, or the XMI a UML tool exports">Import…</button>
+          title="Read a class diagram somebody already drew: atlas's own JSON, or the XMI a UML tool exports">Import…</button>
+        <button class="btn ghost" data-act="derived-im"
+          title="Read what an application's processes already imply, without modelling anything">As built…</button>
         <button class="btn" data-act="new-im">Create new</button>
       </div>` : ""}
     </div>
@@ -7887,6 +10098,22 @@ async function viewInfoModels() {
         app: target, file, api, toast,
         navigate: (id) => { location.hash = `#/data/m/${encodeURIComponent(id)}`; },
       });
+      return;
+    }
+    // "As built" is scoped to an application, not to a model — an application with no
+    // model at all is exactly the case it exists for, and that case has no row to
+    // hang a link on. Every application is offered, not only the writable ones:
+    // reading what a process implies changes nothing.
+    if (e.target.closest('[data-act="derived-im"]')) {
+      const picked = await openPickModal({
+        title: "As built",
+        label: "Application",
+        options: applications.map((app) => ({ value: app.id, label: app.name })),
+        hint: "Read what this application's processes already imply about its data. Nothing is modelled and nothing is written.",
+        okLabel: "Read it",
+      });
+      if (!picked) return;
+      location.hash = `#/data/derived/${encodeURIComponent(picked.option.value)}`;
       return;
     }
     const btn = e.target.closest('[data-act="new-im"]');
@@ -8095,6 +10322,75 @@ async function viewDataInstances() {
   enhanceViewTables();
 }
 
+// viewDerivedModel opens the *as built* reading of one application: the classes,
+// members and states its processes imply, with nothing modelled by hand
+// (ADR-0301). It is the counterpart of
+// viewInfoModel, not a mode of it — the two are different statements about the same
+// subject, and keeping them apart is the whole point.
+async function viewDerivedModel(applicationId) {
+  const gen = navGen;
+  const mod = await import("./derived-model.js");
+  const application = await resolveProject(applicationId);
+  if (superseded(gen)) return;
+  // Two live diagram-js instances stand on this page, so leaving it has to take them
+  // down rather than leave them bound to markup that is gone.
+  window.__atlasCleanup = mod.cleanupDerivedModel;
+  await mod.mountDerivedModel(view, { api, applicationId, application });
+}
+
+// viewModelDifference reads the authored model against what the processes build
+// (ADR-0310). It is the
+// third reading of one subject, and it is a list rather than a fourth drawing —
+// precisely so a reader cannot mistake it for either picture.
+async function viewModelDifference(applicationId) {
+  const gen = navGen;
+  const mod = await import("./model-difference.js");
+  const application = await resolveProject(applicationId);
+  if (superseded(gen)) return;
+  await mod.mountModelDifference(view, { api, applicationId, application });
+}
+
+// viewObjectCatalog lists every class of every model the caller can see, and
+// viewObjectDetail opens one of them with everywhere it is used
+// (ADR-0338). They are the
+// vocabulary's own reading: the canvas and the model list are both per document, so
+// neither could answer "what else depends on this Order" or show the estate's classes
+// together. Both are read-only and both live in one module, because the list's rows and
+// the detail's tables say the same things about the same subject.
+async function viewObjectCatalog() {
+  const mod = await import("./business-objects.js");
+  await mod.mountObjectCatalog(view, { api });
+}
+
+async function viewObjectDetail(modelId, className) {
+  const mod = await import("./business-objects.js");
+  await mod.mountObjectDetail(view, { api, modelId, className });
+}
+
+// The business architecture (ADR-0305, roadmap B8) lives in its own module, read
+// against the catalogue rather than written in English here (ADR-0267): the gap report
+// as the landing view with the capability list one tab away, one capability with what
+// realizes it and what it measured, and the value streams with their stages.
+async function viewCapabilityMap() {
+  const mod = await import("./capabilities.js");
+  await mod.mountCapabilityMap(view, { api });
+}
+
+async function viewCapabilityDetail(key) {
+  const mod = await import("./capabilities.js");
+  await mod.mountCapabilityDetail(view, { api, toast, key });
+}
+
+async function viewValueStreams() {
+  const mod = await import("./capabilities.js");
+  await mod.mountValueStreams(view, { api });
+}
+
+async function viewValueStreamDetail(key) {
+  const mod = await import("./capabilities.js");
+  await mod.mountValueStreamDetail(view, { api, toast, key });
+}
+
 // viewInfoModel opens one model on the class canvas, which lives in its own module
 // so the shell stays small.
 async function viewInfoModel(id) {
@@ -8276,6 +10572,13 @@ async function viewPanoramaStarmap() {
   await mod.mountPanoramaMesh(view, { api, toast });
 }
 
+async function viewPanoramaEstate() {
+  const gen = navGen;
+  const mod = await import("./panorama-estate.js");
+  if (superseded(gen)) return;
+  await mod.mountPanoramaEstate(view, { api, toast });
+}
+
 async function viewPanoramaModel(id) {
   const gen = navGen;
   const mod = await import("./panorama-viewer.js");
@@ -8322,6 +10625,13 @@ async function viewEditor(key, projectId) {
 async function viewEditorDraft(id) {
   const gen = navGen;
   const mod = await import("./editor.js");
+  // A decision authored for one of this diagram's business rule tasks left what it
+  // saved behind on the way out; the task adopts it as the editor mounts, which is
+  // what keeps the ADR-0062 round trip working now that it is a navigation rather
+  // than a window (ADR-0320). One-shot: taking it
+  // clears it, so reopening the diagram later does not re-apply it.
+  const { takeAdoption } = await import("./dmn-editor.js");
+  const adopt = takeAdoption(id);
   // An existing draft carries its own projectId; resolve it so the editor can
   // offer a "back to project" breadcrumb (the route alone doesn't name it).
   let projectId = "";
@@ -8332,7 +10642,21 @@ async function viewEditorDraft(id) {
   } catch { /* best-effort: fall back to a Home-only crumb */ }
   const project = await resolveProject(projectId);
   if (superseded(gen)) return; // a newer navigation landed during the pre-mount fetches
-  await mod.mountEditor(view, { api, toast, draftId: id, projectId, project });
+  await mod.mountEditor(view, { api, toast, draftId: id, projectId, project, adopt });
+}
+
+// viewDmnEditor mounts the decision editor
+// (ADR-0320). refId edits an existing decision; without it a new one is authored,
+// filed into projectId. draftId opens a decision that exists only as a draft, which
+// has no reference to be addressed by (ADR-0321). forTask is the
+// {processId, elementId} of the business rule task the author pressed "＋ New
+// decision" on, which decides where back goes and whose task adopts what is saved to
+// the model.
+async function viewDmnEditor({ refId, draftId, projectId, forTask } = {}) {
+  const gen = navGen;
+  const mod = await import("./dmn-editor.js");
+  if (superseded(gen)) return; // don't mount over a newer view after the dynamic import
+  await mod.mountDmnEditor(view, { api, toast, refId, draftId, projectId, forTask });
 }
 
 // generateFor, when given, is the {processId, elementId} the "Create a new form" link
@@ -8348,8 +10672,10 @@ async function viewFormEditor(formId, projectId, generateFor) {
 
 async function viewLive(key, instance) {
   const mod = await import("./editor.js");
-  // apiRaw rides along because the live view pages its instance list through the
-  // X-Instances-Next-Cursor header, which the body-only helper cannot see.
+  // apiRaw rides along for X-Archive-State on the panel's instance search: the rows
+  // it marks are answered from the exported log rather than this store, and that is a
+  // header. Pagination is not — it is in the body now
+  // (ADR-0378).
   await mod.mountLive(view, { api, apiRaw, toast, key, instance });
 }
 
@@ -8366,7 +10692,7 @@ async function viewInstanceReplay(key) {
 // ---------- Router ----------
 // viewDmnViewer renders a referenced DMN model: its decision requirements graph
 // (decisions, input data, and the requirements between them) drawn read-only from
-// the graph the embedded engine exposes, with a Bearbeiten button that opens the
+// the graph the embedded engine exposes, with an Edit button that opens the
 // embedded dmn-js editor (ADR-0062) on the same model. The SVG itself is a
 // picture, not an edit surface — editing happens in the modeler overlay, and on
 // save the view re-renders from the updated model.
@@ -8376,7 +10702,7 @@ async function viewDmnViewer(refId) {
   let g, ref = null;
   try {
     // The graph carries no model handle, so the reference is fetched alongside it
-    // to know which model the Bearbeiten button should open.
+    // to know which model the Edit button should open.
     const [graph, refs] = await Promise.all([
       api("GET", `/api/v1/dmnrefs/${encodeURIComponent(refId)}/graph`),
       api("GET", "/api/v1/dmnrefs").catch(() => []),
@@ -8407,13 +10733,13 @@ async function viewDmnViewer(refId) {
     } catch { /* keep the generic "← Project" label, which still links correctly */ }
   };
   const editBtn = ref && ref.modelRef
-    ? `<button class="btn" id="dmn-edit" title="Edit this decision in Atlas">Bearbeiten</button>` : "";
-  // Re-render from the updated model once the editor closes on a save; also
-  // resolves the back link's project name.
+    ? `<button class="btn" id="dmn-edit" title="Edit this decision in atlas">Edit</button>` : "";
+  // Edit navigates to the decision editor's own page; coming back re-renders this
+  // viewer from the stored model. Also resolves the back link's project name.
   const wireEdit = () => {
     const b = document.getElementById("dmn-edit");
-    if (b) b.addEventListener("click", async () => {
-      await editDmnRef({ id: ref.id, modelRef: ref.modelRef, projectId: ref.projectId || "", name: ref.name }, () => viewDmnViewer(refId));
+    if (b) b.addEventListener("click", () => {
+      editDmnRef({ id: ref.id, modelRef: ref.modelRef, projectId: ref.projectId || "", name: ref.name });
     });
     resolveBack();
   };
@@ -8431,95 +10757,18 @@ async function viewDmnViewer(refId) {
       <div class="row">${editBtn}</div>
     </div>
     <div id="dmn-canvas" style="overflow:auto;border:1px solid #e5e7eb;border-radius:10px;background:var(--diagram-bg);padding:8px">${renderDrgSvg(g)}</div>
-    <p class="muted" style="font-size:12px">Diese Entscheidung kann direkt in Atlas bearbeitet (<b>Bearbeiten</b>) oder in einem Business-Rule-Task über den Decision-Picker des Modelers verwendet werden.</p></div>`;
+    <p class="muted" style="font-size:12px">This decision can be edited in atlas (<b>Edit</b>) or used from a business rule task through the Modeler's decision picker.</p></div>`;
   wireEdit();
 }
 
-// borderPoint returns the point on a box's border (centre cx,cy, size w×h) in the
-// direction of (tx,ty), so a requirement arrow lands on the box edge, not its
-// centre.
-function borderPoint(cx, cy, w, h, tx, ty) {
-  const dx = tx - cx, dy = ty - cy;
-  if (dx === 0 && dy === 0) return [cx, cy];
-  const sx = dx !== 0 ? (w / 2) / Math.abs(dx) : Infinity;
-  const sy = dy !== 0 ? (h / 2) / Math.abs(dy) : Infinity;
-  const s = Math.min(sx, sy);
-  return [cx + dx * s, cy + dy * s];
-}
-
-// renderDrgSvg draws a model's decision requirements graph as an SVG. It uses the
-// authored DMNDI bounds when the model has a diagram; otherwise it lays the graph
-// out in layers (input data at the bottom, decisions stacked above by requirement
-// depth). Read-only: no interaction, just a faithful picture.
-function renderDrgSvg(g) {
-  const NW = 168, NH = 64, GAPX = 36, GAPY = 60, PAD = 24;
-  const hasDI = (g.nodes || []).some((n) => n.width > 0);
-  let placed;
-  if (hasDI) {
-    placed = g.nodes.map((n) => ({ n, x: n.x || 0, y: n.y || 0, w: n.width || NW, h: n.height || NH }));
-  } else {
-    const reqs = {};
-    (g.edges || []).forEach((e) => { (reqs[e.target] = reqs[e.target] || []).push(e.source); });
-    const level = {};
-    const lvl = (id, seen) => {
-      if (level[id] != null) return level[id];
-      if (seen.has(id)) return 0;
-      seen.add(id);
-      const rs = reqs[id] || [];
-      return (level[id] = rs.length ? 1 + Math.max(...rs.map((r) => lvl(r, seen))) : 0);
-    };
-    g.nodes.forEach((n) => lvl(n.id, new Set()));
-    const maxL = Math.max(0, ...Object.values(level));
-    const byLevel = {};
-    g.nodes.forEach((n) => { (byLevel[level[n.id]] = byLevel[level[n.id]] || []).push(n); });
-    placed = [];
-    for (let L = 0; L <= maxL; L++) {
-      (byLevel[L] || []).forEach((n, i) =>
-        placed.push({ n, x: PAD + i * (NW + GAPX), y: PAD + (maxL - L) * (NH + GAPY), w: NW, h: NH }));
-    }
-  }
-  if (!placed.length) return `<p class="muted" style="padding:16px">This model has no decisions to show.</p>`;
-  const pos = {};
-  placed.forEach((p) => { pos[p.n.id] = p; });
-
-  const edges = (g.edges || []).map((e) => {
-    const a = pos[e.source], b = pos[e.target];
-    if (!a || !b) return "";
-    const ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by = b.y + b.h / 2;
-    const [x1, y1] = borderPoint(ax, ay, a.w, a.h, bx, by);
-    const [x2, y2] = borderPoint(bx, by, b.w, b.h, ax, ay);
-    const dash = e.type === "knowledgeRequirement" ? ` stroke-dasharray="5 4"` : "";
-    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#94a3b8" stroke-width="1.5"${dash} marker-end="url(#drg-arrow)"/>`;
-  }).join("");
-
-  const nodes = placed.map(({ n, x, y, w, h }) => {
-    const input = n.type === "inputData";
-    const bkm = n.type === "businessKnowledgeModel";
-    const fill = input ? "#eff6ff" : bkm ? "#f5f3ff" : "#ffffff";
-    const stroke = input ? "#3b82f6" : bkm ? "#8b5cf6" : "#111827";
-    const rx = input ? h / 2 : 10;
-    const sub = input ? (n.dataType || "input data") : bkm ? "knowledge model" : (n.hasTable ? "decision table" : "decision");
-    return `<g>
-      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
-      <text x="${x + w / 2}" y="${y + h / 2 - 3}" text-anchor="middle" font-size="13" font-weight="600" fill="#111827">${esc(n.name || n.id)}</text>
-      <text x="${x + w / 2}" y="${y + h / 2 + 14}" text-anchor="middle" font-size="10.5" fill="#6b7280">${esc(sub)}</text>
-    </g>`;
-  }).join("");
-
-  const minX = Math.min(...placed.map((p) => p.x)) - PAD;
-  const minY = Math.min(...placed.map((p) => p.y)) - PAD;
-  const W = Math.max(...placed.map((p) => p.x + p.w)) + PAD - minX;
-  const H = Math.max(...placed.map((p) => p.y + p.h)) + PAD - minY;
-  return `<svg viewBox="${minX.toFixed(0)} ${minY.toFixed(0)} ${W.toFixed(0)} ${H.toFixed(0)}" width="${W.toFixed(0)}" height="${H.toFixed(0)}" style="max-width:100%;height:auto;display:block;font-family:system-ui,-apple-system,sans-serif">
-    <defs><marker id="drg-arrow" markerWidth="10" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L8,3 L0,6 z" fill="#94a3b8"/></marker></defs>
-    ${edges}${nodes}</svg>`;
-}
+// The decision requirements graph is drawn by decision-graph.js — one renderer,
+// shared with the Operations decision modal, so a decision is the same picture
+// whether it is being designed or being accounted for.
 
 // setTitle sets the browser tab / history title with the distinctive part first, so
-// several open Atlas tabs are told apart at a glance. "" falls back to plain "Atlas".
+// several open Atlas tabs are told apart at a glance. "" falls back to plain "atlas".
 function setTitle(label) {
-  document.title = label ? `${label} · Atlas` : "Atlas";
+  document.title = label ? `${label} · atlas` : "atlas";
 }
 
 // routeTitle derives a tab title from the route alone (set immediately on navigation).
@@ -8539,8 +10788,8 @@ async function viewRepository() {
       <button class="btn neutral" id="repo-refresh" title="Reload the repository catalog">Refresh</button>
     </div>
     <p class="muted">Workers, service tasks and scripts the community already built,
-    packaged as element templates. Install one and it lands in your palette ready to
-    configure. Data-only workers install in a click; a script task carries code, so it
+    packaged as element templates. Installing one keeps its template on this server;
+    applying it to a task in the Modeler is not built yet (ADR-0212). Data-only workers install in a click; a script task carries code, so it
     is imported for review. Credentials never travel in a shared package — you connect
     those on your server.</p>
     <div class="ops-toolbar">
@@ -8582,7 +10831,7 @@ async function viewRepository() {
         ? `<button class="btn ghost danger" data-act="uninstall" data-id="${esc(p.id)}" title="Remove this template from your server">Remove</button>`
         : p.carriesCode
           ? `<button class="btn neutral" data-act="install" data-id="${esc(p.id)}" title="Review the code, then install this template">Review &amp; install</button>`
-          : `<button class="btn" data-act="install" data-id="${esc(p.id)}" title="Install this template into your palette">Install</button>`;
+          : `<button class="btn" data-act="install" data-id="${esc(p.id)}" title="Install this template on this server">Install</button>`;
       const installedTag = isInstalled ? '<span class="pill ok"><span class="dot"></span>Installed</span>' : "";
       return `<div class="repo-card card">
         <div class="repo-head">
@@ -8665,6 +10914,7 @@ function routeTitle(path) {
     [/^#\/console\/backup$/, "Backup · Console"],
     [/^#\/console\/org$/, "Organization · Console"],
     [/^#\/console\/workers$/, "Workers · Console"],
+    [/^#\/console\/events$/, "Events · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
     [/^#\/modeler\/form\//, "Form · Modeler"],
@@ -8682,6 +10932,8 @@ function routeTitle(path) {
     [/^#\/operations\/p\//, "Live view · Operations"],
     [/^#\/operations$/, "Instances · Operations"],
     [/^#\/data\/instances$/, "Instances · Data"],
+    [/^#\/data\/objects\/.+/, "Business object · Data"],
+    [/^#\/data\/objects$/, "Business objects · Data"],
     [/^#\/data\/m\//, "Class diagram · Data"],
     [/^#\/data$/, "Model · Data"],
     [/^#\/panorama\/starmap$/, "Starmap · Panorama"],
@@ -8698,6 +10950,10 @@ async function route() {
   document.getElementById("scrim").hidden = true;
   if (window.__atlasCleanup) { try { window.__atlasCleanup(); } catch { /* ignore */ } }
   navGen++; // supersede any view handler still awaiting from a previous navigation
+  // The FEEL assistant's top-bar button is offered to whoever may use its routes; this
+  // is the first point after boot at which the principal is known.
+  const feelBtn = document.getElementById("feel-assistant-btn");
+  if (feelBtn) feelBtn.hidden = !mayUse("modeler");
 
   const hash = location.hash || "#/console";
   // #/console/connectors is the pre-ADR-0203 spelling of the Workers page. A
@@ -8722,12 +10978,13 @@ async function route() {
   else if (path.startsWith("#/operations")) appId = "operations";
   else if (path.startsWith("#/panorama")) appId = "panorama";
   else if (path.startsWith("#/data")) appId = "data";
+  else if (path.startsWith("#/catalog")) appId = "catalog";
 
   // Gate the whole app behind login when enforcement is on and no session is
   // active. Auth off (the default) skips this entirely.
   if (!AUTH.loaded) await loadAuth();
   if (AUTH.enabled && !AUTH.user) {
-    document.getElementById("app-name").textContent = "Atlas";
+    document.getElementById("app-name").textContent = "atlas";
     document.getElementById("topnav").innerHTML = "";
     paintApps(); // nobody is signed in, so nobody holds a role: the drawer says so too
     syncIncidentBadge(""); // the login screen has no nav to badge, and must not poll
@@ -8737,12 +10994,14 @@ async function route() {
   }
 
   startPresence(); // signed in, so this tab is somebody being here (presence.go)
+  if (!FEATURES.loaded) await loadFeatures(); // before the menus are painted from it
   setChrome(appId, path);
   setTitle(routeTitle(path));
   updateAccount();
   window.scrollTo(0, 0);
 
   try {
+    if (isCatalogueRoute(path) && !FEATURES.catalogue) return viewSwitchedOff();
     if (path === "#/" || path === "#/console") return await viewConsoleDashboard();
     if (path === "#/console/engine") return await viewConsoleEngine();
     if (path === "#/console/logs") return await viewConsoleLogs();
@@ -8754,6 +11013,27 @@ async function route() {
       return await viewAIAccess({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
+    if (path === "#/console/events") {
+      const gen = navGen;
+      const { viewEvents } = await import("./events.js");
+      return await viewEvents({ api, view, isSuperseded: () => superseded(gen) });
+    }
+    if (path === "#/catalog") {
+      const gen = navGen;
+      const { viewCatalogs } = await import("./catalog-admin.js");
+      return await viewCatalogs({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
+    const cd = path.match(/^#\/catalog\/c\/(.+)$/);
+    if (cd) {
+      const gen = navGen;
+      const { viewCatalogDetail } = await import("./catalog-admin.js");
+      // me travels with the context because one card on that page is the owner's
+      // alone (ADR-0071): an editor may change the catalogue and not who else can.
+      return await viewCatalogDetail({
+        api, apiBytes, toast, view, isSuperseded: () => superseded(gen),
+        me: AUTH.user, enforced: AUTH.enabled,
+      }, decodeURIComponent(cd[1]));
+    }
     if (path === "#/modeler") return await viewModelerHome();
     if (path === "#/modeler/repository") return await viewRepository();
     const pd = path.match(/^#\/modeler\/p\/(.+)$/);
@@ -8776,6 +11056,42 @@ async function route() {
     if (fe) return await viewFormEditor(decodeURIComponent(fe[1]));
     const dm = path.match(/^#\/modeler\/draft\/(.+)$/);
     if (dm) return await viewEditorDraft(decodeURIComponent(dm[1]));
+    // The decision editor, before the viewer below: "new" and "e/…" would otherwise
+    // be read as reference ids by its catch-all
+    // (ADR-0320). The /for/… tail is the shape
+    // ADR-0260 gave "Create a new form" pressed on a step — here it is "＋ New
+    // decision" pressed on a business rule task, and it is what sends the author
+    // back to that diagram.
+    const dnewdec = path.match(/^#\/modeler\/dmn\/new(?:\/p\/([^/]+))?(?:\/for\/([^/]+)\/([^/]+))?$/);
+    if (dnewdec) {
+      return await viewDmnEditor({
+        projectId: dnewdec[1] ? decodeURIComponent(dnewdec[1]) : "",
+        forTask: dnewdec[3]
+          ? { processId: decodeURIComponent(dnewdec[2]), elementId: decodeURIComponent(dnewdec[3]) }
+          : null,
+      });
+    }
+    const dedit = path.match(/^#\/modeler\/dmn\/e\/([^/]+)(?:\/for\/([^/]+)\/([^/]+))?$/);
+    if (dedit) {
+      return await viewDmnEditor({
+        refId: decodeURIComponent(dedit[1]),
+        forTask: dedit[3]
+          ? { processId: decodeURIComponent(dedit[2]), elementId: decodeURIComponent(dedit[3]) }
+          : null,
+      });
+    }
+    // A decision draft has no reference to be addressed by, so it is addressed by
+    // itself (ADR-0321). Before the viewer's catch-all, like its
+    // siblings.
+    const ddraft = path.match(/^#\/modeler\/dmn\/d\/([^/]+)(?:\/for\/([^/]+)\/([^/]+))?$/);
+    if (ddraft) {
+      return await viewDmnEditor({
+        draftId: decodeURIComponent(ddraft[1]),
+        forTask: ddraft[3]
+          ? { processId: decodeURIComponent(ddraft[2]), elementId: decodeURIComponent(ddraft[3]) }
+          : null,
+      });
+    }
     const dv = path.match(/^#\/modeler\/dmn\/(.+)$/);
     if (dv) return await viewDmnViewer(decodeURIComponent(dv[1]));
     const m = path.match(/^#\/modeler\/d\/(\d+)$/);
@@ -8791,18 +11107,51 @@ async function route() {
     if (path === "#/operations/incidents") return await viewIncidents();
     if (path === "#/operations/workers") return await viewWorkers();
     if (path === "#/operations/outbox") return await viewMailOutbox();
+    if (path === "#/operations/messages") return await viewBufferedMessages();
     if (path === "#/operations/ad-mock") return await viewADMockDirectory();
     if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
     if (path === "#/operations/decisions") return await viewDecisions();
+    if (path === "#/tasks/recertification") {
+      // Taken before the import, as the routes above take it: the closure is read
+      // after the view's first await, and without it that read threw.
+      const gen = navGen;
+      const { viewRecertification } = await import("./recertification.js");
+      return await viewRecertification({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
+    if (path === "#/operations/reconciliation") {
+      // Taken before the import, as the routes above take it: the closure is read
+      // after the view's first await, and without it that read threw.
+      const gen = navGen;
+      const { viewReconciliation } = await import("./reconciliation.js");
+      return await viewReconciliation({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
     if (path === "#/operations/call-activities") return await viewCallActivities();
     if (path === "#/panorama/starmap") return await viewPanoramaStarmap();
+    if (path === "#/panorama/estate") return await viewPanoramaEstate();
     if (path === "#/panorama") return await viewPanoramaModels();
+    if (path === "#/panorama/capabilities") return await viewCapabilityMap();
+    if (path === "#/panorama/value-streams") return await viewValueStreams();
+    // A key is lowercase letters, digits and hyphens, so it never collides with a
+    // route segment; it is still decoded, because a link may carry it encoded.
+    const pcap = path.match(/^#\/panorama\/capabilities\/([^/]+)$/);
+    if (pcap) return await viewCapabilityDetail(decodeURIComponent(pcap[1]));
+    const pvs = path.match(/^#\/panorama\/value-streams\/([^/]+)$/);
+    if (pvs) return await viewValueStreamDetail(decodeURIComponent(pvs[1]));
     const pm = path.match(/^#\/panorama\/models\/(.+)$/);
     if (pm) return await viewPanoramaModel(decodeURIComponent(pm[1]));
     if (path === "#/data") return await viewInfoModels();
+    if (path === "#/data/objects") return await viewObjectCatalog();
+    // …/objects/{modelId}/{class}: both are encoded, because a class name is a name a
+    // person chose ("Line item") and a model id is opaque.
+    const imo = path.match(/^#\/data\/objects\/([^/]+)\/(.+)$/);
+    if (imo) return await viewObjectDetail(decodeURIComponent(imo[1]), decodeURIComponent(imo[2]));
     if (path === "#/data/instances") return await viewDataInstances();
     const imm = path.match(/^#\/data\/m\/(.+)$/);
     if (imm) return await viewInfoModel(decodeURIComponent(imm[1]));
+    const imd = path.match(/^#\/data\/derived\/(.+)$/);
+    if (imd) return await viewDerivedModel(decodeURIComponent(imd[1]));
+    const imdiff = path.match(/^#\/data\/difference\/(.+)$/);
+    if (imdiff) return await viewModelDifference(decodeURIComponent(imdiff[1]));
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
     // because a DMN decision id may contain spaces or other reserved characters.
     const dd = path.match(/^#\/operations\/decisions\/(.+)$/);
@@ -8838,6 +11187,11 @@ async function route() {
 // currently in the main view. It runs once per navigation (not as a live observer),
 // so it never watches the modeler's heavy SVG; each enhanced table then keeps itself
 // current via its own lightweight tbody observer as rows refresh.
+//
+// Rebuilding only a <tbody> therefore needs nothing. Code that replaces a whole *table*
+// — a refresh that rewrites its container, a pane that loads lazily, a results panel —
+// calls this again when it is done, or that list silently loses its sorting and its
+// filter row (ADR-0286).
 function enhanceViewTables() {
   for (const t of view.querySelectorAll("table:not(.no-enhance)")) {
     enhanceTable(t, { key: t.dataset.dtKey || undefined });

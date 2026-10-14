@@ -256,6 +256,86 @@ test("the ranking answers the direction and depth it is given", async ({ page })
   expect(oneHop.find((r) => r.name === "Credit score").total).toBe(1);
 });
 
+// With a heat weighting on (ADR-0211 §8) the canvas ranks the estate by a tally, and
+// the column beside it has to rank it the same way: the largest circle and the first
+// row being different nodes is a contradiction the reader cannot resolve, because
+// nothing on screen says the two orderings answer different questions.
+//
+// The same graph, given tallies. Deliberately arranged so the two weightings disagree
+// with each other *and* with the blast ranking — Invoice holds the most incidents and
+// nothing depends on it, ops-mail has the widest radius and no tally at all — since a
+// fixture where every ordering agrees would pass whatever the code did.
+const tallied = {
+  ...wider,
+  nodes: wider.nodes.map((n) => ({
+    ...n,
+    ...(n.id === "process:1" ? { incidents: 41, runtime: { running: 2 } } : {}),
+    ...(n.id === "process:2" ? { incidents: 9, runtime: { running: 380 } } : {}),
+    ...(n.id === "process:3" ? { incidents: 9, runtime: { running: 0 } } : {}),
+    ...(n.id === "process:4" ? { incidents: 0, runtime: { running: 17 } } : {}),
+  })),
+};
+
+test("the ranking follows the weighting the picture is drawn with", async ({ page }) => {
+  const parked = await page.evaluate(([g, o]) =>
+    window.heatRanking(g, "incidents", o), [tallied, all]);
+  const busy = await page.evaluate(([g, o]) =>
+    window.heatRanking(g, "instances", o), [tallied, all]);
+
+  // Ordered by the tally, and by nothing else the reader has not been told about.
+  // Dunning is critical and Reminder is not, so the tie at nine goes to the one that
+  // is itself in trouble — the same rule the blast ranking breaks its ties by.
+  expect(parked.map((r) => [r.name, r.value])).toEqual([
+    ["Invoice", 41], ["Dunning", 9], ["Reminder", 9],
+  ]);
+  expect(busy.map((r) => [r.name, r.value])).toEqual([
+    ["Dunning", 380], ["Signup", 17], ["Invoice", 2],
+  ]);
+
+  // A node with a zero, and every kind that cannot hold a tally at all, are left out
+  // rather than listed as nothing: a ranking padded with zeroes buries its own answer.
+  expect(parked.some((r) => r.name === "Signup")).toBe(false);
+  expect(busy.some((r) => r.name === "Reminder")).toBe(false);
+  expect(parked.some((r) => r.kind !== "process")).toBe(false);
+
+  // Each row carries the reach the blast ranking would have measured, which is what
+  // turns a count into a priority: Invoice holds the most and nothing depends on it.
+  expect(parked[0].total).toBe(0);
+  expect(parked.find((r) => r.name === "Dunning").total).toBe(1);
+});
+
+// The reach on a row is measured the way the panel measures it, or the two numbers on
+// one screen would have been taken differently.
+test("a ranked row's reach answers the direction and depth it is given", async ({ page }) => {
+  const needs = await page.evaluate((g) => window.heatRanking(g, "incidents",
+    { direction: "dependencies", depth: Infinity }), tallied);
+  // Invoice needs three things, and still leads because the ordering is the tally.
+  expect(needs[0].name).toBe("Invoice");
+  expect(needs[0].total).toBe(3);
+
+  const oneHop = await page.evaluate((g) => window.heatRanking(g, "incidents",
+    { direction: "dependencies", depth: 1 }), tallied);
+  expect(oneHop[0].total).toBe(2);
+
+  // And a bounded list, because a sidebar is not a page.
+  const short = await page.evaluate(([g, o]) =>
+    window.heatRanking(g, "incidents", { ...o, limit: 1 }), [tallied, all]);
+  expect(short.map((r) => r.name)).toEqual(["Invoice"]);
+});
+
+// Nothing to rank is an answer rather than a failure, and a weighting this build does
+// not know is not one either: a saved view from a later build must not produce a list
+// of every node at zero.
+test("a ranking with nothing to count comes back empty rather than padded", async ({ page }) => {
+  const empty = await page.evaluate(([g, o]) => ({
+    healthy: window.heatRanking(g, "incidents", o),
+    unknown: window.heatRanking(g, "something-new", o),
+    none: window.heatRanking(g, null, o),
+  }), [wider, all]);
+
+  expect(empty).toEqual({ healthy: [], unknown: [], none: [] });
+});
+
 // A maintenance window: several nodes going down together (ADR-0211 §6 asked of a
 // set rather than of a node).
 //

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Genehmigungen</title>
+<meta name="robots" content="noindex" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='52' fill='%23000'/%3E%3Cpath fill='%23fff' d='M142.1 201.7A68 68 0 0 1 24 174.5L57.5 152.3A33 33 0 0 0 115.3 179.2Z'/%3E%3Cpath fill='%23fff' d='M22.2 162.7A68 68 0 0 1 106.5 92L119.7 117.1L98 126A33 33 0 0 0 59 146.7Z'/%3E%3Cpath fill='%23fff' d='M126 92H160V226H126Z'/%3E%3Cpath fill='%23fff' d='M189.5 38H210.5V62.5H235V83.5H210.5V108H189.5V83.5H165V62.5H189.5Z'/%3E%3C/svg%3E" />
+<style>
+  body { margin:0; font:15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         color:#14161a; background:#f3f4f6; display:flex; align-items:center;
+         justify-content:center; min-height:100vh; }
+  main { max-width:44ch; padding:24px; text-align:center; }
+  a { color:#0a4ad1; }
+</style>
+</head>
+<body>
+<!--
+  The approver's page was here (ADR-0311), and the approval is now read and decided
+  in the inbox that already held it — an approval is an ordinary user task, and Tasks
+  is where all of this person's work is (ADR-0394).
+
+  What is left is the address, because addresses were sent out. Every approval
+  notification carries a link to this page with the order line in its query, and a
+  mail cannot be recalled: an approver who opens one next week must land on their
+  approval rather than on a 404. So this forwards, carrying the line it was given
+  into the inbox's own link.
+
+  It may be deleted once no notification old enough to point here can still name an
+  open approval. Nothing else links to it: the menu, the handbook and the models all
+  name the inbox now.
+-->
+<main>
+  <p>Diese Seite ist in <strong>Tasks</strong> aufgegangen. Sie werden weitergeleitet.</p>
+  <p><a id="go" href="/index.html#/tasks">Weiter zum Posteingang</a></p>
+</main>
+<script>
+  // The query this page was linked with, handed to the inbox unchanged: it names the
+  // order line, which is what the inbox resolves against the approvals somebody holds.
+  var q = window.location.search || "";
+  var to = "/index.html#/tasks" + (q ? "?" + q.slice(1) : "");
+  document.getElementById("go").setAttribute("href", to);
+  // replace and not assign: the page it forwards from is not a step anybody should
+  // reach again with the Back button.
+  window.location.replace(to);
+</script>
+</body>
+</html>

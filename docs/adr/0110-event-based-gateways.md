@@ -1,6 +1,7 @@
 # ADR-0110: Event-based gateways (deferred choice)
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
 

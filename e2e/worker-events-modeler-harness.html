@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas worker events modeler e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api` whose
+         GET /api/v1/message-sources lists inbound event watches on three workers, to
+         verify that the message picker offers those Worker events to an element that
+         waits for a message and to none that throws one (ADR-0429 §6). The diagram
+         declares one message a watch also publishes, so the test can tell a declared
+         name from an offered one. Mounted in deployment mode (key set, draftId null) so
+         no live collaboration SSE is attached. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      // Start_msg is a message start with no message yet; Catch_1 waits for the declared
+      // order.placed; Throw_1 publishes a message of its own.
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_events" targetNamespace="http://atlas/bpmn">
+  <bpmn:message id="Message_order" name="order.placed"/>
+  <bpmn:message id="Message_done" name="onboarding.done"/>
+  <bpmn:process id="events" name="Test Worker Events" isExecutable="true">
+    <bpmn:startEvent id="Start_msg" name="Start"><bpmn:outgoing>f0</bpmn:outgoing><bpmn:messageEventDefinition id="MED_start"/></bpmn:startEvent>
+    <bpmn:intermediateCatchEvent id="Catch_1" name="Order placed"><bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing><bpmn:messageEventDefinition id="MED_catch" messageRef="Message_order"/></bpmn:intermediateCatchEvent>
+    <bpmn:intermediateThrowEvent id="Throw_1" name="Done"><bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing><bpmn:messageEventDefinition id="MED_throw" messageRef="Message_done"/></bpmn:intermediateThrowEvent>
+    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f2</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_msg" targetRef="Catch_1"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Catch_1" targetRef="Throw_1"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="Throw_1" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="events">
+    <bpmndi:BPMNShape id="Start_msg_di" bpmnElement="Start_msg"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Catch_1_di" bpmnElement="Catch_1"><dc:Bounds x="280" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Throw_1_di" bpmnElement="Throw_1"><dc:Bounds x="400" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="520" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="280" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="316" y="138"/><di:waypoint x="400" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="436" y="138"/><di:waypoint x="520" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // Four watches on three workers: jira.ticket.created is published by two of them,
+      // order.placed is a name the diagram already declares, and the HR watch is off.
+      const SOURCES = [
+        { messageName: "employee.created", connectorId: "w-hr", connectorName: "HR", kind: "googlesheets", enabled: false },
+        { messageName: "jira.ticket.created", connectorId: "w-jira", connectorName: "ServiceDesk", kind: "jira", enabled: true },
+        { messageName: "jira.ticket.created", connectorId: "w-jira2", connectorName: "Projects", kind: "jira", enabled: true },
+        { messageName: "order.placed", connectorId: "w-clio", connectorName: "Orders", kind: "clio", enabled: true },
+      ];
+
+      window.__sourceCalls = 0;
+      window.__failSources = false;
+      const api = async (method, url) => {
+        if (method === "GET" && /\/message-sources$/.test(url)) {
+          window.__sourceCalls++;
+          if (window.__failSources) throw new Error("unreachable");
+          return SOURCES;
+        }
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/processes$/.test(url)) return [];
+        if (method === "GET" && /\/drafts$/.test(url)) return [];
+        if (method === "GET" && /\/decisions/.test(url)) return [];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        return {};
+      };
+
+      window.__mount = () => mountEditor(view, { api, toast: noop, key: 42 });
+      window.__select = (id) =>
+        window.__atlasModeler.get("selection").select(window.__atlasModeler.get("elementRegistry").get(id));
+      // The exported XML is what the deploy sends, so the tests assert against it.
+      window.__xml = async () => (await window.__atlasModeler.saveXML({ format: true })).xml;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

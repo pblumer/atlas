@@ -34,6 +34,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pblumer/atlas/limits"
 	"io"
 	"net/http"
 	"net/url"
@@ -141,7 +142,7 @@ func (c *HTTPClient) CreateEntry(ctx context.Context, e Entry) (Result, error) {
 		return Result{}, fmt.Errorf("remedy: create entry in %s: %w", e.Form, err)
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, limits.Default().Definition))
 	if resp.StatusCode/100 != 2 {
 		return Result{}, fmt.Errorf("remedy: create entry in %s returned HTTP %d: %s", e.Form, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
@@ -164,7 +165,7 @@ func (c *HTTPClient) login(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("remedy: login to %s: %w", c.conn.BaseURL, err)
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, limits.Default().Definition))
 	if resp.StatusCode/100 != 2 {
 		return "", fmt.Errorf("remedy: login to %s returned HTTP %d: %s", c.conn.BaseURL, resp.StatusCode, strings.TrimSpace(string(body)))
 	}

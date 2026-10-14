@@ -1,6 +1,7 @@
 # ADR-0119: Deactivating a deployed process
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-12
 - **Deciders:** Atlas maintainers
 

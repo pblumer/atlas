@@ -25,6 +25,7 @@ func TestDecisionEvaluationValueRoundTrip(t *testing.T) {
 				InputsJSON:         `{"season":"Fall","guests":8}`,
 				OutputsJSON:        `{"dish":"Spareribs"}`,
 				TraceJSON:          `{"tables":[{"hitPolicy":"U","matched":[2]}]}`,
+				DecisionKey:        NewKey(0, 12),
 			},
 		},
 		{
@@ -101,5 +102,36 @@ func TestDecisionEvaluationDecodeErrors(t *testing.T) {
 				t.Errorf("decode(%d bytes) err = %v, want ErrShortBuffer", len(tt.src), err)
 			}
 		})
+	}
+}
+
+// A record written before DecisionKey existed ends after TraceJSON. It must still
+// decode, reading the key as 0 — "not recorded" — rather than failing or inventing
+// one (ADR-0423).
+func TestADecisionEvaluationRecordedBeforeItsKeyStillDecodes(t *testing.T) {
+	v := &DecisionEvaluationValue{
+		ProcessInstanceKey: NewKey(1, 1),
+		ElementInstanceKey: NewKey(1, 7),
+		ProcessDefKey:      NewKey(0, 3),
+		ElementId:          4,
+		DecisionId:         "dish",
+		InputsJSON:         `{}`,
+		OutputsJSON:        `{"dish":"Spareribs"}`,
+		TraceJSON:          `{"tables":[]}`,
+		DecisionKey:        NewKey(0, 12),
+	}
+	buf := AppendValue(nil, v)
+	old := buf[:len(buf)-8] // what an older Atlas wrote: everything but the key
+
+	got, err := DecodeValue(VTDecisionEvaluation, old)
+	if err != nil {
+		t.Fatalf("DecodeValue of a record without the key: %v", err)
+	}
+	dv := got.(*DecisionEvaluationValue)
+	if dv.DecisionKey != 0 {
+		t.Errorf("DecisionKey = %d, want 0 for a record that never carried one", dv.DecisionKey)
+	}
+	if dv.TraceJSON != v.TraceJSON || dv.DecisionId != v.DecisionId {
+		t.Errorf("decoded %+v, want the rest of the record intact", dv)
 	}
 }

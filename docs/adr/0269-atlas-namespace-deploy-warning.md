@@ -1,6 +1,7 @@
 # ADR-0269: The engine stays namespace-blind, and the deploy says so
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas maintainers
 

@@ -1,0 +1,47 @@
+{
+  "<message>.<outcome>": [
+    "orderId",
+    "position",
+    "commandId",
+    "action",
+    "effect",
+    "outcome",
+    "source",
+    "principal",
+    "itemId",
+    "at",
+    "variantId",
+    "instanceKey",
+    "result",
+    "homeCatalog"
+  ],
+  "atlas.entitlement.granted": [
+    "principal",
+    "itemId",
+    "orderId",
+    "since",
+    "origin",
+    "variantId",
+    "until",
+    "homeCatalog"
+  ],
+  "atlas.entitlement.revoked": [
+    "principal",
+    "itemId",
+    "orderId",
+    "since",
+    "endedAt",
+    "reason",
+    "endedBy",
+    "variantId",
+    "homeCatalog"
+  ],
+  "atlas.order.advanced": [],
+  "atlas.order.placed": [
+    "orderId",
+    "orderer",
+    "recipient",
+    "portalBaseUrl",
+    "atlasApiBase"
+  ]
+}

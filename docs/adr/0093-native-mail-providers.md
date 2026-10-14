@@ -1,6 +1,7 @@
 # ADR-0093: Native Gmail and Microsoft Graph mail providers
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 

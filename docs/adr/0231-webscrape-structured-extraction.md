@@ -1,6 +1,7 @@
 # ADR-0231: Structured HTML extraction, richer feed entries, and a fetch that survives the real web
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-03
 - **Deciders:** Atlas maintainers
 

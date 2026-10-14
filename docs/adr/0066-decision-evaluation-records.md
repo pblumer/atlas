@@ -1,6 +1,7 @@
 # ADR-0066: Durable decision-evaluation records for debugging
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-25
 - **Deciders:** Core team
 

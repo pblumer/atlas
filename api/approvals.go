@@ -1,0 +1,356 @@
+package api
+
+import (
+	"net/http"
+	"strconv"
+
+	"github.com/pblumer/atlas/api/brandimage"
+	"github.com/pblumer/atlas/api/catalog"
+	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/order"
+	"github.com/pblumer/atlas/api/taskfolder"
+	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
+)
+
+// The approver's own surface (ADR-0311).
+//
+// An approval is a user task like any other, and the Console can work it. That is
+// the wrong place for most of the people who get one. The approver is a fixed
+// integration manager, a named group, or — the common case — the line manager the
+// directory resolved, who approves perhaps four times a year and for whom a tool
+// with Deployments, Instances and Incidents in it is a tool they will ask a
+// colleague to use for them.
+//
+// So there is a page, and this is what it reads. One call answers everything it
+// shows: which approvals are the caller's, what each one decides, and the brand
+// of the catalogue the order came from.
+//
+// # Why the join happens here
+//
+// The chain is task → order → release → catalogue, and the approver may walk none
+// of it themselves. They are not the orderer, so the order is not theirs to read;
+// they are not the catalogue's audience, so neither is the catalogue. Each of
+// those refusals is correct and none of them should be relaxed — a customer's
+// brand is not shown to other customers, which is the whole point of the logo
+// gate. What is legitimate is the *answer*: somebody holding the approval may see
+// what they are approving. So the join is done on the server, under the one right
+// the approver actually has, and nothing else opens.
+
+// approvalOrderVar is the variable every portal approval carries: the order it
+// belongs to. An instance without it is not deciding an order, whatever it is
+// called.
+const approvalOrderVar = "orderId"
+
+// firstNonEmpty is the first of two strings that says something.
+//
+// Used where a process variable may or may not have been set and the order knows
+// the answer anyway: a process started before positions had names carries no
+// variant, and the line it decides does.
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+// approvalResp is one open approval: the task, what it decides, and how the
+// catalogue it belongs to looks.
+type approvalResp struct {
+	Task taskResp `json:"task"`
+	// OrderID and ItemID name the line this approval decides; Recipient and Orderer
+	// are principal ids, never names — see ADR-0314.
+	OrderID string `json:"orderId"`
+	ItemID  string `json:"itemId"`
+	// PositionID names the position rather than the product. It is the item id
+	// wherever the order carries one position of it, which is every order placed
+	// before a product could be ordered in two shapes at once
+	// (ADR-0384).
+	PositionID string `json:"positionId,omitempty"`
+	VariantID  string `json:"variantId,omitempty"`
+	Recipient  string `json:"recipient,omitempty"`
+	Orderer    string `json:"orderer,omitempty"`
+	// RecipientName and OrdererName are the two principals as a person reads them,
+	// resolved from the directory when the approval is read — never stored. The
+	// order and the process keep ids (ADR-0314); an approver deciding "for
+	// usr_7f3a…" is reading a key, and the question the screen asks is for whom.
+	RecipientName string `json:"recipientName,omitempty"`
+	OrdererName   string `json:"ordererName,omitempty"`
+	// Texts is the ordered product's name per language, as the release froze it. An
+	// approver deciding "vpn-zugang" is reading an id; this is the same product in
+	// words somebody chose.
+	Texts map[string]string `json:"texts,omitempty"`
+	// Price is what the order says this line costs, as the release froze it
+	// (ADR-0361). Read from the **line** and
+	// not from the release: the line is the order's own record of what was decided
+	// on, and it is what a reader sees years later. Empty where the catalogue says
+	// nothing about cost, which is the ordinary case.
+	Price string `json:"price,omitempty"`
+	// CatalogID, CatalogTexts and Languages place the order: which catalogue, called
+	// what, offered in which languages.
+	CatalogID    string            `json:"catalogId,omitempty"`
+	CatalogTexts map[string]string `json:"catalogTexts,omitempty"`
+	Languages    []string          `json:"languages,omitempty"`
+	// Theme is the catalogue's brand. The mark is not here — it is bytes, served
+	// from this approval's own logo route under this same gate.
+	Theme catalog.Theme `json:"theme"`
+	// Assignment is where this approval has been, when a deadline or a person has
+	// moved it (escalation.go). Absent while it is still with whoever it started
+	// with, which is the ordinary case — and its absence is therefore the answer
+	// "nobody has had to chase this".
+	Assignment *order.Assignment `json:"assignment,omitempty"`
+	// Answers are what the orderer answered on the product's configuration form, as
+	// the order holds them now, labelled as the form labels them
+	// (ADR-0441). Read from the order and
+	// not from the process: Atlas's own approval models are not given them, so they
+	// never sit in an approval's history in the clear.
+	Answers []approvalAnswer `json:"answers,omitempty"`
+	// Amended says the answers were corrected after the order was placed
+	// (ADR-0359), so an approver reads them as the current ones, not the first.
+	Amended bool `json:"amended,omitempty"`
+}
+
+// handleListApprovals answers the approval page: every open approval the caller
+// holds, newest first, with what it decides and the brand it wears.
+//
+// It walks the open user tasks off the run loop, because that walk grows with the
+// open-task population and the single writer must not do it (ADR-0239). The
+// enrichment is bounded by what survives the walk — the tasks this one person
+// holds — not by the population.
+func (s *Server) handleListApprovals(w http.ResponseWriter, r *http.Request) {
+	pr := httpapi.PrincipalFrom(r.Context())
+
+	var before uint64
+	if v := r.URL.Query().Get("before"); v != "" {
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			httpapi.Error(w, http.StatusBadRequest, "invalid before cursor (want a job key)")
+			return
+		}
+		before = n
+	}
+
+	// Two passes. The first keeps the tasks this caller holds, which needs nothing
+	// but the compiled assignment metadata the walk already produced; the second
+	// asks each survivor's instance what order it is deciding. Reading variables
+	// inside the walk would mean a store read per open task on the server.
+	type candidate struct {
+		key uint64
+		tr  taskResp
+	}
+	var held []candidate
+	var nextCursor uint64
+	budgetHit, err := s.visitOpenTasks(before, false, func(jobKey uint64, tr taskResp, _ taskfolder.Task) bool {
+		nextCursor = jobKey
+		if s.holdsApproval(pr, tr) {
+			held = append(held, candidate{key: jobKey, tr: tr})
+		}
+		return true
+	})
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "list approvals: "+err.Error())
+		return
+	}
+
+	out := []approvalResp{}
+	readErr := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+		for _, c := range held {
+			a, ok, err := s.approvalOf(rv, c.tr)
+			if err != nil {
+				return err
+			}
+			if ok {
+				out = append(out, a)
+			}
+		}
+		return nil
+	})
+	if readErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read approvals: "+readErr.Error())
+		return
+	}
+	// A page whose scan budget did not bite holds every approval addressed to this
+	// caller, so its total is exact; one that hit the budget reports a floor and the
+	// cursor to continue with (ADR-0378).
+	page := httpapi.PageOf(out, budgetHit)
+	if budgetHit {
+		page = page.WithCursor(strconv.FormatUint(nextCursor, 10))
+	}
+	httpapi.JSON(w, http.StatusOK, page)
+}
+
+// holdsApproval is the listing's filter: a task addressed to this caller. It is
+// deliberately stricter than the inbox, which shows every open task to anybody
+// signed in — this page is one person's approvals, and an unaddressed task is
+// nobody's approval.
+func (s *Server) holdsApproval(pr *httpapi.Principal, tr taskResp) bool {
+	if !s.authEnabled {
+		return true
+	}
+	if pr == nil {
+		return false
+	}
+	if tr.Assignee == "" && tr.CandidateGroups == "" {
+		return false
+	}
+	return s.holdsTask(pr, tr.Assignee, tr.CandidateGroups)
+}
+
+// approvalOf turns one held task into an approval, or reports that it is not one.
+//
+// What makes a task an approval is not its name or its process id but the order:
+// the instance carries an orderId and an itemId, the order has that line, and the
+// line says this process is what decides it. That is general on purpose — an
+// installation that approves through its own model binds a product to it by name
+// (see [order.Line.ApprovalProcess]) and lands here without a change.
+func (s *Server) approvalOf(rv *state.ReadView, tr taskResp) (approvalResp, bool, error) {
+	vars := map[string]string{}
+	err := rv.VisibleVariablesOfScope(tr.ProcessInstanceKey, func(v *model.VariableValue) error {
+		switch v.Name {
+		// positionId among them, and it is the one that was missed: it is read below
+		// as what names the line, and a name collected nowhere is a fallback that
+		// always fires. For a product the order carries twice the fallback resolves
+		// to nothing — correctly, because the product names two lines — and the
+		// approval was then not recognised as an approval at all.
+		case approvalOrderVar, "itemId", "positionId", "variantId", "recipient", "orderer":
+			if s, ok := nativeVar(v).(string); ok {
+				vars[v.Name] = s
+			}
+		}
+		return nil
+	})
+	if err != nil || vars[approvalOrderVar] == "" ||
+		(vars["itemId"] == "" && vars["positionId"] == "") {
+		return approvalResp{}, false, err
+	}
+
+	ord, ok, err := s.orderStore.Get(vars[approvalOrderVar])
+	if err != nil || !ok {
+		return approvalResp{}, false, err
+	}
+	// The position first, where the process names one. A process started before
+	// positions had names passes only itemId, and that still resolves for every
+	// order carrying one position of the product — which is every order that could
+	// have been placed then.
+	ref := vars["positionId"]
+	if ref == "" {
+		ref = vars["itemId"]
+	}
+	var line order.Line
+	if key, resolveErr := order.ResolveLine(ord, ref); resolveErr == nil {
+		for _, l := range ord.Lines {
+			if l.Key() == key {
+				line = l
+				break
+			}
+		}
+	}
+	// The order has to agree that this process decides this line. Without that an
+	// ordinary user task on an order's own process — a provisioning step that asks
+	// somebody to do something by hand — would arrive here dressed as an approval.
+	if line.ItemID == "" || line.ApprovalProcess() != tr.ProcessID {
+		return approvalResp{}, false, nil
+	}
+
+	a := approvalResp{
+		Task: tr, OrderID: ord.ID, ItemID: line.ItemID, PositionID: line.Key(),
+		VariantID: firstNonEmpty(vars["variantId"], line.VariantID),
+		Recipient: vars["recipient"], Orderer: vars["orderer"], Price: line.Price,
+	}
+	// Named from the order rather than from the process's variables: the order is
+	// the record of who ordered for whom, and a model may pass either on in any shape.
+	a.RecipientName = s.principalName(firstNonEmpty(ord.Recipient, a.Recipient))
+	a.OrdererName = s.principalName(firstNonEmpty(ord.Orderer, a.Orderer))
+	if as, ok := ord.AssignmentFor(line.Key()); ok {
+		a.Assignment = &as
+	}
+	a.Answers, a.Amended = s.answersFor(line), len(line.Amendments) > 0
+	rel, ok, err := s.catalogStore.Release(ord.ReleaseID)
+	if err != nil {
+		return approvalResp{}, false, err
+	}
+	if ok {
+		for _, it := range rel.Items {
+			if it.ID == line.ItemID {
+				a.Texts = it.Texts
+				break
+			}
+		}
+		a.CatalogID = rel.CatalogID
+		cat, found, cErr := s.catalogStore.Catalog(rel.CatalogID)
+		if cErr != nil {
+			return approvalResp{}, false, cErr
+		}
+		if found {
+			a.CatalogTexts, a.Languages, a.Theme = cat.Texts, cat.Languages, cat.Theme
+		}
+	}
+	return a, true, nil
+}
+
+// handleApprovalLogo serves the brand mark of the catalogue an approval's order
+// came from, or 404 when there is none.
+//
+// It exists because the catalogue's own logo route cannot serve it: that one asks
+// for the catalogue's read right, and an approver is not the catalogue's audience
+// — a line manager approves a request for a customer group they are not in.
+// Opening the catalogue route to them would open one customer's mark to everybody
+// who ever holds a task. So the mark travels under the gate the approver actually
+// passes, which is the task they hold, and nothing else widens.
+func (s *Server) handleApprovalLogo(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid task key")
+		return
+	}
+	auth, authErr := s.mayWorkTask(r, key)
+	if s.refuseTaskWork(w, auth, authErr) {
+		return
+	}
+
+	var (
+		tr    taskResp
+		found bool
+	)
+	s.do(func() {
+		jv, ok, gErr := s.store.GetJob(key)
+		if gErr != nil || !ok {
+			err = gErr
+			return
+		}
+		tr, found = s.enrichTask(key, jv), true
+	})
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read task: "+err.Error())
+		return
+	}
+	if !found {
+		httpapi.Error(w, http.StatusNotFound, "no open task with that key")
+		return
+	}
+
+	var a approvalResp
+	isApproval := false
+	if readErr := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+		var rErr error
+		a, isApproval, rErr = s.approvalOf(rv, tr)
+		return rErr
+	}); readErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read approval: "+readErr.Error())
+		return
+	}
+	if !isApproval || a.CatalogID == "" {
+		httpapi.Error(w, http.StatusNotFound, "that task decides no catalogue order")
+		return
+	}
+
+	data, ct, has, logoErr := s.catalogStore.Logo(a.CatalogID)
+	switch {
+	case logoErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "read logo: "+logoErr.Error())
+	case !has:
+		httpapi.Error(w, http.StatusNotFound, "that catalogue has no logo")
+	default:
+		brandimage.Serve(w, ct, data)
+	}
+}

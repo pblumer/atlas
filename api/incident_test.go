@@ -43,7 +43,7 @@ func deployAndStartTask(t *testing.T, ts *httptest.Server) uint64 {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 1 {
 		t.Fatalf("expected 1 task, got %v (%s)", err, body)
 	}
 	return tasks[0].Key
@@ -82,13 +82,11 @@ func listIncidentsQuery(t *testing.T, ts *httptest.Server, query string) []incid
 	if code != http.StatusOK {
 		t.Fatalf("list incidents%s: status=%d body=%s", query, code, body)
 	}
-	var resp struct {
-		Incidents []incidentRow `json:"incidents"`
-	}
-	if err := json.Unmarshal(body, &resp); err != nil {
+	var resp []incidentRow
+	if err := json.Unmarshal(listRows(t, body), &resp); err != nil {
 		t.Fatalf("decode incidents: %v (%s)", err, body)
 	}
-	return resp.Incidents
+	return resp
 }
 
 // TestFailJobRaisesAndResolveIncident drives the whole operator loop over HTTP:
@@ -111,7 +109,7 @@ func TestFailJobRaisesAndResolveIncident(t *testing.T) {
 	// The task is gone from the inbox while blocked.
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
 	var tasks []json.RawMessage
-	_ = json.Unmarshal(body, &tasks)
+	_ = json.Unmarshal(listRows(t, body), &tasks)
 	if code != http.StatusOK || len(tasks) != 0 {
 		t.Fatalf("blocked task still listed: status=%d body=%s", code, body)
 	}
@@ -126,7 +124,7 @@ func TestFailJobRaisesAndResolveIncident(t *testing.T) {
 		t.Fatalf("after resolve: %d incidents remain", len(got))
 	}
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
-	_ = json.Unmarshal(body, &tasks)
+	_ = json.Unmarshal(listRows(t, body), &tasks)
 	if code != http.StatusOK || len(tasks) != 1 {
 		t.Fatalf("task did not return after resolve: status=%d body=%s", code, body)
 	}
@@ -196,7 +194,7 @@ func parkTask(t *testing.T, ts *httptest.Server, defKey uint64) uint64 {
 		ProcessInstanceKey uint64 `json:"processInstanceKey"`
 		ProcessDefKey      uint64 `json:"processDefKey"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, body)
 	}
 	for _, task := range tasks {

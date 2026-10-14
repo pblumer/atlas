@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -55,7 +56,7 @@ func normalizeHTTPMethod(m string) (string, error) {
 // incomplete row the author hasn't filled in). A duplicated name is an error, so a
 // silent last-wins collision can't hide a modeling mistake. kind names the field
 // for the error message ("header" / "query parameter").
-func httpKVList(taskID, kind string, kvs []xmlHTTPKV) ([]RestKV, error) {
+func httpKVList(g *feelGate, taskID, kind string, kvs []xmlHTTPKV) ([]RestKV, error) {
 	if len(kvs) == 0 {
 		return nil, nil
 	}
@@ -70,7 +71,7 @@ func httpKVList(taskID, kind string, kvs []xmlHTTPKV) ([]RestKV, error) {
 			return nil, fmt.Errorf("compiler: rest task %q has a duplicate %s %q", taskID, kind, name)
 		}
 		seen[name] = true
-		val, err := restValue(taskID, kind+" "+name, kv.Value)
+		val, err := restValue(g, taskID, kind+" "+name, kv.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -84,8 +85,8 @@ func httpKVList(taskID, kind string, kvs []xmlHTTPKV) ([]RestKV, error) {
 // expression compiled once at deploy time (invariant I5) and evaluated over the
 // instance's variables at call time; otherwise it is a literal used verbatim. what
 // names the field for error messages.
-func restValue(taskID, what, raw string) (RestExpr, error) {
-	return connectorValue(taskID, "rest worker", what, raw)
+func restValue(g *feelGate, taskID, what, raw string) (RestExpr, error) {
+	return connectorValue(g, taskID, "rest worker", what, raw)
 }
 
 // connectorValue is the shared literal-or-FEEL toggle for the HTTP-based workers
@@ -93,7 +94,7 @@ func restValue(taskID, what, raw string) (RestExpr, error) {
 // deploy time (invariant I5) and evaluated over the instance's variables at call
 // time; otherwise it is a literal used verbatim. kind names the worker for
 // diagnostics ("rest worker"/"scim worker") and what names the field.
-func connectorValue(taskID, kind, what, raw string) (RestExpr, error) {
+func connectorValue(g *feelGate, taskID, kind, what, raw string) (RestExpr, error) {
 	trimmed := strings.TrimSpace(raw)
 	if !strings.HasPrefix(trimmed, "=") {
 		return RestExpr{Literal: raw}, nil
@@ -102,7 +103,7 @@ func connectorValue(taskID, kind, what, raw string) (RestExpr, error) {
 	if text == "" {
 		return RestExpr{}, fmt.Errorf("compiler: %s task %q has an empty FEEL expression for %s", kind, taskID, what)
 	}
-	e, err := expr.CompileAuto(text)
+	e, err := g.compileFEEL(text)
 	if err != nil {
 		return RestExpr{}, fmt.Errorf("compiler: %s task %q: %s: %w", kind, taskID, what, err)
 	}
@@ -188,7 +189,8 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 	if len(defs.Processes) == 0 {
 		return nil, fmt.Errorf("compiler: no <process> element in definitions")
 	}
-	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs, agentParams)
+	g := strictFEEL // a deploy: a call that can only be null is refused (ADR-0388)
+	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs, g), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs, agentParams, g)
 }
 
 // Deployable is one executable process compiled from a model, plus the display
@@ -214,7 +216,8 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 	if err != nil {
 		return nil, err
 	}
-	resolve := buildMessageResolver(defs)
+	g := strictFEEL // a deploy: a call that can only be null is refused (ADR-0388)
+	resolve := buildMessageResolver(defs, g)
 	resolveSig := buildSignalResolver(defs)
 	resolveErr := buildErrorResolver(defs)
 	resolveEsc := buildEscalationResolver(defs)
@@ -228,7 +231,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 		if len(proc.StartEvents) == 0 {
 			continue // black-box pool: nothing to run
 		}
-		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, resolveStore, docs, agentParams)
+		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, resolveStore, docs, agentParams, g)
 		if err != nil {
 			return nil, err
 		}
@@ -283,20 +286,31 @@ func parseNamed(key uint64, version int32, r io.Reader, processId string, gated 
 	if err != nil {
 		return nil, nil, err
 	}
+	// The FEEL-call gate follows the same split as the validation gate, and for the
+	// same reason: a call this build cannot bind is refused where a deploy can act on
+	// it, and kept — as the null it has always evaluated to — where the definition is
+	// already deployed and running (ADR-0388,
+	// ADR-0393).
+	g := strictFEEL
+	if !gated {
+		g = tolerantFEEL()
+	}
 	for _, proc := range defs.Processes {
 		if proc.Id != processId {
 			continue
 		}
-		cp, err := compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs, agentParams)
+		cp, err := compileProcess(key, version, proc, buildMessageResolver(defs, g), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs, agentParams, g)
 		if err == nil {
-			return cp, nil, nil
+			// A tolerant gate may have kept something today's compiler refuses; that is
+			// drift to report, not a reason to withhold the definition.
+			return cp, g.problems(), nil
 		}
 		// Only the gate refused it: stage 5 runs on a process that is already built,
 		// so this is the same definition the deploy of its day produced. Everything
 		// else stopped before there was a process, and is an error on both paths.
 		var ve *ValidationError
 		if !gated && errors.As(err, &ve) && ve.Process != nil {
-			return ve.Process, ve.Problems, nil
+			return ve.Process, append(g.problems(), ve.Problems...), nil
 		}
 		return nil, nil, err
 	}
@@ -450,7 +464,7 @@ func participantNames(defs xmlDefinitions) map[string]string {
 // returns a resolver from a messageRef to the message's name and its compiled
 // correlation-key expression. An empty correlation key compiles to nil, which
 // evaluates to "" — matching only publishes with an empty key.
-func buildMessageResolver(defs xmlDefinitions) func(ownerId, messageRef string) (string, *expr.Compiled, error) {
+func buildMessageResolver(defs xmlDefinitions, g *feelGate) func(ownerId, messageRef string) (string, *expr.Compiled, error) {
 	messages := make(map[string]xmlMessage, len(defs.Messages))
 	for _, m := range defs.Messages {
 		if m.Id != "" {
@@ -467,7 +481,7 @@ func buildMessageResolver(defs xmlDefinitions) func(ownerId, messageRef string) 
 		}
 		var keyExpr *expr.Compiled
 		if text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(m.Subscription.CorrelationKey), "=")); text != "" {
-			ce, err := expr.CompileAuto(text)
+			ce, err := g.compileFEEL(text)
 			if err != nil {
 				return "", nil, fmt.Errorf("compiler: message %q correlationKey: %w", messageRef, err)
 			}
@@ -582,8 +596,9 @@ func buildEscalationResolver(defs xmlDefinitions) func(ownerId, escalationRef st
 // resolveError (shared across a collaboration's processes). docs is the model-wide
 // element-id → <bpmn:documentation> index (elementDocumentation), likewise shared: it is
 // keyed by BPMN element id, and this process only ever looks up its own.
-func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error), resolveItemType func(string) string, resolveDataStore func(ref, ownName string) string, docs map[string]string, agentParams map[string][]xmlAgentParam) (*CompiledProcess, error) {
+func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error), resolveItemType func(string) string, resolveDataStore func(ref, ownName string) string, docs map[string]string, agentParams map[string][]xmlAgentParam, g *feelGate) (*CompiledProcess, error) {
 	b := NewBuilder(key, proc.Id, version)
+	b.setFeelGate(g)
 	b.SetDocumentation(docs[proc.Id]) // the process's own prose; "" interns to -1 (ADR-0025)
 	// The tool-parameter declarations, translated out of the parse layer's types so the
 	// builder never sees an XML struct. Build reads them when it binds an agent-driven
@@ -635,12 +650,19 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		b.SetHistoryTtl(nanos)
 	}
+	b.SetStartVariables(startVariablesOf(proc.StartVariables))
+	consts, err := constantsOf(proc.Id, proc.Constants, g)
+	if err != nil {
+		return nil, err
+	}
+	b.SetConstants(consts)
 	// The searchable variable names (ADR-0244): resolved here, at
 	// deploy time, so the runtime never parses the attribute and the engine asks the
 	// compiled process one question per variable write (I5). A declaration that cannot
 	// mean anything — a nameless entry, or the same name twice — fails the deploy, for
 	// the same reason a malformed TTL does: it would otherwise index nothing and look
 	// like it was working.
+	var searchableNames, personalNames []string
 	if raw := strings.TrimSpace(proc.Searchable); raw != "" {
 		seen := make(map[string]bool)
 		var names []string
@@ -655,7 +677,68 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			seen[name] = true
 			names = append(names, name)
 		}
+		searchableNames = names
 		b.SetSearchableVariables(names)
+	}
+	// The personal variable names (ADR-0314), resolved at deploy time for the same
+	// reason and refused for the same reasons: a nameless entry or a repeated one would
+	// protect nothing while looking like it was working.
+	if raw := strings.TrimSpace(proc.Personal); raw != "" {
+		seen := make(map[string]bool)
+		var names []string
+		for _, part := range strings.Split(raw, ",") {
+			name := strings.TrimSpace(part)
+			if name == "" {
+				return nil, fmt.Errorf("compiler: process %q: personal %q has an empty variable name", proc.Id, proc.Personal)
+			}
+			if seen[name] {
+				return nil, fmt.Errorf("compiler: process %q: personal names %q twice", proc.Id, name)
+			}
+			seen[name] = true
+			names = append(names, name)
+		}
+		personalNames = names
+		b.SetPersonalVariables(names)
+	}
+	// The data subject: which variable holds the id of the person the personal
+	// variables are about. ADR-0314 says a value is enciphered "under that data key"
+	// without saying how an instance knows whose key that is, and the answer cannot be
+	// left implicit — enciphering under the wrong subject's key makes an erasure either
+	// ineffective (the wrong key is destroyed) or too broad (somebody else's data goes
+	// with it).
+	//
+	// It is declared rather than derived from the instance's initiator, because the one
+	// real process that needed this — an account order — carries the data of a person
+	// who is *not* yet a principal in Atlas at all, and orders one account on behalf of
+	// another person as a matter of course. Neither the starter nor any convention
+	// identifies the subject; only the model knows.
+	if raw := strings.TrimSpace(proc.DataSubject); raw != "" {
+		if strings.Contains(raw, ",") {
+			return nil, fmt.Errorf("compiler: process %q: dataSubject %q names more than one variable: a value is enciphered under exactly one subject's key, so two subjects would mean two keys and no defined erasure (ADR-0314)", proc.Id, proc.DataSubject)
+		}
+		if len(personalNames) == 0 {
+			return nil, fmt.Errorf("compiler: process %q: dataSubject %q is declared but no variable is declared personal: the declaration would encipher nothing. Declare atlas:personal=\"…\" or drop atlas:dataSubject (ADR-0314)", proc.Id, raw)
+		}
+		for _, name := range personalNames {
+			if name == raw {
+				return nil, fmt.Errorf("compiler: process %q: dataSubject %q is itself declared personal: the variable that says whose key opens a value cannot be enciphered under that key, because nothing would be left to look the key up by. A subject id is a reference and stays in the clear (ADR-0314)", proc.Id, raw)
+			}
+		}
+		b.SetDataSubjectVariable(raw)
+	} else if len(personalNames) > 0 {
+		return nil, fmt.Errorf("compiler: process %q: %d variable(s) are declared personal but no atlas:dataSubject says whose data it is: an enciphered value belongs to one person, and without the variable holding that person's id there is no key to encipher under and nothing to destroy on an erasure request. Declare atlas:dataSubject=\"…\" (ADR-0314)", proc.Id, len(personalNames))
+	}
+	// Personal and searchable are mutually exclusive, and this is decidable here. The
+	// index stores what the engine sees, which for a declared variable is ciphertext
+	// under a random nonce: two writes of the same name produce different bytes, so an
+	// exact-match search can never match and a range never order. The declaration would
+	// be a promise the mechanism cannot keep.
+	for _, p := range personalNames {
+		for _, sv := range searchableNames {
+			if p == sv {
+				return nil, fmt.Errorf("compiler: process %q: %q is declared both personal and searchable: a personal value is indexed as ciphertext under a random nonce, so no search could ever match it. Search on a reference — the data subject's id is one — instead (ADR-0314, ADR-0244)", proc.Id, p)
+			}
+		}
 	}
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
 	reg := &registrar{b: b, ids: ids, docs: docs, agentParams: agentParams}
@@ -824,16 +907,24 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				keepWire(fmt.Errorf("compiler: data output association on %q target: %w", ownerId, err))
 				return
 			}
-			var valExpr *expr.Compiled
-			if from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Assignment.From), "=")); from != "" {
-				ce, err := expr.CompileAuto(from)
+			// Every <assignment>, in document order, because the order decides which of
+			// two writes to the same member wins. An assignment with no <from> produces
+			// no value and so is no write — which is also how an association with no
+			// <assignment> at all arrives here, and ADR-0058 makes that state-only.
+			writes := make([]DataWrite, 0, len(a.Assignments))
+			for _, asg := range a.Assignments {
+				from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(asg.From), "="))
+				if from == "" {
+					continue
+				}
+				ce, err := g.compileFEEL(from)
 				if err != nil {
 					keepWire(fmt.Errorf("compiler: data output association on %q assignment: %w", ownerId, err))
 					return
 				}
-				valExpr = ce
+				writes = append(writes, DataWrite{Value: ce, TargetPath: strings.TrimSpace(asg.To)})
 			}
-			b.AddDataOutputAssociation(ids[ownerId], name, valExpr, state, strings.TrimSpace(a.Assignment.To))
+			b.AddDataOutputAssociationWrites(ids[ownerId], name, state, writes)
 		}
 	}
 	// Every scope, recursively — like wireScopeIO below, and for the same reason: a
@@ -869,7 +960,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			}
 			var valExpr *expr.Compiled
 			if from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Assignment.From), "=")); from != "" {
-				ce, err := expr.CompileAuto(from)
+				ce, err := g.compileFEEL(from)
 				if err != nil {
 					keepWire(fmt.Errorf("compiler: data input association on %q assignment: %w", ownerId, err))
 					return
@@ -892,7 +983,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		if text == "" {
 			return nil, fmt.Errorf("compiler: task %q ioMapping %s for %q has no source expression", ownerId, dir, target)
 		}
-		e, err := expr.CompileAuto(text)
+		e, err := g.compileFEEL(text)
 		if err != nil {
 			return nil, fmt.Errorf("compiler: task %q ioMapping %s for %q: %w", ownerId, dir, target, err)
 		}
@@ -977,7 +1068,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		if text == "" {
 			return nil, nil
 		}
-		e, err := expr.CompileAuto(text)
+		e, err := g.compileFEEL(text)
 		if err != nil {
 			return nil, fmt.Errorf("compiler: loop %s on %q: %w", what, ownerId, err)
 		}
@@ -1341,12 +1432,80 @@ type xmlProcess struct {
 	// for these names, because indexing every value would double the write path and
 	// index JSON blobs. Empty = nothing indexed, and the process pays nothing.
 	Searchable string `xml:"searchable,attr"`
+	// Personal is a comma-separated list of variable names holding personal data
+	// (ADR-0314). Same shape and same place as Searchable, because that record asks for
+	// a list rather than a mechanism. A declared variable is *payload*: it may be
+	// written, carried and handed to a worker, and it may not be read by any expression
+	// — see personalRefusal. Empty = nothing declared, and the process pays nothing.
+	Personal string `xml:"personal,attr"`
+	// DataSubject names the one variable holding the id of the person the personal
+	// variables are about (ADR-0314). It is what the enciphering edge looks the data
+	// key up by, so a process that declares personal data must declare it: a value
+	// enciphered under nobody's key could never be erased, and erasure is the entire
+	// point.
+	//
+	// Its own value stays in the clear — it is a reference, which is the record's
+	// primary defence rather than something to hide — so it may be routed on, matched
+	// and indexed like any other variable.
+	DataSubject string `xml:"dataSubject,attr"`
+
+	// StartVariables are the values the process says it starts with
+	// (<atlas:startForm><atlas:startVariable/></atlas:startForm>). The start surfaces
+	// render them as typed fields, and the engine seeds the default of one a start did
+	// not supply (ADR-0455).
+	StartVariables []xmlStartVariable `xml:"extensionElements>startForm>startVariable"`
+	// Constants are the values every instance starts with and nobody is asked for
+	// (<atlas:constants><atlas:constant/></atlas:constants>, ADR-0454).
+	// The engine seeds them on every start path.
+	Constants []xmlConstant `xml:"extensionElements>constants>constant"`
 
 	xmlFlowContent // the process root's flow nodes and sequence flows
 
 	DataObjects          []xmlDataObject          `xml:"dataObject"`
 	DataStoreReferences  []xmlDataStoreReference  `xml:"dataStoreReference"`
 	DataObjectReferences []xmlDataObjectReference `xml:"dataObjectReference"`
+}
+
+// xmlStartVariable is one <atlas:startVariable name type default required/>.
+type xmlStartVariable struct {
+	Name     string `xml:"name,attr"`
+	Type     string `xml:"type,attr"`
+	Default  string `xml:"default,attr"`
+	Required string `xml:"required,attr"`
+}
+
+// startVariablesOf reads the declared start variables the way the Modeler does
+// (readStartVariables in api/web/editor.js): a row without a name is dropped, a type
+// outside the four the start forms render falls back to string, and a name declared
+// twice keeps its first row. It never refuses anything. The declaration has always been
+// authoring metadata the deploy accepted as written, and a stored definition is compiled
+// again on every restart, so a refusal here would turn an accepted model into one that
+// no longer loads. A default that is not a literal of its type is therefore not refused
+// either: it is not seeded, and the reason travels with the declaration for the deploy
+// to warn with (see startVariableDefault).
+func startVariablesOf(decl []xmlStartVariable) []StartVariable {
+	var out []StartVariable
+	seen := map[string]bool{}
+	for _, d := range decl {
+		name := strings.TrimSpace(d.Name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		typ := strings.TrimSpace(d.Type)
+		if !slices.Contains(startVariableTypes, typ) {
+			typ = "string"
+		}
+		sv := StartVariable{
+			Name:     name,
+			Type:     typ,
+			Default:  d.Default,
+			Required: strings.TrimSpace(d.Required) == "true",
+		}
+		startVariableDefault(&sv)
+		out = append(out, sv)
+	}
+	return out
 }
 
 // xmlFlowContent is the set of flow nodes and sequence flows of one scope — the
@@ -1368,11 +1527,11 @@ type xmlFlowContent struct {
 
 	Flows []xmlSequenceFlow `xml:"sequenceFlow"`
 
-	Tasks              []xmlPlainTask        `xml:"task"`
-	ManualTasks        []xmlPlainTask        `xml:"manualTask"`
-	ParallelGateways   []xmlNode             `xml:"parallelGateway"`
-	InclusiveGateways  []xmlInclusiveGateway `xml:"inclusiveGateway"`
-	EventBasedGateways []xmlNode             `xml:"eventBasedGateway"` // deferred choice; only its id matters (ADR-0110)
+	Tasks              []xmlPlainTask         `xml:"task"`
+	ManualTasks        []xmlPlainTask         `xml:"manualTask"`
+	ParallelGateways   []xmlNode              `xml:"parallelGateway"`
+	InclusiveGateways  []xmlInclusiveGateway  `xml:"inclusiveGateway"`
+	EventBasedGateways []xmlEventBasedGateway `xml:"eventBasedGateway"` // deferred choice (ADR-0110)
 
 	UserTasks []xmlUserTask `xml:"userTask"`
 
@@ -1626,9 +1785,13 @@ type xmlSubProcess struct {
 	// TriggeredByEvent marks an event subprocess (ADR-0082): it is not entered by a
 	// sequence flow but armed by its start event's event definition while the parent
 	// scope runs. "true" makes it an event subprocess; empty/absent is an ordinary one.
-	TriggeredByEvent string            `xml:"triggeredByEvent,attr"`
-	MultiInstance    *xmlMultiInstance `xml:"multiInstanceLoopCharacteristics"`
-	StandardLoop     *xmlStandardLoop  `xml:"standardLoopCharacteristics"`
+	TriggeredByEvent string `xml:"triggeredByEvent,attr"`
+	// Wizard is atlas:wizard (ADR-0449): "internal" or "public" makes the subprocess
+	// one sitting of one filler, walked user task by user task. Empty is an ordinary
+	// subprocess; any other value is refused at deploy by stage 5.
+	Wizard        string            `xml:"wizard,attr"`
+	MultiInstance *xmlMultiInstance `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop  `xml:"standardLoopCharacteristics"`
 	// IsTransaction marks a subprocess that was parsed from a <transaction> element (never from
 	// XML — set by foldTransactions). The compiler marks its compiled node so the runtime and
 	// validation know it may host a cancel boundary and hold a cancel end event (ADR-0108).
@@ -1814,11 +1977,18 @@ type xmlDataObjectReference struct {
 
 // xmlDataOutputAssociation is a <dataOutputAssociation> on an activity: targetRef
 // names the data object (or a <dataObjectReference> to it) the activity writes, and
-// the optional <assignment><from> is a FEEL expression, evaluated over the instance's
-// variables at completion, that produces the written value (ADR-0058).
+// each <assignment><from> is a FEEL expression, evaluated over the instance's
+// variables at completion, that produces a written value (ADR-0058).
+//
+// Assignments is a list because BPMN's DataAssociation declares `assignment [0..*]`
+// and because a step that captures a form's worth of fields should not have to be
+// drawn as one arrow per field (ADR-0350).
+// It was a single field until then, which is worse than a limitation: encoding/xml
+// overwrites a non-slice field, so a second <assignment> was discarded without a
+// word and the last one silently won.
 type xmlDataOutputAssociation struct {
-	TargetRef  string        `xml:"targetRef"`
-	Assignment xmlAssignment `xml:"assignment"`
+	TargetRef   string          `xml:"targetRef"`
+	Assignments []xmlAssignment `xml:"assignment"`
 }
 
 // xmlAssignment is a data association's <assignment>: a <from> value expression and a
@@ -1942,6 +2112,37 @@ type xmlIntermediateThrowEvent struct {
 	// Link, when present, makes this a link throw event: a goto to the link catch of the same
 	// name in the same scope — an off-page worker (ADR-0133). A pointer so an absent one is nil.
 	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
+	// OtherChildren collects every child element none of the fields above matched, so that
+	// "carries a definition this compiler does not implement" stays distinguishable from
+	// "carries no definition at all". They used to be the same state and both were refused;
+	// once the second one compiles to a none throw (ADR-0307),
+	// the first would otherwise be silently accepted as a pass-through that does nothing the
+	// model asked for. Most of what lands here is ordinary — documentation, extensionElements,
+	// the incoming/outgoing hints bpmn-js writes — so only a *EventDefinition child is
+	// refused; see unimplementedEventDefinition.
+	OtherChildren []xmlUnmatchedChild `xml:",any"`
+}
+
+// xmlUnmatchedChild is a child element captured only for its name. It carries no content:
+// the point is to know what was there, not to read it.
+type xmlUnmatchedChild struct {
+	XMLName xml.Name
+}
+
+// unimplementedEventDefinition returns the local name of the first unmatched child that is a
+// BPMN event definition, or "" when there is none.
+//
+// The suffix is the whole test, deliberately. Naming the specific definitions that are wrong
+// on a throw event (timer, conditional, error, cancel, terminate) would be a list that goes
+// stale the moment BPMN or this compiler grows one more; a definition nothing above matched
+// is by construction one this compiler does not implement here, whatever it is called.
+func unimplementedEventDefinition(children []xmlUnmatchedChild) string {
+	for _, ch := range children {
+		if strings.HasSuffix(ch.XMLName.Local, "EventDefinition") {
+			return ch.XMLName.Local
+		}
+	}
+	return ""
 }
 
 // xmlLinkEventDefinition is a <linkEventDefinition name="…"> on an intermediate throw or
@@ -2059,6 +2260,17 @@ type xmlNode struct {
 	DataIn  []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
+// xmlEventBasedGateway is an <eventBasedGateway>. atlas runs one kind of it, the
+// exclusive deferred choice inside a running instance (ADR-0110), and the two
+// attributes are read only so that the kinds it does not run are refused rather than
+// run as that one (#804): instantiate="true" makes the gateway start the instance, and
+// eventGatewayType="Parallel" makes it wait for every event instead of the first.
+type xmlEventBasedGateway struct {
+	xmlNode
+	Instantiate      string `xml:"instantiate,attr"`
+	EventGatewayType string `xml:"eventGatewayType,attr"`
+}
+
 // xmlPlainTask is an undefined <task> or a <manualTask>: an activity with no
 // execution semantics of its own (the engine runs it as a pass-through), but an
 // activity all the same — so it carries the loop markers (ADR-0077, ADR-0133) as well
@@ -2148,6 +2360,10 @@ type xmlServiceTask struct {
 	// User, when present, marks this service task a user-provisioning task
 	// (ADR-0123). The pointer is nil when the <atlas:userConnector> extension is absent.
 	User *xmlUserConnector `xml:"extensionElements>userConnector"`
+	// Shop is a send task's <atlas:shopTask> (ADR-0429 §4): the point where a
+	// product's process states how an action ended. Send tasks only; on a service task
+	// it is refused at compile.
+	Shop *xmlShopTask `xml:"extensionElements>shopTask"`
 	// Csv, when present, marks this service task a CSV-to-JSON task
 	// (ADR-0139). The pointer is nil when the <atlas:csvConnector> extension is absent.
 	Csv *xmlCsvConnector `xml:"extensionElements>csvConnector"`
@@ -2216,6 +2432,11 @@ type xmlServiceTask struct {
 	// (ADR-0258): one chat operation — send, edit, delete, read, list
 	// or open a thread — against a Worker an operator configured.
 	Discord *xmlDiscordConnector `xml:"extensionElements>discordConnector"`
+	// S3, when present, marks this service task an object-store task
+	// (ADR-0442): one operation against an S3-compatible bucket
+	// — put an object down, read a small one back, ask whether it is there, list what is
+	// under a prefix, copy one, delete one, or mint a link somebody can open it with.
+	S3 *xmlS3Connector `xml:"extensionElements>s3Connector"`
 	// Agent, when present, marks this service task an AI task: one call to a language
 	// model, one answer into one variable (ADR-0256). It is the same extension element an
 	// ad-hoc container carries, read for its other half — prompt and resultVariable rather
@@ -2534,11 +2755,41 @@ type xmlMailConnector struct {
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
+	// Operation is what the task does with the Worker's mailbox
+	// (ADR-0438); blank is send, which is every mail task authored
+	// before mailboxes existed. The attributes below belong to the other operations,
+	// and the compiler refuses one an operation does not use.
+	Operation      string `xml:"operation,attr"`
+	Folder         string `xml:"folder,attr"`
+	MessageID      string `xml:"messageId,attr"`
+	Destination    string `xml:"destination,attr"`
+	MaxResults     string `xml:"maxResults,attr"`
+	IncludeBody    string `xml:"includeBody,attr"`
+	UnreadOnly     string `xml:"unreadOnly,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
 }
 
 // xmlUserConnector is the <atlas:userConnector> extension of a user-provisioning
 // task (ADR-0123). Operation selects the action; the remaining
 // attributes are literal-or-FEEL values, like the mail worker's fields.
+// xmlShopTask is <atlas:shopTask mode="outcome" action="…" outcome="…"/> on a send
+// task (ADR-0429 §4).
+type xmlShopTask struct {
+	Mode    string `xml:"mode,attr"`
+	Action  string `xml:"action,attr"`
+	Outcome string `xml:"outcome,attr"`
+	// Product, Order, Position and ResultVariable belong to mode `command`: the
+	// product whose action is issued, the order and the position it is issued on
+	// (each a literal or an =expression), and the variable that receives the
+	// command id.
+	Product        string `xml:"product,attr"`
+	Order          string `xml:"order,attr"`
+	Position       string `xml:"position,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	// Retries is the task's own retry budget (ADR-0135); blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
 type xmlUserConnector struct {
 	Operation   string `xml:"operation,attr"`
 	Username    string `xml:"username,attr"`
@@ -2809,6 +3060,44 @@ type xmlGoogleSheetsConnector struct {
 	Retries string `xml:"retries,attr"`
 }
 
+// An object-store task's parameters, carried on a service task as an
+// <atlas:s3Connector connector="..." operation="..." .../> extension element
+// (ADR-0442). The connector attribute names the Worker (whose
+// access key lives on the server, never in the model) and operation is the object
+// operation the task performs. Element and attribute keep the pre-ADR-0203 spelling
+// their siblings carry: both are authored in deployed models.
+//
+// Which of the remaining attributes apply is decided by the operation, and only by it:
+// bucket addresses the bucket (every operation) and key the one object seven of them act
+// on; content is what a put writes and contentType what those bytes are; encoding says
+// whether content is text or base64; prefix, delimiter, startAfter and maxKeys are a
+// listing's shape; sourceBucket and sourceKey are what a copy copies from; expiresIn is a
+// presigned URL's lifetime in seconds; resultVariable receives what the store returned.
+// s3Meta children are extra request headers — user metadata, or an x-amz-* header sent as
+// itself. The compiler refuses any attribute the operation does not use, so a model can
+// never carry a value the Worker silently drops.
+type xmlS3Connector struct {
+	Connector      string      `xml:"connector,attr"`
+	Operation      string      `xml:"operation,attr"`
+	Bucket         string      `xml:"bucket,attr"`
+	Key            string      `xml:"key,attr"`
+	Content        string      `xml:"content,attr"`
+	ContentType    string      `xml:"contentType,attr"`
+	Encoding       string      `xml:"encoding,attr"`
+	Prefix         string      `xml:"prefix,attr"`
+	Delimiter      string      `xml:"delimiter,attr"`
+	StartAfter     string      `xml:"startAfter,attr"`
+	MaxKeys        string      `xml:"maxKeys,attr"`
+	SourceBucket   string      `xml:"sourceBucket,attr"`
+	SourceKey      string      `xml:"sourceKey,attr"`
+	ExpiresIn      string      `xml:"expiresIn,attr"`
+	ResultVariable string      `xml:"resultVariable,attr"`
+	Meta           []xmlHTTPKV `xml:"s3Meta"`
+	// Retries is the task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
 type xmlRemedyConnector struct {
 	Connector      string      `xml:"connector,attr"`
 	Form           string      `xml:"form,attr"`
@@ -2963,6 +3252,43 @@ type xmlCalledDecision struct {
 	ResultVariable string `xml:"resultVariable,attr"`
 	Retries        string `xml:"retries,attr"`
 	BindingType    string `xml:"bindingType,attr"`
+	// VersionTag is Camunda's tag for a versionTag binding. Atlas reads it only to
+	// say it is not supported.
+	VersionTag string `xml:"versionTag,attr"`
+	// Version is atlas:version, the deployed version of the decision the task
+	// evaluates (ADR-0423). A Camunda engine
+	// ignores the attribute and runs latest.
+	Version string `xml:"version,attr"`
+}
+
+// calledDecisionBinding maps a business rule task's zeebe:calledDecision to its
+// compiled binding and, for a fixed version, the version it names.
+//
+// Unlike [decisionBinding], which call activities still use, it does not fold
+// `versionTag` into latest: a model that pins a tag and runs whatever is newest is
+// the silent wrong answer this binding exists to end, so the tag is kept apart and
+// the deploy refuses it (checkDecisionBindings). atlas:version must be a positive
+// whole number, and it cannot be combined with bindingType="deployment" or
+// "versionTag", which name a different model.
+func calledDecisionBinding(taskId string, cd xmlCalledDecision) (DecisionBinding, int32, error) {
+	if v := strings.TrimSpace(cd.Version); v != "" {
+		n, err := strconv.ParseInt(v, 10, 32)
+		if err != nil || n < 1 {
+			return 0, 0, fmt.Errorf("compiler: business rule task %q: version %q is not a deployed version number (1, 2, 3, …)", taskId, cd.Version)
+		}
+		if bt := strings.TrimSpace(cd.BindingType); bt != "" && bt != "latest" {
+			return 0, 0, fmt.Errorf("compiler: business rule task %q: version %d cannot be combined with bindingType %q; remove one of the two", taskId, n, bt)
+		}
+		return BindingVersion, int32(n), nil
+	}
+	switch strings.TrimSpace(cd.BindingType) {
+	case "deployment":
+		return BindingDeployment, 0, nil
+	case "versionTag":
+		return BindingVersionTag, 0, nil
+	default:
+		return BindingLatest, 0, nil
+	}
 }
 
 // decisionBinding maps a zeebe:calledDecision bindingType to a compiled binding
@@ -3038,7 +3364,7 @@ func decisionInputs(in []xmlDecisionInput) (map[string]any, error) {
 // evaluation time; target names the decision input it feeds. A leading '=' (the
 // Zeebe expression marker) is trimmed. An empty target or an uncompilable source
 // fails the deploy, exactly like a bad script-task expression.
-func decisionInputMappings(taskID string, in []xmlZeebeIOMapInput) ([]DecisionInputMapping, error) {
+func decisionInputMappings(g *feelGate, taskID string, in []xmlZeebeIOMapInput) ([]DecisionInputMapping, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
@@ -3051,7 +3377,7 @@ func decisionInputMappings(taskID string, in []xmlZeebeIOMapInput) ([]DecisionIn
 		if text == "" {
 			return nil, fmt.Errorf("compiler: business rule task %q input mapping for %q has no source expression", taskID, im.Target)
 		}
-		e, err := expr.CompileAuto(text)
+		e, err := g.compileFEEL(text)
 		if err != nil {
 			return nil, fmt.Errorf("compiler: business rule task %q input mapping for %q: %w", taskID, im.Target, err)
 		}

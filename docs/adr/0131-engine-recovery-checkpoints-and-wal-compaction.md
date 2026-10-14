@@ -1,6 +1,7 @@
 # ADR-0131: Engine recovery checkpoints and WAL compaction
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-17
 - **Deciders:** Atlas engine team
 

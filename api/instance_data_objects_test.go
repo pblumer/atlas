@@ -53,7 +53,7 @@ func TestInstanceDataObjects(t *testing.T) {
 		Key   uint64 `json:"key"`
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(body, &instances); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &instances); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	var key uint64
@@ -207,7 +207,7 @@ func readDataObjectRows(t *testing.T, ts *httptest.Server, bpmn string) map[stri
 		Key   uint64 `json:"key"`
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(body, &instances); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &instances); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	var key uint64
@@ -357,7 +357,7 @@ func TestInstanceDataObjectsDefinitionDeleted(t *testing.T) {
 	var instances []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &instances); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &instances); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	if len(instances) == 0 {

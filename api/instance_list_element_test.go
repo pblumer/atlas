@@ -35,7 +35,7 @@ func listedKeys(t *testing.T, body []byte) []uint64 {
 		Key   uint64 `json:"key"`
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	out := make([]uint64, 0, len(rows))
@@ -115,20 +115,21 @@ func TestListInstancesByElement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET capped page: %v", err)
 	}
+	facts := readPage(t, res)
+	res.Body.Close()
 	var page []struct {
 		Key uint64 `json:"key"`
 	}
-	_ = json.NewDecoder(res.Body).Decode(&page)
-	cursor := res.Header.Get("X-Instances-Next-Cursor")
-	truncated := res.Header.Get("X-Instances-Truncated")
-	res.Body.Close()
+	if err := json.Unmarshal(facts.Items, &page); err != nil {
+		t.Fatalf("decode capped page: %v", err)
+	}
 	if len(page) != 1 || page[0].Key != all[0] {
 		t.Fatalf("capped page = %+v, want the newest match", page)
 	}
-	if truncated != "true" || cursor == "" {
-		t.Fatalf("capped page headers: truncated=%q cursor=%q, want true and a cursor", truncated, cursor)
+	if !facts.Truncated || facts.NextCursor == "" {
+		t.Fatalf("capped page says truncated=%v cursor=%q, want true and a cursor", facts.Truncated, facts.NextCursor)
 	}
-	next := list(fmt.Sprintf("/api/v1/instances?process=%d&element=left&state=active&before=%s", dep.Key, cursor))
+	next := list(fmt.Sprintf("/api/v1/instances?process=%d&element=left&state=active&before=%s", dep.Key, facts.NextCursor))
 	if want := []uint64{all[2]}; !equalKeys(next, want) {
 		t.Errorf("next page = %v, want %v", next, want)
 	}

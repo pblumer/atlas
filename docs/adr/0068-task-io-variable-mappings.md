@@ -1,6 +1,7 @@
 # ADR-0068: Task input/output variable mappings with activity-local scopes
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-27
 - **Deciders:** Atlas engine team
 

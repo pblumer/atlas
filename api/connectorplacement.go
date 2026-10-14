@@ -94,6 +94,7 @@ var authoredKindJobTypes = map[string][]int32{
 	connectorKindJira:         {compiler.JiraJobTypeIndex},
 	connectorKindGoogleSheets: {compiler.GoogleSheetsJobTypeIndex},
 	connectorKindDiscord:      {compiler.DiscordJobTypeIndex},
+	connectorKindS3:           {compiler.S3JobTypeIndex},
 	"webscrape":               {compiler.WebScrapeJobTypeIndex},
 	"userconnector":           {compiler.UserConnectorJobTypeIndex},
 
@@ -138,6 +139,8 @@ var catalogKindsWithoutJobType = map[string]string{
 // quietly excused from being movable.
 var engineOnlyJobTypes = map[int32]string{
 	compiler.UserConnectorJobTypeIndex: "mutates the run-loop-owned user store (ADR-0123), so it has no out-of-process form",
+	compiler.ShopJobTypeIndex:          "states an action's outcome to the order and the engine (ADR-0429 §4), so it has no out-of-process form",
+	compiler.ShopCommandJobTypeIndex:   "asks a held position for an action through the order act (ADR-0429 §4), so it has no out-of-process form",
 }
 
 // offloadableJobTypes is offloadableKinds inverted: the job types an operator can move

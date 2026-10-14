@@ -1,6 +1,7 @@
 # ADR-0074: Embedded subprocesses (scope lifecycle via child counters)
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-28
 - **Deciders:** Atlas engine team
 

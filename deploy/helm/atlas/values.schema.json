@@ -65,13 +65,18 @@
           "type": "object",
           "properties": { "enabled": { "type": "boolean" } }
         },
+        "catalogue": {
+          "type": "object",
+          "properties": { "enabled": { "type": "boolean" } }
+        },
         "script": {
           "type": "object",
           "properties": {
             "powershell": { "type": "boolean" },
             "python": { "type": "boolean" },
             "javascript": { "type": "boolean" },
-            "timeout": { "type": "string" }
+            "timeout": { "type": "string" },
+            "sandbox": { "type": "string", "enum": ["off", "strict"] }
           }
         },
         "shutdownTimeout": { "type": "string" },

@@ -34,7 +34,7 @@ func oneAuthTask(t *testing.T, ts *httptest.Server, c *http.Client) uint64 {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, body)
 	}
 	if len(tasks) != 1 {
@@ -51,7 +51,7 @@ func assigneeOf(t *testing.T, ts *httptest.Server, c *http.Client, key uint64) s
 		Key      uint64 `json:"key"`
 		Assignee string `json:"assignee"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, body)
 	}
 	for _, tk := range tasks {

@@ -71,7 +71,7 @@ type promoteResp struct {
 // this server may ship work and which credential it presents, which is operator
 // configuration, not application content.
 func (s *Server) handleCreateTarget(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -81,6 +81,9 @@ func (s *Server) handleCreateTarget(w http.ResponseWriter, r *http.Request) {
 		BaseURL       string `json:"baseUrl"`
 		Kind          string `json:"kind"`
 		CredentialRef string `json:"credentialRef"`
+		// Optional, and empty means "the same credential for both jobs" — which is what
+		// every target configured before this says.
+		ReadCredentialRef string `json:"readCredentialRef"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -103,12 +106,18 @@ func (s *Server) handleCreateTarget(w http.ResponseWriter, r *http.Request) {
 	}
 	rec := deploymentTarget{
 		ID: id, Name: name, BaseURL: base,
-		Kind:          strings.TrimSpace(payload.Kind),
-		CredentialRef: strings.TrimSpace(payload.CredentialRef),
-		CreatedAt:     time.Now().Unix(),
+		Kind:              strings.TrimSpace(payload.Kind),
+		CredentialRef:     strings.TrimSpace(payload.CredentialRef),
+		ReadCredentialRef: strings.TrimSpace(payload.ReadCredentialRef),
+		CreatedAt:         time.Now().Unix(),
 	}
 	var saveErr error
-	s.do(func() { saveErr = s.targets.Save(rec) })
+	// A target is a node on the Starmap, so the reading it was drawn from no longer
+	// describes this server (see forgetLandscape).
+	s.do(func() {
+		s.forgetLandscape()
+		saveErr = s.targets.Save(rec)
+	})
 	if saveErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "create target: "+saveErr.Error())
 		return
@@ -142,7 +151,10 @@ func (s *Server) handleListTargets(w http.ResponseWriter, r *http.Request) {
 // promoted to it are untouched, both here and over there.
 func (s *Server) handleDeleteTarget(w http.ResponseWriter, r *http.Request) {
 	var delErr error
-	s.do(func() { delErr = s.targets.Delete(r.PathValue("id")) })
+	s.do(func() {
+		s.forgetLandscape()
+		delErr = s.targets.Delete(r.PathValue("id"))
+	})
 	if delErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "delete target: "+delErr.Error())
 		return
@@ -160,7 +172,7 @@ func (s *Server) handlePromoteRelease(w http.ResponseWriter, r *http.Request) {
 	}
 	version := int32(version64)
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -296,9 +308,12 @@ func (s *Server) handlePromoteRelease(w http.ResponseWriter, r *http.Request) {
 // The artifacts come from the *deployment* records the release points at, not from
 // the application's current drafts: a release is the frozen thing that shipped, and
 // the drafts may have moved on since. Members that are not processes are skipped —
-// forms and decisions do not travel yet (ADR-0128 Phase 2 records only processes),
-// and silently sending nothing for them is better than sending something the
-// receiver cannot deploy.
+// forms and decisions do not travel yet, and silently sending nothing for them is
+// better than sending something the receiver cannot deploy. A release does now
+// record its decisions (ADR-0319), so what
+// is missing here is the transport for them, not the manifest: promoting a
+// decision-only application reaches the target with nothing to deploy, exactly as
+// it did before decisions were recorded at all.
 //
 // Must be called on the run-loop goroutine (the deploy store's owner). Errors are
 // reported through outErr so the caller's do() closure can bail cleanly.
@@ -389,7 +404,7 @@ func (s *Server) pushBundle(ctx context.Context, tgt deploymentTarget, credentia
 	defer resp.Body.Close()
 	out.RemoteStatus = resp.StatusCode
 
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxXMLBytes))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, s.budgets().ModelUpload))
 	if err != nil {
 		out.Error = "read reply: " + err.Error()
 		return out
@@ -520,7 +535,7 @@ func (s *Server) fillRemoteStatus(ctx context.Context, st *targetStatus, tgt dep
 		st.Error = fmt.Sprintf("peer answered HTTP %d", resp.StatusCode)
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, s.budgets().ModelUpload))
 	if err != nil {
 		st.Error = "read reply: " + err.Error()
 		return

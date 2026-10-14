@@ -1,10 +1,10 @@
 # Atlas Helm chart
 
-Deploys the single-binary [Atlas](https://github.com/pblumer/atlas) BPMN workflow
+Deploys the single-binary [atlas](https://github.com/pblumer/atlas) BPMN workflow
 engine — the engine, HTTP API, web UI and MCP endpoint in one container.
 
 > ⚠️ Atlas is in early development (`0.x`) — APIs and on-disk formats are
-> unstable. By default this chart deploys the pinned `0.4.0` release image; set
+> unstable. By default this chart deploys the pinned `0.13.0` release image; set
 > `image.tag` to move to another release (or to the rolling `main` tag).
 
 ## Why a StatefulSet with one replica
@@ -14,21 +14,21 @@ Atlas is a durable, event-sourced engine with a **single writer per partition**
 state store at a time. The chart therefore renders a **StatefulSet pinned to one
 replica** with a **ReadWriteOnce** persistent volume, so two servers can never
 touch the same data. Do not convert it to a Deployment or scale it up — that
-would corrupt durable state. Scale Atlas by adding partitions (a roadmap item),
+would corrupt durable state. Scale atlas by adding partitions (a roadmap item),
 not pods.
 
 ## Install
 
 ```bash
 # From the OCI registry (no checkout needed):
-helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.4.0
+helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.13.0
 
 # ...or from a checkout of the repo:
 helm install atlas ./deploy/helm/atlas
 
 # Pin an image tag and give it real storage:
-helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.4.0 \
-  --set image.tag=0.4.0 \
+helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.13.0 \
+  --set image.tag=0.13.0 \
   --set persistence.size=20Gi \
   --set persistence.storageClass=fast-ssd
 ```
@@ -88,7 +88,7 @@ kubectl exec statefulset/atlas -- \
 
 The chart has no dedicated values for it, because the server takes it as a handful
 of environment variables and `extraEnv` carries them without a new schema. Point
-Atlas at an OpenID Connect provider by putting the issuer and client id there and
+atlas at an OpenID Connect provider by putting the issuer and client id there and
 the secret in a Secret you manage:
 
 ```yaml
@@ -119,7 +119,7 @@ helm upgrade --install atlas ./deploy/helm/atlas -f values.yaml
 provider. Set it to the origin your Ingress serves, not the Service name.
 
 Keep the bootstrap administrator above — it is the way back in when the
-provider is unreachable. Which Atlas roles the provider's groups grant is
+provider is unreachable. Which atlas roles the provider's groups grant is
 configured in the running instance, under Console → Organization → Single
 sign-on, and is off until somebody turns it on. See
 [`docs/install.md`](../../../docs/install.md#single-sign-on-with-an-identity-provider).
@@ -153,6 +153,23 @@ All three run inside the Linux container: `pwsh` is PowerShell Core (not Windows
 PowerShell), `python3` (not Python 2), and Node.js — scripts must be
 Linux-compatible. To turn a language off, set its `atlas.script.<lang>=false`.
 
+The initial `atlas.script.sandbox=off` default preserves existing scripts that
+read mounted files or call network services. After checking those dependencies,
+enable the fail-closed Linux profile with:
+
+```bash
+helm upgrade atlas ./deploy/helm/atlas \
+  --set atlas.script.sandbox=strict
+```
+
+`strict` requires Landlock ABI 3 or newer. Atlas checks that when it starts; a
+container runtime whose seccomp profile blocks the Landlock system calls causes a
+clear startup failure, never an unsandboxed fallback. Each run then sees only the
+installed interpreter/runtime and its own writable scratch directory. It cannot
+read `/data`, list other script scratch directories, or create network or
+Unix-domain sockets. Keep `off` for a reviewed process that intentionally needs
+one of those capabilities until model-level capability declarations exist.
+
 ## Ingress / TLS
 
 ```bash
@@ -164,15 +181,18 @@ helm install atlas ./deploy/helm/atlas \
   --set ingress.hosts[0].paths[0].pathType=Prefix
 ```
 
-Terminate TLS before exposing Atlas publicly. In a cluster the Ingress usually
-does it and Atlas serves plain HTTP behind it, which is what the chart defaults
+Terminate TLS before exposing atlas publicly. In a cluster the Ingress usually
+does it and atlas serves plain HTTP behind it, which is what the chart defaults
 to. Where that last hop must be encrypted as well — an Ingress on another node, or
-another Atlas publishing an application to this one, which requires `https` of its
+another atlas publishing an application to this one, which requires `https` of its
 target — set `atlas.tls.enabled` with a `kubernetes.io/tls` Secret and the pod
 terminates TLS itself; the probes then switch to the HTTPS scheme automatically.
-Either way `/mcp` is gated by `--auth` like every other route and no longer depends
-on a proxy rule, while `/metrics`, `/healthz` and `/readyz` stay unauthenticated by
-design — encryption is not authorization.
+Either way `/mcp` and `/metrics` are gated by `--auth` like every other route and no
+longer depend on a proxy rule: a Prometheus scraper presents an API token scoped
+`metrics` ([ADR-0198](../../../docs/adr/0198-metrics-behind-the-boundary.md), and
+[Credentials for machines](../../../docs/install.md#credentials-for-machines) for the
+scrape config). Only `/healthz` and `/readyz` stay unauthenticated, by design,
+because a kubelet has no credential to offer — encryption is not authorization.
 
 ## Values
 
@@ -189,9 +209,10 @@ common knobs:
 | `atlas.auth.enabled` | `false` | Require login for API/UI |
 | `atlas.vault.enabled` | `true` | Encrypted secret vault |
 | `atlas.docs.enabled` | `true` | Serve OpenAPI + API explorer |
+| `atlas.catalogue.enabled` | `true` | Serve the shop, catalogue, orders and inventory; `false` switches the whole area off, keeping its data |
 | `atlas.tls.enabled` | `false` | Terminate TLS in the pod. Needs `atlas.tls.existingSecret`; the probes switch to HTTPS with it |
 | `atlas.tls.existingSecret` | `""` | `kubernetes.io/tls` Secret with the certificate and key (what cert-manager writes) |
-| `atlas.tls.caKey` | `""` | Key in that Secret holding a CA bundle to trust when publishing to another Atlas (`--tls-ca`) |
+| `atlas.tls.caKey` | `""` | Key in that Secret holding a CA bundle to trust when publishing to another atlas (`--tls-ca`) |
 | `service.type` / `service.port` | `ClusterIP` / `8080` | Service exposure |
 | `ingress.enabled` | `false` | Create an Ingress |
 

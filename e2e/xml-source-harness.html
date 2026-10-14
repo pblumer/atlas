@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas XML source e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, to verify
+         the Modeler's XML source view: the document behind the diagram, shown as text
+         and applied back onto the canvas. __mount() is the deployment mode (key set,
+         draftId null), where an applied source has no draft to go into and leaving has
+         to ask; __mountDraft() is the draft mode, where Save writes it and a live
+         session is attached — through the fake EventSource below, so a test can play a
+         collaborator's change into it. Auto-layout replaces the canvas by the same kind
+         of import, so the same harness asks the same questions of it. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+
+      const view = document.getElementById("view");
+
+      // A stand-in for the live session's stream (ADR-0140): it records itself so a
+      // spec can emit the frames the server would send, and nothing more.
+      class FakeEventSource {
+        constructor(url) {
+          this.url = url;
+          this.listeners = {};
+          window.__es = this;
+        }
+        addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }
+        close() {}
+        emit(type, data) {
+          for (const fn of this.listeners[type] || []) fn({ data: JSON.stringify(data) });
+        }
+      }
+      window.EventSource = FakeEventSource;
+
+      // A user task to correct, and a call activity naming a deployed process, so the
+      // drill-down can be used to ask whether leaving would cost an applied source.
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_src" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="src-proc" name="Source Demo" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Eingang"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="Task_1" name="Pruefen"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>
+    <bpmn:callActivity id="Call_1" name="Auftrag pruefen">
+      <bpmn:extensionElements><zeebe:calledElement processId="pruefe-auftrag"/></bpmn:extensionElements>
+      <bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing>
+    </bpmn:callActivity>
+    <bpmn:endEvent id="End_1" name="Fertig"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Task_1" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_1" targetRef="Call_1" />
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Call_1" targetRef="End_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="src-proc">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="160" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_1_di" bpmnElement="Task_1">
+        <dc:Bounds x="250" y="98" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Call_1_di" bpmnElement="Call_1">
+        <dc:Bounds x="400" y="98" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
+        <dc:Bounds x="560" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="196" y="138" /><di:waypoint x="250" y="138" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="350" y="138" /><di:waypoint x="400" y="138" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3">
+        <di:waypoint x="500" y="138" /><di:waypoint x="560" y="138" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+      window.__XML = XML;
+
+      const PROCESSES = [{ key: 92, processId: "pruefe-auftrag", name: "Prüfe Auftrag", version: 1 }];
+
+      // Recorded so a spec can see what the editor sent and fetched — the mock stands
+      // in for fetch, so route interception has nothing to catch.
+      window.__calls = [];
+      window.__toasts = [];
+      const toast = (msg, kind) => { window.__toasts.push({ msg, kind }); };
+      const api = async (method, url, body) => {
+        window.__calls.push({ method, url, body });
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/processes$/.test(url)) return PROCESSES;
+        if (method === "GET" && /\/drafts\/[^/]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/drafts$/.test(url)) return [];
+        if (method === "POST" && /\/drafts/.test(url)) {
+          const m = /<bpmn:process id="([^"]+)"/.exec(String(body || ""));
+          return { processId: m ? m[1] : "draft", name: m ? m[1] : "Draft" };
+        }
+        // Auto-layout hands back a diagram to import; the same one keeps the canvas valid.
+        if (method === "POST" && /\/layout$/.test(url)) return XML;
+        if (method === "GET" && /\/forms$/.test(url)) return [];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        return {};
+      };
+
+      window.__mount = () => mountEditor(view, { api, toast, key: 42 });
+      window.__mountDraft = () => mountEditor(view, { api, toast, draftId: "src-proc" });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

@@ -1,6 +1,7 @@
 # ADR-0125: Escalation events (non-interrupting, propagating throw/catch)
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-13
 - **Deciders:** Atlas engine team
 

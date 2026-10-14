@@ -57,7 +57,16 @@ const (
 	// per-tenant address; the field stays an override for an operator behind a proxy.
 	// Only the operation and its values are model-authored.
 	connectorKindDiscord = "discord"
-	connectorKindEntra   = "entra"
+	// connectorKindS3 is the object-store Worker Type
+	// (ADR-0442): a configured record of this kind resolves to a
+	// live client speaking the S3 API, whose access key — an {accessKeyId,
+	// secretAccessKey, region} bundle, optionally with a sessionToken — is read from the
+	// vault. Unlike Google Sheets and Discord the endpoint *is* meaningful: blank means
+	// AWS at the bundle's region, and anything else is the address of the store the
+	// installation runs, which also decides that its buckets are addressed path-style.
+	// Only the operation and its values are model-authored.
+	connectorKindS3    = "s3"
+	connectorKindEntra = "entra"
 	// connectorKindAD is the Active Directory Worker Type
 	// (ADR-0206). A record holds the directory's LDAP URL
 	// and a credentialsRef naming a vault {bindDN, password} bundle; the model names
@@ -72,6 +81,11 @@ const (
 	// clearest reason ADR-0164 has: a round is one model call, minutes long and able to
 	// hang, so it never runs in the engine process.
 	connectorKindAgent = "agent"
+
+	// connectorKindCloudEvents is the endpoint push delivery sends the event feed to
+	// (ADR-0433). No task names it:
+	// the feed's subscriptions do (feedsubs.go).
+	connectorKindCloudEvents = "cloudevents"
 )
 
 // configuredWorker is an operator-managed Worker (ADR-0203): an instance of a
@@ -100,6 +114,11 @@ type configuredWorker struct {
 	// (client secret, refresh token, or service-account key), never a value (I6).
 	Provider string `json:"provider,omitempty"`
 	Sender   string `json:"sender,omitempty"`
+	// MailboxEndpoint is an SMTP mail Worker's IMAP endpoint ("imaps://host:993"),
+	// what lets it read the mailbox it sends from (ADR-0438). It
+	// uses the sender and the credential above as login. Empty for a Worker that only
+	// sends, and for Gmail and Microsoft, which read through the API they send with.
+	MailboxEndpoint string `json:"mailboxEndpoint,omitempty"`
 
 	// Model is which model an agent Worker asks (Kind == connectorKindAgent,
 	// ADR-0255). It is the first piece of a Worker's

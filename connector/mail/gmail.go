@@ -24,6 +24,10 @@ type GmailClient struct {
 	tokens  TokenSource
 	baseURL string
 	sender  string
+	// readTokens and modifyTokens are the mailbox half's tokens, scoped to reading and
+	// to changing the mailbox (ADR-0438); nil uses tokens.
+	readTokens   TokenSource
+	modifyTokens TokenSource
 }
 
 // NewGmailClient builds a Gmail mail client. baseURL defaults to the Gmail v1 API when

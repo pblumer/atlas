@@ -130,14 +130,24 @@ func (s *Server) ensureSystemProcesses(now int64) error {
 		s.systemPIDs[p.processID] = true
 	}
 
-	// Seed forms (idempotent overwrite) filed under the system project.
+	// Seed forms (idempotent overwrite) filed under the system project. A server
+	// that switched the shop off files none of the shop's machinery: not its
+	// approval form, and below not its fulfilment and approval processes. The ids
+	// stay in systemPIDs above, so one an earlier start deployed is still protected
+	// (ADR-0434).
 	for _, f := range forms {
+		if s.catalogueOff && catalogueSystemForms[f.id] {
+			continue
+		}
 		if err := s.forms.Save(form{ID: f.id, Name: f.id, ProjectID: systemProjectID, SavedAt: now, Schema: string(f.schema)}); err != nil {
 			return fmt.Errorf("seed system form %s: %w", f.id, err)
 		}
 	}
 
 	for _, p := range procs {
+		if s.catalogueOff && catalogueSystemProcesses[p.processID] {
+			continue
+		}
 		// File the draft under the system project so the Modeler lists it there.
 		if err := s.drafts.Save(draft{ProcessID: p.processID, Name: p.name, ProjectID: systemProjectID, SavedAt: now, XML: string(p.xml)}); err != nil {
 			return fmt.Errorf("file system draft %s: %w", p.processID, err)

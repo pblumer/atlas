@@ -73,6 +73,63 @@ test("a migratable instance shows what would move, and needs a reason before it 
   expect(page.__errors, "page errors").toEqual([]);
 });
 
+test("a refused rebinding offers the fork, and it needs somewhere to resume", async ({ page }) => {
+  await page.locator("#mig-bad").click();
+  const modal = page.locator(".mig-modal");
+  const fork = modal.locator(".mig-fork");
+
+  // The refusal comes with its next step rather than a dead end, and the section is not
+  // dimmed: there is no rebinding to prefer over it here.
+  await expect(fork).toBeVisible();
+  await expect(fork).not.toHaveClass(/alt/);
+  await expect(fork).toContainText("continue in a new instance");
+  // What it costs is stated before anything is committed — in particular the work in
+  // flight, which a fork cannot carry.
+  await expect(fork).toContainText("3 variables");
+  await expect(fork).toContainText("1 job");
+  // Nothing is proposed, because the parked token's element is not in the target version.
+  await expect(fork).toContainText("no element of the same id");
+
+  const forkBtn = modal.locator("[data-mig-fork]");
+  await expect(forkBtn).toBeVisible();
+  await expect(forkBtn).toBeDisabled();
+  await modal.locator("#mig-reason").fill("v2 replaced the task this token sits on");
+  await expect(forkBtn, "a reason alone is not enough: the fork needs somewhere to resume").toBeDisabled();
+
+  await fork.locator('input[type=checkbox][value="review_v2"]').check();
+  await expect(forkBtn).toBeEnabled();
+  await forkBtn.click();
+
+  const calls = await page.evaluate(() => window.__calls.map((c) => c.method + " " + c.url));
+  expect(calls).toEqual([
+    "POST /api/v1/instances/5002/migrate/plan",
+    "POST /api/v1/instances/5002/migrate/fork",
+  ]);
+  const sent = await page.evaluate(() => window.__calls[1].body);
+  expect(sent.resume).toEqual(["review_v2"]);
+  expect(sent.reason).toBe("v2 replaced the task this token sits on");
+
+  // The successor is named, because that is where the work is now.
+  const toast = await page.evaluate(() => window.__toast);
+  expect(toast.kind).toBe("ok");
+  expect(toast.msg).toContain("5003");
+  expect(page.__errors, "page errors").toEqual([]);
+});
+
+test("a migratable instance shows the fork as the dimmed alternative", async ({ page }) => {
+  await page.locator("#mig-ok").click();
+  const modal = page.locator(".mig-modal");
+  const fork = modal.locator(".mig-fork");
+
+  // Offered, but visibly the second answer: rebinding keeps the instance's work, and an
+  // operator who can do that should not be invited to end it.
+  await expect(fork).toBeVisible();
+  await expect(fork).toHaveClass(/alt/);
+  // Its proposal is already ticked, so the one-click case stays one click.
+  await expect(fork.locator('input[type=checkbox][value="review_v2"]')).toBeChecked();
+  expect(page.__errors, "page errors").toEqual([]);
+});
+
 test("changing the target re-reads the plan for that target", async ({ page }) => {
   await page.locator("#mig-ok").click();
   const modal = page.locator(".mig-modal");
@@ -131,11 +188,15 @@ test("a batch drains every page and lists the instances it left behind", async (
   await modal.locator("#migb-reason").fill("draining v1");
   await modal.locator("[data-migb-go]").click();
 
-  // The server pages; the caller repeats while `remaining` is true.
+  // The server pages; the caller repeats while `remaining` is true, continuing past
+  // the cursor each page hands back rather than from the front, where a refused
+  // instance would be selected again.
   await expect(page.locator("#migo-title")).toBeVisible();
   const calls = await page.evaluate(() => window.__calls.filter((c) => c.url.includes("migrate-instances")));
   expect(calls.length).toBe(2);
   expect(calls[0].body.reason).toBe("draining v1");
+  expect(calls[0].url).not.toContain("after=");
+  expect(calls[1].url).toContain("?after=7002");
 
   // Both numbers, and the refusal as a work list: each named instance is still on the
   // old version and still needs a decision.
@@ -159,5 +220,49 @@ test("a batch refuses to migrate a version onto itself", async ({ page }) => {
   await expect(modal.locator(".mig-err")).toBeVisible();
   await expect(modal.locator("[data-migb-go]")).toBeDisabled();
 
+  expect(page.__errors, "page errors").toEqual([]);
+});
+
+// startBatch opens the batch dialog on one of the harness's server behaviours and
+// submits it with a reason.
+const startBatch = async (page, button) => {
+  await page.locator(button).click();
+  const modal = page.locator(".mig-modal");
+  await modal.locator("#migb-reason").fill("draining v1");
+  await modal.locator("[data-migb-go]").click();
+};
+
+test("a batch that fails part-way says how much already moved, and re-reads", async ({ page }) => {
+  await startBatch(page, "#mig-batch-fail");
+
+  // Each instance is its own event, so the first page's two are on the new version
+  // whatever happened to the second call — an error that did not say so would read as
+  // "nothing happened".
+  await expect.poll(() => page.evaluate(() => window.__toast && window.__toast.kind)).toBe("err");
+  const t = await page.evaluate(() => window.__toast);
+  expect(t.msg).toContain("2 instances were already migrated");
+  expect(await page.evaluate(() => window.__done)).toBe(1);
+  expect(await page.evaluate(() => window.__result)).toBe(false);
+  expect(page.__errors, "page errors").toEqual([]);
+});
+
+test("a page that says more remain but not where to continue ends the walk", async ({ page }) => {
+  await startBatch(page, "#mig-batch-nocursor");
+
+  // From the front again it would meet the same instances; the loop stops instead of
+  // spinning to its guard.
+  await expect.poll(() => page.evaluate(() => window.__result)).toBe(true);
+  const calls = await page.evaluate(() => window.__calls.filter((c) => c.url.includes("migrate-instances")));
+  expect(calls.length).toBe(1);
+  expect(page.__errors, "page errors").toEqual([]);
+});
+
+test("a flood of refusals is listed up to a bound and counted beyond it", async ({ page }) => {
+  await startBatch(page, "#mig-batch-flood");
+
+  await expect(page.locator("#migo-title")).toContainText("250 left behind");
+  await expect(page.locator(".mig-refused li")).toHaveCount(200);
+  await expect(page.locator(".mig-unlisted")).toContainText("50 more");
+  await expect(page.locator(".mig-unlisted")).toContainText("v1");
   expect(page.__errors, "page errors").toEqual([]);
 });

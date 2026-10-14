@@ -1,15 +1,16 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
 
+	"github.com/pblumer/atlas/api/brandimage"
+	"github.com/pblumer/atlas/api/capability"
 	"github.com/pblumer/atlas/api/httpapi"
 
 	"github.com/pblumer/atlas/api/token"
@@ -30,15 +31,6 @@ type registrationConfig struct {
 	ProcessID string `json:"processId,omitempty"`
 	URL       string `json:"url,omitempty"`
 }
-
-// maxThemeBytes bounds the theme request body — it carries a single short colour
-// string, so a tiny cap is plenty and fails a bloated body fast.
-const maxThemeBytes = 1 << 12
-
-// maxADMockBytes bounds the Active-Directory mockup body, which carries the seed's
-// whole text rather than a setting's worth of it
-// (ADR-0202).
-const maxADMockBytes = 1 << 18 // 256 KiB
 
 // hexColorRe matches a canonical "#rrggbb" colour. Validation lives server-side so
 // a malformed value can never be persisted and served to every browser.
@@ -80,7 +72,7 @@ func (s *Server) handleGetTheme(w http.ResponseWriter, _ *http.Request) {
 // handleSetTheme stores the org-wide brand accent. Admin-gated: it changes what
 // every user of the instance sees.
 func (s *Server) handleSetTheme(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxThemeBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Theme))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -119,47 +111,11 @@ func (s *Server) handleDeleteTheme(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// maxLogoBytes bounds an uploaded org logo (ADR-0148). A brand mark is small — a
-// few KB of PNG or SVG — so a tight cap rejects an oversized or bogus upload fast
-// while leaving generous headroom for a high-resolution raster mark.
-const maxLogoBytes = 512 << 10 // 512 KiB
-
-// pngMagic is the 8-byte signature every PNG begins with. Validating the bytes
-// server-side (not just the client's Content-Type) means a mislabelled or corrupt
-// upload can never be persisted and served to every browser as the org logo.
-var pngMagic = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
-
-// normalizeLogoType canonicalises an upload's Content-Type to a bare, lowercase
-// media type, dropping any parameters (e.g. "image/svg+xml; charset=utf-8").
-func normalizeLogoType(h string) string {
-	if i := strings.IndexByte(h, ';'); i >= 0 {
-		h = h[:i]
-	}
-	return strings.ToLower(strings.TrimSpace(h))
-}
-
-// validLogo checks the uploaded bytes actually look like the declared image type:
-// the PNG magic for a raster mark, and well-formed UTF-8 containing an "<svg" root
-// for a vector one. It is a sanity gate, not a sanitiser — the served response's
-// CSP (handleGetLogo) is what neutralises a hostile SVG, so this only rejects
-// obvious non-images.
-func validLogo(contentType string, data []byte) bool {
-	switch contentType {
-	case "image/png":
-		return bytes.HasPrefix(data, pngMagic)
-	case "image/svg+xml":
-		return utf8.Valid(data) && bytes.Contains(bytes.ToLower(data), []byte("<svg"))
-	}
-	return false
-}
-
 // handleGetLogo serves the org-wide brand logo image, or 404 when none is set. It
 // is public (like the theme) so the login screen and every browser can show the
 // customer's mark before authenticating. A stored SVG is attacker-influenced
-// content, so the response is locked down: nosniff pins the declared type, and a
-// strict CSP with the sandbox directive neutralises any script the SVG carries even
-// if it is opened as a top-level document — the app itself only ever renders it via
-// <img>, where SVG script never runs anyway.
+// content, so the response is locked down by [brandimage.Serve] — the same
+// headers a catalogue's own mark travels under.
 func (s *Server) handleGetLogo(w http.ResponseWriter, _ *http.Request) {
 	var (
 		data []byte
@@ -176,12 +132,7 @@ func (s *Server) handleGetLogo(w http.ResponseWriter, _ *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no org logo set")
 		return
 	}
-	w.Header().Set("Content-Type", ct)
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	brandimage.Serve(w, ct, data)
 }
 
 // handleSetLogo stores the org-wide brand logo. Admin-gated: it changes what every
@@ -189,14 +140,14 @@ func (s *Server) handleGetLogo(w http.ResponseWriter, _ *http.Request) {
 // the raw request body; its format comes from the Content-Type header and is
 // re-validated against the bytes before anything is persisted.
 func (s *Server) handleSetLogo(w http.ResponseWriter, r *http.Request) {
-	ct := normalizeLogoType(r.Header.Get("Content-Type"))
-	if _, ok := logoExtByType[ct]; !ok {
+	ct := brandimage.NormalizeType(r.Header.Get("Content-Type"))
+	if _, ok := brandimage.Mark.ExtFor(ct); !ok {
 		httpapi.Error(w, http.StatusUnsupportedMediaType, "logo must be uploaded as image/png or image/svg+xml")
 		return
 	}
 	// Read one byte past the cap so an over-limit body is detected, not silently
 	// truncated into a "valid" smaller image.
-	data, err := io.ReadAll(io.LimitReader(r.Body, maxLogoBytes+1))
+	data, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Asset+1))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -205,11 +156,11 @@ func (s *Server) handleSetLogo(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "empty logo body")
 		return
 	}
-	if len(data) > maxLogoBytes {
+	if int64(len(data)) > s.budgets().Asset {
 		httpapi.Error(w, http.StatusRequestEntityTooLarge, "logo exceeds the 512 KiB limit")
 		return
 	}
-	if !validLogo(ct, data) {
+	if !brandimage.Valid(ct, data) {
 		httpapi.Error(w, http.StatusBadRequest, "body is not a valid "+ct+" image")
 		return
 	}
@@ -340,7 +291,7 @@ func (s *Server) handleGetRegistration(w http.ResponseWriter, _ *http.Request) {
 // registration off. 400 if the named process is not a publishable public form, so
 // an operator gets immediate feedback rather than a silently dead link.
 func (s *Server) handleSetRegistration(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxThemeBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Theme))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -471,7 +422,7 @@ func (s *Server) handleSetADMock(w http.ResponseWriter, r *http.Request) {
 	// body" on a seed that was perfectly good, which is a maddening thing to debug.
 	// MaxBytesReader says the body is too large instead, and 256 KB holds a few thousand
 	// entries: past that, the answer is a smaller seed, not a bigger field.
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxADMockBytes))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, s.budgets().Settings))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -525,3 +476,88 @@ func (s *Server) handleSetADMock(w http.ResponseWriter, r *http.Request) {
 		Entries: a.SeedEntries, HasSeed: a.Seed != "",
 	})
 }
+
+// confirmationView is the confirmation horizon as the API renders it. "configured"
+// tells a client the difference between a decision made here and none at all: without
+// a record the built-in default applies, and the switch must not claim otherwise.
+type confirmationView struct {
+	HorizonMonths int  `json:"horizonMonths"`
+	Configured    bool `json:"configured"`
+	Default       int  `json:"default"`
+}
+
+// handleGetConfirmation reads how long a business-architecture confirmation stays fresh
+// (ADR-0304).
+func (s *Server) handleGetConfirmation(w http.ResponseWriter, _ *http.Request) {
+	var (
+		c      confirmationSetting
+		stored bool
+		err    error
+	)
+	s.do(func() { c, stored, err = s.settings.getConfirmation() })
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read confirmation setting: "+err.Error())
+		return
+	}
+	months := c.HorizonMonths
+	if !stored || months == 0 {
+		months = capability.DefaultHorizonMonths
+	}
+	httpapi.JSON(w, http.StatusOK, confirmationView{
+		HorizonMonths: months, Configured: stored && c.HorizonMonths != 0,
+		Default: capability.DefaultHorizonMonths,
+	})
+}
+
+// handleSetConfirmation sets the horizon.
+//
+// A very long interval is accepted rather than refused. It silences the freshness
+// check, and the record that decided this says so: capping it would need a second rule
+// about how long is too long, and the honest alternative is that the number is visible
+// here and travels with every answer that applies it. A negative value switches the
+// check off, which is a legitimate thing to want while a map is being built.
+func (s *Server) handleSetConfirmation(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, s.budgets().Request))
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	var payload struct {
+		// A pointer, so "not sent" and "sent as zero" are different: zero means
+		// "use the default", which is a decision, and an absent field is a mistake.
+		HorizonMonths *int `json:"horizonMonths"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	if payload.HorizonMonths == nil {
+		httpapi.Error(w, http.StatusBadRequest, "horizonMonths is required")
+		return
+	}
+	if *payload.HorizonMonths > maxConfirmationHorizonMonths {
+		httpapi.Error(w, http.StatusBadRequest, fmt.Sprintf(
+			"horizonMonths is at most %d: past that the field is not a policy but a way of "+
+				"switching the check off, which a negative value says plainly",
+			maxConfirmationHorizonMonths))
+		return
+	}
+	s.do(func() { err = s.settings.saveConfirmation(confirmationSetting{HorizonMonths: *payload.HorizonMonths}) })
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "save confirmation setting: "+err.Error())
+		return
+	}
+	months := *payload.HorizonMonths
+	if months == 0 {
+		months = capability.DefaultHorizonMonths
+	}
+	httpapi.JSON(w, http.StatusOK, confirmationView{
+		HorizonMonths: months, Configured: *payload.HorizonMonths != 0,
+		Default: capability.DefaultHorizonMonths,
+	})
+}
+
+// maxConfirmationHorizonMonths is a sanity bound, not a policy: a hundred years of
+// months. Past it the number is not an interval anybody meant, and a negative value is
+// the honest way to say "off".
+const maxConfirmationHorizonMonths = 1200

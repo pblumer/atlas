@@ -164,7 +164,7 @@ func foreignNamespaceSentence(found, want string, elems []string) string {
 		where = "in no namespace"
 		fix = "Declare xmlns:atlas=" + strconv.Quote(want) + " on the model and prefix them with it."
 	}
-	return fmt.Sprintf("The model's Atlas extension elements (%s) are %s, not Atlas' own %s. "+
+	return fmt.Sprintf("The model's atlas extension elements (%s) are %s, not atlas' own %s. "+
 		"The engine reads them either way — it matches an extension element on its name alone — "+
 		"but the Modeler does not: opening this process and saving it drops them and everything "+
 		"configured on them. %s",

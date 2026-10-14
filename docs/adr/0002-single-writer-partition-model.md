@@ -1,6 +1,7 @@
 # ADR-0002: Single-writer partition model
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-06-11
 - **Deciders:** Core team
 

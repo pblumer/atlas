@@ -45,6 +45,13 @@ var wantAdminRoutes = []string{
 	"POST /api/v1/scripts/run",
 	"PUT /api/v1/call-activities/overrides/{processId}",
 	"DELETE /api/v1/call-activities/overrides/{processId}",
+	// And the constants this installation holds — an application's and its own: the
+	// tenant, client id or endpoint every instance of a process reading them starts with
+	// here — the same per-server operator decision as an override (ADR-0453,
+	// ADR-0456). Reading them stays open, because the Constants pages,
+	// the Modeler and a deploy's warning read them.
+	"PUT /api/v1/applications/{id}/constants",
+	"PUT /api/v1/server/constants",
 
 	// Reaching into a running instance's data, or moving instances between
 	// definitions. An operator may cancel and repair; rewriting a variable or
@@ -52,7 +59,14 @@ var wantAdminRoutes = []string{
 	"POST /api/v1/instances/{key}/variables",
 	"POST /api/v1/instances/{key}/migrate/plan",
 	"POST /api/v1/instances/{key}/migrate",
+	"POST /api/v1/instances/{key}/migrate/fork",
 	"POST /api/v1/processes/{key}/migrate-instances",
+	// The repair that rides beside the migration: a bounded run of variable-index
+	// membership corrections over a definition's instances (ADR-0244). It changes no
+	// value and no execution, only what the search can seek to — but it is the same
+	// shape as the migration batch, one command per instance of a whole version, so it
+	// is gated with it rather than with the operator's single-instance acts.
+	"POST /api/v1/processes/{key}/reindex-instances",
 
 	// What a worker did, in full: job payloads carry whatever the process carries.
 	"GET /api/v1/workers/{id}/history",
@@ -74,6 +88,20 @@ var wantAdminRoutes = []string{
 	"DELETE /api/v1/deploy-tokens/{id}",
 	"POST /api/v1/api-tokens",
 	"GET /api/v1/api-tokens",
+	// Where the event feed is pushed: minting a delivery of who holds what to a system
+	// beyond Atlas is the act minting an events token is
+	// (ADR-0433).
+	// What switching the catalogue off strands: which processes still work orders
+	// and how many, an operator's diagnosis at the level of the whole server
+	// (ADR-0434).
+	"GET /api/v1/catalogue-switch",
+	"GET /api/v1/feed-subscriptions",
+	"POST /api/v1/feed-subscriptions",
+	"PATCH /api/v1/feed-subscriptions/{id}",
+	"DELETE /api/v1/feed-subscriptions/{id}",
+	// Who listens to Atlas's events: where personal data flows across every
+	// project, which only an administrator sees whole (ADR-0435 §7).
+	"GET /api/v1/event-catalog/listeners",
 	"DELETE /api/v1/api-tokens/{id}",
 	"POST /api/v1/oauth-clients",
 	"GET /api/v1/oauth-clients",
@@ -82,11 +110,29 @@ var wantAdminRoutes = []string{
 	"GET /api/v1/secrets",
 	"PUT /api/v1/secrets/{name}",
 	"DELETE /api/v1/secrets/{name}",
+	// Erasing a data subject destroys the key their personal data was enciphered
+	// under, which makes every copy of it — live store, checkpoints, exports, backups
+	// — permanently unreadable in one act (ADR-0314). It is the most irreversible
+	// operation the API has: there is no restore, because the point is that no copy
+	// survives. The listing is gated with it because it enumerates who is still
+	// erasable, and because the two belong to one operator task.
+	"GET /api/v1/personal-data",
+	"DELETE /api/v1/personal-data/{subject}",
 
 	// Org-wide settings. Every one of them is read by somebody who is not an
 	// administrator — the login screen reads three before anyone is anybody — so it
 	// is the write that is listed here and the read that is not.
 	"PUT /api/v1/settings/theme",
+	// A catalogue's own appearance, which is the instance theme relocated rather
+	// than a second mechanism: an instance serving several customer groups has
+	// several brands, and it stays with the administrator for the same reason the
+	// instance one does (ADR-0113, decision 12).
+	"PUT /api/v1/catalogs/{id}/theme",
+	// And its brand mark, on the same gate and for one more reason: it is the only
+	// place in the catalogue where somebody hands the server bytes it will serve
+	// back to a browser.
+	"PUT /api/v1/catalogs/{id}/logo",
+	"DELETE /api/v1/catalogs/{id}/logo",
 	"DELETE /api/v1/settings/theme",
 	"PUT /api/v1/settings/logo",
 	"DELETE /api/v1/settings/logo",
@@ -97,6 +143,11 @@ var wantAdminRoutes = []string{
 	"PUT /api/v1/settings/sql-mock",
 	"PUT /api/v1/settings/registration",
 	"DELETE /api/v1/settings/registration",
+	// The confirmation horizon decides how loudly the gap report complains about a
+	// map nobody has re-read. Widening it silences that, so setting it is an
+	// operator's act; reading it is not, because every business-architecture answer
+	// already carries the interval it applied.
+	"PUT /api/v1/settings/confirmation",
 
 	// The claim mapping is admin-only in both directions, unlike the three above:
 	// its rules name the provider's group identifiers, and nothing on the login
@@ -248,8 +299,50 @@ func TestKnownRoles(t *testing.T) {
 	if isGrantableRole(roleAny) {
 		t.Error("roleAny is grantable — it describes a route, not a person")
 	}
-	if !isGrantableRole(RoleOperator) || isGrantableRole("wizard") {
-		t.Error("grantable roles are exactly the four")
+	if !isGrantableRole(RoleOperator) || !isGrantableRole(RoleFeedReader) || isGrantableRole("wizard") {
+		t.Error("operator and feedreader must be grantable and a role nobody declared must not")
+	}
+	for _, role := range legacyRoles() {
+		if role == RoleFeedReader || role == RoleProductManager {
+			t.Errorf("the legacy upgrade grants %s; it hands that reach to every existing account", role)
+		}
+	}
+}
+
+// TestAConfinedScopeCarriesItsOwnRoles: an events token holds feedreader and nothing
+// else whoever mints it, so a leaked feed token reads the feed and does nothing more;
+// an account that does not hold feedreader cannot mint one; and a scope with no roles
+// of its own still carries the minter's, as before
+// (ADR-0430).
+func TestAConfinedScopeCarriesItsOwnRoles(t *testing.T) {
+	admin := &httpapi.Principal{UserID: "usr_1", Roles: []string{RoleAdmin}}
+	reader := &httpapi.Principal{UserID: "usr_2", Roles: []string{RoleFeedReader}}
+	operator := &httpapi.Principal{UserID: "usr_3", Roles: []string{RoleOperator, RoleUser}}
+	for _, tc := range []struct {
+		name  string
+		scope string
+		p     *httpapi.Principal
+		want  string
+	}{
+		{"an administrator's events token", apiScopeEvents, admin, "feedreader"},
+		{"auth off", apiScopeEvents, nil, "feedreader"},
+		{"a feed reader's own events token", apiScopeEvents, reader, "feedreader"},
+		{"a full token is the minter's set, without feedreader", apiScopeFull, admin, "modeler operator user"},
+		{"a worker token is the minter's set", apiScopeWorker, operator, "operator user"},
+	} {
+		got, refusal := tokenRolesFor(tc.scope, tc.p)
+		if refusal != "" || strings.Join(got, " ") != tc.want {
+			t.Errorf("%s: tokenRolesFor = %q (%q), want %q", tc.name, strings.Join(got, " "), refusal, tc.want)
+		}
+	}
+	if got, refusal := tokenRolesFor(apiScopeEvents, operator); got != nil || !strings.Contains(refusal, "feedreader") {
+		t.Errorf("an operator minting an events token = %v (%q), want a refusal naming feedreader", got, refusal)
+	}
+	// The map hands out a copy: a token's roles are its own.
+	got, _ := tokenRolesFor(apiScopeEvents, admin)
+	got[0] = "admin"
+	if scopeRoles[apiScopeEvents][0] != RoleFeedReader {
+		t.Fatal("changing one token's roles changed the scope's")
 	}
 }
 

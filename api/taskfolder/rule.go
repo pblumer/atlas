@@ -151,9 +151,9 @@ func Catalog() []FieldSpec {
 			{ID: OpIs, Value: ValueNumber, feel: number("priority", "=")},
 		}},
 		{ID: FieldDue, Ops: []OpSpec{
-			{ID: OpOverdue, Value: ValueNone, feel: literal("dueDate != null and dueDate < now()")},
+			{ID: OpOverdue, Value: ValueNone, feel: literal("dueDate != null and dueDate < scanAt")},
 			{ID: OpWithin, Value: ValueDuration, feel: func(c Condition) string {
-				return "dueDate != null and dueDate < now() + duration(" + feelString(c.Value) + ")"
+				return "dueDate != null and dueDate < scanAt + duration(" + feelString(c.Value) + ")"
 			}},
 			{ID: OpNone, Value: ValueNone, feel: literal("dueDate = null")},
 			{ID: OpAny, Value: ValueNone, feel: literal("dueDate != null")},
@@ -200,7 +200,7 @@ func inList(name string) func(Condition) string {
 // "older than" is the earlier instant, hence `<`.
 func age(op string) func(Condition) string {
 	return func(c Condition) string {
-		return "instanceCreatedAt " + op + " now() - duration(" + feelString(isoDuration(c)) + ")"
+		return "instanceCreatedAt " + op + " scanAt - duration(" + feelString(isoDuration(c)) + ")"
 	}
 }
 
@@ -388,6 +388,18 @@ func Compile(r Rule) (*Matcher, error) {
 	if err := r.Validate(); err != nil {
 		return nil, err
 	}
+	// No call check here, deliberately (ADR-0388,
+	// ADR-0392). A call this
+	// build can only answer with null compiles cleanly, and a folder rule built on
+	// one would filter nothing while reading as "no tasks match" — but no such rule
+	// can be built: the expression is generated from [Catalog], and every value in
+	// it is either a string literal this package escapes, an integer, or a duration
+	// held to a pattern. Nothing a caller sends becomes a call.
+	//
+	// The property belongs to the catalogue rather than to this line, so it is
+	// pinned where a new operator would break it, in TestCatalogIsSelfConsistent — a
+	// guard that fails the build beats one that refuses a person's rule for a
+	// mistake they did not make.
 	c, err := expr.CompileAuto(r.FEEL())
 	if err != nil {
 		return nil, fmt.Errorf("the rule does not compile: %w", err)
@@ -441,10 +453,40 @@ type Task struct {
 // "assigned to me" compare a username against an account id and quietly match
 // nothing, which is why `user.name` and not `user.id` is what an assignee
 // condition generates.
+//
+// SeesAll says the viewer is an operator or an administrator, who keep every open
+// task in view. Everybody else sees the tasks addressed to them, to one of their
+// groups, or to nobody at all; the server applies that, since only it has the
+// task's resolved assignment in hand.
 type User struct {
-	ID     string
-	Name   string
-	Groups []string
+	ID      string
+	Name    string
+	Groups  []string
+	SeesAll bool
+}
+
+// BuiltinFolder is one of the fixed inbox folders the console lists above the saved
+// ones. They are not rules: nobody wrote them, nobody can edit them, and expressing
+// them as FEEL would only be a longer way to say `t.Assignee == u.Name`.
+//
+// They live here, beside the rules, because the counting walk has to apply them and
+// the console has to label them, and a predicate written twice is a predicate that
+// drifts — which is exactly how the console's badges came to disagree with what the
+// inbox held (ADR-0365).
+type BuiltinFolder struct {
+	// ID is the console's own folder id, so a returned count lands on the right badge.
+	ID string
+	// Match is the predicate, in the order the console shows the folders.
+	Match func(t Task, u User) bool
+}
+
+// BuiltinFolders is that list. An empty viewer name matches nothing under "mine",
+// which is right: with auth off and no display identity typed in, nobody is "me".
+var BuiltinFolders = []BuiltinFolder{
+	{ID: "all", Match: func(Task, User) bool { return true }},
+	{ID: "mine", Match: func(t Task, u User) bool { return u.Name != "" && t.Assignee == u.Name }},
+	{ID: "unassigned", Match: func(t Task, _ User) bool { return t.Assignee == "" }},
+	{ID: "group", Match: func(t Task, _ User) bool { return t.CandidateGroups != "" }},
 }
 
 // Match reports whether one task belongs in the folder.
@@ -465,6 +507,14 @@ func (m *Matcher) Match(t Task, u User, now time.Time) bool {
 // bindings builds the evaluation scope for one task. An empty string binds as
 // FEEL null rather than as "", so `assignee = null` means "nobody has claimed it"
 // instead of "somebody is called the empty string".
+//
+// scanAt is the moment the whole scan is judged against, bound as a value
+// rather than left to FEEL's now(), which reads the clock again for every row
+// and would let a task on the edge of a window fall on either side depending on
+// when in the scan it was reached (see the note on expr.DateTime). It is not
+// called "now": FEEL resolves that name to the builtin function even where a
+// binding of that name exists, so `dueDate < now` compares an instant against a
+// function and yields null instead of a boolean.
 func (m *Matcher) bindings(t Task, u User, now time.Time) map[string]expr.Value {
 	lane := make([]any, 0, len(t.LanePath))
 	for _, l := range t.LanePath {
@@ -475,6 +525,7 @@ func (m *Matcher) bindings(t Task, u User, now time.Time) map[string]expr.Value 
 		groups = append(groups, g)
 	}
 	return map[string]expr.Value{
+		"scanAt":            expr.DateTime(now),
 		"processId":         strOrNull(t.ProcessID),
 		"processName":       strOrNull(t.ProcessName),
 		"taskName":          strOrNull(t.TaskName),

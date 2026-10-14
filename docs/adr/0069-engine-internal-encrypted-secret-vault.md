@@ -1,6 +1,7 @@
 # ADR-0069: An engine-internal encrypted secret vault (ADR-0041 option A3)
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-27
 - **Deciders:** Atlas engine team
 

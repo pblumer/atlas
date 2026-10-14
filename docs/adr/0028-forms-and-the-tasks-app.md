@@ -1,6 +1,7 @@
 # ADR-0028: User tasks, forms, and the Tasks app
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
 

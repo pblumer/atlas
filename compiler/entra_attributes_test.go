@@ -12,7 +12,7 @@ import (
 // variables, returning the JSON object the worker would send as the request body.
 func evalAttrs(t *testing.T, raw string, vars map[string]expr.Value) map[string]any {
 	t.Helper()
-	re, err := entraAttributesExpr("t", raw)
+	re, err := entraAttributesExpr(strictFEEL, "t", raw)
 	if err != nil {
 		t.Fatalf("entraAttributesExpr: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestEntraInlineAttributesRejectsBadTemplates(t *testing.T) {
 		{"malformed feel", `{"displayName":"=a +"}`, "did not compile"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := entraAttributesExpr("t", tc.raw)
+			_, err := entraAttributesExpr(strictFEEL, "t", tc.raw)
 			if err == nil {
 				t.Fatalf("want an error mentioning %q, got none", tc.want)
 			}
@@ -90,7 +90,7 @@ func TestEntraInlineAttributesRejectsBadTemplates(t *testing.T) {
 		})
 	}
 	// An empty template is not an error: it means "use the attributesVariable instead".
-	if re, err := entraAttributesExpr("t", "  "); err != nil || re.Expr != nil {
+	if re, err := entraAttributesExpr(strictFEEL, "t", "  "); err != nil || re.Expr != nil {
 		t.Errorf("empty template = (%+v, %v), want the zero RestExpr and no error", re, err)
 	}
 }

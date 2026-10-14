@@ -1,7 +1,11 @@
 package engine
 
 import (
+	"encoding/json"
+	"strings"
+
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -33,6 +37,94 @@ type ProcessingContext struct {
 func (c *ProcessingContext) latestDefKey(processId string) (uint64, bool) {
 	k, ok := c.p.latestProcess[processId]
 	return k, ok
+}
+
+// namespaceValue is the value of a namespace an instance of cp starts with
+// (ADR-0456): a JSON object holding each member the process declares
+// in it — for a constant, the value the installation holds on this server; for a fact,
+// what Atlas knows — else the member's fallback, else nothing, so the member reads as
+// null. The object is built once per definition and configuration change and cached on
+// the processor, so the creations after the first allocate nothing (I1); the text is
+// frozen into the creation event like any variable's, so replay never builds it (I6).
+func (c *ProcessingContext) namespaceValue(defKey uint64, cp *compiler.CompiledProcess, namespace string) string {
+	cache := c.p.serverNamespace
+	if namespace == compiler.ApplicationNamespace {
+		cache = c.p.appNamespace
+	}
+	if text, ok := cache[defKey]; ok {
+		return text
+	}
+	app := c.p.defApplication[defKey]
+	members := map[string]any{}
+	for _, k := range cp.Constants() {
+		if k.Namespace != namespace {
+			continue
+		}
+		if v, ok := c.heldMember(namespace, app, &k); ok {
+			members[k.Name] = v
+		} else if k.HasFallback {
+			members[k.Name] = namespaceMember(toVarKind(k.Kind), k.Bool, k.Text)
+		}
+	}
+	_, _, text := expr.Classify(expr.FromJSON(members))
+	cache[defKey] = text
+	return text
+}
+
+// heldMember is what this installation holds for one declared member of a namespace: a
+// constant's held value, or a fact Atlas knows. An empty fact is not held — a node with no
+// environment set says nothing, and the member falls back like a missing constant.
+func (c *ProcessingContext) heldMember(namespace, app string, k *compiler.Constant) (any, bool) {
+	if k.Info {
+		var fact string
+		switch {
+		case namespace == compiler.ApplicationNamespace && k.Name == "id":
+			fact = app
+		case namespace == compiler.ApplicationNamespace && k.Name == "key":
+			fact = c.p.appInfo[app].Key
+		case namespace == compiler.ApplicationNamespace && k.Name == "name":
+			fact = c.p.appInfo[app].Name
+		case k.Name == "id":
+			fact = c.p.serverInfo.ID
+		case k.Name == "name":
+			fact = c.p.serverInfo.Name
+		case k.Name == "environment":
+			fact = c.p.serverInfo.Environment
+		}
+		return fact, fact != ""
+	}
+	held := c.p.serverConstants
+	if namespace == compiler.ApplicationNamespace {
+		held = c.p.appConstants[app]
+	}
+	v, ok := held[k.Name]
+	if !ok {
+		return nil, false
+	}
+	return namespaceMember(v.Kind, v.Bool, v.Text), true
+}
+
+// namespaceMember turns a stored value back into the JSON value it is a member of the
+// namespace as. The text is canonical — the server parsed it when it was saved, the
+// compiler when the model was deployed — so a JSON member that does not decode cannot
+// occur, and would be null rather than a failed start.
+func namespaceMember(kind model.VarKind, b bool, text string) any {
+	switch kind {
+	case model.VarString:
+		return text
+	case model.VarNumber:
+		return json.Number(text)
+	case model.VarBool:
+		return b
+	case model.VarJSON:
+		dec := json.NewDecoder(strings.NewReader(text))
+		dec.UseNumber()
+		var v any
+		if dec.Decode(&v) == nil {
+			return v
+		}
+	}
+	return nil
 }
 
 // resolveCallTarget resolves the definition a call activity starts as a child,
@@ -166,11 +258,17 @@ func (c *ProcessingContext) ForEachElementInstance(procKey uint64, fn func(elKey
 // are collected before the caller acts on them, as the walk did, so the caller may
 // emit events for each without disturbing the read.
 //
-// Committed state only, deliberately: the teardown must be a pure function of what
-// is durable (I6), exactly as the walk it replaced was.
+// Read through the transaction, so a child activated earlier in this same batch is
+// visible to the teardown. ADR-0238 originally read the committed store here and
+// called that a determinism measure; it is not one. The records this transaction
+// has already applied are a deterministic function of the commands processed so
+// far — replay applies the same records in the same order — so seeing them is as
+// reproducible as not seeing them, and strictly more correct. What the committed
+// view actually produced was a child that outlived the caller cancelled in the
+// batch that created it (ADR-0284).
 func (c *ProcessingContext) ChildInstancesOf(callElKey uint64) []uint64 {
 	var children []uint64
-	if err := c.p.store.ChildInstancesOfParent(callElKey, func(childPiKey uint64) error {
+	if err := c.tx.ChildInstancesOfParent(callElKey, func(childPiKey uint64) error {
 		children = append(children, childPiKey)
 		return nil
 	}); err != nil {
@@ -203,34 +301,87 @@ func (c *ProcessingContext) ForEachStartTimer(fn func(key uint64, v model.TimerV
 	}
 }
 
-// ElementInstancesOnNode returns the keys of every live element instance sitting
-// on the given BPMN node within a process instance, seen through the in-flight
-// transaction (so it includes one activated earlier in this batch). A parallel
-// join uses it to count how many tokens have arrived on its incoming flows.
-func (c *ProcessingContext) ElementInstancesOnNode(procKey uint64, elementId int32) []uint64 {
-	var keys []uint64
+// Arrival is one token waiting on a join: the element instance holding it and the
+// incoming sequence flow it came in on.
+//
+// The flow is what a join has to count by. BPMN 2.0.2 §13.4 activates a parallel
+// gateway when there is at least one token on *each* incoming sequence flow, and
+// consumes exactly one from each — which is a different question from how many
+// tokens are on the node, and gives a different answer whenever a flow carries two
+// (ADR-0290).
+type Arrival struct {
+	Key  uint64
+	Flow int32
+}
+
+// ArrivalsOnNode returns the tokens waiting on the given node in one execution
+// scope, oldest first, each with the flow it arrived on. The order is the index's:
+// element-instance keys ascend with their minting, so oldest-first is what the scan
+// yields, and it is what makes a join's choice of which token to consume both
+// first-in-first-out and a pure function of state.
+//
+// The result aliases a processor-owned buffer and is valid until the next call.
+func (c *ProcessingContext) ArrivalsOnNode(procKey, scopeKey uint64, elementId int32) []Arrival {
+	out := c.p.arrivalBuf[:0]
 	err := c.tx.ElementInstancesOfProcess(procKey, func(elKey uint64, v *model.ElementInstanceValue) error {
-		if v.ElementId == elementId {
-			keys = append(keys, elKey)
+		if v.ElementId == elementId && v.FlowScopeKey == scopeKey {
+			out = append(out, Arrival{Key: elKey, Flow: v.SourceFlowId})
 		}
 		return nil
 	})
 	c.p.fail(err)
-	return keys
+	c.p.arrivalBuf = out
+	return out
 }
 
-// TokenCanStillReach reports whether any live token could still arrive at nodeId:
-// an active element instance sitting on a node from which nodeId is reachable
-// (per reaches), or a token in flight as an element-activating command not yet
-// processed — the rest of this batch's queue plus followups generated so far —
+// OldestPerFlow reduces arrivals to one token per distinct incoming flow — the
+// oldest on each — which is the set a join firing consumes. Everything it leaves
+// out is surplus: a second token on a flow that already has one, which belongs to
+// the *next* firing and must not be swallowed by this one.
+//
+// The result aliases a second processor-owned buffer, so it stays valid across a
+// re-scan of the node.
+func (c *ProcessingContext) OldestPerFlow(arrivals []Arrival) []Arrival {
+	set := c.p.joinSetBuf[:0]
+	for _, a := range arrivals {
+		seen := false
+		for _, s := range set {
+			if s.Flow == a.Flow {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			set = append(set, a)
+		}
+	}
+	c.p.joinSetBuf = set
+	return set
+}
+
+// TokenCanStillReach reports whether any live token in scopeKey could still arrive
+// at nodeId: an active element instance sitting on a node from which nodeId is
+// reachable (per reaches), or a token in flight as an element-activating command not
+// yet processed — the rest of this batch's queue plus followups generated so far —
 // targeting such a node or nodeId itself. Tokens already parked on nodeId are the
 // join's own arrivals and are excluded. An inclusive join fires only when this is
-// false. Considering in-flight commands is what keeps two pass-through branches
-// from each firing the join separately.
-func (c *ProcessingContext) TokenCanStillReach(procKey uint64, nodeId int32, reaches map[int32]bool) bool {
+// false. Considering in-flight commands is what keeps two pass-through branches from
+// each firing the join separately.
+//
+// scopeKey scopes the question the same way it scopes a parallel join's count
+// (ADR-0277): a token in a *sibling* iteration of a
+// multi-instance subprocess is on the same node ids but can never arrive here, and
+// letting it hold the join open made every iteration wait for the slowest one.
+//
+// Narrowing to one scope does not blind the join to a token running inside a nested
+// subprocess on one of its branches: reaches follows sequence flows, which never
+// cross a scope boundary, so an inner node is not in reaches at all — what keeps the
+// join waiting is the subprocess's own element instance, which sits in *this* scope
+// on a node that does reach the join.
+func (c *ProcessingContext) TokenCanStillReach(procKey, scopeKey uint64, nodeId int32, reaches compiler.NodeSet) bool {
 	upstream := false
 	err := c.tx.ElementInstancesOfProcess(procKey, func(_ uint64, v *model.ElementInstanceValue) error {
-		if v.ElementId != nodeId && reaches[v.ElementId] {
+		if v.FlowScopeKey == scopeKey && v.ElementId != nodeId && reaches.Has(v.ElementId) {
 			upstream = true
 		}
 		return nil
@@ -246,13 +397,45 @@ func (c *ProcessingContext) TokenCanStillReach(procKey uint64, nodeId int32, rea
 				continue
 			}
 			e := &cmd.Value.element
-			if e.ProcessInstanceKey == procKey && (e.ElementId == nodeId || reaches[e.ElementId]) {
+			if e.ProcessInstanceKey != procKey || e.FlowScopeKey != scopeKey {
+				continue
+			}
+			if e.ElementId == nodeId || reaches.Has(e.ElementId) {
 				return true
 			}
 		}
 		return false
 	}
 	return scan(c.p.queue[c.p.batchPos+1:]) || scan(c.p.followups)
+}
+
+// TokenEntering reports whether a token is on its way into scopeKey over a sequence
+// flow: an element that completed and took a flow has written its Completed already,
+// and its successor's activation is still a queued command, so the token is in
+// neither place the active-child counter sees (#1013). Only a flow's activation
+// counts — one with SourceFlowId >= 0. An armed boundary, an event-subprocess
+// trigger, a compensation handler or an ad-hoc activity is entered some other way,
+// and none of them is a token a scope waits for in order to drain.
+//
+// It reads the queue the way [ProcessingContext.TokenCanStillReach] does, and for the
+// same reason that is safe across a restart: the queue is the batch's continuation,
+// restored on recovery (ADR-0271), so the commands seen here are the ones a resumed
+// processor sees.
+func (c *ProcessingContext) TokenEntering(scopeKey uint64) bool {
+	return activationEntering(c.p.queue[c.p.batchPos+1:], scopeKey) ||
+		activationEntering(c.p.followups, scopeKey)
+}
+
+// activationEntering is TokenEntering over one command list.
+func activationEntering(cmds []Command, scopeKey uint64) bool {
+	for i := range cmds {
+		cmd := &cmds[i]
+		if cmd.ValueType == model.VTElementInstance && cmd.Intent == model.IntentActivating &&
+			cmd.Value.element.FlowScopeKey == scopeKey && cmd.Value.element.SourceFlowId >= 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // ActiveChildren returns the active-child count of a scope (e.g. to detect that
@@ -307,23 +490,121 @@ func (c *ProcessingContext) AppendTimerEvent(key uint64, intent model.Intent, v 
 	c.appendEvent(key, model.VTTimer, intent, inflightValue{timer: v})
 }
 
-// AppendVariableEvent records a variable write. The value is data (a name and
+// AppendVariableEvent records a variable write and reports whether it happened: a
+// value past the variable budget is refused, with an incident naming it
+// (ADR-0294). Most callers write engine-derived values —
+// a loop index, a counter — which cannot exceed a budget sized for a business record,
+// and they ignore the result. A caller that writes something a model or a worker
+// produced should not.
+//
+// The value is data (a name and
 // contents), so unlike the graph-derived events this one does allocate for its
 // strings — variables are runtime data, not hot-path token movement.
-func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.VariableValue) {
+func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.VariableValue) bool {
 	// Stamped here rather than at each call site so no path can forget it, and so a
 	// value copied out of one scope and re-written into another (a call activity
 	// promoting its child's result, a loop promoting its body's) can never carry the
 	// producer of the write it was copied from (ADR-0219).
 	v.ProducerKey = c.producer
+	cp, atRoot := c.processOfScope(v.ScopeKey)
 	// Whether this write belongs in the variable value index is stamped here for the
 	// same reason, and for one more: applyToState holds the record and nothing else,
 	// so it cannot ask a compiled process whether a name is searchable. Deciding it
 	// here freezes the answer into the event, and replay indexes exactly what the live
 	// write indexed (I6).
-	v.Indexed = c.indexesVariable(v.ScopeKey, v.Name)
+	v.Indexed = c.indexesVariable(cp, atRoot, v.Name)
+	// A write of a constant's name into an instance that already holds the constant is
+	// dropped, whatever wrote it (ADR-0454). The writer is told it
+	// happened: nothing about it is wrong enough to park, and the constant is what the
+	// instance was started with. A delete is exempt for the reason it is exempt below.
+	if intent != model.IntentVariableDeleted && c.keepsConstant(cp, atRoot, &v) {
+		return true
+	}
+	// A declared personal value that arrived readable is refused, whatever wrote it, and
+	// so is a write that moves the instance's data subject out from under values already
+	// sealed (ADR-0314). A delete is exempt for the reason it is exempt from the budget
+	// below.
+	if intent != model.IntentVariableDeleted && refusePersonalWrite(c, cp, &v) {
+		return false
+	}
+	// A value past the budget is not written and not silently dropped: an incident
+	// names the variable and both sizes (ADR-0294) — though resolving it does not
+	// write the value again (#1123). Deleting is never refused — a delete carries
+	// no value, and refusing to shrink an instance would be the wrong way round.
+	return c.appendVariable(intent, v, c.p.variableCeiling())
+}
+
+// appendCollection is AppendVariableEvent measured against the *collection* budget
+// rather than the variable one. A multi-instance activity's output collection is what
+// a legitimate loop accumulates at the iteration ceiling, which is a different
+// question from what one business record may weigh — and measuring it against the
+// smaller number would refuse ordinary loops
+// (ADR-0294).
+func (c *ProcessingContext) appendCollection(intent model.Intent, v model.VariableValue) bool {
+	v.ProducerKey = c.producer
+	cp, atRoot := c.processOfScope(v.ScopeKey)
+	v.Indexed = c.indexesVariable(cp, atRoot, v.Name)
+	if intent != model.IntentVariableDeleted && c.keepsConstant(cp, atRoot, &v) {
+		return true
+	}
+	if intent != model.IntentVariableDeleted && refusePersonalWrite(c, cp, &v) {
+		return false
+	}
+	return c.appendVariable(intent, v, c.p.collectionCeiling())
+}
+
+// appendVariableElement records that one element of a list variable became this
+// value, rather than recording the list. It is what a multi-instance activity emits
+// per finished iteration, and it is the whole of the fix for a cost that grew with
+// the square of the iteration count: the record is the size of one result, not of the
+// collection so far (ADR-0296).
+//
+// The collection's own ceiling is not checked here, because this write does not carry
+// the collection. Its caller checks it: setListElement measures the list this element
+// produces before it records the element. ADR-0296 first left that out, trusting the
+// variable budget times the iteration bound to cap the list; nothing then refused a
+// list that outgrew its budget while it filled, and the promotion that did refuse it
+// dropped the whole collection without an incident (amended 2026-09-28).
+func (c *ProcessingContext) appendVariableElement(v model.VariableValue) bool {
+	v.ProducerKey = c.producer
+	cp, atRoot := c.processOfScope(v.ScopeKey)
+	v.Indexed = c.indexesVariable(cp, atRoot, v.Name)
+	if refusePersonalWrite(c, cp, &v) {
+		return false
+	}
+	c.appendEvent(v.ScopeKey, model.VTVariable, model.IntentVariableElementSet, inflightValue{variable: v})
+	c.markConditionDirty(v.ScopeKey)
+	return true
+}
+
+// appendVariable is the shared tail of both: a value past ceiling is not written and
+// not silently dropped — an incident names the variable and both sizes, and resolving
+// retries. Deleting is never refused: a delete carries no value, and refusing to
+// shrink an instance would be the budget working backwards.
+func (c *ProcessingContext) appendVariable(intent model.Intent, v model.VariableValue, ceiling int64) bool {
+	if intent != model.IntentVariableDeleted && int64(len(v.Text)) > ceiling {
+		parkOversizedWrite(c, v.ScopeKey, v.Name, int64(len(v.Text)), ceiling)
+		return false
+	}
 	c.appendEvent(v.ScopeKey, model.VTVariable, intent, inflightValue{variable: v})
 	c.markConditionDirty(v.ScopeKey)
+	return true
+}
+
+// processOfScope is the compiled process a write's scope belongs to, and whether that
+// scope is the instance's own root rather than an activity-local one.
+//
+// Both per-write questions below need exactly this, so it is resolved once: the reads
+// are the same one or two the index question already did, because an element instance
+// names its definition itself.
+func (c *ProcessingContext) processOfScope(scopeKey uint64) (cp *compiler.CompiledProcess, atRoot bool) {
+	if ei := c.GetElementInstance(scopeKey); ei != nil {
+		return c.process(ei.ProcessDefKey), false
+	}
+	if pi := c.GetProcessInstance(scopeKey); pi != nil {
+		return c.process(pi.ProcessDefKey), true
+	}
+	return nil, false
 }
 
 // indexesVariable reports whether a write of name into scopeKey belongs in the
@@ -334,16 +615,193 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 //
 // A process that declares nothing costs one length check here, the same shape as the
 // conditional-event question below it.
-func (c *ProcessingContext) indexesVariable(scopeKey uint64, name string) bool {
-	if c.GetElementInstance(scopeKey) != nil {
-		return false // an activity-local scope, not the instance root
-	}
-	pi := c.GetProcessInstance(scopeKey)
-	if pi == nil {
+func (c *ProcessingContext) indexesVariable(cp *compiler.CompiledProcess, atRoot bool, name string) bool {
+	return atRoot && cp != nil && cp.HasSearchableVariables() && cp.IsSearchableVariable(name)
+}
+
+// keepsConstant reports whether a write must be dropped because it names one of the
+// process's constants in an instance root that already holds it
+// (ADR-0454).
+//
+// Dropping rather than refusing is the decision, and it is decided by the writes that
+// actually arrive here: a call activity handing its child's variables back to a caller
+// that has a constant of the same name, a worker echoing its input, a message payload
+// carrying a field the process fixes. In each the constant is what the instance must keep,
+// and parking the token would stop a process for a value nobody meant to change. The
+// model's own writes never reach this: the deploy refused them.
+//
+// Two writes go through. The constant's own seeding, which is the first write of the
+// name and so finds nothing there yet — the reason activateInstance writes constants
+// before start variables. And an operator's correction (ADR-0095), the escape hatch for
+// a constant that is wrong in an instance already running, which the variable audit
+// records.
+//
+// A process that declares no constants pays the length check in HasConstants and nothing
+// else, the same shape as indexesVariable.
+func (c *ProcessingContext) keepsConstant(cp *compiler.CompiledProcess, atRoot bool, v *model.VariableValue) bool {
+	if !atRoot || cp == nil || !cp.HasConstants() || !cp.IsConstant(v.Name) {
 		return false
 	}
-	cp := c.process(pi.ProcessDefKey)
-	return cp != nil && cp.HasSearchableVariables() && cp.IsSearchableVariable(name)
+	if c.cmd.ValueType == model.VTVariable && c.cmd.Intent == model.IntentVariableModify {
+		return false
+	}
+	return c.GetVariable(v.ScopeKey, v.Name) != nil
+}
+
+// clearPersonalWrite reports whether this write must be refused because it carries a
+// value the process declared personal and carries it readable.
+//
+// It is the backstop that makes ADR-0314's rule hold on *every* path into an instance,
+// not only the ones an edge could be put on. A form submission, a worker's result and an
+// operator's write are all sealed before they become commands; a message payload is not,
+// because the instance it correlates into is only known here, inside the engine, which
+// holds no key. Without this check that one path would write personal data in the clear,
+// permanently un-erasable, while the declaration said otherwise and nothing looked wrong.
+//
+// A delete carries no value and a null hides nothing, so neither is refused. The
+// enciphered-or-not question is a prefix check on bytes the engine already holds, which
+// is why it can be asked here at all (I4: no key, no I/O, deterministic).
+func clearPersonalWrite(cp *compiler.CompiledProcess, v *model.VariableValue) bool {
+	if cp == nil || !cp.HasPersonalVariables() || v.Kind == model.VarNull {
+		return false
+	}
+	return cp.IsPersonal(v.Name) && !v.IsEnciphered()
+}
+
+// movedDataSubject reports whether this write would point the instance at a different
+// data subject than the one its values are already sealed under.
+//
+// The hazard is quiet and total: sealing follows whatever the data-subject variable says
+// at the moment of the write, so changing it halfway splits one person's values across
+// two keys — and then erasing either subject leaves the other half readable while the
+// request looks honoured. Nothing downstream could notice, because each value opens
+// perfectly well under the key it names.
+//
+// The first write is how the subject arrives, and a change *before* anything has been
+// sealed costs nothing — correcting a mistyped id then is ordinary, and refusing it would
+// be pedantry. So the refusal asks the one question that matters: has anything already
+// been sealed, anywhere in the instance? Every scope is scanned, not only the root: a
+// form submitted or a worker completing inside an embedded subprocess — every screen of
+// a wizard (ADR-0449) — writes into that subprocess's scope, not the root, so a root-only
+// scan would let the subject move from under values sealed there. The scan runs only when
+// the subject variable actually changes value, which is rare, so its cost is too.
+func movedDataSubject(c *ProcessingContext, cp *compiler.CompiledProcess, v *model.VariableValue) bool {
+	if cp == nil || !cp.HasPersonalVariables() || v.Name != cp.DataSubjectVariable() {
+		return false
+	}
+	old := c.ResolveVariable(v.ScopeKey, v.Name)
+	if old == nil || (old.Kind == v.Kind && old.Text == v.Text && old.Bool == v.Bool) {
+		return false
+	}
+	piKey := v.ScopeKey
+	if ei := c.GetElementInstance(v.ScopeKey); ei != nil {
+		piKey = ei.ProcessInstanceKey
+	}
+	sealed := false
+	scan := func(scope uint64) {
+		if sealed {
+			return
+		}
+		c.VariablesOfScope(scope, func(existing model.VariableValue) {
+			if !sealed && cp.IsPersonal(existing.Name) && existing.IsEnciphered() {
+				sealed = true
+			}
+		})
+	}
+	scan(piKey)
+	c.ForEachElementInstance(piKey, scan)
+	return sealed
+}
+
+// foreignSubject reports whether a sealed personal value is written into a scope whose
+// data subject is somebody else.
+//
+// An edge seals under the subject the target scope's chain names, so a value written
+// from outside always matches. A value only arrives sealed for someone else by being
+// copied — an output mapping handing a value out of a subprocess that shadowed the
+// subject (ADR-0314, amended). It would still open, under its own subject's key, so
+// nothing downstream would notice; but an erasure of this instance's subject would leave
+// it readable, which is the split movedDataSubject refuses from the other side. The
+// envelope names its subject in the clear, so the question needs no key.
+func foreignSubject(c *ProcessingContext, cp *compiler.CompiledProcess, v *model.VariableValue) bool {
+	if cp == nil || !cp.HasPersonalVariables() || !cp.IsPersonal(v.Name) || !v.IsEnciphered() {
+		return false
+	}
+	sealedFor, ok := model.EncipheredSubject(v.Text)
+	if !ok {
+		return false
+	}
+	current := c.ResolveVariable(v.ScopeKey, cp.DataSubjectVariable())
+	if current == nil {
+		return false // the subject arrives later, and subjectArrivesForAnother asks then
+	}
+	subject := subjectOf(current)
+	return subject != "" && subject != sealedFor
+}
+
+// subjectArrivesForAnother is foreignSubject asked from the other side: the data subject
+// arrives in a scope that already holds a value sealed for somebody else.
+//
+// A copy can arrive before the subject does. A call activity seeds its child with the
+// caller's variables in name order and its input mappings after them, so the child's
+// subject may be written after a value sealed for the caller's; an output mapping can hand
+// a value out to a scope that never had the subject, which a later task then sets. The
+// value's own write found no subject to disagree with, so the subject's first write is
+// where the two meet. Only the written scope is read: that is where a copy lands, and a
+// sibling scope naming a subject of its own — one iteration per person — is not this
+// subject's business. The read happens only on a subject's first write into a scope of a
+// process that declares personal data.
+func subjectArrivesForAnother(c *ProcessingContext, cp *compiler.CompiledProcess, v *model.VariableValue) bool {
+	if cp == nil || !cp.HasPersonalVariables() || v.Name != cp.DataSubjectVariable() {
+		return false
+	}
+	if c.ResolveVariable(v.ScopeKey, v.Name) != nil {
+		return false // a change, not an arrival: movedDataSubject's question
+	}
+	subject := subjectOf(v)
+	if subject == "" {
+		return false
+	}
+	foreign := false
+	c.VariablesOfScope(v.ScopeKey, func(existing model.VariableValue) {
+		if foreign || !cp.IsPersonal(existing.Name) || !existing.IsEnciphered() {
+			return
+		}
+		if sealedFor, ok := model.EncipheredSubject(existing.Text); ok && sealedFor != subject {
+			foreign = true
+		}
+	})
+	return foreign
+}
+
+// subjectOf is the person a data-subject value names: its text, trimmed, when it is a
+// string or a number, and nobody otherwise.
+func subjectOf(v *model.VariableValue) string {
+	if v.Kind == model.VarString || v.Kind == model.VarNumber {
+		return strings.TrimSpace(v.Text)
+	}
+	return ""
+}
+
+// refusePersonalWrite parks an incident and reports true when ADR-0314 forbids this
+// write. It is the one place the three appenders ask, so no write path can be the one
+// that forgot.
+func refusePersonalWrite(c *ProcessingContext, cp *compiler.CompiledProcess, v *model.VariableValue) bool {
+	switch {
+	case clearPersonalWrite(cp, v):
+		parkClearPersonalWrite(c, v.ScopeKey, v.Name)
+		return true
+	case movedDataSubject(c, cp, v):
+		parkMovedDataSubject(c, v.ScopeKey, v.Name)
+		return true
+	case foreignSubject(c, cp, v):
+		parkPersonalOfAnotherSubject(c, v.ScopeKey, v.Name)
+		return true
+	case subjectArrivesForAnother(c, cp, v):
+		parkSubjectOfAnotherPerson(c, v.ScopeKey, v.Name)
+		return true
+	}
+	return false
 }
 
 // markConditionDirty notes that a variable changed in the given scope, so the batch loop will
@@ -420,6 +878,15 @@ func (c *ProcessingContext) AppendMigrationEvent(v model.ProcessMigrationValue) 
 	c.appendEvent(v.ProcessInstanceKey, model.VTProcessMigration, model.IntentMigrated, inflightValue{migration: v})
 }
 
+// AppendVariableIndexEvent corrects one variable's membership in the value index
+// (ADR-0244). It carries no value: the variable holds that, and the whole point is that
+// the value did not change. Emitted only where an instance's declaration can change
+// under it — a migration, or an operator's reindex — one per variable whose membership
+// actually differs, so an instance already in step produces no events at all.
+func (c *ProcessingContext) AppendVariableIndexEvent(v model.VariableIndexValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTVariableIndex, model.IntentVariableIndexed, inflightValue{variableIndex: v})
+}
+
 // AppendCompensableEvent records a compensation-index change: IntentCompensableRecorded
 // retains a completed compensable activity (keyed under its scope in completion order),
 // and IntentCompensableConsumed drops one once it has been compensated (ADR-0103). Both
@@ -464,6 +931,12 @@ func (c *ProcessingContext) AppendSignalSubscriptionEvent(key uint64, intent mod
 // message-start instantiation, so both kinds of cross-pool delivery are recorded.
 func (c *ProcessingContext) AppendMessageFlowEvent(v model.MessageFlowValue) {
 	c.appendEvent(v.ReceiverProcessDefKey, model.VTMessageFlow, model.IntentMessagePublished, inflightValue{messageFlow: v})
+}
+
+// AppendTriggerReceiptEvent records a trigger receipt, or with
+// IntentTriggerReceiptsPruned drops the receipts older than v.Cutoff (ADR-0425).
+func (c *ProcessingContext) AppendTriggerReceiptEvent(intent model.Intent, v model.TriggerReceiptValue) {
+	c.appendEvent(0, model.VTTriggerReceipt, intent, inflightValue{trigger: v})
 }
 
 // AppendInboundDeliveryEvent advances an external source's inbound high-water mark
@@ -526,6 +999,12 @@ func (c *ProcessingContext) NotifyJobAvailable(jobType int32) {
 // appendEvent writes an event into the batch AND mutates state from that same
 // record via applyToState. Doing both from one record is what keeps the log and
 // state in lockstep — recovery replays the exact same applyToState.
+// AppendMessageEvent appends a message-buffer event (ADR-0370), keyed by the message's
+// own key.
+func (c *ProcessingContext) AppendMessageEvent(key uint64, intent model.Intent, v model.MessageValue) {
+	c.appendEvent(key, model.VTMessage, intent, inflightValue{message: v})
+}
+
 func (c *ProcessingContext) appendEvent(key uint64, vt model.ValueType, intent model.Intent, v inflightValue) {
 	c.p.position++
 	c.p.batchRecords = append(c.p.batchRecords, eventRecord{

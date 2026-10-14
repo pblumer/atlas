@@ -27,6 +27,25 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`capabilities.spec.mjs`** ([ADR-0305](../docs/adr/0305-business-capabilities-and-value-streams.md),
+  roadmap B8): the business-architecture screens against a stubbed API — the landing view
+  is the gap report, one card per finding kind in the server's order, each sentence composed
+  from the finding's coordinates in the catalogue's words and never the report's English
+  detail; the capability list is the shared table, with the unrealized backlog, the due
+  confirmations and a tag as filters; a capability's page reads its measurement over the
+  window picked and sends a confirmation with who was asked and what was found; a value
+  stream flags a stage naming a capability the map does not have; and English is the same
+  screen in other words.
+- **`feel-assistant.spec.mjs`** ([ADR-0445](../docs/adr/0445-feel-assistant.md)):
+  the **FEEL assistant** against a stubbed API — Ctrl+Shift+E opens and closes it from anywhere;
+  a message sends the whole conversation, the model's earlier turn as the reply it came with and
+  what the editor holds now, and the checked proposal lands in the editor with the engine's verdict;
+  a failed request leaves the message where it was typed; invalid test variables are refused
+  before anything is sent; Copy, the history and the favourites survive closing and reloading;
+  the mini spark on a FEEL field opens it on that field and Apply writes back through the field's
+  change event, keeping an fx field's `=`; a focused dmn-js output cell gets a spark and Apply types
+  into it, while an input cell (a unary test) is not written to; and without an AI Worker the chat
+  is absent and the rest still works.
 - **`token-simulation.spec.mjs`** — message semantics across two pools (ADR-0101): a thrown
   message **delivers to a waiting catch** (both pools complete), a message with **nothing
   waiting is not buffered** (the later catch still parks), and a parked catch **still fires
@@ -37,7 +56,9 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   starting a sandbox sends the diagram *on screen* rather than a stored copy; a job waiting
   for a person becomes a Complete button, and completing it repaints the run onto the canvas
   with the runtime view's own markers; malformed start variables are reported instead of
-  posted; editing the diagram says the run no longer matches it; and leaving the editor
+  posted; editing the diagram says the run no longer matches it, and so do an applied XML source and
+  an auto-layout, which replace the canvas by an import and have the run painted back onto it, while a
+  refused source that the editor puts back is not reported as a change; and leaving the editor
   releases the server-side sandbox rather than leaving it to its TTL.
 
   And the **batch half**: the pool setup is read off the diagram (a row per task the
@@ -69,6 +90,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   ordered by size, keeping the row of an end event nothing reached and marking it as
   such — and offering each outcome *once*, which is the regression guard for a
   registry scan that used to see an element's external label as a second copy of it;
+  the setup is **three numbered steps that say where they stand** — each readout
+  following its boxes as they are typed in without moving the caret out of them,
+  naming a dataset the run cannot use by the generator's own rules, distinguishing
+  "not filled in" from "wrong", and disabling Run while the first two are unsatisfied;
   and stopping a batch leaves what it did readable.
 
   And the **scenario half**: the checkboxes an author ticks become the expectations a
@@ -191,7 +216,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   overview** tests in the same file drive the real app shell against a routed mock instead:
   the per-process Incidents column links to the version holding them (not the latest), a
   capped incident page says its counts are a lower bound, and a variable-search hit that is
-  parked is flagged apart from an equally "active" one.
+  parked is flagged apart from an equally "active" one. The **Incidents view's layout** is
+  measured on a fixture shaped like a production screen (long process ids, a URL inside a
+  message, a worker chip): at 1600px and 1280px both tables fit their cards with every
+  action control inside, the view drops the centred column while its explanation keeps its
+  measure, the other Operations views keep the column, and a timestamp stays on one line.
 
 - **`io-card.spec.mjs`** (ADR-0161 / [ADR-0219](../docs/adr/0219-variable-write-attribution.md)):
   the **in/out card on the diagram**, on the shape that made it lie — a parallel fork whose
@@ -239,7 +268,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   narrower clipped it. The panel must be exactly as wide as its column — at the default
   width, after a real pointer drag, for a width a previous session left in
   `localStorage`, and collapsed to its rail, where the editor must take the freed width
-  rather than leave a gap at the right edge.
+  rather than leave a gap at the right edge. The Components palette had the same defect
+  on the left (form-js pins it to 270px): it must fill its column too, so no empty band
+  opens between it and the canvas, and its tiles must reflow rather than be clipped —
+  three to a row at the default 270px, even beside a classic 17px scrollbar (simulated
+  with padding, since headless Chromium hides scrollbars). A double-click on either
+  divider restores the column's default width.
 
 - **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):
   **who is signed in**, in the Users card under Organization. The column must render the
@@ -251,7 +285,172 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   column is absent. Drives the real app shell against a routed mock, with Playwright's
   clock driving both intervals — the timing is part of what is being tested.
 
+- **`catalog-actions.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
+  the **product's actions** in the catalogue editor. A product that still carries the
+  operation map opens as the actions it means — the order's provision and return first, key
+  and effect fixed — and is saved as actions; an added action carries its effect, its
+  triggers and a label per language; clearing a row's key and message removes it; and
+  choosing a lifecycle process pre-fills `<product>.provision` and `<product>.deprovision`.
+  Drives the real `viewCatalogDetail` through the editor harness, which lets a spec reshape
+  a product before it mounts (`window.__patchItems`).
+
+- **`catalog-transfer.spec.mjs`** ([ADR-0451](../docs/adr/0451-catalogue-export.md)):
+  **exporting and importing a catalogue** from the Console. The catalogue exports as
+  `catalogue-<id>.json`, with `?processes=true` when that is ticked; the ticked products
+  export as one document, and none ticked asks for some rather than calling the server; a
+  products file is posted with `?into=` the catalogue shown; a refused import lists every
+  problem with its subject and names the processes deployed before the refusal; and the
+  catalogue list posts a whole file, with `publish` when asked. Drives the real
+  `viewCatalogDetail` and `viewCatalogs` through the editor harness, whose mock refuses an
+  import when a spec sets `window.__importRefusal`.
+
+- **`catalog-commanded-by.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md) §10):
+  **which process applications may command a product** in the catalogue editor. The
+  applications are offered by name and stored by their portable key, the stored ones
+  ticked; ticking and unticking is what the save sends, and unticking the last sends an
+  empty list rather than keeping the stored one, because a save replaces the product; a
+  key no application here carries keeps a ticked box and survives the save; a typed key
+  is sent without a blank or a repeat; a product without the field saves an empty list;
+  and when the applications cannot be read the field falls back to typed keys instead of
+  breaking the form. Drives the real `viewCatalogDetail` through the editor harness, which
+  serves the applications a spec sets (`window.__applications`, `null` for a failed read).
+
+- **`shop-actions.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
+  the **actions on a held position** in the shop. A held position shows a button per action
+  the server offers the reader, labelled in the reader's language, and one the position does
+  not take now is greyed out with the server's reason as its title; an action without a form
+  asks first and sends a command id, one with a form opens it under the position, refuses
+  to send it empty and sends its answers; and a product whose return only an operator gives
+  is not offered for return. Loads the real `shop.html` with only the network replaced.
+
+- **`worker-events-modeler.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
+  the **Worker events in the message picker**. An element that waits for a message — a
+  message start, a catch, a boundary event, a receive task — is offered the names the
+  server's inbound watches publish, one choice per name with every publishing worker
+  named and a watch that is off marked; picking one declares a message of that name and
+  links it, and a name the diagram already declares is not offered twice. An element that
+  throws a message is offered none. The name field suggests the same names, one render
+  asks the server once, and a listing that fails leaves the picker as it was. Drives the
+  real `mountEditor` against a mock `api` serving `GET /api/v1/message-sources`.
+
+- **`modeler-shop-send-task.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
+  the **Shop kind of a send task**. Choosing it writes
+  `<atlas:shopTask mode="outcome" action="…" outcome="…"/>` and nothing else — a message
+  send loses its `messageRef`, a job-worker send its task definition — because that element
+  is the whole contract the compiler parses; a send task drawn fresh in a model that
+  declared no atlas namespace exports with it declared. A shop task read from the model
+  shows its action and outcome, offers both modes and no loop, and survives the
+  round trip unchanged; choosing the message kind or a Worker Type takes it off again. An
+  action key no catalogue could declare is flagged while it is typed and again when the
+  task is reopened, and is saved as typed rather than reverted. The **command mode**
+  writes `product`, `action`, `order`, `position` and `resultVariable` and no `outcome`,
+  which the compiler refuses on a command, and offers the loop an outcome does not;
+  switching back to an outcome clears those and starts the outcome on its first choice; an
+  `=` expression in the order is written verbatim and opens with fx on, and the fx switch
+  turns a literal position into one. A send task naming both a message and a shop task
+  shows as the message send the compiler runs it as. Drives the real `mountEditor`
+  against a mock `api`, asserting on the exported XML.
+
+- **`message-sources-modeler.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
+  the **message picker grouped by source**. `GET /api/v1/message-sources` answers inbound
+  watches, product actions and the deployed processes waiting for a name; an element that
+  waits for a message is offered «Events from Workers» then «Product actions» (product, key
+  and effect, a declared name left out), an element that throws is offered «Processes
+  waiting for it» and never a product action, and picking any of them declares the
+  message. A row without a `sourceKind` is an inbound watch, and only watches are Worker
+  events. In a process a catalogue product binds, every Worker event is marked as not for a
+  product action, and stays selectable. The name field suggests the same names; the line
+  under it names the watches, the product action that owns the name and the processes
+  waiting for it, and stops suggesting a watch for a name a product owns. A listing that
+  fails leaves a throw's picker as it was. Shares `message-sources-harness.html` with the
+  next spec.
+
+- **`shop-badges-modeler.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
+  the **shop badge on the canvas**. A send task declaring `<atlas:shopTask>` and a receive
+  task whose message a product action owns carry a small shop badge, with a tooltip saying
+  which, on the Implement tab and in the live view and never in the Design view. It sits
+  beside the task's envelope — measured: no overlap, same band, inside the task — and the
+  envelope stays drawn with no implementation badge over it. A listing that fails marks no
+  receive task while the shop send task keeps its badge; one that arrives late marks the
+  receive task when it does, and the canvas asks for it once. The badge is derived: the
+  exported XML is unchanged by it, and choosing the Message kind takes it off.
+- **`feed-subscriptions.spec.mjs`** ([ADR-0433](../docs/adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)):
+  the **Feed… panel** of a CloudEvents endpoint Worker. A subscription whose endpoint is
+  failing shows as held, with the endpoint's last answer and the position it waits at;
+  subscribing sends the catalogues picked and where to start; a subscription is paused,
+  rewound to the oldest event held and ended from its row, each one request. The New worker
+  form explains the type and links its runbook.
+- **`shop-handbuch.spec.mjs`** ([ADR-0436](../docs/adr/0436-a-catalogue-is-imported-as-one-document.md)):
+  the **shop handbook** and its installer. The page switches language like the handbook;
+  the installer asks for the two audiences and the two approvers the example's catalogue
+  document leaves open, then creates the application, its ten forms and five processes,
+  publishes them and imports the catalogue last, with every placeholder replaced; a refused
+  import lists each problem by its catalogue or product.
+- **`console-events.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):
+  the Console's **Events** page. A modeler reads every entry, with the shape and an
+  experimental entry marked, and opens one to its payload, personal data marked. The
+  listeners route refuses a modeler, so the page has no "listening now" column at all. An
+  administrator's page:
+  - counts the listeners per event;
+  - names each listener with its version, project and the personal data it receives;
+  - warns about a model waiting for an `atlas.*` name atlas never emits;
+  - lists for a feed entry the subscriptions it reaches: a subscription narrowed to catalogues
+    is not sent an incident, which belongs to none;
+  - says, with the shop switched off, that the feed passes over the catalogue's events while
+    the engine's still reach every subscription.
+- **`signal-events-modeler.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):
+  the **events atlas emits in the Modeler's signal picker**, driven through the real
+  vendored bpmn-js.
+  - An element that waits for a signal is offered only the events a model may listen to.
+  - Picking one declares a signal of that name, or reuses the diagram's. The note under it
+    names the personal data the listener receives, and a rename redraws the note.
+  - An `atlas.*` name that is no event, and a throw on an `atlas.*` name, are warned about.
+  - The catalogue is asked for once. A catalogue that cannot be read leaves the picker as it
+    was.
+- **`timer-fx-modeler.spec.mjs`** ([ADR-0055](../docs/adr/0055-feel-expression-timer-schedules.md)):
+  the **fx switch on a timer's schedule field**, driven through the real vendored bpmn-js.
+  - A literal duration opens as a literal and an `=` value as an expression; the switch flips
+    between the two, and the exported XML carries exactly what the field shows.
+  - An expression typed after the locked `=` is written into `timeDuration`, or into
+    `timeDate` once the type is switched, and the engine is asked about the bare expression.
+  - A boundary timer and a timer start carry the switch too, and a timer start's note says its
+    expression may read no variables.
+
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
+- **`catalog-publish-warnings.spec.mjs`** (ADR-0443): a
+  publish that warns says the release stands and lists which order-form answers reach a process in
+  the clear; the warnings survive the reload every publish does, and a publish without warnings
+  shows none.
+- **`shown-version.spec.mjs`** ([ADR-0452](../docs/adr/0452-modeler-shows-its-version.md)):
+  the editor bar's chip names what is open and how it stands against the other record — a draft
+  missing a newer deployed change is a warning (`Draft ≠ v2`) whose panel names who created the
+  draft, who last saved it and who deployed v2, the first difference and a link to v2; a draft that
+  is the deployed model reads `Draft = v1`; one with undeployed work is not a warning; a version says
+  which of how many, who deployed it and who adjusted its layout, and compares the draft with *that*
+  version. The bar stays one row with the chip on it. Deploy from a draft saves it first and only
+  once; a new diagram's first deploy saves it; a version opened read-only is deployed without a
+  save, and the Deploy panel says the draft is left alone.
+- **`xml-source.spec.mjs`** ([ADR-0457](../docs/adr/0457-modeler-xml-source.md)):
+  the **XML source** view in the process and decision editors (`xml-source-harness.html` mounts the
+  real `editor.js`; the decision editor runs in the Console against a stubbed server). The menu
+  offers it right after Export XML, and the text is the canvas as it is now, unsaved edits included,
+  highlighted and numbered; a three-thousand-line document draws only the lines in view, each on
+  the text area's line vertically and after a sideways scroll (`code-editor.js`'s `virtual` mode);
+  Apply puts a correction on the canvas; malformed XML is marked on its
+  line while typing and refused on Apply with the diagram untouched; a well-formed document the
+  modeler cannot read is rolled back rather than leaving an empty canvas; closing with an unapplied
+  edit asks first and closing an untouched one does not; F4 and F8 typed into the dialog do not
+  toggle Variables or run Auto-layout behind it, and do again once it is closed; an applied source
+  counts as an edit, so
+  leaving a deployment asks, Save writes it, and a collaborator's change arriving over the live
+  session (a fake `EventSource`) is deferred rather than pulled over it; Copy copies it. A document
+  that is BPMN but has nothing to draw — which bpmn-js refuses only after clearing the canvas — is
+  rolled back too. **Auto-layout** imports the same way and is held to the same: it counts as an
+  edit for leaving a deployment, a collaborator's change waits for it, and a re-flowed document that
+  cannot be drawn puts the diagram back. In the decision editor the views are rebuilt from the
+  applied document and Save keeps it, a document of another DMN version is refused naming both
+  versions, and a collaborator's change waits for an applied source and for an auto-layout. The form editor's schema tab says
+  **Source**, and an edit there is what Save writes.
 
 ## Rendering a conformance gallery diagram
 

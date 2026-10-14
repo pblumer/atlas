@@ -62,9 +62,15 @@ func jobPullSrv(t *testing.T, jobType string, vars string) *Server {
 // need a lease to elapse.
 func jobPullSrvClocked(t *testing.T, jobType string, vars string) (*Server, *testClock) {
 	t.Helper()
+	return jobPullSrvClockedWith(t, jobTypeBPMN("orders", jobType), vars)
+}
+
+// jobPullSrvClockedWith is jobPullSrvClocked for a model of the test's own.
+func jobPullSrvClockedWith(t *testing.T, bpmnXML string, vars string) (*Server, *testClock) {
+	t.Helper()
 	clk := &testClock{t: time.Now().UnixNano()}
 	srv := newServerWithClock(t, clk)
-	code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", jobTypeBPMN("orders", jobType), "application/xml")
+	code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", bpmnXML, "application/xml")
 	if code != http.StatusOK {
 		t.Fatalf("deploy: status=%d body=%s", code, body)
 	}
@@ -426,6 +432,49 @@ func TestLongPollReturnsWhenAJobArrives(t *testing.T) {
 	}
 }
 
+// TestLongPollReturnsWhenAFailedJobIsOfferedAgain: a worker that fails a job with
+// retries left gives it straight back, and a second worker already parked on the type
+// is woken for it — as for a new job — rather than sleeping out its poll while the job
+// waits on the index.
+func TestLongPollReturnsWhenAFailedJobIsOfferedAgain(t *testing.T) {
+	srv := jobPullSrv(t, "send-email", `{}`)
+	_, held := pull(t, srv, `{"type":"send-email","worker":"w1","leaseMs":60000}`)
+	if len(held.Jobs) != 1 {
+		t.Fatalf("pulled %d jobs, want the fixture's one", len(held.Jobs))
+	}
+	job := held.Jobs[0]
+
+	done := make(chan pullResp, 1)
+	started := time.Now()
+	go func() {
+		// Far longer than the test waits: an answer inside the bound can only be a wake.
+		_, got := pull(t, srv, `{"type":"send-email","worker":"w2","waitMs":30000}`)
+		done <- got
+	}()
+	deadline := time.Now().Add(3 * time.Second)
+	for srv.jobWaiters.count(waitTypeIndex(t, srv, "send-email")) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the long poll never registered a waiter")
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	path := fmt.Sprintf("/api/v1/jobs/%d/fail", job.JobKey)
+	body := fmt.Sprintf(`{"retries":2,"message":"transient","worker":"w1","leaseToken":%d}`, job.LeaseToken)
+	if code, b := serveInternal(t, srv, http.MethodPost, path, body, "application/json"); code != http.StatusOK {
+		t.Fatalf("fail: status=%d body=%s", code, b)
+	}
+
+	select {
+	case got := <-done:
+		if len(got.Jobs) != 1 || got.Jobs[0].JobKey != job.JobKey {
+			t.Errorf("the long poll returned %+v, want the failed job offered again", got.Jobs)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatalf("the long poll was not woken by a job failed back to the queue (waited %s)", time.Since(started).Round(time.Second))
+	}
+}
+
 // TestLongPollDoesNotHoldTheRunLoop is the constraint the whole sequence exists for.
 // A request that waited inside Loop.Do would freeze the single writer for the length
 // of the poll — every other request, every timer tick, the whole engine. So while a
@@ -573,3 +622,45 @@ const csvConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
     <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
   </bpmn:process>
 </bpmn:definitions>`
+
+// TestPullHandsOutEveryJobExactlyOnceAcrossManyPulls guards the bounded scan. The
+// pull used to read every waiting job of its type and discard all but the page it
+// wanted; it now stops at the page (ADR-0270). Stopping early
+// is only safe if nothing behind the stop is lost — so this drains a backlog one job
+// at a time and checks that the pulls together hand out each job once and only once.
+func TestPullHandsOutEveryJobExactlyOnceAcrossManyPulls(t *testing.T) {
+	srv := jobPullSrv(t, "send-email", `{}`)
+	const extra = 11
+	for range extra {
+		if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/processes/1/instances", "{}", "application/json"); code != http.StatusOK {
+			t.Fatalf("start extra instance: status=%d body=%s", code, body)
+		}
+	}
+
+	seen := map[uint64]int{}
+	for i := 0; i < extra+2; i++ { // one more pull than there are jobs
+		code, got := pull(t, srv, `{"type":"send-email","worker":"w1","maxJobs":1}`)
+		if code != http.StatusOK {
+			t.Fatalf("pull %d: status=%d", i, code)
+		}
+		if len(got.Jobs) == 0 {
+			break
+		}
+		if len(got.Jobs) != 1 {
+			t.Fatalf("pull %d returned %d jobs, want the one it asked for", i, len(got.Jobs))
+		}
+		seen[got.Jobs[0].JobKey]++
+	}
+	if len(seen) != extra+1 {
+		t.Fatalf("pulled %d distinct jobs, want all %d", len(seen), extra+1)
+	}
+	for key, n := range seen {
+		if n != 1 {
+			t.Errorf("job %d was leased %d times, want once", key, n)
+		}
+	}
+	// And the backlog really is drained: one more pull hands out nothing.
+	if code, got := pull(t, srv, `{"type":"send-email","worker":"w2","maxJobs":10}`); code != http.StatusOK || len(got.Jobs) != 0 {
+		t.Errorf("after draining: status=%d jobs=%d, want 200 and none", code, len(got.Jobs))
+	}
+}

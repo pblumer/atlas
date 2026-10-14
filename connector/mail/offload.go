@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
@@ -52,17 +54,46 @@ type Job struct {
 	// MessageID is the job key, so a message resent after a lease elapsed is
 	// identifiable as the same one rather than looking like a second mail.
 	MessageID string `json:"messageId,omitempty"`
+	// The mailbox half (ADR-0438). Operation is empty for a send.
+	// Target is the message an operation addresses — the messageId a watch or a list
+	// answered — named apart from MessageID above, which is this job's own key.
+	Operation      string `json:"operation,omitempty"`
+	Folder         string `json:"folder,omitempty"`
+	Target         string `json:"target,omitempty"`
+	Destination    string `json:"destination,omitempty"`
+	MaxResults     int    `json:"maxResults,omitempty"`
+	IncludeBody    bool   `json:"includeBody,omitempty"`
+	UnreadOnly     bool   `json:"unreadOnly,omitempty"`
+	ResultVariable string `json:"resultVariable,omitempty"`
+}
+
+// Directory resolves a recipient that is not a mail address — a person or a group
+// this installation knows — to the addresses it should reach.
+//
+// It exists so a model can address somebody it only holds a *reference* to. The
+// portal names people by principal id and by nothing else, and resolves a name or
+// an address from the account at the moment a screen is rendered, never copying
+// one into an order or a variable (ADR-0314). A notification
+// is that rule applied to a message instead of a screen: the model writes
+// `to="=approvalRef"`, the address is looked up here, at send time, and it exists
+// nowhere else.
+//
+// A nil Directory resolves nothing and leaves every recipient as written, which is
+// what this did before the interface existed.
+type Directory interface {
+	Recipients(ref string) ([]string, error)
 }
 
 // Resolve turns a compiled mail task into a [Job]: the authored fields
-// evaluated against the scope's variables. It is engine work by necessity — FEEL is
-// compiled at deploy (ADR-0008/0015) and the scope lives in the store.
+// evaluated against the scope's variables, with any recipient that is a reference
+// rather than an address resolved through dir. It is engine work by necessity —
+// FEEL is compiled at deploy (ADR-0008/0015) and the scope lives in the store.
 //
 // It deliberately does not validate that there is a recipient. That check belongs
 // with the send, after the worker lookup, so an operator with both an
 // unconfigured worker and an empty recipient list hears about the configuration
 // first — that being the one they can act on.
-func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, ei *model.ElementInstanceValue, elementInstanceKey, jobKey uint64) (Job, error) {
+func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, ei *model.ElementInstanceValue, elementInstanceKey, jobKey uint64, dir Directory) (Job, error) {
 	if detail == nil {
 		return Job{}, fmt.Errorf("mail: task has no detail")
 	}
@@ -74,12 +105,43 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		return Job{}, fmt.Errorf("mail: read variables for element %d: %w", elementInstanceKey, err)
 	}
 	piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
+	if detail.MailOp != "" {
+		j := Job{
+			Connector:   cp.Intern(detail.Connector),
+			Operation:   detail.MailOp,
+			Folder:      resolveValue(detail.MailFolder, piKey, scopeVars),
+			Target:      strings.TrimSpace(resolveValue(detail.MailMessage, piKey, scopeVars)),
+			Destination: resolveValue(detail.MailDestination, piKey, scopeVars),
+			MaxResults:  int(detail.MailMaxResults),
+			IncludeBody: detail.MailIncludeBody,
+			UnreadOnly:  detail.MailUnreadOnly,
+			Body:        resolveValue(detail.Body, piKey, scopeVars),
+			HTML:        resolveValue(detail.BodyHTML, piKey, scopeVars),
+			MessageID:   strconv.FormatUint(jobKey, 10),
+		}
+		if detail.ResultVar >= 0 {
+			j.ResultVariable = cp.Intern(detail.ResultVar)
+		}
+		return j, nil
+	}
+	to, err := lookUp(splitAddrs(resolveValue(detail.To, piKey, scopeVars)), dir)
+	if err != nil {
+		return Job{}, err
+	}
+	cc, err := lookUp(splitAddrs(resolveValue(detail.Cc, piKey, scopeVars)), dir)
+	if err != nil {
+		return Job{}, err
+	}
+	bcc, err := lookUp(splitAddrs(resolveValue(detail.Bcc, piKey, scopeVars)), dir)
+	if err != nil {
+		return Job{}, err
+	}
 	return Job{
 		Connector: cp.Intern(detail.Connector),
 		From:      resolveValue(detail.From, piKey, scopeVars),
-		To:        splitAddrs(resolveValue(detail.To, piKey, scopeVars)),
-		Cc:        splitAddrs(resolveValue(detail.Cc, piKey, scopeVars)),
-		Bcc:       splitAddrs(resolveValue(detail.Bcc, piKey, scopeVars)),
+		To:        to,
+		Cc:        cc,
+		Bcc:       bcc,
 		Subject:   resolveValue(detail.MailSubject, piKey, scopeVars),
 		Body:      resolveValue(detail.Body, piKey, scopeVars),
 		HTML:      resolveValue(detail.BodyHTML, piKey, scopeVars),
@@ -87,29 +149,121 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 	}, nil
 }
 
-// Run sends a resolved job through the caller's own registry. It is the whole of the
-// worker's half, and the in-process path calls it too, so there is one definition of
-// what a resolved mail task means rather than two that drift.
+// Run performs a resolved job through the caller's own registry: a send, or a
+// mailbox operation, whose answer it returns for the task's result variable (nil
+// when the operation answers nothing). It is the whole of the worker's half, and the
+// in-process path calls it too, so there is one definition of what a resolved mail
+// task means rather than two that drift.
 //
 // The worker lookup comes first: an unconfigured name is the more actionable of
 // the two failures a job can carry here, and reporting it ahead of an empty
 // recipient list keeps the message an operator sees pointed at the fix.
-func Run(ctx context.Context, j Job, reg *Registry) error {
+func Run(ctx context.Context, j Job, reg *Registry) (any, error) {
 	client, ok := reg.Client(j.Connector)
 	if !ok {
-		return reg.Unresolved("mail", j.Connector)
+		return nil, reg.Unresolved("mail", j.Connector)
 	}
-	if len(j.To) == 0 {
-		return fmt.Errorf("mail: task resolved no recipient")
+	if j.Operation == "" || j.Operation == OpSend {
+		if len(j.To) == 0 {
+			return nil, fmt.Errorf("mail: task resolved no recipient")
+		}
+		return nil, client.Send(ctx, Message{
+			From:      j.From,
+			To:        j.To,
+			Cc:        j.Cc,
+			Bcc:       j.Bcc,
+			Subject:   j.Subject,
+			Body:      j.Body,
+			HTML:      j.HTML,
+			MessageID: j.MessageID,
+		})
 	}
-	return client.Send(ctx, Message{
-		From:      j.From,
-		To:        j.To,
-		Cc:        j.Cc,
-		Bcc:       j.Bcc,
-		Subject:   j.Subject,
-		Body:      j.Body,
-		HTML:      j.HTML,
-		MessageID: j.MessageID,
-	})
+	mb, err := MailboxOf(client)
+	if err != nil {
+		return nil, fmt.Errorf("mail: worker %q: %w", j.Connector, err)
+	}
+	// One operation is one worker call, and the shared budget bounds it whole — a
+	// list of twenty-five is twenty-six requests to Gmail, not twenty-six budgets.
+	ctx, cancel := context.WithTimeout(ctx, nettimeout.Default)
+	defer cancel()
+	return runMailbox(ctx, mb, j)
+}
+
+// runMailbox performs one mailbox operation.
+func runMailbox(ctx context.Context, mb Mailbox, j Job) (any, error) {
+	if j.Operation != OpList && j.Target == "" {
+		return nil, fmt.Errorf("mail: %s: the task's messageId resolved to nothing", j.Operation)
+	}
+	switch j.Operation {
+	case OpList:
+		envs, err := mb.List(ctx, ListRequest{Folder: j.Folder, MaxResults: j.MaxResults, UnreadOnly: j.UnreadOnly, IncludeBody: j.IncludeBody})
+		if err != nil {
+			return nil, err
+		}
+		out := make([]any, 0, len(envs))
+		for _, e := range envs {
+			out = append(out, e.Fields(j.IncludeBody))
+		}
+		return out, nil
+	case OpGet:
+		e, err := mb.Get(ctx, j.Target, j.IncludeBody)
+		if err != nil {
+			return nil, err
+		}
+		return e.Fields(j.IncludeBody), nil
+	case OpMove:
+		if strings.TrimSpace(j.Destination) == "" {
+			return nil, fmt.Errorf("mail: move: the task's destination resolved to nothing")
+		}
+		id, err := mb.Move(ctx, j.Target, j.Destination)
+		if err != nil || id == "" {
+			// No id is an IMAP server that cannot say where the message went; the
+			// variable is left as it was rather than overwritten with nothing.
+			return nil, err
+		}
+		return id, nil
+	case OpMarkRead, OpMarkUnread:
+		return nil, mb.SetRead(ctx, j.Target, j.Operation == OpMarkRead)
+	case OpDelete:
+		return nil, mb.Delete(ctx, j.Target)
+	case OpReply:
+		return nil, mb.Reply(ctx, j.Target, Reply{Body: j.Body, HTML: j.HTML, MessageID: j.MessageID})
+	}
+	return nil, fmt.Errorf("mail: unknown operation %q", j.Operation)
+}
+
+// lookUp turns a recipient list into addresses: an entry with an "@" is already
+// one, anything else is a reference for the directory to resolve.
+//
+// The test is deliberately that crude. A mail address is the thing with an "@" in
+// it, and every string without one is something this server would have handed to
+// SMTP to be rejected — so treating it as a reference takes nothing away and needs
+// no new syntax in the model. A reference nobody answers to fails the job, which
+// parks the task with a message naming it, because a notification quietly sent to
+// nobody is the failure mode a notification exists to avoid.
+func lookUp(rcpts []string, dir Directory) ([]string, error) {
+	if dir == nil || len(rcpts) == 0 {
+		return rcpts, nil
+	}
+	// Declared rather than made: nothing resolved has to come back as nil and not
+	// as an empty list. A leased job's payload is JSON, where the two are `null`
+	// and `[]`, and an unresolved expression must travel as the absence of a value
+	// rather than as a value that happens to be empty — which is a contract a test
+	// holds and this function quietly broke.
+	var out []string
+	for _, r := range rcpts {
+		if strings.Contains(r, "@") {
+			out = append(out, r)
+			continue
+		}
+		found, err := dir.Recipients(r)
+		if err != nil {
+			return nil, fmt.Errorf("mail: recipient %q: %w", r, err)
+		}
+		if len(found) == 0 {
+			return nil, fmt.Errorf("mail: recipient %q is neither an address nor anybody this server knows", r)
+		}
+		out = append(out, found...)
+	}
+	return out, nil
 }

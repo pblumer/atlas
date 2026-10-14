@@ -78,7 +78,7 @@ func BuildInfo(version, revision string) prometheus.Collector {
 	g := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: Namespace,
 		Name:      "build_info",
-		Help:      "Always 1; the labels carry the running Atlas version and VCS revision.",
+		Help:      "Always 1; the labels carry the running atlas version and VCS revision.",
 	}, []string{"version", "revision"})
 	g.WithLabelValues(version, revision).Set(1)
 	return g

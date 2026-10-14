@@ -1,0 +1,602 @@
+// Package catalog holds the product catalogue a self-service portal orders from:
+// what may be ordered, how the parts of a product relate, and what a release
+// proves before anything can be ordered against it.
+//
+// It is the first of the three models in ADR-0312.
+// Design-time state throughout — nothing here reaches the event log, the processor
+// or recovery, and none of the six engine invariants applies to it. What does apply
+// is I5: everything provable when a catalogue is published is proved there, so
+// ordering never interprets a graph (see [Publish]).
+package catalog
+
+// Lifecycle is the window in which an item may be ordered, in the server's own
+// Unix time (nanoseconds, as every other timestamp in this tree).
+//
+// Zero means unbounded on that side, which is the ordinary case: most products are
+// orderable from the moment they are published until somebody withdraws them. The
+// window is data rather than a computed state so that a catalogue can be published
+// ahead of the date it opens.
+//
+// **Both ends are inclusive**, and placing an order outside them is refused
+// (ADR-0397). The gate is the order service, read
+// from the release like every other rule about a basket; the portal keeps the same
+// window so a basket cannot be filled with something the placement will refuse,
+// which is courtesy rather than enforcement. The Console authors the window as two
+// days and stores the **end** of the last one, so a product orderable "until the
+// 31st" is orderable on the 31st.
+//
+// It governs ordering and nothing else. A right already held when the window closes
+// keeps running; when a right ends is [Item.MaxDays], which is a different
+// question (ADR-0344).
+type Lifecycle struct {
+	From  int64 `json:"from,omitempty"`
+	Until int64 `json:"until,omitempty"`
+}
+
+// State is where an item stands in its own life.
+//
+// There is no deleted state, and that is load-bearing: an order placed years ago
+// and an entitlement still held both resolve through the item, so an item is
+// withdrawn rather than removed. A store that can delete one can orphan evidence.
+type State string
+
+// FulfilmentProcess is the id of the model that works an order
+// (api/systemprocesses/auftrag-erfuellung.bpmn). It lives here, where a product's
+// bindings are checked against it, and the order package names it through this
+// constant, so the Go side has one spelling of it.
+const FulfilmentProcess = "atlas-auftrag-erfuellung"
+
+const (
+	// StateDraft is an item being written. It cannot be published.
+	StateDraft State = "draft"
+	// StateActive is an item a release may carry.
+	StateActive State = "active"
+	// StateWithdrawn is an item no longer orderable, still resolvable forever.
+	StateWithdrawn State = "withdrawn"
+)
+
+// ApprovalKind names how an order line for an item gets approved.
+//
+// The four kinds are configuration a catalogue maintainer picks from a list; each
+// is carried out by a process, so a fifth is modelled and registered under a name
+// rather than built into the product. That is why this is a string and not an enum
+// closed by the type system: KindNone, KindFixed, KindRole and KindSuperior are the
+// shipped four, and a registered process name is as valid a value.
+type ApprovalKind string
+
+const (
+	// KindNone orders without approval. A catalogue always answers which of its
+	// items carry this, as a standing list — see ADR-0315.
+	KindNone ApprovalKind = "none"
+	// KindFixed routes to one named principal.
+	KindFixed ApprovalKind = "fixed"
+	// KindRole routes to whoever holds a named group; any one of them may approve.
+	KindRole ApprovalKind = "role"
+	// KindSuperior routes to the orderer's line manager, resolved from the directory.
+	KindSuperior ApprovalKind = "superior"
+)
+
+// Approval is one item's approval rule.
+type Approval struct {
+	Kind ApprovalKind `json:"kind"`
+	// Ref names the principal for KindFixed or the group for KindRole. It is empty
+	// for the kinds that need no target, and Publish refuses a rule that needs one
+	// and has none.
+	Ref string `json:"ref,omitempty"`
+}
+
+// Variant is one orderable shape of an item — a laptop's size, a licence tier.
+//
+// Variants are unordered on purpose. An ordering would let the basket resolve a
+// conflict by picking the higher one, and "higher" is meaningful for a licence tier
+// and meaningless for Windows against Linux. The basket asks the orderer instead.
+type Variant struct {
+	ID    string            `json:"id"`
+	Texts map[string]string `json:"texts"`
+}
+
+// TargetRef says what this item looks like in one target system: the group, the
+// licence SKU, the role, named exactly as that system names it.
+//
+// It exists for the commissioning load and for the reconciliation after it
+// (ADR-0333). A target system reports rights in its
+// own vocabulary — "CN=VPN-Users", "ENTERPRISEPACK" — and an entitlement holds a
+// catalogue item id. Something has to join the two, and the join has to be *data a
+// person can read*, because the whole value of a load is a report somebody checks
+// before it is applied. A join buried in a script produces a report that says
+// "Alice holds VPN access" and gives the reader nothing to check it against.
+//
+// It is deliberately not the same knowledge as the provisioning process, though the
+// two overlap. The process *acts*: it is what adds the membership. This is a
+// *claim* about the target system, and a claim is the thing reconciliation can
+// test. An installation that leaves this empty simply has an item no load will ever
+// attribute — which is the right default, not a degraded one.
+type TargetRef struct {
+	// System is the target system's name in the installation's own vocabulary —
+	// "entra", "ad", "jira". Atlas never interprets it; it only requires that an
+	// observation and the item it should match agree on the spelling.
+	System string `json:"system"`
+	// Ref is the right as that system reports it. Compared literally, case and all:
+	// a distinguished name differing only in case is two different strings to the
+	// directory that issued them, and normalising here would attribute a right to
+	// an item on a similarity Atlas invented.
+	Ref string `json:"ref"`
+}
+
+// Item is a product or a service. Which of the two it is follows from its position
+// in the graph, not from a field: an item nothing composes is a product, an item
+// with no parts is a service, and an item with both is a bundle inside a bundle.
+// Levels nest arbitrarily.
+type Item struct {
+	ID string `json:"id"`
+	// HomeCatalog is the catalogue whose scope governs editing this item. An item
+	// is referenced by catalogues rather than owned by one — it legitimately appears
+	// in several — so scope cannot be inherited from "the catalogue it is in", and a
+	// per-item member list is the per-artifact ACL ADR-0071 refused. One home, and
+	// every other catalogue includes it read-only.
+	HomeCatalog string `json:"homeCatalog"`
+	State       State  `json:"state"`
+	// Texts holds the item's name per language tag. A release proves it carries one
+	// for every language its catalogue declares.
+	Texts map[string]string `json:"texts"`
+	// Descriptions is what this product *is*, per language tag, beside the name
+	// Texts carries. Empty is the ordinary state for a product whose name says
+	// enough, and means no description anywhere rather than an empty one.
+	//
+	// # Why per language and not one string
+	//
+	// Every other text a person reads off a product is per locale, and this is the
+	// one somebody reads when the name was not enough — which is exactly when not
+	// being able to read it matters. A catalogue declaring German and French could
+	// otherwise translate the name of a thing and not the sentence explaining it.
+	//
+	// It is deliberately not Keywords, which is flat for the opposite reason:
+	// keywords are for *finding* and a searcher's language is not the catalogue's,
+	// while a description is for *showing* and is read in the language the portal
+	// is being read in.
+	//
+	// # What a release demands of it
+	//
+	// Nothing, until there is one. A product with no description publishes, because
+	// not every product needs a paragraph. A product with a description in one of
+	// the catalogue's declared languages and not another does not, because that is
+	// a portal where one audience is told what the thing is and the other is shown
+	// an empty panel — the half-translated catalogue the name check already
+	// refuses, in the field a reader turns to second.
+	Descriptions map[string]string `json:"descriptions,omitempty"`
+	Lifecycle    Lifecycle         `json:"lifecycle,omitempty"`
+	Variants     []Variant         `json:"variants,omitempty"`
+	Approval     Approval          `json:"approval"`
+	// ProvisionProcess and DeprovisionProcess are the BPMN process ids bound to this
+	// item. Both are required to publish: a catalogue that can only grant is not a
+	// lifecycle, and the day somebody must revoke at scale is the wrong day to find
+	// the process was never written.
+	ProvisionProcess   string `json:"provisionProcess"`
+	DeprovisionProcess string `json:"deprovisionProcess"`
+	// LifecycleProcess binds ONE process for the whole of this item's lifecycle, in
+	// place of the two ids above (ADR-0425). Each operation is a message start event
+	// of it, named in Operations: provision and deprovision are required, change is
+	// optional. An item carries either the two ids or this, never both.
+	//
+	// The operation is the contract and the message name the process's own
+	// business, the way a published interface maps an entry-point name to an
+	// element (ADR-0373): renaming a start event changes the mapping, not what an
+	// order asks for.
+	LifecycleProcess string            `json:"lifecycleProcess,omitempty"`
+	Operations       map[string]string `json:"operations,omitempty"`
+	// LifecycleForm says how the lifecycle process runs: "per-operation" (the
+	// default, and what empty means) starts an instance for every operation;
+	// "per-position" starts one instance per order position at provisioning and
+	// delivers every later operation to it
+	// (ADR-0428). Declared
+	// rather than read off the diagram, so a catch event somebody adds to a model
+	// cannot silently change how a product is returned.
+	LifecycleForm string `json:"lifecycleForm,omitempty"`
+	// Actions is the product's open list of actions, in place of Operations
+	// (ADR-0429): every thing that can be asked of a position, each with an
+	// effect the order interprets, the triggers that may ask for it, and the
+	// message the lifecycle process starts or waits at. An item carries either
+	// Operations or Actions, never both; one that still carries Operations is
+	// read as the actions they mean (ActionList), so nothing is migrated.
+	Actions []Action `json:"actions,omitempty"`
+	// CommandedBy names, by their portable keys (ADR-0134), the process applications
+	// whose processes may issue this product's actions with a shop command task
+	// (ADR-0429 §10, decision 1) — an HR leaver process returning a right, a
+	// maintenance process resetting a password. Only an action an operator or a
+	// system may ask for can be issued so. Empty, which is the default, means no
+	// process may command it.
+	//
+	// It is read from the newest release at the moment a task commands, not frozen
+	// on the order: it says which automation the operator trusts with what somebody
+	// holds, and taking an application off the list must stop it for every right
+	// already held, not only for the ones ordered afterwards.
+	CommandedBy []string `json:"commandedBy,omitempty"`
+	// MultipleAllowed says whether a principal may hold this item more than once —
+	// two licences, two mailboxes. Where it is false the basket marks an item the
+	// orderer already holds as held, and skips it.
+	MultipleAllowed bool `json:"multipleAllowed,omitempty"`
+	// Targets is what this item is called in the systems that actually hold it, and
+	// it is what lets a commissioning load attribute a right it found to this item
+	// (ADR-0333). Empty is the ordinary state for an
+	// item nothing outside Atlas grants, and it means no load will ever name it.
+	//
+	// Several are allowed: one service is legitimately two groups. The same ref
+	// twice is not, and [Publish] refuses it — an observation matching two items
+	// cannot be attributed, and guessing between them would write evidence Atlas
+	// invented.
+	Targets []TargetRef `json:"targets,omitempty"`
+	// MaxDays is how long a right this product grants may last, in days, or zero
+	// for one that does not end (ADR-0344). It is a
+	// **ceiling declared as policy** — nobody holds this for more than ninety days
+	// — and not a date somebody chose; an order cannot yet name a shorter end
+	// within it.
+	//
+	// It reaches a grant through the release, like the bindings and the approval
+	// rule beside it: a ceiling relaxed in the catalogue next week must not lengthen
+	// a right granted this week under the stricter one.
+	//
+	// It never applies to an adopted or legacy right. A commissioning load records
+	// a found right's start as the moment it was found, so a ceiling measured from
+	// it would schedule an entire estate to expire on the anniversary of the day
+	// somebody switched the portal on.
+	MaxDays int `json:"maxDays,omitempty"`
+	// Eligible narrows the catalogue's audience for this one product: the group ids
+	// whose members may **receive** it. Empty is the ordinary case and means no
+	// narrowing (ADR-0347).
+	//
+	// # Why an item needs this when a catalogue already has an audience
+	//
+	// Because a person sees exactly one catalogue — the highest-ranked one their
+	// groups reach — so "put it in a narrower catalogue" is not a workaround. A
+	// second catalogue does not give anybody a second shop; it is simply hidden
+	// behind the one they already reach. A product that should be available to part
+	// of a catalogue's audience could not be expressed at all.
+	//
+	// # Why empty is not fail-open
+	//
+	// [Catalog.ReachedBy] is fail-closed and stays the gate: nothing here is
+	// reachable by somebody outside the catalogue's audience, whatever this says.
+	// This only ever *narrows* that, so an empty list inherits a restriction rather
+	// than removing one — the opposite of a catalogue with no groups, which would
+	// otherwise be a shop open to everybody while somebody is still filling it.
+	//
+	// # Who is checked
+	//
+	// The **recipient**, never the orderer. A manager ordering a workplace for a
+	// new hire is the ordinary case and must keep working; the question this
+	// answers is who may end up holding the thing, and that is the person it is
+	// for. It reaches an order through the release like the ceiling and the
+	// approval rule beside it, so a restriction relaxed next week cannot retroact
+	// on an order placed this week and a restriction *added* next week cannot
+	// invalidate one already approved.
+	Eligible []string `json:"eligible,omitempty"`
+	// Keywords are the words somebody might search for that are not the product's
+	// name: synonyms, the vendor's own term, the abbreviation everybody uses, the
+	// thing it replaced (ADR-0355).
+	//
+	// # Why this exists rather than searching the name alone
+	//
+	// The story it serves names the case exactly: find a service *when the exact
+	// product name is not known*. A search over names answers only for somebody who
+	// already knows what the thing is called, which is the person who least needs
+	// a search.
+	//
+	// # Why one flat list and not one per language
+	//
+	// Every other text on an item is per locale, and this deliberately is not. A
+	// synonym list is for **finding**, not for displaying, and a searcher's language
+	// is not the catalogue's: somebody reading a German catalogue types "laptop" as
+	// readily as "Notebook", and an abbreviation like "M365" belongs to no language
+	// at all. Splitting the list by locale would hide a term from exactly the person
+	// who needed it, and would ask a product manager to maintain in two places what
+	// they think of once.
+	//
+	// It travels into the release like everything else here, so a term added next
+	// week does not change what an order placed this week was placed against — which
+	// matters less for a search than for a rule, and is still the property that
+	// makes a release a release.
+	Keywords []string `json:"keywords,omitempty"`
+	// ConfigForm names the Atlas form somebody fills in when they order this
+	// product: the cost centre, the site, the employee number — whatever this one
+	// product needs that its name does not say
+	// (ADR-0358). Empty is the
+	// ordinary case and means the product is fully described by what it is.
+	//
+	// # Why a form id and not a field list of its own
+	//
+	// Atlas already has forms: a definition with an id, an editor, a renderer, a
+	// generator, and two surfaces rendering them. A second way to declare "these
+	// are the fields somebody fills in" would be a second thing to author, a second
+	// thing to render, and a second set of field types to keep level with the
+	// first. The catalogue names an id and interprets nothing.
+	//
+	// # What the catalogue does *not* do with it
+	//
+	// It never resolves it. The form store is the `api` package's and this package
+	// cannot see it, exactly as it cannot see which processes are deployed — and
+	// for the same reason the two provisioning bindings are stored as plain ids.
+	// The authoring screen offers only forms that exist, which is where that check
+	// belongs: at the moment somebody chooses, not at the moment somebody orders.
+	//
+	// # Why the release freezes the id and not the form
+	//
+	// A release freezes what an order was placed against, and the reason is always
+	// the same: a rule relaxed next week must not change what somebody was held to
+	// this week. That argument is about *rules*. A form is a set of questions, and
+	// what has to survive is the **answers** — which the order line carries, with
+	// their field keys, for as long as the order exists. "Cost centre 4711" stays
+	// true whatever the form does afterwards.
+	//
+	// The honest cost is stated in the record: a form that gains a field next week
+	// leaves every earlier order without a value for it, and a provisioning process
+	// that reads it finds nothing. That is true of every variable a process reads
+	// and is the process's business; copying a form-js document into every release
+	// would put a rendering artifact inside a design-time model that has kept
+	// rendering out of itself on purpose, and would send it to every browser that
+	// opens the portal.
+	ConfigForm string `json:"configForm,omitempty"`
+	// Price is what this product costs, written as the catalogue's maintainer wants
+	// it read — "CHF 1'200.–", "49.– / Monat", "im Grundpaket enthalten"
+	// (ADR-0361). Empty is the ordinary case
+	// and means the catalogue says nothing about cost.
+	//
+	// # Why a string and not a number with a currency
+	//
+	// Because it is **displayed and never computed**. A number invites a total, a
+	// total invites two products in different currencies, and that invites a rate
+	// and a date — a money model, decided by an installation's finance rules and not
+	// by this package. Everything that makes a price *arithmetic* is absent on
+	// purpose, and a string is the honest shape of "this is what it says on the
+	// shelf".
+	//
+	// The cost of that is stated rather than hidden: nothing can add these up. The
+	// surface that needs a figure most is the approval, and an approval decides one
+	// line — so the one number it shows is the one number it needs. A basket total
+	// would need the money model above, and that is a different measure.
+	//
+	// # Why it is frozen into the release like a rule
+	//
+	// It is not a rule, and it travels like one anyway. An approver saw a figure and
+	// decided on it; a catalogue edit next week must not make the record show a
+	// different figure than the one that was approved. That is the same sentence as
+	// the approval rule's and the ceiling's, and it is the reason this is on the
+	// line as well as in the release.
+	Price string `json:"price,omitempty"`
+	// Category is the heading this product sits under in the portal — "Arbeitsplatz",
+	// "Kommunikation", "Fachanwendungen" (ADR-0360).
+	// Empty is the ordinary case and puts the product under the heading the portal
+	// names for products that have none.
+	//
+	// # Why a field and not an entity
+	//
+	// Because it is **a heading and nothing else**. An entity would carry its own
+	// texts, its own ordering, its own visibility and its own lifecycle, and each of
+	// those is a thing to publish, migrate and get wrong. A heading has none of them:
+	// it is the word above a column.
+	//
+	// The costs are real and stated rather than hidden. A category has **no ordering
+	// of its own** — there is nothing on a string to sort by, and inventing a rank
+	// here would be the entity arriving through the back door, so the portal sorts
+	// alphabetically. And two spellings are two categories, with nothing to notice
+	// that "Arbeitsplatz" and "Arbeitsplätze" were meant as one.
+	//
+	// If either of those turns out to matter, the answer is the entity, and this
+	// field is what it would be migrated from.
+	//
+	// # What this string is, now that the heading is translatable
+	// (ADR-0412)
+	//
+	// The third cost ADR-0360 recorded was that a heading has no translation. It has
+	// one now, in [Item.CategoryTexts] below — and this field did not become it. It
+	// is **the key**: what the portal groups by, what a search hit sets to open the
+	// cascade at the right column, and what an already published release already
+	// holds. The translations are how it is *rendered*.
+	//
+	// That split is the whole of the decision, and it is what makes the change
+	// additive. Had the string become a map, two products would be one category when
+	// their German agreed and two when their French did not — a heading that splits
+	// in a language nobody publishing it reads. Grouping by one value that no reader
+	// ever has to see keeps "same category" a fact about the catalogue rather than
+	// about the reader.
+	//
+	// Where translations are present the key never has to be a word: a stable slug
+	// survives the maintainer deciding the German wording was wrong. Where they are
+	// absent — every product written before the field existed, every single-language
+	// catalogue — the key is the word, and it is what every language renders. That
+	// is the old behaviour exactly, which is why no stored record had to be migrated.
+	Category string `json:"category,omitempty"`
+	// CategoryTexts is [Item.Category] per language tag: the heading as the reader
+	// of this portal reads it, where the key above is what everything groups by.
+	//
+	// Empty is the ordinary state and means the key renders in every language — the
+	// state of every product written before this field and of every catalogue that
+	// declares one language.
+	//
+	// # What a release demands of it
+	//
+	// The rule [Item.Descriptions] follows, for the same reason: optional as a
+	// whole, all-or-nothing once there is one. A heading translated into German and
+	// not French is a portal where one audience reads its own column head and the
+	// other reads somebody else's, and nothing says so, because the fallback renders
+	// and looks deliberate.
+	//
+	// Beside that, a translation without a key is refused. It would put the product
+	// in the bucket for products carrying no heading — under a column head reading
+	// "Ohne Kategorie", while holding the word for one in four languages.
+	CategoryTexts map[string]string `json:"categoryTexts,omitempty"`
+	// ProductGroup is the group this product sits in, one level below its category:
+	// the portal's cascade reads Kategorie > Produktgruppe > Produkt > Services.
+	//
+	// A string on the product, exactly like [Item.Category] above, and for the same
+	// reasons — see the paragraph there, which applies word for word. What is worth
+	// adding is what the pairing means, because "a chain" sounds like more than this
+	// is: the group has no record and therefore **no category of its own**. The
+	// product carries both strings and the chain is assembled per product — this
+	// product is in category X, group Y — so the group→category relation is only
+	// ever read off the products that carry both.
+	//
+	// Two consequences, and neither is an error state. A group whose products sit
+	// in two categories appears under both, because nothing anywhere claims a group
+	// belongs to one. And a group with no products does not exist, exactly as a
+	// category with none does not.
+	ProductGroup string `json:"productGroup,omitempty"`
+	// ProductGroupTexts is [Item.ProductGroup] per language tag, exactly as
+	// [Item.CategoryTexts] is the heading's — same split into a key that groups and
+	// texts that render, same all-or-nothing rule at publication, same reason. See
+	// the paragraphs there.
+	ProductGroupTexts map[string]string `json:"productGroupTexts,omitempty"`
+	// Revision is optimistic concurrency, the same field and the same rule the
+	// capability map uses: a write that states a revision is refused when the
+	// stored record has moved past it, rather than silently overwriting somebody
+	// else's edit (ADR-0376).
+	//
+	// # Why this and not the timestamp beside it
+	//
+	// Because a caller has to be able to send it back unchanged, and
+	// [Item.UpdatedAt] is Unix nanoseconds — around 1.8e18, past the 2^53 where a
+	// float64 stops representing integers exactly. Every JSON client that decodes
+	// numbers as doubles, which is most of them and every MCP client, would return
+	// a value a few hundred nanoseconds off and be told its write was stale. A
+	// revision counts in ones, so it stays exact for more writes than a catalogue
+	// will ever see.
+	//
+	// Zero means the caller stated no precondition and the write is unconditional,
+	// which is what the Console sends: it renders every field and posts every
+	// field, so the record it overwrites is the record on the screen in front of
+	// somebody. A product stored before this field existed also reads zero, so its
+	// first write is unconditional and every write after it can be guarded.
+	Revision  int64 `json:"revision"`
+	CreatedAt int64 `json:"createdAt"`
+	UpdatedAt int64 `json:"updatedAt"`
+}
+
+// EdgeKind distinguishes the two questions an edge can answer. They are different
+// questions and were conflated in the record this implements: structure says what
+// belongs to what, precedence says what must exist first.
+type EdgeKind string
+
+const (
+	// EdgeComposition is structure: the part is integral to the whole, always
+	// ordered with it, never deselectable.
+	EdgeComposition EdgeKind = "composition"
+	// EdgeAggregation is structure: the part is optional, separately orderable, and
+	// may belong to several wholes.
+	EdgeAggregation EdgeKind = "aggregation"
+	// EdgeRequires is precedence: From cannot be provisioned before To is. This is
+	// the edge the fulfilment order is computed over, and the only one whose
+	// direction means "after".
+	EdgeRequires EdgeKind = "requires"
+	// EdgeExcludes is incompatibility: From and To must never be held by the same
+	// person (ADR-0342). The clerk who may create a supplier
+	// must not also approve payments to it — neither right is wrong, the
+	// combination is.
+	//
+	// A third question rather than a shading of the other two, and put beside them
+	// for the reason they are apart: an edge kind that means two things is one
+	// nobody can read.
+	//
+	// **The only symmetric kind.** The other three mean something different read
+	// backwards; "A must not be held with B" is exactly "B must not be held with
+	// A". [Publish] is where that is resolved, by writing both directions into the
+	// release — a reader that checked one would find half the violations and report
+	// the estate as half clean.
+	EdgeExcludes EdgeKind = "excludes"
+)
+
+// Structural reports whether this edge describes containment rather than order.
+func (k EdgeKind) Structural() bool { return k == EdgeComposition || k == EdgeAggregation }
+
+// Edge links two items. For the structural kinds From is the whole and To the part;
+// for EdgeRequires From is the dependent item and To its precondition.
+type Edge struct {
+	From string   `json:"from"`
+	To   string   `json:"to"`
+	Kind EdgeKind `json:"kind"`
+}
+
+// MemberRole is what a member may do. The two values are ADR-0071's, unchanged:
+// a viewer reads, an editor reads and writes. Ownership is the implicit third and
+// highest, and is not listed.
+type MemberRole string
+
+const (
+	// RoleViewer reads the catalogue.
+	RoleViewer MemberRole = "viewer"
+	// RoleEditor reads and changes it, publishing releases included.
+	RoleEditor MemberRole = "editor"
+)
+
+// PrincipalRef names who a grant is for. Type is "user" or "group"; a group grant
+// reaches everyone in it, resolved from the membership the principal already
+// carries, so no store read happens inside an authorization check (ADR-0180).
+type PrincipalRef struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
+// Member is one grant on a catalogue.
+type Member struct {
+	Ref  PrincipalRef `json:"ref"`
+	Role MemberRole   `json:"role"`
+}
+
+// Catalog is a named set of items, with the appearance, audience and precedence
+// that decide who sees it and how.
+type Catalog struct {
+	ID    string            `json:"id"`
+	Texts map[string]string `json:"texts"`
+	// Rank resolves the one-catalogue-per-user rule against directory group
+	// membership, which is many-to-many: the highest rank a user reaches wins.
+	// Ranks are unique across catalogues, and Publish refuses a tie rather than
+	// falling back to an id nobody chose.
+	Rank int `json:"rank"`
+	// Languages are the language tags this catalogue offers. A release proves every
+	// item it carries has a text for each, and a companion record forbids declaring
+	// one the portal interface does not have.
+	Languages []string `json:"languages"`
+	// Items are the item ids this catalogue offers, whatever their home.
+	Items []string `json:"items"`
+	// Groups are the directory or Atlas groups whose members reach this catalogue.
+	Groups []string `json:"groups,omitempty"`
+	// Members are the object axis (ADR-0071/0180/0278): the role says a caller may
+	// maintain catalogues at all, this says which ones. Without it a product
+	// manager can rebuild and publish every customer's catalogue, with nothing in
+	// the way but not knowing an id — which ADR-0278 states plainly is not an
+	// access control.
+	Members []Member `json:"members,omitempty"`
+	// Theme is this catalogue's appearance, empty for the instance's own. Set by
+	// an administrator rather than by whoever maintains the catalogue
+	// (decision 12).
+	Theme Theme `json:"theme,omitempty"`
+	// Edges are the structure and precedence between the items this catalogue
+	// offers. They belong to the catalogue rather than to the items because they
+	// are what its release is computed from, and because the same two products can
+	// relate differently in two catalogues.
+	Edges []Edge `json:"edges,omitempty"`
+	// OwnerID is whoever created it, because creation is the one moment where
+	// there is nobody to ask. The owner may always read, write and share.
+	OwnerID string `json:"ownerId,omitempty"`
+	// Revision is optimistic concurrency, the same field and the same rule
+	// [Item.Revision] and the capability map carry.
+	//
+	// A catalogue's patch is partial, so it cannot clear a field nobody mentioned
+	// the way a product's full replace could. What it can still lose is a list:
+	// Items, Edges and Members are replaced whole when sent, and the surfaces that
+	// send them compute the new value from a snapshot — adding one product posts
+	// every product plus that one. Two maintainers adding a product a second apart,
+	// and the second write is the first one's disappearance, with no error and no
+	// trace.
+	//
+	// Zero in a patch means the caller stated no precondition and the write is
+	// unconditional, which is right for a form whose every field is on the screen
+	// in front of somebody. The caller holding a snapshot is the one that should
+	// say so. A catalogue itself is never at zero: it is created at one, so there
+	// is always a revision to hold on to.
+	//
+	// Every writer advances it, and that is not a detail — a path that changes a
+	// catalogue without advancing it is a path whose changes a stale caller
+	// overwrites in silence. TestEveryWriterAdvancesTheRevision names them all.
+	Revision  int64 `json:"revision"`
+	CreatedAt int64 `json:"createdAt"`
+	UpdatedAt int64 `json:"updatedAt"`
+}

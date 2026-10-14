@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas frozen decision marking e2e harness</title>
+    <!-- Drives the real api/web/frozen-decisions.js and decision-cleanup.js's
+         holderNote: how a definition deployed while latest was frozen at deploy
+         time is marked, what the decision editor says after a deploy such a
+         definition will not follow, and how a version's holder says how it holds
+         it. The sentences are the deliverable, so they are asserted as themselves. -->
+  </head>
+  <body>
+    <script type="module">
+      import { frozenMark, frozenBehindOn, frozenDeployNotice } from "/frozen-decisions.js";
+      import { holderNote, versionDeleteState } from "/decision-cleanup.js";
+      window.__mark = frozenMark;
+      window.__behindOn = frozenBehindOn;
+      window.__notice = frozenDeployNotice;
+      window.__holder = holderNote;
+      window.__versionState = versionDeleteState;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

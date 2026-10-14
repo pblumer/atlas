@@ -1,0 +1,369 @@
+package api
+
+import (
+	"fmt"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/pblumer/atlas/compiler"
+
+	"github.com/pblumer/atlas/api/httpapi"
+)
+
+// Decision deployments (ADR-0319).
+//
+// A DMN model an application publishes becomes a runtime artifact of its own: a
+// durable, versioned record in the decisions store, compiled into the DMN registry
+// under a key from the same global definition key space process definitions use.
+// That is what lets an application consisting of nothing but `eligibility.dmn`
+// publish something the engine can run, and what a process's `latest` reference is
+// pinned to when the process is deployed.
+//
+// Everything here runs on the run loop: it allocates keys, advances version
+// counters, writes the durable records and registers the compiled models — all
+// single-writer state (I3). The compiling and validating that precedes it happens
+// off the loop, in the bundle's preflight.
+
+// resolveVersionPins resolves every fixed-version reference in a compiled process
+// to the decision deployment holding that version, before anything is written
+// (ADR-0423). A version that is not
+// deployed refuses the deploy and names what is: a task that names v4 of a decision
+// that stands at v3 must not deploy, and certainly must not run v3.
+//
+// Latest-bound references are not resolved here any more: under the runtime policy
+// they are settled when the job is worked, and the evaluation records which
+// deployment answered. It reads run-loop state, so it runs on the loop.
+func (s *Server) resolveVersionPins(cp *compiler.CompiledProcess) (map[compiler.DecisionVersionRef]uint64, error) {
+	refs := cp.VersionBoundDecisions()
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	pins := make(map[compiler.DecisionVersionRef]uint64, len(refs))
+	for _, ref := range refs {
+		key, ok := s.decisionVersionKeys[ref.DecisionID][ref.Version]
+		if !ok {
+			return nil, fmt.Errorf("process %q binds decision %q to version %d, which is not deployed; deployed versions: %s",
+				cp.BpmnProcessId, ref.DecisionID, ref.Version, s.deployedVersionsText(ref.DecisionID))
+		}
+		pins[ref] = key
+	}
+	return pins, nil
+}
+
+// persistedVersionPins is the record form of resolveVersionPins' answer, in a
+// stable order so the same deploy writes the same record.
+func persistedVersionPins(pins map[compiler.DecisionVersionRef]uint64) []persistedDecisionBinding {
+	if len(pins) == 0 {
+		return nil
+	}
+	out := make([]persistedDecisionBinding, 0, len(pins))
+	for ref, key := range pins {
+		out = append(out, persistedDecisionBinding{DecisionID: ref.DecisionID, Key: key, Version: ref.Version})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].DecisionID != out[j].DecisionID {
+			return out[i].DecisionID < out[j].DecisionID
+		}
+		return out[i].Version < out[j].Version
+	})
+	return out
+}
+
+// deployedVersionsText lists the deployed versions of a decision for a refusal,
+// or says there are none.
+func (s *Server) deployedVersionsText(decisionId string) string {
+	vs := make([]int, 0, len(s.decisionVersionKeys[decisionId]))
+	for v := range s.decisionVersionKeys[decisionId] {
+		vs = append(vs, int(v))
+	}
+	if len(vs) == 0 {
+		return "none"
+	}
+	sort.Ints(vs)
+	parts := make([]string, len(vs))
+	for i, v := range vs {
+		parts[i] = "v" + strconv.Itoa(v)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// indexDecisionVersions records a decision deployment's versions in
+// decisionVersionKeys.
+func (s *Server) indexDecisionVersions(rec persistedDecision) {
+	for _, d := range rec.Decisions {
+		if s.decisionVersionKeys[d.ID] == nil {
+			s.decisionVersionKeys[d.ID] = map[int32]uint64{}
+		}
+		s.decisionVersionKeys[d.ID][d.Version] = rec.Key
+	}
+}
+
+// decisionVersionOf reads back which version of a decision a deployment key
+// holds, 0 when the key is not a decision deployment of it — a model bundled with
+// a process, or an evaluation recorded before the key was.
+func (s *Server) decisionVersionOf(key uint64, decisionId string) int32 {
+	if key == 0 {
+		return 0
+	}
+	for v, k := range s.decisionVersionKeys[decisionId] {
+		if k == key {
+			return v
+		}
+	}
+	return 0
+}
+
+// decisionDeployment is one DMN model about to be deployed as a decision: what the
+// bundle's off-loop preflight resolved, ready for the on-loop write.
+type decisionDeployment struct {
+	artifactID string
+	modelRef   string
+	modelName  string
+	decisions  []string
+	xml        []byte
+}
+
+// deployDecisions publishes an application's DMN models as decision deployments,
+// in one run-loop turn: every record is written durably first, and only then is
+// any model registered with the DMN registry.
+//
+// That order is invariant I2 for this path. A decision becomes evaluable — and
+// claimable by a release manifest — only after its record is on disk, so a publish
+// that fails partway leaves nothing behind that the next restart would not also
+// produce. The reverse order would make a decision runnable that a restart forgets.
+//
+// It returns the records it wrote, in deployment order, for the publish response
+// and the release manifest. Compilation was already proven off the loop by the
+// bundle's DMN preflight, so a registry refusal here is a should-not-happen; it is
+// reported rather than swallowed, and the durable record stays — which is the safe
+// side of the boundary, not the unsafe one.
+func (s *Server) deployDecisions(models []decisionDeployment, appID, deployedBy string, deployedAt int64) ([]persistedDecision, error) {
+	if len(models) == 0 {
+		return nil, nil
+	}
+	// Spend the keys durably before any record claims one
+	// (ADR-0339): one reservation for
+	// the whole batch, so a publish of five decisions costs one write and not five.
+	next, err := s.reserveKeys(len(models))
+	if err != nil {
+		return nil, err
+	}
+	recs := make([]persistedDecision, 0, len(models))
+	for _, m := range models {
+		key := next
+		next++
+		entries := make([]deployedDecisionEntry, 0, len(m.decisions))
+		for _, id := range m.decisions {
+			version := s.decisionVersions[id] + 1
+			s.decisionVersions[id] = version
+			entries = append(entries, deployedDecisionEntry{ID: id, Version: version})
+		}
+		recs = append(recs, persistedDecision{
+			Key:           key,
+			ApplicationID: appID,
+			ArtifactID:    m.artifactID,
+			ModelRef:      m.modelRef,
+			ResourceName:  decisionResourceName(m.modelRef, m.decisions),
+			ModelName:     m.modelName,
+			Decisions:     entries,
+			Checksum:      modelChecksum(m.xml),
+			DeployedAt:    deployedAt,
+			DeployedBy:    deployedBy,
+			XML:           string(m.xml),
+		})
+	}
+	// Durable first — all of them — so a write failure registers nothing.
+	for _, rec := range recs {
+		if err := s.decisionDeploys.Save(rec); err != nil {
+			return nil, err
+		}
+	}
+	for i, rec := range recs {
+		if err := s.dmnRegistry.DeployDecision(rec.Key, []byte(models[i].xml)); err != nil {
+			return nil, fmt.Errorf("register decision %s: %w", rec.ResourceName, err)
+		}
+		s.indexDecisionVersions(rec)
+	}
+	return recs, nil
+}
+
+// decisionResourceName is the file-shaped name a decision deployment carries into
+// a release manifest: the resolver handle with the extension an author would
+// recognize it by.
+//
+// A publish always has a handle — a reference without one is dropped before it gets
+// here, since there would be nothing to resolve. A decision deployed straight from
+// the editor may have none, because the record carries its own XML and therefore
+// needs no model behind it (ADR-0322). Rather than claim a
+// model that does not exist, such a deployment names itself from its own first
+// decision id.
+func decisionResourceName(modelRef string, decisions []string) string {
+	if modelRef != "" {
+		return modelRef + ".dmn"
+	}
+	for _, id := range decisions {
+		if h := sanitizeHandle(id); h != "" {
+			return h + ".dmn"
+		}
+	}
+	return "decision.dmn"
+}
+
+// deployedDecisionResp is one deployed decision as the API reports it: the runtime
+// identity a business rule task binds to, and where it came from. One row per
+// decision, so a model providing two decisions reports two rows sharing a key —
+// the key is the deployment, the id and version are the decision's own lineage.
+type deployedDecisionResp struct {
+	Key           uint64 `json:"key"`
+	DecisionID    string `json:"decisionId"`
+	Version       int32  `json:"version"`
+	ApplicationID string `json:"applicationId,omitempty"`
+	ModelRef      string `json:"modelRef,omitempty"`
+	ResourceName  string `json:"resourceName,omitempty"`
+	ModelName     string `json:"modelName,omitempty"`
+	Checksum      string `json:"checksum,omitempty"`
+	DeployedAt    int64  `json:"deployedAt"`
+	DeployedBy    string `json:"deployedBy,omitempty"`
+	// Current says this is the newest deployed version of its decision id — the one
+	// a process deployed now would pin its latest-bound reference to. A superseded
+	// version stays deployed and addressable: processes pinned to it keep running
+	// against exactly it, which is the point of the whole record.
+	Current bool `json:"current"`
+	// PinnedBy are the deployed process definitions that hold this deployment's key:
+	// a latest-bound reference frozen on it at deploy, or a task naming its version —
+	// each entry's Binding says which. It is what stops it being deleted
+	// (ADR-0336), so it is reported before the act
+	// rather than only in the refusal after it. Filled by the listing; absent on the
+	// rows a deploy echoes back, which are new and can be pinned by nothing.
+	PinnedBy []decisionPinRef `json:"pinnedBy,omitempty"`
+}
+
+// decisionResponses flattens decision-deployment records into one row per
+// decision, newest deployment first, marking the current version of each id.
+func decisionResponses(recs []persistedDecision) []deployedDecisionResp {
+	newest := map[string]int32{}
+	for _, rec := range recs {
+		for _, d := range rec.Decisions {
+			if d.Version > newest[d.ID] {
+				newest[d.ID] = d.Version
+			}
+		}
+	}
+	out := []deployedDecisionResp{}
+	for _, rec := range recs {
+		for _, d := range rec.Decisions {
+			out = append(out, deployedDecisionResp{
+				Key:           rec.Key,
+				DecisionID:    d.ID,
+				Version:       d.Version,
+				ApplicationID: rec.ApplicationID,
+				ModelRef:      rec.ModelRef,
+				ResourceName:  rec.ResourceName,
+				ModelName:     rec.ModelName,
+				Checksum:      rec.Checksum,
+				DeployedAt:    rec.DeployedAt,
+				DeployedBy:    rec.DeployedBy,
+				Current:       d.Version == newest[d.ID],
+			})
+		}
+	}
+	// Newest deployment first, then by decision id, so a listing leads with what was
+	// just published and reads deterministically among a model's own decisions.
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Key != out[j].Key {
+			return out[i].Key > out[j].Key
+		}
+		return out[i].DecisionID < out[j].DecisionID
+	})
+	return out
+}
+
+// handleListDecisionDeployments lists the decisions deployed on this server as
+// runtime artifacts — one row per decision, newest deployment first, every version
+// present (ADR-0319). It is the decision
+// counterpart of GET /api/v1/processes: what an operator can point a business rule
+// task at, and what a pinned reference resolved to.
+//
+// ?applicationId= narrows to one application, ?decisionId= to one decision's
+// version history — the two questions this listing is asked, answered without a
+// second route.
+func (s *Server) handleListDecisionDeployments(w http.ResponseWriter, r *http.Request) {
+	appID := r.URL.Query().Get("applicationId")
+	decisionID := r.URL.Query().Get("decisionId")
+	var (
+		recs    []persistedDecision
+		loadErr error
+	)
+	// The pins are run-loop state (the deployments map and their compiled pins), so
+	// they are read in the same turn as the records. An operator deciding what to
+	// clean up needs to see what is holding a version before clicking, not after.
+	pinsFor := map[uint64][]decisionPinRef{}
+	s.do(func() {
+		if recs, loadErr = s.decisionDeploys.LoadAll(); loadErr != nil {
+			return
+		}
+		for _, rec := range recs {
+			if pins := s.definitionsPinnedTo(rec.Key); len(pins) > 0 {
+				pinsFor[rec.Key] = pins
+			}
+		}
+	})
+	if loadErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "list decision deployments: "+loadErr.Error())
+		return
+	}
+	if appID != "" {
+		kept := recs[:0]
+		for _, rec := range recs {
+			if rec.ApplicationID == appID {
+				kept = append(kept, rec)
+			}
+		}
+		recs = kept
+	}
+	out := decisionResponses(recs)
+	for i := range out {
+		out[i].PinnedBy = pinsFor[out[i].Key]
+	}
+	if decisionID != "" {
+		kept := out[:0]
+		for _, row := range out {
+			if row.DecisionID == decisionID {
+				kept = append(kept, row)
+			}
+		}
+		out = kept
+	}
+	httpapi.JSON(w, http.StatusOK, out)
+}
+
+// handleDecisionDeploymentXML serves one decision deployment's DMN source —
+// exactly the bytes the registry was rebuilt from, not a re-export of whatever the
+// model folder holds now. That distinction is the point: the file behind a
+// modelRef is edited in place by the DMN editor, so only the deployment record
+// still knows what a running process is actually evaluating.
+func (s *Server) handleDecisionDeploymentXML(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid decision deployment key")
+		return
+	}
+	var (
+		rec     persistedDecision
+		ok      bool
+		loadErr error
+	)
+	s.do(func() { rec, ok, loadErr = s.decisionDeploys.load(key) })
+	if loadErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read decision deployment: "+loadErr.Error())
+		return
+	}
+	if !ok {
+		httpapi.Error(w, http.StatusNotFound, "no decision deployment with that key")
+		return
+	}
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	_, _ = w.Write([]byte(rec.XML))
+}

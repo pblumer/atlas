@@ -1,0 +1,162 @@
+package order
+
+import (
+	"fmt"
+	"sort"
+
+	"github.com/pblumer/atlas/api/catalog"
+)
+
+// Giving back what an order granted.
+//
+// Every line has carried a DeprovisionProcess since the order was placed, frozen
+// there so that revoking what this order granted uses the process that was in
+// force when it was granted. Nothing ever called it. The catalogue has known how
+// to take something back since the first day; the portal only never asked.
+//
+// A return is the mirror of a provisioning and is modelled as one: the same
+// process start, the same report of an outcome, a status while it is in flight and
+// a status when it has come back. What it is *not* is a cancellation. A
+// cancellation is a line that never was; a return is a line that was and is no
+// longer, and a record that cannot tell the two apart cannot answer who had access
+// when — which is the question an audit of an access record exists to answer.
+
+// Returnable reports whether a line can be given back now, and says why not.
+//
+// Three things have to hold. It must be held — a skipped line the recipient got
+// elsewhere was never this order's to revoke, and one already returned is gone. It
+// must have a process to revoke it with, because a return with nothing to run is a
+// status change pretending to be an act. And nothing still held may require it.
+//
+// That last one is the precedence graph read backwards. Provisioning ordered the
+// account before the laptop that needs it; giving back runs the other way, and an
+// account revoked under a laptop that still uses it leaves the laptop working
+// until somebody notices, or not working for a reason nobody connects to this.
+func Returnable(o Order, ref string) error {
+	key, err := ResolveLine(o, ref)
+	if err != nil {
+		return err
+	}
+	var line Line
+	found := false
+	for _, l := range o.Lines {
+		if l.Key() == key {
+			line, found = l, true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("order %s carries no line for %s", o.ID, key)
+	}
+	// Narrower than Held on purpose. A line already on its way back must not be
+	// asked for twice — two revocations racing against one target system is how a
+	// half-deleted account happens — while one whose revocation failed is exactly
+	// what a retry is for.
+	if line.Status != StatusDone && line.Status != StatusReturnFailed {
+		switch line.Status {
+		case StatusReturning:
+			return fmt.Errorf("order: line %s is already going back", key)
+		default:
+			return fmt.Errorf("order: line %s is %s and is not held by anybody", key, line.Status)
+		}
+	}
+	if !line.BindingFor(catalog.OpDeprovision).Bound() {
+		return fmt.Errorf("order: line %s names no process to revoke it with", key)
+	}
+	// Dependencies are between products, so this asks about the product this
+	// position is of.
+	if blockers := stillNeeding(o, line.ItemID); len(blockers) > 0 {
+		return fmt.Errorf("order: line %s is still needed by %v, which %s held",
+			key, blockers, plural(len(blockers)))
+	}
+	return nil
+}
+
+// stillNeeding names the lines that require this one and are still held — which
+// includes one whose own return is under way or has failed, because neither is
+// gone. Sorted, so the message is the same every time.
+func stillNeeding(o Order, itemID string) []string {
+	held := map[string]bool{}
+	for _, l := range o.Lines {
+		if l.Status.Held() {
+			held[l.ItemID] = true
+		}
+	}
+	var out []string
+	for dependent, needs := range o.Requires {
+		if !held[dependent] {
+			continue
+		}
+		for _, need := range needs {
+			if need == itemID {
+				out = append(out, dependent)
+				break
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return "is still"
+	}
+	return "are still"
+}
+
+// Returning marks a line's revocation as under way, recording who asked. The
+// process itself is started by the caller, which is the half that needs an engine.
+//
+// by may be empty where nothing identified the caller — single-user mode has no
+// principals — and an empty actor is recorded as empty rather than as a guess.
+func Returning(o Order, ref string, at int64, by string) (Order, error) {
+	if err := Returnable(o, ref); err != nil {
+		return o, err
+	}
+	key, err := ResolveLine(o, ref)
+	if err != nil {
+		return o, err
+	}
+	if at == 0 {
+		return o, fmt.Errorf("order: returning line %s needs the moment it happened", key)
+	}
+	lines := make([]Line, len(o.Lines))
+	copy(lines, o.Lines)
+	for i := range lines {
+		if lines[i].Key() == key {
+			lines[i].Status, lines[i].ReturnedBy = StatusReturning, by
+			break
+		}
+	}
+	// Not propagated. A line on its way back is not a cause of anything: the guard
+	// above already proved nothing held requires it, and running the pass here
+	// would only recompute blocks for lines that are all settled anyway.
+	o.Lines = lines
+	o.UpdatedAt = at
+	return o, nil
+}
+
+// ReturnProcessOf is the process that revokes a line, for a caller about to start
+// it. It reads it from the order rather than from the catalogue, because what was
+// granted is what has to be revoked — a product whose deprovisioning was changed
+// afterwards must not revoke an older grant by the newer rules.
+func ReturnProcessOf(o Order, ref string) string {
+	return ReturnBindingOf(o, ref).Process
+}
+
+// ReturnBindingOf is [ReturnProcessOf] with the start event, for a line whose
+// product binds a lifecycle process (ADR-0425): where the revocation starts, not
+// only which process runs it.
+func ReturnBindingOf(o Order, ref string) catalog.Binding {
+	key, err := ResolveLine(o, ref)
+	if err != nil {
+		return catalog.Binding{}
+	}
+	for _, l := range o.Lines {
+		if l.Key() == key {
+			return l.BindingFor(catalog.OpDeprovision)
+		}
+	}
+	return catalog.Binding{}
+}

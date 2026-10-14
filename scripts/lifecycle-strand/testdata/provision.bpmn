@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_demo_interner_account_prov" targetNamespace="http://atlas/katalog-demo">
+  <process id="proc_demo_interner_account_prov" name="Katalog Demo: Interner Account provisionieren" isExecutable="true">
+    <documentation>Demo-Provisionierungsprozess für Account-Produkte (F, E, T, R, I, S, M, Benutzeraccount extern, 2027 Interner Account (U), Externer Account (X)) und Laptop Hülle 14". Ablauf: (Genehmigung) -&gt; Account anlegen -&gt; Ergebnis an die Bestellposition melden (done).
+
+GENEHMIGUNG IM PROZESS (seit Version 3). Die Genehmigung ist ein Schritt dieses Prozesses und läuft nicht mehr über die Genehmigungsprozesse von Atlas. Am Produkt steht die Genehmigungsart "keine" mit dem Genehmiger als ref; der Erfüllungsprozess übergibt ihn als approvalRef. Ist approvalRef gesetzt, geht die Aufgabe "Genehmigen" an diese Person; bei Ablehnung wird die Entscheidung an den Auftrag gemeldet (POST .../decision). Ist approvalRef leer (Produkt ohne Genehmigung, das denselben Prozess nutzt), entfällt der Schritt. Es wird keine Mail versandt.</documentation>
+    <startEvent id="start" name="Interner Account bestellt">
+      <outgoing>g0</outgoing>
+    </startEvent>
+    <exclusiveGateway id="gw_noetig" name="Genehmigung nötig?" default="g_ohne">
+      <incoming>g0</incoming>
+      <outgoing>g_mit</outgoing>
+      <outgoing>g_ohne</outgoing>
+    </exclusiveGateway>
+    <userTask id="Genehmigen" name="Genehmigen">
+      <documentation>Die Aufgabe geht an die Person, die am Produkt als Genehmiger hinterlegt ist (approvalRef). Bei einer Ablehnung ist eine Begründung anzugeben; die bestellende Person bekommt sie zu lesen. Es wird keine Mail versandt.</documentation>
+      <extensionElements>
+        <zeebe:formDefinition formId="genehmigung"/>
+        <zeebe:assignmentDefinition assignee="=approvalRef"/>
+      </extensionElements>
+      <incoming>g_mit</incoming>
+      <outgoing>g_entschieden</outgoing>
+    </userTask>
+    <exclusiveGateway id="gw_genehmigt" name="Genehmigt?" default="g_nein">
+      <incoming>g_entschieden</incoming>
+      <outgoing>g_ja</outgoing>
+      <outgoing>g_nein</outgoing>
+    </exclusiveGateway>
+    <serviceTask id="Ablehnen" name="Ablehnung melden">
+      <documentation>POST /api/v1/orders/{orderId}/lines/{itemId}/decision mit Urheber (approvalRef) und Begründung.</documentation>
+      <extensionElements>
+        <atlas:restConnector method="POST"
+          url="=(if atlasApiBase = null then &#34;http://127.0.0.1:8080&#34; else atlasApiBase) + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + itemId + &#34;/decision&#34;"
+          authType="bearer" authSecret="atlas"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=approvalRef" target="by"/>
+          <zeebe:input source="=if begruendung = null then &#34;&#34; else begruendung" target="reason"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>g_nein</incoming>
+      <outgoing>g_abl_ende</outgoing>
+    </serviceTask>
+    <endEvent id="ende_abgelehnt" name="Abgelehnt">
+      <incoming>g_abl_ende</incoming>
+    </endEvent>
+    <exclusiveGateway id="gw_weiter">
+      <incoming>g_ja</incoming>
+      <incoming>g_ohne</incoming>
+      <outgoing>f1</outgoing>
+    </exclusiveGateway>
+    <userTask id="account_anlegen" name="Account anlegen">
+      <incoming>f1</incoming>
+      <outgoing>f2</outgoing>
+    </userTask>
+    <serviceTask id="melden" name="Position als provisioniert melden">
+      <documentation>POST /api/v1/orders/{orderId}/lines/{positionId} mit {"status":"done"}. Gemeldet gegen positionId; fehlt sie, gegen itemId.</documentation>
+      <extensionElements>
+        <atlas:restConnector method="POST"
+          url="=(if atlasApiBase = null then &#34;http://127.0.0.1:8080&#34; else atlasApiBase) + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + (if positionId = null then itemId else positionId)"
+          authType="bearer" authSecret="atlas"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;done&#34;" target="status"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>f2</incoming>
+      <outgoing>f3</outgoing>
+    </serviceTask>
+    <endEvent id="ende" name="Account angelegt">
+      <incoming>f3</incoming>
+    </endEvent>
+    <sequenceFlow id="g0" sourceRef="start" targetRef="gw_noetig"/>
+    <sequenceFlow id="g_mit" name="ja" sourceRef="gw_noetig" targetRef="Genehmigen"><conditionExpression>=approvalRef != null and approvalRef != &#34;&#34;</conditionExpression></sequenceFlow>
+    <sequenceFlow id="g_ohne" name="nein" sourceRef="gw_noetig" targetRef="gw_weiter"/>
+    <sequenceFlow id="g_entschieden" sourceRef="Genehmigen" targetRef="gw_genehmigt"/>
+    <sequenceFlow id="g_ja" name="ja" sourceRef="gw_genehmigt" targetRef="gw_weiter"><conditionExpression>=genehmigt = true</conditionExpression></sequenceFlow>
+    <sequenceFlow id="g_nein" name="nein" sourceRef="gw_genehmigt" targetRef="Ablehnen"/>
+    <sequenceFlow id="g_abl_ende" sourceRef="Ablehnen" targetRef="ende_abgelehnt"/>
+    <sequenceFlow id="f1" sourceRef="gw_weiter" targetRef="account_anlegen"/>
+    <sequenceFlow id="f2" sourceRef="account_anlegen" targetRef="melden"/>
+    <sequenceFlow id="f3" sourceRef="melden" targetRef="ende"/>
+  </process>
+  <bpmndi:BPMNDiagram id="di_proc_demo_interner_account_prov">
+    <bpmndi:BPMNPlane id="plane_proc_demo_interner_account_prov" bpmnElement="proc_demo_interner_account_prov">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start"><omgdc:Bounds x="152" y="102" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_noetig_di" bpmnElement="gw_noetig" isMarkerVisible="true"><omgdc:Bounds x="240" y="95" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Genehmigen_di" bpmnElement="Genehmigen"><omgdc:Bounds x="340" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_genehmigt_di" bpmnElement="gw_genehmigt" isMarkerVisible="true"><omgdc:Bounds x="490" y="95" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Ablehnen_di" bpmnElement="Ablehnen"><omgdc:Bounds x="465" y="220" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_abgelehnt_di" bpmnElement="ende_abgelehnt"><omgdc:Bounds x="497" y="360" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_weiter_di" bpmnElement="gw_weiter" isMarkerVisible="true"><omgdc:Bounds x="590" y="95" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="account_anlegen_di" bpmnElement="account_anlegen"><omgdc:Bounds x="690" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="melden_di" bpmnElement="melden"><omgdc:Bounds x="840" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende"><omgdc:Bounds x="990" y="102" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="g0_di" bpmnElement="g0"><omgdi:waypoint x="188" y="120"/><omgdi:waypoint x="240" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="g_mit_di" bpmnElement="g_mit"><omgdi:waypoint x="290" y="120"/><omgdi:waypoint x="340" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="g_ohne_di" bpmnElement="g_ohne"><omgdi:waypoint x="265" y="95"/><omgdi:waypoint x="265" y="30"/><omgdi:waypoint x="615" y="30"/><omgdi:waypoint x="615" y="95"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="g_entschieden_di" bpmnElement="g_entschieden"><omgdi:waypoint x="440" y="120"/><omgdi:waypoint x="490" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="g_ja_di" bpmnElement="g_ja"><omgdi:waypoint x="540" y="120"/><omgdi:waypoint x="590" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="g_nein_di" bpmnElement="g_nein"><omgdi:waypoint x="515" y="145"/><omgdi:waypoint x="515" y="220"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="g_abl_ende_di" bpmnElement="g_abl_ende"><omgdi:waypoint x="515" y="300"/><omgdi:waypoint x="515" y="360"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><omgdi:waypoint x="640" y="120"/><omgdi:waypoint x="690" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><omgdi:waypoint x="790" y="120"/><omgdi:waypoint x="840" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><omgdi:waypoint x="940" y="120"/><omgdi:waypoint x="990" y="120"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

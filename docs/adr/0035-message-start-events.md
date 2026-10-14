@@ -1,6 +1,7 @@
 # ADR-0035: Message start events and the processInstanceKey built-in
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-23
 - **Deciders:** Atlas engine team
 

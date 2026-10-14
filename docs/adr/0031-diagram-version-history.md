@@ -1,6 +1,7 @@
 # ADR-0031: Diagram version history in the Modeler
 
 - **Status:** Proposed
+- **Implementation:** Not started
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
 

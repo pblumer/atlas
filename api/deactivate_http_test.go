@@ -55,7 +55,7 @@ func countInstances(t *testing.T, ts *httptest.Server) int {
 		t.Fatalf("list instances status=%d body=%s", code, body)
 	}
 	var insts []json.RawMessage
-	if err := json.Unmarshal(body, &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &insts); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	return len(insts)

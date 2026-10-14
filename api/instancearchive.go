@@ -306,7 +306,7 @@ func archiveFailure(err error) (archiveResult, bool) {
 	switch {
 	case errors.Is(err, opensearch.ErrSearchRefused):
 		return archiveResult{State: archiveRefused, Reason: "The event log store declined the query. " +
-			"Its credentials here may not carry read access to the index Atlas writes."}, true
+			"Its credentials here may not carry read access to the index atlas writes."}, true
 	case err != nil:
 		return archiveResult{State: archiveUnreachable, Reason: "The event log store could not be reached, " +
 			"so nothing is known about instances this server no longer holds — which is not " +

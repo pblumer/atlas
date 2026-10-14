@@ -1,6 +1,7 @@
 # ADR-0042: User-task runtime assignment and claim/unclaim
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
 

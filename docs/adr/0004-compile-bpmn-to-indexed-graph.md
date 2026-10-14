@@ -1,6 +1,7 @@
 # ADR-0004: Compile BPMN to an integer-indexed graph
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-06-11
 - **Deciders:** Core team
 

@@ -8,6 +8,15 @@ Thanks for your interest in Atlas. The project is in early development, so the m
 - Skim the [ADRs](docs/adr/). They explain *why* things are the way they are. If your change contradicts an ADR, that's fine — but it means writing a new ADR that supersedes it, not quietly diverging.
 - For anything non-trivial, open an issue first to align on approach before writing code.
 
+## Language
+
+Atlas is a public repository, so anything that stays in it is written in **English**: code, comments, ADRs, the CHANGELOG, `docs/`, commit messages, PR descriptions, and issues. An issue is part of the project's documentation rather than an internal note — one that only the team can read is one that only the team can pick up.
+
+Two deliberate exceptions:
+
+- **User-facing Console strings are bilingual** (English and German), and the two must say the same thing — see [`AGENTS.md`](AGENTS.md).
+- **[`docs/compliance/`](docs/compliance/) is German**, because its audience is a Swiss authority.
+
 ## Architectural guardrails
 
 Atlas's performance and correctness rest on a few load-bearing decisions, captured as **invariants** in [`docs/architecture/invariants.md`](docs/architecture/invariants.md). Changes that violate these need an ADR, not just a PR:
@@ -31,7 +40,7 @@ Narrow, *stated* exceptions: purely mechanical changes with no behavioral surfac
 ```bash
 go build ./...
 go test ./...
-go test -race -timeout=25m ./...   # mandatory before pushing; -timeout is too (see below)
+go test -race -timeout=45m ./...   # mandatory before pushing; -timeout is too (see below)
 go test -cover ./...               # repository-wide statement coverage must stay >= 95%
 go vet ./...
 gofmt -l .                         # must be empty
@@ -60,9 +69,10 @@ If you're making or changing a significant architectural decision:
 
 1. Copy [`docs/adr/template.md`](docs/adr/template.md) to `docs/adr/draft-<slug>.md`. **Don't pick a number** — the record keeps its `# ADR-DRAFT: Title` heading until it lands on main, and gets its number there. Two branches each taking "the next free number" is how records ended up sharing one, and how one record was renumbered on six consecutive merges.
 2. Fill in context, drivers, options, and consequences honestly — including the trade-offs you're accepting.
-3. Leave the table in [`docs/adr/README.md`](docs/adr/README.md) alone: the row is added with the number. That table is the one line every record in flight would otherwise have to touch, which is exactly what used to conflict.
-4. Cite the record as `ADR-draft-<slug>` in code comments and docs. When the number is assigned, those citations are rewritten with it.
-5. If it replaces an earlier decision, mark the old ADR *Superseded by ADR-XXXX* (don't delete it).
+3. Set both state fields. **Status** says whether the decision holds (*Proposed*, *Accepted*, *Superseded by ADR-XXXX*, *Deprecated*); **Implementation** says whether it is built (*Not started*, *Partial*, *Landed*, *Superseded*). A record that arrives with its code is *Accepted* / *Landed* — merging code against a decision is taking it, and `go test ./docs/adr` refuses *Landed* under any other status. A record that decides something before it is built is *Accepted* / *Not started*. See [`docs/adr/README.md`](docs/adr/README.md#the-two-states-of-a-record).
+4. Leave the table in [`docs/adr/README.md`](docs/adr/README.md) alone: the row is added with the number. That table is the one line every record in flight would otherwise have to touch, which is exactly what used to conflict.
+5. Cite the record as `ADR-draft-<slug>` in code comments and docs. When the number is assigned, those citations are rewritten with it.
+6. If it replaces an earlier decision, mark the old ADR *Superseded by ADR-XXXX* and its implementation *Superseded* (don't delete it).
 
 After the PR merges, a workflow on `main` runs `make adr-number`, which renames the file to `NNNN-<slug>.md`, fixes the heading, adds the index row and rewrites every citation. You don't have to do anything — but you can run `make adr-number` yourself on `main` if you ever need to. A number, once assigned, is never reassigned.
 

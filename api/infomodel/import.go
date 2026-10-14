@@ -136,7 +136,7 @@ func ParseImport(format string, document []byte) (ImportResult, error) {
 	if format == "" {
 		detected, ok := DetectImportFormat(document)
 		if !ok {
-			return ImportResult{}, errors.New("this document is neither JSON nor XML: an import is an Atlas " +
+			return ImportResult{}, errors.New("this document is neither JSON nor XML: an import is an atlas " +
 				"information model as JSON, or a UML class diagram as XMI")
 		}
 		format = detected
@@ -160,7 +160,7 @@ func ParseImport(format string, document []byte) (ImportResult, error) {
 
 	model := sanitizeImport(parsed, notes)
 	if len(model.Classes) == 0 {
-		return ImportResult{}, errors.New("this document contains no classes Atlas could read")
+		return ImportResult{}, errors.New("this document contains no classes atlas could read")
 	}
 	layoutImported(&model, notes)
 	return ImportResult{Format: format, Model: model, Notes: notes.result()}, nil
@@ -237,7 +237,7 @@ func sanitizeImport(doc Model, notes *noteList) Model {
 			notes.add(NoteInfo, name, "%s says no kind of class, so it was read as a business object.", name)
 		}
 		if !knownStereotype(stereotype) {
-			notes.add(NoteDropped, name, "%s is a %q class, which Atlas does not author. This build has business objects, value types and enumerations.", name, c.Stereotype)
+			notes.add(NoteDropped, name, "%s is a %q class, which atlas does not author. This build has business objects, value types and enumerations.", name, c.Stereotype)
 			continue
 		}
 		if seenName[name] {
@@ -434,7 +434,7 @@ func sanitizeAssociations(in []Association, byID map[string]*Class, nextID func(
 		to, okTo := byID[strings.TrimSpace(a.To.ClassID)]
 		label := associationLabel(a, from, to)
 		if !knownKind(kind) {
-			notes.add(NoteDropped, label, "%s is a %q relationship, which Atlas does not author. This build draws associations, aggregations, compositions and generalizations.", label, a.Kind)
+			notes.add(NoteDropped, label, "%s is a %q relationship, which atlas does not author. This build draws associations, aggregations, compositions and generalizations.", label, a.Kind)
 			continue
 		}
 		if !okFrom || !okTo {
@@ -531,7 +531,7 @@ func sanitizeStores(in []DataStore, byID map[string]*Class, nextID func(string) 
 			mode = StoreModeRead
 		}
 		if _, ok := StoreModeOf(mode); !ok {
-			notes.add(NoteDropped, name, "%s is a %q store, which Atlas does not author: this build reads from a store, and writing through one is a transaction against something outside the engine.", name, st.Mode)
+			notes.add(NoteDropped, name, "%s is a %q store, which atlas does not author: this build reads from a store, and writing through one is a transaction against something outside the engine.", name, st.Mode)
 			continue
 		}
 		class, ok := byName[strings.TrimSpace(st.Class)]
@@ -574,10 +574,10 @@ func normalizeMultiplicity(raw, element string, notes *noteList) string {
 	}
 	mapped, ok := nearestMultiplicity(value)
 	if !ok {
-		notes.add(NoteAdjusted, element, "%s has the multiplicity %q, which Atlas cannot read, so it was read as optional.", element, raw)
+		notes.add(NoteAdjusted, element, "%s has the multiplicity %q, which atlas cannot read, so it was read as optional.", element, raw)
 		return MultOptional
 	}
-	notes.add(NoteAdjusted, element, "%s is %q; Atlas authors 0..1, 1, 0..* and 1..*, so it was read as %s.", element, raw, mapped)
+	notes.add(NoteAdjusted, element, "%s is %q; atlas authors 0..1, 1, 0..* and 1..*, so it was read as %s.", element, raw, mapped)
 	return mapped
 }
 
@@ -593,10 +593,10 @@ func normalizeEndMultiplicity(raw, element string, notes *noteList) string {
 	}
 	mapped, ok := nearestMultiplicity(value)
 	if !ok {
-		notes.add(NoteAdjusted, element, "An end of %s has the multiplicity %q, which Atlas cannot read, so it was left unsaid.", element, raw)
+		notes.add(NoteAdjusted, element, "An end of %s has the multiplicity %q, which atlas cannot read, so it was left unsaid.", element, raw)
 		return ""
 	}
-	notes.add(NoteAdjusted, element, "An end of %s is %q; Atlas authors 0..1, 1, 0..* and 1..*, so it was read as %s.", element, raw, mapped)
+	notes.add(NoteAdjusted, element, "An end of %s is %q; atlas authors 0..1, 1, 0..* and 1..*, so it was read as %s.", element, raw, mapped)
 	return mapped
 }
 

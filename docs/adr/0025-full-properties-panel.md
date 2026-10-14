@@ -1,6 +1,7 @@
 # ADR-0025: Extend the hand-written properties panel instead of vendoring bpmn-js-properties-panel
 
 - **Status:** Proposed (amended 2026-08-18: documentation is carried, not discarded)
+- **Implementation:** Partial
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
 

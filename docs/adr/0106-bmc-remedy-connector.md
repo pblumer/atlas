@@ -1,6 +1,7 @@
 # ADR-0106: A BMC Remedy connector — server-registered ITSM entry creation
 
 - **Status:** Accepted (amended 2026-08-26 — the connector's work moved onto a worker; see the amendment note below)
+- **Implementation:** Landed
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
 

@@ -1,6 +1,7 @@
 # ADR-0132: Link events (intra-scope goto — a compile-time synthetic flow)
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-13
 - **Deciders:** Atlas engine team
 

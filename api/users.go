@@ -17,15 +17,11 @@ import (
 // through s.do onto the run-loop goroutine, the same discipline the other sidecar
 // handlers follow, so the user store is only ever touched by a single owner.
 
-// maxUserBytes caps a user request body. User records are tiny; this refuses a
-// runaway upload without constraining any real request.
-const maxUserBytes = 64 << 10 // 64 KiB
-
 // decodeJSONBody reads a size-limited JSON body into dst, writing a 400 and
 // returning false on a read or parse error. Centralizing it keeps every identity
 // handler's body handling identical and in one place.
-func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxUserBytes))
+func (s *Server) decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Request))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return false
@@ -83,7 +79,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if !decodeJSONBody(w, r, &payload) {
+	if !s.decodeJSONBody(w, r, &payload) {
 		return
 	}
 	username := strings.TrimSpace(payload.Username)
@@ -270,7 +266,7 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		Password    string   `json:"password"`
 		Roles       []string `json:"roles"`
 	}
-	if !decodeJSONBody(w, r, &payload) {
+	if !s.decodeJSONBody(w, r, &payload) {
 		return
 	}
 	username := strings.TrimSpace(payload.Username)
@@ -378,7 +374,7 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 		Roles       *[]string `json:"roles"`
 		Disabled    *bool     `json:"disabled"`
 	}
-	if !decodeJSONBody(w, r, &payload) {
+	if !s.decodeJSONBody(w, r, &payload) {
 		return
 	}
 	var (
@@ -464,9 +460,11 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 			// session: an OAuth grant can stand for months (ADR-0200).
 			s.revokeUserGrants(id)
 		} else {
-			// Roles changed but the account stands: rewrite what its grants may do
-			// rather than dropping them, so an administrative edit does not knock a
-			// person's worker over.
+			// Roles changed but the account stands: push the new set into the account's
+			// live sessions so it is enforced from the next request rather than the next
+			// login, and rewrite what its grants may do rather than dropping them, so an
+			// administrative edit does not knock a person's worker over.
+			s.sessions.setUserRoles(id, updated.Roles)
 			s.setUserGrantRoles(id, updated.Roles)
 		}
 		// Roles and the disabled flag are the two fields that change what an account
@@ -485,7 +483,7 @@ func (s *Server) handleSetUserPassword(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		Password string `json:"password"`
 	}
-	if !decodeJSONBody(w, r, &payload) {
+	if !s.decodeJSONBody(w, r, &payload) {
 		return
 	}
 	if len(payload.Password) < minPasswordLen {

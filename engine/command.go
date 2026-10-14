@@ -74,7 +74,13 @@ type Command struct {
 	// work (ADR-0159). It is the explicit gate for the audit record — never inferred from
 	// Reason being set — so a manual completion is always attributable even if the reason
 	// is somehow empty, and a worker's completion never mints an operator-action record.
+	// A BPMN error thrown by hand carries it for the same reason (ADR-0089).
 	Manual bool
+	// ErrorMessage is what a worker said about the BPMN error it threw (ADR-0089), the
+	// text an operator reads on the incident when nothing catches the error. It rides
+	// only on the non-hot-path IntentJobErrorThrown command, beside the code in
+	// Value.incident.Message, so it never touches the token-movement fast path.
+	ErrorMessage string
 	// RetryBackoff is the delay (unix-nanoseconds) a worker asked to wait before its failed
 	// job may be retried (ADR-0111). It rides only on the non-hot-path IntentJobFailed command;
 	// the handler reads the clock at command time and freezes now+RetryBackoff into the job's
@@ -86,6 +92,40 @@ type Command struct {
 	// now+LeaseFor into the job's LeaseExpiresAt, so a replay lands on the same instant
 	// (invariant I6).
 	LeaseFor int64
+	// Created, when set, is where an instance-creation command reports the key the
+	// new instance was given. The key is minted while the command is processed, so a
+	// caller that needs it — the API start, which records which instance works an
+	// order's position — cannot know it before, and nothing afterwards could tell its
+	// instance from one another caller started in the same batch.
+	//
+	// Written on the processor goroutine during RunUntilIdle and read by the caller
+	// only after that returned without error, so it is read once the instance is
+	// durable (invariant I2) and the loop's rendezvous orders the two. nil on every
+	// other command; it rides only on the non-hot-path creation intent, and a
+	// pointer the caller owns allocates nothing here (invariant I1). Commands are
+	// never replayed (I6), so recovery never writes through it.
+	Created *uint64
+	// Triggered is where a directed trigger's answer is written (ADR-0425): whether
+	// it created an instance, answered from a receipt, or was refused and why. The
+	// same contract as Created — written on the processor goroutine, read after
+	// RunUntilIdle returned, never on a replayed command.
+	Triggered *TriggerResult
+	// Delivered is where a directed delivery's answer is written
+	// (ADR-0428), under the
+	// same contract as Triggered.
+	Delivered *DeliveryResult
+	// Reported is where an action outcome report's answer is written (ADR-0429 §3):
+	// recorded now, answered from the record, or refused as a second ending of the
+	// same command. Same contract as Triggered.
+	Reported *OutcomeResult
+	// MessageTTL is how long a published message stays useful when nothing waits for
+	// it yet (ADR-0370): zero, the default, keeps ADR-0020's no-op for an unmatched
+	// publish, and a positive value buffers it for a subscription that opens later.
+	// It rides only on a client's publish command, never on token movement.
+	MessageTTL time.Duration
+	// MessageID is the sender's id for a published message, "" for none. With a
+	// MessageTTL it makes a repeat of the same message a no-op while the first lives.
+	MessageID string
 }
 
 // sideEffect is work to run after the batch's fsync (invariant I2). It is a

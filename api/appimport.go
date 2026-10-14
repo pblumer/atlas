@@ -28,12 +28,6 @@ import (
 // so this server never has to reach the same temis instance — a release is meant to
 // be the frozen thing that shipped.
 
-// maxImportBytes caps a bundle. It is larger than the single-model limit because a
-// bundle carries several BPMN definitions plus their resolved DMN models, but it is
-// still bounded: the endpoint accepts a multi-megabyte body from an authenticated
-// peer, so an unbounded read would be a memory-exhaustion lever for a leaked token.
-const maxImportBytes = 32 << 20 // 32 MiB
-
 // importBundleReq is the wire format a publishing peer sends.
 type importBundleReq struct {
 	// Application names the application to import into. It is matched by name and
@@ -66,12 +60,20 @@ type importBundleResp struct {
 	Reason        string              `json:"reason,omitempty"`
 	Definitions   []deployedProcess   `json:"definitions"`
 	Release       *applicationRelease `json:"release,omitempty"`
+	// Warnings are the deploy-time preflight every deploy path owes its caller
+	// (ADR-0158), reported here for the same reason it is reported on a local deploy —
+	// and with more reason: a worker is configured per server (ADR-0041), so a release
+	// that ran on the publisher can name workers this server has never heard of, and
+	// the import is the first moment anybody here can be told. It is not a refusal:
+	// a target that provisions its workers after the first import is normal
+	// (ADR-0287).
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // handleImportBundle receives a published application bundle from a peer. It is the
 // only operation a deploy token may reach (deployAgentAllowed, ADR-0129).
 func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxImportBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().AppBundle))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -117,6 +119,15 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Who may listen to the personal data atlas emits (ADR-0435 §6): an import is a
+	// deploy, and an import credential is never an administrator's, so a listener on
+	// personal data is deployed on this server by an administrator, not shipped to it.
+	for _, a := range req.Artifacts {
+		if found := s.personalListenersBlocking(r, []byte(a.XML)); len(found) > 0 {
+			personalListenerRefusal(w, r, found)
+			return
+		}
+	}
 
 	var (
 		appID       string
@@ -125,8 +136,26 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 		rel         applicationRelease
 		opErr       error
 		conflictMsg string
+		warnings    []string
+		refused     *mailboxRefusal
+		claimed     string
 	)
 	s.do(func() {
+		// The two checks every other door runs, before anything — not even the
+		// application record — is written: who may use a mailbox
+		// (ADR-0438) and the claim on a message name (ADR-0205). An
+		// import is a deploy, and a check that one door skips is decoration.
+		for _, a := range req.Artifacts {
+			var err error
+			if refused, err = s.mailboxUseBlockingModel(r, []byte(a.XML)); err != nil || refused != nil {
+				opErr = err
+				return
+			}
+			if claimed, err = s.claimBlockingModel(r, []byte(a.XML)); err != nil || claimed != "" {
+				opErr = err
+				return
+			}
+		}
 		// Resolve or create the application. Matching by name is what makes the
 		// publisher's first import work without either side knowing the other's ids.
 		projs, err := s.projects.LoadAll()
@@ -158,6 +187,7 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 				opErr = err
 				return
 			}
+			s.noteApplication(rec)
 			appID = id
 		}
 
@@ -222,11 +252,20 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 		if rel.Version > s.appVersions[appID] {
 			s.appVersions[appID] = rel.Version
 		}
+		// Still on the loop, with every artifact registered: the same preflight a
+		// local deploy runs, against this server's workers and this application's
+		// information model.
+		warnings = s.deployWarningsOnLoop(deployed, appID)
 	})
 
 	switch {
 	case opErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "import bundle: "+opErr.Error())
+	case refused != nil:
+		mailboxRefusalResponse(w, refused)
+	case claimed != "":
+		claimRefusal(w, claimed, "An inbound worker you cannot reach publishes under this "+
+			"message name. Rename the message in the model, or ask whoever owns that worker to share it.")
 	case already:
 		httpapi.JSON(w, http.StatusConflict, importBundleResp{
 			ApplicationID: appID, Application: name, Imported: false,
@@ -236,9 +275,14 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 		if deployed == nil {
 			deployed = []deployedProcess{}
 		}
+		// Off the loop, over the bytes the publisher sent and nothing else (I3).
+		for _, a := range req.Artifacts {
+			warnings = append(warnings, foreignAtlasNamespaceWarnings([]byte(a.XML))...)
+			warnings = append(warnings, searchableDeclarationWarnings([]byte(a.XML))...)
+		}
 		httpapi.JSON(w, http.StatusOK, importBundleResp{
 			ApplicationID: appID, Application: name, Imported: true,
-			Definitions: deployed, Release: &rel,
+			Definitions: deployed, Release: &rel, Warnings: dedupeWarnings(warnings),
 		})
 	}
 }

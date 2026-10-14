@@ -36,6 +36,7 @@ func collectDecisions(t *testing.T, s interface {
 func TestJobCompletionRecordsDecisionEvaluation(t *testing.T) {
 	dir := t.TempDir()
 	h := openHarness(t, dir)
+	defer h.close(t)
 	cp, jobType := businessRuleProcess(t)
 
 	p := engine.New(1, h.log, h.store, &manualClock{})

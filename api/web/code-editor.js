@@ -56,7 +56,9 @@ function normVars(list) {
     const name = typeof v === "string" ? v : (v && v.name);
     if (!name) continue;
     names.add(name);
-    arr.push(typeof v === "string" ? { name, detail: "variable" } : { name, detail: v.detail || "variable" });
+    // onAccept, when a caller gives one, runs after the variable is inserted — the
+    // Modeler declares a namespace member it offered but the model did not yet read.
+    arr.push(typeof v === "string" ? { name, detail: "variable" } : { name, detail: v.detail || "variable", onAccept: v.onAccept });
   }
   return { names, arr };
 }
@@ -83,7 +85,14 @@ function highlightTokens(tokens, variables) {
 //   setVariables(list) — update the in-scope variable names (colour + completion).
 //   setMarkers(list)   — show error markers; each { line (1-based), message }.
 //   focusLine(n)       — scroll a line into view (used after a run error).
-// opts: { lang, variables, validate, gutter, wrap, hint }.
+// opts: { lang, variables, validate, gutter, wrap, hint, virtual }.
+//
+// virtual draws only the lines in view (plus a margin) instead of the whole text, and
+// moves them with the text area's scroll. A field holds a few lines and is drawn whole
+// on every keystroke at no cost; a whole document is not — at tens of kilobytes the
+// re-draw and its layout took most of a tenth of a second per key, and grew with the
+// document. It needs one drawn line per logical line, so it applies only without wrap
+// and without a locked prefix.
 export function attachCodeEditor(textarea, opts = {}) {
   if (!textarea || textarea.dataset.ceOn === "1") return null;
   const lang = opts.lang;
@@ -152,6 +161,24 @@ export function attachCodeEditor(textarea, opts = {}) {
   const lineH = parseFloat(cs.lineHeight) || 19;
   const padTop = parseFloat(cs.paddingTop) || 8;
 
+  // --- virtual drawing (opts.virtual) ---
+  // vLines is the highlighted text as one HTML string per logical line, rebuilt on
+  // every edit — tokenising a document whole is cheap; it is the DOM for all of it that
+  // is not. What is drawn is a window of it, positioned by a transform rather than by
+  // the backdrop's own scroll, since the backdrop no longer holds the whole height.
+  const virtual = opts.virtual === true && !wrap && !lockPrefix;
+  const OVERSCAN = 30; // lines drawn beyond each edge, so a scroll step lands on drawn text
+  let vLines = [""];
+  let gutterInner = null;
+  if (virtual) {
+    wrapEl.classList.add("virtual");
+    if (gutterOn) {
+      gutterInner = document.createElement("div");
+      gutterInner.className = "ce-gutter-lines";
+      gutter.appendChild(gutterInner);
+    }
+  }
+
   let items = [];
   let active = -1;
   let markers = [];
@@ -163,8 +190,55 @@ export function attachCodeEditor(textarea, opts = {}) {
     return n;
   }
 
+  // linesOf splits a token list at its newlines into one HTML string per line. A token
+  // spanning lines (a comment, a text run) becomes one span per line, in its class.
+  function linesOf(tokens) {
+    const lines = [""];
+    for (const t of tokens) {
+      const parts = t.value.split("\n");
+      for (let k = 0; k < parts.length; k++) {
+        if (k > 0) lines.push("");
+        if (parts[k]) lines[lines.length - 1] += highlightTokens([{ ...t, value: parts[k] }], varNames);
+      }
+    }
+    return lines;
+  }
+
+  // windowOf answers which lines a virtual editor draws: those in view and OVERSCAN
+  // either side, and the offset that puts the first of them on its line.
+  function windowOf(total) {
+    const top = textarea.scrollTop;
+    const first = Math.max(0, Math.floor((top - padTop) / lineH) - OVERSCAN);
+    const last = Math.min(total - 1, Math.ceil((top + (textarea.clientHeight || 0)) / lineH) + OVERSCAN);
+    return { first, last, offset: first * lineH - top };
+  }
+
+  function renderWindow() {
+    const { first, last, offset } = windowOf(vLines.length);
+    code.innerHTML = vLines.slice(first, last + 1).join("\n") + "\u200b";
+    code.style.transform = `translate(${-textarea.scrollLeft}px, ${offset}px)`;
+    pre.scrollTop = 0;
+    pre.scrollLeft = 0;
+    renderGutter();
+    renderMarkers();
+  }
+
   function renderGutter() {
     if (!gutterOn) return;
+    if (virtual) {
+      const total = vLines.length;
+      wrapEl.style.setProperty("--ce-gutter", String(total).length + "ch");
+      const { first, last, offset } = windowOf(total);
+      let html = "";
+      for (let i = first + 1; i <= last + 1; i++) {
+        const m = markers.find((mk) => mk.line === i);
+        html += `<div class="ce-ln${m ? " err" : ""}"${m ? ` title="${escapeHTML(m.message || "error")}"` : ""}>${i}</div>`;
+      }
+      gutterInner.innerHTML = html;
+      gutterInner.style.transform = `translateY(${offset}px)`;
+      gutter.scrollTop = 0;
+      return;
+    }
     const n = lineCount();
     const digits = String(n).length;
     wrapEl.style.setProperty("--ce-gutter", digits + "ch");
@@ -191,6 +265,11 @@ export function attachCodeEditor(textarea, opts = {}) {
     // A locked prefix is rendered verbatim in its own dimmed span and excluded from
     // tokenisation; the two segments still cover every character in order, so the
     // transparent textarea on top stays aligned character-for-character.
+    if (virtual) {
+      vLines = linesOf(lang.tokenize(textarea.value));
+      renderWindow();
+      return;
+    }
     const v = textarea.value;
     const lp = lockLen();
     const head = lp ? `<span class="ce-locked">${escapeHTML(v.slice(0, lp))}</span>` : "";
@@ -267,6 +346,9 @@ export function attachCodeEditor(textarea, opts = {}) {
     closePopup();
     afterEdit();
     textarea.focus();
+    if (it.src && typeof it.src.onAccept === "function") {
+      try { it.src.onAccept(); } catch { /* the insert stands either way */ }
+    }
   }
 
   function moveActive(delta) {
@@ -477,6 +559,7 @@ export function attachCodeEditor(textarea, opts = {}) {
   // --- events ---
   const onInput = () => { renderHighlight(); openCompletion(false); scheduleValidate(); hideTip(); };
   const onScroll = () => {
+    if (virtual) { renderWindow(); return; }
     pre.scrollTop = textarea.scrollTop; pre.scrollLeft = textarea.scrollLeft;
     if (gutterOn) gutter.scrollTop = textarea.scrollTop;
     renderMarkers();
@@ -544,6 +627,11 @@ export function attachCodeEditor(textarea, opts = {}) {
     textarea.addEventListener("click", clampCaret);
   }
 
+  // A virtual editor draws for the height it has, so a resize (the window, the
+  // dialog) re-draws the window rather than leaving the new space blank.
+  const resizeObs = virtual && typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => renderWindow()) : null;
+  if (resizeObs) resizeObs.observe(textarea);
+
   renderHighlight();
   runValidate();
 
@@ -551,6 +639,7 @@ export function attachCodeEditor(textarea, opts = {}) {
     el: wrapEl,
     destroy() {
       destroyed = true;
+      if (resizeObs) resizeObs.disconnect();
       clearTimeout(validateTimer);
       if (hoverRaf) cancelAnimationFrame(hoverRaf);
       textarea.removeEventListener("input", onInput);

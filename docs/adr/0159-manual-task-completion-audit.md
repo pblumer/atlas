@@ -1,6 +1,7 @@
 # ADR-0159: Auditable manual task completion
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 

@@ -210,6 +210,9 @@ func TestInternalTokenServicePrincipal(t *testing.T) {
 	if p.HasRole(RoleAdmin) {
 		t.Fatalf("service principal must not be admin")
 	}
+	if p.Scope != apiScopeWorker {
+		t.Fatalf("service principal scope = %q, want %q", p.Scope, apiScopeWorker)
+	}
 
 	// A wrong token or none does not resolve.
 	bad := httptest.NewRequest("GET", "/api/v1/tasks", nil)
@@ -221,7 +224,8 @@ func TestInternalTokenServicePrincipal(t *testing.T) {
 		t.Fatal("no auth header must not resolve")
 	}
 
-	// The middleware admits a bearer-authenticated request to a gated route.
+	// The internal bearer belongs to supervised workers. It reaches their protocol
+	// but not a person's task list or the rest of the product API.
 	reached := false
 	_, policy := s.mountRoutes()
 	h := s.withAuth(policy, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -232,9 +236,17 @@ func TestInternalTokenServicePrincipal(t *testing.T) {
 	}))
 	rr := httptest.NewRequest("GET", "/api/v1/tasks", nil)
 	rr.Header.Set("Authorization", "Bearer sekret")
-	h.ServeHTTP(httptest.NewRecorder(), rr)
+	blocked := httptest.NewRecorder()
+	h.ServeHTTP(blocked, rr)
+	if reached || blocked.Code != http.StatusForbidden {
+		t.Fatalf("internal token on tasks: reached=%v status=%d, want blocked with 403", reached, blocked.Code)
+	}
+
+	workerReq := httptest.NewRequest("POST", "/api/v1/jobs/activate", nil)
+	workerReq.Header.Set("Authorization", "Bearer sekret")
+	h.ServeHTTP(httptest.NewRecorder(), workerReq)
 	if !reached {
-		t.Fatal("bearer request was blocked")
+		t.Fatal("internal token was blocked from the worker protocol")
 	}
 }
 

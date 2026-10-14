@@ -1,0 +1,201 @@
+package api
+
+import (
+	"slices"
+	"strings"
+
+	"github.com/pblumer/atlas/api/catalog"
+	"github.com/pblumer/atlas/compiler"
+)
+
+// What the catalogue's fulfilment report asks the engine.
+//
+// The report (api/catalog/fulfilmentreport.go) is a pure function over two
+// answers this server alone can give: which processes are deployed, and which job
+// types anything works. Both live here so the catalogue package stays free of the
+// engine, the way its approver report stays free of the account store.
+
+// processLookup answers for the running engine.
+type processLookup struct{ s *Server }
+
+// JobTypesOf names the job types the newest deployed version of this process id
+// carries, and says whether any version carries it.
+//
+// The newest version, because that is the one an instance starts on: a superseded
+// version whose tasks were bound differently is not what an order placed today
+// would run. A process id nothing carries is "not deployed" whatever else is in
+// the registry.
+func (l processLookup) JobTypesOf(processID string) ([]string, bool) {
+	processID = strings.TrimSpace(processID)
+	if processID == "" {
+		return nil, false
+	}
+	var (
+		found bool
+		out   []string
+	)
+	l.s.do(func() {
+		var (
+			best int32
+			cp   *compiler.CompiledProcess
+		)
+		for _, d := range l.s.deployments {
+			if d.ProcessID != processID || d.cp == nil {
+				continue
+			}
+			if !found || d.Version > best {
+				found, best, cp = true, d.Version, d.cp
+			}
+		}
+		if cp == nil {
+			return
+		}
+		for _, idx := range jobCreatingTypes(cp) {
+			if name, ok := l.s.jobTypes.Name(idx); ok {
+				out = append(out, name)
+			}
+		}
+	})
+	return out, found
+}
+
+// Served reports whether anything works this job type.
+//
+// Three ways it can be worked, and the report must not know about any of them:
+//
+//   - the engine serves the kind itself, holding its credentials (ADR-0163);
+//   - it is a user task, which a person works — a queue waiting for a human is
+//     the design and not a gap;
+//   - a worker has been seen pulling it since this server started.
+//
+// That last clause is the same honest reading [Server.unservedConnectors] takes,
+// and it has the same cost: a worker that has never polled reports nothing, so
+// just after a restart a type reads as unworked until the first poll. An operator
+// looking at a queue that is not moving wants to know that nothing has claimed
+// it, and the answer corrects itself within one heartbeat.
+func (l processLookup) Served(jobType string) bool {
+	jobType = strings.TrimSpace(jobType)
+	if jobType == "" {
+		return true // nothing to serve
+	}
+	served := false
+	l.s.do(func() {
+		idx, known := l.s.jobTypes.Index(jobType)
+		if !known {
+			// A type no deployment interned cannot have a job waiting on it.
+			served = true
+			return
+		}
+		if idx == compiler.UserTaskJobTypeIndex || l.s.jobRunner.Handles(idx) {
+			served = true
+			return
+		}
+		for _, st := range l.s.workers.byName {
+			// What it asked for, not what it got. A worker polling a queue with no
+			// work in it has leased nothing, and counting only leases would report
+			// every quiet queue on a healthy installation as unserved.
+			if slices.Contains(st.Serves, jobType) {
+				served = true
+				return
+			}
+			if _, pulls := st.Types[jobType]; pulls {
+				served = true
+				return
+			}
+		}
+	})
+	return served
+}
+
+// EntryPoints names the root message start events of the newest deployed version of
+// a process id, and says whether it has a none start and whether any version is
+// deployed at all (ADR-0425). The newest version, because that is the one a trigger
+// starts (supersedeStarts).
+func (l processLookup) EntryPoints(processID string) (messages []string, hasNone bool, deployed bool) {
+	processID = strings.TrimSpace(processID)
+	if processID == "" {
+		return nil, false, false
+	}
+	l.s.do(func() {
+		d := l.s.latestDeploymentOf(processID)
+		if d == nil || d.cp == nil {
+			return
+		}
+		deployed = true
+		for _, ms := range d.cp.MessageStartEvents() {
+			messages = append(messages, ms.MessageName)
+		}
+		for _, id := range d.cp.StartEvents() {
+			if d.cp.Node(id).Type == compiler.TypeStartEvent {
+				hasNone = true
+			}
+		}
+	})
+	slices.Sort(messages)
+	return messages, hasNone, deployed
+}
+
+// WatchedMessages names every message an enabled inbound watch on this server
+// publishes, so publishing a catalogue can refuse an action whose message a Worker's
+// event would reach (ADR-0429 §1). A disabled watch publishes nothing, and enabling
+// it again is refused from the watch's side while a product owns the name.
+func (l processLookup) WatchedMessages() map[string]bool {
+	out := map[string]bool{}
+	l.s.do(func() {
+		subs, err := l.s.inboundSubs.LoadAll()
+		if err != nil {
+			return
+		}
+		for _, sub := range subs {
+			if name := strings.TrimSpace(sub.MessageName); sub.Enabled && name != "" {
+				out[name] = true
+			}
+		}
+	})
+	return out
+}
+
+// CatchPoints lists the message catch points of the newest deployed version of a
+// process id: what a per-position lifecycle delivers its later operations to
+// (ADR-0428).
+func (l processLookup) CatchPoints(processID string) []catalog.CatchPoint {
+	var out []catalog.CatchPoint
+	l.s.do(func() {
+		d := l.s.latestDeploymentOf(strings.TrimSpace(processID))
+		if d == nil || d.cp == nil {
+			return
+		}
+		for _, c := range d.cp.MessageCatchPoints() {
+			out = append(out, catalog.CatchPoint{Element: c.Element, Message: c.MessageName, Correlated: c.Correlated})
+		}
+	})
+	return out
+}
+
+// ShopOutcomes lists the shop send tasks of the newest deployed version of a process
+// id and what each states (ADR-0429 §4).
+func (l processLookup) ShopOutcomes(processID string) []catalog.ShopOutcome {
+	var out []catalog.ShopOutcome
+	l.s.do(func() {
+		d := l.s.latestDeploymentOf(strings.TrimSpace(processID))
+		if d == nil || d.cp == nil {
+			return
+		}
+		for _, p := range d.cp.ShopOutcomePoints() {
+			out = append(out, catalog.ShopOutcome{Element: p.Element, Action: p.Action, Outcome: p.Outcome})
+		}
+	})
+	return out
+}
+
+// WaitlessCycle names a cycle in the newest deployed version of a process id that
+// waits for nothing, or nil (ADR-0428).
+func (l processLookup) WaitlessCycle(processID string) []string {
+	var out []string
+	l.s.do(func() {
+		if d := l.s.latestDeploymentOf(strings.TrimSpace(processID)); d != nil && d.cp != nil {
+			out = d.cp.WaitlessCycle()
+		}
+	})
+	return out
+}

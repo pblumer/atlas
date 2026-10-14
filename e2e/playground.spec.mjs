@@ -125,6 +125,63 @@ test("editing the diagram says the run no longer matches it", async ({ page }) =
   expect(page.__errors).toEqual([]);
 });
 
+// The canvas can also be replaced whole: an applied XML source and an auto-layout
+// both import a document rather than edit an element, and an import fires none of
+// the element events the hint above listens to — and wipes the run's markers off the
+// shapes it replaces. So both are asked of each kind of import.
+
+async function startCase(page) {
+  await startSandbox(page);
+  await page.locator("#pg-startvars").fill('{"amount": 12400}');
+  await page.locator("#pg-case").click();
+  await expect(page.locator('.djs-element[data-element-id="review"].atlas-active')).toHaveCount(1);
+  await expect(page.locator(".token-badge")).toHaveCount(2);
+}
+
+async function applySource(page, edit) {
+  await page.locator("#bar-more").click();
+  await page.locator("#bar-menu #xmlsource").click();
+  const ta = page.locator(".xml-ta");
+  await ta.fill(edit(await ta.inputValue()));
+  await page.locator(".xml-modal [data-apply]").click();
+}
+
+test("an applied XML source says the run no longer matches it, and the run stays drawn", async ({ page }) => {
+  await startCase(page);
+  await applySource(page, (xml) => xml.replace('id="review" name="', 'id="review" name="Doppelt '));
+  await expect(page.locator(".xml-modal")).toHaveCount(0);
+  await expect(page.locator("#pg-hint")).toContainText("diagram changed");
+  // The import replaced every shape; the run is painted onto the new ones.
+  await expect(page.locator('.djs-element[data-element-id="review"].atlas-active')).toHaveCount(1);
+  await expect(page.locator(".token-badge")).toHaveCount(2);
+  expect(page.__errors).toEqual([]);
+});
+
+test("an auto-layout says the run no longer matches it, and the run stays drawn", async ({ page }) => {
+  await startCase(page);
+  await page.locator("#bar-more").click();
+  await page.locator("#bar-menu #autolayout").click();
+  await expect(page.locator("#pg-hint")).toContainText("diagram changed");
+  await expect(page.locator('.djs-element[data-element-id="review"].atlas-active')).toHaveCount(1);
+  await expect(page.locator(".token-badge")).toHaveCount(2);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a refused source puts the diagram back without claiming it changed", async ({ page }) => {
+  await startCase(page);
+  const before = await page.locator("#pg-hint").textContent();
+  // BPMN with nothing to draw: bpmn-js clears the canvas before refusing it, and the
+  // editor imports the diagram back — an import, but of what the sandbox is running.
+  await applySource(page, () => '<?xml version="1.0"?>\n<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Empty" targetNamespace="http://atlas/bpmn"></bpmn:definitions>');
+  await expect(page.locator(".xml-modal .xml-status")).toContainText("unchanged");
+  await expect(page.locator('.djs-element[data-element-id="review"].atlas-active')).toHaveCount(1);
+  await expect(page.locator(".token-badge")).toHaveCount(2);
+  await page.waitForTimeout(300);
+  await expect(page.locator("#pg-hint")).not.toContainText("diagram changed");
+  expect(await page.locator("#pg-hint").textContent()).toBe(before);
+  expect(page.__errors).toEqual([]);
+});
+
 test("leaving the editor releases the sandbox", async ({ page }) => {
   await startSandbox(page);
   await page.evaluate(() => window.__leave());
@@ -795,5 +852,81 @@ test("the run is broken down by the outcome each case reached", async ({ page })
   await expect(rows.nth(2)).toContainText("0%");
   await expect(rows.nth(2)).toHaveClass(/pg-unreached/);
   await expect(rows.nth(2).locator(".pg-track i")).toHaveAttribute("style", "width:0.0%");
+  expect(page.__errors).toEqual([]);
+});
+
+test("the setup is three numbered steps, each saying where it stands", async ({ page }) => {
+  await switchToBatch(page);
+  const steps = page.locator(".pg-step");
+  await expect(steps).toHaveCount(3);
+
+  // Step 1 reads the dataset that is actually driving the run, whichever of the
+  // three sources that is.
+  await expect(steps.nth(0)).toContainText("Dataset");
+  await expect(steps.nth(0).locator(".pg-step-note")).toHaveText("2 cases listed");
+  await expect(steps.nth(0).locator(".pg-step-n")).toHaveClass(/done/);
+
+  // Step 2 is the arrival stream in words — the same one the sparkline draws.
+  await expect(steps.nth(1).locator(".pg-step-note")).toHaveText("all at once");
+  await page.locator("#pg-arrival").selectOption("poisson");
+  await expect(steps.nth(1).locator(".pg-step-note")).toHaveText("a stream of 10 per hour");
+
+  // Step 3 counts what the run will be judged on. Asserting nothing is not a fault:
+  // it is a run somebody reads, and it does not stop the button.
+  await expect(steps.nth(2).locator(".pg-step-note")).toHaveText("2 checks");
+  await page.locator("#pg-x-finish").uncheck();
+  await page.locator("#pg-x-inc").uncheck();
+  await expect(steps.nth(2).locator(".pg-step-note")).toContainText("nothing asserted");
+  await expect(steps.nth(2).locator(".pg-step-n")).not.toHaveClass(/done/);
+  await expect(page.locator("#pg-batch")).toBeEnabled();
+
+  // A rule with nothing after "then" is a fault, and it is named before the run
+  // rather than by the verdict afterwards. The head follows the box as it is typed
+  // in, and the box keeps its caret — the head is repainted, the column is not.
+  await page.locator("#pg-rule-add").click();
+  await page.locator('.pg-rule [data-rule="when"]').fill("betrag < 1000");
+  await expect(steps.nth(2).locator(".pg-step-note.bad")).toContainText("says nothing the case has to show");
+  await expect(page.locator('.pg-rule [data-rule="when"]')).toBeFocused();
+  await expect(page.locator('.pg-rule [data-rule="when"]')).toHaveValue("betrag < 1000");
+
+  await page.locator('.pg-rule [data-rule="then"]').fill('end = "done"');
+  await expect(steps.nth(2).locator(".pg-step-note")).toHaveText("1 rule");
+  expect(page.__errors).toEqual([]);
+});
+
+test("a dataset the run cannot use is named, and Run stops offering to run it", async ({ page }) => {
+  await switchToBatch(page);
+  const note = page.locator(".pg-step").first().locator(".pg-step-note");
+
+  // A list that is not JSON is something the panel can settle without the server,
+  // and saying so before the button beats a toast after it.
+  await page.locator("#pg-cases").fill("[{");
+  await expect(note).toHaveText("not valid JSON");
+  await expect(page.locator("#pg-batch")).toBeDisabled();
+
+  await page.locator("#pg-cases").fill("[]");
+  await expect(note).toHaveText("the list is empty");
+  await expect(page.locator("#pg-batch")).toBeDisabled();
+
+  // A CSV has nothing to run until a file is chosen — not a fault, but not a run.
+  await page.locator('#pg-setup button[data-source="csv"]').click();
+  await expect(note).toHaveText("choose a file");
+  await expect(page.locator("#pg-batch")).toBeDisabled();
+
+  // A described dataset carries the generator's own two rules: it needs a count,
+  // and a case carries one value per name.
+  await page.locator('#pg-setup button[data-source="generated"]').click();
+  await expect(note).toHaveText("300 generated · 1 field");
+  await expect(page.locator("#pg-batch")).toBeEnabled();
+
+  await page.locator("#pg-gen-add").click();
+  await page.locator(".pg-field").nth(1).locator('[data-gen="name"]').fill("amount");
+  await expect(note).toHaveText('two fields are called "amount"');
+  await expect(page.locator("#pg-batch")).toBeDisabled();
+
+  await page.locator("[data-gen-del]").nth(1).click();
+  await page.locator("#pg-gen-count").fill("");
+  await expect(note).toHaveText("how many cases?");
+  await expect(page.locator("#pg-batch")).toBeDisabled();
   expect(page.__errors).toEqual([]);
 });

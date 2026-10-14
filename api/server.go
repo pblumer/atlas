@@ -18,13 +18,11 @@
 // read stats, health, and a static UI shell. Deployments are durable via an
 // on-disk sidecar store (ADR-0019) reloaded on startup, so diagrams, versions,
 // and recovered instances survive a restart; the eventual event-sourced
-// deployment path arrives with the Milestone 4 public API. One honest limitation
-// remains: there is no streaming job-worker transport yet (that follows the gRPC
-// job protocol, ADR-0007), so an instance parks at its service task — exactly the
-// "waiting token" the live viewer shows. Such a parked job can be finished by
-// hand over HTTP (POST /jobs/{key}/complete, the operator mirror of .../fail from
-// the incident model), but that is a synchronous operator affordance, not the
-// leased, at-least-once worker protocol.
+// deployment path arrives with the Milestone 4 public API. Workers take jobs over
+// the same HTTP API, by the leased, at-least-once protocol of ADR-0007: they lease
+// by type (POST /jobs/activate, long-polling), and report complete, fail or a BPMN
+// error with the lease token the activation returned. An operator can finish or
+// fail a parked job by hand on the same routes, with a reason recorded for audit.
 package api
 
 import (
@@ -39,12 +37,15 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/pblumer/atlas"
+	"github.com/pblumer/atlas/api/capability"
 	"github.com/pblumer/atlas/api/collab"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/infomodel"
@@ -65,6 +66,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/sharepoint"
@@ -76,6 +78,7 @@ import (
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/jobtype"
+	"github.com/pblumer/atlas/limits"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/metrics"
 	"github.com/pblumer/atlas/model"
@@ -85,9 +88,14 @@ import (
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/tracing"
 
+	"github.com/pblumer/atlas/api/catalog"
+	"github.com/pblumer/atlas/api/decisiondoc"
+	"github.com/pblumer/atlas/api/feelgen"
 	"github.com/pblumer/atlas/api/formgen"
+	"github.com/pblumer/atlas/api/order"
 	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
+	"github.com/pblumer/atlas/api/releasenotes"
 	"github.com/pblumer/atlas/api/token"
 	"github.com/pblumer/atlas/api/vault"
 )
@@ -135,11 +143,11 @@ var webFS embed.FS
 //
 // It is a var, not a const, so a release build can stamp the tag into it with
 //
-//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.4.0"
+//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.13.0"
 //
 // A plain checkout build keeps the "-dev" suffix; the exact commit is always
 // available from the embedded VCS metadata (see buildInfo).
-var Version = "0.4.0-dev"
+var Version = "0.13.0-dev"
 
 // deployment is the server-side record of a deployed definition. The compiled
 // process itself lives in the processor; here we keep the metadata the UI needs
@@ -173,6 +181,14 @@ type Server struct {
 	proc  *engine.Processor
 	store *state.Store
 
+	// limits are the installation's resource budgets: how much a caller, a called
+	// service, or a running process may make this server hold at once. Every ceiling
+	// in the API reads its number from here rather than from a constant beside the
+	// handler, so the set is enumerable and an operator can move it (ADR-0291).
+	// New defaults it to limits.Default(), so a server nobody configured has every
+	// budget it always had.
+	limits limits.Limits
+
 	// dataDir is the root under which every durable store lives (the WAL, the
 	// state store, and the design-time sidecar directories). The backup/restore
 	// endpoints (ADR-0107) read and write the design-time subtree of it; nothing
@@ -193,6 +209,43 @@ type Server struct {
 	nextKey     uint64
 	versions    map[string]int32 // bpmnProcessId → highest version deployed
 	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
+	// decisionDeploys is the durable sidecar for decision deployments — DMN models
+	// published as runtime artifacts in their own right
+	// (ADR-0319) — and decisionVersions the
+	// per-decision-id version counter it rebuilds at startup, the decision
+	// counterpart of versions above.
+	decisionDeploys  *decisionStore
+	decisionVersions map[string]int32
+	// decisionVersionKeys maps a decision id and version to the decision deployment
+	// holding it — what a fixed-version business rule task resolves to at deploy
+	// time, and how an evaluation's recorded key is read back as a version
+	// (ADR-0423). It follows the records
+	// exactly as decisionVersions does.
+	decisionVersionKeys map[string]map[int32]uint64
+	// keySpace is the durable floor under nextKey: the highest definition key this
+	// installation has ever issued. Without it the counter is rebuilt from the
+	// surviving records, and deleting the highest-keyed one hands its key — and the
+	// instance history filed under it — to the next deploy
+	// (ADR-0339).
+	keySpace *keySpaceStore
+	// landscapes is what the Starmap last read this server's *structure* as
+	// (ADR-0211 §7). It holds no health and nobody's view of anything — see
+	// [meshFacts] — and it lives here, under the same single-owner discipline as the
+	// registry above, which is also what makes it single-flight: two readers arriving
+	// together are two loop turns, and the second finds what the first left.
+	landscapes meshCollection
+	// runtimeIncidents is the last exact per-definition incident count the live
+	// diagram's aggregate overlay was answered from
+	// (ADR-0366). Guarded by its own
+	// mutex and deliberately NOT run-loop owned: the walk behind it must happen off
+	// the loop (ADR-0266), so the result has no reason to travel back onto it — see
+	// api/runtimeincidents.go.
+	runtimeIncidents runtimeIncidentCache
+	// elementNames is the BPMN id → name map of each deployed definition, parsed
+	// from the stored document on first use — see api/portalprogress.go. Guarded by
+	// its own mutex for the reason above: the parse grows with the document, and the
+	// loop's only part in it is handing over the bytes.
+	elementNames elementNameCache
 	// jobTypes is the engine-wide job-type table (ADR-0007/0157). Compiled processes
 	// are resolved through it at deploy and on reload so a job type index means the
 	// same thing in every definition; it also turns an index on a job back into a name.
@@ -200,12 +253,22 @@ type Server struct {
 	// workers is the Workers view's runtime registry (ADR-0157): who pulled what,
 	// this run. Not durable and not engine state — see api/workers.go.
 	workers *workerRegistry
+	// breakers holds back a failing target's jobs instead of translating its outage
+	// into one incident per instance (ADR-0340). Runtime state under the same
+	// single-owner discipline as the registry above — see api/workerbreaker.go.
+	breakers *workerBreakers
+	// gateResume is where the external pull's last *gated* scan of each job type
+	// stopped, the HTTP half of the rotation the in-process runner keeps for itself.
+	// See [Server.scanHeldCandidates].
+	gateResume map[int32]uint64
 	// jobWaiters parks long-polling workers until a job of their type is durable
 	// (ADR-0157). Guarded by its own mutex, deliberately NOT run-loop owned: the
 	// waiting happens off the loop — see api/jobwait.go.
 	jobWaiters *jobWaiters
-	// driveMu serializes job driving, so two callers never claim the same job and
-	// work it twice. See [Server.drive].
+	// driveMu serializes the scheduler halves of job driving — claiming a round and
+	// applying its outcomes — and deliberately not the handlers in between, so a
+	// worker waiting on a dead host no longer holds up unrelated work. See
+	// [Server.drive].
 	driveMu sync.Mutex
 	// supervisor runs the worker processes Atlas launches itself (ADR-0157 step 7).
 	// nil unless the operator asked for them on the command line — never from a
@@ -240,13 +303,50 @@ type Server struct {
 	deployTokenStore    *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
 	deployTokens        *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
 	apiTokenStore       *apiTokenStore    // durable sidecar for machine credentials (ADR-0194)
-	apiTokens           *apiTokenIndex    // in-memory hash->token index, same discipline as the deploy one
-	targets             *targetStore      // durable sidecar for peer deployment targets (ADR-0129)
-	appVersions         map[string]int32  // applicationId → highest release version published (ADR-0128)
+	// directorySync holds one record: where the Entra mirror resumes from and how
+	// many runs have written (ADR-0332).
+	directorySync *directorySyncStore
+	// inventoryLoads holds one record per target system: whether a commissioning
+	// load has ever been applied for it, and what the loads amounted to
+	// (ADR-0333). The inventory itself cannot answer
+	// the first question — "loaded and found nothing" leaves it as empty as "never
+	// loaded" — and those two call for opposite actions.
+	inventoryLoads *inventoryLoadStore
+	// discrepancies is the durable journal of what Atlas and the target systems
+	// disagreed about (ADR-0334). Transitions rather than samples:
+	// a disagreement that persists is one record whose last-seen moment moves, and
+	// one that goes away is that record closed.
+	discrepancies *discrepancyStore
+	// recertifications is what people attested about the inventory
+	// (ADR-0341): the campaigns, and the judgements made in
+	// them. It answers the question the journal beside it cannot — not "is this
+	// record true" but "is this right still needed", which only a person can say.
+	recertifications *recertifyStore
+	apiTokens        *apiTokenIndex   // in-memory hash->token index, same discipline as the deploy one
+	targets          *targetStore     // durable sidecar for peer deployment targets (ADR-0129)
+	appVersions      map[string]int32 // applicationId → highest release version published (ADR-0128)
 	// processDocs is the documentation area as a self-contained service: it owns
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
-	processDocs *processdoc.Service
+	processDocs  *processdoc.Service
+	decisionDocs *decisiondoc.Service
+	// catalogs serves the self-service portal's product catalogues and the releases
+	// published from them (ADR-0312). Another
+	// area service on the ADR-0147 shape: its own store, the run loop for every
+	// access, no engine state anywhere.
+	catalogs *catalog.Service
+	// orders serves the portal's orders: what somebody asked for, against one
+	// frozen catalogue release.
+	orders *order.Service
+	// catalogStore and orderStore are the same two stores the services above hold,
+	// kept here for one reader that is neither of them: the approval page
+	// (approvals.go) joins a running task to the order it decides and the catalogue
+	// that order came from, and has to do it off the run loop, because it walks the
+	// open tasks (ADR-0239). Sidecar stores are written atomically and may be read
+	// directly for exactly that reason — it is the same access the order service is
+	// already built with (catalogStore.Release below).
+	catalogStore *catalog.Store
+	orderStore   *order.Store
 	// taskFolders serves the Tasks app's saved filters (ADR-0268).
 	taskFolders *taskfolder.Service
 	// formGen writes a form from a description and from the process it belongs to
@@ -254,6 +354,17 @@ type Server struct {
 	// loop, because it owns no state: it stores nothing, and the three closures in
 	// formgeneration.go are its whole reach into this server.
 	formGen *formgen.Service
+	// feelGen writes a FEEL expression from a conversation with the author
+	// (ADR-0445). Like formGen it owns no state and holds no run
+	// loop; feelgeneration.go is its whole reach into this server.
+	feelGen *feelgen.Service
+	// feelMetrics counts what the FEEL assistant's requests came to; nil when this
+	// server exports no metrics (feelgeneration.go).
+	feelMetrics *feelAssistantMetrics
+	// releaseNotes serves the Console's release notes, read from the CHANGELOG this
+	// binary embeds (ADR-0444). Like formGen it
+	// owns no state and holds no run loop.
+	releaseNotes *releasenotes.Service
 	// playground serves the Modeler's Playground area, and playgroundSessions
 	// holds its live sandboxes. Each sandbox owns its own single-writer goroutine,
 	// so neither field is guarded by this server's run loop (ADR-0215).
@@ -266,6 +377,18 @@ type Server struct {
 	// isolated as a per-area service under ADR-0147.
 	panorama  *panorama.Service
 	infomodel *infomodel.Service
+	// capabilities is the business-architecture registry: the business capabilities
+	// an organisation must be able to perform and the value streams whose stages they
+	// perform (ADR-0305). Design-time, and a
+	// per-area service under ADR-0147 like the two above.
+	capabilities *capability.Service
+	// capabilityRecords and valueStreamRecords are the two stores behind that
+	// service. The service owns writing them; the Server keeps a handle because
+	// Panorama resolves a capability binding against them (ADR-0189 §4) from
+	// collectBindingCatalog, which already runs on the run loop — going back through
+	// the service there would re-enter the loop it is standing on.
+	capabilityRecords  *capability.Store
+	valueStreamRecords *capability.StreamStore
 	// remoteNodes is what peer Atlas servers last said about themselves
 	// (ADR-0189 §6, P4c). It carries its own lock rather than living on the run
 	// loop, because it is written by goroutines waiting on the network and putting
@@ -274,24 +397,37 @@ type Server struct {
 	// own mutex thereafter.
 	remoteNodes *remoteNodeCache
 
+	// remoteLandscapes is what peer Atlas servers last said about their own derived
+	// landscapes (ADR-0402, the estate altitude). A
+	// second cache rather than a second field on the first one, because the two reads
+	// cost different amounts and fail independently: a starmap this server's credential
+	// may not read must not expire a descriptor that answered, or the estate would
+	// report a healthy peer as gone. Same lifetime rules as remoteNodes otherwise —
+	// set once before Handler is mounted, mutated under its own mutex.
+	remoteLandscapes *remoteLandscapeCache
+
 	// panoramaMesh is Panorama's derived landscape altitude (ADR-0211): a graph
 	// computed from this server's own resources, never stored. Separate from the
 	// model library above because declared intent and derived fact must not share
 	// a surface.
 	panoramaMesh     *panorama.Mesh
-	systemPIDs       map[string]bool     // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
-	deploySysProcs   bool                // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
-	userProvisioning bool                // opt-in: enable the user-provisioning worker for system processes (ADR-0123)
-	dmnrefs          *dmnRefStore        // durable sidecar for DMN reference artifacts (ADR-0034)
-	connectors       *connectorStore     // durable sidecar for managed workers (ADR-0041)
-	callOverrides    *callOverrideStore  // durable sidecar for per-server call-activity target overrides (ADR-0105)
-	repository       []repositoryPackage // curated, bundled repository catalog, immutable after New (ADR-0081)
-	repositoryStore  *repositoryStore    // durable sidecar for installed repository templates (ADR-0081)
-	settings         *settingsStore      // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0113)
-	vault            *vault.Vault        // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
-	vaultEnabled     bool                // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
-	users            *userStore          // durable sidecar for user accounts (ADR-0044)
-	groups           *groupStore         // durable sidecar for user groups (ADR-0180)
+	systemPIDs       map[string]bool           // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
+	deploySysProcs   bool                      // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
+	userProvisioning bool                      // opt-in: enable the user-provisioning worker for system processes (ADR-0123)
+	dmnrefs          *dmnRefStore              // durable sidecar for DMN reference artifacts (ADR-0034)
+	favourites       *favouriteStore           // one list of marked products per account (ADR-0348)
+	dmnDrafts        *dmnDraftStore            // durable sidecar for decision work in progress (ADR-0321)
+	connectors       *connectorStore           // durable sidecar for managed workers (ADR-0041)
+	callOverrides    *callOverrideStore        // durable sidecar for per-server call-activity target overrides (ADR-0105)
+	appConstants     *applicationConstantStore // durable sidecar for each application's constants on this installation (ADR-0453)
+	srvConstants     *serverConstantStore      // durable sidecar for the installation's constants for every application (ADR-0456)
+	repository       []repositoryPackage       // curated, bundled repository catalog, immutable after New (ADR-0081)
+	repositoryStore  *repositoryStore          // durable sidecar for installed repository templates (ADR-0081)
+	settings         *settingsStore            // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0113)
+	vault            *vault.Vault              // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
+	vaultEnabled     bool                      // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
+	users            *userStore                // durable sidecar for user accounts (ADR-0044)
+	groups           *groupStore               // durable sidecar for user groups (ADR-0180)
 
 	// sessions holds live login sessions in memory. Unlike the sidecar stores it
 	// is touched from concurrent handler goroutines, so it guards itself with a
@@ -433,12 +569,27 @@ type Server struct {
 	// every change to it, with each Worker's bot token resolved from the vault
 	// (ADR-0041). Read only while driving jobs on the run loop, so it needs no lock.
 	discordRegistry *discord.Registry
+	// s3Registry resolves a Worker name to an S3 API client for object-store tasks
+	// (ADR-0442). Built from the Worker store at startup and
+	// rebuilt on every change; a task naming a Worker that is not in it parks with the
+	// reason (ADR-0158). The access key lives here and in the vault, never in a model.
+	s3Registry *s3.Registry
 
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
 	// is that bridge's poll cadence (WithInboundPollInterval; 0 disables the bridge).
 	inboundSubs *inboundSubStore
 	inboundPoll time.Duration
+	// feedSubs holds the event feed's push subscriptions and feedPush the cadence they
+	// are delivered at (WithFeedPushInterval; 0 disables delivery). feedPushes is each
+	// subscription's runtime hold after a failed delivery, feedPushClient and
+	// feedPushClock the HTTP client and clock delivery uses, injectable for tests
+	// (ADR-0433).
+	feedSubs       *feedSubStore
+	feedPush       time.Duration
+	feedPushes     *feedPushState
+	feedPushClient *http.Client
+	feedPushClock  func() time.Time
 	// inboundClock is the clock the bridge paces per-watch cadences by, injectable so a
 	// test does not have to wait one out. nil means time.Now.
 	inboundClock func() time.Time
@@ -488,8 +639,24 @@ type Server struct {
 	// all three are touched only on the run-loop goroutine (via do), so no lock.
 	retentionMaxAge   time.Duration
 	retentionInterval time.Duration
-	retentionBatch    int
-	retentionCursor   uint64
+	// triggerReceiptTTL is how long a directed trigger's receipt is kept (ADR-0425):
+	// a sender's retry inside it answers with the first instance, one after it is a
+	// new trigger. lastReceiptPrune paces the prune to once an hour, on the
+	// retention sweep's tick, so the log carries one prune event an hour and not one
+	// a tick.
+	triggerReceiptTTL time.Duration
+	lastReceiptPrune  int64
+	// eventFeedTTL is how long a row of the event feed is kept (ADR-0429 §5); zero
+	// keeps the default of 30 days. lastFeedPrune paces its prune like the receipts'.
+	eventFeedTTL  time.Duration
+	lastFeedPrune int64
+	// messageTTLMax is the longest time to live a published message may ask for
+	// (ADR-0370); zero keeps the default of seven days. A buffered message is data a
+	// caller makes this server hold, so how long it may be held is bounded like how
+	// much of it may be.
+	messageTTLMax   time.Duration
+	retentionBatch  int
+	retentionCursor uint64
 
 	// now reads wall-clock time (unix nanoseconds) for the retention sweep's
 	// eligibility cutoff. It is injected so a test can drive the cutoff
@@ -507,6 +674,15 @@ type Server struct {
 	// together by withRetentionTrigger.
 	retentionTicks <-chan time.Time
 	retentionSwept chan struct{}
+	// timerTicks, when non-nil, replaces the timer scheduler's real ticker, so a test
+	// that owns a clock owns the only one in the picture. It is the same seam the
+	// retention sweep and the checkpoint loop have, and it is here for a sharper
+	// reason than theirs: this loop does not only fire timers, it *drives jobs* — so
+	// on a server standing still it is the one goroutine that can hand work out while
+	// a test is counting what went out. A test that passes a channel it never sends
+	// on has silenced it; nil is production, where a real ticker drives it and nothing
+	// observes it. Set by withTimerTrigger.
+	timerTicks <-chan time.Time
 
 	// Recovery checkpoints (ADR-0131): on a fixed cadence, snapshot the applied state
 	// so a restart replays only the WAL suffix past it instead of the whole log — the
@@ -529,6 +705,15 @@ type Server struct {
 	// deterministic-test seam as the retention sweep and the exporter.
 	checkpointTicks <-chan time.Time
 	checkpointDone  chan struct{}
+	// checkpointOffLoop, when non-nil, runs on the checkpoint goroutine at each point
+	// where the pass has just left the run loop and is about to do work that reads the
+	// whole state store: phase "commit" before publishing a staged checkpoint, phase
+	// "cut" before verifying checkpoints for compaction. Nil in production.
+	//
+	// It is a test seam because the property it guards — that the loop is free during
+	// those reads — is invisible from outside the server, and losing it costs seconds of
+	// a server that answers nothing, with no symptom pointing at the checkpoint.
+	checkpointOffLoop func(phase string)
 
 	// compactWAL enables deleting the WAL segments a checkpoint and every consumer
 	// watermark make redundant (ADR-0131), on the same tick that takes the checkpoint —
@@ -587,6 +772,17 @@ type Server struct {
 	// mounted; read-only thereafter.
 	docsEnabled bool
 
+	// catalogueOff is the shop, the catalogue, the orders and the inventory switched
+	// off with --catalogue=false / WithoutCatalogue
+	// (ADR-0434). Spelled as "off" rather than
+	// "enabled" on purpose: the zero value is the shipped default, and seventy-odd
+	// tests build a Server as a literal and expect the whole surface. Set once before
+	// Handler is mounted; read-only thereafter.
+	catalogueOff bool
+	// catalogueReporting is every process id that calls the order routes, read once
+	// at start when the catalogue is off (processesReportingToOrders); nil otherwise.
+	catalogueReporting map[string]bool
+
 	// logs is the recent-process-log tail exposed at GET /api/v1/logs, so an
 	// operator can read server logs from the web UI without shell access. Nil when
 	// the command did not wire a buffer (WithLogBuffer), in which case the endpoint
@@ -626,6 +822,18 @@ type Server struct {
 	// empty means derive them from the request (ADR-0200).
 	externalURL string
 
+	// selfURL is how this process reaches its own HTTP server — the address its
+	// supervised workers are told to work for (cmd/atlas: internalURL), which is a
+	// loopback origin and, where this server terminates TLS, a plaintext loopback
+	// port nothing outside the process can use.
+	//
+	// The shipped system processes need it: they do their work by calling Atlas's
+	// own API, and a model cannot carry an installation's address. externalURL is
+	// the wrong value for that — it is set only when an operator states one, and a
+	// request built on an empty base fails silently, which is the defect the
+	// fulfilment report exists to surface.
+	selfURL string
+
 	// oidc is the identity provider people may sign in with, when an operator
 	// configured one (WithOIDC, ADR-0210). Nil is the
 	// default and means the local password is the only way in: the routes are not
@@ -656,6 +864,25 @@ type Option func(*Server)
 // so an operator can read server logs from the web UI. The command builds the
 // buffer, tees the standard logger into it, and passes it here.
 func WithLogBuffer(b *LogBuffer) Option { return func(s *Server) { s.logs = b } }
+
+// budgets is how every handler reads a ceiling. It defaults a Server that was built
+// as a struct literal — tests do, in seventy-odd places — to [limits.Default],
+// because the zero Limits is sixteen ceilings of zero and a ceiling of zero admits
+// nothing. That failure does not look like missing configuration; it looks like a
+// bad request, and a test asserting "too large" would pass for the wrong reason.
+// New always sets them, so this only ever fires for a literal.
+func (s *Server) budgets() limits.Limits {
+	if s.limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.limits
+}
+
+// WithLimits sets the installation's resource budgets. Without it a server runs on
+// [limits.Default], which is what every ceiling in the API was before they had a
+// name. There is deliberately no way to remove a budget: "off" is the state they
+// exist to prevent, so an unset field is a default and not an absence.
+func WithLimits(l limits.Limits) Option { return func(s *Server) { s.limits = l } }
 
 // WithoutDocs disables the OpenAPI document at /api/v1/openapi.json and the
 // Scalar API explorer at /api/docs, which are otherwise served by default. Pass
@@ -743,6 +970,12 @@ func WithUserProvisioning() Option { return func(s *Server) { s.userProvisioning
 // directly). The default is 2s.
 func WithInboundPollInterval(d time.Duration) Option {
 	return func(s *Server) { s.inboundPoll = d }
+}
+
+// WithFeedPushInterval sets how often push delivery of the event feed runs. A
+// non-positive interval disables it (tests drive it directly). The default is 2s.
+func WithFeedPushInterval(d time.Duration) Option {
+	return func(s *Server) { s.feedPush = d }
 }
 
 // WithCollabKeepaliveInterval sets how often an idle collaboration SSE stream
@@ -858,6 +1091,49 @@ func WithRetention(maxAge time.Duration) Option {
 	}
 }
 
+// WithTriggerReceiptRetention sets how long a directed trigger's receipt is kept
+// (ADR-0425); the default is 30 days. A retry that arrives after its receipt was
+// dropped starts a new instance, so this is the longest a sender may take to retry.
+func WithTriggerReceiptRetention(d time.Duration) Option {
+	return func(s *Server) {
+		if d > 0 {
+			s.triggerReceiptTTL = d
+		}
+	}
+}
+
+// WithMessageTTLMax sets the longest time to live a published message may ask for
+// (ADR-0370); the default is seven days. A publish asking for more is refused with 400
+// rather than shortened, because a sender that asked for a lifetime is relying on it.
+func WithMessageTTLMax(d time.Duration) Option {
+	return func(s *Server) {
+		if d > 0 {
+			s.messageTTLMax = d
+		}
+	}
+}
+
+// DefaultMessageTTLMax is the longest time to live a published message may ask for
+// when the operator set nothing (ADR-0370).
+const DefaultMessageTTLMax = 7 * 24 * time.Hour
+
+func (s *Server) messageTTLLimit() time.Duration {
+	if s.messageTTLMax > 0 {
+		return s.messageTTLMax
+	}
+	return DefaultMessageTTLMax
+}
+
+// WithEventFeedRetention sets how long a row of the event feed is kept (ADR-0429 §5);
+// the default is 30 days. A consumer whose cursor is older than that is answered 410.
+func WithEventFeedRetention(d time.Duration) Option {
+	return func(s *Server) {
+		if d > 0 {
+			s.eventFeedTTL = d
+		}
+	}
+}
+
 // WithRetentionInterval sets the retention sweep cadence (ADR-0115). A non-positive
 // value restores the default. Tests pass a short interval to exercise the sweep.
 func WithRetentionInterval(d time.Duration) Option {
@@ -905,6 +1181,16 @@ func withClock(now func() int64) Option {
 			s.now = now
 		}
 	}
+}
+
+// withTimerTrigger replaces the timer scheduler's real ticker with an explicit tick
+// channel. It is unexported — a test seam — and the reason it exists is the drive
+// that follows each tick rather than the timers themselves: a test that advances its
+// own clock and then counts what the engine handed out is otherwise sharing the
+// question with a goroutine firing every real second. Passing a channel nothing is
+// ever sent on holds it still for the whole test.
+func withTimerTrigger(ticks <-chan time.Time) Option {
+	return func(s *Server) { s.timerTicks = ticks }
 }
 
 // withRetentionTrigger replaces the retention sweep's real ticker with an explicit
@@ -998,6 +1284,20 @@ func withCheckpointTrigger(ticks <-chan time.Time, done chan struct{}) Option {
 	}
 }
 
+// withCheckpointOffLoopHook installs the just-left-the-loop seam. Test-only, for the
+// same reason as withCheckpointTrigger.
+func withCheckpointOffLoopHook(fn func(phase string)) Option {
+	return func(s *Server) { s.checkpointOffLoop = fn }
+}
+
+// offLoop announces that the pass has left the run loop and is about to read the state
+// store. It is a no-op unless a test installed the seam.
+func (s *Server) offLoop(phase string) {
+	if s.checkpointOffLoop != nil {
+		s.checkpointOffLoop(phase)
+	}
+}
+
 // withReadyTimeout shortens the deadline GET /readyz gives the run loop. Like
 // withCheckpointTrigger it is a test seam rather than an operator knob: a test that
 // wedges the run loop should not have to wait out the production deadline to see the
@@ -1015,6 +1315,16 @@ func withReadyTimeout(d time.Duration) Option {
 // of proc and store (Close here stops only the loop, not the engine).
 func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Option) (*Server, error) {
 	ds, err := newDeployStore(filepath.Join(dataDir, "deployments"))
+	if err != nil {
+		return nil, err
+	}
+	decisionDeploys, err := newDecisionStore(filepath.Join(dataDir, "decisions"))
+	if err != nil {
+		return nil, err
+	}
+	// Opened beside the two stores whose records carry definition keys, because it is
+	// what stops one of those keys being issued twice.
+	keySpace, err := newKeySpaceStore(filepath.Join(dataDir, "keyspace"))
 	if err != nil {
 		return nil, err
 	}
@@ -1061,6 +1371,18 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	decisionDocStore, err := decisiondoc.NewStore(filepath.Join(dataDir, "decision-docs"))
+	if err != nil {
+		return nil, err
+	}
+	catalogStore, err := catalog.NewStore(filepath.Join(dataDir, "catalog"))
+	if err != nil {
+		return nil, err
+	}
+	orderStore, err := order.NewStore(filepath.Join(dataDir, "orders"))
+	if err != nil {
+		return nil, err
+	}
 	taskFolderStore, err := taskfolder.NewStore(filepath.Join(dataDir, "task-folders"))
 	if err != nil {
 		return nil, err
@@ -1070,6 +1392,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		return nil, err
 	}
 	infomodelStore, err := infomodel.NewStore(filepath.Join(dataDir, "information-models"))
+	if err != nil {
+		return nil, err
+	}
+	capabilityStore, err := capability.NewStore(filepath.Join(dataDir, "capabilities"))
+	if err != nil {
+		return nil, err
+	}
+	valueStreamStore, err := capability.NewStreamStore(filepath.Join(dataDir, "value-streams"))
 	if err != nil {
 		return nil, err
 	}
@@ -1105,6 +1435,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	favourites, err := newFavouriteStore(filepath.Join(dataDir, "favourites"))
+	if err != nil {
+		return nil, err
+	}
+	dmnDrafts, err := newDmnDraftStore(filepath.Join(dataDir, "dmn-drafts"))
+	if err != nil {
+		return nil, err
+	}
 	users, err := newUserStore(filepath.Join(dataDir, "users"))
 	if err != nil {
 		return nil, err
@@ -1113,11 +1451,37 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	directorySync, err := newDirectorySyncStore(filepath.Join(dataDir, "directory-sync"))
+	if err != nil {
+		return nil, err
+	}
+	inventoryLoads, err := newInventoryLoadStore(filepath.Join(dataDir, "inventory-loads"))
+	if err != nil {
+		return nil, err
+	}
+	discrepancies, err := newDiscrepancyStore(filepath.Join(dataDir, "discrepancies"))
+	if err != nil {
+		return nil, err
+	}
+	recertifications, err := newRecertifyStore(
+		filepath.Join(dataDir, "recertification-campaigns"),
+		filepath.Join(dataDir, "recertification-rows"))
+	if err != nil {
+		return nil, err
+	}
 	connectors, err := newConnectorStore(filepath.Join(dataDir, "connectors"))
 	if err != nil {
 		return nil, err
 	}
 	callOverrides, err := newCallOverrideStore(filepath.Join(dataDir, "call-overrides"))
+	if err != nil {
+		return nil, err
+	}
+	appConstants, err := newApplicationConstantStore(filepath.Join(dataDir, "application-constants"))
+	if err != nil {
+		return nil, err
+	}
+	srvConstants, err := newServerConstantStore(filepath.Join(dataDir, "server-constants"))
 	if err != nil {
 		return nil, err
 	}
@@ -1137,6 +1501,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		return nil, err
 	}
 	inboundSubs, err := newInboundSubStore(filepath.Join(dataDir, "inbound-subscriptions"))
+	if err != nil {
+		return nil, err
+	}
+	feedSubs, err := newFeedSubStore(filepath.Join(dataDir, "feed-subscriptions"))
 	if err != nil {
 		return nil, err
 	}
@@ -1160,18 +1528,29 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// built from it rather than owning it.
 	quit := make(chan struct{})
 	s := &Server{
-		proc:        proc,
-		store:       store,
-		dataDir:     dataDir,
-		remoteNodes: newRemoteNodeCache(),
-		quit:        quit,
-		runLoop:     runloop.New(quit),
-		deployments: map[uint64]*deployment{},
-		nextKey:     1,
-		versions:    map[string]int32{},
-		deploys:     ds,
-		jobTypes:    jobTypes,
-		workers:     newWorkerRegistry(nil),
+		proc:             proc,
+		store:            store,
+		dataDir:          dataDir,
+		limits:           limits.Default(), // WithLimits overrides; there is no "no budget"
+		remoteNodes:      newRemoteNodeCache(),
+		remoteLandscapes: newRemoteLandscapeCache(),
+		quit:             quit,
+		runLoop:          runloop.New(quit),
+		deployments:      map[uint64]*deployment{},
+		nextKey:          1,
+		versions:         map[string]int32{},
+		deploys:          ds,
+
+		// Its own group: gofmt aligns a literal's contiguous run, and folding these
+		// into the one above would rewrite every line of it for no change in meaning.
+		decisionDeploys:     decisionDeploys,
+		keySpace:            keySpace,
+		decisionVersions:    map[string]int32{},
+		decisionVersionKeys: map[string]map[int32]uint64{},
+		jobTypes:            jobTypes,
+		workers:             newWorkerRegistry(nil),
+		breakers:            newWorkerBreakers(nil),
+		gateResume:          map[int32]uint64{},
 		// Created unconditionally, not with a worker registry: AD is worker-only
 		// (ADR-0206), so this server never holds a mock
 		// directory of its own and is only ever the place the workers' reports land.
@@ -1208,15 +1587,22 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		targets:           targets,
 		appVersions:       map[string]int32{},
 		dmnrefs:           dmnrefs,
+		favourites:        favourites,
+		dmnDrafts:         dmnDrafts,
 		connectors:        connectors,
 		callOverrides:     callOverrides,
+		appConstants:      appConstants,
+		srvConstants:      srvConstants,
 		repository:        repositoryCatalog,
 		repositoryStore:   repositoryStore,
 		inboundSubs:       inboundSubs,
+		feedSubs:          feedSubs,
+		feedPushes:        newFeedPushState(),
 		settings:          settings,
 		playgroundTTL:     playgroundSessionTTL, // WithPlaygroundSessions overrides both of these
 		playgroundSweep:   playgroundReapInterval,
 		inboundPoll:       2 * time.Second,          // default tick; WithInboundPollInterval overrides, 0 disables
+		feedPush:          2 * time.Second,          // default tick; WithFeedPushInterval overrides, 0 disables
 		inboundBatch:      defaultInboundBatch,      // per-poll ReadEvents cap; WithInboundBatchLimit overrides
 		exporterPoll:      5 * time.Second,          // OpenSearch export cadence; WithOpenSearchExportInterval overrides (ADR-0114)
 		retentionInterval: DefaultRetentionInterval, // history-retention sweep cadence; WithRetentionInterval overrides (ADR-0115)
@@ -1225,6 +1611,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		vaultEnabled:      true,                     // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:             users,
 		groups:            groups,
+		directorySync:     directorySync,
+		inventoryLoads:    inventoryLoads,
+		discrepancies:     discrepancies,
+		recertifications:  recertifications,
 		sessions:          newSessionStore(defaultSessionTTL),
 		oidcStates:        newOIDCStateStore(),
 		collab:            collab.NewRegistry(),
@@ -1259,6 +1649,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.dialAgentWorker,
 		s.processSourceForGeneration,
 	)
+	// The FEEL assistant asks the same AI Workers through the same dial: what a model
+	// writes there is checked by the engine before the author sees it, which is the
+	// one thing it adds to form generation's pattern.
+	s.feelGen = feelgen.New(s.agentWorkersForFeel, s.dialAgentWorker)
+	s.feelGen.Observe = s.observeFeelAssistant
+	s.releaseNotes = releasenotes.New(atlas.Changelog, atlas.ADRIndex)
 	s.processDocs = processdoc.New(
 		s.runLoop,
 		processDocStore,
@@ -1272,6 +1668,135 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		},
 		token.New,
 	)
+	// Decision documentation is the same area service for a second artifact kind
+	// (ADR-0324). It takes no deployment lookup: a decision
+	// document is a sign-off artifact and is usually published before the decision
+	// is deployed, so the field would be empty in the case it exists for.
+	s.decisionDocs = decisiondoc.New(
+		s.runLoop,
+		decisionDocStore,
+		func(clientIP string) bool { return s.publicRate.allow(clientIP) },
+		token.New,
+	)
+	// The portal catalogue is another area service on the same shape: it takes the
+	// run loop, its store, and the server clock, and nothing else.
+	s.catalogs = catalog.New(s.runLoop, catalogStore, func() int64 { return s.now() },
+		// "Passes as an administrator here" — which with enforcement off is everybody,
+		// exactly as Server.isAdmin answers it for every other area. Written with the
+		// nil check because a request carries no principal when nobody is signed in.
+		func(p *httpapi.Principal) bool { return !s.authEnabled || (p != nil && p.HasRole(RoleAdmin)) })
+	// Orders read releases straight from the catalogue store. The closure runs
+	// inside the order service's own run-loop closure, so it must not dispatch
+	// onto the loop again — Do is a rendezvous, and a nested one would deadlock.
+	// The wake is the fulfilment process's only prompt: a settled line publishes
+	// a message correlated on the order id, and the orchestrator parked on it asks
+	// what may start next. Publishing runs the processor, which is a visit to the
+	// loop of its own — so the order service calls this outside its own closure.
+	s.catalogStore, s.orderStore = catalogStore, orderStore
+	s.orders = order.New(s.runLoop, orderStore, func() int64 { return s.now() },
+		catalogStore.Release, s.catalogs.MayOrderFrom,
+		// Which groups the recipient is in, for the eligibility check
+		// (ADR-0347). It reuses the principal synthesis the
+		// reminder route needed — the same question, asked about somebody who is not
+		// calling — and takes its group ids and nothing else.
+		func(recipient string) ([]string, error) {
+			p, err := s.principalOf(recipient)
+			if err != nil {
+				return nil, err
+			}
+			return p.GroupIDs, nil
+		},
+		// Whose name an order may carry (ADR-0349).
+		//
+		// The operator role, and not a manager relationship, because Atlas cannot
+		// answer what a manager relationship *is*: the escalation path has the
+		// caller name a superior precisely because a directory lookup belongs to a
+		// modelled process and not to the engine. Gating on something this server
+		// cannot evaluate would mean inventing a hierarchy, and an invented
+		// hierarchy decides who may act in whose name.
+		//
+		// With enforcement off there is nobody to be, exactly as everywhere else.
+		func(p *httpapi.Principal) bool {
+			return !s.authEnabled ||
+				(p != nil && (p.HasRole(RoleOperator) || p.HasRole(RoleAdmin)))
+		},
+		func(message, orderID string, vars map[string]string) error {
+			start := make([]model.VariableValue, 0, len(vars))
+			for name, value := range vars {
+				start = append(start, model.VariableValue{Name: name, Kind: model.VarString, Text: value})
+			}
+			// A map has no order and start variables are written in the order given,
+			// so sort: the same order must produce the same log, live and on replay.
+			sort.Slice(start, func(i, j int) bool { return start[i].Name < start[j].Name })
+			s.do(func() { s.proc.PublishMessage(message, orderID, start...) })
+			return s.drive()
+		},
+		// The notification's link is built on the operator's configured origin and
+		// on nothing else. Deriving it from whichever host the orderer happened to
+		// reach would put an internal address in a mail to somebody who cannot
+		// resolve it.
+		func() string { return s.externalURL },
+		func() string { return s.selfURL },
+		// The inventory. A right the portal granted is engine state, not order
+		// state, because it outlives the order: the instance that produced it is
+		// eligible for retention deletion long before the right ends, and a record
+		// that cannot be rebuilt after that is not a record. Origin is set here and
+		// not by the order service — an order can only ever produce an ordered
+		// right, and a package that cannot name another origin cannot mislabel one.
+		func(g order.Grant) error {
+			s.do(func() {
+				grant := s.proc.GrantEntitlement
+				if g.Outcome.Set() {
+					// The provision's outcome rides the same command as its grant,
+					// so one fsync commits both (ADR-0429 §3, I2).
+					grant = func(v model.EntitlementValue) {
+						s.proc.GrantEntitlementWithOutcome(v, outcomeValue(g.Outcome, orderTriggerSource))
+					}
+				}
+				grant(model.EntitlementValue{
+					Principal: g.Principal, ItemID: g.ItemID, VariantID: g.VariantID,
+					OrderID: g.OrderID, Since: g.At, Origin: model.OriginOrdered,
+					// The end travels with the grant, computed from the ceiling the
+					// release froze (ADR-0344). It is set
+					// only here, which is what keeps it off adopted and legacy rights:
+					// neither is granted by an order, and neither knows when it began.
+					Until: g.Until,
+					// Who approved the line travels with the grant, so the right keeps
+					// its approver after retention has deleted the order.
+					ApprovedBy: g.ApprovedBy,
+				})
+			})
+			return s.drive()
+		},
+		// And the closing of a hold. The reason is Returned and never anything
+		// else: this callback is reached only from a line that reached Returned,
+		// which is a right that was given back. The correction path — a right
+		// reconciliation found the target system does not have — goes through
+		// handleRevokeDiscrepancy and says so there, because the two rows assert
+		// different things (ADR-0346).
+		func(principal, itemID string, at int64, by string, outcome order.Outcome) error {
+			s.do(func() {
+				if outcome.Set() {
+					s.proc.RevokeEntitlementWithOutcome(principal, itemID, at, model.EndReturned, by,
+						outcomeValue(outcome, orderTriggerSource))
+					return
+				}
+				s.proc.RevokeEntitlement(principal, itemID, at, model.EndReturned, by)
+			})
+			return s.drive()
+		},
+		// And what they already hold, for the basket's second resolution. Read off
+		// the loop: it is one person's inventory, but it is a scan (ADR-0239).
+		func(principal string) (map[string]bool, error) {
+			out := map[string]bool{}
+			err := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+				return rv.EntitlementsOf(principal, func(v *model.EntitlementValue) error {
+					out[v.ItemID] = true
+					return nil
+				})
+			})
+			return out, err
+		})
 	// The Tasks app's folders are the second such area. Both collaborators are the
 	// server's for the same reason: the editor's value lists come from the
 	// deployment registry and the user store, which only the loop may read, and the
@@ -1328,6 +1853,25 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		token.New,
 		time.Now,
 	)
+	// The business-architecture registry needs no sharing scope of its own: a
+	// capability map exists to cross the silos an application scope draws, so the map
+	// is readable by every signed-in identity and written by a modeler (the route table
+	// says so). What *is* filtered is the landscape it is compared against — a process
+	// outside the caller's scope travels as a placeholder, so a realization pointing at
+	// it reads as restricted rather than as missing.
+	s.capabilities = capability.New(
+		s.runLoop,
+		capabilityStore,
+		valueStreamStore,
+		s.collectCapabilityLandscape,
+		s.confirmationHorizon,
+		time.Now,
+	)
+	s.capabilityRecords, s.valueStreamRecords = capabilityStore, valueStreamStore
+	// Measuring is the one capability read that walks instances, so it is wired
+	// separately and runs off the loop (ADR-0239). Everything else in that area is
+	// design-time size and runs on it.
+	s.capabilities.SetMeasurementResolver(s.measureCapability)
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -1338,6 +1882,39 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// WithPlaygroundSessions reaches the registry it configures.
 	s.playgroundSessions = playground.NewRegistry(s.playgroundTTL, playgroundMaxSessions)
 	s.playground = playgroundapi.New(s.playgroundSessions, s.playgroundModel, startVarsFromMap)
+	// Every sub-service reads the ceilings this server was configured with, rather
+	// than the defaults its own constructor set. One assignment each, here, because
+	// the options have all run by now: WithLimits is what s.limits already reflects.
+	// A service added without a line here keeps the defaults — the completeness test
+	// in the limits package is what notices.
+	s.formGen.Limits = s.budgets()
+	s.feelGen.Limits = s.budgets()
+	s.processDocs.Limits = s.budgets()
+	s.decisionDocs.Limits = s.budgets()
+	s.taskFolders.Limits = s.budgets()
+	s.panorama.Limits = s.budgets()
+	s.infomodel.Limits = s.budgets()
+	s.catalogs.Limits = s.budgets()
+	// The catalogue can now say which approval rules reach nobody. It asks; the
+	// accounts and the groups are the server's, and this is where the two meet.
+	s.catalogs.Approvers = approverLookup{s: s}
+	s.catalogs.Processes = processLookup{s: s}
+	s.catalogs.EntryPoints = processLookup{s: s}
+	s.catalogs.Forms = processLookup{s: s}
+	s.catalogs.Models = processLookup{s: s}
+	s.catalogs.Deployer = catalogDeployer{s: s}
+	s.catalogs.Personal = processLookup{s: s}
+	s.catalogs.Remainders = remainderLookup{s: s}
+	s.orders.Limits = s.budgets()
+	// An outcome that comes without a right changing hands — a provision that
+	// failed or was refused, a return that failed — is written on its own
+	// (ADR-0429 §3).
+	s.orders.ReportOutcomesTo(func(o order.Outcome) error {
+		_, err := s.recordOutcome(o, orderTriggerSource)
+		return err
+	})
+	s.capabilities.Limits = s.budgets()
+	s.playground.Limits = s.budgets()
 	// The encrypted secret vault (ADR-0069) is on by default (ADR-0070) unless
 	// WithoutVault disabled it. An operator key from the environment is preferred
 	// and never persisted; absent one, a key is loaded from — or generated into —
@@ -1353,7 +1930,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		}
 		if source == "generated" {
 			logging.Info(logging.VaultKeyGenerated,
-				"generated a vault master key (mode 0600); set ATLAS_VAULT_KEY for a stronger "+
+				"generated a vault master key readable by this account only; set ATLAS_VAULT_KEY for a stronger "+
 					"at-rest posture or pass --vault=false to disable (ADR-0070)",
 				slog.String("path", filepath.Join(dataDir, "vault.key")))
 		}
@@ -1400,6 +1977,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// must be bounded and non-blocking — closing channels, never sending on them.
 	proc.SetJobNotifier(func(jobType int32) { s.jobWaiters.notify(jobType) })
 	s.jobRunner = job.NewRunner(store, proc)
+	// The dispatch gate: the in-process runner asks it before handing a job out and
+	// tells it how each one ended, without learning what a Worker is (ADR-0340).
+	s.jobRunner.SetGate(jobGate{s})
+	s.breakers.onChange = s.logBreakerChange
 	s.jobRunner.HandleCompleting(compiler.DMNJobTypeIndex, func(rd state.Reader) job.CompletingHandler {
 		return dmn.Handler(rd, s.processLookup, s.dmnRegistry, nil)
 	})
@@ -1472,6 +2053,19 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// the worker resolves at call time (resolveConnectorSecret, ADR-0041). One worker
 	// serves every process under the reserved AD job type; each job dials, binds,
 	// operates, and closes.
+	// A shop send task states how a product action ended (ADR-0429 §4). It is the
+	// server's own: it reads the order and hands the outcome back on the completion,
+	// which the engine appends in the batch that completes the job.
+	s.jobRunner.HandleCompleting(compiler.ShopJobTypeIndex, func(rd state.Reader) job.CompletingHandler {
+		return s.shopTaskHandler(rd)
+	})
+	// A shop command task asks a held position for one of its product's actions in
+	// the name of its process's application (ADR-0429 §4, §10 decision 1). It acts
+	// through the order act, which waits on the run loop, so only a round that works
+	// its jobs off the loop takes it.
+	s.jobRunner.HandleOffLoop(compiler.ShopCommandJobTypeIndex, func(rd state.Reader) job.CompletingHandler {
+		return s.shopCommandHandler(rd)
+	})
 	s.jobRunner.HandleWithOutput(compiler.AdJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		// No directory registry in-process: a task naming a Console-configured
 		// directory is served by the worker that holds it (ADR-0164/0168), and this
@@ -1509,6 +2103,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err := s.applyOffloadedKinds(); err != nil {
 		return nil, err
 	}
+	// The floor first, so the counter starts above every key ever issued rather than
+	// above every key that still has a record. loadDeployments then raises it further
+	// for the records that survive, which is what keeps an installation that predates
+	// the floor correct.
+	if err := s.loadKeyFloor(); err != nil {
+		return nil, err
+	}
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}
@@ -1520,6 +2121,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// Same discipline for the per-process documentation counter, so an export after
 	// a restart continues the sequence instead of minting a second v1 (ADR-0143).
 	if err := s.processDocs.LoadVersions(); err != nil {
+		return nil, err
+	}
+	// And for the per-decision one (ADR-0324).
+	if err := s.decisionDocs.LoadVersions(); err != nil {
 		return nil, err
 	}
 	// Peer deploy tokens (ADR-0129) into the in-memory index the auth middleware
@@ -1545,6 +2150,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err := s.loadCallOverrides(); err != nil {
 		return nil, err
 	}
+	// And the constants this installation holds — each application's and its own — with
+	// the facts the namespaces carry, which a bound constant is seeded from (ADR-0453,
+	// ADR-0456). Same place and same reason as the overrides above.
+	if err := s.loadHeldConstants(); err != nil {
+		return nil, err
+	}
 	// Bootstrap-deploy Atlas's own platform processes into the protected system
 	// project (ADR-0122), when enabled. Runs after loadDeployments so its
 	// idempotency check sees the recovered deployments (a restart adds no versions),
@@ -1561,6 +2172,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		if err := s.ensureRegistrationLink(time.Now().Unix()); err != nil {
 			return nil, err
 		}
+	}
+	// Switching the catalogue off is never refused, but it is not silent about the
+	// orders it strands: after recovery and the deployments, before the loop serves,
+	// so the counters and the stores are read directly (ADR-0434).
+	if s.catalogueOff {
+		s.warnCatalogueWorkInFlight()
 	}
 	// Build the OpenSearch exporter when configured (ADR-0114). It tails the durable
 	// WAL under dataDir and is bounded by the state store's applied-position
@@ -1603,19 +2220,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if len(s.SuperviseSpecs) > 0 {
 		s.supervisor = newSupervisor(quit)
 		for i, spec := range s.SuperviseSpecs {
-			args := []string{"worker", "--server", s.superviseURL, "--id", spec.ID}
-			for _, h := range s.superviseHandles[i] {
-				args = append(args, "--handle", h)
-			}
-			// A supervised worker may also serve built-in worker kinds. It is a
-			// child of this process, so it inherits the environment any of them read
-			// their configuration from — and for a kind whose configuration lives in
-			// the worker store instead, the engine adds it to that environment at
-			// spawn (see superviseEnv). Together that is what makes the default set
-			// work with nothing configured at all.
-			if len(spec.Connectors) > 0 {
-				args = append(args, "--connector", strings.Join(spec.Connectors, ","))
-			}
+			// The argv is derived only from typed server configuration. A request
+			// can restart this fixed worker, never add an argument or command.
+			args := supervisedWorkerArgs(s.superviseURL, spec, s.superviseHandles[i])
 			s.supervisor.add(spec, args, s.superviseEnv(spec))
 		}
 		s.supervisor.start()
@@ -1639,6 +2246,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if s.inboundPoll > 0 {
 		s.wg.Add(1)
 		go s.inboundBridge(s.inboundPoll)
+	}
+	// Push delivery POSTs the event feed to the cloudevents Workers its subscriptions
+	// name (ADR-0433): a goroutine
+	// like the inbound bridge, its network I/O off the run loop and only the cursor's
+	// write on it. A non-positive interval disables it.
+	if s.feedPush > 0 {
+		s.wg.Add(1)
+		go s.feedPusher(s.feedPush)
 	}
 	// The OpenSearch exporter tails the durable log and bulk-indexes new records
 	// (ADR-0114). Like the timer scheduler and inbound bridge it is a separate
@@ -1755,6 +2370,29 @@ func (s *Server) retentionSweeper(every time.Duration) {
 	}
 }
 
+// defaultTriggerReceiptTTL is how long a trigger receipt is kept when the operator
+// set nothing (ADR-0425).
+const defaultTriggerReceiptTTL = 30 * 24 * time.Hour
+
+// pruneTriggerReceipts drops the trigger receipts older than their retention, at
+// most once an hour. It runs on the run loop, inside the retention sweep's turn.
+func (s *Server) pruneTriggerReceipts(now int64) {
+	if now-s.lastReceiptPrune < int64(time.Hour) {
+		return
+	}
+	s.lastReceiptPrune = now
+	ttl := s.triggerReceiptTTL
+	if ttl <= 0 {
+		ttl = defaultTriggerReceiptTTL
+	}
+	cutoff := now - int64(ttl)
+	if stale, err := s.store.HasTriggerReceiptBefore(cutoff); err != nil || !stale {
+		return
+	}
+	s.proc.PruneTriggerReceipts(cutoff)
+	_ = s.proc.RunUntilIdle()
+}
+
 // purgeTarget is one finished instance a sweep decided to hard-delete, carrying the
 // history value the purge command needs (its definition key, and the purge due date that
 // locates its schedule entry) so neither the command nor applyToState reads it again.
@@ -1771,6 +2409,8 @@ type purgeTarget struct {
 // purge commands it enqueues, and the cursor advance are one atomic single-writer step.
 // Errors are logged and retried next tick.
 func (s *Server) sweepRetention(now int64) {
+	s.pruneTriggerReceipts(now)
+	s.pruneEventFeed(now)
 	// A transient read error just skips this tick (retried on the next), matching the
 	// silent, best-effort style of the other run-loop pollers (timerScheduler).
 	safePos, err := s.retentionSafePosition()
@@ -1981,29 +2621,50 @@ func (s *Server) runCheckpointPass(last *uint64) checkpointPass {
 // takeCheckpoint publishes one checkpoint and prunes older ones, returning the position
 // it captured (zero when nothing was published — an idle server or a failed pass).
 //
-// The snapshot hops onto the run loop via do(): between batches, the store's applied
+// It is two halves, and which half runs where is the point.
+//
+// The **snapshot** hops onto the run loop via do(): between batches, the store's applied
 // position and the state it holds agree exactly, which is precisely what makes a
-// checkpoint's consistency boundary meaningful (invariant I3). Pruning then runs off
-// the loop, keeping directory removal and an fsync out of the writer's way; it is safe
-// there because only this goroutine ever publishes into the root.
+// checkpoint's consistency boundary meaningful (invariant I3). That half is bounded — a
+// flush and a directory of hard links to immutable files.
+//
+// The **commit** then runs off the loop, and has to. It checksums the staged directory,
+// which means reading every byte of the state store; on a store of any size that is by
+// far the longest step, and on the loop it would stop command processing — and with it
+// every request the API serves, since even an off-loop reader takes a loop turn to open
+// its view. The staged directory is a set of hard links under a name nothing else looks
+// at, so the writer running on during the commit cannot change what is published.
+// Pruning runs off the loop for the same reason, and is safe there because only this
+// goroutine ever publishes into the root.
 func (s *Server) takeCheckpoint() (uint64, error) {
-	var pos uint64
+	var staged *checkpoint.Staged
 	var err error
 	s.do(func() {
 		var applied uint64
 		if applied, err = s.store.LastAppliedPosition(); err != nil || applied == 0 {
 			return // nothing durable yet: there is no state worth snapshotting
 		}
-		pos, err = s.proc.Checkpoint(s.checkpointRoot)
+		staged, err = s.proc.StageCheckpoint(s.checkpointRoot)
 	})
 	if err != nil {
 		logging.Warn(logging.CheckpointFailed, "taking a recovery checkpoint failed; will retry next tick",
 			slog.String("error", err.Error()))
 		return 0, err
 	}
-	if pos == 0 {
+	if staged == nil {
+		// Nothing durable yet, or the loop is closing and the closure never ran. Either
+		// way no snapshot was taken, so there is nothing to commit.
 		return 0, nil
 	}
+	s.offLoop("commit")
+	if _, err := staged.Commit(); err != nil {
+		// Commit clears its own temporary directory, so a failed pass leaves nothing
+		// behind for the next one to trip over.
+		logging.Warn(logging.CheckpointFailed, "publishing a recovery checkpoint failed; will retry next tick",
+			slog.String("error", err.Error()))
+		return 0, err
+	}
+	pos := staged.AppliedPosition()
 	if err := checkpoint.Prune(s.checkpointRoot, s.checkpointKeep); err != nil {
 		// The checkpoint is published either way; a failed prune costs disk, not recovery,
 		// so it is reported without discarding the position that was captured.
@@ -2041,8 +2702,40 @@ func (s *Server) compactLog() (int, string, error) {
 			slog.String("error", err.Error()))
 		return 0, "", err
 	}
+	// The applied position is loop-owned, so it is read on the loop — one point read.
+	var lastApplied uint64
+	s.do(func() { lastApplied, err = s.store.LastAppliedPosition() })
+	if err != nil {
+		logging.Warn(logging.WALCompactionFailed, "wal compaction failed; will retry next tick",
+			slog.String("error", err.Error()))
+		return 0, "", err
+	}
+	if lastApplied == 0 {
+		// Nothing durable yet, or the loop is closing and the closure never ran. No
+		// checkpoint can qualify against a zero position, so skip the verification
+		// entirely rather than read every checkpoint to reach the same answer.
+		return 0, "", nil
+	}
+	// Resolving the cut verifies checkpoints, and verifying one reads every byte of its
+	// state files — the same whole-store read that must not happen on the writer. It runs
+	// here, with the loop free. Checkpoints are immutable once published and only this
+	// goroutine publishes into the root, so nothing it reads can change under it.
+	s.offLoop("cut")
+	cut, err := s.proc.CompactionCut(s.checkpointRoot, lastApplied, limits)
+	if err != nil {
+		logging.Warn(logging.WALCompactionFailed, "wal compaction failed; will retry next tick",
+			slog.String("error", err.Error()))
+		return 0, "", err
+	}
+	if cut == 0 {
+		return 0, "", nil // nothing is provably redundant: the log stays whole
+	}
+	// The deletion itself does go on the loop: the WAL belongs to the single writer,
+	// which may be rolling a segment at the same moment (invariant I3). This really is
+	// the bounded work — a few unlinks and one directory fsync, for segments already
+	// proven redundant.
 	var removed int
-	s.do(func() { removed, err = s.proc.CompactLog(s.checkpointRoot, limits) })
+	s.do(func() { removed, err = s.proc.CompactLogAt(cut) })
 	if err != nil {
 		logging.Warn(logging.WALCompactionFailed, "wal compaction failed; will retry next tick",
 			slog.String("error", err.Error()))
@@ -2108,6 +2801,18 @@ func WithOffloadedConnectorKinds(kinds []string) Option {
 	return func(s *Server) { s.offloadedKinds = kinds }
 }
 
+// WithSelfURL tells the server how it reaches its own HTTP API, so the shipped
+// system processes can call it.
+//
+// An Option, so it comes from the process's own command line and from nowhere
+// else: a request must not be able to point the engine's own orchestration at
+// another server. Empty is a real state — a Server built by a test that never
+// runs the fulfilment loop has none — and the models then build a request on an
+// empty base, which fails the call rather than sending it somewhere else.
+func WithSelfURL(url string) Option {
+	return func(s *Server) { s.selfURL = strings.TrimRight(strings.TrimSpace(url), "/") }
+}
+
 // WithSupervisedWorkers asks the server to run these workers itself: one child
 // process per entry, restarted while the server lives (ADR-0157 step 7).
 //
@@ -2163,22 +2868,34 @@ func WithWorkerHistory(connector, scope string) Option {
 // every test would otherwise change meaning. What changed is *who* waits — the
 // caller's goroutine instead of the one goroutine everything else needs.
 //
-// Drivers are serialized. Two concurrent callers must not claim the same job and
-// work it twice, and the second waiting for the first is also what keeps "my
-// request's work is done when it returns" true.
+// The mutex covers the *scheduler* steps — claiming a round and applying its
+// outcomes — and deliberately not the handlers in between. It used to cover the
+// whole loop, and that is what the audit reported: one worker waiting on a dead
+// host held it for its entire timeout, so starting, completing or cancelling any
+// *other* instance waited behind a request that had nothing to do with it.
+//
+// Narrowing it is only safe because a claim now leases
+// (ADR-0274). Without an identity on the claim, two callers
+// driving at once would be
+// handed the same job and work it twice; with one, the activation takes the job off
+// the activatable index before Claim returns, so the second caller's claim cannot
+// see it. The identity was the work — the mutex was only ever standing in for it.
+//
+// Serializing the two ends still buys something worth keeping: a claim and a submit
+// are short, and running them one at a time keeps the run loop's queue from filling
+// with drivers.
 //
 // Handlers read through a [state.ReadView] taken while the loop is held, so each
 // round sees one coherent state rather than whatever the writer has reached since —
 // the guarantee they used to get for free by running on the writer itself.
 func (s *Server) drive() error {
-	s.driveMu.Lock()
-	defer s.driveMu.Unlock()
 	for {
 		var (
 			jobs []job.Job
 			view *state.ReadView
 			err  error
 		)
+		s.driveMu.Lock()
 		s.do(func() {
 			if err = s.proc.RunUntilIdle(); err != nil {
 				return
@@ -2188,18 +2905,43 @@ func (s *Server) drive() error {
 			}
 			view = s.store.ReadView()
 		})
+		s.driveMu.Unlock()
 		if err != nil {
 			return err
 		}
 		if len(jobs) == 0 {
 			return nil
 		}
-		outcomes := s.jobRunner.Work(jobs, view)
+		// The slow part, with nobody waiting on it: a handler makes the outbound call
+		// a worker exists for, and the caller that dispatched this round is the only
+		// one that waits for it.
+		// The round's handlers see plaintext for a declared personal value: every
+		// connector resolves its expressions over this reader, and ADR-0314 sends the
+		// transforms that combine personal values into the worker precisely because the
+		// plaintext exists there for the duration of one call. Wrapping happens here,
+		// off the run loop, so the vault read is off it too.
+		outcomes := s.jobRunner.Work(jobs, s.personalReader(view))
 		_ = view.Close()
 		if len(outcomes) == 0 {
 			return nil // nothing this runner serves; the rest is an external worker's
 		}
+		// What a handler returns is a worker result landing a job's output, which is
+		// ADR-0314's in edge as much as an external worker's HTTP completion is — and it
+		// does not pass through that endpoint, so it is sealed here, off the loop, before
+		// Submit turns it into a command. A failure to seal fails the job: writing the
+		// plaintext instead would put an un-erasable value in the log, which is the one
+		// outcome this mechanism exists to prevent.
+		for i := range outcomes {
+			if outcomes[i].Err != nil || len(outcomes[i].Completion.Outputs) == 0 {
+				continue
+			}
+			if sealErr := s.encipherJobVars(outcomes[i].Job.Key, outcomes[i].Completion.Outputs); sealErr != nil {
+				outcomes[i].Err = sealErr
+			}
+		}
+		s.driveMu.Lock()
 		s.do(func() { s.jobRunner.Submit(outcomes) })
+		s.driveMu.Unlock()
 	}
 }
 
@@ -2208,101 +2950,186 @@ func (s *Server) drive() error {
 // restores diagrams, names, versions, and the ability to advance recovered
 // instances (ADR-0019). It runs before the loop serves traffic, so touching the
 // registry and the processor directly here respects the single-writer invariant.
+//
+// Two stores feed it: process deployments and decision deployments
+// (ADR-0319). They share one key space and
+// each lists in ascending key order, so merging them replays registration in the
+// order it happened live. That ordering is not cosmetic: a definition deployed
+// before deploy-time pinning still resolves latest binding against "the newest
+// model registered, of either kind", and rebuilding that pointer out of order
+// would silently hand it a different model than it had before the restart.
 func (s *Server) loadDeployments() error {
-	recs, err := s.deploys.LoadAll()
+	procs, err := s.deploys.LoadAll()
 	if err != nil {
 		return err
 	}
-	for _, rec := range recs {
-		// Recompile exactly the process this record represents (a collaboration's
-		// XML holds several), keyed as originally assigned (ADR-0019/0022) — and
-		// without the deploy-time validation gate
-		// (ADR-0177). This definition passed the gate
-		// that existed when it was deployed and its instances have been running under
-		// it since; a rule added to the compiler afterwards is a reason to tell the
-		// operator, not to refuse to start. The model on disk did not change.
-		cp, problems, err := compiler.ReloadNamed(rec.Key, rec.Version, bytes.NewReader([]byte(rec.XML)), rec.ProcessID)
-		if err != nil {
-			// A stored model that no longer compiles *at all* is still a hard,
-			// actionable error rather than a silently dropped definition (ADR-0019):
-			// there is no definition to bring back, so its instances could not advance
-			// either way. Name the record, since acting on it means editing that file.
-			return fmt.Errorf("api: reload deployment %d (%s v%d) from %s: %w", rec.Key, rec.ProcessID, rec.Version, s.deploys.fileFor(rec.Key), err)
+	decisions, err := s.decisionDeploys.LoadAll()
+	if err != nil {
+		return err
+	}
+	for i, j := 0, 0; i < len(procs) || j < len(decisions); {
+		if j == len(decisions) || (i < len(procs) && procs[i].Key < decisions[j].Key) {
+			if err := s.restoreDeployment(procs[i]); err != nil {
+				return err
+			}
+			i++
+			continue
 		}
-		if len(problems) > 0 {
-			// Not silent: the model is drifting from what the compiler now asks for,
-			// and the next deploy of it will be refused. Named per deployment so the
-			// operator can go straight to the model that needs fixing.
+		if err := s.restoreDecisionDeployment(decisions[j]); err != nil {
+			return err
+		}
+		j++
+	}
+	return nil
+}
+
+// restoreDeployment brings one process deployment back: recompile, re-resolve its
+// job types, re-register its bundled DMN models and its resolved decision
+// bindings, and put it in the in-memory registry. Split out of loadDeployments so
+// the two record kinds can be replayed in one merged key order.
+func (s *Server) restoreDeployment(rec persistedDeployment) error {
+	// Recompile exactly the process this record represents (a collaboration's
+	// XML holds several), keyed as originally assigned (ADR-0019/0022) — and
+	// without the rules that gate a *deploy*
+	// (ADR-0177, ADR-0393). This definition
+	// passed the gate that existed when it was deployed and its instances have been
+	// running under it since; a rule added to the compiler afterwards is a reason to
+	// tell the operator, not to refuse to start. The model on disk did not change.
+	//
+	// That is every such rule, not only stage 5's: refusing a FEEL call this build
+	// can only answer with null (ADR-0388) is raised while the process is still
+	// being built, and it took a server into a crash loop before the reload carried
+	// its own gate too.
+	cp, problems, err := compiler.ReloadNamed(rec.Key, rec.Version, bytes.NewReader([]byte(rec.XML)), rec.ProcessID)
+	if err != nil {
+		// A stored model that no longer compiles *at all* is still a hard,
+		// actionable error rather than a silently dropped definition (ADR-0019):
+		// there is no definition to bring back, so its instances could not advance
+		// either way. Name the record, since acting on it means editing that file.
+		return fmt.Errorf("api: reload deployment %d (%s v%d) from %s: %w", rec.Key, rec.ProcessID, rec.Version, s.deploys.fileFor(rec.Key), err)
+	}
+	if len(problems) > 0 {
+		// Not silent: the model is drifting from what the compiler now asks for,
+		// and the next deploy of it will be refused. Named per deployment so the
+		// operator can go straight to the model that needs fixing.
+		logging.Warn(logging.DeploymentReloadedWithProblems,
+			"a deployed definition would no longer be accepted at deploy; it was restored and keeps running exactly as it did — fix the model and deploy it again",
+			slog.Uint64("deploymentKey", rec.Key),
+			slog.String("processId", rec.ProcessID),
+			slog.Int64("version", int64(rec.Version)),
+			slog.String("artifact", "bpmn"),
+			slog.String("problems", compiler.SummarizeProblems(problems)))
+	}
+	cp.Version = rec.Version
+	// Restore the decision bindings this definition was deployed with
+	// (ADR-0319), before the processor sees
+	// it. A record with no policy marker predates deploy-time pinning, so it is
+	// deliberately left unpinned and keeps resolving latest at task activation.
+	switch rec.BindingPolicy {
+	case bindingPinned:
+		cp.PinDecisions(rec.decisionPins())
+	case bindingRuntime:
+		cp.ResolveLatestAtRuntime(rec.versionPins())
+	}
+	// Re-resolve the job types the same way the original deploy did. The registry
+	// is durable and never recycles an index, so this lands on exactly the indices
+	// the jobs already in state were written under (ADR-0007/0157).
+	if err := cp.ResolveJobTypes(s.jobTypes.Intern); err != nil {
+		return fmt.Errorf("api: resolve job types for deployment %d (%s v%d): %w", rec.Key, rec.ProcessID, rec.Version, err)
+	}
+	s.proc.Deploy(cp)
+	// Re-register the process's DMN models so its business rule tasks evaluate
+	// after a restart, exactly as they did when first deployed (ADR-0014). The
+	// models are snapshotted in the deployment record (a legacy record carries a
+	// single model), so no temis reference has to be re-resolved here.
+	for _, dmnXML := range rec.dmnModels() {
+		// The same split as the BPMN model above
+		// (ADR-0177), for the same reason: refusing a
+		// snapshotted DMN model here undeploys nothing, it only keeps the server from
+		// starting. A decision that stopped compiling since the deploy fails when it
+		// is evaluated — a job error on a worker, which the engine has an answer for
+		// — while every other decision in the model keeps answering.
+		dmnProblems, err := s.dmnRegistry.Reload(rec.Key, []byte(dmnXML))
+		if err != nil {
+			return fmt.Errorf("api: reload dmn model for def %d (%s) from %s: %w", rec.Key, rec.ProcessID, s.deploys.fileFor(rec.Key), err)
+		}
+		if dmnProblems != "" {
 			logging.Warn(logging.DeploymentReloadedWithProblems,
-				"a deployed definition would no longer pass validation; it was restored and keeps running — fix the model and deploy it again",
+				"a DMN model bundled with a deployed definition no longer compiles cleanly; the definition keeps running and the decisions that still compile keep answering — fix the model and deploy it again",
 				slog.Uint64("deploymentKey", rec.Key),
 				slog.String("processId", rec.ProcessID),
 				slog.Int64("version", int64(rec.Version)),
-				slog.String("artifact", "bpmn"),
-				slog.String("problems", compiler.SummarizeProblems(problems)))
+				slog.String("artifact", "dmn"),
+				slog.String("problems", dmnProblems))
 		}
-		cp.Version = rec.Version
-		// Re-resolve the job types the same way the original deploy did. The registry
-		// is durable and never recycles an index, so this lands on exactly the indices
-		// the jobs already in state were written under (ADR-0007/0157).
-		if err := cp.ResolveJobTypes(s.jobTypes.Intern); err != nil {
-			return fmt.Errorf("api: resolve job types for deployment %d (%s v%d): %w", rec.Key, rec.ProcessID, rec.Version, err)
-		}
-		s.proc.Deploy(cp)
-		// Re-register the process's DMN models so its business rule tasks evaluate
-		// after a restart, exactly as they did when first deployed (ADR-0014). The
-		// models are snapshotted in the deployment record (a legacy record carries a
-		// single model), so no temis reference has to be re-resolved here.
-		for _, dmnXML := range rec.dmnModels() {
-			// The same split as the BPMN model above
-			// (ADR-0177), for the same reason: refusing a
-			// snapshotted DMN model here undeploys nothing, it only keeps the server from
-			// starting. A decision that stopped compiling since the deploy fails when it
-			// is evaluated — a job error on a worker, which the engine has an answer for
-			// — while every other decision in the model keeps answering.
-			dmnProblems, err := s.dmnRegistry.Reload(rec.Key, []byte(dmnXML))
-			if err != nil {
-				return fmt.Errorf("api: reload dmn model for def %d (%s) from %s: %w", rec.Key, rec.ProcessID, s.deploys.fileFor(rec.Key), err)
-			}
-			if dmnProblems != "" {
-				logging.Warn(logging.DeploymentReloadedWithProblems,
-					"a DMN model bundled with a deployed definition no longer compiles cleanly; the definition keeps running and the decisions that still compile keep answering — fix the model and deploy it again",
-					slog.Uint64("deploymentKey", rec.Key),
-					slog.String("processId", rec.ProcessID),
-					slog.Int64("version", int64(rec.Version)),
-					slog.String("artifact", "dmn"),
-					slog.String("problems", dmnProblems))
-			}
-		}
-		// Restore the deactivation flag (ADR-0119) before the loop serves traffic and
-		// before timers tick, so a start timer restored from the log finds the definition
-		// inactive and skips instantiation. loadDeployments does not re-arm timers (they
-		// come back from the WAL), so this is the only place recovery re-applies the gate.
-		if rec.Inactive {
-			s.proc.SetProcessActive(rec.Key, false)
-		}
-		s.deployments[rec.Key] = &deployment{
-			Key:        rec.Key,
-			ProcessID:  rec.ProcessID,
-			Name:       rec.Name,
-			Version:    rec.Version,
-			DeployedAt: rec.DeployedAt,
-			ProjectID:  rec.ProjectID,
-			DeployedBy: rec.DeployedBy,
-			xml:        []byte(rec.XML),
-			cp:         cp,
-			inactive:   rec.Inactive,
+	}
+	// Restore the deactivation flag (ADR-0119) before the loop serves traffic and
+	// before timers tick, so a start timer restored from the log finds the definition
+	// inactive and skips instantiation. loadDeployments does not re-arm timers (they
+	// come back from the WAL), so this is the only place recovery re-applies the gate.
+	if rec.Inactive {
+		s.proc.SetProcessActive(rec.Key, false)
+	}
+	// Which application this definition is filed under, for its constants bound to one
+	// (ADR-0453).
+	s.proc.SetDefinitionApplication(rec.Key, rec.ProjectID)
+	s.deployments[rec.Key] = &deployment{
+		Key:        rec.Key,
+		ProcessID:  rec.ProcessID,
+		Name:       rec.Name,
+		Version:    rec.Version,
+		DeployedAt: rec.DeployedAt,
+		ProjectID:  rec.ProjectID,
+		DeployedBy: rec.DeployedBy,
+		xml:        []byte(rec.XML),
+		cp:         cp,
+		inactive:   rec.Inactive,
 
-			diagramUpdatedAt: rec.DiagramUpdatedAt,
-			diagramUpdatedBy: rec.DiagramUpdatedBy,
+		diagramUpdatedAt: rec.DiagramUpdatedAt,
+		diagramUpdatedBy: rec.DiagramUpdatedBy,
+	}
+	s.order = append(s.order, rec.Key)
+	if rec.Version > s.versions[rec.ProcessID] {
+		s.versions[rec.ProcessID] = rec.Version
+	}
+	if rec.Key >= s.nextKey {
+		s.nextKey = rec.Key + 1
+	}
+	return nil
+}
+
+// restoreDecisionDeployment brings one decision deployment back: recompile its
+// persisted DMN source into the registry under the key it was deployed with, and
+// resume its per-decision version counters
+// (ADR-0319). Nothing compiled was ever
+// persisted, so the registry is rebuilt from source here — off the processor, and
+// before the loop serves traffic.
+func (s *Server) restoreDecisionDeployment(rec persistedDecision) error {
+	// The same ADR-0177 split the bundled models above get, for the same reason:
+	// refusing a decision that has stopped compiling cleanly undeploys nothing, it
+	// only keeps the server from starting. A decision whose logic no longer compiles
+	// fails when it is evaluated — a job error on a worker, which the engine has an
+	// answer for — while every other decision in the model keeps answering.
+	problems, err := s.dmnRegistry.ReloadDecision(rec.Key, []byte(rec.XML))
+	if err != nil {
+		return fmt.Errorf("api: reload decision deployment %d from %s: %w", rec.Key, s.decisionDeploys.fileFor(rec.Key), err)
+	}
+	if problems != "" {
+		logging.Warn(logging.DeploymentReloadedWithProblems,
+			"a deployed decision no longer compiles cleanly; it was restored and the decisions that still compile keep answering — fix the model and publish it again",
+			slog.Uint64("deploymentKey", rec.Key),
+			slog.String("modelRef", rec.ModelRef),
+			slog.String("artifact", "dmn"),
+			slog.String("problems", problems))
+	}
+	for _, d := range rec.Decisions {
+		if d.Version > s.decisionVersions[d.ID] {
+			s.decisionVersions[d.ID] = d.Version
 		}
-		s.order = append(s.order, rec.Key)
-		if rec.Version > s.versions[rec.ProcessID] {
-			s.versions[rec.ProcessID] = rec.Version
-		}
-		if rec.Key >= s.nextKey {
-			s.nextKey = rec.Key + 1
-		}
+	}
+	s.indexDecisionVersions(rec)
+	if rec.Key >= s.nextKey {
+		s.nextKey = rec.Key + 1
 	}
 	return nil
 }
@@ -2312,13 +3139,17 @@ func (s *Server) loadDeployments() error {
 // coarse (whole seconds) — timers are "fire at or after due", not real-time.
 func (s *Server) timerScheduler(every time.Duration) {
 	defer s.wg.Done()
-	t := time.NewTicker(every)
-	defer t.Stop()
+	ticks := s.timerTicks
+	if ticks == nil {
+		t := time.NewTicker(every)
+		defer t.Stop()
+		ticks = t.C
+	}
 	for {
 		select {
 		case <-s.quit:
 			return
-		case <-t.C:
+		case <-ticks:
 			// Fire due timers on the loop, then drive any jobs they unblocked (e.g. a
 			// timer leading into a business rule task) OFF it: this tick runs every
 			// second, and before ADR-0157 step 6 it was the path that could hold the
@@ -2618,6 +3449,7 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// names. The token in the URL is the whole authorization, and the handlers rate
 	// limit them.
 	mountFunc(accessPublic, roleAny, "GET "+processdoc.PublicPath+"{token}", s.processDocs.HandlePublic)
+	mountFunc(accessPublic, roleAny, "GET "+decisiondoc.PublicPath+"{token}", s.decisionDocs.HandlePublic)
 	mountFunc(accessPublic, roleAny, "GET /public/forms/{token}", s.handlePublicFormPage)
 	mountFunc(accessPublic, roleAny, "GET /public/forms/{token}/schema", s.handlePublicFormSchema)
 	mountFunc(accessPublic, roleAny, "POST /public/forms/{token}/start", s.handlePublicFormStart)
@@ -2628,6 +3460,35 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// A preflight carries no credentials by definition, so it is public with them.
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/schema", s.handlePublicFormPreflight)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/start", s.handlePublicFormPreflight)
+	// A public wizard's later screens (ADR-0449). The pass in the Authorization header
+	// is the whole authorization, and it opens the public sittings of one instance.
+	mountFunc(accessPublic, roleAny, "GET /public/wizard/step", s.handlePublicWizardStep)
+	mountFunc(accessPublic, roleAny, "POST /public/wizard/steps/{taskKey}/complete", s.handlePublicWizardComplete)
+	mountFunc(accessPublic, roleAny, "OPTIONS /public/wizard/step", s.handlePublicFormPreflight)
+	mountFunc(accessPublic, roleAny, "OPTIONS /public/wizard/steps/{taskKey}/complete", s.handlePublicFormPreflight)
+
+	// The shop was called the portal and lived at /portal.html. The address was
+	// bookmarked, pasted into mails and printed on intranet pages, none of which a
+	// rename reaches, so the old one keeps leading to the new one rather than to a
+	// 404 that reads as the service having been switched off. The query is kept:
+	// it is where a returning sign-in says how it went.
+	//
+	// Unless the shop *was* switched off (--catalogue=false), and then both addresses
+	// say so: the page is a static file the catch-all below would otherwise serve, and
+	// it would render and then fail every call it makes
+	// (ADR-0434).
+	if s.catalogueOff {
+		mountFunc(accessPublic, roleAny, "GET /shop.html", s.handleSwitchedOffPage)
+		mountFunc(accessPublic, roleAny, "GET /portal.html", s.handleSwitchedOffPage)
+	} else {
+		mountFunc(accessPublic, roleAny, "GET /portal.html", func(w http.ResponseWriter, r *http.Request) {
+			to := "/shop.html"
+			if r.URL.RawQuery != "" {
+				to += "?" + r.URL.RawQuery
+			}
+			http.Redirect(w, r, to, http.StatusMovedPermanently)
+		})
+	}
 
 	// The embedded UI is the catch-all; the more specific patterns above win under
 	// net/http's precedence rules. Static assets, and the login screen has to load.
@@ -2641,28 +3502,38 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	return mux, policy
 }
 
-// readStats reads the live instance counts. It must be called on the run-loop
-// goroutine (inside do).
-// readStats counts what the runtime holds, from a consistent view.
+// readStats reads the live runtime counts from a consistent view.
 //
-// All three counts are scans of a whole column family rather than maintained
-// counters. That is deliberate for incidents, which leave state two ways and so
-// cannot be tracked by a number kept up to date, and it is what makes the instance
-// and token counts the *authoritative* ones ADR-0080 contrasts with its
-// per-definition sums. The price is that one call costs O(active instances +
-// tokens): on a server holding 50.000 instances and 200.000 tokens it walks a
-// quarter of a million keys.
+// The instance and token counts come from the maintained per-definition counters
+// (ADR-0080), not from walking the runtime families. Both readings are the same number
+// — [TestStatsReadFromCountersAgreeWithTheScan] holds them against the authoritative
+// scan across starts, completions and cancels — and they cost very differently: the
+// counters are bounded by how many definitions and elements are *deployed*, which is
+// design-time size, while the scan is O(active instances + tokens). On a server holding
+// 50.000 instances and 200.000 tokens the scan walks a quarter of a million keys:
+// measured at 49ms against 1.2ms for the counters, and — the part that matters more
+// than the ratio — the scan tenfolds with the population while the counters barely move
+// (BenchmarkStatsAtProductionSize).
 //
-// Affordable for a request; ruinous on the run loop, which is where all eight of its
-// callers used to put it. Taking a [state.ReadView] is what moved it off, and the
-// signature is the enforcement — there is no way to call this against the live store
-// any more (ADR-0266).
+// That difference is not a nicety. Eight call sites reach this, and seven of them are
+// write paths that report the counts back in their response — starting an instance,
+// **publishing a message**, cancelling or terminating a batch, a CSV upload — so on a
+// message-driven model the engine paid that scan once per message. The eighth is
+// GET /api/v1/stats, which the Console's incident badge polls every five seconds for a
+// single field. ADR-0266 moved the scan off the run loop; this stops paying for it.
+//
+// The incident count stays a scan, deliberately. An incident leaves state two ways —
+// resolved by an operator *and* dropped with the element instance it sits on (an
+// instance cancel or an interrupting boundary event, which announce no resolution) — so
+// a maintained number would drift where a scan cannot. It is affordable because the
+// family holds one key per stuck token, which is the population an operator is expected
+// to keep near zero; if that ever stops being true, the honest fix is fewer incidents.
 func readStats(rv *state.ReadView) (statsResp, error) {
-	pi, err := rv.ActiveProcessInstanceCount()
+	pi, err := rv.TotalActiveInstances()
 	if err != nil {
 		return statsResp{}, err
 	}
-	ei, err := rv.ActiveElementInstanceCount()
+	ei, err := rv.TotalLiveTokens()
 	if err != nil {
 		return statsResp{}, err
 	}
@@ -2670,7 +3541,7 @@ func readStats(rv *state.ReadView) (statsResp, error) {
 	if err != nil {
 		return statsResp{}, err
 	}
-	return statsResp{ActiveProcessInstances: pi, ActiveElementInstances: ei, UnresolvedIncidents: inc}, nil
+	return statsResp{ActiveProcessInstances: int(pi), ActiveElementInstances: int(ei), UnresolvedIncidents: inc}, nil
 }
 
 // statsOffLoop reads the runtime counts with the run loop free.
@@ -2678,12 +3549,14 @@ func readStats(rv *state.ReadView) (statsResp, error) {
 // Seven of the eight callers are write paths that report the counts back in their
 // response — starting an instance, publishing a message, cancelling or terminating a
 // batch, a CSV upload. Each took a run-loop turn of its own purely for that read-back,
-// so under a load generator the engine paid the quarter-million-key scan above *per
-// write*, on the single writer. That, rather than the parked instances themselves, is
-// what kept the loop busy enough to put the whole API out of reach.
+// so under a load generator the engine paid a quarter-million-key scan *per write*, on
+// the single writer. That, rather than the parked instances themselves, is what kept the
+// loop busy enough to put the whole API out of reach.
 //
 // The turn this still takes is the bounded one [Server.readOffLoop] describes: take
-// the view, copy the deployment metadata. The counting happens with the loop free.
+// the view, copy the deployment metadata. The counting happens with the loop free — and
+// since [readStats] reads the maintained counters rather than scanning, it is now cheap
+// there too rather than merely out of the way.
 func (s *Server) statsOffLoop() (statsResp, error) {
 	var stats statsResp
 	err := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {

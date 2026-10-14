@@ -218,7 +218,7 @@ func TestInstancesExposeStartMetadata(t *testing.T) {
 		CompletedAt    int64  `json:"completedAt"`
 		CorrelationKey string `json:"correlationKey"`
 	}
-	if err := json.Unmarshal(body, &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &insts); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	if len(insts) != 2 {

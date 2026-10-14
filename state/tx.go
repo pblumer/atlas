@@ -180,6 +180,74 @@ func (t *Tx) PutJob(key uint64, v *model.JobValue) error {
 	return err
 }
 
+// --- Entitlement ---
+
+// PutEntitlement records that a principal holds an item. Writing one that is
+// already there replaces it, which is how a re-grant after a revocation reads: one
+// entitlement with a new start, not two overlapping ones.
+func (t *Tx) PutEntitlement(v *model.EntitlementValue) error {
+	return t.b.Set(keyEntitlement(v.Principal, v.ItemID), t.encodeValue(v), nil)
+}
+
+// DeleteEntitlement removes one. Deleting one that is absent is a harmless no-op:
+// a revocation of something nobody was recorded as holding is the state the caller
+// asked for, and refusing it would make a reconciliation that removes a privilege
+// twice into an error.
+func (t *Tx) DeleteEntitlement(principal, itemID string) error {
+	return t.b.Delete(keyEntitlement(principal, itemID), nil)
+}
+
+// EndEntitlement closes a hold: it writes the history row and deletes the live
+// entitlement, in one transaction.
+//
+// The two together, because either alone is a lie. A delete without the row loses
+// the hold; a row without the delete reports somebody as both holding and having
+// returned the same thing.
+//
+// It reads the hold through this transaction rather than taking it from the
+// caller, and that is the load-bearing choice. The batch is indexed, so the read
+// sees this transaction's own pending writes, which makes it correct in the two
+// cases a frozen copy gets wrong: revoking twice writes one row rather than two
+// (the second read finds nothing), and a grant and a revocation folded in the
+// same batch close the hold that was actually granted. It stays deterministic —
+// it reads state this same pipeline built, in the same order, live and on replay
+// alike (invariants I4/I6) — because every field that could not be derived that
+// way travels in the event instead.
+//
+// Reports whether a hold was there to close. Revoking something nobody held stays
+// the harmless no-op [DeleteEntitlement] describes, and writes no row: a history
+// of holds that never existed is not a smaller error than no history at all.
+func (t *Tx) EndEntitlement(principal, itemID string, endedAt int64,
+	reason model.HoldEnd, endedBy string) (bool, error) {
+	row, err := t.EndEntitlementRow(principal, itemID, endedAt, reason, endedBy)
+	return row != nil, err
+}
+
+// EndEntitlementRow is [Tx.EndEntitlement], answering the history row it wrote — the
+// hold as it was, with how it ended — or nil when nothing was held. The event feed
+// publishes that row (ADR-0429 §5): a revocation's own event names only the principal
+// and the item, and the order the right came from is in the hold it ends.
+func (t *Tx) EndEntitlementRow(principal, itemID string, endedAt int64,
+	reason model.HoldEnd, endedBy string) (*model.EntitlementHistoryValue, error) {
+
+	var held model.EntitlementValue
+	found, err := t.readInto(keyEntitlement(principal, itemID), &held)
+	if err != nil || !found {
+		return nil, err
+	}
+	row := model.EntitlementHistoryValue{
+		Principal: held.Principal, ItemID: held.ItemID, VariantID: held.VariantID,
+		OrderID: held.OrderID, Since: held.Since, Until: held.Until,
+		Origin: held.Origin, EndedAt: endedAt, EndedReason: reason, EndedBy: endedBy,
+		ApprovedBy: held.ApprovedBy,
+	}
+	if err := t.b.Set(keyEntitlementHistory(principal, endedAt, itemID),
+		t.encodeValue(&row), nil); err != nil {
+		return nil, err
+	}
+	return &row, t.b.Delete(keyEntitlement(principal, itemID), nil)
+}
+
 // --- Incident ---
 
 // PutIncident writes an incident, keyed by the element instance it is attached to.
@@ -328,6 +396,36 @@ func (t *Tx) DeleteChildByParent(callElKey, childPiKey uint64) error {
 	return t.b.Delete(keyChildByParent(callElKey, childPiKey), nil)
 }
 
+// ChildInstancesOfParent calls fn with the process instance key of every live
+// child a call-activity element instance has started, as visible in this
+// transaction — committed rows plus this batch's own writes.
+//
+// The transactional view is the point. A caller and the child it starts can be
+// created in one batch, and a cancellation arriving in that same batch has to
+// tear down a child whose activation is applied but not yet committed. Reading
+// the committed store there would report no children and leave the child running
+// with no live caller. This is the same reason ElementInstancesOfProcess reads
+// through the batch, and it stays deterministic for exactly the same reason: what
+// the transaction has applied is a function of the records processed so far, not
+// of when the commit happens.
+//
+// The committed-store form on queries remains, as the off-loop and state-level
+// query — it is what a test asserting the index's maintenance wants to read.
+func (t *Tx) ChildInstancesOfParent(callElKey uint64, fn func(childPiKey uint64) error) error {
+	prefix := childByParentPrefix(callElKey)
+	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+	for iter.First(); iter.Valid(); iter.Next() {
+		if err := fn(trailingKey(iter.Key())); err != nil {
+			return err
+		}
+	}
+	return iter.Error()
+}
+
 // PutProcessInstanceHistory records a terminal (completed/terminated) process
 // instance in the history index. Written from applyToState when an instance
 // ends, from the event alone, so it replays identically on recovery (ADR-0017).
@@ -432,6 +530,16 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 			return err
 		}
 	}
+	// What is deliberately not in that list: the entitlement family.
+	//
+	// It is not an oversight and it is not merely that the keys do not match. An
+	// entitlement is keyed by principal and item, and the instance that granted it
+	// is eligible for deletion here long before the right it produced ends — that
+	// difference in lifetime is the entire reason the inventory is its own family
+	// rather than something recoverable from the order. Purging an instance must
+	// therefore never reach it, which is an explicit amendment to ADR-0115 and
+	// ADR-0144 (see ADR-0312) and is held by a
+	// test rather than by this comment.
 	return nil
 }
 
@@ -834,6 +942,27 @@ func (t *Tx) reindexVariable(scope uint64, name string, next *model.VariableValu
 		return nil
 	}
 	return t.b.Set(keyVariableIndex(name, text, scope), nil, nil)
+}
+
+// SetVariableIndexed changes a variable's membership in the value index without
+// touching its value (ADR-0244). Membership is stamped by the version that wrote the
+// value, so when an instance moves to a version whose declaration differs — a
+// migration, or an operator's reindex — this is what brings the two back in line.
+//
+// It re-puts the variable with the new flag, which is what moves the index entry:
+// [Tx.reindexVariable] compares the stored record against the one being written, so
+// turning membership on adds the entry and turning it off removes it, both through the
+// one path that maintains the index. A variable that is gone, or already in step, is a
+// no-op — the command emits nothing in that case, but the fold must survive a replay of
+// an event whose variable a later record deleted.
+func (t *Tx) SetVariableIndexed(scope uint64, name string, indexed bool) error {
+	prev, err := t.GetVariable(scope, name)
+	if err != nil || prev == nil || prev.Indexed == indexed {
+		return err
+	}
+	next := *prev
+	next.Indexed = indexed
+	return t.PutVariable(&next)
 }
 
 // DeleteVariable removes a variable from its scope by name. It is idempotent —

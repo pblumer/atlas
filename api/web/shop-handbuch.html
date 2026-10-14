@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="de" data-lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>atlas – Shop-Handbuch / Shop handbook</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='52' fill='%23000'/%3E%3Cpath fill='%23fff' d='M142.1 201.7A68 68 0 0 1 24 174.5L57.5 152.3A33 33 0 0 0 115.3 179.2Z'/%3E%3Cpath fill='%23fff' d='M22.2 162.7A68 68 0 0 1 106.5 92L119.7 117.1L98 126A33 33 0 0 0 59 146.7Z'/%3E%3Cpath fill='%23fff' d='M126 92H160V226H126Z'/%3E%3Cpath fill='%23fff' d='M189.5 38H210.5V62.5H235V83.5H210.5V108H189.5V83.5H165V62.5H189.5Z'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f6f7f9; --fg:#1c2024; --muted:#5b636c; --card:#ffffff; --border:#e3e6ea;
+  --accent:#2d6cdf; --accent-fg:#ffffff; --chip:#eef1f5; --code:#f2f4f7;
+  --ok:#1a7f4b; --warn:#b26a00; --err:#c0392b;
+  --shadow:0 1px 2px rgba(20,22,26,.05), 0 8px 24px rgba(20,22,26,.06);
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#15181c; --fg:#e6e9ec; --muted:#9aa3ad; --card:#1e2228; --border:#2c323a;
+  --accent:#5b8def; --accent-fg:#0d1117; --chip:#262c34; --code:#12151a;
+  --ok:#4cc38a; --warn:#e0a44a; --err:#e5707a;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:15.5px/1.65 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+html[data-lang="de"] [data-l="en"], html[data-lang="en"] [data-l="de"]{display:none !important}
+.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;
+  padding:12px clamp(16px,3vw,28px);background:var(--card);border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;text-decoration:none;color:var(--fg)}
+.brand small{font-weight:600;color:var(--muted)}
+.topbar .spacer{flex:1}
+.langtoggle{display:inline-flex;border:1px solid var(--border);border-radius:999px;overflow:hidden}
+.langtoggle button{border:0;background:transparent;color:var(--muted);padding:6px 14px;font:inherit;font-weight:600;cursor:pointer}
+.langtoggle button.on{background:var(--accent);color:var(--accent-fg)}
+.applink{text-decoration:none;color:var(--accent);font-weight:600;font-size:14px}
+.wrap{display:grid;grid-template-columns:250px minmax(0,1fr);max-width:1180px;margin:0 auto}
+nav.toc{position:sticky;top:53px;align-self:start;max-height:calc(100vh - 53px);overflow:auto;padding:22px 12px 40px 20px}
+nav.toc a{display:block;padding:5px 10px;border-radius:7px;text-decoration:none;color:var(--fg);font-size:14px;line-height:1.35}
+nav.toc a:hover{background:var(--chip)}
+main{padding:8px clamp(16px,4vw,44px) 96px;min-width:0}
+.hero{padding:34px 0 8px}
+.hero h1{font-size:30px;margin:0 0 8px}
+.hero p{color:var(--muted);max-width:760px}
+section{padding-top:18px}
+h2{font-size:23px;margin:28px 0 10px;padding-top:6px;border-top:1px solid var(--border)}
+h3{font-size:17.5px;margin:22px 0 6px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin:14px 0;box-shadow:var(--shadow)}
+code{background:var(--code);padding:1px 6px;border-radius:5px;font-size:.92em}
+pre{background:var(--code);padding:12px 14px;border-radius:9px;overflow:auto;font-size:13.5px;line-height:1.5}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14.5px}
+th,td{border-bottom:1px solid var(--border);padding:7px 8px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600}
+.note{border-left:3px solid var(--warn);padding:6px 12px;background:var(--card);border-radius:0 8px 8px 0}
+.inst label{display:block;margin:10px 0 4px;font-weight:600}
+.inst select,.inst input{width:100%;max-width:440px;padding:7px 9px;border:1px solid var(--border);border-radius:7px;
+  background:var(--bg);color:var(--fg);font:inherit}
+.inst .hint{color:var(--muted);font-size:13.5px;margin:2px 0 0}
+.btn{display:inline-block;border:0;border-radius:8px;padding:9px 18px;background:var(--accent);color:var(--accent-fg);
+  font:inherit;font-weight:600;cursor:pointer;margin-top:14px}
+.btn:disabled{opacity:.55;cursor:default}
+#inst-status{margin-top:12px;white-space:pre-line}
+#inst-status.ok{color:var(--ok)} #inst-status.err{color:var(--err)}
+@media (max-width:860px){.wrap{grid-template-columns:1fr} nav.toc{display:none}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/">atlas <small data-l="de">Shop-Handbuch</small><small data-l="en">Shop handbook</small></a>
+  <span class="spacer"></span>
+  <a class="applink" href="/handbuch.html" data-l="de">Zum Handbuch</a><a class="applink" href="/handbuch.html" data-l="en">To the handbook</a>
+  <a class="applink" href="/#/catalog" data-l="de">Zur Katalogpflege</a><a class="applink" href="/#/catalog" data-l="en">To the catalogue</a>
+  <span class="langtoggle"><button id="lang-de" type="button">DE</button><button id="lang-en" type="button">EN</button></span>
+</header>
+<div class="wrap">
+<nav class="toc" id="toc">
+  <a href="#willkommen"><span data-l="de">Worum es geht</span><span data-l="en">What this is about</span></a>
+  <a href="#grundbegriffe"><span data-l="de">Grundbegriffe</span><span data-l="en">The terms</span></a>
+  <a href="#katalog-aufbauen"><span data-l="de">Einen Katalog aufbauen</span><span data-l="en">Building a catalogue</span></a>
+  <a href="#mehrere-kataloge"><span data-l="de">Mehrere Kataloge</span><span data-l="en">Several catalogues</span></a>
+  <a href="#produkte"><span data-l="de">Produkte und Services abbilden</span><span data-l="en">Modelling products and services</span></a>
+  <a href="#genehmigung"><span data-l="de">Genehmigungen</span><span data-l="en">Approvals</span></a>
+  <a href="#prozesse"><span data-l="de">Die Prozesse zum Produkt</span><span data-l="en">The product's processes</span></a>
+  <a href="#betrieb"><span data-l="de">Im Betrieb</span><span data-l="en">In operation</span></a>
+  <a href="#dokument"><span data-l="de">Ein Shop als Dokument</span><span data-l="en">A shop as a document</span></a>
+  <a href="#beispiel"><span data-l="de">Das Beispiel installieren</span><span data-l="en">Installing the example</span></a>
+  <a href="#terminal"><span data-l="de">Im Terminal: atlas import</span><span data-l="en">From a terminal: atlas import</span></a>
+</nav>
+<main>
+
+<section id="willkommen" class="hero">
+  <h1 data-l="de">Kataloge, Produkte und ihre Prozesse</h1>
+  <h1 data-l="en">Catalogues, products and their processes</h1>
+  <p data-l="de">Dieses Handbuch ist für alle, die in atlas einen Shop aufbauen: Produktverantwortliche mit der Rolle
+    <code>productmanager</code>, und wer die Prozesse modelliert, die ein bestelltes Produkt bereitstellen. Es
+    beantwortet vier Fragen – wie man einen Katalog aufbaut, wie mehrere Kataloge zusammenspielen, wie man Produkte
+    und Services abbildet und wie man die Prozesse dazu entwirft – und führt durch ein durchgehendes Beispiel:
+    die Dienstleistungen einer Verwaltung, die Sie mit einem Klick in Ihre Installation übernehmen können.</p>
+  <p data-l="en">This handbook is for everybody who builds a shop in atlas: product owners with the
+    <code>productmanager</code> role, and whoever models the processes that provide an ordered product. It answers
+    four questions – how to build a catalogue, how several catalogues work together, how to model products and
+    services, and how to design their processes – and walks through one example throughout: the services of a
+    public administration, which you can bring into your installation with one click.</p>
+</section>
+
+<section id="grundbegriffe">
+  <h2 data-l="de">Grundbegriffe</h2><h2 data-l="en">The terms</h2>
+  <table>
+    <tr><th data-l="de">Begriff</th><th data-l="en">Term</th><th data-l="de">Bedeutung</th><th data-l="en">Meaning</th></tr>
+    <tr><td><b data-l="de">Katalog</b><b data-l="en">Catalogue</b></td>
+      <td data-l="de">Was eine Zielgruppe bestellen kann: eine Liste von Produkten, ihre Beziehungen, die Sprachen, in
+        denen er erscheint, und wer ihn pflegt.</td>
+      <td data-l="en">What an audience can order: a list of products, how they relate, the languages it appears in,
+        and who maintains it.</td></tr>
+    <tr><td><b data-l="de">Produkt / Service</b><b data-l="en">Product / service</b></td>
+      <td data-l="de">Beides ist derselbe Datensatz. Was es ist, folgt aus seiner Stellung: Ein Eintrag, den nichts
+        enthält, ist ein Produkt; einer ohne Teile ist ein Service; einer mit beidem ist ein Bündel im Bündel.</td>
+      <td data-l="en">Both are the same record. Which it is follows from its position: an entry nothing contains is a
+        product, one with no parts is a service, one with both is a bundle inside a bundle.</td></tr>
+    <tr><td><b data-l="de">Variante</b><b data-l="en">Variant</b></td>
+      <td data-l="de">Eine bestellbare Ausprägung – eine Grösse, eine Stufe. Varianten sind ungeordnet: Die bestellende
+        Person wählt.</td>
+      <td data-l="en">An orderable shape – a size, a tier. Variants are unordered: the person ordering chooses.</td></tr>
+    <tr><td><b>Release</b></td>
+      <td data-l="de">Ein veröffentlichter, eingefrorener Stand eines Katalogs. Bestellt wird immer gegen ein Release;
+        eine spätere Änderung am Katalog ändert keine laufende Bestellung.</td>
+      <td data-l="en">A published, frozen state of a catalogue. Orders are always placed against a release; a later
+        change to the catalogue changes no running order.</td></tr>
+    <tr><td><b data-l="de">Position</b><b data-l="en">Position</b></td>
+      <td data-l="de">Ein Produkt in einer Bestellung, mit seiner Variante. Aus einer erledigten Position wird ein
+        Recht im Bestand der empfangenden Person.</td>
+      <td data-l="en">A product in an order, with its variant. A position that is done becomes a right in the
+        recipient's inventory.</td></tr>
+    <tr><td><b data-l="de">Heimkatalog</b><b data-l="en">Home catalogue</b></td>
+      <td data-l="de">Der eine Katalog, der ein Produkt pflegt. Andere Kataloge dürfen es anbieten, aber nicht
+        ändern.</td>
+      <td data-l="en">The one catalogue that maintains a product. Other catalogues may offer it, but not change it.</td></tr>
+  </table>
+</section>
+
+<section id="katalog-aufbauen">
+  <h2 data-l="de">Einen Katalog aufbauen</h2><h2 data-l="en">Building a catalogue</h2>
+  <ol>
+    <li data-l="de"><b>Anlegen</b> in der Console unter <a href="/#/catalog">Catalogue</a>: ein Name je Sprache und
+      die Sprachen, in denen der Katalog erscheint (z.&nbsp;B. <code>de</code> und <code>en</code>). Wer anlegt, ist
+      Eigentümer.</li>
+    <li data-l="en"><b>Create</b> it in the Console under <a href="/#/catalog">Catalogue</a>: a name per language and
+      the languages the catalogue appears in (e.g. <code>de</code> and <code>en</code>). Whoever creates it owns it.</li>
+    <li data-l="de"><b>Zielgruppe festlegen</b>: die Gruppen, deren Mitglieder bestellen dürfen. Ein Katalog ohne
+      Zielgruppe erreicht niemanden – mit Absicht, damit ein halb fertiger Shop nicht für alle sichtbar ist.</li>
+    <li data-l="en"><b>Set the audience</b>: the groups whose members may order. A catalogue with no audience
+      reaches nobody – on purpose, so a half-finished shop is not visible to everyone.</li>
+    <li data-l="de"><b>Pflegende teilen</b>: Der Eigentümer gibt Personen oder Gruppen die Rolle <i>editor</i>
+      (ändern) oder <i>viewer</i> (lesen). Nur der Eigentümer ändert, wer pflegt.</li>
+    <li data-l="en"><b>Share maintenance</b>: the owner gives people or groups the role <i>editor</i> (change) or
+      <i>viewer</i> (read). Only the owner changes who maintains it.</li>
+    <li data-l="de"><b>Produkte anlegen und anbieten</b> (siehe <a href="#produkte">Produkte</a>), dann
+      <b>veröffentlichen</b>. Die Veröffentlichung prüft alles, was sich vorher prüfen lässt – fehlende Namen,
+      Genehmigungen ohne Ziel, Prozessbindungen, Zyklen in den Abhängigkeiten – und meldet alle Probleme auf einmal.
+      Erst ein Release ist bestellbar.</li>
+    <li data-l="en"><b>Create and offer products</b> (see <a href="#produkte">Products</a>), then <b>publish</b>.
+      Publishing checks everything that can be checked in advance – missing names, approvals with no target, process
+      bindings, cycles in the dependencies – and reports every problem at once. Only a release can be ordered from.</li>
+  </ol>
+  <p class="note" data-l="de">Übersetzungen fehlen nie unbemerkt: Die Katalogpflege zeigt je Sprache, welche Namen,
+    Beschreibungen und Knopftexte noch fehlen. Eine fehlende Übersetzung blockiert die Veröffentlichung nicht.</p>
+  <p class="note" data-l="en">Missing translations are never silent: the catalogue page shows per language which names,
+    descriptions and button texts are still missing. A missing translation does not block publishing.</p>
+</section>
+
+<section id="mehrere-kataloge">
+  <h2 data-l="de">Mehrere Kataloge</h2><h2 data-l="en">Several catalogues</h2>
+  <p data-l="de">Eine Person sieht im Shop <b>genau einen</b> Katalog: unter allen, die ihre Gruppen erreichen,
+    den mit dem <b>höchsten Rang</b>. Ränge sind eindeutig; die Veröffentlichung lehnt einen Gleichstand ab. Daraus
+    folgt die wichtigste Entwurfsregel: Ein spezieller Katalog für eine kleinere Gruppe trägt einen höheren Rang
+    <i>und</i> bietet auch die allgemeinen Produkte an, die diese Gruppe weiterhin braucht.</p>
+  <p data-l="en">A person sees <b>exactly one</b> catalogue in the shop: of all the ones their groups reach, the one
+    with the <b>highest rank</b>. Ranks are unique; publishing refuses a tie. That gives the most important design
+    rule: a special catalogue for a smaller group carries a higher rank <i>and</i> also offers the general products
+    that group still needs.</p>
+  <p data-l="de">Dafür gibt es den <b>Heimkatalog</b>. Ein Produkt wird von genau einem Katalog gepflegt und kann
+    von beliebig vielen angeboten werden – schreibgeschützt. Im Beispiel pflegt «Dienstleistungen der Verwaltung»
+    Badge und Parkplatz; «Fachbereich Bau» bietet beide ebenfalls an und pflegt nur den Geoportal-Zugang selbst.
+    Ändert die Verwaltung den Parkplatz, gilt die Änderung im nächsten Release beider Kataloge.</p>
+  <p data-l="en">That is what the <b>home catalogue</b> is for. A product is maintained by exactly one catalogue and
+    can be offered by any number of them – read-only. In the example, "Administration services" maintains the badge
+    and the parking space; "Building department" offers both too and maintains only the geoportal access itself.
+    When the administration changes the parking space, the change applies in the next release of both catalogues.</p>
+  <p data-l="de">Jeder Katalog hat eigene Beziehungen zwischen seinen Produkten, eine eigene Zielgruppe, eigene
+    Sprachen und ein eigenes Erscheinungsbild. Auch der Ereignis-Feed lässt sich auf Kataloge einschränken: Ein
+    Feed-Token oder ein Push-Abonnement für einen Katalog erhält nur die Ereignisse zu den Produkten, die dieser
+    Katalog pflegt.</p>
+  <p data-l="en">Each catalogue has its own relations between its products, its own audience, its own languages and
+    its own look. The event feed can be narrowed by catalogue too: a feed token or a push subscription for one
+    catalogue receives only the events about the products that catalogue maintains.</p>
+</section>
+
+<section id="produkte">
+  <h2 data-l="de">Produkte und Services abbilden</h2><h2 data-l="en">Modelling products and services</h2>
+  <h3 data-l="de">Beziehungen</h3><h3 data-l="en">Relations</h3>
+  <table>
+    <tr><th data-l="de">Beziehung</th><th data-l="en">Relation</th><th data-l="de">Wirkung</th><th data-l="en">Effect</th></tr>
+    <tr><td><code>composition</code></td><td data-l="de">Fester Bestandteil: wird mitbestellt und lässt sich nicht
+      abwählen.</td><td data-l="en">Integral part: ordered along and cannot be deselected.</td></tr>
+    <tr><td><code>aggregation</code></td><td data-l="de">Wahlweiser Bestandteil: wird angeboten und nur bestellt, wenn
+      angekreuzt.</td><td data-l="en">Optional part: offered and ordered only when ticked.</td></tr>
+    <tr><td><code>requires</code></td><td data-l="de">Reihenfolge: A wird erst bereitgestellt, wenn B bereitgestellt
+      ist. Im Beispiel braucht der Parkplatz den Badge.</td><td data-l="en">Order: A is provided only once B is.
+      In the example the parking space needs the badge.</td></tr>
+    <tr><td><code>excludes</code></td><td data-l="de">Ausschluss: beides zusammen ist nicht bestellbar.</td>
+      <td data-l="en">Exclusion: both together cannot be ordered.</td></tr>
+  </table>
+  <h3 data-l="de">Was ein Produkt trägt</h3><h3 data-l="en">What a product carries</h3>
+  <table>
+    <tr><th data-l="de">Feld</th><th data-l="en">Field</th><th data-l="de">Wofür</th><th data-l="en">What for</th></tr>
+    <tr><td><code>texts</code>, <code>descriptions</code></td><td data-l="de">Name und Beschreibung je Sprache.</td><td data-l="en">Name and description per language.</td></tr>
+    <tr><td><code>variants</code></td><td data-l="de">Bestellbare Ausprägungen, z.&nbsp;B. Badge «Standard» und «Mit Serverraum».</td><td data-l="en">Orderable shapes, e.g. badge "Standard" and "Including the server room".</td></tr>
+    <tr><td><code>configForm</code></td><td data-l="de">Ein Formular, das beim Bestellen ausgefüllt wird (z.&nbsp;B. Kennzeichen). Die Antworten werden auf der Position eingefroren.</td><td data-l="en">A form filled in when ordering (e.g. the licence plate). The answers are frozen on the position.</td></tr>
+    <tr><td><code>maxDays</code></td><td data-l="de">Wie lange ein Recht höchstens gilt. Atlas hält das Ablaufdatum fest; entzogen wird ein Recht von einem Prozess (siehe <a href="#betrieb">Betrieb</a>).</td><td data-l="en">How long a right lasts at most. Atlas records the end date; a process takes the right away (see <a href="#betrieb">Operation</a>).</td></tr>
+    <tr><td><code>lifecycle</code></td><td data-l="de">Bestellfenster: von wann bis wann bestellt werden kann.</td><td data-l="en">Ordering window: from when until when it can be ordered.</td></tr>
+    <tr><td><code>eligible</code></td><td data-l="de">Gruppen, denen die <i>empfangende</i> Person angehören muss.</td><td data-l="en">Groups the <i>recipient</i> must belong to.</td></tr>
+    <tr><td><code>category</code>, <code>categoryTexts</code></td><td data-l="de">Überschrift im Shop, mit Wortlaut je Sprache.</td><td data-l="en">Heading in the shop, with a wording per language.</td></tr>
+    <tr><td><code>price</code>, <code>keywords</code></td><td data-l="de">Anzeigepreis (nie berechnet) und Suchwörter.</td><td data-l="en">Display price (never computed) and search words.</td></tr>
+    <tr><td><code>approval</code></td><td data-l="de">Wer genehmigt – siehe <a href="#genehmigung">Genehmigungen</a>.</td><td data-l="en">Who approves – see <a href="#genehmigung">Approvals</a>.</td></tr>
+    <tr><td data-l="de">Prozessbindung</td><td data-l="en">Process binding</td><td data-l="de">Welche Prozesse das Produkt bereitstellen und entziehen – siehe <a href="#prozesse">Prozesse</a>.</td><td data-l="en">Which processes provide and remove the product – see <a href="#prozesse">Processes</a>.</td></tr>
+  </table>
+  <p class="note" data-l="de">Die Antworten des Bestellformulars sehen die bestellende und die empfangende Person, die
+    genehmigende Person in ihrer Inbox (mit den Beschriftungen des Formulars) und die Prozesse, die das Produkt
+    bindet: Jedes Feld kommt als eigene Variable unter seinem Schlüssel an, im Beispiel <code>kennzeichen</code> und
+    <code>fahrzeug</code>. Atlas' eigene Genehmigungsprozesse erhalten sie nicht. Ein Feld darf nicht wie eine der
+    Variablen heissen, die die Bestellung selbst setzt (etwa <code>recipient</code>); das Veröffentlichen lehnt ein
+    solches Formular ab. Erreicht eine Antwort einen Prozess, der sie nicht als Personendaten deklariert, warnt das
+    Veröffentlichen und nennt Antwort und Prozess; die Version wird trotzdem veröffentlicht. Benennt ein Feld
+    niemanden – eine Kostenstelle, eine Fahrzeugart –, setzt man im Formular-Editor unter <i>Custom properties</i>
+    <code>personal</code> = <code>false</code>; dann entfällt die Warnung für dieses Feld.</p>
+  <p class="note" data-l="en">The answers of the order form are seen by the person ordering and the recipient, by the
+    approver in their inbox (with the form's labels) and by the processes the product binds: each field arrives as a
+    variable of its own under its key, in the example <code>kennzeichen</code> and <code>fahrzeug</code>. Atlas's own
+    approval processes do not receive them. A field may not be named like one of the variables the order sets itself
+    (such as <code>recipient</code>); publishing refuses such a form. If an answer reaches a process that does not
+    declare it personal data, publishing warns and names the answer and the process; the release is still made. If a
+    field names nobody – a cost centre, a vehicle type – set <code>personal</code> = <code>false</code> under
+    <i>Custom properties</i> in the form editor, and the warning for that field goes away.</p>
+</section>
+
+<section id="genehmigung">
+  <h2 data-l="de">Genehmigungen</h2><h2 data-l="en">Approvals</h2>
+  <table>
+    <tr><th data-l="de">Art</th><th data-l="en">Kind</th><th data-l="de">Wer genehmigt</th><th data-l="en">Who approves</th></tr>
+    <tr><td><code>none</code></td><td data-l="de">Niemand – die Position startet sofort.</td><td data-l="en">Nobody – the position starts at once.</td></tr>
+    <tr><td><code>fixed</code></td><td data-l="de">Eine bestimmte Person (<code>ref</code> = ihre ID). Im Beispiel: der Parkplatz, durch das Facility Management.</td><td data-l="en">One named person (<code>ref</code> = their id). In the example: the parking space, by facility management.</td></tr>
+    <tr><td><code>role</code></td><td data-l="de">Ein Mitglied einer Gruppe (<code>ref</code> = Gruppen-ID); wer zuerst entscheidet, entscheidet. Im Beispiel: das Geoportal.</td><td data-l="en">A member of a group (<code>ref</code> = group id); whoever decides first decides. In the example: the geoportal.</td></tr>
+    <tr><td><code>superior</code></td><td data-l="de">Die vorgesetzte Person der bestellenden, aus dem Verzeichnis. Braucht einen Verzeichnis-Worker namens <code>verzeichnis</code>; zum Ausprobieren genügt der AD-Mock. Im Beispiel: der Badge.</td><td data-l="en">The orderer's line manager, from the directory. Needs a directory worker named <code>verzeichnis</code>; the AD mock is enough to try it. In the example: the badge.</td></tr>
+    <tr><td data-l="de">eigener Prozess</td><td data-l="en">own process</td><td data-l="de">Jeder andere Wert ist die ID eines eigenen Genehmigungsprozesses.</td><td data-l="en">Any other value is the id of an approval process of your own.</td></tr>
+  </table>
+  <p data-l="de">Genehmigungen erscheinen in der Inbox der Genehmigenden; eine Bestellung mit mehreren Positionen
+    derselben Person lässt sich gesammelt entscheiden. Die Katalogpflege zeigt, welche Regeln niemanden erreichen.</p>
+  <p data-l="en">Approvals appear in the approvers' inbox; an order with several positions for the same approver can
+    be decided at once. The catalogue page shows which rules reach nobody.</p>
+  <p data-l="de">Jede der drei eingebauten Genehmigungen meldet sich, bevor ihre Aufgabe wartet, mit dem Signal
+    <code>atlas.approval.requested</code>: mit der Regel (<code>approvalKind</code>), wer entscheidet
+    (<code>approver</code>), Bestellung, Position und Produkt. Ein eigenes Modell hört mit einem Signal-Start darauf,
+    etwa um die entscheidende Person im Chat zu benachrichtigen, ohne dass Sie die Genehmigung selbst ändern. Was das
+    Signal genau trägt, steht im Handbuch unter <a href="/handbuch.html#ev-atlas-approval-requested">Ereignisse</a>;
+    die Antworten des Bestellformulars trägt es nicht.</p>
+  <p data-l="en">Each of the three built-in approvals announces itself before its task waits, with the signal
+    <code>atlas.approval.requested</code>: the rule (<code>approvalKind</code>), who decides (<code>approver</code>),
+    the order, the position and the product. A model of your own listens with a signal start, for instance to tell the
+    approver in a chat, without changing the approval itself. What the signal carries is listed in the handbook under
+    <a href="/handbuch.html#ev-atlas-approval-requested">Events</a>; it does not carry the order form's answers.</p>
+</section>
+
+<section id="prozesse">
+  <h2 data-l="de">Die Prozesse zum Produkt</h2><h2 data-l="en">The product's processes</h2>
+  <p data-l="de">Ein Produkt bindet seine Prozesse in einer von zwei Formen. Das Beispiel zeigt beide.</p>
+  <p data-l="en">A product binds its processes in one of two forms. The example shows both.</p>
+  <h3 data-l="de">Form 1: getrennte Prozesse</h3><h3 data-l="en">Form 1: separate processes</h3>
+  <p data-l="de"><code>provisionProcess</code> und <code>deprovisionProcess</code> nennen je einen Prozess mit einem
+    gewöhnlichen Start. Die Bestellung startet den ersten pro Position, die Rückgabe den zweiten. Einfach und gut
+    lesbar – passend, solange es nur Bereitstellen und Entziehen gibt (im Beispiel: Parkplatz und Geoportal).</p>
+  <p data-l="en"><code>provisionProcess</code> and <code>deprovisionProcess</code> each name a process with a plain
+    start. The order starts the first per position, the return the second. Simple and easy to read – right as long
+    as there is only providing and removing (in the example: parking and geoportal).</p>
+  <h3 data-l="de">Form 2: ein Lebenszyklus-Prozess mit Aktionen</h3><h3 data-l="en">Form 2: one lifecycle process with actions</h3>
+  <p data-l="de"><code>lifecycleProcess</code> nennt einen Prozess, und <code>actions</code> listet alles, was man von
+    einer gehaltenen Position verlangen kann. Jede Aktion hat einen Schlüssel, eine Nachricht, eine Wirkung und die
+    Auslöser, die sie verlangen dürfen:</p>
+  <p data-l="en"><code>lifecycleProcess</code> names one process, and <code>actions</code> lists everything that can be
+    asked of a held position. Each action has a key, a message, an effect and the triggers allowed to ask for it:</p>
+  <table>
+    <tr><th data-l="de">Wirkung</th><th data-l="en">Effect</th><th data-l="de">Bedeutung und Meldung</th><th data-l="en">Meaning and report</th></tr>
+    <tr><td><code>provision</code></td><td data-l="de">Bereitstellen; meldet die Position mit <code>done</code> über ihre Route.</td><td data-l="en">Provide; reports the position <code>done</code> through its route.</td></tr>
+    <tr><td><code>deprovision</code></td><td data-l="de">Entziehen; meldet <code>returned</code>.</td><td data-l="en">Remove; reports <code>returned</code>.</td></tr>
+    <tr><td><code>change</code></td><td data-l="de">Ändern, das Recht bleibt (Badge sperren); meldet mit einer Shop-Aufgabe <code>completed</code>.</td><td data-l="en">Change, the right stays (block the badge); reports <code>completed</code> with a shop task.</td></tr>
+    <tr><td><code>service</code></td><td data-l="de">Dienstleistung an der Position (Ersatzbadge); meldet ebenfalls mit einer Shop-Aufgabe.</td><td data-l="en">A service on the position (replacement badge); also reports with a shop task.</td></tr>
+  </table>
+  <p data-l="de">Auslöser sind <code>customer</code> (die Person im Shop), <code>operator</code> (der Betrieb, auch über
+    MCP) und <code>system</code> (ein anderer Prozess). Jede Aktion ist ein Nachrichtenstart des Prozesses; die
+    Veröffentlichung prüft, dass es ihn gibt und dass jede Änderung und jeder Service von einer Shop-Aufgabe
+    beantwortet wird. Diese Form lohnt sich, sobald ein Produkt mehr kann als kommen und gehen.</p>
+  <p data-l="en">Triggers are <code>customer</code> (the person in the shop), <code>operator</code> (operations, also
+    over MCP) and <code>system</code> (another process). Each action is a message start of the process; publishing
+    checks it exists and that every change and service is answered by a shop task. This form pays off as soon as a
+    product can do more than come and go.</p>
+  <h3 data-l="de">Was jeder Produktprozess bekommt</h3><h3 data-l="en">What every product process receives</h3>
+  <p data-l="de">Die Variablen <code>orderId</code>, <code>itemId</code>, <code>positionId</code>, <code>recipient</code>,
+    <code>orderer</code>, <code>variantId</code>, <code>approvalRef</code>, <code>atlasApiBase</code> und
+    <code>portalBaseUrl</code>, dazu jede Antwort des Bestellformulars als eigene Variable. Ist eine Antwort eine
+    Personenangabe – ein Kennzeichen, eine Telefonnummer –, deklariert der Prozess sie mit
+    <code>atlas:personal="kennzeichen"</code> und <code>atlas:dataSubject="recipient"</code>: Dann wird sie
+    verschlüsselt unter dem Schlüssel der empfangenden Person gespeichert und lässt sich mit dieser Person löschen;
+    Bedingungen und Zuordnungen des Modells dürfen sie dann nicht lesen. Gemeldet wird über
+    <code>POST /api/v1/orders/{orderId}/lines/{positionId}</code> mit einem REST-Task; er nennt nur die Verbindung
+    <code>atlas</code>. Den Wert – ein API-Token mit der Rolle
+    <code>operator</code> – legt die Installation im Vault unter <code>atlas</code> oder in
+    <code>ATLAS_CONNECTOR_ATLAS_TOKEN</code> ab.</p>
+  <p data-l="en">The variables <code>orderId</code>, <code>itemId</code>, <code>positionId</code>, <code>recipient</code>,
+    <code>orderer</code>, <code>variantId</code>, <code>approvalRef</code>, <code>atlasApiBase</code> and
+    <code>portalBaseUrl</code>, plus every answer of the order form as a variable of its own. Where an answer is
+    personal – a licence plate, a phone number – the process declares it with <code>atlas:personal="kennzeichen"</code>
+    and <code>atlas:dataSubject="recipient"</code>: it is then stored sealed under the recipient's key and can be
+    erased with that person; the model's conditions and mappings may not read it then. Reporting goes through
+    <code>POST /api/v1/orders/{orderId}/lines/{positionId}</code> with a REST task; it names only the connection
+    <code>atlas</code>. The value – an API token with the
+    <code>operator</code> role – is stored by the installation in the vault under <code>atlas</code> or in
+    <code>ATLAS_CONNECTOR_ATLAS_TOKEN</code>.</p>
+</section>
+
+<section id="betrieb">
+  <h2 data-l="de">Im Betrieb</h2><h2 data-l="en">In operation</h2>
+  <ul>
+    <li data-l="de"><b>Bestand.</b> Jede erledigte Position wird ein Recht der empfangenden Person, mit Herkunft und
+      Ablaufdatum. Bestehende Rechte aus der Zeit vor atlas übernimmt eine Ersterfassung.</li>
+    <li data-l="en"><b>Inventory.</b> Every position that is done becomes a right of the recipient, with its origin and
+      end date. Rights from before atlas are taken over by a commissioning load.</li>
+    <li data-l="de"><b>Befristung.</b> Ein Recht über seinem Ablaufdatum gilt weiter, bis ein Prozess es zurückgibt –
+      das Beispiel <code>examples/befristung.bpmn</code> tut das täglich.</li>
+    <li data-l="en"><b>Time limits.</b> A right past its end date still holds until a process returns it – the example
+      <code>examples/befristung.bpmn</code> does so daily.</li>
+    <li data-l="de"><b>Ereignis-Feed.</b> Jede Aktion, jedes gewährte und entzogene Recht ist ein CloudEvent, das ein
+      Umsystem abfragen (<code>GET /api/v1/events</code>) oder sich zustellen lassen kann (ein Worker vom Typ
+      «CloudEvents endpoint»), auf Wunsch auf Kataloge eingeschränkt.</li>
+    <li data-l="en"><b>Event feed.</b> Every action and every right granted and removed is a CloudEvent that another
+      system can pull (<code>GET /api/v1/events</code>) or have delivered (a worker of type "CloudEvents endpoint"),
+      narrowed to catalogues if wanted.</li>
+    <li data-l="de"><b>Agenten.</b> Über MCP lassen sich Kataloge pflegen, importieren und veröffentlichen.</li>
+    <li data-l="en"><b>Agents.</b> Over MCP, catalogues can be maintained, imported and published.</li>
+  </ul>
+</section>
+
+<section id="dokument">
+  <h2 data-l="de">Ein Shop als Dokument</h2><h2 data-l="en">A shop as a document</h2>
+  <p data-l="de">Ein ganzer Shop lässt sich als ein JSON-Dokument übernehmen: Kataloge mit ihren Beziehungen und
+    Zielgruppen, die Produkte mit allem, was sie tragen, und auf Wunsch gleich veröffentlicht. Alles oder nichts:
+    Lehnt atlas etwas ab, ändert sich nichts, und alle Probleme stehen in der Antwort. Die IDs gehören dem Dokument;
+    derselbe Import ein zweites Mal aktualisiert, statt doppelt anzulegen.</p>
+  <p data-l="en">A whole shop can be brought in as one JSON document: catalogues with their relations and audiences,
+    the products with everything they carry, published straight away if you like. All or nothing: if atlas refuses
+    anything, nothing changes, and every problem is in the answer. The ids belong to the document; the same import a
+    second time updates instead of creating twice.</p>
+<pre>POST /api/v1/catalogs/import
+{ "publish": true,
+  "catalogs": [ { "id": "cat-verwaltung-dienste", "texts": {"de": "…", "en": "…"}, "rank": 100,
+                  "languages": ["de","en"], "items": ["vd-zutrittsbadge","vd-parkplatz"], "groups": ["…"],
+                  "edges": [ {"from": "vd-parkplatz", "to": "vd-zutrittsbadge", "kind": "requires"} ] } ],
+  "products": [ { "id": "vd-parkplatz", "homeCatalog": "cat-verwaltung-dienste", "state": "active", … } ] }</pre>
+  <p data-l="de">Über MCP heisst das Werkzeug <code>atlas_import_catalog</code>. Das Dokument des Beispiels liegt unter
+    <code>examples/verwaltung-dienstleistungen/katalog.json</code>.</p>
+  <p data-l="en">Over MCP the tool is <code>atlas_import_catalog</code>. The example's document is in
+    <code>examples/verwaltung-dienstleistungen/katalog.json</code>.</p>
+</section>
+
+<section id="beispiel">
+  <h2 data-l="de">Das Beispiel installieren</h2><h2 data-l="en">Installing the example</h2>
+  <p data-l="de">«Dienstleistungen der Verwaltung» bringt zwei Kataloge, drei Produkte, ihre fünf Prozesse und zehn
+    Formulare mit, zweisprachig. Was nur Ihre Installation kennt – wer bestellt und wer genehmigt –, fragt der
+    Installer ab. Er legt zuerst die Applikation mit Prozessen und Formularen an und veröffentlicht sie, dann
+    importiert er den Katalog und veröffentlicht beide Kataloge. Melden Sie sich dafür als Administrator an oder mit
+    den Rollen <code>modeler</code> (Prozesse veröffentlichen) und <code>productmanager</code> (Kataloge pflegen).</p>
+  <p data-l="en">"Administration services" brings two catalogues, three products, their five processes and ten forms,
+    bilingual. What only your installation knows – who orders and who approves – the installer asks for. It first
+    creates the application with its processes and forms and publishes it, then imports the catalogue and publishes
+    both catalogues. Sign in as an administrator for this, or with the roles <code>modeler</code> (publishing processes)
+    and <code>productmanager</code> (maintaining catalogues).</p>
+  <ul>
+    <li data-l="de"><b>Vorher:</b> ein API-Token mit <code>operator</code> im Vault unter <code>atlas</code>, damit die
+      Prozesse ihre Positionen melden können; für die Badge-Genehmigung ein Verzeichnis-Worker
+      <code>verzeichnis</code> oder der AD-Mock.</li>
+    <li data-l="en"><b>Beforehand:</b> an API token with <code>operator</code> in the vault under <code>atlas</code>, so
+      the processes can report their positions; for the badge approval a directory worker <code>verzeichnis</code> or
+      the AD mock.</li>
+    <li data-l="de"><b>Danach:</b> im <a href="/shop.html">Shop</a> einen Parkplatz bestellen – der Badge wird zuerst
+      bereitgestellt –, die Genehmigung in der Inbox erteilen, die Aufgaben «Badge ausgeben» und «Parkplatz zuteilen»
+      erledigen und am gehaltenen Badge «Badge sperren» auslösen.</li>
+    <li data-l="en"><b>Afterwards:</b> order a parking space in the <a href="/shop.html">shop</a> – the badge is
+      provided first –, approve it in the inbox, complete the tasks "Badge ausgeben" and "Parkplatz zuteilen", and
+      trigger "Block the badge" on the badge you hold.</li>
+  </ul>
+  <div class="card inst" id="installer">
+    <div id="inst-questions"><p data-l="de">Lade das Beispiel…</p><p data-l="en">Loading the example…</p></div>
+    <button class="btn" id="inst-go" type="button" disabled><span data-l="de">⬇ Installieren</span><span data-l="en">⬇ Install</span></button>
+    <div id="inst-status" role="status" aria-live="polite"></div>
+  </div>
+</section>
+
+<section id="terminal">
+  <h2 data-l="de">Im Terminal: <code>atlas import</code></h2><h2 data-l="en">From a terminal: <code>atlas import</code></h2>
+  <p data-l="de">Dasselbe Paket lässt sich ohne Browser installieren – im Terminal oder in einem CI-Job, etwa um eine
+    Test- und eine Produktionsinstanz gleich auszustatten. Ein <b>Paket</b> ist ein Verzeichnis: <code>atlas.json</code>,
+    das Manifest der Applikation im selben Format, das <i>Download source…</i> liefert; die Prozesse und Formulare,
+    die es nennt; und auf Wunsch <code>katalog.json</code> mit dem Shop und <code>fragen.json</code> mit den Fragen zu
+    seinen Platzhaltern. Der Befehl geht vor wie der Installer: Applikation, Veröffentlichen, Katalog.</p>
+  <p data-l="en">The same package installs without a browser – in a terminal or a CI job, say to equip a test and a
+    production instance alike. A <b>package</b> is a directory: <code>atlas.json</code>, the application's manifest in
+    the format <i>Download source…</i> produces; the processes and forms it names; and optionally <code>katalog.json</code>
+    with the shop and <code>fragen.json</code> with the questions its placeholders ask. The command goes about it like
+    the installer: application, publish, catalogue.</p>
+<pre>atlas import --server https://atlas-test.example.com --answers antworten.json examples/verwaltung-dienstleistungen
+
+# antworten.json
+{ "zielgruppe": "Alle Mitarbeitenden", "zielgruppe-bau": "Fachbereich Bau",
+  "facility-management": "Fabienne Meier", "geoportal-verantwortliche": "Geoportal-Team" }</pre>
+  <p data-l="de">Eine Antwort auf eine Gruppen- oder Personenfrage muss im Verzeichnis des Servers stehen, als ID oder
+    als Name. IDs vergibt jeder Server selbst, Namen sind überall gleich – eine Antwortdatei mit Namen dient deshalb
+    der Test- wie der Produktionsinstanz. Tragen zwei Personen denselben Namen, wird die Antwort abgelehnt; dann hilft
+    die ID. Fehlt eine Antwort oder ist sie unbekannt, bricht der Befehl ab, <b>bevor er etwas schreibt</b>, und nennt
+    alle Probleme auf einmal.</p>
+  <p data-l="en">An answer to a group or person question must be in the server's directory, as an id or as a name. Each
+    server mints its own ids while names stay the same, so an answers file with names serves the test instance and the
+    production one alike. If two people share a name, the answer is refused; the id then helps. If an answer is
+    missing or unknown, the command stops <b>before it writes anything</b> and names every problem at once.</p>
+  <table id="import-flags">
+    <thead><tr>
+      <th data-l="de">Angabe</th><th data-l="en">Flag</th>
+      <th data-l="de">Bedeutung</th><th data-l="en">Meaning</th>
+    </tr></thead>
+    <tbody>
+      <tr><td><code>--server</code></td>
+        <td data-l="de">Adresse der atlas-Instanz; ohne Angabe <code>http://localhost:8080</code></td>
+        <td data-l="en">Address of the atlas instance; <code>http://localhost:8080</code> when omitted</td></tr>
+      <tr><td><code>--token</code></td>
+        <td data-l="de">API-Token, wenn die Anmeldung eingeschaltet ist; ohne Angabe aus <code>ATLAS_TOKEN</code>. Ein
+          Token trägt die Rollen dessen, der es ausstellt (ohne <code>admin</code>): für die Applikation
+          <code>modeler</code>, für den Katalog <code>productmanager</code>.</td>
+        <td data-l="en">API token when sign-in is on; taken from <code>ATLAS_TOKEN</code> when omitted. A token carries
+          the roles of whoever mints it (without <code>admin</code>): <code>modeler</code> for the application,
+          <code>productmanager</code> for the catalogue.</td></tr>
+      <tr><td><code>--answers</code></td>
+        <td data-l="de">eine JSON-Datei mit den Antworten, <code>{"name": "wert"}</code></td>
+        <td data-l="en">a JSON file of answers, <code>{"name": "value"}</code></td></tr>
+      <tr><td><code>--set</code></td>
+        <td data-l="de">eine Antwort, <code>name=wert</code>; mehrfach möglich und stärker als <code>--answers</code> –
+          die Datei für das Gemeinsame, <code>--set</code> für das, was je Instanz abweicht</td>
+        <td data-l="en">one answer, <code>name=value</code>; repeatable, and wins over <code>--answers</code> – the file
+          for what is shared, <code>--set</code> for what differs per instance</td></tr>
+      <tr><td><code>--note</code></td>
+        <td data-l="de">die Notiz der Release, die das Veröffentlichen anlegt; ohne Angabe <code>atlas import</code></td>
+        <td data-l="en">the note on the release publishing creates; <code>atlas import</code> when omitted</td></tr>
+    </tbody>
+  </table>
+  <p data-l="de">Ein zweiter Lauf aktualisiert, statt doppelt anzulegen: Die Applikation wird über den Schlüssel in
+    <code>atlas.json</code> gefunden, Kataloge und Produkte über ihre IDs. Jeder Lauf veröffentlicht die Applikation
+    neu und legt dabei eine weitere Release an. Artefakte der Applikation, die das Paket nicht nennt, bleiben
+    unverändert und werden aufgezählt.</p>
+  <p data-l="en">A second run updates instead of creating twice: the application is found by the key in
+    <code>atlas.json</code>, catalogues and products by their ids. Each run publishes the application again and records
+    another release. The application's artifacts the package does not name stay as they are and are listed.</p>
+</section>
+
+</main>
+</div>
+<script>
+// ---- language toggle, shared with the handbook ----
+const LANG_KEY = "atlas.handbuch.lang";
+const root = document.documentElement;
+function setLang(l){
+  root.dataset.lang = l;
+  root.setAttribute("lang", l);
+  document.getElementById("lang-de").classList.toggle("on", l === "de");
+  document.getElementById("lang-en").classList.toggle("on", l === "en");
+  try { localStorage.setItem(LANG_KEY, l); } catch(e) {}
+}
+(function initLang(){
+  let l = null;
+  try { l = localStorage.getItem(LANG_KEY); } catch(e) {}
+  if (l !== "de" && l !== "en") l = (navigator.language || "de").toLowerCase().startsWith("de") ? "de" : "en";
+  setLang(l);
+})();
+document.getElementById("lang-de").addEventListener("click", () => setLang("de"));
+document.getElementById("lang-en").addEventListener("click", () => setLang("en"));
+
+// ---- the installer ----
+// The example ships in examples-catalog.json, generated from examples/ by
+// `go test ./examples -update`: its processes, its forms and its catalogue document
+// (examples/verwaltung-dienstleistungen/katalog.json). What the document cannot know
+// — an audience group, an approver — it leaves as {{placeholder}}, and the package's
+// fragen.json says what the installer asks for each. examples/shopcatalog_test.go
+// holds those questions to every placeholder a document leaves, so none is imported
+// literally.
+(function initInstaller(){
+  const EXAMPLE = "verwaltung-dienstleistungen";
+  // What each placeholder asks is the package's own (fragen.json), carried into
+  // examples-catalog.json beside the document — the same questions `atlas import`
+  // reads, so the terminal and this page ask alike.
+  let QUESTIONS = {};
+  const T = (de, en) => (root.dataset.lang === "en" ? en : de);
+  const qbox = document.getElementById("inst-questions");
+  const go = document.getElementById("inst-go");
+  const status = document.getElementById("inst-status");
+  const say = (text, cls) => { status.textContent = text; status.className = cls || ""; };
+
+  async function call(method, path, body, isXml){
+    const opts = { method, headers: {} };
+    if (body !== undefined){
+      opts.headers["Content-Type"] = isXml ? "application/xml" : "application/json";
+      opts.body = isXml ? body : JSON.stringify(body);
+    }
+    const res = await fetch(path, opts);
+    const text = await res.text();
+    let json = null;
+    try { json = text ? JSON.parse(text) : {}; } catch (e) { /* not JSON */ }
+    if (!res.ok){
+      const problems = json && Array.isArray(json.problems)
+        ? json.problems.map((p) => "• " + p.subject + ": " + p.problem).join("\n") : "";
+      const err = new Error(problems || (json && (json.error || json.message)) || text || (res.status + " " + res.statusText));
+      err.status = res.status; throw err;
+    }
+    return json || {};
+  }
+  const tryList = (path) => call("GET", path).then((v) => (Array.isArray(v) ? v : []), () => null);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c]));
+
+  let example = null;
+  async function load(){
+    try {
+      const res = await fetch("examples-catalog.json");
+      if (!res.ok) throw new Error("examples-catalog.json: " + res.status);
+      example = ((await res.json()).examples || []).find((e) => e.id === EXAMPLE && e.shop);
+      if (!example) throw new Error(T("Das Beispiel fehlt im Beispielkatalog.", "The example is missing from the examples catalogue."));
+      QUESTIONS = example.shop.questions || {};
+    } catch (e) { qbox.textContent = e.message; return; }
+    const names = [...new Set([...JSON.stringify(example.shop.document).matchAll(/\{\{([a-z0-9-]+)\}\}/g)].map((m) => m[1]))];
+    // One directory for both: any signed-in caller may read it (it is what the member
+    // and assignee pickers use), where the group administration is an admin's.
+    const principals = (await tryList("/api/v1/principals")) || [];
+    const groups = principals.filter((p) => p.type === "group");
+    const people = principals.filter((p) => p.type === "user");
+    qbox.innerHTML = names.map((name) => {
+      const q = QUESTIONS[name] || { kind: "text" };
+      const label = (q.label && (q.label[root.dataset.lang] || q.label.de || q.label.en)) || name;
+      const hint = (q.hint && (q.hint[root.dataset.lang] || q.hint.de || q.hint.en)) || "";
+      const list = q.kind === "group" ? groups : q.kind === "user" ? people : null;
+      const field = list && list.length
+        ? '<select data-ph="' + esc(name) + '">' + list.map((g) =>
+            '<option value="' + esc(g.id) + '">' + esc(g.name || g.displayName || g.username || g.id) + "</option>").join("") + "</select>"
+        : '<input data-ph="' + esc(name) + '" placeholder="' + esc(q.kind === "group" ? T("Gruppen-ID", "group id") : T("Benutzer-ID", "user id")) + '">';
+      return "<label>" + esc(label) + "</label>" + field + '<p class="hint">' + esc(hint) + "</p>";
+    }).join("");
+    go.disabled = false;
+  }
+
+  async function applicationId(name){
+    const list = await call("GET", "/api/v1/applications");
+    const found = (list || []).find((a) => a.name === name && !a.protected);
+    if (found) return found.id;
+    return (await call("POST", "/api/v1/applications", { name })).id;
+  }
+
+  async function install(){
+    const answers = {};
+    for (const el of qbox.querySelectorAll("[data-ph]")){
+      const v = (el.value || "").trim();
+      if (!v) throw new Error(T("Bitte alle Fragen beantworten.", "Please answer every question."));
+      answers[el.dataset.ph] = v;
+    }
+    say(T("Applikation anlegen…", "Creating the application…"));
+    const appId = await applicationId(example.shop.app);
+    for (const f of example.forms || []){
+      say(T("Formulare speichern…", "Saving the forms…"));
+      await call("POST", "/api/v1/forms", { id: f.id, name: f.name, projectId: appId, schema: f.schema });
+    }
+    for (const p of example.processes || []){
+      say(T("Prozesse speichern…", "Saving the processes…"));
+      await call("POST", "/api/v1/drafts?projectId=" + encodeURIComponent(appId), p.xml, true);
+    }
+    say(T("Prozesse veröffentlichen…", "Publishing the processes…"));
+    const pub = await call("POST", "/api/v1/applications/" + appId + "/publish", { note: "Shop-Handbuch – Beispiel" });
+    if (!pub.deployed) throw new Error(pub.reason || T("Veröffentlichen abgelehnt.", "Publish refused."));
+    say(T("Katalog importieren…", "Importing the catalogue…"));
+    // Each answer goes in as a JSON string, so a value cannot break the document.
+    const doc = JSON.parse(JSON.stringify(example.shop.document).replace(/\{\{([a-z0-9-]+)\}\}/g,
+      (all, name) => JSON.stringify(answers[name] || "").slice(1, -1)));
+    const out = await call("POST", "/api/v1/catalogs/import", doc);
+    say(T("✓ Installiert: ", "✓ Installed: ") + (out.created || []).concat(out.updated || []).join(", ") +
+      "\n" + T("Veröffentlicht: ", "Published: ") + (out.releases || []).length + " " + T("Kataloge.", "catalogues."), "ok");
+  }
+
+  go.addEventListener("click", async () => {
+    go.disabled = true;
+    try { await install(); }
+    catch (e) {
+      say(e.status === 401 ? T("Bitte melden Sie sich zuerst in der App an.", "Please sign in to the app first.")
+        : T("Fehler: ", "Error: ") + e.message, "err");
+    } finally { go.disabled = false; }
+  });
+  load();
+})();
+</script>
+</body>
+</html>

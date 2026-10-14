@@ -1,6 +1,7 @@
 # ADR-0100: Token simulation — configurable multi-instance count, modelled cardinality wins
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-06
 - **Deciders:** Atlas maintainers
 

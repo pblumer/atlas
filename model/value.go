@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"sort"
 	"strings"
 )
@@ -138,6 +139,20 @@ type JobValue struct {
 	// recomputed on replay (I6). Append-compatible: an old record decodes to 0, which
 	// reads correctly as "never leased".
 	LeaseEpoch uint64
+	// CandidateGroups is the resolved group assignment, comma-separated, seeded from
+	// the model when the task activates — the same way Assignee is. It lives on the
+	// job because a model may name its groups with an expression, and what that
+	// expression evaluated to is a fact about *this* instance rather than about the
+	// definition (ADR-0318). Append-compatible: a
+	// record written before it decodes to "", and a reader falls back to the model's
+	// own value for those.
+	CandidateGroups string
+	// CreatedAt is the unix-nano instant the job was created — when a user task was
+	// opened, which the inbox shows on every row. It is the JobCreated event's header
+	// timestamp, stamped by applyToState and carried by every later re-put of the job,
+	// so replay rebuilds it identically (I4/I6). Append-compatible: a record written
+	// before it decodes to 0, read as "not recorded".
+	CreatedAt int64
 }
 
 const jobSize = 8 + 8 + 4 + 4 + 8
@@ -153,7 +168,9 @@ func (v *JobValue) encode(dst []byte) []byte {
 	dst = appendString(dst, v.Assignee)
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.RetryDueDate))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.LeaseExpiresAt))
-	return binary.LittleEndian.AppendUint64(dst, v.LeaseEpoch)
+	dst = binary.LittleEndian.AppendUint64(dst, v.LeaseEpoch)
+	dst = appendString(dst, v.CandidateGroups)
+	return binary.LittleEndian.AppendUint64(dst, uint64(v.CreatedAt))
 }
 
 func (v *JobValue) decode(src []byte) error {
@@ -180,6 +197,17 @@ func (v *JobValue) decode(src []byte) error {
 	}
 	if len(rest) >= 24 {
 		v.LeaseEpoch = binary.LittleEndian.Uint64(rest[16:])
+	}
+	if len(rest) > 24 {
+		groups, tail, err := readString(rest[24:])
+		if err != nil {
+			return err
+		}
+		v.CandidateGroups = groups
+		// CreatedAt follows the groups; a record written before it ends here.
+		if len(tail) >= 8 {
+			v.CreatedAt = int64(binary.LittleEndian.Uint64(tail))
+		}
 	}
 	return nil
 }
@@ -317,6 +345,32 @@ type ProcessInstanceValue struct {
 	// it — and read back from the purge event to drop that index entry — without either
 	// fold reading a clock or a definition.
 	PurgeDueDate int64
+	// PredecessorInstanceKey is the instance this one continues: a fork migration ends
+	// an instance whose tokens cannot be rebound onto another version and starts this
+	// one in that version at operator-named resume points, carrying the data across
+	// (ADR-0389). 0 for every instance that began on its own.
+	//
+	// It is the successor's half of a link both records carry, so either instance
+	// answers "where did this come from" and "where did this go" without a scan.
+	PredecessorInstanceKey uint64
+	// SuccessorInstanceKey is the instance that continues this one: set on the terminal
+	// event of a forked-away instance, so the history record still names where the work
+	// went. 0 for every instance that ended on its own account — which is what keeps a
+	// forked predecessor distinguishable from an ordinary cancellation, both of which
+	// are PITerminated (ADR-0389).
+	SuccessorInstanceKey uint64
+	// PublicPassHash is the SHA-256, hex, of the pass a public start link handed the
+	// visitor who started this instance, when its process holds a public wizard
+	// (ADR-0449). The pass is what lets that visitor, who has no account, fill the
+	// steps of the instance's public wizards and nothing else. It rides in on the
+	// creation command and is frozen into the activation event, so it is durable in the
+	// same fsync as the instance it unlocks and read back on replay rather than
+	// recomputed (I6). Empty for every other instance.
+	//
+	// Kept out of every JSON rendering of the record (the event export among them): it
+	// cannot be turned back into the pass, but a verifier of a credential has no
+	// reader outside the one route that checks it.
+	PublicPassHash string `json:"-"`
 }
 
 // processInstanceLegacySize is the original fixed layout (ProcessDefKey, State,
@@ -336,7 +390,10 @@ func (v *ProcessInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.ParentElementInstanceKey)
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.ExpiryDueDate))
 	dst = binary.LittleEndian.AppendUint64(dst, v.CompletedPosition)
-	return binary.LittleEndian.AppendUint64(dst, uint64(v.PurgeDueDate))
+	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.PurgeDueDate))
+	dst = binary.LittleEndian.AppendUint64(dst, v.PredecessorInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.SuccessorInstanceKey)
+	return appendString(dst, v.PublicPassHash)
 }
 
 func (v *ProcessInstanceValue) decode(src []byte) error {
@@ -373,10 +430,30 @@ func (v *ProcessInstanceValue) decode(src []byte) error {
 	if len(tail) >= 24 {
 		v.CompletedPosition = binary.LittleEndian.Uint64(tail[16:])
 	}
-	// PurgeDueDate is the newest appended field: a record written before it ends after
+	// PurgeDueDate is a later appended field: a record written before it ends after
 	// the completed position and leaves it zero (no history TTL scheduled it).
 	if len(tail) >= 32 {
 		v.PurgeDueDate = int64(binary.LittleEndian.Uint64(tail[24:]))
+	}
+	// The two fork links are the newest appended fields: a record written before them
+	// ends after the purge due date and leaves both zero — an instance that neither
+	// continues another nor was continued by one
+	// (ADR-0389).
+	if len(tail) >= 40 {
+		v.PredecessorInstanceKey = binary.LittleEndian.Uint64(tail[32:])
+	}
+	if len(tail) >= 48 {
+		v.SuccessorInstanceKey = binary.LittleEndian.Uint64(tail[40:])
+	}
+	// The public pass hash is the newest appended field: a record written before it
+	// ends after the successor key and leaves it empty — an instance no public start
+	// handed a pass for (ADR-0449).
+	if len(tail) > 48 {
+		hash, _, err := readString(tail[48:])
+		if err != nil {
+			return err
+		}
+		v.PublicPassHash = hash
 	}
 	return nil
 }
@@ -420,6 +497,18 @@ type VariableValue struct {
 	// existed. Stamped at command time and frozen into the event, never recomputed on
 	// replay (I6). Append-compatible: an old record ends after Text and decodes to 0.
 	ProducerKey uint64
+	// Index is which element of a list variable this write sets, or -1 for a write of
+	// the whole value — which is what every write outside a multi-instance activity's
+	// output collection is.
+	//
+	// A loop collects one result per iteration into one list. Writing the whole list
+	// each time put the growing collection into the log and into the variable timeline
+	// once per iteration, so the bytes written grew with the *square* of the iteration
+	// count: a hundred thousand results of a kilobyte each cost a hundred gigabytes to
+	// record a hundred megabytes of answer. Naming the element instead makes the record
+	// the size of one result (ADR-0296).
+	Index int32
+
 	// Indexed says this write belongs in the variable value index: its process
 	// declared the name searchable (atlas:searchable) and the write is at the
 	// instance's root scope.
@@ -472,6 +561,48 @@ func (v *VariableValue) IndexText() (string, bool) {
 	return text, true
 }
 
+// EncipheredMarker opens the JSON envelope a personal value is stored as (ADR-0314).
+//
+// It lives here, beside the variable's own encoding, because it is part of what a
+// stored variable can *be* — and because the engine has to recognise one without being
+// able to open it. The sealing and opening live in the vault, which is the only place
+// that may hold a key; this const is what keeps the two from drifting, since the vault
+// builds and matches its envelopes against it.
+const EncipheredMarker = `{"atlas:personal":`
+
+// EncipheredSubject returns the data subject a sealed personal value was enciphered for,
+// read from the envelope's clear header (ADR-0314: the subject's id is a reference, and
+// travels in the clear on purpose). It needs no key. ok is false when text is not an
+// envelope with a subject.
+//
+// The engine uses it to refuse a sealed value copied into a scope whose data subject is
+// somebody else: the value would still open, under its own subject's key, but an erasure
+// of the instance's subject would leave it readable.
+func EncipheredSubject(text string) (string, bool) {
+	if !strings.HasPrefix(text, EncipheredMarker) {
+		return "", false
+	}
+	var env map[string]struct {
+		Subject string `json:"subject"`
+	}
+	if json.Unmarshal([]byte(text), &env) != nil || len(env) != 1 {
+		return "", false
+	}
+	for _, e := range env {
+		return e.Subject, e.Subject != ""
+	}
+	return "", false
+}
+
+// IsEnciphered reports whether this value holds a sealed personal value rather than a
+// readable one. It needs no key, which is the point: the single writer uses it to refuse
+// a write of a declared personal variable that arrived in the clear — the one check that
+// makes the rule hold on every path into an instance, including the ones no edge can
+// seal because the target instance is only known once a message correlates.
+func (v *VariableValue) IsEnciphered() bool {
+	return v.Kind == VarJSON && strings.HasPrefix(v.Text, EncipheredMarker)
+}
+
 func (v *VariableValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.ScopeKey)
 	dst = appendString(dst, v.Name)
@@ -484,9 +615,11 @@ func (v *VariableValue) encode(dst []byte) []byte {
 	dst = appendString(dst, v.Text)
 	dst = binary.LittleEndian.AppendUint64(dst, v.ProducerKey)
 	if v.Indexed {
-		return append(dst, 1)
+		dst = append(dst, 1)
+	} else {
+		dst = append(dst, 0)
 	}
-	return append(dst, 0)
+	return binary.LittleEndian.AppendUint32(dst, uint32(v.Index+1))
 }
 
 func (v *VariableValue) decode(src []byte) error {
@@ -519,6 +652,13 @@ func (v *VariableValue) decode(src []byte) error {
 	// Indexed is appended after it, and reads false on a record written before the
 	// value index existed — such a write really is not in the index.
 	v.Indexed = len(tail) >= 9 && tail[8] != 0
+	// Index is appended after that, stored one higher so that a record written before
+	// it existed — which ends here and reads zero — decodes to -1, "this write is the
+	// whole value". Every such record is exactly that.
+	v.Index = -1
+	if len(tail) >= 13 {
+		v.Index = int32(binary.LittleEndian.Uint32(tail[9:])) - 1
+	}
 	return nil
 }
 
@@ -622,6 +762,12 @@ type DecisionEvaluationValue struct {
 	InputsJSON         string // canonical JSON object: the decision's input context
 	OutputsJSON        string // canonical JSON object: the decision's outputs (name → value)
 	TraceJSON          string // temis trace JSON (which rules fired); "" when none
+	// DecisionKey is the deployment whose model answered: a decision deployment, or
+	// the process's own key for a bundled model. It is what makes the version that
+	// ran a fact in the log once latest is resolved when the job is worked
+	// (ADR-0423). An appended field: a
+	// record written before it ends after TraceJSON and reads 0, "not recorded".
+	DecisionKey uint64
 }
 
 func (*DecisionEvaluationValue) ValueType() ValueType { return VTDecisionEvaluation }
@@ -634,7 +780,8 @@ func (v *DecisionEvaluationValue) encode(dst []byte) []byte {
 	dst = appendString(dst, v.DecisionId)
 	dst = appendString(dst, v.InputsJSON)
 	dst = appendString(dst, v.OutputsJSON)
-	return appendString(dst, v.TraceJSON)
+	dst = appendString(dst, v.TraceJSON)
+	return binary.LittleEndian.AppendUint64(dst, v.DecisionKey)
 }
 
 func (v *DecisionEvaluationValue) decode(src []byte) error {
@@ -661,11 +808,15 @@ func (v *DecisionEvaluationValue) decode(src []byte) error {
 		return err
 	}
 	v.OutputsJSON = outputs
-	trace, _, err := readString(rest)
+	trace, rest, err := readString(rest)
 	if err != nil {
 		return err
 	}
 	v.TraceJSON = trace
+	// DecisionKey is appended: a record written before it ends here.
+	if len(rest) >= 8 {
+		v.DecisionKey = binary.LittleEndian.Uint64(rest)
+	}
 	return nil
 }
 
@@ -751,6 +902,23 @@ const (
 	// the old version and started being the new one, which is what lets the replay
 	// resolve each step through the definition that was in force at it.
 	OperatorActionMigrate
+	// OperatorActionForkedTo is written on the instance an operator forked *away from*:
+	// its tokens could not be rebound onto the target version, so it was terminated and
+	// its work continued in a new instance of that version
+	// (ADR-0389). Which instance that is, is on the record —
+	// SuccessorInstanceKey — so this kind carries only who ended it and why.
+	OperatorActionForkedTo
+	// OperatorActionForkedFrom is the same fork seen from the successor: the instance
+	// did not begin at a start event but continued another instance's work at resume
+	// points an operator named. Its predecessor is on its record; this is what makes the
+	// successor's timeline open with the reason it exists rather than with a token
+	// appearing in the middle of the diagram.
+	OperatorActionForkedFrom
+	// OperatorActionThrowJobError is an operator throwing a BPMN error from a parked job
+	// by hand, the error a worker would otherwise have thrown (ADR-0089, ADR-0159). Like a
+	// completion by hand it forces a path the engine did not take on its own — here the
+	// error flow — so it is recorded with who and why, and with the code it threw.
+	OperatorActionThrowJobError
 )
 
 func (k OperatorActionKind) String() string {
@@ -759,6 +927,12 @@ func (k OperatorActionKind) String() string {
 		return "completeJob"
 	case OperatorActionMigrate:
 		return "migrate"
+	case OperatorActionForkedTo:
+		return "forkedTo"
+	case OperatorActionForkedFrom:
+		return "forkedFrom"
+	case OperatorActionThrowJobError:
+		return "throwJobError"
 	default:
 		return "OperatorActionKind(?)"
 	}
@@ -794,6 +968,11 @@ type OperatorActionValue struct {
 	// through the old version's compiled graph. Append-compatible: a record written
 	// before this field decodes to 0, which is what every non-migration record means.
 	FromProcessDefKey uint64
+	// ErrorCode is the BPMN error code an OperatorActionThrowJobError threw, and "" for
+	// every other kind (ADR-0089). It is written only when set, after FromProcessDefKey,
+	// so a record of any other kind keeps the layout it always had and an older reader
+	// stops where it always stopped.
+	ErrorCode string
 }
 
 func (*OperatorActionValue) ValueType() ValueType { return VTOperatorAction }
@@ -805,7 +984,11 @@ func (v *OperatorActionValue) encode(dst []byte) []byte {
 	dst = append(dst, byte(v.Kind))
 	dst = appendString(dst, v.Actor)
 	dst = appendString(dst, v.Reason)
-	return binary.LittleEndian.AppendUint64(dst, v.FromProcessDefKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.FromProcessDefKey)
+	if v.ErrorCode != "" {
+		dst = appendString(dst, v.ErrorCode)
+	}
+	return dst
 }
 
 func (v *OperatorActionValue) decode(src []byte) error {
@@ -829,8 +1012,17 @@ func (v *OperatorActionValue) decode(src []byte) error {
 	// Appended after the two strings, so a record written before it simply ends here
 	// and the field stays 0 — which is what every kind but a migration means by it.
 	v.FromProcessDefKey = 0
+	v.ErrorCode = ""
 	if len(rest) >= 8 {
 		v.FromProcessDefKey = binary.LittleEndian.Uint64(rest)
+		// The code follows only on a thrown error's record; any other ends here.
+		if rest = rest[8:]; len(rest) > 0 {
+			code, _, err := readString(rest)
+			if err != nil {
+				return err
+			}
+			v.ErrorCode = code
+		}
 	}
 	return nil
 }
@@ -941,6 +1133,53 @@ func (v *ProcessMigrationValue) decode(src []byte) error {
 		v.Mapping[i].From = int32(binary.LittleEndian.Uint32(rest[i*8:]))
 		v.Mapping[i].To = int32(binary.LittleEndian.Uint32(rest[i*8+4:]))
 	}
+	return nil
+}
+
+// VariableIndexValue is one variable's membership in the value index, changed after
+// the fact. It carries no value, deliberately: the variable holds that, and the point
+// of this record is that the value did not change — only whether the index answers for
+// it (ADR-0244).
+//
+// It exists because membership is stamped by the version that wrote the value (I6),
+// while an instance can be moved to another version under an operator's hand. A
+// migration onto a version that declares more names, or fewer, would otherwise leave
+// the instance missing from the index its new version's search reads, or listed in it
+// under a version that never promised to be searchable by that name. The comparison is
+// made at command time against the compiled process, and one of these is emitted per
+// variable whose membership differs — so the fold, which cannot ask a compiled process
+// anything, is handed the answer.
+type VariableIndexValue struct {
+	ProcessInstanceKey uint64 // the root scope the variable lives in: only that scope is indexed
+	Name               string
+	Indexed            bool
+}
+
+func (*VariableIndexValue) ValueType() ValueType { return VTVariableIndex }
+
+func (v *VariableIndexValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = appendString(dst, v.Name)
+	if v.Indexed {
+		return append(dst, 1)
+	}
+	return append(dst, 0)
+}
+
+func (v *VariableIndexValue) decode(src []byte) error {
+	if len(src) < 8 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src)
+	name, rest, err := readString(src[8:])
+	if err != nil {
+		return err
+	}
+	v.Name = name
+	if len(rest) < 1 {
+		return ErrShortBuffer
+	}
+	v.Indexed = rest[0] != 0
 	return nil
 }
 
@@ -1158,7 +1397,84 @@ type IncidentValue struct {
 	ElementId          int32 // the compiled-graph element the token is stuck on (maps to a BPMN element id for the operator)
 	RaisedAt           int64 // unix nanoseconds the incident was raised; read at command time and frozen into the event (I6)
 	Message            string
+	// Reason says what raised the incident, where the message says it in words. It
+	// exists because resolving one is not one act: an incident the element never got
+	// to run past needs its behavior run, where a failed job needs the job re-created.
+	// The engine used to infer that from the element's node type, which works only as
+	// long as each node type has one way of getting stuck.
+	//
+	// Zero is IncidentUnclassified and means exactly that — nothing was recorded —
+	// which is what every incident written before this field existed decodes as, and
+	// what the sources still resolved by node type write today.
+	Reason IncidentReason
 }
+
+// IncidentReason classifies why an incident was raised, for the resolve path and for
+// an operator reading a list of them.
+type IncidentReason uint8
+
+const (
+	// IncidentUnclassified is "not recorded": an older record, or a source whose
+	// resolution the element's node type still decides.
+	IncidentUnclassified IncidentReason = 0
+	// IncidentOverBudget marks an element that was activated but never ran, because
+	// its token had used up the execution budget for this run
+	// (ADR-0272). Resolving it runs the behavior that never ran.
+	IncidentOverBudget IncidentReason = 1
+	// IncidentTooManyIterations marks a multi-instance activity that asked for more
+	// iterations than the instance budget allows (ADR-0276). Like
+	// IncidentOverBudget it names an element that never ran, so resolving it runs the
+	// behavior — which re-evaluates the count, and parks again if it is still too
+	// large.
+	IncidentTooManyIterations IncidentReason = 2
+	// IncidentVariableTooLarge marks an element whose write was refused because the
+	// value was past the budget for a variable, or for a multi-instance activity's
+	// output collection (ADR-0294). Unlike the two above it
+	// names an element that *did* run: the work happened and its result is the thing
+	// that will not fit. Resolving it does not write the value again: nothing re-runs
+	// the element's write, so the incident goes and the element stays where it stopped
+	// (#1123).
+	IncidentVariableTooLarge IncidentReason = 3
+	// IncidentPersonalInTheClear marks an element whose write was refused because it
+	// carried a value the process declared personal (ADR-0314) and carried it in the
+	// clear. Such a value is enciphered where it enters Atlas — a form, a worker's
+	// result, an operator's write — and the engine cannot do it: it holds no key, by
+	// the same invariant that keeps applyToState free of side effects (I4).
+	//
+	// So a write that arrives readable came from a path with no edge to seal at, and
+	// the honest outcome is to refuse it: writing it would put a value in the log that
+	// no erasure could ever reach, while the model said the opposite. Resolving retries
+	// the write, so re-delivering the value through a path that does seal lets it
+	// through.
+	IncidentPersonalInTheClear IncidentReason = 4
+	// IncidentDataSubjectMoved marks an element whose write was refused because it
+	// would have changed the instance's data subject after values were already sealed
+	// under the previous one (ADR-0314).
+	//
+	// Allowing it would split one person's data across two keys, and then erasing
+	// either of them would leave the other half readable — silently, which is the
+	// failure the whole mechanism exists to prevent. Before anything is sealed the
+	// change is harmless and goes through; afterwards the honest remedy is a new
+	// instance with the right subject, so this does not become a retry somebody can
+	// resolve their way out of.
+	IncidentDataSubjectMoved IncidentReason = 5
+	// IncidentPersonalOfAnotherSubject marks an element whose write was refused because it
+	// carried a sealed personal value enciphered for a different data subject than the one
+	// the target scope names (ADR-0314). A value only reaches a scope sealed for someone
+	// else by being copied there — an output mapping handing a value out of a subprocess
+	// that shadowed the subject, say. It would still open under its own subject's key, so
+	// nothing would look wrong, but erasing the instance's subject would leave it readable.
+	// The same reason refuses the other order: the data subject's first write into a scope
+	// that already holds such a copy, which a call activity seeding its child produces.
+	IncidentPersonalOfAnotherSubject IncidentReason = 6
+	// IncidentUnhandledError marks a BPMN error that no handler caught (ADR-0089): a
+	// worker's thrown error, an error end event, a mockup task's simulated one. The
+	// element did not finish what it was doing, so resolving retries the thing that
+	// threw — the job, which an uncaught worker error leaves in place with its retries
+	// spent, or the throw itself — and an error still uncaught parks again on a fresh
+	// incident rather than leaving the token parked behind none.
+	IncidentUnhandledError IncidentReason = 7
+)
 
 func (*IncidentValue) ValueType() ValueType { return VTIncident }
 
@@ -1168,7 +1484,9 @@ func (v *IncidentValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.JobKey)
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.RaisedAt))
-	return appendString(dst, v.Message)
+	// Reason rides after the message, so a record written before it existed is simply
+	// one byte shorter and decodes as IncidentUnclassified.
+	return append(appendString(dst, v.Message), byte(v.Reason))
 }
 
 func (v *IncidentValue) decode(src []byte) error {
@@ -1181,11 +1499,15 @@ func (v *IncidentValue) decode(src []byte) error {
 	v.JobKey = binary.LittleEndian.Uint64(src[16:])
 	v.ElementId = int32(binary.LittleEndian.Uint32(src[24:]))
 	v.RaisedAt = int64(binary.LittleEndian.Uint64(src[28:]))
-	msg, _, err := readString(src[incidentFixed:])
+	msg, rest, err := readString(src[incidentFixed:])
 	if err != nil {
 		return err
 	}
 	v.Message = msg
+	v.Reason = IncidentUnclassified
+	if len(rest) > 0 {
+		v.Reason = IncidentReason(rest[0])
+	}
 	return nil
 }
 
@@ -1270,6 +1592,20 @@ func newValue(vt ValueType) Value {
 		return &OperatorActionValue{}
 	case VTProcessMigration:
 		return &ProcessMigrationValue{}
+	case VTVariableIndex:
+		return &VariableIndexValue{}
+	case VTEntitlement:
+		return &EntitlementValue{}
+	case VTEntitlementHistory:
+		return &EntitlementHistoryValue{}
+	case VTActionOutcome:
+		return &ActionOutcomeValue{}
+	case VTFeedRetention:
+		return &FeedRetentionValue{}
+	case VTTriggerReceipt:
+		return &TriggerReceiptValue{}
+	case VTMessage:
+		return &MessageValue{}
 	default:
 		return nil
 	}

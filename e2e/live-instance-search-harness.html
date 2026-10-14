@@ -87,6 +87,15 @@
       const activeCursor = (r) => String(r.key);
       const doneCursor = (r) => `${r.completedAt}.${r.key}`;
 
+      // listing is how every capped list endpoint answers since
+      // ADR-0378: the rows under
+      // .items, beside the count of what is really there and whether the cap bit. (page,
+      // above, is this harness's own slicer — it says which rows; this says how they are
+      // wrapped.)
+      const listing = (items, extra = {}) => ({
+        items, total: items.length, totalExact: true, truncated: false, ...extra,
+      });
+
       const listResponse = (url) => {
         const p = new URL(url, location.origin).searchParams;
         const state = p.get("state");
@@ -95,12 +104,10 @@
         const half = state === "finished" ? doneRows : activeRows;
         const cursorOf = state === "finished" ? doneCursor : activeCursor;
         const { slice, more, cursor } = page(half, limit, before, cursorOf);
-        const headers = new Headers();
-        if (more) {
-          headers.set("X-Instances-Truncated", "true");
-          if (cursor) headers.set("X-Instances-Next-Cursor", cursor);
-        }
-        return { data: slice, headers };
+        // The cap and the cursor are in the body now, not in headers.
+        const body = listing(slice, { total: half.length, truncated: more });
+        if (more && cursor) body.nextCursor = cursor;
+        return { data: body, headers: new Headers() };
       };
 
       const api = async (method, url, body) => {
@@ -116,16 +123,16 @@
           const all = activeRows.concat(doneRows);
           // A bare instance key is a point read; anything else matches variable content.
           const byKey = all.find((r) => String(r.key) === q);
-          if (byKey) return [byKey];
+          if (byKey) return listing([byKey]);
           const needle = q.toLowerCase();
-          return all.filter((r) => r.variables.some((v) =>
-            `${v.name}=${v.value}`.toLowerCase().includes(needle) || v.value.toLowerCase().includes(needle)));
+          return listing(all.filter((r) => r.variables.some((v) =>
+            `${v.name}=${v.value}`.toLowerCase().includes(needle) || v.value.toLowerCase().includes(needle))));
         }
         if (url.startsWith("/api/v1/instances?")) {
           window.__requests.push(url);
           return listResponse(url).data;
         }
-        if (url.startsWith("/api/v1/tasks")) return [];  // global page or ?processInstance=
+        if (url.startsWith("/api/v1/tasks")) return listing([]);  // global page or ?processInstance=
         if (url.includes("/runtime")) {
           return {
             instances: ACTIVE, finished: FINISHED, tokens: ACTIVE,
@@ -165,9 +172,9 @@
         if (method === "GET" && url.startsWith("/api/v1/instances/search")) {
           const data = await api(method, url, body);
           const headers = new Headers();
-          if (!data.length && window.__archive) {
+          if (!data.items.length && window.__archive) {
             headers.set("X-Archive-State", window.__archive.state);
-            return { data: (window.__archive.rows || []).map((r) => ({ ...r, archived: true })), headers };
+            return { data: listing((window.__archive.rows || []).map((r) => ({ ...r, archived: true }))), headers };
           }
           return { data, headers };
         }

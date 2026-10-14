@@ -1,6 +1,7 @@
 # ADR-0179: A worker's job history lives in clio, not in Atlas
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
 

@@ -1,14 +1,13 @@
 # ISDS-Konzept — Atlas BPMN Workflow Engine
 
 > Antwortdokument zur Vorlage **P042-Hi01 — Informationssicherheits- und
-> Datenschutzkonzept (ISDS-Konzept)**, BIT-Template V120 / NCSC-Template V4.4.
+> Datenschutzkonzept (ISDS-Konzept)**
 > Kapitelnummerierung und Reihenfolge folgen der Vorlage, damit der Inhalt
 > direkt in das Word-Dokument übernommen werden kann.
 
 | | |
 |---|---|
 | **Schutzobjekt** | Atlas — BPMN 2.x Workflow Engine (Fachanwendungsplattform) |
-| **Klassifizierung** | intern |
 | **Status** | in Arbeit (Entwurf des Herstellers/Projekts, noch nicht geprüft) |
 | **Version** | 0.1 |
 | **Datum** | 2026-08-25 |
@@ -135,7 +134,7 @@ Massnahmen aus Kapitel 6.4 im Wesentlichen fünf Restrisiken:
 |-----|------------|-----------------------|
 | R-01 | **Produktreife**: `0.x` Developer Preview, instabile On-Disk-Formate, kein Downgrade, kein LTS, keine Backport-Patches | rot bis zur 1.0 |
 | R-03 | **Föderierte Authentisierung gebaut, aber optional**: Anmeldefluss über OpenID Connect *und* Abbildung von Claims auf Rollen und Gruppen sind mit M12 umgesetzt; ohne konfigurierten Anbieter bleibt es beim lokalen Passwort | gelb, grün mit konfiguriertem Anbieter und eingeschalteter Abbildung |
-| R-04 | **Grobgranulare Autorisierung**: seit M9 nennt jede der 199 `/api/v1`-Routen die Rolle, die sie verlangt (`admin`, `modeler`, `operator`, `user`), und die Schranke setzt sie durch — dazu Projekt- und Worker-Sichtbarkeit. Bestehende Konten behalten beim Update, was sie vorher konnten, sind also erst enger gestellt, wenn eine Betreiberin sie enger stellt | gelb, grün bei bewusst vergebenen Rollen |
+| R-04 | **Grobgranulare Autorisierung**: seit M9 nennt jede `/api/v1`-Route die Rolle, die sie verlangt (`admin`, `modeler`, `operator`, `productmanager`, `feedreader`, `user`), und die Schranke setzt sie durch — dazu Projekt- und Worker-Sichtbarkeit. Bestehende Konten behalten beim Update, was sie vorher konnten, sind also erst enger gestellt, wenn eine Betreiberin sie enger stellt | gelb, grün bei bewusst vergebenen Rollen |
 | R-05 | **Keine Verschlüsselung ruhender Daten** ausser Vault-Secrets: WAL, State-Store und Design-Time-Ablagen liegen im Klartext im Dateisystem | gelb, grün mit Datenträgerverschlüsselung |
 | R-07 | **Keine Hochverfügbarkeit**: Single-Writer, genau ein Prozess pro Datenverzeichnis, keine Replikation (ADR-0175 ist erst *Proposed*) | gelb, abhängig von der Verfügbarkeitsanforderung |
 
@@ -365,21 +364,28 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
 
 | Prinzipal | Herkunft | Rechte |
 |-----------|----------|--------|
-| Benutzer (Rolle `user`) | lokales Konto | alles, was nicht ausdrücklich admin-geschützt ist: Modelle deployen, Instanzen starten/abbrechen, Laufzeitdaten und Prozessvariablen lesen, Tasks bearbeiten |
-| Benutzer (Rolle `admin`) | lokales Konto | zusätzlich Benutzer- und Gruppenverwaltung, Secrets, Worker, Einstellungen, Backup/Restore, Snapshots, Migration, Deploy-Tokens |
+| Benutzer (Rolle `user`) | lokales oder föderiertes Konto (M12) | die eigenen Aufgaben sehen, übernehmen und abschliessen; lesen, was freigegeben ist. Jedes neue Konto erhält nur diese Rolle; allein erreicht sie nichts, was eine Definition verändert oder eine Instanz steuert |
+| Benutzer (Rolle `modeler`) | lokales oder föderiertes Konto | Entwürfe, Formulare, Entscheidungen, Dokumentation, Applikationen und Worker bearbeiten — **und deployen**; Deploy ist Codeausführung (R-09) |
+| Benutzer (Rolle `operator`) | lokales oder föderiertes Konto | Instanzen starten, abbrechen, beenden und reparieren, Incidents bearbeiten, Laufzeitdaten lesen |
+| Benutzer (Rolle `productmanager`) | lokales oder föderiertes Konto | Kataloge des Self-Service-Portals und ihre Produkte pflegen und veröffentlichen (ADR-0315); bewusst ohne Deploy, denn ein Produkt bindet bereits deployte Prozesse. Wird beim Update nie automatisch vergeben |
+| Benutzer (Rolle `feedreader`) | lokales oder föderiertes Konto, in der Regel aber ein API-Token mit Geltungsbereich `events` | Den Ereignis-Feed lesen (`GET /api/v1/events`): wie jede Aktion an einer bezogenen Position endete und jedes gewährte und entzogene Recht, über alle Kataloge — und sonst nichts. Ein `events`-Token mit einer Reichweite (`reach`) aus Katalogen liest nur, was die Produkte dieser Kataloge betrifft; die Ausstellerin muss jeden genannten Katalog pflegen. Bewusst nicht Teil von `operator`, weil der Feed zeigt, wer was hält. Wird beim Update nie automatisch vergeben |
+| Benutzer (Rolle `admin`) | lokales oder föderiertes Konto | Obermenge aller Rollen; zusätzlich Benutzer- und Gruppenverwaltung, Secrets, Einstellungen, Backup/Restore inklusive Vollsicherung, Instanzmigration, Überschreiben von Instanzvariablen (ADR-0095), API- und Deploy-Tokens, Deployment-Ziele |
 | Projektmitglied | Projekt-Sichtbarkeit `private`/`shared` mit Rollen `viewer`/`editor` (ADR-0071, Gruppen ADR-0180) | Zugriff auf die Design-Time-Artefakte des Projekts |
-| `system:mcp` | interner Bearer-Token, nur prozessintern (ADR-0049); heute das Credential der von Atlas gestarteten Worker | wie ein Benutzer, **nie** admin |
-| API-Token | von einem Administrator ausgestelltes Maschinen-Credential (ADR-0194): benannt, befristet, widerrufbar, nur SHA-256 gespeichert, Geheimnis genau einmal ausgeliefert | genau der Geltungsbereich des Tokens — `worker` (vier Operationen) oder `full` (wie ein Benutzer); **nie** admin |
+| `system:mcp` | interner Bearer-Token, nur prozessintern (ADR-0049); heute das Credential der von Atlas gestarteten Worker | Rollen `modeler`, `operator`, `user`, beschränkt auf den Geltungsbereich `worker`: Jobs holen, abschliessen und als fehlgeschlagen melden, dazu die Rückmeldungen an Postausgang und Mockups; **nie** admin |
+| API-Token | von einem Administrator ausgestelltes Maschinen-Credential (ADR-0194): benannt, befristet, widerrufbar, nur SHA-256 gespeichert, Geheimnis genau einmal ausgeliefert | Rollen `modeler`, `operator`, `user`, **nie** admin; zusätzlich beschränkt durch den Geltungsbereich des Tokens: `full` (alles, was ein angemeldetes Konto ohne Administration erreicht, ohne den Ereignis-Feed) oder ein eng umgrenzter Bereich (`worker`, `metrics`, `status`, `directory`, `inventory`, `landscape`, `events`). Ein `events`-Token trägt als einziger nicht die Rollen der Ausstellerin, sondern nur `feedreader`: Geltungsbereich und Rolle nennen beide genau den Feed |
 | MCP-Aufrufer | das Credential, mit dem der Aufrufer `/mcp` erreicht hat (Session-Cookie oder Bearer), unverändert an die API weitergereicht | genau die Rechte dieses Prinzipals — nicht mehr und nicht weniger (ADR-0196) |
 | `deploy-agent` | Deploy-Token eines Peer-Servers (ADR-0129), SHA-256-gehasht abgelegt | fail-closed-Allowlist aus genau zwei Operationen (Bundle importieren, eigene Deployments lesen) |
 | anonym | öffentliche Start-Links (ADR-0029), Selbstregistrierungs-Link (ADR-0126) | nur die freigegebene Startformular-Route, ratenbegrenzt |
 
-**Wichtig für die Beurteilung:** ausser `admin` wird **keine Rolle erzwungen**.
-Insbesondere ist `POST /api/v1/deployments` **nicht** admin-geschützt — jeder
-angemeldete Benutzer kann ein Prozessmodell einspielen und damit auch
-Skript-Tasks und Worker-Aufrufe zur Ausführung bringen (R-04, R-09). Trennung
-von Entwicklungs-/Test-/Produktionsumgebung und ein enger Benutzerkreis auf der
-Produktion sind deshalb Pflicht (M-05).
+**Wichtig für die Beurteilung:** Jede Route nennt die Rolle, die sie verlangt, und
+die Schranke prüft sie für Session, API-Token, Deploy-Token und OAuth-Freigabe
+gleichermassen (M9, ADR-0209). `POST /api/v1/deployments` verlangt `modeler`.
+Deployen bleibt trotzdem Codeausführung: Wer `modeler` trägt, kann Skript-Tasks und
+Worker-Aufrufe zur Ausführung bringen (R-09). Zudem behalten bestehende Konten beim
+Update `modeler`, `operator` und `user`, bis eine Betreiberin sie enger stellt
+(R-04). Trennung von Entwicklungs-/Test-/Produktionsumgebung und ein enger Kreis von
+`modeler`- und `admin`-Konten auf der Produktion sind deshalb weiterhin Pflicht
+(M-05).
 
 ### 5.2.4 Nachvollziehbarkeit und Protokollierung
 
@@ -545,6 +551,7 @@ das Vorhaben ergänzen⟩. Initiator ist immer die Quelle.
 | K-14 | KI-Agent / Werkzeug | Atlas-Server `/mcp` | HTTP / 8080 | MCP-Steuerung (ADR-0016) | keine | Session-Cookie oder Bearer des Aufrufers; unter `--auth` erzwungen (ADR-0196) |
 | K-15 | Internet ⟨optional⟩ | Reverse Proxy → `/public/forms/…` | HTTPS / 443 | öffentliche Start-Links (ADR-0029), Selbstregistrierung (ADR-0126) | TLS | anonym, Token-gebunden, ratenbegrenzt |
 | K-16 | Atlas-Server | Skript-Interpreter (lokal) | Prozessaufruf | Skript-Tasks `pwsh`/`python3`/`node` (ADR-0047) | — | läuft als Dienstbenutzer — siehe R-09 |
+| K-17 | Atlas-Server | Umsystem (Verrechnung, CMDB) ⟨Zone⟩ | HTTPS / 443 | Push-Zustellung des Ereignis-Feeds an einen CloudEvents-Endpunkt (ADR-0429 §5), nur falls ein Administrator ein Abonnement anlegt; Inhalt: wer welches Recht hält, Personen nur als ID | TLS, Klartext nur für Loopback, Weiterleitungen werden nicht verfolgt | Bearer-Token aus dem Vault (Referenz am Worker); Abonnement admin-verwaltet, auf Kataloge einschränkbar |
 
 **Nicht vorhanden:** ausgehende Verbindungen zum Hersteller, Update-Prüfungen,
 Telemetrie, Lizenz-Calls. Der Server benötigt für den Betrieb **keinen
@@ -587,12 +594,12 @@ zu bestätigen.
 | R-01 | **Produktreife.** `0.x` Developer Preview: On-Disk-Format instabil, kein Downgrade, keine LTS-Linie, Sicherheitsfixes nur im nächsten Release, kein kommerzieller Support | alle | M-05, M-11, M-14, befristete Freigabe | **rot** bis 1.0; gelb bei unkritischem Einsatz mit Ausnahmebewilligung |
 | R-02 | **Kein TLS im Produkt.** Server spricht ausschliesslich HTTP; bei fehlendem/fehlkonfiguriertem Proxy Klartext im Netz (Session-Cookie, Prozessvariablen) | Vertraulichkeit, Integrität | M-01, Konfigurationsprüfung in der Abnahme | gelb → **grün** bei korrektem Proxy |
 | R-03 | **Föderierte Authentisierung gebaut, aber optional.** Mit M12 kann eine Installation die Anmeldung an einen OpenID-Connect-Anbieter übergeben; MFA und Passwortrichtlinie werden damit dessen Sache, und ein dort geschlossenes Konto kommt hier nicht mehr hinein. Schaltet eine Betreiberin zusätzlich die Claim-Abbildung ein, entzieht ein Austritt beim Anbieter auch die *Rollen* und die Gruppenmitgliedschaft — der automatische Entzug, nach dem eine Prüfstelle zuerst fragt. Ohne konfigurierten Anbieter bleibt es beim lokalen Passwort, und das lokale Login bleibt in jedem Fall als Notfallzugang bestehen. Offen: die vom Anbieter ausgelöste Abmeldung sowie SAML für eIAM | Vertraulichkeit | M-01 (AuthN am Proxy), M-06, M-07, ADR-0197, M12 | **gelb**, grün für Installationen mit konfiguriertem Anbieter und eingeschalteter Abbildung |
-| R-04 | **Grobgranulare Autorisierung.** Mit M9 nennt jede der 199 `/api/v1`-Routen die verlangte Rolle — `admin` (51 Routen), `modeler`, `operator`, `user` — und die Schranke setzt sie an einer Stelle durch, für Session, API-Token, Deploy-Token und OAuth-Freigabe gleichermassen; ein Token ist nie `admin`. Worker sind seit M11 erfasst (Eigentümer, Freigabe, Anspruch auf den Nachrichtennamen). Was bleibt: Beim Update behält jedes bestehende Konto `modeler`+`operator`+`user`, also alles ausser Administration, bis eine Betreiberin es enger stellt — die Massnahme liefert die Möglichkeit, nicht den Zustand | Vertraulichkeit, Integrität | M-05, M-07, enger Benutzerkreis, getrennte Installationen, Rollen nach Aufnahme bewusst vergeben | **gelb**, grün bei bewusst vergebenen Rollen |
+| R-04 | **Grobgranulare Autorisierung.** Mit M9 nennt jede `/api/v1`-Route die verlangte Rolle — `admin`, `modeler`, `operator`, `productmanager` (ADR-0315), `feedreader` (Ereignis-Feed), `user` — und die Schranke setzt sie an einer Stelle durch, für Session, API-Token, Deploy-Token und OAuth-Freigabe gleichermassen; ein Token ist nie `admin`. Worker sind seit M11 erfasst (Eigentümer, Freigabe, Anspruch auf den Nachrichtennamen). Was bleibt: Beim Update behält jedes bestehende Konto `modeler`+`operator`+`user`, also alles ausser Administration und Katalogpflege, bis eine Betreiberin es enger stellt — die Massnahme liefert die Möglichkeit, nicht den Zustand | Vertraulichkeit, Integrität | M-05, M-07, enger Benutzerkreis, getrennte Installationen, Rollen nach Aufnahme bewusst vergeben | **gelb**, grün bei bewusst vergebenen Rollen |
 | R-05 | **Keine Verschlüsselung ruhender Daten** ausser Vault-Secrets; wer Dateisystemzugriff hat, liest alle Geschäftsdaten | Vertraulichkeit | M-04 (Datenträgerverschlüsselung, Dateirechte, minimaler Admin-Kreis) | gelb → **grün** mit M-04 |
-| R-06 | **Löschung vs. Anfüge-only-Log.** Retention löscht den Zustandsdatensatz, Ereignisse verbleiben im WAL bis zur Kompaktierung; weitere Kopien in OpenSearch, Backups, Snapshots | Datenschutz (Art. 6 DSG) | M-08, Modellierungsrichtlinie «Referenz statt Inhalt» | **gelb**, grün bei konsistent konfigurierten Fristen |
+| R-06 | **Löschung vs. Anfüge-only-Log.** Retention löscht den Zustandsdatensatz, Ereignisse verbleiben im WAL bis zur Kompaktierung; weitere Kopien in OpenSearch, Backups, Snapshots. Seit ADR-0314 gibt es dafür eine Massnahme, die keine Frist braucht: ein Prozess deklariert, welche Variablen Personendaten enthalten und welche Variable die betroffene Person benennt; diese Werte werden unter einem Schlüssel je Person verschlüsselt, und die Zerstörung dieses einen Schlüssels macht **jede** Kopie auf einmal unlesbar — auch Backups, die niemand mehr erreicht. Der Compiler verweigert ein Deployment, das auf einer deklarierten Variable rechnet, und die Engine verweigert einen Schreibvorgang, der einen deklarierten Wert im Klartext anliefert; aus der Modellierungsrichtlinie ist damit eine geprüfte Regel geworden. Was offen bleibt: die Massnahme greift nur, wo ein Modell deklariert — für Modelle ohne Deklaration bleibt die Lage unverändert — und sie macht Daten unlesbar, statt Bytes zu entfernen (rechtliche Beurteilung durch den DSB der Betreiberin) | Datenschutz (Art. 6 DSG) | M-08, M-18, ADR-0314 | **gelb**, grün für Prozesse mit Deklaration und konsistent konfigurierten Fristen |
 | R-07 | **Keine Hochverfügbarkeit.** Single-Writer, genau ein Prozess pro Datenverzeichnis; Ausfall = Ausfall bis Restore/Neustart; Replikation erst geplant (ADR-0175, *Proposed*) | Verfügbarkeit | M-11, M-12, M-17, ⟨VM-/Storage-HA⟩ | **gelb**, abhängig von der Verfügbarkeitsanforderung |
 | R-08 | **Unauthentisierte Endpunkte.** Offen bleiben nur noch `/healthz`, `/readyz` und die tokenbasierten öffentlichen Links; dazu, was die Anmeldemaske selbst liest. `/mcp` (ADR-0196), der API-Explorer (ADR-0195) und `/metrics` (ADR-0198) sind geschlossen. Welche Route offen ist, ist deklariert und per Test gegen eine ausgeschriebene Liste gehalten (ADR-0199) | Vertraulichkeit, Integrität | M-13 | **grün** — keine Route hängt mehr an einer Proxy-Regel |
-| R-09 | **Skript-Tasks führen Code aus.** PowerShell/Python/JavaScript laufen im Kontext des Dienstbenutzers; wer deployen darf, führt Code aus. Seit M9 ist «wer deployen darf» eine vergebene Rolle (`modeler`) und nicht mehr jedes angemeldete Konto | Integrität, Vertraulichkeit | M-09 (nicht benötigte Sprachen abschalten), M-05, M9 (Rolle `modeler` nur an Autorinnen), systemd-Härtung | **gelb** |
+| R-09 | **Skript-Tasks führen Code aus.** PowerShell/Python/JavaScript laufen im Kontext des Dienstbenutzers; wer deployen darf, führt Code aus. Seit M9 ist «wer deployen darf» eine vergebene Rolle (`modeler`) und nicht mehr jedes angemeldete Konto. Was ein Skript im Standardmodus `--script-sandbox=off` erreicht (Datenverzeichnis, Vault-Schlüssel und damit alle Zugangsdaten, Umgebung der atlas-Prozesse, Netzwerk), steht in [`docs/install.md`](../install.md#what-a-script-can-reach-with---script-sandboxoff) | Integrität, Vertraulichkeit | M-09 (nicht benötigte Sprachen abschalten), M-05, M9 (Rolle `modeler` nur an Autorinnen), systemd-Härtung | **gelb** |
 | R-10 | **Ausgehende Worker-Aufrufe.** Ein Prozessmodell adressiert Zielsysteme; falsch modelliert oder missbraucht = Datenabfluss | Vertraulichkeit | M-10 (Registrierung durch Betrieb, Worker in der Zielzone, FW-Whitelist), M-05 | **gelb** |
 | R-11 | **Lieferkette.** Releases nur mit `SHA256SUMS`, ohne Signatur und ohne SBOM; CI ohne automatisierte Schwachstellenprüfung (kein `govulncheck`/SAST) | Integrität | M-14, Build aus Quellen, Abhängigkeits-Scan im Bund | **gelb** |
 | R-12 | **Sessions nur im Speicher**, 12 h Gültigkeit, Abmeldung aller Benutzer bei Neustart; keine serverseitige Sitzungsübersicht. Anmeldeversuche sind seit ADR-0197 je Adresse und je Konto begrenzt | Verfügbarkeit (Komfort), Vertraulichkeit | M-01, M-12 | **grün** |
@@ -683,7 +690,8 @@ mit dem ISBO BIT.
 | M-06 | Anwendungslog mit `--log-format=json` an ⟨Log-Plattform/SIEM⟩ liefern (es trägt die `auth.*`-Sicherheitsspur); Access-Log am Proxy ergänzen; Alarme auf `auth.login_throttled`, `auth.denied`, `auth.disabled`, `checkpoint.failed`, `wal_compaction.failed`, `exporter.tick_failed`, `command.failed`, `auth.admin_seeded` | ⟨Betrieb LE⟩ | Monitoring-Konfiguration |
 | M-07 | Benutzer-/Berechtigungslebenszyklus: Eintritt, Mutation, Austritt (`Disabled`), jährliche Rezertifizierung | ⟨AV⟩ | Rezertifizierungsprotokoll (Kap. 8.3) |
 | M-08 | Aufbewahrung/Löschung konfigurieren: `--retention-max-age` bzw. `atlas:historyTtl`, Checkpointing **und** `--compact-wal`, OpenSearch-Retention, Backup-Fristen, ⟨Proxy-Logfristen⟩ | ⟨AV + Betrieb⟩ | Konfiguration, Löschnachweis |
-| M-09 | Nicht benötigte Skriptsprachen abschalten (`--powershell=false --python=false --javascript=false`); `--script-timeout` prüfen | ⟨Betrieb LE⟩ | Startparameter |
+| M-18 | Personendaten deklarieren und löschbar halten (ADR-0314): in jedem Prozess, der Personendaten führt, `atlas:personal` und `atlas:dataSubject` setzen; die Kennung der betroffenen Person als `atlas:searchable` deklarieren, damit deren laufende Instanzen vor einer Löschung gefunden werden; Vault-Schlüssel sichern (siehe M-03 — der Verlust des Master-Schlüssels ist damit Verlust von Geschäftsdaten, nicht nur von Zugangsdaten); Löschbegehren über `DELETE /api/v1/personal-data/{subject}` ausführen — die Route schreibt den Nachweis selbst in den Audit-Trail (`event=personal_data.erased`, mit Betroffener und Handelnder), und dieser Eintrag ist der **einzige** verbleibende Nachweis, weil der Schlüssel danach fehlt und die Betroffene keine andere Spur hinterlässt; Audit-Log entsprechend aufbewahren | ⟨AV + Modellierung⟩ | Deklaration im Modell, Audit-Eintrag je Löschung |
+| M-09 | Nicht benötigte Skriptsprachen abschalten (`--powershell=false --python=false --javascript=false`); `--script-timeout` prüfen; für Skripte ohne Datei-/Netzwerkbedarf `--script-sandbox=strict` nach Kompatibilitätstest aktivieren (Linux Landlock ABI 3+) | ⟨Betrieb LE⟩ | Startparameter, negativer Zugriffstest auf `/data` und Netzwerk |
 | M-10 | Worker und Secrets ausschliesslich durch den Betrieb registrieren; Worker in der Zone des Zielsystems betreiben; Firewall-Whitelist je Ziel | ⟨Betrieb LE⟩ | Kommunikationsmatrix 5.4, CRQs |
 | M-11 | Datensicherung gemäss 5.2.5; **halbjährlicher Restore-Test** inkl. Vault-Schlüssel | ⟨Betrieb LE⟩ | Restore-Protokoll |
 | M-12 | Monitoring von `/readyz`, Prometheus-Metriken, Plattenplatz des Datenverzeichnisses; Startup-Probe mit ausreichendem Zeitbudget (Replay!) | ⟨Betrieb LE⟩ | Monitoring |

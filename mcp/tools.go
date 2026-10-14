@@ -2,7 +2,11 @@ package mcp
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"net/url"
 	"strconv"
+	"strings"
 )
 
 // Tool is one MCP tool: its advertised name, human/model-facing description,
@@ -13,6 +17,13 @@ type Tool struct {
 	Description string
 	InputSchema map[string]any
 	Handler     func(c *Client, args map[string]any) (string, error)
+	// Catalogue marks a tool of the shop, the catalogue, the orders or the
+	// inventory: one an adapter built WithoutCatalogue does not offer, because the
+	// server it fronts does not serve the route behind it
+	// (ADR-0434).
+	// TestWithoutCatalogueOffersNoToolOfTheArea fails for a tool of the area that
+	// does not say so.
+	Catalogue bool
 }
 
 // noArgs is the JSON Schema for a tool that takes no arguments.
@@ -46,7 +57,9 @@ func keyArg(desc string) map[string]any {
 func defaultTools() []Tool {
 	tools := append(runtimeTools(), authoringTools()...)
 	tools = append(tools, collabTools()...)
-	return append(tools, infomodelTools()...)
+	tools = append(tools, infomodelTools()...)
+	tools = append(tools, capabilityTools()...)
+	return append(tools, catalogTools()...)
 }
 
 // runtimeTools are the deploy/instance/inspect tools.
@@ -54,7 +67,7 @@ func runtimeTools() []Tool {
 	return []Tool{
 		{
 			Name:        "atlas_info",
-			Description: "Get Atlas server product and version information.",
+			Description: "Get atlas server product and version information.",
 			InputSchema: noArgs(),
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/info"))
@@ -62,8 +75,8 @@ func runtimeTools() []Tool {
 		},
 		{
 			Name: "atlas_deploy",
-			Description: "Deploy a BPMN 2.0 XML process definition to Atlas. The model is " +
-				"compiled and validated; only elements Atlas can execute are accepted. " +
+			Description: "Deploy a BPMN 2.0 XML process definition to atlas. The model is " +
+				"compiled and validated; only elements atlas can execute are accepted. " +
 				"Returns the assigned definition key, process id, and version.",
 			InputSchema: map[string]any{
 				"type": "object",
@@ -85,10 +98,39 @@ func runtimeTools() []Tool {
 		},
 		{
 			Name:        "atlas_list_processes",
-			Description: "List all deployed process definitions with their key, process id, version, and deploy time.",
+			Description: "List all deployed process definitions with their key, process id, version, deploy time, and who deployed each version (deployedBy, deployedByName).",
 			InputSchema: noArgs(),
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/processes"))
+			},
+		},
+		{
+			Name:      "atlas_product_usage",
+			Catalogue: true,
+			Description: "Where one catalogue product is used, read out of the release backwards: " +
+				"which catalogues offer it, which wholes carry it and whether integrally " +
+				"(composition) or optionally (aggregation), what it needs, what needs it, what " +
+				"it may never be held together with, and how many people hold it broken down by " +
+				"origin. The reverse question — what breaks if this service is retired, rebound " +
+				"or moved — cannot be answered from any forward view of the catalogue. Holders " +
+				"are counted and never named.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"itemId": map[string]any{
+						"type": "string",
+						"description": "The catalogue product id, as a published release names it " +
+							"(not its display text).",
+					},
+				},
+				"required": []any{"itemId"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "itemId")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/catalog-products/" + url.PathEscape(id) + "/usage"))
 			},
 		},
 		{
@@ -182,7 +224,8 @@ func runtimeTools() []Tool {
 			Name: "atlas_create_instance",
 			Description: "Start a new instance of a deployed process definition by its key and run it " +
 				"until the engine goes idle. Optionally seed the instance scope with start variables " +
-				"(the same {name: value} shape a human's start form submits). Returns the resulting " +
+				"(the same {name: value} shape a human's start form submits); a declared start variable " +
+				"left out takes the default the process declares. Returns the resulting " +
 				"live instance counts.",
 			InputSchema: map[string]any{
 				"type": "object",
@@ -216,8 +259,11 @@ func runtimeTools() []Tool {
 				"whose token is sitting on that BPMN element id right now — the \"who is stuck on this task?\" " +
 				"question, answered from the element's own index rather than by reading through the version; it needs " +
 				"'process' (an element id is only meaningful within the version defining it) and lists live instances " +
-				"only, since a finished instance holds no token. Returns {items, truncated, nextCursor} like " +
-				"atlas_list_tasks: hand nextCursor back as 'before' for the next, older page. A truncated page with " +
+				"only, since a finished instance holds no token. Returns {items, total, totalExact, truncated, " +
+				"nextCursor} like atlas_list_tasks: hand nextCursor back as 'before' for the next, older page. " +
+				"'total' is how many there are and 'totalExact' whether that is the population or merely what this " +
+				"page saw — exact wherever a maintained counter knows it, which is one definition's halves and the " +
+				"engine's live total. A truncated page with " +
 				"no nextCursor means there is more but this listing has no position to resume from — narrow it with " +
 				"'process' and a single 'state' to get one. To reach one particular instance use " +
 				"atlas_search_instances, which answers a bare instance key with a point read.",
@@ -466,6 +512,32 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_delete_decision_deployment",
+			Description: "Delete a deployed DMN decision by its deployment key, removing it from the " +
+				"engine and from disk. Refused with a conflict error while a deployed process is " +
+				"pinned to it — pins outlive the instances that used them, so having no running " +
+				"instances is not enough — and while it is the current version of a decision that " +
+				"has older versions still deployed, which means removing a version history oldest " +
+				"first. The refusal says which of the two it is. Returns a confirmation.",
+			InputSchema: keyArg("The decision deployment key (from atlas_decision_deployments) to delete."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				body, err := c.del("/api/v1/decision-deployments/" + strconv.FormatUint(key, 10))
+				if err != nil {
+					return "", err
+				}
+				// 204 No Content on success, like the process delete above: give the model
+				// an explicit confirmation rather than an empty string.
+				if len(body) == 0 {
+					return `{"deleted":true,"key":` + strconv.FormatUint(key, 10) + `}`, nil
+				}
+				return string(body), nil
+			},
+		},
+		{
 			Name: "atlas_mail_outbox",
 			Description: "List what a mail worker on the \"preview\" provider delivered in-server instead of " +
 				"sending (ADR-0150) — how a scenario checks what a mail task actually produced, with no mail " +
@@ -523,14 +595,21 @@ func runtimeTools() []Tool {
 			Description: "Publish a message for correlation: any instance waiting at a message catch event " +
 				"whose correlation key matches is delivered the message and advances. Provide the message " +
 				"'name' and, when the catch event correlates on a key, the 'correlationKey' value to match. " +
-				"A message that matches no waiting instance is a legal no-op. Optional 'variables' are merged " +
-				"into a correlated instance's scope. Returns {name, correlationKey, stats}.",
+				"A message that matches no waiting instance is a legal no-op — unless it carries 'timeToLiveMs': " +
+				"then it is kept that long, and the first instance that starts waiting for its name and key in that " +
+				"time receives it (ADR-0370). A 'messageId' with a time to live makes a retry of the same message a " +
+				"no-op while it lives. A message with a time to live may not carry a variable any deployed process " +
+				"declares personal (422). Optional 'variables' are merged into a correlated instance's scope. " +
+				"Returns {name, correlationKey, timeToLiveMs, messageId, stats}. A message a catalogue " +
+				"product's action starts or waits at is refused (409): the order sends it, never a publish by name.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"name":           stringProp("The message name (matches the BPMN message's name)."),
 					"correlationKey": stringProp("The correlation key value to match against waiting instances. Omit for an unkeyed message."),
 					"variables":      objectProp("Optional variables merged into a correlated instance's scope, e.g. {\"approved\": true}. Omit for none."),
+					"timeToLiveMs":   integerProp("How long, in milliseconds, to keep the message for an instance that starts waiting later. Omit to lose it when nothing waits now. The server caps it (default 7 days)."),
+					"messageId":      stringProp("Your id for this message; with timeToLiveMs, a retry with the same id is a no-op while the message lives."),
 				},
 				"required": []any{"name"},
 			},
@@ -544,6 +623,91 @@ func runtimeTools() []Tool {
 					return "", err
 				}
 				return asText(c.post("/api/v1/messages", "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_buffered_messages",
+			Description: "List the messages waiting in the buffer: published with a time to live while nothing " +
+				"waited for them, kept for the instance that starts waiting later (ADR-0370). Each carries its " +
+				"key, name, correlationKey, messageId, bufferedAt and expiresAt (Unix nanoseconds), expired " +
+				"(past its time, waiting only for the sweep — nothing receives it now) and its variables. " +
+				"Optional 'name' narrows to one message name and, with it, 'correlationKey' to one key; 'limit' " +
+				"bounds the page (default 100, at most 1000) and 'after' continues from the nextCursor a previous " +
+				"call returned. Returns {messages, total, nextCursor}; total counts the whole buffer.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name":           stringProp("Only messages with this name."),
+					"correlationKey": stringProp("Only messages with this correlation key; needs 'name'."),
+					"limit":          map[string]any{"type": "integer", "minimum": 1, "description": "Maximum messages to return (default 100, at most 1000)."},
+					"after":          stringProp("The nextCursor a previous call returned, to continue the listing."),
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				query, err := batchQuery(args)
+				if err != nil {
+					return "", err
+				}
+				q, _ := url.ParseQuery(strings.TrimPrefix(query, "?"))
+				if name := optString(args, "name"); name != "" {
+					q.Set("name", name)
+				}
+				if key := optString(args, "correlationKey"); key != "" {
+					q.Set("correlationKey", key)
+				}
+				path := "/api/v1/messages/buffered"
+				if len(q) > 0 {
+					path += "?" + q.Encode()
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
+			Name: "atlas_trigger_start",
+			Description: "Start the newest deployed version of a process at ONE of its message start " +
+				"events — a directed trigger (ADR-0425). Unlike atlas_publish_message, which broadcasts by " +
+				"name and answers the same whether or not anything started, this answers with the " +
+				"instance it started (201), with the instance an earlier call with the same 'triggerId' " +
+				"started (200, replayed), or with why it started nothing: 404 unknown process or start " +
+				"event, 409 for a start event a catalogue product binds (those start through the order), " +
+				"a singleton already running, or a deactivated process. 'triggerId' is REQUIRED — reuse it " +
+				"when retrying the same thing. Returns {instanceKey, replayed}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"processId": stringProp("The BPMN process id."),
+					"message":   stringProp("The message name of the start event to enter."),
+					"triggerId": stringProp("Your id for this trigger; a retry with the same id starts nothing new."),
+					"variables": objectProp("Optional start variables, e.g. {\"employeeId\": \"E-1\"}."),
+				},
+				"required": []any{"processId", "message", "triggerId"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				processID, err := argString(args, "processId")
+				if err != nil {
+					return "", err
+				}
+				message, err := argString(args, "message")
+				if err != nil {
+					return "", err
+				}
+				triggerID, err := argString(args, "triggerId")
+				if err != nil {
+					return "", err
+				}
+				payload := map[string]any{"triggerId": triggerID}
+				if v, ok := args["variables"]; ok && v != nil {
+					if _, isObj := v.(map[string]any); !isObj {
+						return "", errors.New("variables must be an object")
+					}
+					payload["variables"] = v
+				}
+				body, err := json.Marshal(payload)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/processes/"+url.PathEscape(processID)+"/triggers/"+
+					url.PathEscape(message), "application/json", body))
 			},
 		},
 		{
@@ -609,18 +773,150 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_throw_job_error",
+			Description: "Throw a BPMN error from a job by hand, by its job key — the operator counterpart to a " +
+				"worker ending its job with an error code instead of a result (ADR-0089). A matching error " +
+				"boundary or error event subprocess catches the code and the instance takes the error path; " +
+				"with none in reach the job is kept under an incident naming the code (and 'errorMessage', " +
+				"when given), and resolving that incident retries the job. A 'reason' is REQUIRED: forcing " +
+				"the error flow is an operator intervention, recorded with who did it, why and which code in " +
+				"append-only audit history (ADR-0159). Refused with a not-found error if no job has that key. " +
+				"Returns {jobKey}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":          map[string]any{"type": "integer", "description": "The job key to throw the error from."},
+					"errorCode":    stringProp("The BPMN error code — what an error boundary or error event subprocess matches on."),
+					"errorMessage": stringProp("Optional message; the incident carries it after the code when nothing catches the error."),
+					"reason":       map[string]any{"type": "string", "description": "Why this error is being thrown by hand — recorded in the instance's audit trail. Required."},
+				},
+				"required": []any{"key", "errorCode", "reason"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				code, err := argString(args, "errorCode")
+				if err != nil {
+					return "", err
+				}
+				reason, err := argString(args, "reason")
+				if err != nil {
+					return "", err
+				}
+				payload := map[string]any{"errorCode": code, "reason": reason}
+				if msg := optString(args, "errorMessage"); msg != "" {
+					payload["errorMessage"] = msg
+				}
+				body, _ := json.Marshal(payload)
+				return asText(c.post("/api/v1/jobs/"+strconv.FormatUint(key, 10)+"/error", "application/json", body))
+			},
+		},
+		{
 			Name: "atlas_workers",
 			Description: "The Workers view — who is doing the engine's out-of-process work, and what is waiting. " +
-				"Returns {types, workers}. Each 'types' row is a job type with its 'parked' queue depth, " +
+				"Returns {types, workers, breakers}. Each 'types' row is a job type with its 'parked' queue depth, " +
 				"'inFlight' count (leased to a worker right now), 'incidents', and 'servedInProcess' — true when " +
-				"Atlas works that type itself, in which case no external worker can lease it. Each 'workers' row " +
+				"atlas works that type itself, in which case no external worker can lease it. Each 'workers' row " +
 				"is a worker seen since this server started: the 'types' it pulls, how many it holds 'inFlight', " +
-				"and its 'pulled' / 'completed' / 'failed' counts with 'lastSeen'. The diagnosis to look for is a " +
-				"type with a growing 'parked' count, zero 'inFlight' and no worker pulling it — work nobody is " +
-				"serving. Worker counters cover this server run only and are not restored on restart.",
+				"and its 'pulled' / 'completed' / 'failed' counts with 'lastSeen'. " +
+				"CHECK 'breakers' FIRST when a queue is not moving: each row is a target whose jobs atlas is " +
+				"deliberately holding back because it kept failing (ADR-0340), with 'connector' (the Worker the " +
+				"model names), 'jobType', 'state' (\"open\" or \"probing\"), 'trippedAt', 'reason' (what it last " +
+				"failed with), 'probeAt' (when the next single job goes through to test it) and 'refused'. That " +
+				"work is WAITING, NOT FAILED — no retry spent, no incident raised — and it resumes by itself as " +
+				"soon as the target answers, so there is nothing to resolve and no incident will appear for it. " +
+				"A type with a growing 'parked' count, zero 'inFlight' and no worker pulling it means work nobody " +
+				"is serving ONLY when no breaker row covers it; otherwise the engine has stopped serving it on " +
+				"purpose and the fix is the target, not the worker. Use atlas_close_breaker after fixing one " +
+				"rather than waiting out its cooldown. Worker counters cover this server run only and are not " +
+				"restored on restart.",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				return asText(c.get("/api/v1/workers"))
+			},
+		},
+		{
+			Name: "atlas_close_breaker",
+			Description: "Stop holding one target's jobs back, now, without waiting for the engine's next " +
+				"attempt (ADR-0340). Use it after fixing what a breaker row in atlas_workers reported — a " +
+				"worker configuration, a credential, the endpoint itself. 'jobType' is required and is the row's " +
+				"job type; 'connector' is its Worker name, omitted for a job type that names no Worker. " +
+				"Returns {jobType, connector, closed}; closed=false means nothing was being held, which is not " +
+				"an error — a target that recovered on its own a moment earlier looks exactly like that. " +
+				"Closing a target that is in fact still down is safe and cheap: the next three failures simply " +
+				"hold it again, and they spend one retry each rather than parking tokens. There is deliberately " +
+				"no way to OPEN a breaker: judging a target down is a conclusion the engine draws from what " +
+				"workers report, not something to assert.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"jobType":   map[string]any{"type": "string", "description": "The held row's job type, e.g. io.atlas.mail.send"},
+					"connector": map[string]any{"type": "string", "description": "The Worker name the model states; omit when the row has none"},
+				},
+				"required": []any{"jobType"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				jobType, err := argString(args, "jobType")
+				if err != nil {
+					return "", err
+				}
+				body, err := json.Marshal(map[string]any{
+					"jobType": jobType, "connector": optString(args, "connector"),
+				})
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/workers/breakers/close", "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_feed_subscriptions",
+			Description: "The event feed's push subscriptions — which systems beyond atlas (a CMDB, a billing " +
+				"system) are sent the feed of action outcomes, granted and revoked rights and incidents, and whether that " +
+				"delivery is moving. Admin-only. Each row names its cloudevents Worker ('workerId', " +
+				"'workerName'), the catalogues it is narrowed to ('reach'; empty is the whole feed), its " +
+				"'cursor' (the feed position delivered through), 'enabled' and 'disabledReason' (set when the " +
+				"feed's retention dropped rows it had not delivered — it stays off until an administrator " +
+				"re-enables it), and 'deliveredAt'. A row with a 'hold' is FAILING: its endpoint refused or did " +
+				"not answer, and delivery waits on a backoff ladder with the cursor where it was — nothing is " +
+				"skipped — showing 'failures', 'failingSince', 'retryAt' and 'lastError'. Fix the endpoint or " +
+				"its credential; delivery resumes by itself. Read-only: creating, changing and ending " +
+				"subscriptions is administrator configuration and has no tool.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get("/api/v1/feed-subscriptions"))
+			},
+		},
+		{
+			Name: "atlas_event_catalog",
+			Description: "The catalogue of the events atlas emits (ADR-0435) — the answer to \"what can I listen to?\". " +
+				"Each entry has its 'type' (the name used verbatim as the signal, the message or the CloudEvents " +
+				"type, atlas.<subject>.<fact>; an entry with 'shaped' describes a shape, such as a product " +
+				"action's outcome named by its product), 'kind' (domain: a system process's fact; platform: the " +
+				"engine's or the server's), 'meaning' in English and German, 'moment' (the system process and " +
+				"element, or the record it is derived from), 'channels' (signal, message, feed, log), 'payload' " +
+				"(each field with its type, whether it is always there, and whether it is personal data), " +
+				"'neverSecret' (the test holding it free of secrets), 'since', 'stability' and 'access' per " +
+				"channel. 'listenable' marks what a model may listen to with a signal start or catch.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get("/api/v1/event-catalog"))
+			},
+		},
+		{
+			Name: "atlas_event_listeners",
+			Description: "Who listens to atlas's events in this installation (ADR-0435 §7), admin-only: every " +
+				"deployed definition with a signal start, catch, boundary or event subprocess, or a message " +
+				"receiver, on an atlas.* name — 'type', 'channel', 'processId', 'version', 'definitionKey', " +
+				"'projectId', 'element', 'role', and 'personal' (the personal-data fields it receives) — with " +
+				"'catalogued' false for a name atlas never emits and 'system' for atlas's own processes; and " +
+				"every feed subscription ('feed'), which receives every type in 'feedTypes' narrowed by its " +
+				"reach. 'feedDelivered' is false where the service catalogue is switched off.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get("/api/v1/event-catalog/listeners"))
 			},
 		},
 		{
@@ -629,9 +925,11 @@ func runtimeTools() []Tool {
 				"its elementInstanceKey (pass it to atlas_resolve_incident), processInstanceKey, processDefKey, " +
 				"processId, jobKey, elementId (the BPMN id of the stuck element; elementIndex is its compiled " +
 				"index), type (\"job\" or \"timer\"), raisedAt, and message. Optional 'instance' / 'process' " +
-				"scope the list to one process instance or one deployed definition, and 'limit' bounds the page. " +
-				"Returns {incidents, truncated}; when 'truncated' is true, more incidents exist than were " +
-				"returned — resolve some, scope the query, or raise the limit.",
+				"scope the list to one process instance or one deployed definition, 'element' / 'type' / " +
+				"'message' narrow it to one BPMN element, one kind, or a fragment of the failure text, and " +
+				"'limit' bounds the page. Returns {incidents, truncated}; when 'truncated' is true, more " +
+				"incidents exist than were returned — under a flood call atlas_incident_summary instead, which " +
+				"answers in one line per cause, and clear whole causes with atlas_resolve_incidents.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -650,6 +948,10 @@ func runtimeTools() []Tool {
 						"minimum":     1,
 						"description": "Only incidents of instances of this deployed definition key.",
 					},
+					"element":      stringProp("Only incidents parked on this BPMN element id (the 'elementId' of a row, or of an atlas_incident_summary group)."),
+					"elementIndex": map[string]any{"type": "integer", "minimum": 0, "description": "Only incidents parked on this compiled element index — what a group whose definition is no longer deployed has instead of a BPMN id."},
+					"type":         stringProp("Only incidents of this kind: \"job\", \"timer\", \"budget\" or \"error\" (a BPMN error nothing caught)."),
+					"message":      stringProp("Only incidents whose message contains this text (case-insensitive)."),
 				},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
@@ -664,11 +966,23 @@ func runtimeTools() []Tool {
 						sep = "&"
 					}
 				}
-				body, headers, err := c.getWithHeaders(path)
-				if err != nil {
-					return "", err
+				// Not optPositiveUint: 0 is a real element index, so "present" and
+				// "positive" are different questions here.
+				if _, ok := args["elementIndex"]; ok {
+					v, err := argUint(args, "elementIndex")
+					if err != nil {
+						return "", err
+					}
+					path += sep + "elementIndex=" + strconv.FormatUint(v, 10)
+					sep = "&"
 				}
-				return incidentsPage(body, headers)
+				for _, name := range []string{"element", "type", "message"} {
+					if v := optString(args, name); v != "" {
+						path += sep + name + "=" + url.QueryEscape(v)
+						sep = "&"
+					}
+				}
+				return asText(c.get(path))
 			},
 		},
 		{
@@ -698,6 +1012,78 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_incident_summary",
+			Description: "What is stuck, by cause — the reading to use when many tokens are parked, because " +
+				"its size is the number of causes and not the number of incidents. Returns {total, groups, " +
+				"groupsTruncated, ungrouped}: each group is one (processDefKey, elementId, type) with its " +
+				"'count', the 'oldestRaisedAt'/'newestRaisedAt' window it has been running, a representative " +
+				"'message' (the oldest incident's) with 'messageVaries' when the group holds more than one " +
+				"wording, and the worker the parked task resolves through ('connector', 'connectorKind', " +
+				"'connectorId' — an empty id means no worker is configured under that name, which is often the " +
+				"cause itself). Groups come biggest first, so the flood is the first row. Optional 'process' / " +
+				"'instance' scope it like atlas_list_incidents. Fix the cause the group names, then clear it " +
+				"with atlas_resolve_incidents using the same processDefKey/elementId/type.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"instance": map[string]any{"type": "integer", "minimum": 1, "description": "Only incidents of this process instance key."},
+					"process":  map[string]any{"type": "integer", "minimum": 1, "description": "Only incidents of instances of this deployed definition key."},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path, sep := "/api/v1/incidents/summary", "?"
+				for _, name := range []string{"instance", "process"} {
+					v, present, err := optPositiveUint(args, name)
+					if err != nil {
+						return "", err
+					}
+					if present {
+						path += sep + name + "=" + strconv.FormatUint(v, 10)
+						sep = "&"
+					}
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
+			Name: "atlas_resolve_incidents",
+			Description: "Resolve many incidents in one call — what to use after fixing a cause that parked " +
+				"a whole population. Two mutually exclusive modes: pass 'keys', an explicit array of " +
+				"elementInstanceKey values (from atlas_list_incidents), or a scope — any of 'processDefKey', " +
+				"'processInstanceKey', 'elementId', 'type', 'message' — which resolves every incident matching " +
+				"it, bounded per call by 'limit'. A scope must name at least one of those: resolving every " +
+				"incident on the server is asked for deliberately with type=\"job\". 'retries' is the budget " +
+				"each resumed job gets (default 1); a retry against an unfixed cause parks the token again " +
+				"with the new reason, so fix first and resolve after. Returns {resolved, notFound, remaining, " +
+				"stats}: 'remaining' true means the per-call cap was hit — call again with the same arguments " +
+				"until it is false.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"keys": map[string]any{
+						"type":        "array",
+						"items":       map[string]any{"type": "integer"},
+						"description": "Explicit elementInstanceKey values to resolve. Mutually exclusive with the scope fields.",
+					},
+					"processDefKey":      map[string]any{"type": "integer", "minimum": 1, "description": "Resolve incidents of instances of this deployed definition."},
+					"processInstanceKey": map[string]any{"type": "integer", "minimum": 1, "description": "Resolve incidents of this one process instance."},
+					"elementId":          stringProp("Resolve incidents parked on this BPMN element id (an atlas_incident_summary group's elementId)."),
+					"elementIndex":       map[string]any{"type": "integer", "minimum": 0, "description": "Resolve incidents parked on this compiled element index (a group's elementIndex) — the way to name the element of a group whose definition is no longer deployed, where no BPMN id can be resolved. Use it with processDefKey; an index means nothing outside its own definition."},
+					"type":               stringProp("Resolve incidents of this kind: \"job\", \"timer\", \"budget\" or \"error\" (a BPMN error nothing caught)."),
+					"message":            stringProp("Resolve incidents whose message contains this text (case-insensitive)."),
+					"retries":            map[string]any{"type": "integer", "minimum": 1, "description": "Attempts to grant each re-activated job (default 1)."},
+					"limit":              map[string]any{"type": "integer", "minimum": 1, "description": "Scope-mode per-call cap (default 500, capped at 5000). Repeat while remaining is true."},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				body, err := resolveIncidentsBody(args)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/incidents/resolve", "application/json", body))
+			},
+		},
+		{
 			Name: "atlas_migration_plan",
 			Description: "Answer what migrating a running instance to another version of its process would " +
 				"do — without changing anything. Returns {instanceKey, fromProcessDefKey, fromVersion, " +
@@ -706,13 +1092,16 @@ func runtimeTools() []Tool {
 				"refused (a token on an element the target does not have, a changed element type or scope, a " +
 				"catch waiting on a different message). Call this before atlas_migrate_instance — the mapping " +
 				"is derived from two graphs and 'which of my tokens would be stranded' is not answerable by " +
-				"eye (ADR-0162).",
+				"eye (ADR-0162). The answer also carries 'fork': what atlas_fork_instance would do instead " +
+				"— {resume, parked, candidates, variables, dataObjects, jobs, forkable, problems} — so a " +
+				"refused rebinding comes back with its next step rather than a dead end.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"key":                 map[string]any{"type": "integer", "description": "The running instance key to plan a migration for."},
 					"targetProcessDefKey": map[string]any{"type": "integer", "description": "The deployed definition key to migrate to — another version of the same process."},
 					"mapping":             migrationMappingSchema(),
+					"resume":              forkResumeSchema(),
 				},
 				"required": []any{"key", "targetProcessDefKey"},
 			},
@@ -759,12 +1148,48 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_fork_instance",
+			Description: "Continue a running instance in a NEW instance of another version of its process, " +
+				"when atlas_migrate_instance has refused because its tokens cannot be rebound. The instance " +
+				"is ended where it is and a successor of the target version starts at the elements in " +
+				"'resume' (or, if none are given, at the ones proposed from where its tokens are now), " +
+				"carrying its root-scope variables and data objects; each instance's record names the other. " +
+				"In-flight jobs, user tasks and incidents end with the predecessor and are NOT carried — " +
+				"call atlas_migration_plan first and read its 'fork' block before using this. A 'reason' is " +
+				"required and recorded as an operator action on both instances. Refused (409) with the same " +
+				"fork plan when it does not hold, writing nothing. Returns the plan plus " +
+				"'successorInstanceKey' (ADR-0389).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":                 map[string]any{"type": "integer", "description": "The running instance key to fork. A call activity's child cannot be forked."},
+					"targetProcessDefKey": map[string]any{"type": "integer", "description": "The deployed definition key to continue in — another version of the same process."},
+					"reason":              map[string]any{"type": "string", "description": "Why this instance is being forked. Recorded in both instances' audit trails."},
+					"resume":              forkResumeSchema(),
+				},
+				"required": []any{"key", "targetProcessDefKey", "reason"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				body, err := migrationBody(args, true)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/instances/"+strconv.FormatUint(key, 10)+"/migrate/fork", "application/json", body))
+			},
+		},
+		{
 			Name: "atlas_migrate_instances",
 			Description: "Migrate a bounded batch of one deployed definition's running instances to another " +
 				"version of the same process. Each instance is migrated independently, so a refusal on one " +
-				"does not roll back the others: returns {toProcessDefKey, migrated, refused, remaining}, " +
-				"where 'refused' carries a full plan per instance that could not move. Repeat while " +
-				"'remaining' is true. A 'reason' is required (ADR-0162).",
+				"does not roll back the others: returns {toProcessDefKey, migrated, refused, remaining, " +
+				"nextCursor}, where 'refused' carries a full plan per instance that could not move. Repeat " +
+				"while 'remaining' is true, passing 'nextCursor' as 'after': a refused instance stays on " +
+				"its version, and a call without the cursor starts from the oldest instance again. A " +
+				"'reason' is required (ADR-0162).",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -772,6 +1197,7 @@ func runtimeTools() []Tool {
 					"targetProcessDefKey": map[string]any{"type": "integer", "description": "The deployed definition key to migrate them to."},
 					"reason":              map[string]any{"type": "string", "description": "Why these instances are being migrated. Recorded per instance in its audit trail."},
 					"limit":               map[string]any{"type": "integer", "minimum": 1, "description": "Maximum instances to migrate in this call (default 500, capped at 5000)."},
+					"after":               map[string]any{"type": "string", "description": "The nextCursor the previous call returned; this call continues past it. Omit on the first call."},
 					"mapping":             migrationMappingSchema(),
 				},
 				"required": []any{"key", "targetProcessDefKey", "reason"},
@@ -785,16 +1211,74 @@ func runtimeTools() []Tool {
 				if err != nil {
 					return "", err
 				}
-				path := "/api/v1/processes/" + strconv.FormatUint(key, 10) + "/migrate-instances"
-				if limit, present, err := optPositiveUint(args, "limit"); err != nil {
+				query, err := batchQuery(args)
+				if err != nil {
 					return "", err
-				} else if present {
-					path += "?limit=" + strconv.FormatUint(limit, 10)
 				}
+				path := "/api/v1/processes/" + strconv.FormatUint(key, 10) + "/migrate-instances" + query
 				return asText(c.post(path, "application/json", body))
 			},
 		},
+		{
+			Name: "atlas_reindex_instances",
+			Description: "Bring a bounded batch of one deployed definition's running instances back in " +
+				"line with what it declares atlas:searchable, so a value search over that version finds " +
+				"them by index. Needed only for instances migrated onto a version whose declaration " +
+				"differs from the one that wrote their values — a migration corrects that as it happens. " +
+				"Returns {processDefKey, searchable, submitted, remaining, nextCursor}; repeat while " +
+				"'remaining' is true, passing 'nextCursor' as 'after' — without it every call selects the " +
+				"same instances again. Idempotent: an instance already in step is written nothing (ADR-0244).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":   map[string]any{"type": "integer", "description": "The deployed definition key whose running instances to reindex."},
+					"limit": map[string]any{"type": "integer", "minimum": 1, "description": "Maximum instances to reindex in this call (default 500, capped at 5000)."},
+					"after": map[string]any{"type": "string", "description": "The nextCursor the previous call returned; this call continues past it. Omit on the first call."},
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				query, err := batchQuery(args)
+				if err != nil {
+					return "", err
+				}
+				path := "/api/v1/processes/" + strconv.FormatUint(key, 10) + "/reindex-instances" + query
+				return asText(c.post(path, "application/json", nil))
+			},
+		},
 	}
+}
+
+// batchQuery renders the paging arguments the batch tools share — a page size and the
+// cursor the previous call handed back — as the query string their endpoints read.
+//
+// A cursor that is present but is not the string the server handed back is refused
+// rather than dropped: dropped, the call would quietly start from the front again,
+// which is the repeat the cursor exists to prevent.
+func batchQuery(args map[string]any) (string, error) {
+	q := url.Values{}
+	if limit, present, err := optPositiveUint(args, "limit"); err != nil {
+		return "", err
+	} else if present {
+		q.Set("limit", strconv.FormatUint(limit, 10))
+	}
+	if v, present := args["after"]; present {
+		after, ok := v.(string)
+		if !ok {
+			return "", fmt.Errorf("argument %q must be the nextCursor string the previous call returned", "after")
+		}
+		if after = strings.TrimSpace(after); after != "" {
+			q.Set("after", after)
+		}
+	}
+	if len(q) == 0 {
+		return "", nil
+	}
+	return "?" + q.Encode(), nil
 }
 
 // migrationMappingSchema describes the optional element-id overrides all three
@@ -817,6 +1301,22 @@ func migrationMappingSchema() map[string]any {
 	}
 }
 
+// forkResumeSchema is where a fork picks the work up again: element ids in the *target*
+// version, which is the only element identity a human controls. Optional everywhere —
+// omitting it asks the server for the proposal derived from where the tokens are now,
+// which is right whenever the ids survived the edit
+// (ADR-0389).
+func forkResumeSchema() map[string]any {
+	return map[string]any{
+		"type": "array",
+		"description": "BPMN element ids in the TARGET version where the successor instance starts. Omit to " +
+			"use the proposal derived from where this instance's tokens are now. Each must be an element in " +
+			"the process itself (not inside a subprocess), not a boundary event, an event subprocess or a " +
+			"joining gateway.",
+		"items": map[string]any{"type": "string"},
+	}
+}
+
 // migrationBody assembles the shared request body for the migration tools. withReason
 // is true for the two that actually write, where the API requires one.
 func migrationBody(args map[string]any, withReason bool) ([]byte, error) {
@@ -834,6 +1334,12 @@ func migrationBody(args map[string]any, withReason bool) ([]byte, error) {
 	}
 	if raw, ok := args["mapping"]; ok && raw != nil {
 		body["mapping"] = raw
+	}
+	// Resume points ride on the same body: the plan endpoint answers both readings of
+	// "move this instance to that version" at once, and the fork endpoint takes them as
+	// where the successor starts (ADR-0389).
+	if raw, ok := args["resume"]; ok && raw != nil {
+		body["resume"] = raw
 	}
 	return json.Marshal(body)
 }

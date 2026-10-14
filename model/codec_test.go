@@ -45,6 +45,16 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "variable index membership",
+			vt:     VTVariableIndex,
+			intent: IntentVariableIndexed,
+			value: &VariableIndexValue{
+				ProcessInstanceKey: NewKey(2, 9),
+				Name:               "identityId",
+				Indexed:            true,
+			},
+		},
+		{
 			name:   "job",
 			vt:     VTJob,
 			intent: IntentJobCreated,
@@ -163,6 +173,19 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "incident carries the reason it was raised",
+			vt:     VTIncident,
+			intent: IntentIncidentCreated,
+			value: &IncidentValue{
+				ProcessInstanceKey: NewKey(1, 5),
+				ElementInstanceKey: NewKey(1, 6),
+				ElementId:          4,
+				RaisedAt:           1_700_000_999,
+				Message:            "this token took 10000 steps in one run without ever waiting",
+				Reason:             IncidentOverBudget,
+			},
+		},
+		{
 			name:   "active process instance",
 			vt:     VTProcessInstance,
 			intent: IntentActivated,
@@ -219,6 +242,39 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "forked process instance names the instance it continues",
+			vt:     VTProcessInstance,
+			intent: IntentActivated,
+			value: &ProcessInstanceValue{
+				ProcessDefKey:          NewKey(3, 2),
+				CreatedAt:              1_700_000_000_000_000_000,
+				PredecessorInstanceKey: NewKey(3, 9),
+			},
+		},
+		{
+			name:   "a public start's process instance carries the hash of its pass",
+			vt:     VTProcessInstance,
+			intent: IntentActivated,
+			value: &ProcessInstanceValue{
+				ProcessDefKey:  NewKey(3, 2),
+				CreatedAt:      1_700_000_000_000_000_000,
+				PublicPassHash: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+			},
+		},
+		{
+			name:   "forked-away process instance names its successor in history",
+			vt:     VTProcessInstance,
+			intent: IntentTerminated,
+			value: &ProcessInstanceValue{
+				ProcessDefKey:        NewKey(3, 2),
+				State:                PITerminated,
+				CompletedAt:          1_700_000_000_000_000_000,
+				CreatedAt:            1_699_999_999_000_000_000,
+				CompletedPosition:    4_242,
+				SuccessorInstanceKey: NewKey(3, 11),
+			},
+		},
+		{
 			name:   "message subscription",
 			vt:     VTMessageSubscription,
 			intent: IntentSubscriptionCreated,
@@ -237,6 +293,23 @@ func TestRecordRoundTrip(t *testing.T) {
 				SourceID:  "clio:orders-clio:/orders",
 				SourceSeq: 1_700_000_042,
 			},
+		},
+		{
+			name:   "trigger receipt",
+			vt:     VTTriggerReceipt,
+			intent: IntentTriggerReceived,
+			value: &TriggerReceiptValue{
+				Source:      "hr-system",
+				TriggerID:   "leaver-4711",
+				InstanceKey: NewKey(1, 77),
+				At:          1_790_000_000_000_000_000,
+			},
+		},
+		{
+			name:   "trigger receipts pruned",
+			vt:     VTTriggerReceipt,
+			intent: IntentTriggerReceiptsPruned,
+			value:  &TriggerReceiptValue{Cutoff: 1_780_000_000_000_000_000},
 		},
 		{
 			name:   "header only, no payload",
@@ -286,6 +359,26 @@ func TestProcessInstanceDecodeLegacy(t *testing.T) {
 	}
 	if !reflect.DeepEqual(v, want) {
 		t.Errorf("legacy decode = %+v, want %+v", v, want)
+	}
+}
+
+// TestAProcessInstanceWrittenBeforeThePassDecodesWithout: a record from before the pass
+// hash existed ends after the successor key, and decodes as an instance no public start
+// handed a pass for (ADR-0449).
+func TestAProcessInstanceWrittenBeforeThePassDecodesWithout(t *testing.T) {
+	full := &ProcessInstanceValue{ProcessDefKey: 7, CreatedAt: 1, SuccessorInstanceKey: 9, PublicPassHash: "ab"}
+	enc := full.encode(nil)
+	legacy := enc[:len(enc)-6] // the string's four-byte length and its two bytes
+	var got ProcessInstanceValue
+	if err := got.decode(legacy); err != nil {
+		t.Fatalf("decode a record written before the pass: %v", err)
+	}
+	if got.PublicPassHash != "" || got.SuccessorInstanceKey != 9 || got.ProcessDefKey != 7 {
+		t.Errorf("legacy record decoded as %+v", got)
+	}
+	var back ProcessInstanceValue
+	if err := back.decode(enc); err != nil || back.PublicPassHash != "ab" {
+		t.Errorf("round trip: %+v, %v", back, err)
 	}
 }
 
@@ -348,6 +441,35 @@ func TestReadRecordShortBuffer(t *testing.T) {
 	buf := AppendRecord(nil, &r)
 	if _, err := ReadRecord(buf[:HeaderSize+2]); !errors.Is(err, ErrShortBuffer) {
 		t.Errorf("short payload: err = %v, want ErrShortBuffer", err)
+	}
+}
+
+// TestReadHeaderStopsAtTheHeader is the point of having it: the payload is not touched, so a
+// reader that only asks what a record *is* pays a fixed cost and allocates nothing — and it
+// still refuses a buffer too short to hold a header, because a header read from nothing is not
+// a header.
+func TestReadHeaderStopsAtTheHeader(t *testing.T) {
+	r := Record{Header: sampleHeader(), Value: &ElementInstanceValue{ElementId: 1}}
+	buf := AppendRecord(nil, &r)
+
+	// A header decoded from the header bytes alone, with the payload cut away entirely.
+	h, err := ReadHeader(buf[:HeaderSize])
+	if err != nil {
+		t.Fatalf("ReadHeader: %v", err)
+	}
+	if h != r.Header {
+		t.Errorf("header = %+v, want %+v", h, r.Header)
+	}
+	// Same answer over the whole record: the payload changes nothing.
+	if whole, err := ReadHeader(buf); err != nil || whole != h {
+		t.Errorf("ReadHeader(whole) = %+v, %v; want the same header", whole, err)
+	}
+	if _, err := ReadHeader(buf[:HeaderSize-1]); !errors.Is(err, ErrShortBuffer) {
+		t.Errorf("short header: err = %v, want ErrShortBuffer", err)
+	}
+
+	if n := testing.AllocsPerRun(100, func() { _, _ = ReadHeader(buf) }); n != 0 {
+		t.Errorf("ReadHeader allocated %v times per call, want 0", n)
 	}
 }
 
@@ -457,15 +579,21 @@ func TestVariableIndexedRoundTrip(t *testing.T) {
 
 // TestVariableIndexedAppendCompatible pins its on-disk compatibility, and with it the
 // one honest limitation of the index: a record written before the flag existed reads
-// back as not indexed. Such a variable is findable by a content walk, never by a
-// seek, until it is written again — which is why the index is seeded once from the
-// declarations at startup rather than assumed complete.
+// back as not indexed. Such a variable is findable by a content walk, never by a seek,
+// until it is written again — or until its membership is corrected by a
+// VariableIndexed event, which is what a migration and an operator's reindex emit
+// (ADR-0295). Nothing seeds the index at
+// startup: it is folded from the log like every other derived index.
 func TestVariableIndexedAppendCompatible(t *testing.T) {
 	full := AppendValue(nil, &VariableValue{
 		ScopeKey: NewKey(1, 5), Name: "identityId", Kind: VarString, Text: "MT-1998",
 		ProducerKey: NewKey(1, 7), Indexed: true,
 	})
-	legacy := full[:len(full)-1] // exactly what the pre-index encoder would have written
+	// Exactly what the pre-index encoder would have written: the record ended after
+	// ProducerKey. Both fields appended since — the Indexed byte and the four-byte
+	// Index — come off, which is why this is not "drop the last byte": a later
+	// appended field would have made that silently strip the wrong one.
+	legacy := full[:len(full)-(1+4)]
 
 	v := VariableValue{Indexed: true} // reused: carries someone else's flag
 	if err := DecodeValueInto(&v, legacy); err != nil {
@@ -512,5 +640,57 @@ func TestVariableIndexText(t *testing.T) {
 				t.Errorf("IndexText() = (%q, %v), want (%q, %v)", got, ok, tc.want, tc.wantOK)
 			}
 		})
+	}
+}
+
+// TestVariableIndexDecodeErrors covers the guards on a truncated membership record.
+// It carries a length-prefixed name, so a buffer can end in three places: before the
+// instance key, inside the name, and before the flag that is the whole point of the
+// record — and a flag read off the end would silently invert an instance's
+// searchability.
+func TestVariableIndexDecodeErrors(t *testing.T) {
+	full := AppendValue(nil, &VariableIndexValue{
+		ProcessInstanceKey: NewKey(1, 3), Name: "identityId", Indexed: true,
+	})
+	for _, tc := range []struct {
+		name string
+		buf  []byte
+	}{
+		{"before the key", full[:4]},
+		{"inside the name", full[:12]},
+		{"before the flag", full[:len(full)-1]},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := DecodeValue(VTVariableIndex, tc.buf); !errors.Is(err, ErrShortBuffer) {
+				t.Errorf("DecodeValue = %v, want ErrShortBuffer", err)
+			}
+		})
+	}
+}
+
+// TestVariableIndexAppendCompatible: Index is the newest appended field, and a record
+// written before it existed has to read back as -1 — "this write is the whole value".
+// Zero would have been the wrong default: zero is a real index, and a record from
+// before the field would have claimed to set element 0 of a list.
+func TestVariableIndexAppendCompatible(t *testing.T) {
+	full := AppendValue(nil, &VariableValue{
+		ScopeKey: NewKey(1, 5), Name: "results", Kind: VarString, Text: "x", Index: 7,
+	})
+	legacy := full[:len(full)-4] // ends after the Indexed byte
+
+	v := VariableValue{Index: 7} // reused: carries someone else's index
+	if err := DecodeValueInto(&v, legacy); err != nil {
+		t.Fatalf("DecodeValueInto(legacy): %v", err)
+	}
+	if v.Index != -1 {
+		t.Errorf("Index = %d, want -1 — a record from before the field sets no element", v.Index)
+	}
+
+	var round VariableValue
+	if err := DecodeValueInto(&round, full); err != nil {
+		t.Fatalf("DecodeValueInto(full): %v", err)
+	}
+	if round.Index != 7 {
+		t.Errorf("Index = %d, want 7 round-tripped", round.Index)
 	}
 }

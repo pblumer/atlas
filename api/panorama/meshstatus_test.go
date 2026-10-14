@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 // withStatus returns a copy of a process carrying an observation, so a status test
@@ -431,6 +432,82 @@ func TestCollapsedApplicationSumsTheIncidentsBehindIt(t *testing.T) {
 	}
 	if got := nodeByID(t, g, "application:a1").Incidents; got != 21 {
 		t.Errorf("Incidents = %d, want 21 — the sum of what all six hold", got)
+	}
+}
+
+// TestIncidentAgeRidesWithTheCountAndIsAbsentWhenUndated. A count says how much is
+// parked; only the raise time says how long it has been. Four hundred incidents from
+// the last five minutes is a worker that has just fallen over and drains itself once
+// somebody restarts it; three standing since Friday is a process nobody is coming
+// back to — and the count ranks those the wrong way round every time.
+//
+// Absent rather than zero where nothing is dated, which is the case that matters: an
+// incident raised before the engine recorded the moment is a gap in the record, and a
+// zero on the wire would date the process to the epoch and draw it as the oldest
+// trouble on the estate.
+func TestIncidentAgeRidesWithTheCountAndIsAbsentWhenUndated(t *testing.T) {
+	const friday = int64(1_700_000_000_000_000_000)
+	parked := withStatus(proc(1, "invoice", "Invoice", "a1"), StateDegraded, "parked")
+	parked.Incidents = 3
+	parked.OldestIncident = friday
+	// Parked, and holding only incidents this engine never dated.
+	undated := withStatus(proc(2, "dunning", "Dunning", "a1"), StateDegraded, "parked")
+	undated.Incidents = 2
+	clean := withStatus(proc(3, "chase", "Chase", "a1"), StateHealthy, "nothing parked")
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{parked, undated, clean},
+	}, Options{})
+
+	if got := nodeByID(t, g, "process:1").OldestIncident; got != friday {
+		t.Errorf("OldestIncident = %d, want %d", got, friday)
+	}
+	for _, id := range []string{"process:2", "process:3", "application:a1"} {
+		if got := nodeByID(t, g, id).OldestIncident; got != 0 {
+			t.Errorf("%s carries OldestIncident = %d, want none", id, got)
+		}
+	}
+
+	// Off the wire entirely where there is nothing to date, so "not known" and "raised
+	// at the epoch" cannot arrive as the same number.
+	encoded, err := json.Marshal(nodeByID(t, g, "process:2"))
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(encoded), "oldestIncident") {
+		t.Errorf("an undated node still names the field: %s", encoded)
+	}
+}
+
+// TestCollapsedApplicationKeepsTheEarliestIncidentBehindIt. The collapsed node stands
+// for every process under it, so how long it has been in trouble is how long the
+// longest-parked of them has been — the same argument its summed count makes, read
+// the other way round. The latest would say only that something broke recently, which
+// is the opposite of the question.
+func TestCollapsedApplicationKeepsTheEarliestIncidentBehindIt(t *testing.T) {
+	const base = int64(1_700_000_000_000_000_000)
+	land := Landscape{Applications: []Application{app("a1", "Billing")}}
+	for i := 1; i <= 6; i++ {
+		p := withStatus(proc(uint64(i), "p", "P", "a1"), StateDegraded, "parked")
+		p.Incidents = 1
+		// Descending, so the earliest is not simply the first one seen.
+		p.OldestIncident = base + int64(10-i)*int64(time.Hour)
+		land.Processes = append(land.Processes, p)
+	}
+	// And one holding an undated incident, which must not win by being a zero.
+	undated := withStatus(proc(7, "p", "P", "a1"), StateDegraded, "parked")
+	undated.Incidents = 1
+	land.Processes = append(land.Processes, undated)
+
+	g := DeriveGraph(land, Options{MaxNodes: 3})
+
+	if !g.Clustered {
+		t.Fatal("Clustered = false; this test is about the collapsed shape")
+	}
+	want := base + 4*int64(time.Hour)
+	if got := nodeByID(t, g, "application:a1").OldestIncident; got != want {
+		t.Errorf("OldestIncident = %d, want %d — the earliest of the seven", got, want)
 	}
 }
 

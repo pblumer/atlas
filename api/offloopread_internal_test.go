@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -17,7 +18,9 @@ import (
 // newOffLoopServer builds a real server over a temp dir. The off-loop read path
 // is about the run loop, so nothing here may be faked: the test needs the actual
 // loop goroutine to observe that it stays free.
-func newOffLoopServer(t *testing.T) (*Server, func()) {
+// opts are passed through to New, so a test that needs one of the server's own
+// seams — a held ticker, an injected clock — gets it without a second helper.
+func newOffLoopServer(t *testing.T, opts ...Option) (*Server, func()) {
 	t.Helper()
 	dir := t.TempDir()
 	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
@@ -32,7 +35,7 @@ func newOffLoopServer(t *testing.T) (*Server, func()) {
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv, err := New(proc, store, dir)
+	srv, err := New(proc, store, dir, opts...)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -202,14 +205,21 @@ func TestListAndTimelineDuringShutdown(t *testing.T) {
 	}
 }
 
-// TestStatsAndIncidentsDuringShutdown pins the two endpoints converted alongside the
-// login to the off-loop read path, and it discriminates rather than merely covers.
+// TestStatsAndIncidentsDuringShutdown pins the endpoints converted to the off-loop
+// read path, and it discriminates rather than merely covers.
 //
 // A closure handed to do() is silently skipped once the loop is closing, so the old
 // handlers answered 200: /stats with three zeros, which reads as "the engine is
 // empty", and /incidents with an empty list, which reads as "nothing is stuck". Both
 // are answers an operator would act on, and both were untrue. Only a handler that
 // takes its view through readOffLoop can tell "no answer" from "the empty answer".
+//
+// The cause summary and the bulk resolve are the same hazard one size up
+// (ADR-0337): a summary of {"total":0} says the server is healthy,
+// and a bulk resolve reporting {"resolved":0} says the scope matched nothing — when
+// in truth neither was ever asked. Both must refuse instead, in either mode: the
+// scope selects through readOffLoop, and the explicit-keys mode reaches the same
+// refusal through the stats read it answers with.
 func TestStatsAndIncidentsDuringShutdown(t *testing.T) {
 	srv, closeSrv := newOffLoopServer(t)
 	closeSrv()
@@ -221,6 +231,11 @@ func TestStatsAndIncidentsDuringShutdown(t *testing.T) {
 	}{
 		{"stats", srv.handleStats, httptest.NewRequest("GET", "/api/v1/stats", nil)},
 		{"incidents", srv.handleListIncidents, httptest.NewRequest("GET", "/api/v1/incidents", nil)},
+		{"incident summary", srv.handleIncidentSummary, httptest.NewRequest("GET", "/api/v1/incidents/summary", nil)},
+		{"bulk resolve by scope", srv.handleResolveIncidents,
+			httptest.NewRequest("POST", "/api/v1/incidents/resolve", strings.NewReader(`{"type":"job"}`))},
+		{"bulk resolve by keys", srv.handleResolveIncidents,
+			httptest.NewRequest("POST", "/api/v1/incidents/resolve", strings.NewReader(`{"keys":[1]}`))},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
@@ -234,8 +249,14 @@ func TestStatsAndIncidentsDuringShutdown(t *testing.T) {
 }
 
 // TestStatsCountsWhatTheViewHolds checks the conversion did not change the answer:
-// the counts still come from the same three queries, now read from a snapshot. The
-// write goes through the loop, so it is ordered before the view this takes.
+// the counts are read from a snapshot, and a write that went through the loop before
+// it is ordered before the view, so it is visible in it.
+//
+// The write has to maintain the per-definition counter beside the record, because that
+// is what the count is read from now (ADR-0382) and
+// because it is what writing an instance *means*: applyToState puts the two in one
+// firstErr, so no event can produce one without the other. A raw PutProcessInstance on
+// its own would set up a state the engine cannot reach, and assert against it.
 func TestStatsCountsWhatTheViewHolds(t *testing.T) {
 	srv, _ := newOffLoopServer(t)
 
@@ -248,6 +269,10 @@ func TestStatsCountsWhatTheViewHolds(t *testing.T) {
 		tx := srv.store.NewTransaction()
 		if err := tx.PutProcessInstance(4242, &model.ProcessInstanceValue{ProcessDefKey: 1}); err != nil {
 			t.Errorf("PutProcessInstance: %v", err)
+			return
+		}
+		if err := tx.IncDefInstanceCount(1); err != nil {
+			t.Errorf("IncDefInstanceCount: %v", err)
 			return
 		}
 		if err := tx.Commit(); err != nil {

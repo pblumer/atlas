@@ -20,7 +20,7 @@ func TestGetTaskByKey(t *testing.T) {
 	var list []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &list); err != nil || len(list) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &list); err != nil || len(list) != 1 {
 		t.Fatalf("list tasks: err=%v body=%s", err, body)
 	}
 	key := list[0].Key
@@ -76,7 +76,7 @@ func TestGetTaskByKeyErrors(t *testing.T) {
 	var list []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &list); err != nil || len(list) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &list); err != nil || len(list) != 1 {
 		t.Fatalf("list tasks: err=%v body=%s", err, body)
 	}
 	if code, b := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/tasks/%d/complete", list[0].Key), "{}", "application/json"); code != http.StatusOK {

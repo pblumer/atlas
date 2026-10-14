@@ -50,7 +50,7 @@ type created struct {
 // HandleAddElement creates an element and places it on a view.
 func (s *Service) HandleAddElement(w http.ResponseWriter, r *http.Request) {
 	var payload addElementRequest
-	if !decodeJSON(w, r, &payload) {
+	if !s.decodeJSON(w, r, &payload) {
 		return
 	}
 	s.writeContent(w, r, payload.ExpectedRevision, "add element",
@@ -69,7 +69,7 @@ func (s *Service) HandleAddElement(w http.ResponseWriter, r *http.Request) {
 // given — and learns the rule rather than only that it was refused.
 func (s *Service) HandleAddRelationship(w http.ResponseWriter, r *http.Request) {
 	var payload addRelationshipRequest
-	if !decodeJSON(w, r, &payload) {
+	if !s.decodeJSON(w, r, &payload) {
 		return
 	}
 	s.writeContent(w, r, payload.ExpectedRevision, "add relationship",

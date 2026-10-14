@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
 )
 
 // Data-flow checking: what the information model is *for*.
@@ -48,6 +49,12 @@ const (
 	// RuleDataMemberThroughScalar marks a dotted write path that walks through a
 	// primitive or an enumeration, which has no members to walk into.
 	RuleDataMemberThroughScalar = "data.member-through-scalar"
+	// RuleDataNotALiteral marks a write of a *constant* value into a member an
+	// «enumeration» types, where that constant is none of the literals it declares. The
+	// model wrote down the complete set of values that member may hold, so a value
+	// outside it is matched by nothing, for ever — the RuleDataUnknownState case one
+	// level down (ADR-0351).
+	RuleDataNotALiteral = "data.not-a-literal"
 	// RuleDataMemberThroughCollection marks a dotted write path that walks through a
 	// collection attribute — legal to write, but it sets a member of the list value
 	// rather than of each element (ADR-0060 leaves list indexing to a follow-up).
@@ -64,6 +71,22 @@ const (
 	// RuleDataStoreUnbound marks a store that is modeled but has no Worker behind it,
 	// so nothing can actually reach what it holds.
 	RuleDataStoreUnbound = "data.store-unbound"
+
+	// RuleDataUnknownState: a process moves an object into a state its class's
+	// lifecycle does not declare (ADR-0259). The typo check, and the one that finds
+	// something on the first application it runs against.
+	RuleDataUnknownState = "data.unknown-state"
+
+	// RuleDataIllegalTransition: both states are declared and no transition joins
+	// them. Deliberately conservative — see checkLifecycles for what it stays quiet
+	// about, and why that is the right direction to be wrong in.
+	RuleDataIllegalTransition = "data.illegal-transition"
+
+	// RuleDataUnreachableState: a class declares a state that nothing the application
+	// deploys ever writes. Reported by CheckApplication rather than by CheckDataFlow,
+	// because it is the one lifecycle question a single compiled process cannot answer
+	// — see unreachablestate.go.
+	RuleDataUnreachableState = "data.unreachable-state"
 )
 
 // Vocabulary is what an application's information models say, flattened for
@@ -216,6 +239,7 @@ func CheckDataFlow(cp *compiler.CompiledProcess, vocab *Vocabulary) []compiler.P
 	ps = append(ps, checkMemberWrites(cp, vocab)...)
 	ps = append(ps, checkReadOrder(cp)...)
 	ps = append(ps, checkDataStores(cp, vocab)...)
+	ps = append(ps, checkLifecycles(cp, vocab)...)
 	sort.SliceStable(ps, func(a, b int) bool {
 		if ps[a].Element != ps[b].Element {
 			return ps[a].Element < ps[b].Element
@@ -262,10 +286,6 @@ func checkMemberWrites(cp *compiler.CompiledProcess, vocab *Vocabulary) []compil
 	for id := int32(0); int(id) < cp.NodeCount(); id++ {
 		element := cp.ElementBpmnId(id)
 		for _, a := range cp.DataOutputAssociations(id) {
-			path := cp.Intern(a.TargetPath)
-			if path == "" {
-				continue // a whole-object write: the value is FEEL, not a member name
-			}
 			objName := cp.Intern(a.DataObject)
 			do, ok := byName[objName]
 			if !ok {
@@ -275,7 +295,19 @@ func checkMemberWrites(cp *compiler.CompiledProcess, vocab *Vocabulary) []compil
 			if !ok {
 				continue // untyped or unresolved: already reported, and nothing to check against
 			}
-			ps = append(ps, checkPath(vocab, class, objName, path, element)...)
+			// Every write on the arrow, because BPMN lets one carry several and each is
+			// a member target in its own right (ADR-0350).
+			for _, w := range a.Writes {
+				path := cp.Intern(w.TargetPath)
+				if path == "" {
+					continue // a whole-object write: the value is FEEL, not a member name
+				}
+				if bad := checkPath(vocab, class, objName, path, element); len(bad) > 0 {
+					ps = append(ps, bad...)
+					continue // the path does not resolve; its value has nothing to be checked against
+				}
+				ps = append(ps, checkLiteralValue(vocab, class, objName, path, w.Value, element)...)
+			}
 		}
 	}
 	return ps
@@ -307,10 +339,69 @@ func checkPath(vocab *Vocabulary, class Class, objName, path, element string) []
 		if mult, known := MultiplicityOf(attr.Multiplicity); known && mult.Collection {
 			return []compiler.Problem{{
 				Element: element, Severity: compiler.SeverityWarning, Rule: RuleDataMemberThroughCollection,
-				Message: fmt.Sprintf("This activity writes %s.%s, and %s.%s is a list. The write sets a member of the list value itself, not of each %s in it — Atlas does not address a list element by index yet.", objName, path, current.Name, seg, next.Name),
+				Message: fmt.Sprintf("This activity writes %s.%s, and %s.%s is a list. The write sets a member of the list value itself, not of each %s in it — atlas does not address a list element by index yet.", objName, path, current.Name, seg, next.Name),
 			}}
 		}
 		current = next
+	}
+	return nil
+}
+
+// checkLiteralValue judges a write's value against the «enumeration» that types the
+// member it lands in — the fourth of the four questions ADR-0230, ADR-0259 and ADR-0060
+// answer from the model, and the only one that was still free text
+// (ADR-0351).
+//
+// It runs only on a *constant*: an expression with no inputs. That is the precise and
+// complete test for "this value is decided now rather than at run time", and it is the
+// whole of the rule's honesty. What `=if x then "a" else "b"` produces is not a fact of
+// the model, and judging it would be the false knowledge the derived model reports as a
+// gap. A constant has no inputs to bind, so evaluating it here is pure and total —
+// FEEL's evaluator reads nothing but the expression itself.
+//
+// The path is assumed to resolve: checkPath has already run and reported it otherwise.
+func checkLiteralValue(vocab *Vocabulary, class Class, objName, path string, value *expr.Compiled, element string) []compiler.Problem {
+	if value == nil || len(value.Inputs()) > 0 {
+		return nil
+	}
+	segments := strings.Split(path, ".")
+	current := class
+	for i, seg := range segments {
+		attr, ok := vocab.attribute(current.Name, seg)
+		if !ok {
+			return nil
+		}
+		if i < len(segments)-1 {
+			next, isClass := vocab.Class(attr.Type)
+			if !isClass {
+				return nil
+			}
+			current = next
+			continue
+		}
+		enum, isClass := vocab.Class(attr.Type)
+		if !isClass || enum.Stereotype != StereotypeEnumeration || len(enum.Literals) == 0 {
+			return nil // an ordinary member holds any value of its type; nothing is closed
+		}
+		result, err := value.Eval(nil)
+		if err != nil {
+			return nil // it did not evaluate here; the deploy has nothing to say about it
+		}
+		kind, _, text := expr.Classify(result)
+		if kind == expr.KindNull {
+			return nil // null is how a member is unset, not a value claiming to be a literal
+		}
+		for _, lit := range enum.Literals {
+			if lit == text {
+				return nil
+			}
+		}
+		return []compiler.Problem{{
+			Element: element, Severity: compiler.SeverityWarning, Rule: RuleDataNotALiteral,
+			Message: fmt.Sprintf("This activity writes %q into %s.%s, which is not one of the values %s declares (%s). "+
+				"Add it to the enumeration, or correct the spelling — the value is matched by that string and nothing else.",
+				text, objName, path, enum.Name, strings.Join(enum.Literals, ", ")),
+		}}
 	}
 	return nil
 }
@@ -391,6 +482,133 @@ func checkReadOrder(cp *compiler.CompiledProcess) []compiler.Problem {
 // plus the two containment edges a token also travels: into a scope's start events,
 // and onto an activity's boundary events.
 //
+// checkLifecycles resolves every data state this process writes against the lifecycle
+// its object's class declares (ADR-0259 §3).
+//
+// It is the data state's half of what checkDeclaredTypes does for itemSubjectRef, and
+// it is silent in the same ways: a class with no lifecycle says nothing (the normal
+// case), an object with no resolvable class says nothing, and everything it does say
+// is a warning — a lifecycle is routinely drawn after the process that writes it.
+//
+// **What it deliberately does not report.** Knowing which state an object can be in
+// *before* a write means reading the graph, and a per-process one can only
+// over-approximate: the predecessors of a write are the object's seeded state plus the
+// target of every other write that can reach it. Over-approximating makes this
+// quieter, never louder — more candidate predecessors means more chances that one of
+// them legally reaches the target, and one is enough to stay silent. That is the right
+// direction to be wrong in: a false warning about a model somebody drew correctly
+// costs more than a missed one.
+//
+// A transition made in *another* process — an order left "approved" by one and picked
+// up by the next — is out of reach of this graph entirely, and is not guessed at.
+//
+// ADR-0259's third check, data.unreachable-state, is not here. It asks whether *any*
+// process in the application writes a declared state, and this function is handed one
+// process; asking it per process would warn about every state that belongs to a
+// different one, which is worse than not asking at all. It needs the application's
+// whole set of deployed processes, and is a follow-up rather than a smaller version
+// of itself.
+func checkLifecycles(cp *compiler.CompiledProcess, vocab *Vocabulary) []compiler.Problem {
+	if !vocab.Modeled() {
+		return nil
+	}
+	var ps []compiler.Problem
+	reaches := reachability(cp)
+
+	for _, do := range cp.DataObjects() {
+		name := cp.Intern(do.Name)
+		class, ok := vocab.Class(cp.Intern(do.ItemType))
+		if !ok || class.Lifecycle == nil {
+			continue // untyped, unmodeled, or a class that declares no lifecycle
+		}
+		declared := map[string]bool{}
+		for _, st := range class.Lifecycle.States {
+			declared[st.Name] = true
+		}
+		unknown := func(state, where string) bool {
+			if state == "" || declared[state] {
+				return false
+			}
+			ps = append(ps, compiler.Problem{
+				Severity: compiler.SeverityWarning, Rule: RuleDataUnknownState,
+				Message: fmt.Sprintf("Data object %q %s the state %q, which is not one of the states %s declares. Add it to the lifecycle, or correct the spelling — a data state is matched by that string and nothing else.", name, where, state, class.Name),
+			})
+			return true
+		}
+
+		seeded := cp.Intern(do.InitialState)
+		unknown(seeded, "is created in")
+
+		// Every write of this object, with the node that makes it, so a write's
+		// possible predecessors can be read off the graph.
+		type write struct {
+			node  int32
+			state string
+		}
+		var writes []write
+		for id := int32(0); int(id) < cp.NodeCount(); id++ {
+			for _, a := range cp.DataOutputAssociations(id) {
+				if cp.Intern(a.DataObject) != name || a.TargetState < 0 {
+					continue
+				}
+				writes = append(writes, write{node: id, state: cp.Intern(a.TargetState)})
+			}
+		}
+
+		allowed := map[string]bool{}
+		for _, t := range class.Lifecycle.Transitions {
+			allowed[t.From+">"+t.To] = true
+		}
+
+		for _, w := range writes {
+			// An undeclared target is already reported as unknown. Complaining that no
+			// transition reaches a state which is not there would be one defect said
+			// twice, in a way that reads as two.
+			if unknown(w.state, "is moved into") {
+				continue
+			}
+			from := []string{}
+			if declared[seeded] {
+				from = append(from, seeded)
+			}
+			for _, other := range writes {
+				if other.node == w.node || !reaches[other.node][w.node] || !declared[other.state] {
+					continue
+				}
+				from = append(from, other.state)
+			}
+			if len(from) == 0 {
+				continue // nothing says where it came from, so nothing to say about the move
+			}
+			legal := false
+			for _, f := range from {
+				if allowed[f+">"+w.state] {
+					legal = true
+					break
+				}
+			}
+			if legal {
+				continue
+			}
+			sort.Strings(from)
+			ps = append(ps, compiler.Problem{
+				Severity: compiler.SeverityWarning, Rule: RuleDataIllegalTransition,
+				Message: fmt.Sprintf("Data object %q is moved to %q, and %s declares no transition to it from %s. Draw the transition, or write a state that follows.", name, w.state, class.Name, strings.Join(quoted(from), " or ")),
+			})
+		}
+	}
+	return ps
+}
+
+// quoted renders state names for a message.
+func quoted(in []string) []string {
+	out := make([]string, len(in))
+	for i, s := range in {
+		out[i] = fmt.Sprintf("%q", s)
+	}
+	return out
+}
+
 // Paths are of length one or more, so a node reaches itself only when it sits on a
 // cycle — which is exactly what distinguishes a loop's writer (it does precede the
 // next round's read) from an activity's own output association (it does not precede
@@ -459,4 +677,32 @@ func checkDataStores(cp *compiler.CompiledProcess, vocab *Vocabulary) []compiler
 		}
 	}
 	return ps
+}
+
+// Classes lists every authored class by name, in a settled order. The lookup above
+// answers "is this one modelled"; reading the difference between what is modelled and
+// what is built has to walk the other way too.
+func (v *Vocabulary) Classes() []Class {
+	if v == nil {
+		return nil
+	}
+	names := make([]string, 0, len(v.classes))
+	for name := range v.classes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make([]Class, 0, len(names))
+	for _, name := range names {
+		out = append(out, v.classes[name])
+	}
+	return out
+}
+
+// Members is a class's attributes with inherited ones first — what the class actually
+// has, rather than what its own definition lists.
+func (v *Vocabulary) Members(className string) []Attribute {
+	if v == nil {
+		return nil
+	}
+	return v.members[className]
 }

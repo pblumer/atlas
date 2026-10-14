@@ -1,6 +1,7 @@
 # ADR-0084: CSV batch validation — upload a file, validate every row against business rules, correct the failures
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-29
 - **Deciders:** Atlas maintainers
 

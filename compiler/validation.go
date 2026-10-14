@@ -113,7 +113,73 @@ const (
 	// write to either leaves the other as it was, and two things drift apart under one
 	// name while every expression in the model quietly means just one of them.
 	RuleVariableShadowsDataObject = "variable.shadows-data-object"
+
+	// RuleDecisionVersionTag marks a business rule task bound with Camunda's
+	// `versionTag`, which Atlas cannot honour: a decision version carries no tag
+	// here. It used to be read as latest, so a model that pinned a tag ran whatever
+	// was newest. A deploy refuses it; a definition already deployed with one is
+	// brought back on reload and keeps the behaviour it had (ADR-0177,
+	// ADR-0423).
+	RuleDecisionVersionTag = "decision.version-tag"
+
+	// RuleConditionalStart marks a process-level start event carrying a conditional
+	// event definition. Atlas runs a conditional event only inside an instance — a
+	// catch, a boundary or an event subprocess (ADR-0137) — because a condition reads
+	// variables, and before an instance exists there are none. The start used to be
+	// compiled as a plain start with its condition dropped, so the model deployed,
+	// never started on its own, and ran unconditionally when started by hand. A
+	// deploy refuses it; a definition already deployed with one is brought back on
+	// reload and keeps the behaviour it had (ADR-0177, ADR-0393,
+	// ADR-0429).
+	RuleConditionalStart = "start.conditional"
+
+	// RuleEventGatewayKind marks an event-based gateway of a kind atlas does not run:
+	// instantiate="true", which makes the gateway start the instance, or
+	// eventGatewayType="Parallel", which makes it wait for every event rather than the
+	// first. atlas runs the exclusive deferred choice inside a running instance
+	// (ADR-0110) and used to run these as that, so the model deployed and did something
+	// other than its diagram says. A deploy refuses it; a definition already deployed
+	// with one is brought back on reload and keeps the behaviour it had (ADR-0177,
+	// ADR-0393, #804).
+	RuleEventGatewayKind = "event-gateway.kind"
+
+	// The wizard rules (ADR-0449). A wizard is an embedded subprocess marked
+	// atlas:wizard: one sitting of one filler, walked user task by user task.
+	//
+	// RuleWizardValue marks an atlas:wizard value that names no kind. An error: the
+	// author meant something by it, and whatever it was would silently not happen.
+	RuleWizardValue = "wizard.value"
+	// RuleWizardNested marks a wizard inside a wizard. An error: a filler sees one
+	// sitting at a time, so a sitting within a sitting has no meaning they could see.
+	RuleWizardNested = "wizard.nested"
+	// RuleWizardEventSubProcess marks an event subprocess marked as a wizard. An
+	// error: nobody enters an event subprocess, so there is no filler to carry.
+	RuleWizardEventSubProcess = "wizard.event-subprocess"
+	// RuleWizardPublicAssignment marks a user task inside a public wizard that names an
+	// assignee or candidate groups. An error: the holder of a public wizard's step is
+	// whoever holds the sitting's pass, and a second answer to "who holds this" is one
+	// too many.
+	RuleWizardPublicAssignment = "wizard.public-assignment"
+	// RuleWizardWait marks an element inside a wizard that waits on something other
+	// than the filler: a message, a signal, a timer, a condition, an event-based race,
+	// or a called process, whose steps live in another instance the continuation does
+	// not follow. A warning: it runs, but the filler is left looking at a screen that
+	// says to wait.
+	RuleWizardWait = "wizard.wait"
+	// RuleWizardNoTimeout marks a wizard with no interrupting timer boundary event. A
+	// warning: a sitting nobody finishes then stays open for good. For a public wizard
+	// the publication of a start link refuses it (UntimedPublicWizard), because there
+	// every abandoned attempt of an anonymous visitor would stay a live instance.
+	RuleWizardNoTimeout = "wizard.no-timeout"
 )
+
+// eventGatewayKind is one event-based gateway marked as a kind atlas does not run,
+// recorded at compile time for stage 5 (RuleEventGatewayKind).
+type eventGatewayKind struct {
+	Node        int32
+	Instantiate bool // instantiate="true": the gateway starts the instance
+	Parallel    bool // eventGatewayType="Parallel": it waits for every event
+}
 
 // Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
 // the per-node graph checks — a fault that stops the compile before a linearized
@@ -126,6 +192,31 @@ const (
 	// unknown flow reference, a bad FEEL expression) — the pool named nothing the
 	// graph checks could inspect, so its error is surfaced as one Problem instead.
 	RuleCompile = "compile"
+	// RuleNullCall marks a stored definition brought back across a reload although
+	// it calls a FEEL function this build does not have (ADR-0388). The call keeps
+	// compiling to the constant null it has always been, because that is what the
+	// definition has been running as; the record is how the operator is told to fix
+	// the model, instead of the server refusing to start
+	// (ADR-0393). A deploy never raises it —
+	// there the same fault is a refusal.
+	RuleNullCall = "feel.null-call"
+
+	// RuleConstantName marks a stored definition brought back across a reload although
+	// one of its constants is not named in capitals (or takes a reserved name), which a
+	// deploy has refused since constant names were written in capitals (ADR-0454,
+	// amended). An error, reported rather than raised: the model ran under the name it
+	// has, and refusing it on a restart would take the server down for a spelling.
+	RuleConstantName = "constant.name"
+
+	// RuleConstantConflict marks a stored definition brought back across a reload although
+	// one of its constants contradicts the rest of it — a variable it asks for, declares
+	// personal or writes, or a fact the constant's namespace carries — which a deploy
+	// refuses (ADR-0454, ADR-0456). 0.12.0 deployed such models before the namespaces
+	// made a variable called application one of them. An error, reported rather than
+	// raised: the process still runs, its constant seeded first and the write that would
+	// replace it dropped, and refusing it on a restart would take the server down
+	// (ADR-0393).
+	RuleConstantConflict = "constant.conflict"
 )
 
 // Problem is one structured validation finding on a compiled process, shaped for
@@ -159,11 +250,91 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkErrorHandling(cp)...)
 	ps = append(ps, checkTransactions(cp)...)
 	ps = append(ps, checkTimerStartSchedules(cp)...)
+	ps = append(ps, checkConditionalStarts(cp)...)
+	ps = append(ps, checkEventGatewayKinds(cp)...)
 	ps = append(ps, checkLoopBounds(cp)...)
 	ps = append(ps, checkLoopCounterMappings(cp)...)
 	ps = append(ps, checkDottedTargets(cp)...)
 	ps = append(ps, checkVariableShadowsDataObject(cp)...)
 	ps = append(ps, checkAgentTools(cp)...)
+	ps = append(ps, checkDecisionBindings(cp)...)
+	ps = append(ps, checkWizards(cp)...)
+	return ps
+}
+
+// checkWizards holds a wizard subprocess to the shape ADR-0449 gives it: a known kind,
+// not nested, not event-triggered, bounded by a timer, steps in a public wizard
+// addressed to nobody, and nothing inside it that waits on anyone but the filler.
+func checkWizards(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for _, id := range cp.invalidWizards {
+		ps = append(ps, problem(cp, id, SeverityError, RuleWizardValue,
+			fmt.Sprintf(`%s has an atlas:wizard value atlas does not know: it is "internal" for signed-in fillers or "public" for the anonymous filler of a public start link`,
+				describeNode(cp, id))))
+	}
+	for i := range cp.nodes {
+		id := int32(i)
+		n := &cp.nodes[i]
+		if n.Wizard != WizardNone {
+			if n.EventSub >= 0 {
+				// The refusal is the whole answer: a timer on it or a wizard around it
+				// cannot make an event subprocess something a filler walks.
+				ps = append(ps, problem(cp, id, SeverityError, RuleWizardEventSubProcess,
+					fmt.Sprintf("%s is an event subprocess marked as a wizard: nobody enters an event subprocess, so there is no filler to carry from step to step", describeNode(cp, id))))
+				continue
+			}
+			if outer := cp.EnclosingWizard(id); outer >= 0 {
+				ps = append(ps, problem(cp, id, SeverityError, RuleWizardNested,
+					fmt.Sprintf("%s is a wizard inside the wizard %q: a filler walks one sitting at a time, so remove the mark from one of them", describeNode(cp, id), cp.ElementBpmnId(outer))))
+			}
+			if !cp.timedOut(id) {
+				ps = append(ps, problem(cp, id, SeverityWarning, RuleWizardNoTimeout,
+					fmt.Sprintf("%s is a wizard with no interrupting timer boundary event, so a sitting nobody finishes stays open for good; attach one to say when it is abandoned", describeNode(cp, id))))
+			}
+			continue
+		}
+		w := cp.EnclosingWizard(id)
+		if w < 0 {
+			continue
+		}
+		switch n.Type {
+		case TypeUserTask:
+			if d := cp.UserTask(n.Detail); cp.nodes[w].Wizard == WizardPublic && addressed(d) {
+				ps = append(ps, problem(cp, id, SeverityError, RuleWizardPublicAssignment,
+					fmt.Sprintf("%s is a step of the public wizard %q and names an assignee or candidate groups: a public wizard's steps belong to the anonymous filler who started it, so leave the assignment empty", describeNode(cp, id), cp.ElementBpmnId(w))))
+			}
+		case TypeReceiveTask, TypeMessageCatchEvent, TypeSignalCatchEvent, TypeTimerCatchEvent,
+			TypeConditionalCatchEvent, TypeEventBasedGateway, TypeCallActivity:
+			ps = append(ps, problem(cp, id, SeverityWarning, RuleWizardWait,
+				fmt.Sprintf("%s inside the wizard %q waits on something other than the filler, who is left on a screen that says to wait; a called process's steps are not followed at all. Move it after the wizard", describeNode(cp, id), cp.ElementBpmnId(w))))
+		}
+	}
+	return ps
+}
+
+// addressed reports whether a user task names anybody: an assignee or candidate
+// groups, written as a literal or as an expression.
+func addressed(d *UserTaskDetail) bool {
+	return d.Assignee >= 0 || d.CandidateGroups >= 0 || d.AssigneeExpr != nil || d.CandidateGroupsExpr != nil
+}
+
+// checkDecisionBindings refuses a local business rule task bound with `versionTag`
+// (RuleDecisionVersionTag). A central decision resolves through its worker, which
+// has no binding here, so only local tasks are checked.
+func checkDecisionBindings(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for id := range cp.nodes {
+		if cp.nodes[id].Type != TypeBusinessRuleTask {
+			continue
+		}
+		d := cp.BusinessRuleTask(cp.nodes[id].Detail)
+		if d.Connector >= 0 || d.Binding != BindingVersionTag {
+			continue
+		}
+		ps = append(ps, problem(cp, int32(id), SeverityError, RuleDecisionVersionTag,
+			fmt.Sprintf("%s binds decision %q by versionTag, which atlas does not support; bind it to Latest, to a deployed version (atlas:version), or to Deployment",
+				describeNode(cp, int32(id)), cp.Intern(d.DecisionId))))
+	}
 	return ps
 }
 
@@ -235,7 +406,9 @@ func ValidateModel(r io.Reader) ([]Problem, error) {
 	if err != nil {
 		return []Problem{{Severity: SeverityError, Rule: RuleParse, Message: err.Error()}}, nil
 	}
-	resolveMsg := buildMessageResolver(defs)
+	// A dry run answers "would this deploy", so it compiles as a deploy does.
+	g := strictFEEL
+	resolveMsg := buildMessageResolver(defs, g)
 	resolveSig := buildSignalResolver(defs)
 	resolveErr := buildErrorResolver(defs)
 	resolveEsc := buildEscalationResolver(defs)
@@ -251,7 +424,7 @@ func ValidateModel(r io.Reader) ([]Problem, error) {
 		// The key is irrelevant to a dry run — the compiled process is inspected and
 		// discarded, never registered — so a per-pool ordinal keeps it deterministic
 		// without touching the server's key counter.
-		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, resolveStore, docs, agentParams)
+		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, resolveStore, docs, agentParams, g)
 		executable++
 		if cerr != nil {
 			// A graph-level failure carries its element-anchored Problems; hand them
@@ -647,6 +820,41 @@ func checkTimerStartSchedules(cp *CompiledProcess) []Problem {
 				fmt.Sprintf("%s has a constant FEEL timer schedule that does not resolve: %s",
 					describeNode(cp, s.ElementId), err)))
 		}
+	}
+	return ps
+}
+
+// checkConditionalStarts refuses a process-level conditional start event
+// (RuleConditionalStart). The compile keeps it as the plain start it has always run
+// as, and records that it carried a condition, so this check can say so at deploy
+// while a reload still brings the definition back unchanged.
+func checkConditionalStarts(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for _, id := range cp.conditionalStarts {
+		ps = append(ps, problem(cp, id, SeverityError, RuleConditionalStart,
+			fmt.Sprintf("%s is a conditional start event, which atlas does not run: a condition reads variables, and before an instance exists there are none, so it would deploy as a plain start and never start on its own; put the condition inside a running instance (a conditional intermediate catch, boundary event or event subprocess), or start the process with the message or timer that observes it",
+				describeNode(cp, id))))
+	}
+	return ps
+}
+
+// checkEventGatewayKinds refuses an event-based gateway of a kind atlas does not run
+// (RuleEventGatewayKind). The compile keeps it as the exclusive choice it has always
+// run as, and records what it was marked as, so this check can say so at deploy while
+// a reload still brings the definition back unchanged.
+func checkEventGatewayKinds(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for _, k := range cp.eventGatewayKinds {
+		var marked []string
+		if k.Instantiate {
+			marked = append(marked, `instantiate="true", which would start the instance`)
+		}
+		if k.Parallel {
+			marked = append(marked, `eventGatewayType="Parallel", which would wait for every event`)
+		}
+		ps = append(ps, problem(cp, k.Node, SeverityError, RuleEventGatewayKind,
+			fmt.Sprintf("%s is marked %s; atlas runs an event-based gateway only as the exclusive deferred choice inside a running instance, where the first event wins and the others are withdrawn. Remove the attribute, or to start the process on any of several events use message, timer or signal start events",
+				describeNode(cp, k.Node), strings.Join(marked, " and "))))
 	}
 	return ps
 }

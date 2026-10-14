@@ -1,6 +1,7 @@
 # ADR-0173: Three SQL connectors, and the first kinds born on a worker
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
 

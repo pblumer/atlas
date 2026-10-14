@@ -133,7 +133,7 @@ func TestMockupTaskResultEvalErrorIsNull(t *testing.T) {
 // TestMockupTaskFailureRaisesIncidentAndReArms proves the failure simulation:
 // failRate=1 (always fail) parks the token with a job-less incident when the timer
 // fires, and resolving the incident re-arms a fresh attempt (a new timer) — which,
-// still at failRate=1, fails again. This exercises the incident + rearmTimerElement
+// still at failRate=1, fails again. This exercises the incident + resumeParkedElement
 // path a partial failRate reaches probabilistically.
 func TestMockupTaskFailureRaisesIncidentAndReArms(t *testing.T) {
 	h := openHarness(t, t.TempDir())

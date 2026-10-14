@@ -137,7 +137,7 @@ was dem Kunden genannt wurde, ist ein Fakt und keine Variable.</documentation>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_preiswechsel" bpmnElement="preiswechsel">
         <dc:Bounds x="432" y="202" width="36" height="36"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="380" y="242" width="140" height="14"/></bpmndi:BPMNLabel>
+        <bpmndi:BPMNLabel><dc:Bounds x="473" y="239" width="92" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_gw" bpmnElement="gw" isMarkerVisible="true">
         <dc:Bounds x="550" y="155" width="50" height="50"/>

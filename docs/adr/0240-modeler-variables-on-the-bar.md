@@ -1,6 +1,7 @@
 # ADR-0240: Variables stays on the Modeler's bar, as a pressed button with a shortcut
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-02
 - **Deciders:** Modeler UI
 

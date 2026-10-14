@@ -1,0 +1,91 @@
+{
+  "publish": true,
+  "catalogs": [
+    {
+      "id": "cat-verwaltung-dienste",
+      "texts": { "de": "Dienstleistungen der Verwaltung", "en": "Administration services" },
+      "rank": 100,
+      "languages": ["de", "en"],
+      "items": ["vd-zutrittsbadge", "vd-parkplatz"],
+      "groups": ["{{zielgruppe}}"],
+      "edges": [{ "from": "vd-parkplatz", "to": "vd-zutrittsbadge", "kind": "requires" }]
+    },
+    {
+      "id": "cat-fachbereich-bau",
+      "texts": { "de": "Fachbereich Bau", "en": "Building department" },
+      "rank": 110,
+      "languages": ["de", "en"],
+      "items": ["vd-geoportal", "vd-zutrittsbadge", "vd-parkplatz"],
+      "groups": ["{{zielgruppe-bau}}"],
+      "edges": [{ "from": "vd-parkplatz", "to": "vd-zutrittsbadge", "kind": "requires" }]
+    }
+  ],
+  "products": [
+    {
+      "id": "vd-zutrittsbadge",
+      "homeCatalog": "cat-verwaltung-dienste",
+      "state": "active",
+      "texts": { "de": "Zutrittsbadge", "en": "Access badge" },
+      "descriptions": {
+        "de": "Der persönliche Badge für die Gebäude der Verwaltung. Die Variante mit Serverraum öffnet zusätzlich den Technikbereich.",
+        "en": "The personal badge for the administration's buildings. The server-room variant also opens the technical area."
+      },
+      "variants": [
+        { "id": "standard", "texts": { "de": "Standard", "en": "Standard" } },
+        { "id": "serverraum", "texts": { "de": "Mit Zutritt Serverraum", "en": "Including the server room" } }
+      ],
+      "approval": { "kind": "superior" },
+      "lifecycleProcess": "proc_vd_zutrittsbadge",
+      "actions": [
+        { "key": "provision", "message": "vd.badge.ausgeben", "effect": "provision" },
+        { "key": "deprovision", "message": "vd.badge.einziehen", "effect": "deprovision", "triggers": ["customer", "operator"],
+          "labels": { "de": "Badge zurückgeben", "en": "Return the badge" } },
+        { "key": "sperren", "message": "vd.badge.sperren", "effect": "change", "triggers": ["customer", "operator"],
+          "labels": { "de": "Badge sperren", "en": "Block the badge" }, "form": "vd-badge-sperrung" },
+        { "key": "ersatz", "message": "vd.badge.ersatz", "effect": "service", "triggers": ["customer"],
+          "labels": { "de": "Ersatzbadge anfordern", "en": "Request a replacement" } }
+      ],
+      "category": "arbeitsplatz",
+      "categoryTexts": { "de": "Arbeitsplatz", "en": "Workplace" },
+      "keywords": ["Badge", "Zutritt", "Access"],
+      "price": "CHF 0.–"
+    },
+    {
+      "id": "vd-parkplatz",
+      "homeCatalog": "cat-verwaltung-dienste",
+      "state": "active",
+      "texts": { "de": "Parkplatz", "en": "Parking space" },
+      "descriptions": {
+        "de": "Ein fester Parkplatz in der Einstellhalle, für ein Jahr. Er setzt einen Zutrittsbadge voraus.",
+        "en": "A fixed space in the car park, for one year. It requires an access badge."
+      },
+      "approval": { "kind": "fixed", "ref": "{{facility-management}}" },
+      "provisionProcess": "proc_vd_parkplatz_zuteilen",
+      "deprovisionProcess": "proc_vd_parkplatz_freigeben",
+      "configForm": "vd-parkplatz-bestellung",
+      "maxDays": 365,
+      "category": "arbeitsplatz",
+      "categoryTexts": { "de": "Arbeitsplatz", "en": "Workplace" },
+      "keywords": ["Parkplatz", "Auto", "Parking"],
+      "price": "CHF 40.– / Monat"
+    },
+    {
+      "id": "vd-geoportal",
+      "homeCatalog": "cat-fachbereich-bau",
+      "state": "active",
+      "texts": { "de": "Zugang Geoportal", "en": "Geoportal access" },
+      "descriptions": {
+        "de": "Lesender Zugang zum Geoportal mit den Plänen des Fachbereichs, für ein halbes Jahr.",
+        "en": "Read access to the geoportal with the department's plans, for half a year."
+      },
+      "approval": { "kind": "role", "ref": "{{geoportal-verantwortliche}}" },
+      "provisionProcess": "proc_vd_geoportal_einrichten",
+      "deprovisionProcess": "proc_vd_geoportal_entfernen",
+      "maxDays": 180,
+      "category": "fachanwendungen",
+      "categoryTexts": { "de": "Fachanwendungen", "en": "Specialist applications" },
+      "keywords": ["GIS", "Geoportal", "Pläne"],
+      "price": "CHF 0.–"
+    }
+  ]
+}

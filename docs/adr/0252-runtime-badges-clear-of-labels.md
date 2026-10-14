@@ -1,6 +1,7 @@
 # ADR-0252: Runtime badges hang outside the shape, clear of its caption
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-04
 - **Deciders:** Atlas maintainers
 

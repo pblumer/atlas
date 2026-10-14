@@ -46,6 +46,7 @@ var connectorJobTypes = map[string][]string{
 	"postgres":     {compiler.PostgresJobType},
 	"remedy":       {compiler.RemedyJobType},
 	"rest":         {compiler.RestJobType},
+	"s3":           {compiler.S3JobType},
 	"scim":         {compiler.ScimJobType},
 	"script":       {compiler.PwshJobType, compiler.PythonJobType, compiler.JsJobType},
 	"sharepoint":   {compiler.SharePointJobType},
@@ -81,6 +82,11 @@ func configuredEnvFor(t *testing.T, kind string) map[string]string {
 		return map[string]string{
 			"ATLAS_DISCORD_CONNECTORS": "team",
 			"ATLAS_DISCORD_TEAM_TOKEN": "bot-t0ken",
+		}
+	case "s3":
+		return map[string]string{
+			"ATLAS_S3_CONNECTORS":         "archiv",
+			"ATLAS_S3_ARCHIV_CREDENTIALS": `{"accessKeyId":"AKIAEXAMPLE","secretAccessKey":"s3cr3t","region":"eu-central-1"}`,
 		}
 	case "entra":
 		return map[string]string{

@@ -19,13 +19,22 @@ const (
 	// subject, it carries no password hash, and the pair (source, external id) is
 	// what a federated login resolves by.
 	SourceOIDC = "oidc"
+
+	// SourceEntra marks an account this server mirrored out of a Microsoft Entra
+	// tenant, by reading /users/delta rather than by anybody signing in
+	// (ADR-0332). Its ExternalID is the directory
+	// object id, and so is its DirectoryID — which is the field the mirror actually
+	// resolves by, because an account mirrored onto an identity that already existed
+	// keeps the Source and ExternalID it had. Like an OIDC account it carries no
+	// password hash: nothing can sign in as it without the provider.
+	SourceEntra = "entra"
 )
 
 // Well-known roles. Roles are a free-form list on the user, not a single "admin"
 // bool, so richer RBAC can grow here without reshaping the record (ADR-0044).
 //
-// Four of them, and each route says which one it needs
-// (ADR-0209). They are a list, not a lattice: an account
+// Five of them — productmanager joined the first four with ADR-0315 — and each
+// route says which one it needs (ADR-0209). They are a list, not a lattice: an account
 // carries several, and the question asked at the boundary is only "does this
 // principal hold the role this route names". So a modeller who is also to start
 // test instances holds `modeler` *and* `operator` — deliberately, because the
@@ -51,6 +60,34 @@ const (
 	// gets, and on its own it reaches nothing that changes a definition or an
 	// instance.
 	RoleUser = "user"
+
+	// RoleProductManager maintains the self-service portal's catalogues and the
+	// products in them, and publishes releases
+	// (ADR-0315).
+	//
+	// It is deliberately not `modeler`: binding a product to its provisioning and
+	// deprovisioning processes means choosing from processes already deployed,
+	// never deploying one, and `modeler` carries deploy — which is code execution.
+	// Which catalogues a holder may touch is the other axis, answered by the
+	// catalogue's own scope rather than by this role.
+	//
+	// It is never granted by the legacy-roles upgrade below: adding it there would
+	// hand catalogue control to every existing account on the day an operator
+	// installs the update.
+	RoleProductManager = "productmanager"
+
+	// RoleFeedReader reads the event feed and nothing else: how each action asked of
+	// a held position ended, and every right granted or revoked (ADR-0429 §5,
+	// ADR-0430). It is what a system
+	// beyond Atlas that follows those facts — a CMDB, a billing system — holds, through
+	// a token minted with the `events` scope, and what a person who integrates one may
+	// be given to look at the feed by hand.
+	//
+	// It is no other role's part. The feed names who holds what across every
+	// catalogue, which no other role reads whole, and an operator who starts and
+	// repairs instances is not thereby somebody a CMDB's credential should be. Like
+	// productmanager it is never granted by the legacy upgrade.
+	RoleFeedReader = "feedreader"
 )
 
 // legacyRoles is what an identity that predates the role model holds: everything a
@@ -82,17 +119,58 @@ func legacyRoles() []string { return []string{RoleModeler, RoleOperator, RoleUse
 //     record (and the audit trail it anchors).
 //   - PasswordHash is a bcrypt hash for local users and empty for external ones.
 type User struct {
-	ID           string   `json:"id"`
-	Username     string   `json:"username"`
-	Email        string   `json:"email,omitempty"`
-	DisplayName  string   `json:"displayName,omitempty"`
-	Roles        []string `json:"roles"`
-	Disabled     bool     `json:"disabled,omitempty"`
-	Source       string   `json:"source"`
-	ExternalID   string   `json:"externalId,omitempty"`
-	PasswordHash string   `json:"passwordHash,omitempty"`
-	CreatedAt    int64    `json:"createdAt"`
-	UpdatedAt    int64    `json:"updatedAt"`
+	ID          string   `json:"id"`
+	Username    string   `json:"username"`
+	Email       string   `json:"email,omitempty"`
+	DisplayName string   `json:"displayName,omitempty"`
+	Roles       []string `json:"roles"`
+	Disabled    bool     `json:"disabled,omitempty"`
+	Source      string   `json:"source"`
+	ExternalID  string   `json:"externalId,omitempty"`
+
+	// DirectoryID is the object id of the directory entry this account mirrors —
+	// Entra's `id` from /users/delta, which is the same value /users and an ID
+	// token's `oid` claim carry (ADR-0332).
+	//
+	// It is a second field rather than a reuse of ExternalID, and the reason is a
+	// property of Entra rather than a preference. An ID token's `sub` is *pairwise*:
+	// derived from the user and the application, so two applications signing in the
+	// same person receive different subjects, and the subject is therefore not the
+	// directory object id. An account created by a federated login (ADR-0210) holds
+	// that subject in ExternalID and must keep holding it, or the next login stops
+	// finding it and creates a second account. Merging the directory onto such an
+	// account is then exactly this: one record carrying both identities, the subject
+	// it signs in with and the object id the mirror follows it by.
+	//
+	// Stored lower-cased. An object id is a GUID — a number with a spelling, not an
+	// opaque string a provider chose — so case is not information, and normalising on
+	// the way in is what lets the lookup be an equality test.
+	DirectoryID string `json:"directoryId,omitempty"`
+
+	// AvatarSource says where this account's picture came from — AvatarUploaded or
+	// AvatarFromDirectory — and is empty when there is none (ADR-0368).
+	//
+	// On the record rather than derived from the bytes, because nothing in a JPEG
+	// says who chose it, and the difference is exactly what somebody looking at a
+	// wrong picture needs: whether to change it here or in the directory. It is
+	// also what stops a directory mirror from overwriting a picture a person put
+	// there themselves.
+	AvatarSource string `json:"avatarSource,omitempty"`
+
+	// AvatarFingerprint is a digest of the stored picture's bytes, and it exists so
+	// that "unchanged" stays true (ADR-0367).
+	//
+	// The directory mirror decides an account unchanged by comparing the record
+	// before and after. A photo that changed while the record did not would be
+	// planned as unchanged and written anyway, which breaks the one rule that makes
+	// the reporting mode worth reading: the plan says what the apply does. With the
+	// digest on the record, a changed photo is a changed record — and the same
+	// photo arriving twice is not a write at all.
+	AvatarFingerprint string `json:"avatarFingerprint,omitempty"`
+
+	PasswordHash string `json:"passwordHash,omitempty"`
+	CreatedAt    int64  `json:"createdAt"`
+	UpdatedAt    int64  `json:"updatedAt"`
 
 	// RolesUpgradedAt is when this record's Roles were last written under the role
 	// model (ADR-0209). Zero means the record predates it,
@@ -129,8 +207,12 @@ type publicUser struct {
 	Roles       []string `json:"roles"`
 	Disabled    bool     `json:"disabled"`
 	Source      string   `json:"source"`
-	CreatedAt   int64    `json:"createdAt"`
-	UpdatedAt   int64    `json:"updatedAt"`
+	// AvatarSource is empty when the account has no picture, which is what lets a
+	// list of people ask for the pictures that exist instead of a request per row
+	// that mostly 404s.
+	AvatarSource string `json:"avatarSource,omitempty"`
+	CreatedAt    int64  `json:"createdAt"`
+	UpdatedAt    int64  `json:"updatedAt"`
 }
 
 // toPublic strips the secret and normalizes Roles to a non-nil slice so the JSON
@@ -141,15 +223,16 @@ func (u User) toPublic() publicUser {
 		roles = []string{}
 	}
 	return publicUser{
-		ID:          u.ID,
-		Username:    u.Username,
-		Email:       u.Email,
-		DisplayName: u.DisplayName,
-		Roles:       roles,
-		Disabled:    u.Disabled,
-		Source:      u.Source,
-		CreatedAt:   u.CreatedAt,
-		UpdatedAt:   u.UpdatedAt,
+		ID:           u.ID,
+		Username:     u.Username,
+		Email:        u.Email,
+		DisplayName:  u.DisplayName,
+		Roles:        roles,
+		Disabled:     u.Disabled,
+		Source:       u.Source,
+		AvatarSource: u.AvatarSource,
+		CreatedAt:    u.CreatedAt,
+		UpdatedAt:    u.UpdatedAt,
 	}
 }
 

@@ -1,4 +1,11 @@
-// Digit grouping for the counts the UI prints.
+// How the UI prints the numbers it puts on a picture: counts, and spans of time.
+//
+// Both live here rather than in the views that draw them because both are read in two
+// places that have to agree — a badge on screen, and the same number in a file that
+// has left the app — and a formatter each of them kept a copy of is a formatter that
+// eventually prints one fact two ways.
+//
+// The counts come first, and what they need is digit grouping.
 //
 // The runtime views put their numbers on the diagram itself — how many tokens completed
 // on a shape, how many were cancelled there, how many are alive there now — and on a
@@ -38,4 +45,28 @@ export function fmtCount(value) {
   // Group from the right: the leading group is whatever is left over (1|234|567).
   const grouped = whole.replace(/\B(?=(\d{3})+$)/g, GROUP_SEP);
   return (n < 0 ? "-" : "") + grouped + (frac ? `.${frac}` : "");
+}
+
+// spanText renders a length of time in the coarsest unit that still says it.
+//
+// The question behind a span on a landscape is "how long has this been wrong", not
+// "how long exactly": five minutes and seven minutes are the same answer, Friday and
+// Thursday are not. So it rounds hard and stops pretending to be precise at a day,
+// which is the granularity the decision it feeds actually has.
+//
+// It is a *length*, with no "ago" on it, because the same number is read two ways —
+// "stuck 3 d" under a node and "the longest-parked one has been stuck 3 d" in a key —
+// and a formatter that baked in one phrasing would be unusable for the other.
+export function spanText(ms) {
+  const n = typeof ms === "number" ? ms : Number(ms);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  const seconds = Math.round(n / 1000);
+  // Below the first useful tick, said as a bound rather than as a number: "43 s" on a
+  // picture read at a glance is precision nobody asked for and nobody acts on.
+  if (seconds < 90) return "under 2 min";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 90) return `${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 36) return `${hours} h`;
+  return `${fmtCount(Math.round(hours / 24))} d`;
 }

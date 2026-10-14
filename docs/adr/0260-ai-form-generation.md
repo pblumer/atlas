@@ -1,6 +1,7 @@
 # ADR-0260: A form is generated at design time, by the Worker an operator already configured
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas engine team
 

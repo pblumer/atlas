@@ -50,9 +50,11 @@ Bearer` header.
 | `atlas_terminate_instances` | `keys?` \| `processDefKey?`, `q?`, `limit?` | terminate an explicit key set, or a definition's matching instances |
 | `atlas_delete_process` | `key` | deletes one deployed definition |
 | `atlas_stats` | none | engine-wide active counts |
-| `atlas_publish_message` | `name`, `correlationKey?`, `variables?` | correlates a message to waiting instances; returns stats |
+| `atlas_publish_message` | `name`, `correlationKey?`, `variables?`, `timeToLiveMs?`, `messageId?` | correlates a message to waiting instances; with `timeToLiveMs` keeps an unmatched one for an instance that waits later (ADR-0370); returns stats |
+| `atlas_buffered_messages` | `name?`, `correlationKey?`, `limit?`, `after?` | lists the messages waiting in the buffer, with payload and expiry; returns `{messages, total, nextCursor}` |
 | `atlas_complete_job` | `key`, `variables?` | completes a job by hand (operator counterpart to a worker) |
 | `atlas_fail_job` | `key`, `retries?`, `message?` | fails a job; `retries` 0 (default) raises an incident, positive re-activates |
+| `atlas_throw_job_error` | `key`, `errorCode`, `reason`, `errorMessage?` | throws a BPMN error from a job by hand; a matching error boundary or event subprocess catches it, otherwise the job is kept under an incident whose resolve retries it |
 | `atlas_list_incidents` | `limit?` | `{incidents, truncated}` — the operator "what's stuck" view |
 | `atlas_resolve_incident` | `key`, `retries?` | resolves an incident by elementInstanceKey and retries its job |
 
@@ -66,6 +68,7 @@ Bearer` header.
 | `atlas_save_draft` | `xml`, `projectId?` | saved BPMN draft |
 | `atlas_list_drafts` | `projectId?` | saved diagram drafts |
 | `atlas_get_draft_xml` | `id` | a draft's BPMN XML (by process id) |
+| `atlas_compare_draft` | `id`, `key?` | whether the draft is the same model as the newest (or the named) deployed version, where they differ, who saved and who deployed — saving does not deploy and deploying does not save |
 | `atlas_delete_draft` | `id` | `{deleted:true,id}` — design-time only, idempotent |
 | `atlas_save_form` | `id`, `schema`, `name?`, `projectId?` | saved form-js form |
 | `atlas_list_forms` | `projectId?` | saved form definitions |

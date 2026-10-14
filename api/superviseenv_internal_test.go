@@ -131,6 +131,9 @@ func TestTwoConnectorsThatFoldToOneVariableDoNotShareACredential(t *testing.T) {
 			t.Fatalf("Save(%s): %v", c.Name, err)
 		}
 	}
+	// Both credentials resolve, so the collision is the only reason one is left out.
+	t.Setenv("ATLAS_CONNECTOR_A_TOKEN", "pw-a")
+	t.Setenv("ATLAS_CONNECTOR_B_TOKEN", "pw-b")
 
 	env := envOf(t, srv.mailWorkerEnv())
 	names := strings.Split(env["ATLAS_MAIL_CONNECTORS"], ",")
@@ -157,11 +160,9 @@ func TestAServerWithNoMailConnectorsHandsOverNothing(t *testing.T) {
 // worker per kind rather than one for all of them, and it is a security property
 // rather than a tidiness one.
 //
-// A script task runs an interpreter that inherits its worker's whole environment
-// (connector/script.CmdExec appends to os.Environ), so a model-authored script on a
-// worker that also holds the mail credential could simply read the SMTP password out
-// of it. Separate processes are what stop that: the secret is rendered only into the
-// environment of the worker that sends mail.
+// A script task runs model-authored code, so defence in depth keeps another Worker
+// Type's credential out of both its rendered environment and its process. The
+// interpreter has its own stricter allowlist in connector/script.CmdExec.
 func TestAScriptWorkerIsNeverGivenTheMailCredential(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	if err := srv.connectors.Save(connector{
@@ -201,15 +202,16 @@ func TestASupervisedWorkerOnAnAuthenticatedServerIsGivenAToken(t *testing.T) {
 	}
 }
 
-// An operator who chose an identity for their workers keeps it: replacing their
-// ATLAS_TOKEN would silently undo that choice.
+// An operator who chose an identity for their workers keeps it. It is rendered
+// explicitly rather than relying on ambient inheritance, because the script worker
+// starts from an allowlisted environment.
 func TestAnOperatorsOwnWorkerTokenIsNotReplaced(t *testing.T) {
 	srv, _ := newValidateServer(t, WithAuth())
 	t.Setenv("ATLAS_TOKEN", "the-operators-own")
 
 	env := envOf(t, srv.superviseEnv(SuperviseSpec{ID: "csv", Connectors: []string{"csv"}})())
-	if _, overridden := env["ATLAS_TOKEN"]; overridden {
-		t.Error("the operator's own ATLAS_TOKEN was overridden")
+	if got := env["ATLAS_TOKEN"]; got != "the-operators-own" {
+		t.Errorf("ATLAS_TOKEN = %q, want the operator's own value", got)
 	}
 }
 
@@ -779,10 +781,10 @@ func TestAnUnknownATLASTOKENIsSaidOutLoudAtStartup(t *testing.T) {
 func captureWarnings(t *testing.T) *lockedBuffer {
 	t.Helper()
 	sink := &lockedBuffer{}
-	if err := logging.Setup(sink, logging.FormatJSON); err != nil {
+	if err := logging.Setup(sink, logging.FormatJSON, logging.DefaultLevel); err != nil {
 		t.Fatalf("logging.Setup: %v", err)
 	}
-	t.Cleanup(func() { _ = logging.Setup(os.Stderr, logging.DefaultFormat) })
+	t.Cleanup(func() { _ = logging.Setup(os.Stderr, logging.DefaultFormat, logging.DefaultLevel) })
 	return sink
 }
 
@@ -875,5 +877,36 @@ func TestAnUnreadableConnectorStoreRendersNothingForEveryKind(t *testing.T) {
 	// has nothing else to go on.
 	if !strings.Contains(sink.String(), logging.WorkerSupervisorFailed.String()) {
 		t.Errorf("nothing was logged; the log was %q", sink.String())
+	}
+}
+
+// A Worker Instance serving a list or a get must reach the mailbox the engine's watch
+// reads, so an SMTP Worker's IMAP endpoint travels with the rest of its configuration
+// (ADR-0438) — and a Worker that only sends hands over no such variable.
+func TestSupervisedMailEnvCarriesTheMailbox(t *testing.T) {
+	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
+	for _, c := range []connector{
+		{ID: "1", Name: "inbox", Kind: connectorKindMail, Provider: "smtp", Endpoint: "smtp.example.com:587",
+			Sender: "me@example.com", MailboxEndpoint: "imaps://imap.example.com:993", Enabled: true, CreatedAt: 1},
+		{ID: "2", Name: "noreply", Kind: connectorKindMail, Provider: "smtp", Endpoint: "smtp.example.com:587",
+			Sender: "noreply@example.com", Enabled: true, CreatedAt: 2},
+	} {
+		if err := srv.connectors.Save(c); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+	}
+	env := envOf(t, srv.mailWorkerEnv())
+	if env["ATLAS_MAIL_INBOX_MAILBOX"] != "imaps://imap.example.com:993" {
+		t.Errorf("mailbox variable = %q", env["ATLAS_MAIL_INBOX_MAILBOX"])
+	}
+	if _, ok := env["ATLAS_MAIL_NOREPLY_MAILBOX"]; ok {
+		t.Error("a sender-only Worker was handed a mailbox variable")
+	}
+	built, err := worker.BuiltinConnectors(func(k string) string { return env[k] }, connectorKindMail)
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	if !slices.Contains(built.Names, "inbox") || !slices.Contains(built.Names, "noreply") {
+		t.Errorf("the worker holds %v", built.Names)
 	}
 }

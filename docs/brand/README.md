@@ -1,10 +1,15 @@
 # Atlas — Brand assets
 
-The Atlas mark is a **white peak carrying a cross, on a black tile** — the load
-Atlas bears, with the Swiss cross of where it is built. It is one solid shape:
-the notch at the base and the cross are cut out of the peak (SVG `evenodd`), so
-there are no strokes and no fine detail to lose. That is what keeps it readable
-from a hero down to a 16px favicon.
+The atlas mark is a **white lowercase a carrying the Swiss cross, on a black
+tile**. The a is set lowercase because the name always is. Its bowl is a band
+that runs round from the stem and ends in an arrow point — a flow that comes
+back to where it started — and passes over itself on the left, which a slanted
+gap shows instead of shading, so the mark stays one colour. The cross is raised
+beside the stem like an exponent, with arms 7/6 of their width as on the
+federal flag — the cross of where atlas is built. It is four solid shapes
+(lower band, upper band, stem, cross) with no strokes. At 16px the gap and the
+arrow point close up and the a with its cross carries the mark alone; that is
+expected, not a defect.
 
 The mark uses fixed colors (no theme dependency) so it reads on **any**
 background, light or dark.
@@ -12,32 +17,80 @@ background, light or dark.
 | Color | Hex | Used for |
 |-------|-----|----------|
 | Black | `#000000` | The tile |
-| White | `#FFFFFF` | The peak |
+| White | `#FFFFFF` | The a and the cross |
 | Off-white | `#F4F7FB` | The tile-less glyph on dark grounds (the social card) |
 
 **Three cuts, one drawing.** `atlas-mark.svg` is the mark as it ships. Where the
 ground is already dark, or the container draws its own tile (the Console's `.mark`
 box), use the tile-less `atlas-glyph.svg`, which inherits `currentColor`.
-`favicon.svg` is the same drawing pushed heavier — a larger peak and a thicker
-cross — because at 16px the shipped weights close up.
+`favicon.svg` is the same drawing pushed heavier — a thicker band and stem, a
+wider gap and a larger cross — because at 16px the shipped weights close up.
+
+**The wordmark is set lowercase.** The social card and the Console's top bar spell the name `atlas`.
+Keep it that way wherever the name is set as a wordmark. `ATLAS` in the
+codebase is only an environment-variable prefix and is never the mark.
+
+**In running text the name is lowercase too — except at the start of a
+sentence.** Write `atlas` in labels, headings and sentences (`Welcome to atlas`,
+`diese atlas-Instanz`), and `Atlas` only where it opens a sentence, or a heading
+or label that starts with the name (`Atlas keeps running.`, `Atlas bindings`).
+The Console's visible texts, including the handbook, follow this rule, and so
+do the messages the server returns (errors, refusals, notes, the OpenAPI and MCP
+descriptions, the command-line help) and the mails and forms of the built-in
+system processes. Code comments, identifiers, values a program reads (such as
+`product` in `/api/v1/info`, a `vendor` field, an HTTP header or the user
+agent), the ADRs and the developer docs were deliberately left as they are.
+The examples under `examples/` follow the rule in what they show a person
+(process and form texts, mails, their READMEs and pages); their XML comments
+and script docstrings are code comments and stay as they are.
+
+So do the documents an operator reads — the README, the installation guide
+(`docs/install.md`) and the deployment docs under `deploy/` — and the changelog,
+whose entries the Console shows as release notes. A message or a label quoted
+there keeps the spelling it has where it is shown (`"Atlas has stopped serving
+this"`, `Atlas bindings`), and a path such as `C:\Atlas` is a name a program
+reads. The version resource of `atlas.exe` sets the name as the wordmark, as the
+Console's page titles do: product name `atlas`, description `atlas – BPMN
+workflow engine`. The prompt the FEEL assistant sends a model is read by no
+person and stays as it is: a change to it raises its `PromptVersion` and splits
+the measurements the prompt is improved by.
+
+**The card is set in English.** It is read wherever the repository link is
+pasted, so the copy stays in English even where the surrounding docs are not.
 
 ## Files
 
 | File | What it is |
 |------|-----------|
-| `atlas-mark.svg` | Full mark (tile + peak) — README, docs, wherever the logo appears |
-| `atlas-glyph.svg` | Peak only, `currentColor`, no tile — inlined by the Console's `.mark` box |
+| `atlas-mark.svg` | Full mark (tile + a + cross) — README, docs, wherever the logo appears |
+| `atlas-glyph.svg` | a and cross only, `currentColor`, no tile — inlined by the Console's `.mark` box |
 | `favicon.svg` | Heavier cut of the mark that stays legible to 16px |
 | `favicon-16.png` `favicon-32.png` `favicon-48.png` | Raster favicons |
 | `apple-touch-icon.png` | 180×180 home-screen icon |
 | `atlas-mark-256.png` `atlas-mark-512.png` | Raster logo (tile included; transparent outside its rounded corners) |
 | `atlas-social.svg` / `atlas-social.png` | 1200×630 social / link-preview card |
+| `atlas-social-flat.svg` | The same card with its text as outlines — renders identically where the fonts are missing |
 | `icons/*.svg` | The feature icons the README's Highlights list carries |
 
 The PNGs are rendered from the SVGs — the SVGs are the source of truth. To
 regenerate them, screenshot each SVG at the target size with headless Chromium
 (the page needs `margin:0` and the `<svg>` sized in CSS; crop the shot, because
 the headless viewport comes back shorter than `--window-size` asks for).
+
+**`atlas-social-flat.svg` is generated, not edited.** It is `atlas-social.svg`
+with every `<text>` replaced by the outlines of the glyphs it renders to, so it
+no longer depends on a font being installed. Rebuilding it is three steps:
+measure every character's position in headless Chromium through
+`getStartPositionOfChar`, pull the matching outlines out of the fonts fontconfig
+resolves `Arial` and `monospace` to, and emit one `<path>` per line. Measuring
+rather than re-shaping the text is what keeps kerning and letter-spacing exactly
+where the live-text cut puts them.
+
+Both derived cuts are built by [`scripts/brand/social.py`](../../scripts/brand/social.py):
+run it after any change to `atlas-social.svg`, and `--check` to verify they are
+not left behind. It compares the outlines against the source before writing, so
+a machine whose fonts resolve differently fails loudly instead of committing
+the wrong letterforms.
 
 **The mark also lives inline in three other places**, because the Console is
 buildless and cannot fetch a file before it paints: the `<link rel="icon">` data
@@ -51,7 +104,7 @@ Eight icons, one per Highlights bullet. They exist because the alternative was
 emoji, and a row of emoji down the left of a feature list reads as generated
 filler no matter what the words say.
 
-They are **drawn from the mark's own vocabulary** so the set and the logo look
+They are **drawn from the vocabulary of the former peak mark** so the set looks
 like one family: solid shapes with their detail cut out of them, the peak as the
 enclosing form, and nodes as filled dots. Same constants throughout —
 

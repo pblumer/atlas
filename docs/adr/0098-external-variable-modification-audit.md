@@ -1,6 +1,7 @@
 # ADR-0098: Audit trail for external variable modifications
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-06
 - **Deciders:** Atlas maintainers
 
@@ -75,6 +76,10 @@ attribute, and the record still captures when/what.
   instance timeline/replay view, not only via the dedicated endpoint. Expose the
   audit read as an MCP tool if agent-facing introspection wants it. When a finer
   "operator" role lands (ADR-0044 trajectory), attribute to it as well.
+
+> **As built (2026-10-11).** All three have landed: the timeline's variables carry the actor
+> of an override (`GET /api/v1/instances/{key}/timeline`), the audit read is the MCP tool
+> `atlas_variable_audit` (`mcp/tools.go`), and the `operator` role exists (`api/userstore.go`).
 
 ## Pros and cons of the options
 

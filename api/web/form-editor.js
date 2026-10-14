@@ -7,7 +7,10 @@
 //                viewer, seeded from an editable Form Input (sample data), and
 //                the live result / validation errors show in Form Output. Its
 //                three areas can each be collapsed and resized independently.
-//   • Editor   — the raw schema as text in a JSON code editor.
+//   • Source   — the raw schema as text in a JSON code editor: a form's source is
+//                its form-js schema, as a diagram's is its XML. (The tab is keyed
+//                "editor" in the markup and the code; only its label says Source, so
+//                it reads as the BPMN and DMN editors' "XML source" does.)
 //
 // The three surfaces stay in sync through one canonical `schema` value: leaving
 // a tab commits its edits into it, entering a tab (re)loads it. Assets load
@@ -101,7 +104,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
         <div class="etabs" id="form-tabs">
           <button type="button" data-ftab="design" class="active" title="Build the form visually">Design</button>
           <button type="button" data-ftab="validate" title="Preview the form and check it for problems">Validate</button>
-          <button type="button" data-ftab="editor" title="Edit the form’s raw JSON schema">Editor</button>
+          <button type="button" data-ftab="editor" title="Show the form’s source — its JSON form-js schema — and correct it in place">Source</button>
         </div>
         <input id="form-name" class="form-name-input" placeholder="Form name" spellcheck="false" />
         <span class="chip" id="form-id-chip"></span>
@@ -303,7 +306,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
       try { parsed = JSON.parse(text); }
       catch (e) {
         // Keep the invalid text on screen and the last valid schema intact.
-        toast("Editor JSON is invalid — keeping the last valid schema (" + e.message + ")", "err");
+        toast("The source is not valid JSON — keeping the last valid schema (" + e.message + ")", "err");
         return;
       }
       if (JSON.stringify(parsed) !== JSON.stringify(schema)) { schema = parsed; rev++; schemaSource = "editor"; }
@@ -342,7 +345,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     Object.keys(panes).forEach((k) =>
       panes[k].el.classList.toggle("active", k === tab));
     await load(tab);
-    syncIdentity(); // the raw Editor can retype the id too, not just the Design panel
+    syncIdentity(); // the Source tab can retype the id too, not just the Design panel
   }
 
   root.querySelectorAll("#form-tabs button").forEach((b) =>
@@ -477,7 +480,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     }
   }
 
-  // ---- Editor pane ---------------------------------------------------------
+  // ---- Source pane ---------------------------------------------------------
   function buildEditor() {
     const p = panes.editor;
     p.built = true;
@@ -693,13 +696,15 @@ function enhanceDesignLayout(container) {
   let previewOpen = bool("previewOpen", true);
   let bottomOpen = bool("bottomOpen", true);
 
-  // Capture the side columns' natural widths BEFORE reflowing (used by the width
-  // resizers below); the palette has no explicit CSS width and would collapse the
-  // instant `main` starts flexing.
+  // The side columns' default widths (used by the width resizers below). The
+  // properties column's natural width is captured BEFORE reflowing. The palette's
+  // cannot be: form-js renders the palette into its column only after this runs, so
+  // the column measures empty — and once rendered, app.css lets the palette fill
+  // whatever width its column is given. Its default is form-js's own --palette-width.
   const palette = rootEl.querySelector(":scope > .fjs-pgl-palette-container");
   const props = rootEl.querySelector(":scope > .fjs-pgl-properties-container");
   const sane = (el, def) => { const w = el ? Math.round(el.getBoundingClientRect().width) : 0; return w > 50 ? w : def; };
-  const paletteW0 = sane(palette, 200);
+  const paletteW0 = 270;
   const propsW0 = sane(props, 250);
 
   // Reshape main into a vertical stack of two regions: the editor with an optional
@@ -813,7 +818,7 @@ function enhanceDesignLayout(container) {
     const r = document.createElement("div");
     r.className = "fv-side-resizer";
     if (side === "left") rootEl.insertBefore(r, main); else rootEl.insertBefore(r, col);
-    dragWidth(r, col, side, () => {
+    dragWidth(r, col, side, w0, () => {
       if (col.classList.contains("fv-rail")) return; // collapsed — width is pinned
       savedW = parseInt(col.style.width, 10) || w0;
       localStorage.setItem(DKEY + wKey, String(savedW));
@@ -873,7 +878,10 @@ function dragPct(divider, axis, area, onMove, onEnd) {
 
 // dragWidth wires a divider that resizes `panel`'s width. side "left" means the
 // panel sits left of the divider (drag right widens); "right" is the mirror.
-function dragWidth(divider, panel, side, onEnd) {
+// A double-click puts the panel back to its default width w0. Clearing the width
+// instead would leave the column sized by its content, and the panels inside
+// both columns now take their width from the column (app.css).
+function dragWidth(divider, panel, side, w0, onEnd) {
   const clamp = (w) => Math.max(120, Math.min(560, w));
   let startX = 0, startW = 0;
   const move = (e) => {
@@ -896,5 +904,5 @@ function dragWidth(divider, panel, side, onEnd) {
     document.addEventListener("pointermove", move);
     document.addEventListener("pointerup", up);
   });
-  divider.addEventListener("dblclick", () => { panel.style.width = ""; onEnd(); });
+  divider.addEventListener("dblclick", () => { panel.style.width = w0 + "px"; onEnd(); });
 }

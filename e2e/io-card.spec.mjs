@@ -57,7 +57,7 @@ test("an instance recorded before attribution says why it cannot tell", async ({
   // section rather than quietly presenting it as this element's own work.
   await select(page, "1002");
   await expect(outNames(page)).toHaveText(["newTicket", "tickets"]);
-  await expect(page.locator(".io-ov .io-sec.out")).toHaveAttribute("title", /before Atlas recorded which element wrote/);
+  await expect(page.locator(".io-ov .io-sec.out")).toHaveAttribute("title", /before atlas recorded which element wrote/);
 
   // The attributed instance carries no such caveat.
   await mount(page);

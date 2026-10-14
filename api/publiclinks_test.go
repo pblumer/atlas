@@ -149,3 +149,99 @@ func TestPublicUnknownToken(t *testing.T) {
 		t.Errorf("unknown token start: %d, want 404", code)
 	}
 }
+
+// TestPublicStartRefusesAFieldTheFormLacks is ADR-0029's promise, end to end: the
+// anonymous start accepts only what the link's form has fields for, and a refused
+// submission starts nothing.
+func TestPublicStartRefusesAFieldTheFormLacks(t *testing.T) {
+	ts := newTestServer(t)
+	token := publish(t, ts)
+
+	code, body := doReq(t, ts, http.MethodPost, "/public/forms/"+token+"/start",
+		`{"variables":{"customer":"Acme","approved":true}}`, "application/json")
+	if code != http.StatusBadRequest {
+		t.Fatalf("a variable the form has no field for: %d %s, want 400", code, body)
+	}
+	if !bytes.Contains(body, []byte("approved")) || bytes.Contains(body, []byte("customer")) {
+		t.Errorf("the refusal should name the extra field and only it: %s", body)
+	}
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list instances: %d %s", code, body)
+	}
+	if bytes.Contains(body, []byte("Acme")) {
+		t.Fatalf("a refused submission started an instance: %s", body)
+	}
+}
+
+// publicWizardBPMN is a start form followed by a public wizard (ADR-0449). boundary is
+// what is attached to the wizard: the interrupting timer that ends an abandoned sitting,
+// or nothing.
+func publicWizardBPMN(boundary string) string {
+	return `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:atlas="http://atlas/schema/1.0"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="intake" isExecutable="true">
+    <startEvent id="s">
+      <extensionElements><zeebe:formDefinition formId="onboarding-form"/></extensionElements>
+    </startEvent>
+    <subProcess id="sitting" atlas:wizard="public">
+      <startEvent id="ws"/>
+      <userTask id="details"/>
+      <endEvent id="we"/>
+      <sequenceFlow id="w1" sourceRef="ws" targetRef="details"/>
+      <sequenceFlow id="w2" sourceRef="details" targetRef="we"/>
+    </subProcess>
+    ` + boundary + `
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="sitting"/>
+    <sequenceFlow id="f2" sourceRef="sitting" targetRef="e"/>
+  </process>
+</definitions>`
+}
+
+const wizardTimeout = `<boundaryEvent id="abandoned" attachedToRef="sitting"><timerEventDefinition><timeDuration>PT30M</timeDuration></timerEventDefinition></boundaryEvent>
+    <endEvent id="ea"/>
+    <sequenceFlow id="fa" sourceRef="abandoned" targetRef="ea"/>`
+
+// TestAPublicWizardNeedsATimeoutToBePublished: a start link is the door anonymous
+// visitors come through, so a public wizard nothing bounds would keep every sitting they
+// abandon as a live instance. Publishing refuses it, and so does a link minted before a
+// redeploy introduced it (ADR-0449).
+func TestAPublicWizardNeedsATimeoutToBePublished(t *testing.T) {
+	ts := newTestServer(t)
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/forms",
+		`{"id":"onboarding-form","name":"Onboarding","schema":{"type":"default","components":[{"type":"textfield","key":"customer","label":"Customer"}]}}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("save form: %d %s", code, body)
+	}
+	deploy := func(boundary string) {
+		t.Helper()
+		if code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", publicWizardBPMN(boundary), "application/xml"); code != http.StatusOK {
+			t.Fatalf("deploy: %d %s", code, body)
+		}
+	}
+
+	deploy("")
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/public-links", `{"processId":"intake"}`, "application/json")
+	if code != http.StatusConflict || !bytes.Contains(body, []byte("sitting")) {
+		t.Fatalf("publishing an untimed public wizard: %d %s, want 409 naming the wizard", code, body)
+	}
+
+	deploy(wizardTimeout)
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/public-links", `{"processId":"intake"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("publishing a timed public wizard: %d %s", code, body)
+	}
+	var link struct{ Token string }
+	if err := json.Unmarshal(body, &link); err != nil || link.Token == "" {
+		t.Fatalf("decode link: %v (%s)", err, body)
+	}
+	if code, body := doReq(t, ts, http.MethodPost, "/public/forms/"+link.Token+"/start", `{"variables":{"customer":"Acme"}}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("start through the link: %d %s", code, body)
+	}
+
+	deploy("")
+	if code, body := doReq(t, ts, http.MethodPost, "/public/forms/"+link.Token+"/start", `{"variables":{"customer":"Acme"}}`, "application/json"); code != http.StatusConflict {
+		t.Errorf("start after a redeploy dropped the timeout: %d %s, want 409", code, body)
+	}
+}

@@ -1,6 +1,7 @@
 # ADR-0039: Input/output variable mappings for business rule tasks
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-23
 - **Deciders:** Core team
 

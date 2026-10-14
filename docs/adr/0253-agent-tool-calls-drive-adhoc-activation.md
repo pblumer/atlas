@@ -1,6 +1,7 @@
 # ADR-0253: Agent tool calls drive ad-hoc activation — the toolbox is the model
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-06
 - **Deciders:** Atlas engine team
 
@@ -246,6 +247,10 @@ in the instance timeline, with its own job, its own variables and its own
 incidents; and as a row in the agent-run record ADR-0117 defines (`VTAgentRun`),
 which gains the round number and the ordered calls of each round. The first tells
 an operator what ran; the second tells an auditor why it was chosen.
+
+> **As built (2026-10-11).** Only the first view exists. The agent-run record of
+> ADR-0117 was never built (see that record's implementation status), so a tool call
+> is visible as its activity in the timeline and nowhere else.
 
 ### Governance — the agent can now cause side effects, and that is the point
 

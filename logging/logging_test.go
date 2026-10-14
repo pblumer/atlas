@@ -25,7 +25,7 @@ import (
 func capture(t *testing.T, f Format) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
-	if err := Setup(&buf, f); err != nil {
+	if err := Setup(&buf, f, DefaultLevel); err != nil {
 		t.Fatalf("Setup: %v", err)
 	}
 	return &buf
@@ -107,7 +107,7 @@ func TestLevelsSeparateRoutineFromWrong(t *testing.T) {
 // shape of the logs, which is exactly when it is too late to matter.
 func TestUnknownFormatIsRefused(t *testing.T) {
 	var buf bytes.Buffer
-	err := Setup(&buf, Format("logfmt"))
+	err := Setup(&buf, Format("logfmt"), DefaultLevel)
 	if err == nil {
 		t.Fatal("Setup accepted an unknown format")
 	}

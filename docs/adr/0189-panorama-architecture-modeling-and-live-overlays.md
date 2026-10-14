@@ -1,6 +1,7 @@
 # ADR-0189: Panorama architecture modeling and live operational overlays
 
 - **Status:** Accepted (amended 2026-08-31 — a derived landscape mesh sits above these drawn views, and takes impact analysis out of P5; amended 2026-09-01 — P5's "over time" is a journal of transitions, not a store of samples, its historical context is a query rather than a copy, and arranging a view splices the document rather than re-serialising it; amended 2026-09-02 — §4/§6 say what an observation of a job type asserts, and where it stops; amended 2026-09-07 — §5's bundle is now shared with the UML class canvas and lives at `api/web/vendor/canvas/`; see the amendment notes below)
+- **Implementation:** Landed
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 

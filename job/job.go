@@ -13,7 +13,9 @@
 package job
 
 import (
+	"errors"
 	"sync"
+	"time"
 
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -26,6 +28,11 @@ type Job struct {
 	ProcessInstanceKey uint64
 	ElementInstanceKey uint64
 	Retries            int32
+	// LeaseEpoch is the round's claim on this job — the fencing token the engine
+	// minted when the runner leased it (ADR-0007). Submit presents it back, so an
+	// outcome from a round whose lease has since elapsed and been handed on is
+	// dropped instead of applied (ADR-0274).
+	LeaseEpoch uint64
 }
 
 // Handler does a job's work with no output. Returning nil completes the job;
@@ -52,6 +59,10 @@ type Completion struct {
 	// the loop and completes the container, which is why the zero value is an ending
 	// rather than an error.
 	ToolCalls []model.ToolCall
+	// Outcome is how a product action ended, stated by a shop send task (ADR-0429
+	// §4). It rides the completion so the engine appends it in the batch that
+	// completes the job: the handler runs off the loop and must not write it itself.
+	Outcome *model.ActionOutcomeValue
 }
 
 // CompletingHandler does a job's work and returns its full Completion — outputs
@@ -66,9 +77,11 @@ type CompletingHandler func(Job) (Completion, error)
 // incident, ADR-0061).
 type Engine interface {
 	RunUntilIdle() error
+	ActivateJob(jobKey uint64, worker string, leaseFor int64)
 	CompleteJob(jobKey uint64, outputs ...model.VariableValue)
 	CompleteJobWithDecision(jobKey uint64, decision *model.DecisionEvaluationValue, outputs ...model.VariableValue)
 	CompleteJobWithToolCalls(jobKey uint64, toolCalls []model.ToolCall, outputs ...model.VariableValue)
+	CompleteJobWithOutcome(jobKey uint64, outcome model.ActionOutcomeValue, outputs ...model.VariableValue)
 	FailJob(jobKey uint64, retries int32, message string, backoff int64)
 }
 
@@ -101,12 +114,82 @@ type Runner struct {
 	// descriptors here and hammering whatever is on the other end. The cap keeps the
 	// throughput and drops the herd.
 	Concurrency int
+	// claimBatch bounds how many jobs one round collects; see SetClaimBatch.
+	claimBatch int
+	// leaseFor is how long a claimed job is held; see SetLease.
+	leaseFor int64
+	// gate, when set, decides which candidates may be handed out and hears how the
+	// ones that were ended; see [Gate]. nil dispatches everything, which is what a
+	// runner built without one does.
+	gate Gate
+	// resume is where a *gated* scan of each job type stopped — a descending cursor, so
+	// consecutive rounds rotate down through a held backlog instead of re-reading the
+	// same page forever. Touched only while a type is held, and only on the run loop.
+	resume map[int32]uint64
+	// offLoop are the job types whose handlers may wait on the run loop, so only a
+	// round that works its jobs off the loop claims them: [Runner.PollOnce] — and so
+	// [Runner.Drive], which a fork or a migration runs on the loop — leaves them for
+	// the next such round instead of deadlocking on the loop it holds.
+	offLoop map[int32]bool
 }
+
+// Gate decides whether a candidate job may be handed out, and hears how the ones that
+// were handed out ended. It is how the circuit breaker of
+// [ADR-0340](../docs/adr/0340-worker-circuit-breaker.md) reaches the dispatch path
+// without this package learning what a Worker is: everything about *why* a job is held
+// — which target it belongs to, whether that target is answering — lives on the other
+// side of these four methods, and all this package knows is a job type and a key.
+//
+// Every method runs on the run loop, so none of them may block or do anything slow.
+type Gate interface {
+	// Holding reports whether anything under this job type is currently held back. It
+	// is asked once per type per round, before any candidate is looked at, and a false
+	// answer — the steady state — costs the round nothing at all.
+	Holding(jobType int32) bool
+	// Allow reports whether this particular job may go out. It is asked only for the
+	// candidates of a type Holding said yes to, and only for jobs the round will
+	// actually hand out if allowed.
+	Allow(jobType int32, jobKey uint64) bool
+	// Failed and Succeeded report a worked job's outcome. They are called before the
+	// command that records it, while the job is still readable.
+	Failed(jobType int32, jobKey uint64, message string)
+	Succeeded(jobType int32, jobKey uint64)
+}
+
+// GatedScanBudget is how many candidates one round of a *held* job type looks at
+// before it stops and resumes next round.
+//
+// Asking the gate about a candidate costs reads — the job and its element instance,
+// to find which target it belongs to — so a round that walked a hundred thousand held
+// jobs looking for one dispatchable job would hold the single writer for all of them,
+// which is exactly the cost [ADR-0270](../docs/adr/0270-bounded-job-polling.md)
+// removed. The budget keeps a held round in the same order of magnitude as an ordinary
+// one, and the resume cursor is what keeps it from being a cap on *which* jobs are
+// ever reached rather than on how many are read at once.
+const GatedScanBudget = 256
+
+// SetGate installs the dispatch gate, or removes it with nil. A runner with no gate
+// hands out every activatable job of a type it serves, which is what it did before
+// there was a gate and what it still does on a server where nothing is failing.
+func (r *Runner) SetGate(g Gate) { r.gate = g }
 
 // DefaultConcurrency is how many handlers a round runs at once when nothing says
 // otherwise. It is well above serial, so a burst still drains quickly, and well
 // below the point where the sockets and memory of one round are a problem.
 const DefaultConcurrency = 16
+
+// InProcessWorker is the name the in-process runner leases jobs under. It is a
+// name no external worker can present — an external worker's name comes from its
+// own configuration, and this one names the engine itself — so a job leased here is
+// visibly the runner's in every operator view that shows an assignee.
+const InProcessWorker = "atlas:in-process"
+
+// DefaultLease is how long the in-process runner holds a claimed job. A lease is a
+// bound, not a lock (ADR-0007): if a handler outlives it the job is offered again,
+// which is what makes a wedged handler recoverable without an operator. Five
+// minutes is well past any handler that is going to return and well short of
+// leaving a job stuck behind one that is not.
+const DefaultLease = int64(5 * time.Minute)
 
 // NewRunner creates a runner over a state store and the engine it feeds.
 func NewRunner(store *state.Store, engine Engine) *Runner {
@@ -148,6 +231,18 @@ func (r *Runner) HandleCompleting(jobType int32, build func(state.Reader) Comple
 	r.factories[jobType] = build
 }
 
+// HandleOffLoop registers a completing worker whose handler waits on the run loop —
+// the shop's command task, which acts through the order act (ADR-0429 §4). Only
+// [Runner.Claim], whose caller works the round off the loop, hands its jobs out;
+// [Runner.PollOnce] and [Runner.Drive] leave them activatable.
+func (r *Runner) HandleOffLoop(jobType int32, build func(state.Reader) CompletingHandler) {
+	r.factories[jobType] = build
+	if r.offLoop == nil {
+		r.offLoop = map[int32]bool{}
+	}
+	r.offLoop[jobType] = true
+}
+
 // Unhandle removes the in-process worker for a job type, so its jobs park for an
 // external one instead (ADR-0168).
 //
@@ -156,7 +251,10 @@ func (r *Runner) HandleCompleting(jobType int32, build func(state.Reader) Comple
 // registers through its own descriptor, the script languages through their loop,
 // the rest inline — and a switch that has to be remembered at ten places is a switch
 // that will be missed at one.
-func (r *Runner) Unhandle(jobType int32) { delete(r.factories, jobType) }
+func (r *Runner) Unhandle(jobType int32) {
+	delete(r.factories, jobType)
+	delete(r.offLoop, jobType)
+}
 
 // Handles reports whether an in-process worker is registered for a job type.
 //
@@ -170,37 +268,198 @@ func (r *Runner) Handles(jobType int32) bool {
 	return ok
 }
 
-// Claim collects every activatable job of a registered type. It reads state, so it
-// runs on the goroutine that owns it — the run loop — and it does nothing slow: the
-// work itself happens in [Runner.Work], off the loop.
-func (r *Runner) Claim() ([]Job, error) {
-	var jobs []Job
+// DefaultClaimBatch is how many jobs one [Runner.Claim] collects before it stops
+// and lets the round proceed. Every caller drives in a loop until a claim comes
+// back empty, so the cap costs a round, not a job.
+//
+// It exists because Claim runs on the single writer and reads a record per job: an
+// uncapped claim against a backlog of a hundred thousand held the writer for all of
+// them, and every other instance, timer and health probe waited behind a burst that
+// one round was never going to finish anyway (ADR-0270).
+const DefaultClaimBatch = 256
+
+// errClaimFull stops a claim scan once the round's share is collected. A sentinel
+// to break the scan early, not a failure — the scan's contract is that any non-nil
+// error from the callback ends it.
+var errClaimFull = errors.New("job: claim batch full")
+
+// SetClaimBatch bounds how many jobs one Claim collects. Zero or less restores
+// [DefaultClaimBatch].
+func (r *Runner) SetClaimBatch(n int) { r.claimBatch = n }
+
+// SetLease sets how long a claimed job is held, in nanoseconds. Zero or less
+// restores [DefaultLease].
+func (r *Runner) SetLease(d int64) { r.leaseFor = d }
+
+// lease is the effective hold, defaulted.
+func (r *Runner) lease() int64 {
+	if r.leaseFor > 0 {
+		return r.leaseFor
+	}
+	return DefaultLease
+}
+
+// claimBatchSize is the effective cap, defaulted.
+func (r *Runner) claimBatchSize() int {
+	if r.claimBatch > 0 {
+		return r.claimBatch
+	}
+	return DefaultClaimBatch
+}
+
+// Claim leases up to a round's worth of activatable jobs of the registered types.
+// It reads and writes engine state, so it runs on the goroutine that owns it — the
+// run loop — and it does nothing slow: the work itself happens in [Runner.Work],
+// off the loop.
+//
+// It *leases*, where it used to merely dispatch. The runner had no claim identity,
+// so two callers driving at once would both be handed the same job and work it
+// twice — which is why the server serialized driving end to end, holding one mutex
+// across every handler's outbound call. A lease is the identity that makes the
+// serialization unnecessary: the activation takes the job off the activatable index
+// before this returns, so a second claim cannot see it
+// (ADR-0274).
+//
+// Each served type gets an equal share of the round rather than whatever is left
+// after the types before it. Ranging a map is randomly ordered, so leaving it to
+// chance would work *on average*, and "on average" is not what a job type flooded
+// by its neighbour needs.
+func (r *Runner) Claim() ([]Job, error) { return r.claim(false) }
+
+// claim is [Runner.Claim]; onLoop leaves out the job types whose handlers wait on
+// the loop, for a caller that works the round on it.
+func (r *Runner) claim(onLoop bool) ([]Job, error) {
+	share := r.claimBatchSize() / max(1, len(r.factories))
+	if share < 1 {
+		share = 1
+	}
+	var keys []uint64
 	for jobType := range r.factories {
-		var keys []uint64
-		if err := r.store.ActivatableJobs(jobType, func(k uint64) error {
-			keys = append(keys, k)
-			return nil
-		}); err != nil {
-			return jobs, err
+		if onLoop && r.offLoop[jobType] {
+			continue
 		}
-		for _, k := range keys {
-			jv, ok, err := r.store.GetJob(k)
-			if err != nil {
-				return jobs, err
+		if r.gate != nil && r.gate.Holding(jobType) {
+			if err := r.claimHeld(jobType, share, &keys); err != nil {
+				return nil, err
 			}
-			if !ok {
-				continue // completed since the scan; skip
+			continue
+		}
+		// Nothing held: forget where a gated scan of this type once stopped, so the
+		// next outage starts at the newest jobs rather than part-way down a rotation
+		// that ended when the last one recovered.
+		delete(r.resume, jobType)
+		before := len(keys)
+		err := r.store.ActivatableJobs(jobType, func(k uint64) error {
+			keys = append(keys, k)
+			if len(keys)-before >= share {
+				return errClaimFull
 			}
-			jobs = append(jobs, Job{
-				Key:                k,
-				Type:               jv.JobType,
-				ProcessInstanceKey: jv.ProcessInstanceKey,
-				ElementInstanceKey: jv.ElementInstanceKey,
-				Retries:            jv.Retries,
-			})
+			return nil
+		})
+		if err != nil && !errors.Is(err, errClaimFull) {
+			return nil, err
 		}
 	}
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	// Lease them all, then apply: activating mutates the index the scan just read,
+	// so the two are kept apart the same way the external pull keeps them apart.
+	for _, k := range keys {
+		r.engine.ActivateJob(k, InProcessWorker, r.lease())
+	}
+	if err := r.engine.RunUntilIdle(); err != nil {
+		return nil, err
+	}
+	jobs := make([]Job, 0, len(keys))
+	for _, k := range keys {
+		jv, ok, err := r.store.GetJob(k)
+		if err != nil {
+			return jobs, err
+		}
+		// Gone (completed meanwhile) or held by somebody else: not this round's.
+		if !ok || jv.Assignee != InProcessWorker || jv.LeaseExpiresAt == 0 {
+			continue
+		}
+		jobs = append(jobs, Job{
+			Key:                k,
+			Type:               jv.JobType,
+			ProcessInstanceKey: jv.ProcessInstanceKey,
+			ElementInstanceKey: jv.ElementInstanceKey,
+			Retries:            jv.Retries,
+			LeaseEpoch:         jv.LeaseEpoch,
+		})
+	}
 	return jobs, nil
+}
+
+// claimHeld collects a share of one job type whose gate is holding something back.
+//
+// Three things separate it from the ordinary scan.
+//
+// The filter sits *inside* the scan rather than after it: a round that collected its
+// share first and filtered afterwards would collect nothing but held jobs and hand out
+// none, which is the whole failure this exists to avoid.
+//
+// It scans **newest first**. The activatable index is ordered by key, so a held
+// target's backlog sits in front of every job created after it — and scanning oldest
+// first would spend the round's budget re-reading that backlog while another Worker's
+// jobs, created since, wait behind it. Newest first reaches them immediately. It is the
+// same inversion the task inbox makes under a flood, for the same reason: the low keys
+// are where a flood parks, and paging down from the newest is what keeps a bounded scan
+// useful.
+//
+// And it resumes where the last round stopped, so the rounds rotate through the held
+// backlog rather than re-reading the same newest page forever. Reaching the far end
+// starts the next round at the newest again, so the rotation covers the index rather
+// than walking off it.
+//
+// The price is that a held type gives up oldest-first order until it recovers. That
+// order is already broken while a breaker is open — the oldest jobs are precisely the
+// ones not going out — and it returns intact with the first ungated round.
+func (r *Runner) claimHeld(jobType int32, share int, keys *[]uint64) error {
+	before := len(*keys)
+	var (
+		last  uint64
+		seen  int
+		atEnd = true
+	)
+	err := r.store.ActivatableJobsDesc(jobType, r.resume[jobType], func(k uint64) error {
+		last, seen = k, seen+1
+		if r.gate.Allow(jobType, k) {
+			*keys = append(*keys, k)
+		}
+		if len(*keys)-before >= share || seen >= GatedScanBudget {
+			atEnd = false
+			return errClaimFull
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errClaimFull) {
+		return err
+	}
+	if atEnd {
+		delete(r.resume, jobType) // back to the newest next round
+		return nil
+	}
+	if r.resume == nil {
+		r.resume = map[int32]uint64{}
+	}
+	r.resume[jobType] = last
+	return nil
+}
+
+// holdsLease reports whether the job is still held by the round that claimed it.
+// It is the in-process form of the check the HTTP completion endpoint makes on an
+// external worker's report: the epoch is the fencing token, and a report from a
+// round whose lease elapsed and was handed on presents a number the job has moved
+// past (ADR-0007).
+func (r *Runner) holdsLease(j Job) bool {
+	jv, ok, err := r.store.GetJob(j.Key)
+	if err != nil || !ok {
+		return false
+	}
+	return jv.LeaseExpiresAt != 0 && jv.Assignee == InProcessWorker && jv.LeaseEpoch == j.LeaseEpoch && j.LeaseEpoch != 0
 }
 
 // Work runs the handlers for claimed jobs and returns what each produced. This is
@@ -260,9 +519,26 @@ func (r *Runner) Work(jobs []Job, reader state.Reader) []Outcome {
 // instead (ADR-0111).
 func (r *Runner) Submit(outcomes []Outcome) {
 	for _, o := range outcomes {
+		// Only the round that still holds the lease may report on it. A handler that
+		// outlived its lease has had the job handed on, and applying its outcome now
+		// would be the double execution the lease exists to prevent — the same fence
+		// the HTTP completion endpoint puts in front of an external worker's report
+		// (ADR-0274).
+		if !r.holdsLease(o.Job) {
+			continue
+		}
+		// The gate hears the outcome before the command that records it, while the job
+		// is still readable: finding which target a job belongs to is a read of the job
+		// and its element instance, and CompleteJob removes the job.
 		if o.Err != nil {
+			if r.gate != nil {
+				r.gate.Failed(o.Job.Type, o.Job.Key, o.Err.Error())
+			}
 			r.engine.FailJob(o.Job.Key, o.Job.Retries-1, o.Err.Error(), 0)
 			continue
+		}
+		if r.gate != nil {
+			r.gate.Succeeded(o.Job.Type, o.Job.Key)
 		}
 		if len(o.Completion.ToolCalls) > 0 {
 			// An agent's round: the completion carries what to run next, not what the
@@ -272,6 +548,12 @@ func (r *Runner) Submit(outcomes []Outcome) {
 			r.engine.CompleteJobWithToolCalls(o.Job.Key, o.Completion.ToolCalls, o.Completion.Outputs...)
 			continue
 		}
+		if o.Completion.Outcome != nil {
+			// A shop send task's statement of how an action ended (ADR-0429 §4): the
+			// engine appends it with the completion, in one batch.
+			r.engine.CompleteJobWithOutcome(o.Job.Key, *o.Completion.Outcome, o.Completion.Outputs...)
+			continue
+		}
 		r.engine.CompleteJobWithDecision(o.Job.Key, o.Completion.Decision, o.Completion.Outputs...)
 	}
 }
@@ -279,8 +561,10 @@ func (r *Runner) Submit(outcomes []Outcome) {
 // PollOnce claims, works and submits one round on the calling goroutine. It is the
 // simple synchronous form — used by [Runner.Drive] and by callers that own the loop
 // themselves; a server that must keep the loop free drives the three steps itself.
+// Because its caller may hold the loop, it leaves the job types registered with
+// [Runner.HandleOffLoop] to a round that does not.
 func (r *Runner) PollOnce() (int, error) {
-	jobs, err := r.Claim()
+	jobs, err := r.claim(true)
 	if err != nil {
 		return 0, err
 	}

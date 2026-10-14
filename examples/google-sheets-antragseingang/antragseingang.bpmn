@@ -108,7 +108,7 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="gw_betrag_di" bpmnElement="gw_betrag" isMarkerVisible="true">
         <omgdc:Bounds x="250" y="215" width="50" height="50"/>
-        <bpmndi:BPMNLabel><omgdc:Bounds x="220" y="185" width="110" height="14"/></bpmndi:BPMNLabel>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="305" y="233" width="98" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="pruefung_di" bpmnElement="pruefung">
         <omgdc:Bounds x="400" y="100" width="100" height="80"/>

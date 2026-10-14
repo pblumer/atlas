@@ -47,7 +47,7 @@ func TestListTasksSkipsOrphanedIndexEntry(t *testing.T) {
 		t.Fatalf("list tasks status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
 	var tasks []taskResp
-	if err := json.Unmarshal(rec.Body.Bytes(), &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, rec.Body.Bytes()), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, rec.Body.String())
 	}
 	if len(tasks) != 0 {

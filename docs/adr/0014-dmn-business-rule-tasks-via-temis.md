@@ -1,6 +1,7 @@
 # ADR-0014: DMN business rule tasks via the temis engine
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-22
 - **Deciders:** Core team
 

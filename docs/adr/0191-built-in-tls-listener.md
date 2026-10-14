@@ -3,6 +3,7 @@
 - **Status:** Accepted (2026-08-31: implemented — the optional TLS 1.3 listener, the
   plaintext loopback hop, and `--tls-ca` for the client side, which is how the first
   of the three questions below was answered; see the acceptance note)
+- **Implementation:** Landed
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,10 +12,6 @@ import (
 
 	"github.com/pblumer/atlas/api/token"
 )
-
-// maxPublicStartBytes caps a public start submission. A start form's data is
-// small; this refuses an oversized anonymous payload (ADR-0029).
-const maxPublicStartBytes = 256 << 10 // 256 KiB
 
 // latestDeploymentByProcessID returns the current (highest-version) deployment
 // for a process id, or nil if none is deployed. Must be called on the run-loop
@@ -53,7 +50,7 @@ func toPublicLinkResp(l publicLink) publicLinkResp {
 // rather than piling up links. 400 if the process has no start form, 404 if it is
 // not deployed. Trusted route (gated with the rest of /api/v1 when auth is on).
 func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, 4<<10))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Theme))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -70,6 +67,7 @@ func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) 
 		notDeployed bool
 		notExec     bool
 		noForm      bool
+		untimed     string
 		opErr       error
 	)
 	s.do(func() {
@@ -81,6 +79,11 @@ func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) 
 		// A non-executable process must not be published for public starting.
 		if d.cp != nil && !d.cp.IsExecutable() {
 			notExec = true
+			return
+		}
+		// A public wizard with no timeout would keep every sitting an anonymous visitor
+		// abandons as a live instance for good (ADR-0449).
+		if untimed = d.cp.UntimedPublicWizard(); untimed != "" {
 			return
 		}
 		formID := d.cp.StartFormId()
@@ -115,6 +118,9 @@ func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) 
 		httpapi.Error(w, http.StatusNotFound, "no deployed process with that id")
 	case notExec:
 		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be published")
+	case untimed != "":
+		httpapi.Error(w, http.StatusConflict, "the public wizard \""+untimed+"\" has no interrupting timer boundary event, "+
+			"so a sitting a visitor abandons would stay open for good; attach one before publishing")
 	case noForm:
 		httpapi.Error(w, http.StatusBadRequest, "the process has no start form to publish")
 	default:
@@ -196,7 +202,9 @@ func (s *Server) setPublicCORS(w http.ResponseWriter, r *http.Request) {
 	h.Set("Access-Control-Allow-Origin", origin)
 	h.Add("Vary", "Origin")
 	h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	h.Set("Access-Control-Allow-Headers", "Content-Type")
+	// Authorization carries a public wizard's pass (ADR-0449). It is a header the page
+	// sets, not a credential the browser attaches, so it needs no Allow-Credentials.
+	h.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	h.Set("Access-Control-Max-Age", "600")
 }
 
@@ -268,7 +276,8 @@ func (s *Server) handlePublicFormSchema(w http.ResponseWriter, r *http.Request) 
 // the submitted form data as start variables, through the same single-writer path
 // every other start uses (ADR-0029/ADR-0002). It reads nothing back and touches
 // no other process. Rate-limited and payload-capped. 404 if the token is unknown
-// or its process is no longer deployed.
+// or its process is no longer deployed; 400 if the submission carries a value the
+// link's form has no field for (publicstartfields.go).
 func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 	s.setPublicCORS(w, r)
 	if !s.publicRate.allow(httpapi.ClientIP(r)) {
@@ -276,7 +285,7 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := r.PathValue("token")
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxPublicStartBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Settings))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -286,10 +295,66 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// The public form is the path a portal's personal data actually arrives on, so it
+	// has to seal (ADR-0314) — and its definition is only known once the token is
+	// resolved, which the loop owns. Hence a resolution visit of its own before the
+	// start: sealing reads the vault and must not happen on the loop, and the command
+	// must already hold ciphertext. A token that resolves to nothing seals nothing and
+	// falls through to the 404 the start below reports.
+	//
+	// The same visit reads the form the link renders, so that a value the form has no
+	// field for is refused before anything is sealed or started. It is the form the
+	// schema route serves, link.FormID, because that is what the visitor was shown. A
+	// form that is gone has no fields, so it accepts an empty submission and nothing
+	// else.
+	//
+	// It also says whether the process holds a public wizard, in which case the start
+	// hands its visitor a pass (publicwizard.go, ADR-0449). The pass is drawn off the
+	// loop, here, and only its hash rides on the creation command.
+	var (
+		sealDefKey uint64
+		schema     string
+		formErr    error
+		wantsPass  bool
+	)
+	s.do(func() {
+		if link, ok, e := s.publicLinks.Get(token); e == nil && ok {
+			if d := s.latestDeploymentByProcessID(link.ProcessID); d != nil {
+				sealDefKey = d.Key
+				wantsPass = d.cp != nil && d.cp.HasPublicWizard()
+				f, _, e := s.forms.Get(link.FormID)
+				schema, formErr = f.Schema, e
+			}
+		}
+	})
+	if formErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read form: "+formErr.Error())
+		return
+	}
+	var passSecret, passHashed string
+	if wantsPass {
+		if passSecret, passHashed, err = mintPass(); err != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "mint pass: "+err.Error())
+			return
+		}
+	}
+	if sealDefKey != 0 {
+		if bad := formShapeOf([]byte(schema)).notOnForm(vars); len(bad) > 0 {
+			httpapi.Error(w, http.StatusBadRequest, "not fields of this form: "+strings.Join(bad, ", "))
+			return
+		}
+		if err := s.encipherStartVars(sealDefKey, vars); err != nil {
+			httpapi.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	var (
 		found   bool
 		notExec bool
+		instKey uint64
 		runErr  error
+		// ambiguous is ADR-0426's refusal: a process only its triggers can start.
+		ambiguous string
 	)
 	s.do(func() {
 		link, ok, e := s.publicLinks.Get(token)
@@ -307,7 +372,27 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 			notExec = true
 			return
 		}
+		if ambiguous = untriggeredStartRefusal(d.cp); ambiguous != "" {
+			return
+		}
+		// A value this installation does not hold yet: the visitor reads only that the
+		// process cannot start, the operator reads why on the application's Constants tab or Admin → Engine → Server constants.
+		if ambiguous = s.boundConstantRefusalOnLoop(d); ambiguous != "" {
+			return
+		}
+		// A redeploy may have added a public wizard with no timeout since the link was
+		// minted; the link refuses it as publishing would have (ADR-0449).
+		if d.cp != nil && d.cp.UntimedPublicWizard() != "" {
+			notExec = true
+			return
+		}
 		found = true
+		if passHashed != "" {
+			// The instance keeps the pass's hash, frozen on its activation event, and
+			// the start learns which instance it made so the pass can name it.
+			s.proc.CreateInstanceWithPass(d.Key, &instKey, passHashed, vars...)
+			return
+		}
 		s.proc.CreateInstance(d.Key, vars...)
 	})
 	// Off the loop: a started instance may run straight into a task, and
@@ -318,10 +403,25 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "start: "+runErr.Error())
-	case notExec:
+	case notExec, ambiguous != "":
+		// The same answer for all three, an untimed public wizard included: a person
+		// filling a public form cannot act on the model's shape, and the operator reads
+		// the reason off the link's process.
 		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "unknown or revoked link")
+	case instKey != 0:
+		// A start into a process with a public wizard hands the visitor its pass and
+		// where the sitting stands. Every other start stays as silent as ADR-0029 made
+		// it. A sitting that cannot be read yet is answered as pending: the pass is
+		// what matters, and the page asks again with it.
+		ans, err := s.publicWizardAnswer(instKey)
+		if err != nil {
+			logWizardFailure(r, instKey, err)
+			ans = &publicWizardResp{State: wizardPending}
+		}
+		ans.Pass = strconv.FormatUint(instKey, 10) + "." + passSecret
+		httpapi.JSON(w, http.StatusOK, map[string]any{"started": true, "wizard": ans})
 	default:
 		httpapi.JSON(w, http.StatusOK, map[string]any{"started": true})
 	}

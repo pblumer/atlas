@@ -1,6 +1,7 @@
 # ADR-0256: The model is authored, the provider is configured — and one call is a task
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas engine team
 

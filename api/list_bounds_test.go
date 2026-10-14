@@ -59,7 +59,7 @@ func TestCancelInstancesScopedToDefinition(t *testing.T) {
 	var insts []struct {
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(body, &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &insts); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	active := 0
@@ -86,7 +86,7 @@ func TestListIncidentsLimit(t *testing.T) {
 	if code, _ := doReq(t, ts, http.MethodGet, "/api/v1/incidents?limit=nope", "", ""); code != http.StatusBadRequest {
 		t.Fatalf("incidents limit=nope: status=%d, want 400", code)
 	}
-	if code, body := doReq(t, ts, http.MethodGet, "/api/v1/incidents?limit=5", "", ""); code != http.StatusOK || !strings.Contains(string(body), `"incidents"`) {
+	if code, body := doReq(t, ts, http.MethodGet, "/api/v1/incidents?limit=5", "", ""); code != http.StatusOK || !strings.Contains(string(body), `"items"`) {
 		t.Fatalf("incidents limit=5: status=%d body=%s", code, body)
 	}
 	// Over the ceiling → clamped to the max, still a clean 200.

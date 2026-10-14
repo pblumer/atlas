@@ -34,6 +34,7 @@ import (
 	"os/exec"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -68,6 +69,27 @@ type ConnectorPayload struct {
 // that fails the job.
 type Exec interface {
 	Run(ctx context.Context, j Job) (map[string]any, error)
+}
+
+// BPMNError is how a handler ends a job in a BPMN error instead of a result (ADR-0089):
+// return one — wrapped or not — and the worker throws Code rather than failing the job.
+// An error boundary or error event subprocess matching Code catches it and the instance
+// takes the error path, with no retry spent. With none in reach the job waits on an
+// incident naming Code and Message until an operator resolves it.
+//
+// It is for an answer the process has a path for — a card declined, a recipient that
+// does not exist — not for a fault: anything else a handler returns fails the job and
+// is retried as before.
+type BPMNError struct {
+	Code    string
+	Message string
+}
+
+func (e *BPMNError) Error() string {
+	if e.Message == "" {
+		return "BPMN error " + e.Code
+	}
+	return "BPMN error " + e.Code + ": " + e.Message
 }
 
 // ExecFunc adapts a function to [Exec].
@@ -172,8 +194,10 @@ type Options struct {
 	// must not exit because the server was restarting, or because the process using
 	// its job type is not deployed yet — both are ordinary and both resolve.
 	Retry time.Duration
-	// MaxJobs is how many jobs one poll may lease. Keep it to what this worker can
-	// actually run: leased work nobody is running is work nobody else can take either.
+	// MaxJobs is how many jobs of one type this worker runs at once. A poll leases
+	// only as many as there are free places for, so every leased job starts the
+	// moment it arrives: leased work nobody is running is work nobody else can take
+	// either, and its lease runs down while it waits (ADR-0440).
 	MaxJobs int
 	// Workers are the worker names this worker holds credentials for, reported
 	// to the engine on every poll. Only the worker knows them — once a kind is
@@ -232,7 +256,8 @@ func New(opts Options) *Worker {
 }
 
 // Run works until ctx is cancelled. Each type is polled by its own goroutine, so a
-// slow queue never starves another.
+// slow queue never starves another, and each type runs up to MaxJobs jobs at once.
+// Run returns only once every job it started has returned.
 func (w *Worker) Run(ctx context.Context) error {
 	if len(w.types) == 0 {
 		return errors.New("worker: no job types to handle; give it at least one --handle type=command")
@@ -242,30 +267,82 @@ func (w *Worker) Run(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for ctx.Err() == nil {
-				err := w.pollOnce(ctx, jobType)
-				if err == nil || ctx.Err() != nil {
-					continue
-				}
-				// A failed poll is not a reason to exit. The server may be restarting,
-				// or the process that uses this job type may not be deployed yet — the
-				// engine answers 404 for a type it has never seen, which is the honest
-				// answer and what makes a typo visible, and both resolve on their own.
-				// So it is logged and retried; only cancellation ends the loop. A
-				// supervised worker that exited here would flap against its supervisor
-				// for as long as the deploy took.
-				logging.Warn(logging.WorkerPollFailed, "a job poll failed; retrying",
-					slog.String("worker", w.opts.ID), slog.String("type", jobType),
-					slog.String("error", err.Error()))
-				select {
-				case <-ctx.Done():
-				case <-time.After(w.opts.Retry):
-				}
-			}
+			w.serve(ctx, jobType)
 		}()
 	}
 	wg.Wait()
 	return nil
+}
+
+// serve keeps one job type's places filled until ctx is cancelled.
+//
+// It polls only when a place is free, and asks for exactly as many jobs as are
+// free, so the bound is on what runs rather than on what one poll returns. Running
+// them one after another instead — the shape this replaced — made a slow endpoint
+// cost the sum of its calls rather than the slowest of them, and left every job of
+// a batch but the first holding a lease it was not using
+// (ADR-0440).
+func (w *Worker) serve(ctx context.Context, jobType string) {
+	places := make(chan struct{}, w.opts.MaxJobs)
+	var running sync.WaitGroup
+	defer running.Wait()
+	// Checked first because the select below picks at random between a free place
+	// and a cancelled context, and a cancelled poll would only fail and come back.
+	for ctx.Err() == nil {
+		// Wait for one free place, then take every other one free right now.
+		select {
+		case places <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
+		free := 1
+	claim:
+		for free < cap(places) {
+			select {
+			case places <- struct{}{}:
+				free++
+			default:
+				break claim
+			}
+		}
+
+		jobs, err := w.activate(ctx, jobType, free)
+		// Hand back the places this poll did not fill.
+		for i := len(jobs); i < free; i++ {
+			<-places
+		}
+		for i, j := range jobs {
+			if i >= free {
+				// More than was asked for. The engine never answers so, but a job it
+				// did lease to this worker is still run — after a place frees up, so the
+				// bound holds whatever the server says.
+				places <- struct{}{}
+			}
+			running.Add(1)
+			go func() {
+				defer running.Done()
+				defer func() { <-places }()
+				w.work(ctx, j)
+			}()
+		}
+		if err == nil || ctx.Err() != nil {
+			continue
+		}
+		// A failed poll is not a reason to exit. The server may be restarting, or the
+		// process that uses this job type may not be deployed yet — the engine
+		// answers 404 for a type it has never seen, which is the honest answer and
+		// what makes a typo visible, and both resolve on their own. So it is logged
+		// and retried; only cancellation ends the loop. A supervised worker that
+		// exited here would flap against its supervisor for as long as the deploy
+		// took.
+		logging.Warn(logging.WorkerPollFailed, "a job poll failed; retrying",
+			slog.String("worker", w.opts.ID), slog.String("type", jobType),
+			slog.String("error", err.Error()))
+		select {
+		case <-ctx.Done():
+		case <-time.After(w.opts.Retry):
+		}
+	}
 }
 
 // RunOnce polls every handled type once and works whatever it is given. It is what
@@ -282,28 +359,43 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	return nil
 }
 
-// pollOnce leases up to MaxJobs of one type and works each of them.
+// pollOnce leases up to MaxJobs of one type, works them at once, and returns when
+// every one of them has been reported.
 func (w *Worker) pollOnce(ctx context.Context, jobType string) error {
-	jobs, err := w.activate(ctx, jobType)
+	jobs, err := w.activate(ctx, jobType, w.opts.MaxJobs)
 	if err != nil {
 		return err
 	}
+	var wg sync.WaitGroup
 	for _, j := range jobs {
-		w.work(ctx, j)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w.work(ctx, j)
+		}()
 	}
+	wg.Wait()
 	return nil
 }
 
 // work runs one job's handler and reports the outcome. A failure is reported to the
 // engine rather than returned: the retry and incident machinery is what an operator
-// sees, and a worker that swallowed the error would park the token silently.
+// sees, and a worker that swallowed the error would park the token silently. A
+// [BPMNError] is the one error that is not a failure, and it is thrown instead.
 func (w *Worker) work(ctx context.Context, j Job) {
 	out, err := runHandler(ctx, w.opts.Handlers[j.Type], j)
 	if err != nil {
-		if failErr := w.fail(ctx, j, err.Error()); failErr != nil && ctx.Err() == nil {
-			// Nothing else to do: the lease will elapse and the job is offered again.
+		// Nothing else to do when a report is refused: the lease will elapse and the job
+		// is offered again.
+		// One without a code names nothing a catch could match and the engine refuses
+		// it, which would hand the job back to this handler after every lease; it is
+		// the handler's own fault, so it fails the job like any other.
+		var be *BPMNError
+		if errors.As(err, &be) && strings.TrimSpace(be.Code) != "" {
+			_ = w.throwError(ctx, j, be)
 			return
 		}
+		_ = w.fail(ctx, j, err.Error())
 		return
 	}
 	_ = w.complete(ctx, j, out)
@@ -320,11 +412,12 @@ func runHandler(ctx context.Context, h Exec, j Job) (Outcome, error) {
 	return Outcome{Variables: vars}, err
 }
 
-func (w *Worker) activate(ctx context.Context, jobType string) ([]Job, error) {
+// activate leases up to maxJobs jobs of one type.
+func (w *Worker) activate(ctx context.Context, jobType string, maxJobs int) ([]Job, error) {
 	body := map[string]any{
 		"type": jobType, "worker": w.opts.ID,
 		"leaseMs": w.opts.Lease.Milliseconds(), "waitMs": w.opts.Wait.Milliseconds(),
-		"maxJobs": w.opts.MaxJobs,
+		"maxJobs": maxJobs,
 	}
 	// Sent on every poll, including one that returns nothing: it is the engine's only
 	// way to learn what this worker can reach, and an idle worker is exactly the case
@@ -372,6 +465,19 @@ func (w *Worker) fail(ctx context.Context, j Job, message string) error {
 		"retries": retries, "message": message,
 	}
 	return w.call(ctx, "/api/v1/jobs/"+strconv.FormatUint(j.JobKey, 10)+"/fail", body, nil)
+}
+
+// throwError ends a job with a BPMN error (ADR-0089). It spends no attempt: whether the
+// instance goes on is the model's catch, not a retry.
+func (w *Worker) throwError(ctx context.Context, j Job, be *BPMNError) error {
+	body := map[string]any{
+		"worker": w.opts.ID, "leaseToken": j.LeaseToken,
+		"errorCode": be.Code,
+	}
+	if be.Message != "" {
+		body["errorMessage"] = be.Message
+	}
+	return w.call(ctx, "/api/v1/jobs/"+strconv.FormatUint(j.JobKey, 10)+"/error", body, nil)
 }
 
 // call posts a JSON body and decodes a JSON reply into out (nil to discard it).

@@ -63,7 +63,7 @@ function bindingsHTML(item, resolution, canEdit) {
   const applicable = BINDING_KEYS.filter((entry) => entry.on.includes(item.type));
   if (!applicable.length) {
     return `<section class="psec"><h3>Atlas bindings</h3>
-      <p class="muted">No Atlas resource kind binds to a ${esc(prettyType(item.type))}.</p></section>`;
+      <p class="muted">No atlas resource kind binds to a ${esc(prettyType(item.type))}.</p></section>`;
   }
   const byKey = new Map();
   for (const binding of resolution?.bindings || []) {
@@ -308,12 +308,12 @@ function sparkHTML(measure) {
 function contextHTML(ctx, loading) {
   if (loading) {
     return `<section class="psec"><h3>History</h3>
-      <p class="muted">Asking the stores outside Atlas…</p></section>`;
+      <p class="muted">Asking the stores outside atlas…</p></section>`;
   }
   if (!ctx) {
     return `<section class="psec"><h3>History</h3>
       <button class="btn ghost small" data-tool="context">Look up history</button>
-      <p class="muted">Asks the stores outside Atlas what they hold about this element.
+      <p class="muted">Asks the stores outside atlas what they hold about this element.
       Nothing is stored here.</p></section>`;
   }
   // A lookup that failed is its own state, distinct from one nobody has run. They
@@ -480,7 +480,7 @@ function pickBinding(list, current, key) {
     const ov = document.createElement("div");
     ov.className = "modal-ov";
     ov.innerHTML = `
-      <div class="modal" role="dialog" aria-modal="true" aria-label="Bind Atlas resource">
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Bind atlas resource">
         <div class="modal-head"><h2>Bind ${esc(key)}</h2></div>
         <div class="modal-body">
           <p class="muted" style="margin:0 0 10px">Only resources you may see are listed.
@@ -887,7 +887,7 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
       return;
     }
     if (!list.supported) {
-      toast("This Atlas version cannot resolve that kind of binding yet.");
+      toast("This atlas version cannot resolve that kind of binding yet.");
       return;
     }
     if (!list.candidates.length) {

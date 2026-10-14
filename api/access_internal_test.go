@@ -36,11 +36,18 @@ var wantPublicRoutes = []string{
 	// Share links, where the token in the URL is the whole authorization
 	// (ADR-0029/0143). Rate-limited in their handlers.
 	"GET /public/process-docs/{token}",
+	"GET /public/decision-docs/{token}",
 	"GET /public/forms/{token}",
 	"GET /public/forms/{token}/schema",
 	"POST /public/forms/{token}/start",
 	"OPTIONS /public/forms/{token}/schema",
 	"OPTIONS /public/forms/{token}/start",
+	// A public wizard's later screens, where the pass in the Authorization header is
+	// the whole authorization (ADR-0449). Rate-limited in their handlers.
+	"GET /public/wizard/step",
+	"POST /public/wizard/steps/{taskKey}/complete",
+	"OPTIONS /public/wizard/step",
+	"OPTIONS /public/wizard/steps/{taskKey}/complete",
 
 	// What this server is, as an OAuth protected resource (RFC 9728, ADR-0200).
 	// These are read *after* a refusal, to find out what did the refusing — behind
@@ -61,6 +68,12 @@ var wantPublicRoutes = []string{
 	"GET /oauth/authorize",
 	"POST /oauth/token",
 	"GET /api/v1/oauth/authorize-context",
+
+	// The shop's former address, answered with a redirect to /shop.html and
+	// nothing else. Public for the reason the page it leads to is: the page is a
+	// static asset, and a redirect that asked for a session first would send a
+	// signed-out bookmark to the login screen instead of to the shop's own sign-in.
+	"GET /portal.html",
 
 	// The embedded web UI. Static assets; the login screen has to load.
 	"/",

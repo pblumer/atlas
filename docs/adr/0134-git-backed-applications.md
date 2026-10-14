@@ -1,8 +1,17 @@
 # ADR-0134: Git-backed applications — a repository as an application's source of truth
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-08-17
 - **Deciders:** Atlas maintainers
+
+> **Implementation status (2026-10-11).** Partial. Built: the curated source layout, its
+> format version and the portable key (`api/appsource.go`), moved as a tar.gz through
+> `GET /api/v1/applications/{id}/source` and `POST /api/v1/applications/source`
+> (`api/appsource_http.go`). Not built: the git binding itself — no `go-git` in `go.mod`, no
+> clone, sync, commit or push, no fast-forward-or-refuse, no repository credential. The
+> decision below is still headed "proposed" and its open questions are still open. Evidence:
+> [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

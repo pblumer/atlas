@@ -88,6 +88,30 @@ type Processor struct {
 	// replay — the flag need not live in the log (I6).
 	inactive map[uint64]bool
 
+	// defApplication names the application each deployed definition is filed under on
+	// this server, appConstants the constants each application holds here (ADR-0453),
+	// serverConstants the ones this installation holds for every application, and
+	// serverInfo and appInfo the facts the namespaces carry besides
+	// (ADR-0456). A bound constant is resolved from them when an
+	// instance is created. Like callOverrides they are operator config: the server layer
+	// pushes them, from its deployment registry and sidecars, at startup and on every
+	// change, and they are owned by this run-loop goroutine (I3). The value read is frozen
+	// into the instance's VariableCreated event, so replay never consults them and they
+	// need not live in the log (I6).
+	//
+	// appNamespace and serverNamespace cache, per definition, the namespace an instance of
+	// it starts with — the JSON object of its declared members' values. Each is built the
+	// first time an instance of the definition is created after the config changed, and
+	// read by every creation after that, so a start allocates nothing for it (I1). Every
+	// change to the config drops the entries it can affect.
+	defApplication  map[uint64]string
+	appConstants    map[string]map[string]ConstantValue
+	appInfo         map[string]ApplicationInfo
+	serverConstants map[string]ConstantValue
+	serverInfo      ServerInfo
+	appNamespace    map[uint64]string
+	serverNamespace map[uint64]string
+
 	jobNotifier func(jobType int32)
 
 	queue        []Command
@@ -102,7 +126,41 @@ type Processor struct {
 	followups    []Command
 	sideEffects  []sideEffect
 	encBuf       []byte
-	fatalErr     error
+	// contBuf holds the encoded continuation for the batch being committed. Reused
+	// across batches like encBuf, so persisting the outstanding queue costs no
+	// allocation per batch (invariant I1).
+	contBuf []byte
+	// routeBuf holds the outgoing flows an inclusive gateway decided to take, reused
+	// across decisions so an OR split allocates nothing per token (invariant I1). It
+	// is valid only between a routing decision and the caller taking those flows.
+	routeBuf []int32
+	// arrivalBuf and joinSetBuf hold a join's waiting tokens and the subset one
+	// firing consumes. Two buffers rather than one because an inclusive join re-scans
+	// the node while still holding the set it is consuming (ADR-0290).
+	// Reused across joins, like the buffers above.
+	arrivalBuf []Arrival
+	joinSetBuf []Arrival
+	fatalErr   error
+
+	// tokenSteps counts, per token, how many element activations it has driven in the
+	// current run — the execution budget (ADR-0272). It is
+	// deliberately not durable: the question it answers is "is one token occupying the
+	// single writer right now", and a token that waited for a job or a timer in between
+	// was never the problem. Cleared when a run starts, and reused across runs like the
+	// per-batch maps beside it.
+	tokenSteps map[uint64]int32
+	// executionBudget is how many steps one token may take in a single run before the
+	// engine stops it with an incident. Set with SetExecutionBudget.
+	executionBudget int32
+	// maxIterations is how many iterations one multi-instance activity may ask for
+	// before the engine refuses it. Set with SetMaxIterations.
+	maxIterations int
+	// maxVariable and maxCollection are how large one variable's value, and a
+	// multi-instance activity's assembled output collection, may be. Two numbers
+	// because they bound different things — see engine/budget.go. Set with
+	// SetMaxVariable and SetMaxCollection.
+	maxVariable   int64
+	maxCollection int64
 
 	// condDirty collects the process instances whose variables changed this batch, so the
 	// batch loop can schedule a conditional re-check for each (ADR-0137). Reused, not
@@ -116,6 +174,19 @@ type Processor struct {
 	// same key would all read zero; this set closes that same-batch window. Cleared
 	// each batch (reused, not reallocated).
 	startsThisBatch map[startKeyIdent]struct{}
+	// terminatedThisBatch collects the process instances torn down during this
+	// batch, so advanceQueue can drop the work they still had scheduled. A cancel
+	// terminates what exists *now*; a command already queued for that instance would
+	// otherwise run in a later batch and rebuild what the teardown just removed. The
+	// map is reused across batches like startsThisBatch.
+	terminatedThisBatch map[uint64]struct{}
+	// gatewayRaceTaken holds the event-based gateways (by element-instance key) one of
+	// whose catches took a buffered message in this run (ADR-0370, ADR-0110). Its
+	// siblings arm in later commands of the same run, before the winner completes and
+	// cancels them, and must not take a message of their own: a message taken by a
+	// catch the winner then cancels would be spent for nothing. Command-path only, so
+	// never consulted on replay (I6); cleared when a run starts.
+	gatewayRaceTaken map[uint64]struct{}
 }
 
 // startKeyIdent identifies a (definition, correlation key) pair for the per-batch
@@ -144,6 +215,12 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 		inactive:      map[uint64]bool{},
 		latestProcess: map[string]uint64{},
 		callOverrides: map[string]CallTargetOverride{},
+
+		defApplication:  map[uint64]string{},
+		appConstants:    map[string]map[string]ConstantValue{},
+		appInfo:         map[string]ApplicationInfo{},
+		appNamespace:    map[uint64]string{},
+		serverNamespace: map[uint64]string{},
 	}
 	p.registerHandlers()
 	p.registerBehaviors()
@@ -253,9 +330,117 @@ func (p *Processor) Undeploy(defKey uint64) {
 		}
 	}
 	delete(p.processes, defKey)
-	// Drop any deactivation for this key so a future definition reusing it (there is
-	// none today — keys are monotonic) never inherits a stale inactive flag.
+	// Drop any deactivation for this key. The parenthetical this used to carry —
+	// "there is none today, keys are monotonic" — was an assumption rather than a
+	// fact: the counter was rebuilt from the surviving records, so deleting the
+	// highest-keyed definition and restarting handed its key straight back. It is a
+	// fact now, because the key space has a durable floor
+	// (ADR-0339). This line stays
+	// anyway: it costs nothing and it is the right thing to do to a key that is
+	// going away.
 	delete(p.inactive, defKey)
+	delete(p.defApplication, defKey)
+	delete(p.appNamespace, defKey)
+	delete(p.serverNamespace, defKey)
+}
+
+// ConstantValue is the value of one constant the installation holds — for an application
+// or for every application — in the canonical form a variable is stored in (ADR-0453,
+// ADR-0456). The server layer parses it when it is saved, so the
+// engine seeds it without parsing (I5).
+type ConstantValue struct {
+	Kind model.VarKind
+	Bool bool
+	Text string
+}
+
+// ServerInfo is what the server namespace says about the installation an instance starts
+// on: its node identity (ADR-0189 §6). Empty fields are facts not set here.
+type ServerInfo struct {
+	ID          string
+	Name        string
+	Environment string
+}
+
+// ApplicationInfo is what the application namespace says about the application a
+// definition is filed under, besides its constants.
+type ApplicationInfo struct {
+	Key  string // the portable application key (ADR-0134), the same on every installation
+	Name string
+}
+
+// SetDefinitionApplication records which application a deployed definition is filed
+// under on this server; "" means none. Run-loop goroutine only: the server layer calls it
+// at startup, on deploy, and when a definition moves between applications.
+func (p *Processor) SetDefinitionApplication(defKey uint64, applicationID string) {
+	delete(p.appNamespace, defKey)
+	if applicationID == "" {
+		delete(p.defApplication, defKey)
+		return
+	}
+	p.defApplication[defKey] = applicationID
+}
+
+// HasApplicationConstant reports whether the application a definition is filed under
+// holds name on this server — what an instance created now would be seeded with. Run-loop
+// goroutine only; the server layer asks it before it lets a person start a definition
+// whose bound constant has no fallback.
+func (p *Processor) HasApplicationConstant(defKey uint64, name string) bool {
+	app, ok := p.defApplication[defKey]
+	if !ok {
+		return false
+	}
+	_, ok = p.appConstants[app][name]
+	return ok
+}
+
+// HasServerConstant reports whether this installation holds the server constant name.
+// Run-loop goroutine only, for the same refusal.
+func (p *Processor) HasServerConstant(name string) bool {
+	_, ok := p.serverConstants[name]
+	return ok
+}
+
+// SetApplicationConstants replaces the constants an application holds on this server; nil
+// or empty removes them. The map is the processor's from here on — the caller must not
+// modify it. Run-loop goroutine only: the server layer calls it at startup, when the
+// constants are saved, and when the application is deleted. Every cached application
+// namespace is dropped: the change is an operator's, rare, and the next start of each
+// definition rebuilds its own.
+func (p *Processor) SetApplicationConstants(applicationID string, constants map[string]ConstantValue) {
+	clear(p.appNamespace)
+	if len(constants) == 0 {
+		delete(p.appConstants, applicationID)
+		return
+	}
+	p.appConstants[applicationID] = constants
+}
+
+// SetApplicationInfo records what the application namespace says about an application;
+// the zero value removes it. Run-loop goroutine only: at startup, and when an application
+// is created, renamed or deleted.
+func (p *Processor) SetApplicationInfo(applicationID string, info ApplicationInfo) {
+	clear(p.appNamespace)
+	if info == (ApplicationInfo{}) {
+		delete(p.appInfo, applicationID)
+		return
+	}
+	p.appInfo[applicationID] = info
+}
+
+// SetServerConstants replaces the constants this installation holds for every
+// application; nil or empty removes them. Ownership and goroutine as for
+// SetApplicationConstants.
+func (p *Processor) SetServerConstants(constants map[string]ConstantValue) {
+	clear(p.serverNamespace)
+	p.serverConstants = constants
+}
+
+// SetServerInfo records the node identity the server namespace reports. Run-loop
+// goroutine only: at startup and when an operator names the node.
+func (p *Processor) SetServerInfo(info ServerInfo) {
+	clear(p.serverNamespace)
+	p.serverInfo = info
 }
 
 // messageStartRef points a starting message at the definition it instantiates
@@ -390,6 +575,36 @@ func (p *Processor) CreateInstance(defKey uint64, startVars ...model.VariableVal
 	})
 }
 
+// CreateInstanceReporting is [Processor.CreateInstance] for a caller that needs
+// the new instance's key: it is written to *created when the command is processed,
+// and left untouched when no instance was created. Read it only after RunUntilIdle
+// returned without error.
+func (p *Processor) CreateInstanceReporting(defKey uint64, created *uint64, startVars ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		ValueType: model.VTProcessInstance,
+		Intent:    model.IntentActivating,
+		Value:     inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: defKey}},
+		StartVars: startVars,
+		Created:   created,
+	})
+}
+
+// CreateInstanceWithPass is [Processor.CreateInstanceReporting] for the public start of a
+// process that holds a public wizard (ADR-0449). passHash is the SHA-256, hex, of the
+// pass the start hands its visitor. It rides on the creation command's own instance
+// value, which the activation event copies whole, so the hash is durable in the same
+// fsync as the instance and read back on replay rather than recomputed (I2, I6), and
+// applyToState stores it with the rest of the record unchanged (I4).
+func (p *Processor) CreateInstanceWithPass(defKey uint64, created *uint64, passHash string, startVars ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		ValueType: model.VTProcessInstance,
+		Intent:    model.IntentActivating,
+		Value:     inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: defKey, PublicPassHash: passHash}},
+		StartVars: startVars,
+		Created:   created,
+	})
+}
+
 // CompleteJob enqueues completion of a job by a worker, optionally carrying the
 // output variables the worker produced (e.g. a business rule task's decision
 // result). The outputs are written into the job's process instance scope when the
@@ -521,16 +736,43 @@ func (p *Processor) ActivateJob(jobKey uint64, worker string, leaseFor int64) {
 // ThrowJobError enqueues a worker's report that its job threw a BPMN error code
 // (ADR-0089) — the "throw BPMN error" verb, a sibling of FailJob. Instead of retrying or
 // raising an incident, the handler cancels the job and propagates the error from the job's
-// element to the nearest matching error boundary or error event subprocess (or, uncaught,
-// raises an incident). The code rides in the command's incident.Message field, a transient
+// element to the nearest matching error boundary or error event subprocess. An error with
+// nowhere to go keeps the job, its retries spent, under a job incident, so resolving it
+// retries the job. The code rides in the command's incident.Message field, a transient
 // command carrier that is never persisted. Throwing on a job that no longer exists is a
 // no-op. Call RunUntilIdle (or Drive) to process it.
 func (p *Processor) ThrowJobError(jobKey uint64, errorCode string) {
+	p.ThrowJobErrorWithMessage(jobKey, errorCode, "")
+}
+
+// ThrowJobErrorWithMessage is ThrowJobError with the worker's own words about the error:
+// nothing reads them while a handler catches it, and when nothing does they follow the
+// code on the incident an operator reads.
+func (p *Processor) ThrowJobErrorWithMessage(jobKey uint64, errorCode, message string) {
 	p.queue = append(p.queue, Command{
-		Key:       jobKey,
-		ValueType: model.VTJob,
-		Intent:    model.IntentJobErrorThrown,
-		Value:     inflightValue{incident: model.IncidentValue{Message: errorCode}},
+		Key:          jobKey,
+		ValueType:    model.VTJob,
+		Intent:       model.IntentJobErrorThrown,
+		Value:        inflightValue{incident: model.IncidentValue{Message: errorCode}},
+		ErrorMessage: message,
+	})
+}
+
+// ThrowJobErrorManually throws a BPMN error from a parked job on an operator's say-so
+// rather than a worker's report (ADR-0089, ADR-0159): the throw runs exactly as
+// ThrowJobErrorWithMessage does, and the intervention is additionally frozen into an
+// append-only audit event carrying who forced it, why, and the code. actor is the
+// acting principal's username ("" when auth is off); reason is their justification.
+func (p *Processor) ThrowJobErrorManually(jobKey uint64, errorCode, message, actor, reason string) {
+	p.queue = append(p.queue, Command{
+		Key:          jobKey,
+		ValueType:    model.VTJob,
+		Intent:       model.IntentJobErrorThrown,
+		Value:        inflightValue{incident: model.IncidentValue{Message: errorCode}},
+		ErrorMessage: message,
+		Actor:        actor,
+		Reason:       reason,
+		Manual:       true,
 	})
 }
 
@@ -610,6 +852,53 @@ func (p *Processor) MigrateInstance(v model.ProcessMigrationValue, actor, reason
 	})
 }
 
+// ForkInstance enqueues the fork of a running instance onto another deployed version of
+// its process (ADR-0389): the instance is ended where it is
+// and its work continues in a *new* instance of that version, seeded at the resume
+// elements given, carrying its root-scope variables and data objects, with each record
+// naming the other.
+//
+// It is what an operator reaches for when [ValidateMigration] refused a rebinding — a
+// token on an element the target version no longer has cannot be carried across, but the
+// instance's data and a decision about where the work picks up again can. resume names
+// elements by their index in the *target* version; the caller resolves them from BPMN
+// ids, because no model string belongs in the log (invariant I5).
+//
+// The caller validates first — it holds both compiled processes — and the handler
+// re-checks on the run loop, because the instance is free to move in between. A fork
+// that no longer holds is dropped; the caller's refusal is the one an operator reads.
+// Call RunUntilIdle to process it.
+func (p *Processor) ForkInstance(piKey, targetDefKey uint64, resume []int32, actor, reason string) {
+	p.queue = append(p.queue, Command{
+		Key:           piKey,
+		ValueType:     model.VTProcessInstance,
+		Intent:        model.IntentForking,
+		Value:         inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: targetDefKey}},
+		StartElements: resume,
+		Actor:         actor,
+		Reason:        reason,
+	})
+}
+
+// ReindexInstanceVariables enqueues a repair of one instance's variable-index
+// membership: the handler compares the instance's root-scope variables against what its
+// own process declares searchable (ADR-0244) and emits a membership event for each one
+// that differs. An instance already in step produces no events, so the command is
+// idempotent and a repair run over a whole version costs one comparison per variable the
+// second time.
+//
+// It exists for the instances a migration reached before migration itself corrected
+// membership. Nothing about it is time- or definition-derived at fold time: the
+// comparison happens here, on the run loop, and only its answer reaches the log
+// (invariant I6). Call RunUntilIdle to process it.
+func (p *Processor) ReindexInstanceVariables(piKey uint64) {
+	p.queue = append(p.queue, Command{
+		Key:       piKey,
+		ValueType: model.VTVariableIndex,
+		Intent:    model.IntentVariableReindex,
+	})
+}
+
 // PublishMessage enqueues publication of a message with the given name and
 // correlation key, optionally carrying payload variables that are written into
 // every correlated instance's scope. It correlates against open subscriptions
@@ -622,6 +911,23 @@ func (p *Processor) PublishMessage(name, correlationKey string, vars ...model.Va
 		Intent:    model.IntentMessagePublished,
 		Value:     inflightValue{subscription: model.MessageSubscriptionValue{MessageName: name, CorrelationKey: correlationKey}},
 		StartVars: vars,
+	})
+}
+
+// PublishMessageWithTTL enqueues publication of a message that is kept when nothing
+// waits for it yet (ADR-0370): if it correlates no subscription and starts no instance,
+// it is buffered for ttl, and the first subscription that opens on its name and key in
+// that time receives it. messageID, when not empty, makes a repeat of the message — the
+// same name, key and id — a no-op for as long as the first one lives, delivered or not.
+// A ttl of zero is PublishMessage. Call RunUntilIdle to process it.
+func (p *Processor) PublishMessageWithTTL(name, correlationKey, messageID string, ttl time.Duration, vars ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		ValueType:  model.VTMessage,
+		Intent:     model.IntentMessagePublished,
+		Value:      inflightValue{subscription: model.MessageSubscriptionValue{MessageName: name, CorrelationKey: correlationKey}},
+		StartVars:  vars,
+		MessageTTL: ttl,
+		MessageID:  messageID,
 	})
 }
 
@@ -672,10 +978,42 @@ func (p *Processor) TriggerDueTimers() error {
 	return nil
 }
 
-// TickTimers fires all due timers and processes the resulting work to idle. A
-// server scheduler calls it on the partition's goroutine (invariant I3).
+// TriggerDueMessageExpiries enqueues an expiry command for every buffered message
+// whose time to live has passed by the current clock (ADR-0370). Like the timers it is
+// time-driven and off the command path; the command it enqueues is what drops the
+// message, as an event, so applyToState never reads the clock (I4).
+func (p *Processor) TriggerDueMessageExpiries() error {
+	now := p.clock.Now()
+	type due struct {
+		key uint64
+		v   model.MessageValue
+	}
+	var expire []due
+	if err := p.store.DueMessageExpiries(now, func(k uint64, v *model.MessageValue) error {
+		expire = append(expire, due{key: k, v: *v})
+		return nil
+	}); err != nil {
+		return err
+	}
+	for _, d := range expire {
+		p.queue = append(p.queue, Command{
+			Key:       d.key,
+			ValueType: model.VTMessage,
+			Intent:    model.IntentMessageExpiring,
+			Value:     inflightValue{message: d.v},
+		})
+	}
+	return nil
+}
+
+// TickTimers fires all due timers, drops the buffered messages whose time to live has
+// passed, and processes the resulting work to idle. A server scheduler calls it on the
+// partition's goroutine (invariant I3).
 func (p *Processor) TickTimers() error {
 	if err := p.TriggerDueTimers(); err != nil {
+		return err
+	}
+	if err := p.TriggerDueMessageExpiries(); err != nil {
 		return err
 	}
 	return p.RunUntilIdle()
@@ -685,6 +1023,12 @@ func (p *Processor) TickTimers() error {
 // drains. Deterministic and synchronous — the basis for tests and simple
 // embedding; the channel-driven concurrent loop arrives with the API milestone.
 func (p *Processor) RunUntilIdle() error {
+	// A run is the unit the execution budget is measured in: this is where a token's
+	// step count starts over, because this is where the writer was last free.
+	clear(p.tokenSteps)
+	// An event-based gateway's catches arm within the run that activated it, so which
+	// race a buffered message already decided is a question for one run (ADR-0370).
+	clear(p.gatewayRaceTaken)
 	for len(p.queue) > 0 {
 		if err := p.processBatch(); err != nil {
 			return err
@@ -715,6 +1059,9 @@ func (p *Processor) processBatch() error {
 	p.fatalErr = nil
 	for k := range p.startsThisBatch {
 		delete(p.startsThisBatch, k) // reuse the map; empty by the next batch (ADR-0094)
+	}
+	for k := range p.terminatedThisBatch {
+		delete(p.terminatedThisBatch, k)
 	}
 
 	tx := p.store.NewTransaction()
@@ -760,6 +1107,19 @@ func (p *Processor) processBatch() error {
 			return err
 		}
 	}
+	// The work this batch still owes, in the same frame as the events that caused
+	// it. Built before the sync because that is the only way it can be durable at
+	// the same instant: a continuation written afterwards could be lost while its
+	// events survived, which is the failure it exists to prevent. Built from the
+	// queue that will actually be installed, so work this batch dropped — a
+	// terminated instance's, say — is not resurrected on restart.
+	p.buildNextQueue(n)
+	p.contBuf = encodeContinuation(p.contBuf[:0], p.queueScratch)
+	if err := p.log.AppendContinuation(p.contBuf); err != nil {
+		tx.Close()
+		return err
+	}
+
 	var syncSeconds, commitSeconds float64
 	var started time.Time
 	if p.metrics != nil {
@@ -796,7 +1156,9 @@ func (p *Processor) processBatch() error {
 	}
 
 	// Phase 4: followups go to the next batch; Phase 5: side effects post-fsync.
-	p.advanceQueue(n)
+	// The queue was assembled before the sync so it could be persisted with the
+	// batch; this is where it becomes live.
+	p.installNextQueue()
 	// Everything this batch wrote is now durable and visible, which is the earliest
 	// point at which counting it is honest (invariant I2, ADR-0142). QueueDepth is read
 	// after advanceQueue so it includes the follow-ups this batch scheduled.
@@ -834,10 +1196,14 @@ func (p *Processor) jobStats() JobStats {
 		switch h.Intent {
 		case model.IntentJobCreated:
 			s.Created++
+		case model.IntentJobActivated:
+			s.Activated++
 		case model.IntentJobCompleted:
 			s.Completed++
 		case model.IntentJobFailed:
 			s.Failed++
+		case model.IntentJobTimedOut:
+			s.TimedOut++
 		case model.IntentJobCanceled:
 			s.Canceled++
 		}
@@ -866,9 +1232,63 @@ func (p *Processor) processOne(cmd Command) {
 // advanceQueue drops the n consumed commands and appends this batch's followups,
 // reusing a scratch buffer so it does not allocate once warmed.
 func (p *Processor) advanceQueue(n int) {
+	p.buildNextQueue(n)
+	p.installNextQueue()
+}
+
+// buildNextQueue assembles the queue the next batch will run — the unconsumed
+// tail plus this batch's followups, less anything belonging to an instance this
+// batch terminated — into queueScratch, without installing it.
+//
+// It is separate from installing so the batch can *persist* that queue before it
+// commits: the continuation has to describe the work that will actually survive,
+// which means it is computed after the terminated-instance filter and not before
+// (ADR-0271).
+func (p *Processor) buildNextQueue(n int) {
 	p.queueScratch = append(p.queueScratch[:0], p.queue[n:]...)
 	p.queueScratch = append(p.queueScratch, p.followups...)
+	if len(p.terminatedThisBatch) > 0 {
+		kept := p.queueScratch[:0]
+		for i := range p.queueScratch {
+			if pi := commandInstanceKey(&p.queueScratch[i]); pi != 0 {
+				if _, gone := p.terminatedThisBatch[pi]; gone {
+					continue
+				}
+			}
+			kept = append(kept, p.queueScratch[i])
+		}
+		p.queueScratch = kept
+	}
+}
+
+// installNextQueue makes the queue built by buildNextQueue the live one.
+func (p *Processor) installNextQueue() {
 	p.queue, p.queueScratch = p.queueScratch, p.queue
+}
+
+// commandInstanceKey is the process instance whose *execution* a queued command
+// would advance, or 0 when it names none. Only the three token-carrying value
+// types answer: an element, a job and a timer each record the instance they
+// belong to, and each would rebuild a piece of an execution after that instance
+// is gone.
+//
+// Process-instance commands are deliberately excluded, for two reasons. Their key
+// does not mean one thing — a creation mints its instance key in the handler, so
+// cmd.Key is not an instance at all there — and their handlers already retire
+// themselves against a missing instance. More importantly, one of them must
+// survive: IntentPurging operates on an instance that has *already* finished, and
+// dropping it would leave history that is never purged.
+func commandInstanceKey(cmd *Command) uint64 {
+	switch cmd.ValueType {
+	case model.VTElementInstance:
+		return cmd.Value.element.ProcessInstanceKey
+	case model.VTJob:
+		return cmd.Value.job.ProcessInstanceKey
+	case model.VTTimer:
+		return cmd.Value.timer.ProcessInstanceKey
+	default:
+		return 0
+	}
 }
 
 func (p *Processor) fail(err error) {
@@ -907,6 +1327,15 @@ func (p *Processor) RecoverFrom(checkpointRoot string) error {
 		return err
 	}
 	after, seedPos, seedCounter := p.checkpointSeed(checkpointRoot, lastApplied)
+
+	// Prove the log still holds the prefix this state needs, before replaying a
+	// suffix and calling it a recovery. Compaction deletes the segments a checkpoint
+	// covers, so after one the log no longer starts at genesis — and a replay of what
+	// remains is indistinguishable from a replay of everything unless somebody checks
+	// where what remains begins (ADR-0280).
+	if err := p.proveThePrefix(lastApplied, after, checkpointRoot); err != nil {
+		return err
+	}
 
 	tx := p.store.NewTransaction()
 	defer tx.Close()
@@ -949,12 +1378,10 @@ func (p *Processor) RecoverFrom(checkpointRoot string) error {
 	}
 
 	// Skipping the prefix needs a record's position, which only the model layer can
-	// decode; the wal package asks for it through this.
-	if after == 0 {
-		err = p.log.Replay(onRecord)
-	} else {
-		err = p.log.ReplayFrom(after, recordPosition, onRecord)
-	}
+	// decode; the wal package asks for it through this. ReplayForRecovery also hands
+	// back the continuation the last batch carried — the work the engine had
+	// scheduled and not yet run when it stopped.
+	continuation, err := p.log.ReplayForRecovery(after, recordPosition, onRecord)
 	if err != nil {
 		return err
 	}
@@ -969,6 +1396,28 @@ func (p *Processor) RecoverFrom(checkpointRoot string) error {
 	}
 	p.position = maxPos
 	p.keygen.counter = maxCounter
+
+	// Restore the obligation, not just the facts. Folding events rebuilds what
+	// happened; the queue is what still has to happen, and without it an instance
+	// interrupted at a batch boundary comes back correctly materialized and never
+	// moves again (ADR-0271). The commands are re-run, not
+	// re-applied: they go through the normal handlers, which is why the events they
+	// produce are written once and only once — the batch that scheduled them never
+	// got to run them.
+	if len(continuation) > 0 {
+		cmds, derr := decodeContinuation(continuation)
+		if derr != nil {
+			return derr
+		}
+		p.queue = append(p.queue[:0], cmds...)
+		// A restored command already holds a key that no event carries yet — the
+		// event it would have produced is what the crash prevented. Minting from the
+		// replayed events alone would hand that number out a second time.
+		if c := highestRestoredCounter(p.partition, cmds); c > p.keygen.counter {
+			p.keygen.counter = c
+		}
+	}
+
 	// Recorded last, so a recovery that failed leaves no stats claiming it succeeded.
 	p.recovery = RecoveryStats{Seconds: time.Since(started).Seconds(), Replayed: replayed, Done: true}
 	return nil

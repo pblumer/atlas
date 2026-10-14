@@ -49,7 +49,8 @@ function installMock(page, form = FORM) {
   page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
-    if (path.endsWith("/api/v1/tasks")) return route.fulfill({ json: [TASK] });
+    // The task list answers with a page, not a bare array (ADR-0378).
+    if (path.endsWith("/api/v1/tasks")) return route.fulfill({ json: { items: [TASK], truncated: false, nextCursor: null } });
     if (path.includes("/api/v1/forms/")) return route.fulfill({ json: form });
     if (path.includes("/variables")) return route.fulfill({ json: { vorname: "Hans" } });
     return route.fulfill({ json: [] });

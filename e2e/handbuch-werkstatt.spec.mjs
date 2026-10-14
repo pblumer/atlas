@@ -165,17 +165,23 @@ test("the chapter is reachable from the table of contents", async ({ page }) => 
 
 // The accounts chapter is the one part of the handbook that documents something a
 // reader can lock themselves out with, so it is worth a test that it is there, that
-// it names all four roles, and that it says the two things an operator has to know
-// before switching the claim mapping on.
-test("the accounts chapter names the four roles and the cost of federating them", async ({ page }) => {
+// it names every role the server grants (api/routeroles.go: grantableRoles), and that
+// it says the two things an operator has to know before switching the claim mapping on.
+//
+// Every role, not "the four": the table said four for as long as productmanager
+// (ADR-0315) was missing from it. The role is looked for in the table's first column,
+// because a description may name another role — productmanager's says it is
+// deliberately not modeler — and a match there would be a second element, not a row.
+test("the accounts chapter names every role and the cost of federating them", async ({ page }) => {
   const calls = [];
   installMock(page, calls);
   await page.goto("/handbuch.html");
   await expect(page.locator('#toc a[href="#konten"]')).toBeVisible();
 
   const chapter = page.locator("#konten");
-  for (const role of ["admin", "modeler", "operator", "user"]) {
-    await expect(chapter.locator("table code", { hasText: new RegExp(`^${role}$`) })).toBeVisible();
+  const roles = chapter.locator("table").first().locator("td:first-child code");
+  for (const role of ["admin", "modeler", "operator", "user", "productmanager", "feedreader"]) {
+    await expect(roles.filter({ hasText: new RegExp(`^${role}$`) })).toBeVisible();
   }
   // Both languages, because a chapter that exists in one is half a chapter.
   for (const [lang, text] of [
@@ -216,17 +222,27 @@ test("the landscape and data chapters exist, in both languages", async ({ page }
   }
 });
 
-test("the welcome chapter offers all six apps, Panorama and Data included", async ({ page }) => {
+test("the welcome chapter offers every app and both portal surfaces", async ({ page }) => {
   const calls = [];
   installMock(page, calls);
   await page.goto("/handbuch.html");
 
   const cards = page.locator("#willkommen .grid2 .card");
-  await expect(cards).toHaveCount(6);
+  // Eight cards, eight links. Approvals stopped being an application of its own — an
+  // approval is a kind of task — so it lost its card and kept its link on the Tasks
+  // card; then it lost that link too, because the page it led to is gone and the
+  // inbox itself is where an approval is read and decided. Counting cards and
+  // listing routes separately is what makes both steps expressible: the card grid is
+  // where a reader learns an app exists, and the routes are what they can reach.
+  await expect(cards).toHaveCount(8);
   // The routes matter more than the names: a card that names an app but links
   // somewhere else is the failure a reader meets rather than reads.
+  //
+  // One is a path rather than a hash because it is a page of its own and not a view
+  // of the shell — which is also why it was reachable by nobody until it was taught
+  // here.
   for (const route of ["/#/console", "/#/modeler", "/#/tasks", "/#/operations",
-    "/#/panorama/starmap", "/#/data"]) {
+    "/#/panorama/starmap", "/#/data", "/shop.html", "/#/catalog"]) {
     await expect(cards.locator(`a[href="${route}"]`)).toHaveCount(1);
   }
 });
@@ -248,4 +264,156 @@ test("the test chapter leads to the Playground", async ({ page }) => {
     await expect(page.locator(`#testen [data-l="${lang}"] a[href="#playground"]`).first()).toBeVisible();
   }
   await expect(page.locator("#playground")).toHaveCount(1);
+});
+
+// A scenario is what turns a Playground run into a regression test, and `atlas
+// playground` is what runs it in a pipeline. Both live in the test chapter, below the
+// Playground, so the card and the rhythm note have to lead there — in both languages —
+// and the anchor has to exist. The flag table itself is held to the command's code by
+// cmd/atlas/playgroundhandbook_test.go.
+test("the test chapter leads to scenarios and the pipeline runner", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+
+  for (const lang of ["de", "en"]) {
+    await page.click(`#lang-${lang}`);
+    await expect(page.locator(`#testen [data-l="${lang}"] a[href="#szenarien"]`).first()).toBeVisible();
+  }
+  await expect(page.locator("#szenarien")).toHaveCount(1);
+  // The first column only: the descriptions name --scenario too ("only with --scenario").
+  await expect(page.locator("#testen #playground-flags td:first-child code", { hasText: /^--scenario$/ }))
+    .toHaveCount(1);
+});
+
+// The delivery chapter is the one that teaches an operator to publish, register a
+// target, and promote to another server. It sits between testing and operations —
+// you test, then you ship, then you watch — so it earns a table-of-contents entry
+// there, and its route table (guarded against the real routes in Go) has to be on
+// the page for that guard to mean anything to a reader.
+test("the deliver chapter is reachable and lists the promote route", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+
+  await expect(page.locator('#toc a[href="#ausliefern"]')).toBeVisible();
+  await expect(page.locator("main section#ausliefern")).toHaveCount(1);
+
+  // The load-bearing fact of the chapter, in whichever language is on screen: a
+  // target is reached with a deploy token, not just any token.
+  for (const [lang, text] of [
+    ["de", "Deploy-Token"],
+    ["en", "deploy token"],
+  ]) {
+    await page.click(`#lang-${lang}`);
+    await expect(page.locator("#ausliefern").locator(`[data-l="${lang}"]`, { hasText: text }).first())
+      .toBeVisible();
+  }
+
+  // The first column only: the "For" cells name routes in prose too.
+  await expect(page.locator("#ausliefern #delivery-routes td:first-child code",
+    { hasText: /\/releases\/\{version\}\/promote$/ })).toHaveCount(1);
+});
+
+// The evolve chapter teaches deploying a new version, migrating or forking a running
+// case, pausing a version, and versioning a decision. It sits after operations — you
+// deliver, operate, then evolve — and its route table (guarded against the real routes
+// and roles in Go) has to be on the page for that guard to mean anything to a reader.
+test("the evolve chapter is reachable and lists the migrate route", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+
+  await expect(page.locator('#toc a[href="#weiterentwickeln"]')).toBeVisible();
+  await expect(page.locator("main section#weiterentwickeln")).toHaveCount(1);
+
+  // The load-bearing fact of the chapter, in whichever language is on screen: a new
+  // deploy does not move running cases — a migration does.
+  for (const [lang, text] of [
+    ["de", "Migration"],
+    ["en", "Migration"],
+  ]) {
+    await page.click(`#lang-${lang}`);
+    await expect(page.locator("#weiterentwickeln").locator(`[data-l="${lang}"]`, { hasText: text }).first())
+      .toBeVisible();
+  }
+
+  // The first column only: the "For" cells name routes in prose too.
+  await expect(page.locator("#weiterentwickeln #evolve-routes td:first-child code",
+    { hasText: /\/instances\/\{key\}\/migrate$/ })).toHaveCount(1);
+});
+
+// The "your own worker" subsection lives inside the Forms & workers chapter (it is not
+// a chapter of its own, so no table-of-contents entry). It teaches the Job API a custom
+// worker drives; its route table is guarded against the real routes and roles in Go, so
+// the table has to be on the page for that guard to mean anything.
+test("the forms chapter teaches a custom worker over the Job API", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+
+  await expect(page.locator("#formulare #eigener-worker")).toHaveCount(1);
+
+  // The load-bearing fact, in whichever language is on screen: at-least-once delivery
+  // means the worker must be idempotent.
+  for (const [lang, text] of [
+    ["de", "idempotent"],
+    ["en", "idempotent"],
+  ]) {
+    await page.click(`#lang-${lang}`);
+    // #eigener-worker is an empty anchor div; the prose is its siblings, so scope to
+    // the chapter. "idempotent" appears only in this subsection within it.
+    await expect(page.locator("#formulare").locator(`[data-l="${lang}"]`, { hasText: text }).first())
+      .toBeVisible();
+  }
+
+  // The first column only: the "For" cells name routes in prose too.
+  await expect(page.locator("#formulare #worker-jobs-routes td:first-child code",
+    { hasText: /\/jobs\/activate$/ })).toHaveCount(1);
+});
+
+// The monitoring subsection lives inside the Operations & incidents chapter (it is not a
+// chapter of its own, so no table-of-contents entry). It teaches metrics, alerting,
+// export, retention and backup; its route table is guarded against the real routes and
+// roles in Go, so the table has to be on the page for that guard to mean anything.
+test("the operations chapter teaches monitoring and lists the backup route", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+
+  await expect(page.locator("#betrieb #ueberwachen")).toHaveCount(1);
+
+  // The load-bearing fact, in whichever language is on screen: Atlas raises no alert on
+  // its own — you alert on the metrics.
+  for (const [lang, text] of [
+    ["de", "atlas_open_incidents"],
+    ["en", "atlas_open_incidents"],
+  ]) {
+    await page.click(`#lang-${lang}`);
+    await expect(page.locator("#betrieb").locator(`[data-l="${lang}"]`, { hasText: text }).first())
+      .toBeVisible();
+  }
+
+  // The first column only: the "For" cells name routes in prose too.
+  await expect(page.locator("#betrieb #monitor-routes td:first-child code",
+    { hasText: /\/backup$/ })).toHaveCount(1);
+});
+
+test("the guiding-case chapter ties one process to all six modules", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+
+  await expect(page.locator("#leitfall")).toHaveCount(1);
+
+  for (const lang of ["de", "en"]) {
+    await page.click(`#lang-${lang}`);
+    // The load-bearing thread: the one step that is not a mockup is the job an own worker
+    // serves — konto-anlegen — named in whichever language is on screen.
+    await expect(page.locator("#leitfall").locator(`[data-l="${lang}"]`, { hasText: "konto-anlegen" }).first())
+      .toBeVisible();
+    // The capstone links back to a reference chapter and to the installable example card.
+    await expect(page.locator(`#leitfall [data-l="${lang}"] a[href="#eigener-worker"]`).first()).toBeVisible();
+    await expect(page.locator(`#leitfall [data-l="${lang}"] a[href="#bsp-lehrgang"]`).first()).toBeVisible();
+  }
 });

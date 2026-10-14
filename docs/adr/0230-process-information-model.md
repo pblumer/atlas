@@ -1,6 +1,7 @@
 # ADR-0230: The process information model — UML classes above BPMN's data objects
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-02
 - **Deciders:** Patrick Blumer
 

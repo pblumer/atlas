@@ -49,6 +49,13 @@ type migrationPlanResp struct {
 	// Migratable is the plain answer, so a caller does not have to interpret an empty
 	// problems array itself.
 	Migratable bool `json:"migratable"`
+	// Fork is what would happen instead if this instance were forked onto the same
+	// target: ended where it is, and continued in a new instance of that version
+	// (ADR-0389). It rides on the same answer because the
+	// question an operator has when a rebinding is refused is "then what?", and a
+	// refusal with no next step is what sent them back to cancel-and-restart. Absent
+	// only when the plan could not be built far enough to ask.
+	Fork *forkPlanResp `json:"fork,omitempty"`
 }
 
 // migrationRequest is the body both endpoints take. Mapping overrides are optional and
@@ -60,6 +67,11 @@ type migrationRequest struct {
 	TargetProcessDefKey uint64          `json:"targetProcessDefKey"`
 	Reason              string          `json:"reason"`
 	Mapping             []migrationPair `json:"mapping"`
+	// Resume names where a *fork* would pick the work up again, by element id in the
+	// target version (ADR-0389). It is ignored by the
+	// in-place endpoints and empty means "propose them from where the tokens are now",
+	// which is what the dialog opens with.
+	Resume []string `json:"resume,omitempty"`
 }
 
 // deriveMigrationMapping builds the element mapping a migration will carry: every
@@ -199,8 +211,8 @@ func (s *Server) planMigration(piKey, targetDefKey uint64, overrides []migration
 }
 
 // readMigrationRequest decodes and sanity-checks the shared body.
-func readMigrationRequest(w http.ResponseWriter, r *http.Request) (migrationRequest, bool) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+func (s *Server) readMigrationRequest(w http.ResponseWriter, r *http.Request) (migrationRequest, bool) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return migrationRequest{}, false
@@ -227,7 +239,7 @@ func (s *Server) handleMigrationPlan(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
-	req, ok := readMigrationRequest(w, r)
+	req, ok := s.readMigrationRequest(w, r)
 	if !ok {
 		return
 	}
@@ -236,7 +248,23 @@ func (s *Server) handleMigrationPlan(w http.ResponseWriter, r *http.Request) {
 		found   bool
 		planErr error
 	)
-	s.do(func() { plan, found, planErr = s.planMigration(key, req.TargetProcessDefKey, req.Mapping) })
+	s.do(func() {
+		plan, found, planErr = s.planMigration(key, req.TargetProcessDefKey, req.Mapping)
+		if planErr != nil || !found {
+			return
+		}
+		// Both readings of "move this instance to that version", from one call. The
+		// dialog shows the rebinding first and the fork below it, and a plan that showed
+		// only the half that failed is what this endpoint exists to stop being.
+		fork, ok, err := s.planFork(key, req.TargetProcessDefKey, req.Resume)
+		if err != nil {
+			planErr = err
+			return
+		}
+		if ok {
+			plan.Fork = &fork
+		}
+	})
 	switch {
 	case planErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "plan migration: "+planErr.Error())
@@ -257,7 +285,7 @@ func (s *Server) handleMigrateInstance(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
-	req, ok := readMigrationRequest(w, r)
+	req, ok := s.readMigrationRequest(w, r)
 	if !ok {
 		return
 	}
@@ -321,26 +349,37 @@ func migrationValueOf(s *Server, plan migrationPlanResp) model.ProcessMigrationV
 }
 
 // migrateBatchResp is the answer to migrating a whole version's instances: what moved,
-// what was refused and why, and whether this call hit its cap.
+// what was refused and why, and whether this call hit its cap. NextCursor is set exactly
+// when Remaining is: the key of the last instance this call looked at, which the next
+// call passes as `?after=`.
 type migrateBatchResp struct {
 	ToProcessDefKey uint64              `json:"toProcessDefKey"`
 	Migrated        int                 `json:"migrated"`
 	Refused         []migrationPlanResp `json:"refused,omitempty"`
 	Remaining       bool                `json:"remaining"`
+	NextCursor      string              `json:"nextCursor,omitempty"`
 }
 
 // handleMigrateInstancesOfProcess migrates a bounded batch of one definition's running
 // instances to another version. Each instance is its own command and its own event, so
 // a refusal on the four-hundredth does not roll back the three hundred and ninety-nine
 // that were fine (ADR-0162) — the batch is an API convenience, never one durable
-// transaction. The caller repeats while `remaining` is true, as the bulk cancel does.
+// transaction. The caller repeats while `remaining` is true, passing the `nextCursor`
+// each call hands back as the next call's `?after=`.
+//
+// The cursor is what makes repeating a walk. A refused instance stays on the version it
+// was on, so a batch that starts from the front every time selects it again: its
+// refusal is reported once per call, and once a whole page is refused that page is all
+// any later call selects — `remaining` stays true and the instances behind it are never
+// reached. The bulk cancel needs no cursor because what it touches leaves the version.
+// A call without `after` starts from the oldest instance, as it always has.
 func (s *Server) handleMigrateInstancesOfProcess(w http.ResponseWriter, r *http.Request) {
 	fromKey, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
 		return
 	}
-	req, ok := readMigrationRequest(w, r)
+	req, ok := s.readMigrationRequest(w, r)
 	if !ok {
 		return
 	}
@@ -360,6 +399,15 @@ func (s *Server) handleMigrateInstancesOfProcess(w http.ResponseWriter, r *http.
 	if limit > migrationBatchMax {
 		limit = migrationBatchMax
 	}
+	var after uint64
+	if q := strings.TrimSpace(r.URL.Query().Get("after")); q != "" {
+		n, err := strconv.ParseUint(q, 10, 64)
+		if err != nil {
+			httpapi.Error(w, http.StatusBadRequest, "invalid after cursor (want an instance key)")
+			return
+		}
+		after = n
+	}
 	actor := ""
 	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 		actor = p.Username
@@ -370,30 +418,34 @@ func (s *Server) handleMigrateInstancesOfProcess(w http.ResponseWriter, r *http.
 		resp  = migrateBatchResp{ToProcessDefKey: req.TargetProcessDefKey}
 		opErr error
 	)
-	// Selecting the batch is a read over the whole active family; planning and
-	// migrating are writes. Only the second half needs the run loop, so the walk
-	// runs off it — the same split as the bulk cancel. An instance that finishes in
-	// between is already handled below (planMigration reports it as gone).
+	// Selecting the batch is a read of the definition's own instance index, past the
+	// cursor; planning and migrating are writes. Only the second half needs the run
+	// loop, so the walk runs off it — the same split as the bulk cancel. An instance
+	// that finishes in between is already handled below (planMigration reports it as
+	// gone), and one that is refused is behind the cursor the next call starts from.
 	var keys []uint64
 	opErr = s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
 		if _, ok := defs[fromKey]; !ok {
 			return nil
 		}
 		found = true
-		err := rv.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
-			if v.ProcessDefKey != fromKey {
-				return nil
-			}
-			keys = append(keys, k)
-			if len(keys) >= limit {
+		err := rv.ActiveInstancesOfDef(fromKey, after, func(k uint64, _ *model.ProcessInstanceValue) error {
+			// Stopping on the instance *after* a full page, rather than on the one that
+			// fills it, makes `remaining` exact: a page that ends on the last instance
+			// does not send the caller round once more for an empty answer.
+			if len(keys) == limit {
 				return errMigrationBatchFull
 			}
+			keys = append(keys, k)
 			return nil
 		})
 		if err != nil && !errors.Is(err, errMigrationBatchFull) {
 			return err
 		}
 		resp.Remaining = errors.Is(err, errMigrationBatchFull)
+		if resp.Remaining {
+			resp.NextCursor = strconv.FormatUint(keys[len(keys)-1], 10)
+		}
 		return nil
 	})
 	if opErr != nil {

@@ -1,6 +1,7 @@
 # ADR-0033: Inclusive gateway join synchronization
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-23
 - **Deciders:** Atlas engine maintainers
 

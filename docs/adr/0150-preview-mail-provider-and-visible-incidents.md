@@ -1,6 +1,7 @@
 # ADR-0150: A preview mail provider, and incidents on the live diagram
 
 - **Status:** Accepted (amended)
+- **Implementation:** Landed
 - **Date:** 2026-08-19
 - **Deciders:** Atlas engine team
 

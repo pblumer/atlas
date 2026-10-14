@@ -63,7 +63,7 @@ func deployAndStartWaiting(t *testing.T, ts *httptest.Server, startBody string) 
 		Key   uint64 `json:"key"`
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(body, &instances); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &instances); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	for _, in := range instances {
@@ -247,7 +247,7 @@ func TestSetInstanceVariablesRequiresAdmin(t *testing.T) {
 		Key   uint64 `json:"key"`
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(list, &instances); err != nil {
+	if err := json.Unmarshal(listRows(t, list), &instances); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	var key uint64

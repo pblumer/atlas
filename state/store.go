@@ -37,6 +37,8 @@ type Store struct {
 	queries
 
 	db *pebble.DB
+	// tuning is what Open was asked for, kept so it can be reported and tested.
+	tuning Tuning
 	// freeBatch caches one indexed batch for reuse across transactions. The
 	// store is single-writer (invariant I3), so at most one transaction is live
 	// at a time and a single cached batch suffices — this keeps NewTransaction
@@ -45,15 +47,30 @@ type Store struct {
 }
 
 // Open opens (creating if needed) the state store rooted at dir.
-func Open(dir string) (*Store, error) {
+//
+// Options tune the storage engine; see [Tuning] for what each one is for and why
+// Pebble's own default is wrong once a store holds millions of keys. With none, the
+// store gets [defaultTuning].
+func Open(dir string, opts ...Option) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	db, err := pebble.Open(dir, &pebble.Options{Merger: counterMerger})
+	tuning := defaultTuning()
+	for _, opt := range opts {
+		opt(&tuning)
+	}
+	popts, cache := tuning.pebbleOptions()
+	db, err := pebble.Open(dir, popts)
+	if cache != nil {
+		// Pebble took its own reference during the open, so this one is done — the DB
+		// keeps the cache alive, and closing the store releases it. Dropping it on the
+		// error path too is what keeps a failed open from leaking the whole cache.
+		cache.Unref()
+	}
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{queries: queries{r: db}, db: db}
+	s := &Store{queries: queries{r: db}, db: db, tuning: tuning}
 	// The runtime aggregate counters (ADR-0080) are derived state added after the
 	// fact. A live store persists across restarts and replays only the tail, so the
 	// counters would read zero for instances that already exist. Seed them once from
@@ -76,6 +93,12 @@ func Open(dir string) (*Store, error) {
 	if err := s.backfillRuntimeTotalsIfNeeded(); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: backfill runtime totals: %w", err)
+	}
+	// The buffered-message counter (ADR-0370) arrived after the buffer it counts, so a
+	// store that already holds waiting messages is counted once.
+	if err := s.backfillBufferedMessagesIfNeeded(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: backfill buffered messages: %w", err)
 	}
 	// The per-element termination counters (ADR-0249) are the latest addition, and an
 	// uncounted cancellation does not read as unknown on the overlay — it reads as a
@@ -169,6 +192,14 @@ func (q queries) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64)
 
 // ActivatableJobs calls fn with the key of every open job of the given type,
 // via the jobActivatable index — the worker-polling access pattern.
+//
+// A non-nil error from fn ends the scan and comes back from here, which is how a
+// caller that wants a *page* pays for a page: the index is ordered, so stopping at
+// the nth entry visits n entries whatever the backlog behind it. Returning nil once
+// full and discarding the rest reads the whole slice instead, and that is what made
+// a worker's heartbeat cost grow with the backlog it was there to drain
+// (ADR-0270). Callers that stop deliberately use a sentinel and
+// unwrap it; anything else is a real failure.
 func (q queries) ActivatableJobs(jobType int32, fn func(jobKey uint64) error) error {
 	return q.scanPrefix(jobActivatablePrefix(jobType), func(k, _ []byte) error {
 		return fn(trailingKey(k))
@@ -207,10 +238,21 @@ func (q queries) JobOfElement(elKey uint64) (uint64, bool, error) {
 	return binary.BigEndian.Uint64(raw), true, nil
 }
 
+// JobActivatable reports whether one job is on the jobActivatable index — whether a
+// worker's pull would be handed it now. It asks the index itself rather than
+// restating the rule [Tx.PutJob] applies to it (retries left, no backoff, no lease),
+// so a caller that reached the job some other way, such as through the element→job
+// reverse index, reads exactly what a scan of the index would have found.
+func (q queries) JobActivatable(jobType int32, jobKey uint64) (bool, error) {
+	_, ok, err := getCopy(q.r, keyJobActivatable(jobType, jobKey))
+	return ok, err
+}
+
 // AllActivatableJobs calls fn with the key of every open job of ANY type, via the
 // same jobActivatable index — the whole column family rather than one job type's
-// slice. It backs the read side of the operator complete/fail affordance (listing
-// the jobs an instance is parked on); worker polling still uses the type-scoped
+// slice, so it costs the server's whole job population. No request path uses it:
+// listing the jobs one instance is parked on goes through that instance's element
+// index and [queries.JobOfElement] instead, and worker polling uses the type-scoped
 // ActivatableJobs.
 func (q queries) AllActivatableJobs(fn func(jobKey uint64) error) error {
 	return q.scanPrefix([]byte{byte(cfJobActivatable)}, func(k, _ []byte) error {
@@ -686,6 +728,34 @@ func (s *Store) backfillRuntimeTotalsIfNeeded() error {
 	return b.Commit(pebble.Sync)
 }
 
+// metaBufferedMessagesV1 marks that the buffered-message counter has been seeded from
+// the buffer it counts.
+const metaBufferedMessagesV1 = "buffered_messages_v1"
+
+// backfillBufferedMessagesIfNeeded seeds the buffered-message counter from the buffer
+// the first time a store gains it, in one synced batch with its marker — the shape of
+// backfillRuntimeTotalsIfNeeded, for the counter that arrived after it.
+func (s *Store) backfillBufferedMessagesIfNeeded() error {
+	if _, ok, err := getCopy(s.db, keyMeta(metaBufferedMessagesV1)); err != nil || ok {
+		return err
+	}
+	n, err := s.countPrefix([]byte{byte(cfBufferedMessage)})
+	if err != nil {
+		return err
+	}
+	b := s.db.NewBatch()
+	defer b.Close()
+	if n > 0 {
+		if err := b.Merge(keyRuntimeTotal(rtBufferedMessages), encodeCounter(int64(n)), nil); err != nil {
+			return err
+		}
+	}
+	if err := b.Set(keyMeta(metaBufferedMessagesV1), []byte{1}, nil); err != nil {
+		return err
+	}
+	return b.Commit(pebble.Sync)
+}
+
 // metaSummaryCountersV1 marks that the ADR-0083 finished-count and last-activity
 // counters have been seeded from pre-existing state — a one-time migration, separate
 // from metaRuntimeCountersV1 so a store that already ran the ADR-0080 backfill still
@@ -954,6 +1024,32 @@ func (q queries) CompletedProcessInstances(fn func(key uint64, v *model.ProcessI
 	})
 }
 
+// ActiveInstancesOfDef calls fn with every live instance of one definition in
+// ASCENDING key order — oldest first — starting just above `after`; after == 0 starts
+// from the oldest. It reads the same by-definition index as
+// [queries.ActiveInstancesOfDefDesc], so its cost is what it yields and not the store.
+//
+// It is the walk for a batch that works through a version in bounded calls (ADR-0162):
+// the key of the last instance a call looked at is the cursor for the next, whatever
+// the call did with it. Resuming from the front instead meets every instance the batch
+// left in place again — a refused migration stays on its version — and a page of them
+// is then all any later call ever sees. Ascending, because an instance started on the
+// version while the batch runs has a key above every cursor so far, and is reached —
+// keys are a partition's monotonic counter, and the server runs one partition
+// (ADR-0006). A second partition would need a cursor per partition.
+func (q queries) ActiveInstancesOfDef(procDefKey, after uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	lo := instanceByDefPrefix(procDefKey)
+	hi := prefixEnd(lo)
+	if after != 0 {
+		// LowerBound is inclusive. Every entry of this index is the same length, so the
+		// entry for `after` with one byte appended sorts strictly above it and below
+		// every later entry — the start of "the next page", whether or not `after`
+		// itself is still in the index.
+		lo = append(keyInstanceByDef(procDefKey, after), 0)
+	}
+	return q.scanRange(lo, hi, q.instanceOfEntry(keyProcessInstance, fn))
+}
+
 // ActiveInstancesOfDefDesc calls fn with every live instance of one definition in
 // DESCENDING key order — newest first — starting just below `before`; before == 0
 // starts from the newest. It reads the by-definition index, so its cost is the
@@ -1051,7 +1147,13 @@ func (q queries) InstancesOnElementDesc(procDefKey uint64, elementId int32, befo
 // the record each entry names. The two indexes differ only in their key range and
 // in which family holds the record, so the walk itself is written once.
 func (q queries) instancesOfDefDesc(lo, hi []byte, recordKey func(uint64) []byte, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
-	return q.scanRangeDesc(lo, hi, func(k, _ []byte) error {
+	return q.scanRangeDesc(lo, hi, q.instanceOfEntry(recordKey, fn))
+}
+
+// instanceOfEntry turns a by-definition index entry into the record it names, for a
+// walk in either direction.
+func (q queries) instanceOfEntry(recordKey func(uint64) []byte, fn func(key uint64, v *model.ProcessInstanceValue) error) func(k, _ []byte) error {
+	return func(k, _ []byte) error {
 		key := trailingKey(k)
 		raw, ok, err := getCopy(q.r, recordKey(key))
 		if err != nil || !ok {
@@ -1065,7 +1167,7 @@ func (q queries) instancesOfDefDesc(lo, hi []byte, recordKey func(uint64) []byte
 			return err
 		}
 		return fn(key, v.(*model.ProcessInstanceValue))
-	})
+	}
 }
 
 // ActiveProcessInstancesDesc calls fn with live process instances in descending key
@@ -1213,6 +1315,89 @@ func (q queries) Incidents(fn func(elementKey uint64, v *model.IncidentValue) er
 		}
 		return fn(trailingKey(k), v.(*model.IncidentValue))
 	})
+}
+
+// EntitlementsOf calls fn with everything one principal holds, in item order.
+//
+// Bounded by one person's inventory rather than by the population, which is what
+// makes it answerable at all — but it is still a scan, and every caller takes a
+// read view rather than the run loop for it (ADR-0239).
+func (q queries) EntitlementsOf(principal string, fn func(v *model.EntitlementValue) error) error {
+	return q.scanPrefix(entitlementPrefix(principal), func(_, raw []byte) error {
+		v, err := model.DecodeValue(model.VTEntitlement, raw)
+		if err != nil {
+			return err
+		}
+		return fn(v.(*model.EntitlementValue))
+	})
+}
+
+// Entitlements calls fn with every entitlement the inventory holds, in key order:
+// by principal, and within a principal by item.
+//
+// This is the one query that grows with the **population** rather than with one
+// person, and it exists because the inventory's key answers only one direction.
+// "What does Alice hold" is a prefix scan; "who holds VPN access" is not
+// answerable without walking the family, because the principal comes first in the
+// key (see [entitlementPrefix] for why it has to).
+//
+// That asymmetry is the shape of the question ADR-0312 left open — whether
+// reconciliation over a whole estate becomes a population-sized job — and the
+// answer here is: yes, it is one, so it runs off the loop through a read view like
+// every other population-sized query (ADR-0239), once per reconciliation run
+// rather than once per item. A by-item index would remove the walk and would cost
+// a second column family that every write has to keep in step; it is the right
+// trade the day somebody measures this walk hurting, and the wrong one before.
+func (q queries) Entitlements(fn func(v *model.EntitlementValue) error) error {
+	return q.scanPrefix([]byte{byte(cfEntitlement)}, func(_, raw []byte) error {
+		v, err := model.DecodeValue(model.VTEntitlement, raw)
+		if err != nil {
+			return err
+		}
+		return fn(v.(*model.EntitlementValue))
+	})
+}
+
+// Entitlement reads whether one principal holds one item. A point read, because
+// "do you already have this" is asked once per product on a catalogue page and a
+// scan per product would make the page cost the inventory.
+func (q queries) Entitlement(principal, itemID string) (*model.EntitlementValue, bool, error) {
+	raw, ok, err := getCopy(q.r, keyEntitlement(principal, itemID))
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	v, err := model.DecodeValue(model.VTEntitlement, raw)
+	if err != nil {
+		return nil, false, err
+	}
+	return v.(*model.EntitlementValue), true, nil
+}
+
+// EntitlementHistoryOf calls fn with every hold one principal has ended, most
+// recently ended first.
+//
+// Descending, because the family only grows and the question asked of it is
+// almost always about the recent past; a caller after an old period gives a
+// window. There is no whole-family scan beside this one on purpose — "every hold
+// everybody has ever ended" is a question with no bounded answer, and a route
+// that offered it would be a slow way to export the estate's access history.
+func (q queries) EntitlementHistoryOf(principal string, fn func(v *model.EntitlementHistoryValue) error) error {
+	lo := entitlementHistoryPrefix(principal)
+	return q.scanRangeDesc(lo, prefixEnd(lo), func(_, raw []byte) error {
+		v, err := model.DecodeValue(model.VTEntitlementHistory, raw)
+		if err != nil {
+			return err
+		}
+		return fn(v.(*model.EntitlementHistoryValue))
+	})
+}
+
+// EntitlementCount returns how many entitlements the inventory holds. It is the
+// measurement the record's open question asks for — whether a column family of
+// millions stays within a workable checkpoint — and the number an operator reads
+// before believing an answer about the estate.
+func (q queries) EntitlementCount() (int, error) {
+	return q.countPrefix([]byte{byte(cfEntitlement)})
 }
 
 // ActiveElementInstanceCount returns how many element instances are live.

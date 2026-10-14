@@ -30,6 +30,9 @@ type Loop struct {
 	// quit is owned by the caller that built the loop — typically the server,
 	// which closes it once for the loop and every background sweeper alike.
 	quit <-chan struct{}
+	// metrics is the turn instrumentation, nil until SetMetrics attaches one. See
+	// turnmetrics.go for why it is atomic and why a turn is worth measuring at all.
+	metrics metricsRef
 }
 
 // New builds a loop that runs until quit is closed. It does not start the
@@ -62,8 +65,19 @@ func (l *Loop) Run() {
 // when it dispatches at the moment the loop stops draining.
 func (l *Loop) Do(fn func()) {
 	done := make(chan struct{})
+	// Read before the send, because the send is the wait: an unbuffered channel means
+	// a successful hand-over is the moment the loop took the closure, so the gap
+	// between this and the closure starting *is* what the caller queued for.
+	queued := l.dispatchedAt()
 	select {
-	case l.tasks <- func() { defer close(done); fn() }:
+	case l.tasks <- func() {
+		defer close(done)
+		// Deferred so a panicking closure is still reported — it held the writer for
+		// however long it ran, and that is the turn most worth seeing. The arguments
+		// are evaluated now, so the second one is when the closure started.
+		defer l.observeTurn(queued, l.dispatchedAt())
+		fn()
+	}:
 		<-done
 	case <-l.quit:
 	}
@@ -83,7 +97,9 @@ func (l *Loop) Do(fn func()) {
 // writer.
 //
 // It is deliberately not [Do] with a timeout: Do promises the closure ran, and a
-// readiness probe must be able to give up on one that did not.
+// readiness probe must be able to give up on one that did not. It is also not
+// reported as a turn (see [Metrics]): the closure is empty, so counting it would fill
+// the histogram with work nobody performed.
 func (l *Loop) Ping(ctx context.Context, d time.Duration) bool {
 	done := make(chan struct{})
 	deadline := time.NewTimer(d)

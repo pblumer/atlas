@@ -1,8 +1,17 @@
 # ADR-0164: No in-process service tasks — the core loop must never be able to get stuck
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
+
+> **As built (2026-10-11).** This record describes running a Worker Type inside the server as
+> what every deployment does today. That is no longer so: since
+> [ADR-0168](0168-connector-work-on-a-worker.md) a connector task can run on a worker, and
+> eighteen kinds run on one by default (`DefaultOffloadedKinds`, `api/connectorkinds.go`);
+> `--in-process-connectors` now defaults to off and brings the old placement back only on
+> request ([ADR-0233](0233-in-process-connectors-refused.md)). Read the passages below about the
+> in-process path as the starting point they were.
 
 ## Context and problem statement
 

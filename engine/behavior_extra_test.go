@@ -1,8 +1,11 @@
 package engine_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -206,6 +209,12 @@ func TestProcessBatchRecordTooLarge(t *testing.T) {
 	if err := p.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
+	// The variable budget now sits in front of this path and refuses such a value
+	// with a resumable incident (ADR-0294), which is the
+	// better answer and not the one under test here. Raised out of the way, so the
+	// WAL's own cap — the last line, where the failure is an aborted batch rather
+	// than an incident — is still reached and still covered.
+	p.SetMaxVariable(128 << 20)
 	// A start variable larger than the WAL's 64 MiB per-record limit: its
 	// VariableCreated event cannot be appended.
 	huge := strings.Repeat("a", (64<<20)+64)
@@ -245,9 +254,20 @@ func TestProcessBatchSyncFailure(t *testing.T) {
 		t.Fatalf("RunUntilIdle 1: %v", err)
 	}
 
-	// Remove the WAL directory so the next segment roll cannot create a file.
-	if err := os.RemoveAll(walDir); err != nil {
-		t.Fatalf("RemoveAll: %v", err)
+	// Put a directory where the next segment goes, so the next roll cannot create
+	// its file. Removing the whole WAL directory did the same on Unix, but Windows
+	// will not delete the segment the log still holds open.
+	segs, err := filepath.Glob(filepath.Join(walDir, "*.wal"))
+	if err != nil || len(segs) == 0 {
+		t.Fatalf("segments: %v, %v", segs, err)
+	}
+	sort.Strings(segs)
+	seq, err := strconv.ParseUint(strings.TrimSuffix(filepath.Base(segs[len(segs)-1]), ".wal"), 10, 64)
+	if err != nil {
+		t.Fatalf("segment name: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(walDir, fmt.Sprintf("%016d.wal", seq+1)), 0o755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
 	}
 	p.CreateInstance(cp.Key)
 	if err := p.RunUntilIdle(); err == nil {

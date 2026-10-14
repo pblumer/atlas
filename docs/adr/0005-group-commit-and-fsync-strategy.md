@@ -1,6 +1,7 @@
 # ADR-0005: Group commit and fsync strategy
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-06-11
 - **Deciders:** Core team
 

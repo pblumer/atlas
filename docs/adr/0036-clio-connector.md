@@ -1,6 +1,7 @@
 # ADR-0036: A clio connector — server-registered event-store integration
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-23
 - **Deciders:** Atlas engine team
 

@@ -230,6 +230,40 @@ func TestRecoverFromTornTail(t *testing.T) {
 	wantEntries(t, replayAll(t, l3), "one", "two", "three")
 }
 
+// TestARestartKeepsAppendingToTheActiveSegment is the path every restart takes:
+// the last segment is whole, Open trims nothing, and the next batch lands right
+// after the last one. On Windows this failed on the second start, before a record
+// was read: the segment was opened append-only, and trimming it — even to its own
+// length — needs the right to write data, so Open returned "Access is denied".
+func TestARestartKeepsAppendingToTheActiveSegment(t *testing.T) {
+	dir := t.TempDir()
+	for i, rec := range []string{"one", "two", "three"} {
+		l, err := wal.Open(wal.Options{Dir: dir})
+		if err != nil {
+			t.Fatalf("start %d: Open: %v", i+1, err)
+		}
+		if err := l.Append([]byte(rec)); err != nil {
+			t.Fatalf("start %d: Append: %v", i+1, err)
+		}
+		if err := l.Sync(); err != nil {
+			t.Fatalf("start %d: Sync: %v", i+1, err)
+		}
+		if err := l.Close(); err != nil {
+			t.Fatalf("start %d: Close: %v", i+1, err)
+		}
+	}
+
+	l, err := wal.Open(wal.Options{Dir: dir})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer l.Close()
+	wantEntries(t, replayAll(t, l), "one", "two", "three")
+	if segs := segmentPaths(t, dir); len(segs) != 1 {
+		t.Fatalf("segments = %d, want 1: a restart continues the active segment", len(segs))
+	}
+}
+
 func TestAppendRejectsEmptyRecord(t *testing.T) {
 	dir := t.TempDir()
 	l, err := wal.Open(wal.Options{Dir: dir})

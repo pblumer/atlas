@@ -353,10 +353,11 @@ func TestProcessInstanceStateString(t *testing.T) {
 }
 
 // TestNewValueNoPayload covers newValue's default branch for a value type with
-// no payload struct.
+// no payload struct. VTMessage was the example until the message buffer gave it one
+// (ADR-0370).
 func TestNewValueNoPayload(t *testing.T) {
-	if v := newValue(VTMessage); v != nil {
-		t.Errorf("newValue(VTMessage) = %v, want nil", v)
+	if v := newValue(VTError); v != nil {
+		t.Errorf("newValue(VTError) = %v, want nil", v)
 	}
 }
 
@@ -378,6 +379,8 @@ func TestValueTypeMethods(t *testing.T) {
 		{(&DecisionEvaluationValue{}), VTDecisionEvaluation},
 		{(&InboundDeliveryValue{}), VTInboundDelivery},
 		{(&CompensableValue{}), VTCompensable},
+		{(&TriggerReceiptValue{}), VTTriggerReceipt},
+		{(&MessageValue{}), VTMessage},
 	}
 	for _, c := range cases {
 		if got := c.v.ValueType(); got != c.want {
@@ -400,7 +403,7 @@ func TestStringersExhaustive(t *testing.T) {
 		VTProcessInstance, VTElementInstance, VTJob, VTTimer, VTMessageSubscription,
 		VTMessage, VTVariable, VTIncident, VTSignal, VTError, VTProcessDefinition,
 		VTMessageFlow, VTDataObject, VTDecisionEvaluation, VTInboundDelivery,
-		VTVariableAudit, VTCompensable, VTOperatorAction,
+		VTVariableAudit, VTCompensable, VTOperatorAction, VTTriggerReceipt,
 	}
 	for _, vt := range valueTypes {
 		if s := vt.String(); s == "" || s == "ValueType(?)" {
@@ -420,7 +423,10 @@ func TestStringersExhaustive(t *testing.T) {
 		IntentDecisionEvaluated, IntentVariableDeleted, IntentInboundDeliveryApplied,
 		IntentVariableModify, IntentVariableAudited,
 		IntentCompensableRecorded, IntentCompensableConsumed, IntentOperatorActed,
-		IntentJobErrorThrown,
+		IntentJobErrorThrown, IntentTriggering, IntentTriggerReceived,
+		IntentTriggerReceiptsPruning, IntentTriggerReceiptsPruned, IntentDelivering,
+		IntentMessageBuffered, IntentMessageIdRecorded, IntentMessageConsumed,
+		IntentMessageExpiring, IntentMessageExpired,
 	}
 	for _, in := range intents {
 		if s := in.String(); s == "" || s == "Intent(?)" {

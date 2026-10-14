@@ -1,6 +1,7 @@
 # ADR-0078: Design-view token simulation — a client-side control-flow walkthrough
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-29
 - **Deciders:** Atlas maintainers
 

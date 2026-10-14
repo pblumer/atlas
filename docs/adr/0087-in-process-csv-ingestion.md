@@ -1,6 +1,7 @@
 # ADR-0087: In-process CSV ingestion — upload in a user task, parse in the process
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-30
 - **Deciders:** Atlas maintainers
 

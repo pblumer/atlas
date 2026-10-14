@@ -1,6 +1,7 @@
 # ADR-0174: A connector task's input mappings are its outbound payload
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-21
 - **Deciders:** Atlas engine team
 

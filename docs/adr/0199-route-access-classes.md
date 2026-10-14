@@ -1,6 +1,7 @@
 # ADR-0199: Every mounted route declares its access class
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 

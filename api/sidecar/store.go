@@ -4,10 +4,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
+
+	"github.com/pblumer/atlas/internal/sharedread"
 )
 
 // Store is a durable store for one kind of design-time record: one JSON file per
@@ -128,10 +132,12 @@ func (s *Store[T]) Get(key string) (T, bool, error) {
 	if !s.addressable(key) {
 		return zero, false, nil
 	}
-	data, err := os.ReadFile(s.FileFor(key))
+	// Through sharedread, not os: a reader here runs off the run loop, and on Windows
+	// an os.Open handle would make the writer's Delete or Save of this record fail.
+	data, err := sharedread.ReadFile(s.FileFor(key))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return zero, false, nil
+			return zero, false, s.brokenDir("read")
 		}
 		return zero, false, fmt.Errorf("%s: read: %w", s.name, err)
 	}
@@ -148,10 +154,31 @@ func (s *Store[T]) Delete(key string) error {
 	if !s.addressable(key) {
 		return nil // nothing this key could name exists here
 	}
-	if err := os.Remove(s.FileFor(key)); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("%s: remove: %w", s.name, err)
+	if err := os.Remove(s.FileFor(key)); err != nil {
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("%s: remove: %w", s.name, err)
+		}
+		if err := s.brokenDir("remove"); err != nil {
+			return err
+		}
 	}
 	return FsyncDir(s.dir)
+}
+
+// brokenDir is the error for a read, remove or listing that found no record because
+// the store's directory is not a directory at all, and nil otherwise.
+//
+// Unix reports that on its own: going through a regular file fails with ENOTDIR.
+// Windows answers the same call with "not found", and lists a regular file as an
+// empty directory, so without this check a broken store reads as an empty one there —
+// and an empty store is an answer ("no such worker", "not shared"), which a store it
+// cannot read must never give.
+func (s *Store[T]) brokenDir(op string) error {
+	fi, err := os.Stat(s.dir)
+	if err != nil || fi.IsDir() {
+		return nil
+	}
+	return fmt.Errorf("%s: %s: %w", s.name, op, &fs.PathError{Op: op, Path: s.dir, Err: syscall.ENOTDIR})
 }
 
 // LoadAll reads every record in the store, in the order set by [Order]. Files
@@ -160,6 +187,9 @@ func (s *Store[T]) Delete(key string) error {
 // deleted between the listing and its read, which is what a reader running off
 // the run loop can meet.
 func (s *Store[T]) LoadAll() ([]T, error) {
+	if err := s.brokenDir("read dir"); err != nil {
+		return nil, err
+	}
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		return nil, fmt.Errorf("%s: read dir: %w", s.name, err)
@@ -173,7 +203,7 @@ func (s *Store[T]) LoadAll() ([]T, error) {
 		if !s.ok(strings.TrimSuffix(name, ".json")) {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(s.dir, name))
+		data, err := sharedread.ReadFile(filepath.Join(s.dir, name)) // see Get
 		if err != nil {
 			// The record went away between the directory listing and this read.
 			// A reader on the loop was shielded from that by being the writer too;

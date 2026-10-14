@@ -18,38 +18,19 @@ import (
 	"github.com/pblumer/atlas/logging"
 )
 
-// backupDirs is the design-time subtree of the data directory that the backup
-// endpoint captures and the restore endpoint accepts (ADR-0107). It is an
-// explicit allowlist, not an "everything except" denylist, so a sensitive store
-// added later (secrets, credentials, a new key file) is never swept into a
-// backup by default — it has to be added here deliberately.
+// The design-time subtree this backup carries is derived from the store registry
+// (storeregistry.go): every store classified design-time, and nothing else. It used
+// to be a list here, kept by hand and in a different file from the code creating
+// the stores — which is how twelve of them drifted out of the whole-instance
+// snapshot without a single test noticing (ADR-0282).
 //
-// Deliberately excluded: the WAL and state store (runtime, rebuilt from the WAL
-// on restart), the user accounts and the vault key (secrets, ADR-0044/0070). The
-// worker store is included — it holds design-time worker configuration —
-// but its secrets live in the vault, so a restore onto a fresh instance leaves
-// workers needing their credentials re-entered.
-var backupDirs = []string{
-	"deployments",
-	"drafts",
-	"forms",
-	"projects",
-	"panorama-models",
-	"releases",
-	"dmnrefs",
-	"dmn-models",
-	"public-links",
-	"connectors",
-	"repository",
-	"inbound-subscriptions",
-	"settings",
-}
-
-// maxRestoreBytes caps the total uncompressed size a single restore will read, a
-// guard against a decompression bomb. Generous for real design-time data (models
-// are small JSON/XML), tight enough to fail fast. It bounds both the compressed
-// upload and the decompressed stream.
-const maxRestoreBytes = 1 << 30 // 1 GiB
+// Deliberately absent, and now absent by classification rather than by memory: the
+// log and state store (runtime, rebuilt on restart), accounts (identity), and
+// anything holding a secret or a credential. A design-time backup is a portable
+// file meant to carry models between installations, so a credential riding along
+// in it would be a credential leaving the building. The worker store *is* carried
+// — it is design-time configuration — but its secrets live in the vault, so a
+// restore onto a fresh instance leaves workers needing their credentials again.
 
 // maxRestoreEntries caps how many archive members a restore will process, so an
 // archive of a vast number of tiny (or zero-byte) entries cannot spin the
@@ -93,8 +74,10 @@ func streamBackup(w io.Writer, fsys fs.FS) error {
 // back exactly. A directory that was never created is simply absent and skipped. The
 // per-directory walk is shared with the full snapshot (walkDirInto, ADR-0109).
 func writeBackup(tw *tar.Writer, fsys fs.FS) error {
-	for _, name := range backupDirs {
-		if err := walkDirInto(tw, fsys, name); err != nil {
+	for _, name := range backupDirs() {
+		// portable is what keeps this installation's node identity at home; see
+		// backupportability.go for why the snapshot does not apply it.
+		if err := walkDirInto(tw, fsys, name, portable); err != nil {
 			return err
 		}
 	}
@@ -112,7 +95,7 @@ func writeBackup(tw *tar.Writer, fsys fs.FS) error {
 func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 	// Bound the compressed upload; the LimitReader below bounds the decompressed
 	// stream so a bomb cannot fill the disk.
-	r.Body = http.MaxBytesReader(w, r.Body, maxRestoreBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, s.budgets().Archive)
 	defer r.Body.Close()
 	gz, err := gzip.NewReader(r.Body)
 	if err != nil {
@@ -121,8 +104,9 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 	}
 	defer gz.Close()
 
-	tr := tar.NewReader(io.LimitReader(gz, maxRestoreBytes))
+	tr := tar.NewReader(io.LimitReader(gz, s.budgets().Archive))
 	restored, entries := 0, 0
+	collisions := []restoreCollision{}
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -148,7 +132,20 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			continue // outside the allowlist — silently ignored
 		}
-		if err := writeRestoredFile(dest, tr); err != nil {
+		body, err := io.ReadAll(tr)
+		if err != nil {
+			httpapi.Error(w, http.StatusBadRequest, "corrupt tar archive")
+			return
+		}
+		// A definition key belongs to the installation that issued it, and this archive
+		// does not carry the counter that issued it. Writing a record onto a key that
+		// already names a different definition here would hand that definition this
+		// installation's instance history, so it is held back and reported instead.
+		if c, clash := foreignDeployment(s.dataDir, dest, body); clash {
+			collisions = append(collisions, c)
+			continue
+		}
+		if err := writeRestoredBytes(dest, body); err != nil {
 			httpapi.Error(w, http.StatusInternalServerError, "restore failed: "+err.Error())
 			return
 		}
@@ -156,8 +153,10 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 	}
 	httpapi.JSON(w, http.StatusOK, map[string]any{
 		"restored":        restored,
+		"skipped":         len(collisions),
+		"collisions":      collisions,
 		"restartRequired": true,
-		"note":            "Design-time artifacts (drafts, projects, forms, …) are live immediately; deployed processes take effect after a server restart.",
+		"note":            restoreNote(collisions),
 	})
 }
 
@@ -180,6 +179,12 @@ func (s *Server) restoreDest(name string) (dest string, ok bool, err error) {
 	if !allowedBackupDir(top) {
 		return "", false, nil
 	}
+	if !portable(clean) {
+		// This installation's own identity, in an archive from another one. Applied on
+		// the way in as well as on the way out, because every archive taken before this
+		// still carries a node.json.
+		return "", false, nil
+	}
 	return filepath.Join(s.dataDir, clean), true, nil
 }
 
@@ -200,7 +205,7 @@ var renamedBackupDirs = map[string]string{
 // allowedBackupDir reports whether a top-level directory is in the design-time
 // allowlist.
 func allowedBackupDir(top string) bool {
-	for _, d := range backupDirs {
+	for _, d := range backupDirs() {
 		if d == top {
 			return true
 		}
@@ -217,6 +222,15 @@ func writeRestoredFile(path string, r io.Reader) error {
 	}
 	data, err := io.ReadAll(r)
 	if err != nil {
+		return err
+	}
+	return writeRestoredBytes(path, data)
+}
+
+// writeRestoredBytes is the same write for a member already in memory, which is what
+// the design-time restore has once it has looked at the record (ADR-0357).
+func writeRestoredBytes(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	tmp := path + ".tmp"

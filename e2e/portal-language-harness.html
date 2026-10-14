@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas portal language e2e harness</title>
+    <!-- Drives the REAL api/web/shop.js against a catalogue fixture.
+
+         The portal mounts itself on DOMContentLoaded and reads seven routes, so
+         it cannot be imported and called the way the Console's productBody can.
+         What it can be given is its answers: a classic script runs at parse time,
+         before the deferred module, and replaces fetch. Everything after that is
+         the page itself — its state, its rendering, its language switch.
+
+         This exists because the language switch is the one thing about the portal
+         that cannot be proved by reading it. Every text goes through textOf, which
+         falls back; whether the SWITCH re-renders through it is a property of how
+         the page is wired, and the wiring is what broke in the field. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      // The fixture, and the routes that serve it. A catalogue in German and
+      // English, and three products: one written in both, one only in German, one
+      // only in English. The second and third are the whole point — a release can
+      // carry them now, and what a reader of the other language is shown is the
+      // property under test.
+      window.__unmatched = [];
+      // ?langs=… lets a test say which languages the catalogue is kept in, because
+      // that is now what the switch offers and it cannot be exercised from one
+      // fixture. Everything else about the catalogue stays put.
+      const LANGS = (new URLSearchParams(location.search).get("langs") || "de,en")
+        .split(",").filter(Boolean);
+      const CAT = {
+        id: "cat_x", rank: 1, languages: LANGS,
+        texts: { de: "Produktekatalog", en: "Product catalogue" },
+        items: ["whole", "de-only", "regional", "en-only"],
+      };
+      const RELEASE = {
+        id: "rel_x", catalogId: "cat_x",
+        items: [
+          {
+            id: "whole", homeCatalog: "cat_x", state: "active",
+            texts: { de: "Notebook", en: "Laptop" },
+            descriptions: { de: "Ein mobiles Gerät.", en: "A mobile device." },
+            category: "Arbeitsplatz",
+            categoryTexts: { de: "Arbeitsplatz", en: "Workplace" },
+            productGroup: "Geräte",
+            productGroupTexts: { de: "Geräte", en: "Devices" },
+            variants: [{ id: "big", texts: { de: "Gross", en: "Large" } }],
+            approval: { kind: "none" },
+            provisionProcess: "p", deprovisionProcess: "d",
+          },
+          {
+            id: "de-only", homeCatalog: "cat_x", state: "active",
+            texts: { de: "Bildschirm" },
+            descriptions: { de: "Ein Bildschirm." },
+            category: "Arbeitsplatz",
+            categoryTexts: { de: "Arbeitsplatz", en: "Workplace" },
+            approval: { kind: "none" },
+            provisionProcess: "p", deprovisionProcess: "d",
+          },
+          {
+            id: "regional", homeCatalog: "cat_x", state: "active",
+            // A catalogue declared in de-DE and en-EN rather than de and en. Both
+            // are correct BCP 47 and neither is what the page's locale is: it
+            // narrows a browser's language to its base, because its own words are
+            // keyed that way. Every text here is invisible to a lookup for the
+            // whole tag, which is what this product exists to catch.
+            texts: { "de-DE": "Dockingstation", "en-EN": "Docking cradle" },
+            descriptions: { "de-DE": "Für den Schreibtisch.", "en-EN": "For the desk." },
+            // A heading of its own, and not the one the first product carries: a
+            // wording that is already on the screen from somewhere else cannot
+            // prove anything about this product.
+            category: "Zubehör",
+            categoryTexts: { "de-DE": "Zubehör", "en-EN": "Accessories" },
+            approval: { kind: "none" },
+            provisionProcess: "p", deprovisionProcess: "d",
+          },
+          {
+            id: "en-only", homeCatalog: "cat_x", state: "active",
+            texts: { en: "Docking station" },
+            category: "Arbeitsplatz",
+            categoryTexts: { de: "Arbeitsplatz", en: "Workplace" },
+            approval: { kind: "none" },
+            provisionProcess: "p", deprovisionProcess: "d",
+          },
+        ],
+        waves: [["whole", "de-only", "regional", "en-only"]],
+        withoutApproval: ["whole", "de-only", "regional", "en-only"],
+      };
+
+      const ROUTES = {
+        "/api/v1/auth/me": { id: "usr_1", username: "anja", name: "Anja" },
+        "/api/v1/shop/catalog": CAT,
+        "/api/v1/catalogs/cat_x/releases": [RELEASE],
+        "/api/v1/orders": [],
+        "/api/v1/shop/tasks": { tasks: [], orders: [], truncated: false },
+        "/api/v1/inventory": { items: [] },
+        "/api/v1/shop/favourites": { itemIds: [] },
+        "/api/v1/principals": [{ id: "usr_1", name: "Anja" }],
+      };
+
+      window.fetch = (input, init) => {
+        const path = String(input).replace(/^https?:\/\/[^/]+/, "").split("?")[0];
+        if (Object.prototype.hasOwnProperty.call(ROUTES, path)) {
+          return Promise.resolve(new Response(JSON.stringify(ROUTES[path]), {
+            status: 200, headers: { "content-type": "application/json" },
+          }));
+        }
+        // Anything the page asks for that this fixture does not serve. Recorded
+        // rather than swallowed: a route added to load() and not to the harness
+        // would otherwise make a test pass against a page that failed to load.
+        window.__unmatched.push(path);
+        return Promise.resolve(new Response("not in this fixture", { status: 404 }));
+      };
+    </script>
+    <script type="module" src="/shop.js"></script>
+  </body>
+</html>

@@ -42,8 +42,8 @@ type Call struct {
 	Body      json.RawMessage `json:"body,omitempty"`
 }
 
-// Report is this mock in the envelope the Console's Mockups view takes
-// (ADR-0216): a header the server understands and a payload it
+// Report is this mock in the envelope ADR-0216 defines for the Console's Mockups view
+// (not built yet): a header the server understands and a payload it
 // does not. At is missing on purpose — it is stamped by whoever accepts the report,
 // never by the reporter.
 type Report struct {
@@ -159,7 +159,7 @@ func (s *Server) Calls() []Call {
 	return out
 }
 
-// Report is what this mock has served, in the shape the Mockups view renders.
+// Report is what this mock has served, in the shape ADR-0216's Mockups view would render.
 func (s *Server) Report() Report {
 	s.mu.Lock()
 	defer s.mu.Unlock()

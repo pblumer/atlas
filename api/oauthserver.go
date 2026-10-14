@@ -228,7 +228,7 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 		ResponseType string `json:"responseType"`
 		Approve      bool   `json:"approve"`
 	}
-	if !decodeJSONBody(w, r, &payload) {
+	if !s.decodeJSONBody(w, r, &payload) {
 		return
 	}
 	q := url.Values{

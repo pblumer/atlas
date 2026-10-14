@@ -1,6 +1,7 @@
 # ADR-0218: Jira runs on a worker by default
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-01
 - **Deciders:** Atlas maintainers
 

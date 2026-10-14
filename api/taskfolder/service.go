@@ -2,6 +2,7 @@ package taskfolder
 
 import (
 	"encoding/json"
+	"github.com/pblumer/atlas/limits"
 	"io"
 	"net/http"
 	"strings"
@@ -10,10 +11,6 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
 )
-
-// maxBodyBytes caps a folder request. A folder is a name and at most twenty
-// conditions; this is a sanity bound on the JSON body, not a tuning knob.
-const maxBodyBytes = 64 << 10
 
 // maxNameLen bounds a folder's name to what the sidebar can show.
 const maxNameLen = 60
@@ -48,17 +45,38 @@ type Options struct {
 // folder holds, and how many the scan looked at. Truncated says the scan hit its
 // budget, so the numbers are a floor rather than a total — the sidebar says so
 // instead of showing a confident wrong number.
+//
+// Builtin carries the fixed inbox folders ([BuiltinFolders]) from the same walk. The
+// console used to count those itself, off the rows of the newest-first task page it
+// had already loaded, which made every one of them the size of that page: a task
+// assigned to somebody and sitting outside the newest 500 left their "Assigned to me"
+// badge reading 0 (ADR-0365). They are
+// counted here for the same reason the saved ones are — because a page is not a
+// population — and they share this response's Truncated.
 type Counts struct {
 	Folders   map[string]int `json:"folders"`
+	Builtin   map[string]int `json:"builtin"`
 	Total     int            `json:"total"`
 	Truncated bool           `json:"truncated"`
 }
 
-// CountFunc answers "how many open tasks does this rule match, out of how many".
-// It scans the engine, which this package deliberately cannot reach: the server
-// owns that scan and hands it in, the same way the documentation service is handed
-// its deployment lookup.
-type CountFunc func(matchers []*Matcher, u User) (perMatcher []int, total int, truncated bool, err error)
+// Tally is what one walk of the open tasks produced.
+//
+// It is a struct rather than four return values because the walk answers two
+// different questions at once — the saved folders' counts and the fixed ones' — and a
+// caller that wants only one of them should not have to name the other.
+type Tally struct {
+	PerMatcher []int
+	Builtin    map[string]int
+	Total      int
+	Truncated  bool
+}
+
+// CountFunc answers "how many open tasks does each of these rules match, and each of
+// the fixed folders, out of how many". It scans the engine, which this package
+// deliberately cannot reach: the server owns that scan and hands it in, the same way
+// the documentation service is handed its deployment lookup.
+type CountFunc func(matchers []*Matcher, u User) (Tally, error)
 
 // Service serves the task-folder area (ADR-0268).
 // Build it with [New].
@@ -67,9 +85,9 @@ type Service struct {
 	// there is no other route from here to shared state.
 	loop  *runloop.Loop
 	store *Store
-	// compiled memoises one matcher per folder, keyed by the folder's UpdatedAt so
-	// an edit invalidates its own entry without anybody having to remember to. Owned
-	// by the loop.
+	// compiled memoises one matcher per folder, keyed by the rule it was compiled
+	// from, so an edit invalidates its own entry without anybody having to remember
+	// to. Owned by the loop.
 	compiled map[string]cachedMatcher
 	// options supplies the editor's value lists; it reads the deployment registry
 	// and design-time stores, so it is only ever called from inside the loop. It
@@ -81,11 +99,19 @@ type Service struct {
 	// newID mints folder ids. Injected so a test can drive the service with
 	// deterministic ids.
 	newID func() (string, error)
+
+	// Limits are the installation's resource budgets. New sets them to
+	// [limits.Default]; the server overwrites them with its own once it has read the
+	// environment, so every ceiling in this service is the one operators configured
+	// (ADR-0291).
+	Limits limits.Limits
 }
 
 type cachedMatcher struct {
-	at int64
-	m  *Matcher
+	// src is the FEEL the matcher was compiled from, which is the whole of what it
+	// is a function of — see [Service.matcher] for why that, and not a timestamp.
+	src string
+	m   *Matcher
 }
 
 // New builds the task-folder service. options and count are the collaborators the
@@ -98,6 +124,7 @@ func New(loop *runloop.Loop, store *Store, options func(User) Options, count Cou
 		options:  options,
 		count:    count,
 		newID:    newID,
+		Limits:   limits.Default(),
 	}
 }
 
@@ -109,7 +136,10 @@ func New(loop *runloop.Loop, store *Store, options func(User) Options, count Cou
 // enough to own a folder.
 func Viewer(r *http.Request) User {
 	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
-		return User{ID: p.UserID, Name: p.Username, Groups: p.GroupIDs}
+		// The role names are the api package's RoleOperator and RoleAdmin, spelt out
+		// because this package sits below it.
+		return User{ID: p.UserID, Name: p.Username, Groups: p.GroupIDs,
+			SeesAll: p.HasRole("operator") || p.HasRole("admin")}
 	}
 	return User{Name: strings.TrimSpace(r.URL.Query().Get("me"))}
 }
@@ -184,9 +214,9 @@ type folderReq struct {
 
 // decode reads and checks a folder request body, answering the client directly on
 // anything malformed. ok=false means a response has already been written.
-func decode(w http.ResponseWriter, r *http.Request) (folderReq, bool) {
+func (s *Service) decode(w http.ResponseWriter, r *http.Request) (folderReq, bool) {
 	var req folderReq
-	if err := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes)).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Request)).Decode(&req); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return req, false
 	}
@@ -232,7 +262,7 @@ func decode(w http.ResponseWriter, r *http.Request) (folderReq, bool) {
 
 // HandleCreate stores a new folder for the calling identity.
 func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
-	req, ok := decode(w, r)
+	req, ok := s.decode(w, r)
 	if !ok {
 		return
 	}
@@ -282,7 +312,7 @@ func (s *Service) nextPosition(ownerID string) int {
 
 // HandleUpdate rewrites a folder the caller owns.
 func (s *Service) HandleUpdate(w http.ResponseWriter, r *http.Request) {
-	req, ok := decode(w, r)
+	req, ok := s.decode(w, r)
 	if !ok {
 		return
 	}
@@ -366,7 +396,7 @@ type previewReq struct {
 // rather than a client-side guess over whatever page happened to be loaded.
 func (s *Service) HandlePreview(w http.ResponseWriter, r *http.Request) {
 	var req previewReq
-	if err := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes)).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Request)).Decode(&req); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
@@ -383,7 +413,8 @@ func (s *Service) HandlePreview(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	counts, total, truncated, err := s.count([]*Matcher{m}, Viewer(r))
+	tally, err := s.count([]*Matcher{m}, Viewer(r))
+	counts, total, truncated := tally.PerMatcher, tally.Total, tally.Truncated
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "preview folder: "+err.Error())
 		return
@@ -404,16 +435,22 @@ func (s *Service) HandleCounts(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "count folders: "+err.Error())
 		return
 	}
-	out := Counts{Folders: map[string]int{}}
-	if len(matchers) > 0 {
-		counts, total, truncated, cErr := s.count(matchers, v)
-		if cErr != nil {
-			httpapi.Error(w, http.StatusInternalServerError, "count folders: "+cErr.Error())
-			return
-		}
-		out.Total, out.Truncated = total, truncated
-		for i, f := range folders {
-			out.Folders[f.ID] = counts[i]
+	// The walk runs whether or not this viewer has saved a folder: the fixed ones are
+	// always on screen, and skipping the scan when there were no saved folders is what
+	// left the console counting them off its own page.
+	out := Counts{Folders: map[string]int{}, Builtin: map[string]int{}}
+	tally, cErr := s.count(matchers, v)
+	if cErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "count folders: "+cErr.Error())
+		return
+	}
+	out.Total, out.Truncated, out.Builtin = tally.Total, tally.Truncated, tally.Builtin
+	if out.Builtin == nil {
+		out.Builtin = map[string]int{}
+	}
+	for i, f := range folders {
+		if i < len(tally.PerMatcher) {
+			out.Folders[f.ID] = tally.PerMatcher[i]
 		}
 	}
 	httpapi.JSON(w, http.StatusOK, out)
@@ -470,17 +507,40 @@ func (s *Service) MatcherFor(id string, v User) (Folder, *Matcher, bool, error) 
 }
 
 // matcher returns a folder's compiled rule, compiling it the first time and
-// whenever the folder has changed since. Keyed by UpdatedAt so an edit
-// invalidates its own entry — there is no separate invalidation to forget.
-// Called on the loop, which owns the cache.
+// whenever the rule has changed since. There is no separate invalidation to
+// forget. Called on the loop, which owns the cache.
+//
+// The key is the rule's FEEL, not the folder's UpdatedAt, and that is a fix rather
+// than a preference. UpdatedAt is a wall clock in milliseconds, so two saves inside
+// one millisecond shared a key and the second was served the first's matcher —
+// measured at 98 failures in 400 runs of TestMatcherIsRecompiledAfterAnEdit, a test
+// that had been passing on the luck of the clock ticking between two writes.
+//
+// Keying by the rule is not merely a finer clock: a matcher is a pure function of
+// [Rule.FEEL] — it is the only thing [Compile] reads — so the same FEEL always
+// compiles to the same matcher and a different one never reuses it. That holds
+// whatever a clock does, including a record restored from a backup with its old
+// timestamp, or one whose UpdatedAt a migration left alone.
 func (s *Service) matcher(f Folder) (*Matcher, error) {
-	if c, ok := s.compiled[f.ID]; ok && c.at == f.UpdatedAt {
+	src := f.Rule.FEEL()
+	if c, ok := s.compiled[f.ID]; ok && c.src == src {
 		return c.m, nil
 	}
 	m, err := Compile(f.Rule)
 	if err != nil {
 		return nil, err
 	}
-	s.compiled[f.ID] = cachedMatcher{at: f.UpdatedAt, m: m}
+	s.compiled[f.ID] = cachedMatcher{src: src, m: m}
 	return m, nil
+}
+
+// budgets is how this service reads a ceiling. It defaults a Service built as a
+// struct literal to [limits.Default], because the zero Limits is every ceiling at
+// zero and a ceiling of zero admits nothing — a failure that looks like a bad
+// request rather than like missing configuration. New always sets them.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }

@@ -1,0 +1,432 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="Definitions_atlas-genehmigung-vorgesetzter"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:signal id="Sig_Angefragt" name="atlas.approval.requested" />
+  <bpmn:process id="atlas-genehmigung-vorgesetzter" name="Shop: Genehmigung (Linienvorgesetzter)" isExecutable="true">
+    <bpmn:documentation>Holt die Genehmigung für eine Auftragsposition ein und entscheidet, was danach geschieht: bei Zustimmung wird der Provisionierungsprozess der Position gestartet, bei Ablehnung die Entscheidung mit Urheber und Begründung an den Auftrag gemeldet.
+
+Startvariablen: orderId, itemId, positionId, provisionProcess, approvalRef, recipient, orderer, variantId, atlasApiBase, portalBaseUrl.
+
+Warum die Genehmigung hier liegt und nicht im Provisionierungsprozess: die Regel steht am Produkt und gehört dem Katalog. Läge sie im Produktprozess, müsste jeder von ihnen sie mitmodellieren, und eine Änderung an der Regel wäre eine Änderung an jedem Prozess.
+
+Eine Zustimmung braucht keine eigene Meldung an den Auftrag: die Position wird provisioniert, und ihr Ergebnis kommt auf dem gewöhnlichen Weg. Gemeldet wird nur die Ablehnung, weil sie sonst nirgends stünde.
+
+Voraussetzung beim Betreiber: ein API-Token mit der Rolle operator, hinterlegt unter ATLAS_CONNECTOR_ATLAS_TOKEN (ADR-0041). Die Aufrufe gehen an Atlas' eigene API und tragen dieses Token als Bearer; die Adresse kommt aus der Startvariablen atlasApiBase und nicht aus dem Modell, weil sie je Installation verschieden ist.
+
+Kein Worker ist einzurichten. Die Service-Tasks sind REST-Connector-Tasks des reservierten Typs io.atlas.http.rest, den die Engine selbst bedient — und, wo der Betreiber diese Art ausgelagert hat, der mitgelieferte rest-Worker.</bpmn:documentation>
+
+    <bpmn:startEvent id="Start" name="Genehmigung nötig">
+      <bpmn:documentation>Wird vom Erfüllungsprozess gestartet, sobald die Position an der Reihe ist und ihre Genehmigungsregel diese Art nennt.</bpmn:documentation>
+      <bpmn:outgoing>F_Start_Ad</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="Vorgesetzter" name="Vorgesetzten lesen">
+      <bpmn:documentation>Liest den Linienvorgesetzten der bestellenden Person aus dem Verzeichnis (Attribut manager).
+
+Findet sich keiner — die Person steht an der Spitze, oder das Attribut ist nicht gepflegt — schlägt dieser Schritt fehl und erzeugt einen Incident. Das ist Absicht: eine Genehmigung, die an niemanden geht, ist eine Bestellung, die stillsteht, ohne dass es jemand merkt.
+
+Schreibt: vorgesetzter.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="ad" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="verzeichnis" />
+          <zeebe:header key="operation" value="search" />
+          <zeebe:header key="attributes" value="manager" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;(userPrincipalName=&#34; + orderer + &#34;)&#34;" target="filter" />
+          <zeebe:output source="=entries[1].manager" target="vorgesetzter" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Start_Ad</bpmn:incoming>
+      <bpmn:outgoing>F_Vor_Vermerken</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:userTask id="Genehmigen" name="Genehmigen">
+      <bpmn:documentation>Die Aufgabe geht an den Linienvorgesetzten der bestellenden Person, wie ihn der vorige Schritt aus dem Verzeichnis gelesen hat.
+
+Das Formular zeigt, worum es geht, und verlangt bei einer Ablehnung eine Begründung — die bestellende Person bekommt sie zu lesen, und „abgelehnt“ ohne weiteres ist die Nachricht, die einen Anruf erzeugt.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:formDefinition formId="genehmigung" />
+        <zeebe:assignmentDefinition assignee="=vorgesetzter" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Split_Task</bpmn:incoming>
+      <bpmn:outgoing>F_Task_Gw</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="Gw" name="Genehmigt?" default="F_Gw_Ablehnen">
+      <bpmn:documentation>Zustimmung und Ablehnung gehen unterschiedliche Wege, weil sie unterschiedliche Dinge sind: die eine startet Arbeit, die andere hält eine Entscheidung fest.</bpmn:documentation>
+      <bpmn:incoming>F_Task_Gw</bpmn:incoming>
+      <bpmn:outgoing>F_Gw_Provisionieren</bpmn:outgoing>
+      <bpmn:outgoing>F_Gw_Ablehnen</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="Provisionieren" name="Provisionierung starten">
+      <bpmn:documentation>POST /api/v1/orders/{orderId}/lines/{positionId}/start mit approvedBy. Der Auftrag hält die Zustimmung fest — wer zugestimmt hat, steht damit im Nachweis — und startet im selben Schritt die Provisionierung, an die das Produkt gebunden war: einen von Hand gestarteten Prozess oder den Startpunkt „provision“ seines Lebenszyklusprozesses (ADR-0425). Welcher Prozess das ist, weiss der Auftrag; dieses Modell muss es nicht wissen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:restConnector method="POST"
+          url="=atlasApiBase + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + positionId + &#34;/start&#34;"
+          authType="bearer" authSecret="atlas" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;provision&#34;" target="operation" />
+          <zeebe:input source="=approvalRef" target="approvedBy" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Gw_Provisionieren</bpmn:incoming>
+      <bpmn:outgoing>F_Prov_Join</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="Ablehnen" name="Ablehnung melden">
+      <bpmn:documentation>POST /api/v1/orders/{orderId}/lines/{itemId}/decision mit der Person, die entschieden hat, und ihrer Begründung.
+
+Eine Ablehnung geht bewusst nicht über die gewöhnliche Ergebnismeldung: sie ist eine Entscheidung mit Urheber und keine Provisionierungsstörung. Als Störung geführt erzeugte sie Incidents, die niemand schliessen kann, und stellte im dauerhaften Nachweis eine Entscheidung als Fehler dar.
+
+Der Genehmiger ist der Vorgesetzte, den der erste Schritt gelesen hat: die Aufgabe ging an genau ihn, also steht im Nachweis, wer entschieden hat.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:restConnector method="POST"
+          url="=atlasApiBase + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + itemId + &#34;/decision&#34;"
+          authType="bearer" authSecret="atlas" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=vorgesetzter" target="by" />
+          <zeebe:input source="=begruendung" target="reason" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Gw_Ablehnen</bpmn:incoming>
+      <bpmn:outgoing>F_Abl_Join</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="Join">
+      <bpmn:documentation>Führt Zustimmung und Ablehnung wieder zusammen, bevor die Entscheidung endet. Exklusiv und nicht parallel: von den beiden Wegen kommt immer genau einer an, und ein paralleler Zusammenführer wartete auf den anderen, der nie kommt.</bpmn:documentation>
+      <bpmn:incoming>F_Prov_Join</bpmn:incoming>
+      <bpmn:incoming>F_Abl_Join</bpmn:incoming>
+      <bpmn:outgoing>F_Join_Ende</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:endEvent id="Ende" name="Entschieden">
+      <bpmn:incoming>F_Join_Ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="F_Start_Ad" sourceRef="Start" targetRef="Vorgesetzter" />
+    <bpmn:scriptTask id="Vermerken" name="Anfrage vermerken">
+      <bpmn:documentation>Hält fest, was die Anfrage ausmacht, bevor sie gemeldet wird: die eigene Instanz (atlasInstance), damit ein Empfänger auf genau diese Genehmigung verweisen kann, die Regel des Produkts (approvalKind) und wer entscheidet (approver).
+
+Die Meldung im nächsten Schritt trägt alle Variablen, die die Instanz in diesem Moment hält (ADR-0435). Was hier nicht steht, erfährt ein Empfänger nicht.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="=processInstanceKey" resultVariable="atlasInstance" />
+        <!-- With an output mapping present the result stays local, so atlasInstance is
+             mapped out with the rest. -->
+        <zeebe:ioMapping>
+          <zeebe:output source="=processInstanceKey" target="atlasInstance" />
+          <zeebe:output source="=&#34;superior&#34;" target="approvalKind" />
+          <zeebe:output source="=vorgesetzter" target="approver" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Vor_Vermerken</bpmn:incoming>
+      <bpmn:outgoing>F_Vermerken_Angefragt</bpmn:outgoing>
+    </bpmn:scriptTask>
+
+    <bpmn:intermediateThrowEvent id="Angefragt" name="Genehmigung angefragt">
+      <bpmn:documentation>Meldet atlas.approval.requested (ADR-0435). Ein Modell der Installation kann mit einem Signal-Start darauf hören, etwa um die entscheidende Person oder Gruppe in einem Chat zu benachrichtigen, ohne dieses Modell zu ändern.
+
+Der Wurf steht vor der Aufgabe und vor jeder Entscheidung: Die Instanz hält hier nur ihre Startvariablen und das eben Vermerkte, keine Begründung, kein Geheimnis und keine Antwort des Bestellformulars. Ein Test hält diese Stelle fest.</bpmn:documentation>
+      <bpmn:incoming>F_Vermerken_Angefragt</bpmn:incoming>
+      <bpmn:outgoing>F_Angefragt_Split</bpmn:outgoing>
+      <bpmn:signalEventDefinition id="Angefragt_Signal" signalRef="Sig_Angefragt" />
+    </bpmn:intermediateThrowEvent>
+
+    <bpmn:parallelGateway id="Split" name="Aufgabe und Nachricht">
+      <bpmn:documentation>Die Benachrichtigung l&#228;uft neben der Aufgabe und nicht vor ihr. Vor ihr h&#228;tte sie die Entscheidung aufgehalten: ein Mail-Worker, der nicht konfiguriert ist, h&#228;lt den Token an, und dann g&#228;be es die Genehmigung gar nicht, &#252;ber die niemand benachrichtigt wurde. Eine Genehmigung, von der niemand wei&#223;, ist immer noch besser als keine — sie steht in der Liste des Genehmigers.</bpmn:documentation>
+      <bpmn:incoming>F_Angefragt_Split</bpmn:incoming>
+      <bpmn:outgoing>F_Split_Task</bpmn:outgoing>
+      <bpmn:outgoing>F_Split_Mail</bpmn:outgoing>
+    </bpmn:parallelGateway>
+
+    <bpmn:serviceTask id="Benachrichtigen" name="Genehmiger benachrichtigen">
+      <bpmn:documentation>Schickt die Nachricht mit dem Link auf die Genehmigungsseite.
+
+Die Adressatin ist der Linienvorgesetzte, den die Verzeichnisabfrage davor gelesen hat — dieselbe Person, an die auch die Aufgabe geht.
+
+Der Empf&#228;nger ist eine Referenz und keine Adresse: der Server schl&#228;gt sie beim Versand im Konto nach. So steht in keiner Prozessvariablen und in keinem Auftrag eine Mailadresse — dieselbe Regel, nach der der Shop Personen nur &#252;ber ihre Kennung f&#252;hrt.
+
+Der Link nennt Auftrag und Leistung und nicht die Aufgabe: einen Aufgabenschl&#252;ssel gibt es noch nicht, wenn diese Nachricht geschrieben wird, und er &#228;ndert sich, wenn die Aufgabe neu zugewiesen wird. Auftrag und Leistung bleiben.
+
+Ist portalBaseUrl leer — der Betreiber hat keine externe Adresse gesetzt —, nennt die Nachricht den Posteingang statt einen Link, den niemand aufrufen kann.
+
+Voraussetzung beim Betreiber: ein Mail-Worker namens &#8222;mail&#8220;.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:mailConnector connector="mail"
+          to="=vorgesetzter"
+          subject="=&#34;Genehmigung n&#246;tig: &#34; + itemId"
+          body="=&#34;Guten Tag\n\nEine Bestellung wartet auf Ihre Genehmigung.\n\nLeistung: &#34; + itemId + &#34;\nAuftrag: &#34; + orderId + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden sie in Ihrem Posteingang (Tasks) dieser atlas-Instanz.&#34; else portalBaseUrl + &#34;/index.html#/tasks?order=&#34; + orderId + &#34;&amp;item=&#34; + itemId) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Shop&#34;" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Split_Mail</bpmn:incoming>
+      <bpmn:outgoing>F_Mail_Ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="EndeMail" name="Benachrichtigt">
+      <bpmn:incoming>F_Mail_Ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:boundaryEvent id="Erinnerung" name="Erinnerungsfrist" attachedToRef="Genehmigen" cancelActivity="false">
+      <bpmn:documentation>Nicht unterbrechend: die Aufgabe bleibt offen, es kommt nur eine Erinnerung dazu. Unterbrechend w&#228;re dieser Timer das Gegenteil von hilfreich — er schl&#246;sse die Aufgabe, deren Erledigung er anmahnt.
+
+Eine unbeachtete Genehmigung ist die leisere H&#228;lfte des Problems: ein h&#228;ngender Incident f&#228;llt in einer Betriebssicht auf, eine liegengebliebene Aufgabe sieht aus wie jede andere im Postkorb.</bpmn:documentation>
+      <bpmn:outgoing>F_Erinnerung_Mail</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration>P3D</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+
+    <bpmn:serviceTask id="Erinnern" name="Erinnerung senden">
+      <bpmn:documentation>Dieselbe Nachricht wie am Anfang, an dieselbe Referenz — der Server schl&#228;gt die Adresse beim Versand nach.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:mailConnector connector="mail"
+          to="=vorgesetzter"
+          subject="=&#34;Erinnerung: Genehmigung n&#246;tig f&#252;r &#34; + itemId"
+          body="=&#34;Guten Tag\n\nEine Bestellung wartet weiterhin auf Ihre Genehmigung.\n\nLeistung: &#34; + itemId + &#34;\nAuftrag: &#34; + orderId + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden sie in Ihrem Posteingang (Tasks) dieser atlas-Instanz.&#34; else portalBaseUrl + &#34;/index.html#/tasks?order=&#34; + orderId + &#34;&amp;item=&#34; + itemId) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Shop&#34;" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Erinnerung_Mail</bpmn:incoming>
+      <bpmn:outgoing>F_Erinnerung_Ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="EndeErinnerung" name="Erinnert">
+      <bpmn:incoming>F_Erinnerung_Ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:boundaryEvent id="Frist" name="Eskalationsfrist" attachedToRef="Genehmigen" cancelActivity="false">
+      <bpmn:documentation>Reicht die Genehmigung an den n&#228;chsth&#246;heren Vorgesetzten weiter. Hier und nur hier ist das die richtige Bewegung: diese Genehmigungsart ist die Linie, also ist ein Schritt die Linie hinauf derselbe Mechanismus einen Schritt weiter.
+
+Nicht unterbrechend, und das ist die wichtigste Eigenschaft dieses Timers: er darf die Aufgabe nicht schliessen. Schweigen ist keine Ablehnung. Eine Frist, die entscheidet, tr&#252;ge in einen dauerhaft aufbewahrten Nachweis eine Entscheidung ein, die niemand getroffen hat.</bpmn:documentation>
+      <bpmn:outgoing>F_Frist_Ad</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration>P7D</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+
+    <bpmn:serviceTask id="FristVorgesetzter" name="N&#228;chsten Vorgesetzten lesen">
+      <bpmn:documentation>Liest den Vorgesetzten der Person, bei der die Genehmigung jetzt liegt — beim ersten Sprung der Linienvorgesetzte der bestellenden Person, danach dessen eigener.
+
+Findet sich keiner, bleibt das Attribut leer, und der Sprung darunter wird zum Vermerk statt zur Weitergabe. Das ist richtig so: die Spitze einer Hierarchie hat niemanden &#252;ber sich, und das ist ein gew&#246;hnliches Ende und kein Fehler.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="ad" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="verzeichnis" />
+          <zeebe:header key="operation" value="search" />
+          <zeebe:header key="attributes" value="manager" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;(userPrincipalName=&#34; + vorgesetzter + &#34;)&#34;" target="filter" />
+          <zeebe:output source="=entries[1].manager" target="naechster" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Frist_Ad</bpmn:incoming>
+      <bpmn:outgoing>F_Frist_Eskalieren</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="Eskalieren" name="Genehmigung weiterreichen">
+      <bpmn:documentation>POST /api/v1/orders/{orderId}/lines/{itemId}/escalate. Ein Aufruf ist ein Sprung, weil ein Aufruf eine abgelaufene Frist ist.
+
+Wer der Vorgesetzte ist, beantwortet der Aufrufer: eine Verzeichnisabfrage geh&#246;rt ins Modell, nicht in den Server — der h&#228;tte daf&#252;r weder die Konfiguration noch die Zugangsdaten. Ob der Sprung stattfinden darf, entscheidet Atlas: eine Schleife im Verzeichnis, jemand der sie schon hatte, eine Kette am Ende.
+
+Ist die Antwort „stalled&#34;, bleibt die Genehmigung, wo sie ist, und der Umstand ist festgehalten. Er steht dann unter GET /api/v1/approvals/stalled — eine Genehmigung, die niemand weiterreichen kann und auf die niemand schaut, ist genau die Art, wie ein Auftrag ewig wartet.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:restConnector method="POST"
+          url="=atlasApiBase + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + itemId + &#34;/escalate&#34;"
+          authType="bearer" authSecret="atlas" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=naechster" target="superior" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Frist_Eskalieren</bpmn:incoming>
+      <bpmn:outgoing>F_Frist_Ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="EndeFrist" name="Weitergereicht">
+      <bpmn:incoming>F_Frist_Ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="F_Erinnerung_Mail" sourceRef="Erinnerung" targetRef="Erinnern" />
+    <bpmn:sequenceFlow id="F_Erinnerung_Ende" sourceRef="Erinnern" targetRef="EndeErinnerung" />
+    <bpmn:sequenceFlow id="F_Frist_Ad" sourceRef="Frist" targetRef="FristVorgesetzter" />
+    <bpmn:sequenceFlow id="F_Frist_Eskalieren" sourceRef="FristVorgesetzter" targetRef="Eskalieren" />
+    <bpmn:sequenceFlow id="F_Frist_Ende" sourceRef="Eskalieren" targetRef="EndeFrist" />
+    <bpmn:sequenceFlow id="F_Vor_Vermerken" sourceRef="Vorgesetzter" targetRef="Vermerken" />
+    <bpmn:sequenceFlow id="F_Vermerken_Angefragt" sourceRef="Vermerken" targetRef="Angefragt" />
+    <bpmn:sequenceFlow id="F_Angefragt_Split" sourceRef="Angefragt" targetRef="Split" />
+    <bpmn:sequenceFlow id="F_Split_Task" sourceRef="Split" targetRef="Genehmigen" />
+    <bpmn:sequenceFlow id="F_Split_Mail" sourceRef="Split" targetRef="Benachrichtigen" />
+    <bpmn:sequenceFlow id="F_Mail_Ende" sourceRef="Benachrichtigen" targetRef="EndeMail" />
+    <bpmn:sequenceFlow id="F_Task_Gw" sourceRef="Genehmigen" targetRef="Gw" />
+    <bpmn:sequenceFlow id="F_Gw_Provisionieren" name="ja" sourceRef="Gw" targetRef="Provisionieren">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=genehmigt = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_Gw_Ablehnen" name="nein" sourceRef="Gw" targetRef="Ablehnen" />
+    <bpmn:sequenceFlow id="F_Prov_Join" sourceRef="Provisionieren" targetRef="Join" />
+    <bpmn:sequenceFlow id="F_Abl_Join" sourceRef="Ablehnen" targetRef="Join" />
+    <bpmn:sequenceFlow id="F_Join_Ende" sourceRef="Join" targetRef="Ende" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="Diagram">
+    <bpmndi:BPMNPlane id="Plane" bpmnElement="atlas-genehmigung-vorgesetzter">
+      <bpmndi:BPMNShape id="S_Start" bpmnElement="Start">
+        <dc:Bounds x="152" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="128" y="225" width="84" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Ad" bpmnElement="Vorgesetzter">
+        <dc:Bounds x="240" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Vermerken" bpmnElement="Vermerken">
+        <dc:Bounds x="392" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Angefragt" bpmnElement="Angefragt">
+        <dc:Bounds x="544" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="520" y="225" width="84" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Split" bpmnElement="Split">
+        <dc:Bounds x="632" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="588" y="146" width="63" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Mail" bpmnElement="Benachrichtigen">
+        <dc:Bounds x="732" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Task" bpmnElement="Genehmigen">
+        <dc:Bounds x="732" y="320" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Gw" bpmnElement="Gw" isMarkerVisible="true">
+        <dc:Bounds x="892" y="335" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="949" y="353" width="60" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Prov" bpmnElement="Provisionieren">
+        <dc:Bounds x="1022" y="240" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Abl" bpmnElement="Ablehnen">
+        <dc:Bounds x="1022" y="400" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Join" bpmnElement="Join" isMarkerVisible="true">
+        <dc:Bounds x="1202" y="335" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Ende" bpmnElement="Ende">
+        <dc:Bounds x="1312" y="342" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1299" y="321" width="62" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EndeMail" bpmnElement="EndeMail">
+        <dc:Bounds x="1312" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1295" y="145" width="70" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Erinnerung" bpmnElement="Erinnerung">
+        <dc:Bounds x="739" y="382" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="672" y="422" width="78" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Frist" bpmnElement="Frist">
+        <dc:Bounds x="794" y="382" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="819" y="422" width="74" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Erinnern" bpmnElement="Erinnern">
+        <dc:Bounds x="892" y="640" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EndeErinnerung" bpmnElement="EndeErinnerung">
+        <dc:Bounds x="1312" y="662" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1310" y="705" width="40" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_FristVorgesetzter" bpmnElement="FristVorgesetzter">
+        <dc:Bounds x="892" y="520" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Eskalieren" bpmnElement="Eskalieren">
+        <dc:Bounds x="1042" y="520" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EndeFrist" bpmnElement="EndeFrist">
+        <dc:Bounds x="1312" y="542" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1294" y="585" width="72" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="E_Start" bpmnElement="F_Start_Ad">
+        <di:waypoint x="188" y="200" />
+        <di:waypoint x="240" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Vor_Vermerken" bpmnElement="F_Vor_Vermerken">
+        <di:waypoint x="340" y="200" />
+        <di:waypoint x="392" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Vermerken_Angefragt" bpmnElement="F_Vermerken_Angefragt">
+        <di:waypoint x="492" y="200" />
+        <di:waypoint x="544" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Angefragt_Split" bpmnElement="F_Angefragt_Split">
+        <di:waypoint x="580" y="200" />
+        <di:waypoint x="632" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Split_Mail" bpmnElement="F_Split_Mail">
+        <di:waypoint x="657" y="175" />
+        <di:waypoint x="657" y="120" />
+        <di:waypoint x="732" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Split_Task" bpmnElement="F_Split_Task">
+        <di:waypoint x="657" y="225" />
+        <di:waypoint x="657" y="360" />
+        <di:waypoint x="732" y="360" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Mail_Ende" bpmnElement="F_Mail_Ende">
+        <di:waypoint x="832" y="120" />
+        <di:waypoint x="1312" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Task_Gw" bpmnElement="F_Task_Gw">
+        <di:waypoint x="832" y="360" />
+        <di:waypoint x="892" y="360" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Gw_Prov" bpmnElement="F_Gw_Provisionieren">
+        <di:waypoint x="917" y="335" />
+        <di:waypoint x="917" y="280" />
+        <di:waypoint x="1022" y="280" />
+        <bpmndi:BPMNLabel><dc:Bounds x="899" y="300" width="14" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Gw_Abl" bpmnElement="F_Gw_Ablehnen">
+        <di:waypoint x="917" y="385" />
+        <di:waypoint x="917" y="440" />
+        <di:waypoint x="1022" y="440" />
+        <bpmndi:BPMNLabel><dc:Bounds x="923" y="405" width="24" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Prov_Join" bpmnElement="F_Prov_Join">
+        <di:waypoint x="1122" y="280" />
+        <di:waypoint x="1227" y="280" />
+        <di:waypoint x="1227" y="335" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Abl_Join" bpmnElement="F_Abl_Join">
+        <di:waypoint x="1122" y="440" />
+        <di:waypoint x="1227" y="440" />
+        <di:waypoint x="1227" y="385" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Join_Ende" bpmnElement="F_Join_Ende">
+        <di:waypoint x="1252" y="360" />
+        <di:waypoint x="1312" y="360" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Erinnerung_Mail" bpmnElement="F_Erinnerung_Mail">
+        <di:waypoint x="757" y="418" />
+        <di:waypoint x="757" y="680" />
+        <di:waypoint x="892" y="680" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Erinnerung_Ende" bpmnElement="F_Erinnerung_Ende">
+        <di:waypoint x="992" y="680" />
+        <di:waypoint x="1312" y="680" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Frist_Ad" bpmnElement="F_Frist_Ad">
+        <di:waypoint x="812" y="418" />
+        <di:waypoint x="812" y="560" />
+        <di:waypoint x="892" y="560" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Frist_Eskalieren" bpmnElement="F_Frist_Eskalieren">
+        <di:waypoint x="992" y="560" />
+        <di:waypoint x="1042" y="560" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Frist_Ende" bpmnElement="F_Frist_Ende">
+        <di:waypoint x="1142" y="560" />
+        <di:waypoint x="1312" y="560" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

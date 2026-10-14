@@ -146,16 +146,6 @@ func (c *Client) get(path string) ([]byte, error) {
 	return c.do(http.MethodGet, path, "", nil)
 }
 
-// getWithHeaders issues a GET and also returns a copy of the response headers.
-// Listing tools use it to preserve API pagination metadata in their MCP result.
-func (c *Client) getWithHeaders(path string) ([]byte, http.Header, error) {
-	resp, err := c.doResponse(http.MethodGet, path, "", nil)
-	if err != nil {
-		return nil, nil, err
-	}
-	return resp.body, resp.header, nil
-}
-
 // post issues a POST with the given content type and body.
 func (c *Client) post(path, contentType string, body []byte) ([]byte, error) {
 	return c.do(http.MethodPost, path, contentType, body)
@@ -165,6 +155,13 @@ func (c *Client) post(path, contentType string, body []byte) ([]byte, error) {
 // replace, which is how the information model is written.
 func (c *Client) put(path, contentType string, body []byte) ([]byte, error) {
 	return c.do(http.MethodPut, path, contentType, body)
+}
+
+// patch issues a PATCH with the given content type and body — a partial change,
+// which is how a catalogue is edited: the fields present are replaced and the
+// fields absent are left alone.
+func (c *Client) patch(path, contentType string, body []byte) ([]byte, error) {
+	return c.do(http.MethodPatch, path, contentType, body)
 }
 
 // del issues a DELETE and returns the raw response body on 2xx, or an *apiError.
@@ -229,9 +226,85 @@ func (c *Client) doResponse(method, path, contentType string, body []byte) (clie
 func extractError(body []byte) string {
 	var e struct {
 		Error string `json:"error"`
+		// Findings is what a validation refusal carries beside its one-line summary:
+		// every reason the record was refused, so an author fixing a form does not make
+		// one round trip per mistake. Without them here an agent gets "the record is not
+		// valid" and nothing else — it has no form to read the details out of, so it
+		// would learn the rules one blind retry at a time.
+		//
+		// Two shapes are in use and both are read: a list of strings, and a list of
+		// objects carrying a `message`.
+		Findings []json.RawMessage `json:"findings"`
 	}
-	if json.Unmarshal(body, &e) == nil && e.Error != "" {
+	if json.Unmarshal(body, &e) != nil || e.Error == "" {
+		return strings.TrimSpace(string(body))
+	}
+	reasons := findingMessages(e.Findings)
+	if len(reasons) == 0 {
 		return e.Error
 	}
-	return strings.TrimSpace(string(body))
+	return e.Error + ": " + strings.Join(reasons, "; ")
 }
+
+// findingMessages renders each finding as one sentence, skipping any it cannot read
+// rather than failing the whole message — a refusal that becomes unreadable because
+// one finding had an unexpected shape is worse than a partial one.
+func findingMessages(findings []json.RawMessage) []string {
+	out := make([]string, 0, len(findings))
+	for _, raw := range findings {
+		var text string
+		if json.Unmarshal(raw, &text) == nil {
+			if text = strings.TrimSpace(text); text != "" {
+				out = append(out, text)
+			}
+			continue
+		}
+		var obj struct {
+			Message string `json:"message"`
+			Reason  string `json:"reason"`
+		}
+		if json.Unmarshal(raw, &obj) != nil {
+			continue
+		}
+		switch {
+		case strings.TrimSpace(obj.Message) != "":
+			out = append(out, strings.TrimSpace(obj.Message))
+		case strings.TrimSpace(obj.Reason) != "":
+			out = append(out, strings.TrimSpace(obj.Reason))
+		}
+	}
+	return out
+}
+
+// CatalogueOffered asks the server whether it serves the shop, the catalogue, the
+// orders and the inventory, which an operator can switch off with --catalogue=false
+// (ADR-0434). It is how the stdio adapter, a
+// separate process that cannot read the server's flags, decides whether to build
+// itself WithoutCatalogue. A server that does not say — one older than the switch —
+// offers it. An error is returned as an error and not read as either answer: the
+// caller cannot tell a server that is down from one that decided.
+//
+// It asks with a short deadline of its own rather than the client's thirty seconds.
+// The adapter asks before it reads its first message, and an agent's host waits on
+// that first answer: a server behind a firewall that drops packets would otherwise
+// hold the whole adapter for half a minute to decide which tools to list.
+func (c *Client) CatalogueOffered() (bool, error) {
+	probe := *c
+	hc := *c.http
+	hc.Timeout = catalogueProbeTimeout
+	probe.http = &hc
+	body, err := probe.get("/api/v1/info")
+	if err != nil {
+		return false, err
+	}
+	var info struct {
+		Catalogue *bool `json:"catalogue"`
+	}
+	if err := json.Unmarshal(body, &info); err != nil {
+		return false, fmt.Errorf("read /api/v1/info: %w", err)
+	}
+	return info.Catalogue == nil || *info.Catalogue, nil
+}
+
+// catalogueProbeTimeout bounds CatalogueOffered.
+const catalogueProbeTimeout = 5 * time.Second

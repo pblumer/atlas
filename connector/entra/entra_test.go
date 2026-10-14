@@ -157,13 +157,19 @@ func TestGraphClientBaseURL(t *testing.T) {
 type recordingClient struct {
 	method, path string
 	body         any
-	res          any
-	err          error
+	// binary records whether the request asked for bytes rather than a decoded
+	// object. It is on the fake because that is where the operation table's decision
+	// becomes observable: nothing else downstream can tell a photo read from a JSON
+	// one.
+	binary bool
+	res    any
+	err    error
 }
 
 func (c *recordingClient) BaseURL() string { return "https://graph.microsoft.com/v1.0" }
 func (c *recordingClient) Call(_ context.Context, r Request) (any, error) {
 	c.method, c.path, c.body = r.Method, r.Path, r.Body
+	c.binary = r.Binary
 	return c.res, c.err
 }
 
@@ -265,6 +271,9 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		{op: "archive-team", job: Job{GroupID: "g1"},
 			method: "POST", path: "/teams/g1/archive",
 			wantBodyIs: func(b any) bool { return b == nil }},
+		{op: "get-user-photo", job: Job{UserID: "u1", ResultVariable: "foto"},
+			method: "GET", path: "/users/u1/photo/$value",
+			wantBodyIs: func(b any) bool { return b == nil }},
 		{op: "get-group", job: Job{GroupID: "g1"},
 			method: "GET", path: "/groups/g1",
 			wantBodyIs: func(b any) bool { return b == nil }},
@@ -297,7 +306,7 @@ func TestRunMapsEveryOperation(t *testing.T) {
 			}},
 	} {
 		t.Run(tc.op, func(t *testing.T) {
-			res := map[string]any{"id": "x"}
+			var res any = map[string]any{"id": "x"}
 			switch {
 			case Ops[tc.op].IsDelta:
 				// A delta's last page carries the cursor in place of a next link.
@@ -307,6 +316,8 @@ func TestRunMapsEveryOperation(t *testing.T) {
 				}
 			case Ops[tc.op].IsList:
 				res = map[string]any{"value": []any{map[string]any{"id": "x"}}}
+			case Ops[tc.op].IsBinary:
+				res = Binary{ContentType: "image/jpeg", Data: []byte("\xff\xd8\xffphoto")}
 			}
 			c := &recordingClient{res: res}
 			j := tc.job
@@ -320,10 +331,15 @@ func TestRunMapsEveryOperation(t *testing.T) {
 			if !tc.wantBodyIs(c.body) {
 				t.Errorf("body = %#v", c.body)
 			}
+			// A photo read must reach the client as a binary request, or the client
+			// decodes JPEG bytes as JSON and the operation fails on every photo there is.
+			if c.binary != Ops[tc.op].IsBinary {
+				t.Errorf("request asked for bytes = %v, want %v", c.binary, Ops[tc.op].IsBinary)
+			}
 		})
 	}
 	// Every operation in the table is covered above; a new one must be added here too.
-	if len(Ops) != 26 {
+	if len(Ops) != 27 {
 		t.Errorf("Ops has %d operations; add the new one to this test", len(Ops))
 	}
 }
@@ -738,7 +754,7 @@ func TestEntraOpsMatchTheConnector(t *testing.T) {
 		}
 		// A listing or a delta query has nowhere to put a collection without one, which
 		// both halves enforce — the compiler at deploy, checkRequired on the worker.
-		if (spec.IsList || spec.IsDelta) && omit != "result" {
+		if (spec.IsList || spec.IsDelta || spec.IsBinary) && omit != "result" {
 			parts = append(parts, `resultVariable="leute"`)
 		}
 		return strings.Join(parts, " ")
@@ -758,7 +774,7 @@ func TestEntraOpsMatchTheConnector(t *testing.T) {
 					(omit == "group" && spec.NeedsGroup) ||
 					(omit == "attributes" && spec.NeedsAttributes) ||
 					(omit == "password" && spec.NeedsPassword) ||
-					(omit == "result" && (spec.IsList || spec.IsDelta))
+					(omit == "result" && (spec.IsList || spec.IsDelta || spec.IsBinary))
 				if !required {
 					continue
 				}

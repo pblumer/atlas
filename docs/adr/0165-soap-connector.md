@@ -1,8 +1,16 @@
 # ADR-0165: SOAP / Web Services (WSDL) connector
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
+
+> **As built (2026-10-11).** The SOAP Worker Type no longer runs only in the server: it is
+> offloaded to a worker like the other kinds (`connector/soap/offload.go`,
+> [ADR-0233](0233-in-process-connectors-refused.md)), so the passages below that call the
+> in-process seam the only one available describe the state before
+> [ADR-0168](0168-connector-work-on-a-worker.md). WSDL import and WS-Security are still not
+> built.
 
 ## Context and problem statement
 

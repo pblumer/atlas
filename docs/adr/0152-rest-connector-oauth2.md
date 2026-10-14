@@ -1,6 +1,7 @@
 # ADR-0152: OAuth2 client-credentials for the REST connector
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-19
 - **Deciders:** Atlas maintainers
 

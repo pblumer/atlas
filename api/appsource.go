@@ -341,6 +341,7 @@ func (s *Server) applicationKeyFor(app project) (string, error) {
 	if err := s.projects.Save(app); err != nil {
 		return "", err
 	}
+	s.noteApplication(app)
 	return key, nil
 }
 
@@ -522,6 +523,7 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 		if err := s.projects.Save(app); err != nil {
 			return sourceImportResult{}, err
 		}
+		s.noteApplication(app)
 	} else if app.Name != man.Name {
 		// The repository is the source of truth for the application's name, the same
 		// as for its artifacts; the key, not the name, is what identifies it.
@@ -529,13 +531,14 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 		if err := s.projects.Save(app); err != nil {
 			return sourceImportResult{}, err
 		}
+		s.noteApplication(app)
 	}
 	res.ApplicationID, res.Name = app.ID, app.Name
 
 	for _, p := range man.Processes {
 		rec := draft{
 			ProcessID: p.ID, Name: p.Name, ProjectID: app.ID,
-			SavedAt: now, XML: string(byPath[p.Path]),
+			SavedAt: now, SavedBy: ownerID, XML: string(byPath[p.Path]),
 		}
 		if err := s.drafts.Save(rec); err != nil {
 			return sourceImportResult{}, err

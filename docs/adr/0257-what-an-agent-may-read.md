@@ -1,6 +1,7 @@
 # ADR-0257: What an agent may read is authored, the way its reach already is
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas engine team
 

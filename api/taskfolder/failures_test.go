@@ -93,7 +93,7 @@ func TestMintFailureIsReported(t *testing.T) {
 	t.Cleanup(func() { close(quit); wg.Wait() })
 
 	svc := New(loop, store, func(User) Options { return Options{} },
-		func(ms []*Matcher, _ User) ([]int, int, bool, error) { return make([]int, len(ms)), 0, false, nil },
+		func(ms []*Matcher, _ User) (Tally, error) { return Tally{PerMatcher: make([]int, len(ms))}, nil },
 		func() (string, error) { return "", errors.New("no entropy") })
 	rec := do(t, svc.HandleCreate, as(http.MethodPost, kundenRule, "usr_me"), nil)
 	if rec.Code != http.StatusInternalServerError {
@@ -117,8 +117,8 @@ func TestScanFailuresAreReported(t *testing.T) {
 	t.Cleanup(func() { close(quit); wg.Wait() })
 
 	svc := New(loop, store, func(User) Options { return Options{} },
-		func([]*Matcher, User) ([]int, int, bool, error) {
-			return nil, 0, false, errors.New("the loop is closing")
+		func([]*Matcher, User) (Tally, error) {
+			return Tally{}, errors.New("the loop is closing")
 		},
 		NewID)
 	create(t, svc, kundenRule, "usr_me")

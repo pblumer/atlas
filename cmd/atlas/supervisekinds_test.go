@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/api"
+	"github.com/pblumer/atlas/connector/script"
+	"github.com/pblumer/atlas/job"
 )
 
 // The gap these cover, named as a follow-up by ADR-0181 itself: trying the AD
@@ -26,12 +28,63 @@ func specIDs(specs []api.SuperviseSpec) string {
 	return strings.Join(ids, ",")
 }
 
+// TestDefaultScriptWorkerHonorsLanguageFlags covers the default out-of-process
+// path. The language flags used to affect only in-process handlers while the
+// supervised script worker silently registered all three languages.
+func TestDefaultScriptWorkerHonorsLanguageFlags(t *testing.T) {
+	specs := defaultSuperviseSpecs([]string{"csv", "script", "mail"}, map[string]bool{
+		"powershell": false,
+		"python":     true,
+		"javascript": false,
+	}, script.SandboxStrict)
+	if len(specs) != 3 {
+		t.Fatalf("specs = %s, want csv,script,mail", specIDs(specs))
+	}
+	if got := strings.Join(specs[1].ScriptLanguages, ","); got != "python" {
+		t.Errorf("script languages = %q, want python", got)
+	}
+	if got := specs[1].ScriptSandbox; got != "strict" {
+		t.Errorf("script sandbox = %q, want strict", got)
+	}
+}
+
+// TestDefaultScriptWorkerIsNotStartedWhenEveryLanguageIsDisabled makes the three
+// opt-out flags an actual containment switch. Script jobs remain durable and park;
+// the other default workers are unaffected.
+func TestDefaultScriptWorkerIsNotStartedWhenEveryLanguageIsDisabled(t *testing.T) {
+	specs := defaultSuperviseSpecs([]string{"csv", "script", "mail"}, map[string]bool{
+		"powershell": false,
+		"python":     false,
+		"javascript": false,
+	}, script.SandboxStrict)
+	if got := specIDs(specs); got != "csv,mail" {
+		t.Fatalf("specs = %q, want csv,mail", got)
+	}
+}
+
+// TestExplicitScriptSupervisionCannotBypassDisabledLanguages closes the less
+// obvious path: --supervise-connector=script must not undo --python=false and the
+// other language switches after the default worker has correctly stayed down.
+func TestExplicitScriptSupervisionCannotBypassDisabledLanguages(t *testing.T) {
+	enabled := map[string]bool{"python": false, "powershell": false, "javascript": false}
+	specs, offload, err := superviseConnectorSpecs([]string{"script"}, nil, enabled, script.SandboxStrict)
+	if err != nil {
+		t.Fatalf("superviseConnectorSpecs: %v", err)
+	}
+	if len(specs) != 0 {
+		t.Fatalf("specs = %s, want no script worker", specIDs(specs))
+	}
+	if len(offload) != 1 || offload[0] != "script" {
+		t.Fatalf("offload = %v, want script jobs parked", offload)
+	}
+}
+
 // TestSuperviseConnectorAsksForAWorkerAndStopsRunningItHere is the whole point: the
 // named kind gets a worker of its own, and the engine stops working those jobs
 // itself — the same pairing the default kinds get, which is what makes the worker
 // the one that leases them.
 func TestSuperviseConnectorAsksForAWorkerAndStopsRunningItHere(t *testing.T) {
-	specs, offload, err := superviseConnectorSpecs([]string{"ad"}, nil)
+	specs, offload, err := superviseConnectorSpecs([]string{"ad"}, nil, nil)
 	if err != nil {
 		t.Fatalf("superviseConnectorSpecs: %v", err)
 	}
@@ -53,7 +106,7 @@ func TestSuperviseConnectorAsksForAWorkerAndStopsRunningItHere(t *testing.T) {
 // away from the engine. Passing it to --offload-connectors is refused at startup as
 // an unknown kind, and asking for its worker must not walk into that refusal.
 func TestAWorkerOnlyKindIsSupervisedWithoutBeingOffloaded(t *testing.T) {
-	specs, offload, err := superviseConnectorSpecs([]string{"entra"}, nil)
+	specs, offload, err := superviseConnectorSpecs([]string{"entra"}, nil, nil)
 	if err != nil {
 		t.Fatalf("superviseConnectorSpecs: %v", err)
 	}
@@ -72,7 +125,7 @@ func TestAWorkerOnlyKindIsSupervisedWithoutBeingOffloaded(t *testing.T) {
 // thing that record exists to prevent. So supervising it must never quietly add it to
 // the offload list, which would be the engine claiming it had been running it.
 func TestTheAgentKindIsSupervisedWithoutBeingOffloaded(t *testing.T) {
-	specs, offload, err := superviseConnectorSpecs([]string{"agent"}, nil)
+	specs, offload, err := superviseConnectorSpecs([]string{"agent"}, nil, nil)
 	if err != nil {
 		t.Fatalf("superviseConnectorSpecs: %v", err)
 	}
@@ -89,7 +142,7 @@ func TestTheAgentKindIsSupervisedWithoutBeingOffloaded(t *testing.T) {
 // it is two processes racing for the same jobs.
 func TestAKindAlreadySupervisedIsNotStartedTwice(t *testing.T) {
 	already := []api.SuperviseSpec{{ID: "mail", Kinds: []string{"mail"}, Connectors: []string{"mail"}}}
-	specs, offload, err := superviseConnectorSpecs([]string{"mail", "ad"}, already)
+	specs, offload, err := superviseConnectorSpecs([]string{"mail", "ad"}, already, nil)
 	if err != nil {
 		t.Fatalf("superviseConnectorSpecs: %v", err)
 	}
@@ -105,7 +158,7 @@ func TestAKindAlreadySupervisedIsNotStartedTwice(t *testing.T) {
 // kind must not read as "asked for and quietly not started", which is indis-
 // tinguishable from the parking this flag exists to end.
 func TestAnUnknownConnectorKindIsRefused(t *testing.T) {
-	_, _, err := superviseConnectorSpecs([]string{"activedirectory"}, nil)
+	_, _, err := superviseConnectorSpecs([]string{"activedirectory"}, nil, nil)
 	if err == nil {
 		t.Fatal("superviseConnectorSpecs with an unknown kind: want an error, got nil")
 	}
@@ -117,7 +170,7 @@ func TestAnUnknownConnectorKindIsRefused(t *testing.T) {
 // TestNoKindsAsksForNothing keeps the flag off by default: the platform owns process
 // lifecycle unless an operator says otherwise (ADR-0157).
 func TestNoKindsAsksForNothing(t *testing.T) {
-	specs, offload, err := superviseConnectorSpecs(nil, nil)
+	specs, offload, err := superviseConnectorSpecs(nil, nil, nil)
 	if err != nil || len(specs) != 0 || len(offload) != 0 {
 		t.Fatalf("superviseConnectorSpecs(nil) = %v, %v, %v; want nothing at all", specIDs(specs), offload, err)
 	}
@@ -128,7 +181,7 @@ func TestNoKindsAsksForNothing(t *testing.T) {
 // entra, Remedy still has an in-process handler — so asking for its worker must also
 // take the kind off the engine, or the two would race for the same jobs.
 func TestSupervisingRemedyPairsTheWorkerWithTheOffload(t *testing.T) {
-	specs, offload, err := superviseConnectorSpecs([]string{"remedy"}, nil)
+	specs, offload, err := superviseConnectorSpecs([]string{"remedy"}, nil, nil)
 	if err != nil {
 		t.Fatalf("superviseConnectorSpecs: %v", err)
 	}
@@ -138,5 +191,47 @@ func TestSupervisingRemedyPairsTheWorkerWithTheOffload(t *testing.T) {
 	}
 	if len(offload) != 1 || offload[0] != "remedy" {
 		t.Fatalf("offload = %v, want [remedy] so the engine stops filing the tickets itself", offload)
+	}
+}
+
+// --worker-max-jobs reaches every built-in Worker Type this server supervises, and
+// nothing else: a --supervise command is the operator's own program, which may not
+// be safe to run twice at once, so it keeps the worker's default of one at a time.
+func TestWorkerMaxJobsReachesEveryBuiltInWorker(t *testing.T) {
+	specs := []api.SuperviseSpec{
+		{ID: "rest", Kinds: []string{"rest"}, Connectors: []string{"rest"}},
+		{ID: "mailer-1", Kinds: []string{"send-email"}},
+		{ID: "entra", Kinds: []string{"entra"}, Connectors: []string{"entra"}},
+	}
+	if err := applyWorkerMaxJobs(specs, 8); err != nil {
+		t.Fatalf("applyWorkerMaxJobs: %v", err)
+	}
+	for _, s := range specs {
+		want := 8
+		if len(s.Connectors) == 0 {
+			want = 0
+		}
+		if s.MaxJobs != want {
+			t.Errorf("%s: MaxJobs = %d, want %d", s.ID, s.MaxJobs, want)
+		}
+	}
+}
+
+// Zero or less would be a worker that can never start a job: refused at startup
+// rather than discovered as a queue that never moves.
+func TestWorkerMaxJobsBelowOneIsRefused(t *testing.T) {
+	for _, n := range []int{0, -1} {
+		if err := applyWorkerMaxJobs(nil, n); err == nil {
+			t.Errorf("applyWorkerMaxJobs(%d) succeeded, want a refusal", n)
+		}
+	}
+}
+
+// The default is the engine's own bound for its in-process handlers, so moving a
+// kind onto a worker does not change how many of its jobs run together.
+func TestWorkerMaxJobsDefaultsToTheInProcessBound(t *testing.T) {
+	if api.DefaultSupervisedWorkerMaxJobs != job.DefaultConcurrency {
+		t.Errorf("DefaultSupervisedWorkerMaxJobs = %d, want job.DefaultConcurrency (%d)",
+			api.DefaultSupervisedWorkerMaxJobs, job.DefaultConcurrency)
 	}
 }

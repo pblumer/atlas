@@ -1,6 +1,7 @@
 # ADR-0010: Go as implementation language, no CGO
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-06-11
 - **Deciders:** Core team
 

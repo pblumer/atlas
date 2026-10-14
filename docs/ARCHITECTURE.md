@@ -1,6 +1,6 @@
 # Atlas Architecture
 
-This document describes the architecture of Atlas, a durable, high-throughput BPMN 2.x workflow engine written in Go. It is the canonical reference for how the system is structured and why. For the reasoning behind specific decisions, see the [Architecture Decision Records](adr/).
+This document describes the architecture of atlas, a durable, high-throughput BPMN 2.x workflow engine written in Go. It is the canonical reference for how the system is structured and why. For the reasoning behind specific decisions, see the [Architecture Decision Records](adr/).
 
 ## Table of contents
 
@@ -22,6 +22,12 @@ This document describes the architecture of Atlas, a durable, high-throughput BP
 
 ---
 
+> **What you may depend on** is stated separately, in
+> [the runtime contract](runtime-contract.md): which behaviour is public and versioned,
+> which structures are implementation details, and how a BPMN feature atlas *draws* is
+> told apart from one atlas *executes* ([ADR-0176](adr/0176-standards-boundary-and-runtime-contract.md)).
+> This document explains how the system works; that one says what is promised.
+
 ## Design philosophy
 
 Atlas is built on four convictions, each of which shapes the whole system. They are not independent features bolted together — they reinforce one another.
@@ -38,36 +44,9 @@ See [ADR-0001](adr/0001-event-sourcing-and-log-structured-state.md), [ADR-0002](
 
 ## System overview
 
-```
-                          ┌─────────────────────────────────────────────┐
-                          │                  Atlas                   │
-                          │                                              │
-   Deploy BPMN  ────────► │  ┌────────────────┐                         │
-                          │  │  Graph Compiler │  (once per deployment)  │
-                          │  └───────┬────────┘                         │
-                          │          │ immutable CompiledProcess         │
-                          │          ▼                                   │
-   Client commands ─────► │  ┌────────────────────────────────────────┐ │
-   (start instance,       │  │            Partition 0..N               │ │
-    publish message,      │  │  ┌──────────────────────────────────┐   │ │
-    complete job)         │  │  │   Single-writer Processor loop    │   │ │
-                          │  │  │   - batch commands                │   │ │
-                          │  │  │   - mutate state (in-memory tx)   │   │ │
-                          │  │  │   - emit events                   │   │ │
-                          │  │  └────────┬─────────────┬───────────┘   │ │
-                          │  │           │             │                │ │
-                          │  │   ┌───────▼──────┐  ┌───▼──────────┐    │ │
-                          │  │   │   WAL (log)  │  │  State store │    │ │
-                          │  │   │ append+fsync │  │  (Pebble)    │    │ │
-                          │  │   └──────────────┘  └──────────────┘    │ │
-                          │  └────────────────────────────────────────┘ │
-                          │          │ jobs                              │
-                          └──────────┼──────────────────────────────────┘
-                                     ▼
-                          External job workers (gRPC stream)
-```
+![Atlas system overview: users, applications, interfaces, workflow engine, embedded persistence (WAL and Pebble state store), workers, the per-run script sandbox and target systems](architecture/system-overview.svg)
 
-A client never talks to the state store directly. Everything is a **command** submitted to a partition. The processor turns commands into **events**, makes them durable, and applies them to state. External work (service tasks) is handed out to **job workers** as jobs, and their results come back as new commands.
+A client never talks to the state store directly. Everything is a **command** submitted to a partition. The processor turns commands into **events**, makes them durable, and applies them to state. External work (service tasks) is handed out to **Worker Instances** as durable jobs over the HTTP Worker API, and their results come back as new commands. PowerShell, Python and JavaScript tasks can run each execution in a fail-closed [Linux sandbox](adr/0303-script-sandbox-isolation.md): `--script-sandbox=strict` confines the filesystem with Landlock and denies sockets with seccomp, and refuses to run rather than fall back. It is opt-in; the default, `off`, keeps the process's own access ([what a script reaches then](install.md#what-a-script-can-reach-with---script-sandboxoff)).
 
 ## The three pillars
 
@@ -263,13 +242,13 @@ The target is full BPMN 2.0 execution semantics. Coverage is delivered in phases
 
 ## Failure handling and incidents
 
-When something cannot proceed — a job fails after exhausting retries, an expression cannot be evaluated, a variable is missing — Atlas does not crash the instance. It raises an **incident**: a first-class state entity that pauses the affected token and surfaces the problem for operator intervention. Resolving an incident produces a command that resumes execution. This keeps long-running processes robust against transient and operator-fixable failures.
+When something cannot proceed — a job fails after exhausting retries, an expression cannot be evaluated, a variable is missing — atlas does not crash the instance. It raises an **incident**: a first-class state entity that pauses the affected token and surfaces the problem for operator intervention. Resolving an incident produces a command that resumes execution. This keeps long-running processes robust against transient and operator-fixable failures.
 
 An incident is surfaced where the operator already is: the live diagram marks the stuck element, badges it with the failure message and resolves it in place ([ADR-0150](adr/0150-preview-mail-provider-and-visible-incidents.md)), and the step-by-step replay, the Instances list and the variable search say so too ([ADR-0151](adr/0151-incidents-beyond-the-live-diagram.md)). The diagram context that needs — the definition, and the BPMN id of the element the compiled record refers to by index — is resolved when the runtime overlay or the incident list is *read*; the durable `IncidentValue` is unchanged, so `applyToState` and replay stay untouched.
 
 ## Observability
 
-Because every state transition is an event in an ordered log, the log itself is the primary observability surface: a complete, replayable audit trail of everything that ever happened. On top of it Atlas exposes metrics (throughput, batch sizes, fsync latency, queue depth per partition), structured logs, and tracing hooks around command processing. The exported-log stream is also the integration point for downstream analytics.
+Because every state transition is an event in an ordered log, the log itself is the primary observability surface: a complete, replayable audit trail of everything that ever happened. On top of it atlas exposes metrics (throughput, batch sizes, fsync latency, queue depth per partition), structured logs, and tracing hooks around command processing. The exported-log stream is also the integration point for downstream analytics.
 
 ## Component map
 
@@ -337,4 +316,4 @@ waiting to be drawn.
 
 ---
 
-*See also: [Enterprise architecture (ArchiMate 3.2)](architecture/enterprise-architecture.md) · [Roadmap](../ROADMAP.md) · [ADRs](adr/) · [Invariants](architecture/invariants.md) · [Glossary](architecture/glossary.md) · [Contributing](../CONTRIBUTING.md) · [Agent guide](../AGENTS.md)*
+*See also: [Enterprise architecture (ArchiMate 3.2)](architecture/enterprise-architecture.md) · [Business architecture](architecture/business-architecture.md) · [Roadmap](../ROADMAP.md) · [ADRs](adr/) · [Invariants](architecture/invariants.md) · [Glossary](architecture/glossary.md) · [Contributing](../CONTRIBUTING.md) · [Agent guide](../AGENTS.md)*

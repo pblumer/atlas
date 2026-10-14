@@ -410,3 +410,258 @@ func TestCheckDataFlowStoresNeedAVocabulary(t *testing.T) {
 		t.Errorf("an unmodelled application produced %+v", ps)
 	}
 }
+
+// --- lifecycles (ADR-0259) -------------------------------------------------
+//
+// The data state a process writes resolves against the class's lifecycle exactly as
+// its itemSubjectRef resolves against a class. Both checks are warnings and neither
+// refuses a deploy: a model is routinely drawn before the vocabulary it names exists.
+
+// lifecycleVocabulary is the sales model with a lifecycle on Order.
+func lifecycleVocabulary(t *testing.T, lc *Lifecycle) *Vocabulary {
+	t.Helper()
+	m := orderModel()
+	for i := range m.Classes {
+		if m.Classes[i].Name == "Order" {
+			m.Classes[i].Lifecycle = lc
+		}
+	}
+	if res := Validate(m); !res.Valid {
+		t.Fatalf("fixture model is invalid: %v", findingCodes(res))
+	}
+	return NewVocabulary([]Model{m})
+}
+
+// The fixture seeds `order` in "received" and writes it to "approved".
+func receivedToApproved() *Lifecycle {
+	return &Lifecycle{
+		States: []LifecycleState{
+			{Name: "received", Initial: true}, {Name: "approved"}, {Name: "shipped", Final: true},
+		},
+		Transitions: []LifecycleTransition{
+			{ID: "t1", From: "received", To: "approved"},
+			{ID: "t2", From: "approved", To: "shipped"},
+		},
+	}
+}
+
+func TestCheckDataFlowLifecycleClean(t *testing.T) {
+	ps := CheckDataFlow(writerProcess(t, "Order", ""), lifecycleVocabulary(t, receivedToApproved()))
+	by := problemsByRule(ps)
+	for _, rule := range []string{RuleDataUnknownState, RuleDataIllegalTransition} {
+		if len(by[rule]) != 0 {
+			t.Errorf("%s on a lifecycle the process obeys: %+v", rule, by[rule])
+		}
+	}
+}
+
+// A class with no lifecycle is the normal case: the data state stays the free string
+// BPMN made it, and nothing is said about it.
+func TestCheckDataFlowWithoutALifecycleSaysNothingAboutStates(t *testing.T) {
+	ps := CheckDataFlow(writerProcess(t, "Order", ""), salesVocabulary(t))
+	by := problemsByRule(ps)
+	if len(by[RuleDataUnknownState])+len(by[RuleDataIllegalTransition]) != 0 {
+		t.Errorf("a class with no lifecycle drew a state finding: %+v", ps)
+	}
+}
+
+// The typo check, and the one that will find something on the first real application.
+func TestCheckDataFlowUnknownState(t *testing.T) {
+	lc := receivedToApproved()
+	lc.States[1].Name = "Approved" // the process writes "approved"
+	lc.Transitions[0].To, lc.Transitions[1].From = "Approved", "Approved"
+	ps := CheckDataFlow(writerProcess(t, "Order", ""), lifecycleVocabulary(t, lc))
+	by := problemsByRule(ps)
+	if len(by[RuleDataUnknownState]) != 1 {
+		t.Fatalf("want one unknown-state, got %+v", by[RuleDataUnknownState])
+	}
+	p := by[RuleDataUnknownState][0]
+	if p.Severity != compiler.SeverityWarning {
+		t.Errorf("severity = %v, want a warning — a lifecycle is drawn after the process", p.Severity)
+	}
+	// It has to name the state, or the reader is left diffing two lists by eye.
+	if !strings.Contains(p.Message, "approved") || !strings.Contains(p.Message, "Order") {
+		t.Errorf("message names neither the state nor the class: %q", p.Message)
+	}
+}
+
+// The object's seeded state is resolved too: an object created in a state the class
+// does not declare is the same defect one step earlier.
+func TestCheckDataFlowUnknownInitialState(t *testing.T) {
+	lc := receivedToApproved()
+	lc.States[0].Name = "neu" // the process seeds "received"
+	lc.Transitions[0].From = "neu"
+	ps := CheckDataFlow(writerProcess(t, "Order", ""), lifecycleVocabulary(t, lc))
+	found := false
+	for _, p := range problemsByRule(ps)[RuleDataUnknownState] {
+		if strings.Contains(p.Message, "received") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the seeded state was not resolved: %+v", ps)
+	}
+}
+
+// A move the lifecycle does not allow, where it does declare both ends.
+func TestCheckDataFlowIllegalTransition(t *testing.T) {
+	lc := receivedToApproved()
+	lc.Transitions = []LifecycleTransition{{ID: "t2", From: "approved", To: "shipped"}}
+	ps := CheckDataFlow(writerProcess(t, "Order", ""), lifecycleVocabulary(t, lc))
+	by := problemsByRule(ps)
+	if len(by[RuleDataIllegalTransition]) != 1 {
+		t.Fatalf("want one illegal-transition, got %+v", by[RuleDataIllegalTransition])
+	}
+	p := by[RuleDataIllegalTransition][0]
+	if p.Severity != compiler.SeverityWarning {
+		t.Errorf("severity = %v, want a warning", p.Severity)
+	}
+	if !strings.Contains(p.Message, "received") || !strings.Contains(p.Message, "approved") {
+		t.Errorf("the message names neither end of the move it refuses: %q", p.Message)
+	}
+}
+
+// A state the lifecycle does not declare is reported once, as unknown — not twice,
+// with a second complaint that no transition reaches the thing that is not there.
+func TestCheckDataFlowUnknownStateIsNotAlsoAnIllegalTransition(t *testing.T) {
+	lc := receivedToApproved()
+	lc.States = lc.States[:1] // only "received" survives
+	lc.Transitions = nil
+	by := problemsByRule(CheckDataFlow(writerProcess(t, "Order", ""), lifecycleVocabulary(t, lc)))
+	if len(by[RuleDataIllegalTransition]) != 0 {
+		t.Errorf("an undeclared state was reported twice: %+v", by[RuleDataIllegalTransition])
+	}
+}
+
+// TestCheckDataFlowChecksEveryWriteOnOneArrow is the guard that matters most for the
+// several-writes-per-arrow shape: the check must not stop at the first assignment.
+// One arrow with a good member and a bad one is a deploy that has to fail, and the
+// message has to name the member that is wrong rather than the arrow that carries it
+// (ADR-0350, ADR-0230 for the class).
+func TestCheckDataFlowChecksEveryWriteOnOneArrow(t *testing.T) {
+	b := compiler.NewBuilder(1, "sales", 1)
+	start := b.AddStartEvent()
+	write := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, write)
+	b.Connect(write, end)
+	b.AddDataObject("order", "Order", "received", false)
+	b.AddDataOutputAssociationWrites(write, "order", "approved", []compiler.DataWrite{
+		{Value: mustExpr(t, "amount"), TargetPath: "id"},          // the class has it
+		{Value: mustExpr(t, "amount"), TargetPath: "shipTo.city"}, // and this one
+		{Value: mustExpr(t, "amount"), TargetPath: "nmae"},        // and not this one
+	})
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	found := problemsByRule(CheckDataFlow(cp, salesVocabulary(t)))[RuleDataUnknownMember]
+	if len(found) != 1 {
+		t.Fatalf("expected one unknown-member problem, got %+v", CheckDataFlow(cp, salesVocabulary(t)))
+	}
+	if !strings.Contains(found[0].Message, "nmae") {
+		t.Errorf("message %q does not name the member that is wrong", found[0].Message)
+	}
+}
+
+// A value written into a member an «enumeration» types
+// (ADR-0351).
+//
+// The model already wrote down every value that member may hold, one literal per line.
+// `= "approvd"` type-checks, deploys, runs, and writes a string no decision, no filter
+// and no report will ever match — the member-picker failure one level down.
+//
+// The severity is the load-bearing choice, not the detection. It is a warning, worded
+// like RuleDataUnknownState and for the same reason: a model that is merely behind its
+// process is not broken, and refusing the deploy would make the two impossible to
+// develop in either order.
+func TestCheckDataFlowConstantValueAgainstEnumerationLiterals(t *testing.T) {
+	tests := []struct {
+		name, value string
+		wantRule    string
+	}{
+		{"a literal the enumeration declares", `"approved"`, ""},
+		{"one it does not", `"approvd"`, RuleDataNotALiteral},
+		{"a number where literals are strings", "42", RuleDataNotALiteral},
+		// null is how a member is unset, not a value claiming to be one of the literals.
+		{"null", "null", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cp := valueWriter(t, "status", tt.value)
+			found := problemsByRule(CheckDataFlow(cp, salesVocabulary(t)))[RuleDataNotALiteral]
+			if tt.wantRule == "" {
+				if len(found) != 0 {
+					t.Fatalf("expected no problem, got %+v", found)
+				}
+				return
+			}
+			if len(found) != 1 {
+				t.Fatalf("expected one %s, got %+v", RuleDataNotALiteral, CheckDataFlow(cp, salesVocabulary(t)))
+			}
+			if found[0].Severity != compiler.SeverityWarning {
+				t.Errorf("severity = %q, want warning — the model may simply be behind the process",
+					found[0].Severity)
+			}
+			// The message has to carry the value and the enumeration: without the first
+			// there is nothing to search the model for, and without the second there is
+			// nowhere to go and add it.
+			if !strings.Contains(found[0].Message, "OrderStatus") {
+				t.Errorf("message %q does not name the enumeration", found[0].Message)
+			}
+		})
+	}
+}
+
+// TestCheckDataFlowLeavesAComputedValueAlone is the half that keeps the rule honest,
+// and the expression is chosen to make the guard load-bearing rather than polite.
+//
+// FEEL is null-propagating, so most expressions evaluate to null without their
+// variables and would be skipped anyway. A conditional does not: with an unbound
+// condition it takes its else branch and hands back a perfectly concrete string. A
+// check that evaluated every expression would therefore report the *else branch* of a
+// value whose real result is decided at run time — a warning about a string the process
+// may never write, which is the false knowledge the derived model reports as a gap.
+//
+// Reading any variable is the precise test for "decided later", and it is why the rule
+// looks at the inputs rather than at what the evaluation happened to produce.
+func TestCheckDataFlowLeavesAComputedValueAlone(t *testing.T) {
+	for _, src := range []string{
+		"someVariable",
+		`if someVariable then "approved" else "approvd"`,
+	} {
+		cp := valueWriter(t, "status", src)
+		if found := problemsByRule(CheckDataFlow(cp, salesVocabulary(t)))[RuleDataNotALiteral]; len(found) != 0 {
+			t.Errorf("a computed value (%s) was judged against the literals: %+v", src, found)
+		}
+	}
+}
+
+// TestCheckDataFlowLeavesAnOrdinaryMemberAlone: only a member an enumeration types has
+// a closed set of values. A string attribute holds any string, and a constant written
+// into one is nothing to report.
+func TestCheckDataFlowLeavesAnOrdinaryMemberAlone(t *testing.T) {
+	cp := valueWriter(t, "id", `"anything at all"`)
+	if found := problemsByRule(CheckDataFlow(cp, salesVocabulary(t)))[RuleDataNotALiteral]; len(found) != 0 {
+		t.Errorf("a plain string member was judged against literals: %+v", found)
+	}
+}
+
+// valueWriter builds Start → write → End writing one member of `order` with the given
+// FEEL value, so the value rather than the path is what a test varies.
+func valueWriter(t *testing.T, targetPath, value string) *compiler.CompiledProcess {
+	t.Helper()
+	b := compiler.NewBuilder(1, "sales", 1)
+	start := b.AddStartEvent()
+	write := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, write)
+	b.Connect(write, end)
+	b.AddDataObject("order", "Order", "received", false)
+	b.AddDataOutputAssociation(write, "order", mustExpr(t, value), "approved", targetPath)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp
+}

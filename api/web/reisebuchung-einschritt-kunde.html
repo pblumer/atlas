@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Atlas · Reiseantrag (Fall A · ein Schritt)</title>
+<title>atlas · Reiseantrag (Fall A · ein Schritt)</title>
 <link rel="stylesheet" href="vendor/form-js/form-js.css"/>
 </head>
 <body>
@@ -87,7 +87,7 @@
       <code>userTask</code> mit <b>einem</b> Formular (<code>reise-antrag</code>).
       Diese Seite lädt dieses eine Schema und teilt es <b>im Browser</b> in Seiten
       auf. Welche Seite als Nächstes kommt, entscheidet der <b>Client</b> — nicht
-      der Prozess. Am Ende geht <b>eine</b> Abgabe an Atlas.</p>
+      der Prozess. Am Ende geht <b>eine</b> Abgabe an atlas.</p>
     <div class="callout">Der Kontrast zu Fall B steht im HTTP-Log unten:
       <b>ein</b> <code>start</code> · <b>ein</b> <code>complete</code>. Fall B
       (verschiedene User-Tasks) hätte hier vier <code>complete</code>.</div>
@@ -97,7 +97,7 @@
   <section class="card" id="stage">
     <h2><span>Reiseantrag</span><span class="hint" id="instHint">—</span></h2>
     <div id="body">
-      <p class="muted">Starte einen neuen Antrag — Atlas legt eine echte Instanz an und parkt auf
+      <p class="muted">Starte einen neuen Antrag — atlas legt eine echte Instanz an und parkt auf
         dem einen Erfassungs-Task. Diese Seite führt dich durch das Formular; abgeschickt wird
         erst am Ende, in einem Rutsch.</p>
       <div class="actions" style="border-top:0;padding-top:4px">
@@ -108,12 +108,12 @@
   </section>
 
   <section class="card">
-    <h2><span>HTTP-Aufrufe an Atlas</span><span class="hint">ein start, ein complete</span></h2>
+    <h2><span>HTTP-Aufrufe an atlas</span><span class="hint">ein start, ein complete</span></h2>
     <div class="log" id="log"><div class="s2">Wartet auf den ersten Aufruf …</div></div>
   </section>
 
   <footer>
-    Wird von Atlas unter <code>/reisebuchung-einschritt-kunde.html</code> ausgeliefert · Prozess:
+    Wird von atlas unter <code>/reisebuchung-einschritt-kunde.html</code> ausgeliefert · Prozess:
     <code>examples/reisebuchung/fall-a/reise-antrag-einschritt.bpmn</code> · Basis-URL:
     <input id="base" value="/api/v1" style="width:150px;font-family:var(--mono);font-size:11px" title="Same-origin per Default."/>
   </footer>
@@ -141,7 +141,7 @@ const PAGES = [
   { title:"Begleitung Minderjähriger", keys:["vertreterName","einverstaendnis"], show:d=>isMinor(d),
     why:"Diese Seite blendet der <b>Client</b> nur ein, wenn das Geburtsdatum auf eine minderjährige Person zeigt." },
   { title:"Bestätigung", keys:["buchungBestaetigt"],                     show:()=>true,
-    why:"Erst der Klick hier löst die <b>eine</b> complete an Atlas aus." },
+    why:"Erst der Klick hier löst die <b>eine</b> complete an atlas aus." },
 ];
 
 // ————— fetch wrapper + call log —————
@@ -195,15 +195,28 @@ async function findProcess(){
   if (!mine.length) throw new Error(`Prozess "${PROCESS_ID}" ist nicht deployed. Bitte examples/reisebuchung/fall-a zuerst deployen (siehe README).`);
   return mine[0].key;
 }
+// Scope the listing to THIS definition. The bare /instances listing is capped — 1000
+// rows per half — and its active half comes back oldest-key-first, so the newest
+// instance is the first row the cap drops: on a server holding more active instances
+// than the cap, the one we just started is never on the page and the diff below comes
+// back empty. ?process= reads this definition's own index instead, newest first. The
+// diff is then correct on any population, though still a guess when two callers start
+// this definition at once: https://github.com/pblumer/atlas/issues/933
+async function instancesOfProcess(defKey){
+  const page = await api("GET",`/instances?process=${defKey}`);
+  return ((page||{}).items||[]).filter(i=>i.processDefKey===defKey);
+}
 async function startInstance(defKey){
-  const before = new Set((await api("GET","/instances")).filter(i=>i.processDefKey===defKey).map(i=>i.key));
+  const before = new Set((await instancesOfProcess(defKey)).map(i=>i.key));
   await api("POST",`/processes/${defKey}/instances`, {variables:{}});
-  const after = (await api("GET","/instances")).filter(i=>i.processDefKey===defKey);
-  return (after.find(i=>!before.has(i.key)) || after.sort((a,b)=>b.key-a.key)[0]).key;
+  const after = await instancesOfProcess(defKey);
+  const fresh = after.find(i=>!before.has(i.key)) || after.sort((a,b)=>b.key-a.key)[0];
+  if (!fresh) throw new Error("Die Instanz wurde gestartet, ist aber nicht auffindbar. Bitte die Seite neu laden.");
+  return fresh.key;
 }
 async function firstTask(){
-  const raw = await api("GET",`/tasks?processInstance=${instanceKey}`);
-  const list = (Array.isArray(raw) ? raw : (raw.items||[])).filter(t=>t.processInstanceKey===instanceKey);
+  const page = await api("GET",`/tasks?processInstance=${instanceKey}`);
+  const list = ((page||{}).items||[]).filter(t=>t.processInstanceKey===instanceKey);
   return list[0];
 }
 

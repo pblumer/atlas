@@ -21,7 +21,26 @@ mkdir -p "${outdir}"
 # which some trimmed toolchains omit and which is only needed to instrument
 # main packages.
 mapfile -t pkgs < <(go list -f '{{if ne .Name "main"}}{{.ImportPath}}{{end}}' ./... | grep .)
-go test -covermode=atomic -coverprofile="${profile}" "${pkgs[@]}"
+
+# -timeout for the same reason `make race` and AGENTS.md carry it, and it is not
+# optional here either: the api package runs for minutes on its own, coverage
+# counters add to that, and Go's default per-package limit is ten. Without the flag
+# the run ends in `panic: test timed out` naming whichever test happened to be
+# executing — a failure that reads like a defect in unrelated code and is nothing
+# but the clock. It cost one red job to learn that twice: `FAIL api 600.194s`, the
+# default to the millisecond.
+#
+# This was survivable while the floor ran in the same job as the race step, which
+# left the build cache warm; on its own runner it was not. That the flag's absence
+# only mattered under one arrangement is the argument for the flag, not against it.
+#
+# Twenty-five and not the race command's forty-five: this pass is the same tests
+# without the detector, and api under instrumentation was measured at 198s and 202s
+# on two runners and at over 600s on a third — where 600s was the default cutting it
+# short rather than its real duration. 25m is several times any of those, and it
+# stays below the job's own cap (40) so a hung package is reported by Go, which names
+# it, rather than by the cap, which cancels in silence.
+go test -covermode=atomic -timeout=25m -coverprofile="${profile}" "${pkgs[@]}"
 
 # The total is computed from the profile rather than read off `go tool cover -func`,
 # which prints it rounded to one decimal. That rounding was not cosmetic: it is the
@@ -32,9 +51,19 @@ go test -covermode=atomic -coverprofile="${profile}" "${pkgs[@]}"
 #
 # The profile's own lines are the source: "file.go:l.c,l.c numStmt count", one per
 # block, so the exact ratio is two sums and needs no rounding at any step.
+#
+# Two sums over the *blocks*, though, not over the lines — which is the second thing
+# this arithmetic got wrong. A merged profile may list the same block more than once,
+# and summing per line then counts those statements twice on both sides of the ratio.
+# It is not hypothetical and it is not stable: two runs of an unchanged tree reported
+# 95.0062% (39610/41692) and 95.0132% (39706/41790), the whole difference being 36
+# blocks of one package appearing twice in the second profile. A floor whose number
+# moves when nothing moved cannot be planned against, and at a two-statement margin it
+# decides red or green by itself. Keyed by block, both of those runs report 95.0062%.
 read -r covered statements total < <(
-  awk '!/^mode:/ { n = $(NF-1); if ($NF + 0 > 0) k += n; s += n }
-       END { if (s == 0) exit 1; printf "%d %d %.4f\n", k, s, 100 * k / s }' "${profile}"
+  awk '!/^mode:/ { stmts[$1] = $(NF-1); if ($NF + 0 > 0) hit[$1] = 1 }
+       END { for (block in stmts) { s += stmts[block]; if (block in hit) k += stmts[block] }
+             if (s == 0) exit 1; printf "%d %d %.4f\n", k, s, 100 * k / s }' "${profile}"
 ) || {
   echo "check-coverage: could not determine total coverage" >&2
   exit 1

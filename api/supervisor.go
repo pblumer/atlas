@@ -9,9 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -52,6 +55,19 @@ const (
 	childLogLines = 200
 )
 
+// scriptWorkerEnvNames is the runtime environment a supervised script worker may
+// inherit from the server. That worker hosts model-authored code, so unlike other
+// workers it receives no arbitrary deployment variables. Its configured worker
+// credential is added separately by superviseEnv and confined to that protocol.
+var scriptWorkerEnvNames = []string{
+	"PATH",
+	"HOME", "USERPROFILE",
+	"TMPDIR", "TMP", "TEMP",
+	"LANG", "LANGUAGE", "LC_ALL", "LC_CTYPE", "TZ",
+	"SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT",
+	"PSModulePath",
+}
+
 // SuperviseSpec is one supervised worker as configured: what to call it and which
 // job types it serves. Both come from the server's command line.
 type SuperviseSpec struct {
@@ -60,6 +76,45 @@ type SuperviseSpec struct {
 	// Workers are built-in Worker Types this worker serves (--connector on the
 	// child). A worker may serve these, model-authored job types, or both.
 	Connectors []string
+	// ScriptLanguages is the enabled subset passed to a script worker. It stays
+	// empty for every other Worker Type and never carries request-supplied data.
+	ScriptLanguages []string
+	// ScriptSandbox is the operator-selected profile passed only to a script
+	// Worker Instance. Empty is the compatible off mode.
+	ScriptSandbox string
+	// MaxJobs is how many jobs of one type the worker runs at once (--max-jobs on
+	// the child). Zero leaves the worker's own default of one at a time, which is
+	// what a --supervise command the operator wrote keeps
+	// (ADR-0440).
+	MaxJobs int
+}
+
+// DefaultSupervisedWorkerMaxJobs is how many jobs of one type a supervised built-in
+// worker runs at once unless --worker-max-jobs says otherwise. It is the bound the
+// engine puts on its own in-process handlers, deliberately: moving a kind onto a
+// worker is about where its work runs, and must not quietly change how much of it
+// runs together — which is what running it one job at a time had done
+// (ADR-0440).
+const DefaultSupervisedWorkerMaxJobs = job.DefaultConcurrency
+
+func supervisedWorkerArgs(server string, spec SuperviseSpec, handles []string) []string {
+	args := []string{"worker", "--server", server, "--id", spec.ID}
+	for _, h := range handles {
+		args = append(args, "--handle", h)
+	}
+	if len(spec.Connectors) > 0 {
+		args = append(args, "--connector", strings.Join(spec.Connectors, ","))
+	}
+	if len(spec.ScriptLanguages) > 0 {
+		args = append(args, "--script-languages", strings.Join(spec.ScriptLanguages, ","))
+	}
+	if strings.TrimSpace(spec.ScriptSandbox) != "" {
+		args = append(args, "--script-sandbox", spec.ScriptSandbox)
+	}
+	if spec.MaxJobs > 0 {
+		args = append(args, "--max-jobs", strconv.Itoa(spec.MaxJobs))
+	}
+	return args
 }
 
 // childStatus is one supervised worker as the console sees it.
@@ -78,10 +133,10 @@ type childStatus struct {
 type child struct {
 	spec SuperviseSpec
 	args []string
-	// env adds to the environment the child inherits, evaluated at every spawn so a
-	// worker added in the Console is picked up by pressing Restart rather than by
-	// restarting Atlas. nil means the child inherits this process's environment
-	// unchanged, which is every worker an operator configured by hand.
+	// env adds to the child's base environment, evaluated at every spawn so a worker
+	// added in the Console is picked up by pressing Restart rather than by restarting
+	// Atlas. The script kind has an allowlisted base; other kinds inherit the server's
+	// environment for backwards compatibility.
 	env func() []string
 
 	mu       sync.Mutex
@@ -107,6 +162,12 @@ type supervisor struct {
 	exe     string
 	backoff time.Duration
 	quit    <-chan struct{}
+	// afterRun, when set, runs between a child's exit and the wait that follows it.
+	// It is a test's way to land a restart in exactly that window; nil in production.
+	afterRun func(c *child)
+	// lifetime ties each child to this process, so a server that ends without
+	// stopping its workers does not leave them running (Windows; a no-op elsewhere).
+	lifetime childLifetime
 
 	mu       sync.Mutex
 	children []*child
@@ -155,8 +216,12 @@ func (s *supervisor) start() {
 	}
 }
 
-// wait blocks until every supervised worker has stopped.
-func (s *supervisor) wait() { s.wg.Wait() }
+// wait blocks until every supervised worker has stopped, then releases what tied
+// them to this process.
+func (s *supervisor) wait() {
+	s.wg.Wait()
+	s.lifetime.close()
+}
 
 // supervise keeps one worker running until the server quits: start it, wait for it,
 // and start it again after a backoff that grows while it keeps failing.
@@ -172,6 +237,17 @@ func (s *supervisor) supervise(c *child) {
 
 		stop := c.beginCycle()
 		err := s.runOnce(c, stop)
+		if s.afterRun != nil {
+			s.afterRun(c)
+		}
+		// Both waits below watch this cycle's own stop channel, not whichever one is
+		// current. A restart closes the channel that is current when it is asked for
+		// and installs a fresh one; asked for while the child ran, or after it exited
+		// but before a wait began, it has closed stop and replaced it already. Waiting
+		// on the replacement would lose the request — the worker would sit out its
+		// backoff, or stay parked with nothing to serve, until somebody asked again.
+		// Waiting on stop cannot: if nobody has asked, stop is still the current
+		// channel, and if somebody has, it is already closed.
 		switch {
 		case err == nil:
 			failures = 0 // it ran and was asked to stop; not a failure
@@ -184,7 +260,7 @@ func (s *supervisor) supervise(c *child) {
 			case <-s.quit:
 				c.set(func() { c.state = "stopped"; c.pid = 0 })
 				return
-			case <-c.currentStop():
+			case <-stop:
 			}
 			failures = 0
 			continue
@@ -200,7 +276,7 @@ func (s *supervisor) supervise(c *child) {
 		case <-s.quit:
 			c.set(func() { c.state = "stopped"; c.pid = 0 })
 			return
-		case <-c.currentStop():
+		case <-stop:
 		case <-time.After(restartDelay(s.backoff, maxRestartBackoff, failures)):
 		}
 	}
@@ -210,16 +286,15 @@ func (s *supervisor) supervise(c *child) {
 // a restart to be asked for. It returns nil when the exit was expected.
 func (s *supervisor) runOnce(c *child, stop <-chan struct{}) error {
 	cmd := exec.Command(s.exe, c.args...)
-	// The child inherits this process's environment and is handed the configuration
-	// for the Worker Types it serves on top of it. Reading it here rather than at
-	// registration is what makes the console's Restart button pick up a worker
-	// added since the server started.
+	// A script worker starts from a small environment because it hosts model-authored
+	// code. Other workers preserve the historical inherited environment. Reading it
+	// here rather than at registration is what makes the console's Restart button
+	// pick up an operator change and a worker added since the server started.
 	var extra []string
 	if c.env != nil {
-		if extra = c.env(); len(extra) > 0 {
-			cmd.Env = append(os.Environ(), extra...)
-		}
+		extra = c.env()
 	}
+	cmd.Env = append(workerBaseEnvironment(c.spec), extra...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		c.set(func() { c.state = "failed"; c.lastExit = err.Error() })
@@ -231,6 +306,11 @@ func (s *supervisor) runOnce(c *child, stop <-chan struct{}) error {
 		logging.Warn(logging.WorkerSupervisorFailed, "could not start a supervised worker",
 			slog.String("id", c.spec.ID), slog.String("error", err.Error()))
 		return err
+	}
+	if err := s.lifetime.bind(cmd.Process); err != nil {
+		logging.Warn(logging.WorkerSupervisorFailed,
+			"a supervised worker is not tied to this server's lifetime; if the server ends without stopping it, it keeps running",
+			slog.String("id", c.spec.ID), slog.Int("pid", cmd.Process.Pid), slog.String("error", err.Error()))
 	}
 	c.set(func() {
 		c.state = "running"
@@ -260,6 +340,30 @@ func (s *supervisor) runOnce(c *child, stop <-chan struct{}) error {
 		<-exited
 		return c.finish(nil, true)
 	}
+}
+
+// workerBaseEnvironment preserves backwards compatibility for ordinary workers
+// while putting the model-authored script kind behind an allowlist. Building a new
+// slice is intentional: filtering a copy by known secret names would expose the
+// next credential whose name Atlas does not yet know.
+func workerBaseEnvironment(spec SuperviseSpec) []string {
+	isScript := false
+	for _, kind := range spec.Connectors {
+		if strings.TrimSpace(kind) == "script" {
+			isScript = true
+			break
+		}
+	}
+	if !isScript {
+		return os.Environ()
+	}
+	env := make([]string, 0, len(scriptWorkerEnvNames))
+	for _, name := range scriptWorkerEnvNames {
+		if value, ok := os.LookupEnv(name); ok {
+			env = append(env, name+"="+value)
+		}
+	}
+	return env
 }
 
 // exitNothingToServe is the status `atlas worker` leaves when it holds no handler at
@@ -344,19 +448,12 @@ func (c *child) drain(r io.ReadCloser) {
 	}
 }
 
-// beginCycle hands out the channel this run watches for a restart request. It does
-// NOT replace it: replacing here is what would leave the running child watching a
-// channel nobody can close, since restart closes whatever is current. Installing
-// the fresh channel is restart's job, and the next cycle picks it up.
+// beginCycle hands out the channel this cycle — the run and the wait after it —
+// watches for a restart request. It does NOT replace it: replacing here is what would
+// leave the running child watching a channel nobody can close, since restart closes
+// whatever is current. Installing the fresh channel is restart's job, and the next
+// cycle picks it up.
 func (c *child) beginCycle() <-chan struct{} {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.stop
-}
-
-// currentStop is the restart channel to watch right now. Read under the lock
-// because restart replaces it.
-func (c *child) currentStop() <-chan struct{} {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.stop

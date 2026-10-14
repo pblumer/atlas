@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "# 👤 Benutzer aufnehmen\n\nBeantrage die Aufnahme eines neuen Atlas-Benutzers. Aus deinen Angaben wird ein Benutzername vorgeschlagen; ein Administrator prüft den Antrag, legt das Konto an und vergibt die Rolle."
+      "text": "# 👤 Benutzer aufnehmen\n\nBeantrage die Aufnahme eines neuen atlas-Benutzers. Aus deinen Angaben wird ein Benutzername vorgeschlagen; ein Administrator prüft den Antrag, legt das Konto an und vergibt die Rolle."
     },
     {
       "key": "vorname",

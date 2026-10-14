@@ -1,0 +1,236 @@
+package catalog
+
+import (
+	"net/http"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/pblumer/atlas/api/httpapi"
+)
+
+// What a credential can reach has to be provable by reading one list.
+//
+// ADR-0209 says that of roles and holds it with an inventory test. The object
+// axis had no such list, and the cost showed: four gaps in a row — the catalogue
+// write side, product rehoming, ordering against a release, and reading — each
+// real, each found only while building the next thing beside it. Per-route tests
+// prove what their author thought of; they cannot prove that a *new* route was
+// thought about at all.
+//
+// So: every handler this service exports is named below, either as gated (an
+// outsider is refused, and the test proves it by asking) or as deliberately
+// ungated with the reason. Reflection supplies the actual set, so adding a
+// handler and forgetting the entry fails the build.
+
+// gateKind says what a handler does about the object axis.
+type gateKind int
+
+const (
+	// gated: touches a specific catalogue object, and an outsider must be refused.
+	gated gateKind = iota
+	// ungated: reaches no particular object, or is itself the visibility
+	// resolution. Each carries its reason.
+	ungated
+)
+
+type handlerGate struct {
+	name string
+	kind gateKind
+	// want is the status an outsider must receive from a gated handler. 404 where
+	// the object must not be shown to exist, 403 where it may be seen but not
+	// changed — here always 404, because an outsider sees nothing.
+	want int
+	// method, body and id describe how to call it. contentType is set only for the
+	// handlers that read raw bytes and take the format from the header.
+	method      string
+	contentType string
+	body        string
+	id          bool
+	// product says the path id names a *product* rather than a catalogue, so the
+	// fixture makes one under the catalogue and passes its id. Without it a
+	// product handler would be asked about an id that is no product at all, and
+	// would answer 404 because nothing is there — which looks exactly like the
+	// gate refusing and proves nothing about it.
+	product bool
+	// why explains an ungated handler. Empty for gated ones.
+	why string
+}
+
+var catalogGates = []handlerGate{
+	{name: "HandleListCatalogs", kind: ungated, method: "GET",
+		why: "lists only what the caller maintains, so it names no object to gate; the outsider case is that the list comes back empty, proved in TestListingShowsOnlyWhatYouMaintain"},
+	{name: "HandleCreateCatalog", kind: ungated, method: "POST", body: `{"rank":1}`,
+		why: "creation has no object yet — the role is the whole gate, and the creator becomes the owner"},
+	{name: "HandleGetCatalog", kind: gated, want: http.StatusNotFound, method: "GET", id: true},
+	{name: "HandleUpdateCatalog", kind: gated, want: http.StatusNotFound, method: "PATCH", body: `{"rank":9}`, id: true},
+	{name: "HandlePublish", kind: gated, want: http.StatusNotFound, method: "POST", id: true},
+	{name: "HandleListReleases", kind: gated, want: http.StatusNotFound, method: "GET", id: true},
+	// Gated on read and not on write, the same as listing the releases above: the
+	// answer is assembled from a GET on the catalogue and a GET on its releases and
+	// exposes nothing beyond them. Demanding the authority to publish would withhold
+	// it from exactly the person who has to ask somebody else to.
+	{name: "HandleUnpublished", kind: gated, want: http.StatusNotFound, method: "GET", id: true},
+	{name: "HandleListItems", kind: ungated, method: "GET",
+		why: "lists only products whose home the caller maintains; the outsider case is an empty list, proved in TestProductListingFollowsTheHomeCatalogue"},
+	{name: "HandleApproverReport", kind: ungated, method: "GET",
+		why: "reports only on products whose home the caller maintains, by the same lookup as the listing above; the outsider case is an empty report, proved in TestTheApproverReportFollowsTheHomeCatalogue"},
+	{name: "HandleFulfilmentReport", kind: ungated, method: "GET",
+		why: "reports only on the releases of catalogues the caller may edit, by the same mayEdit the report above uses; the outsider case is an empty report, proved in TestTheFulfilmentReportFollowsTheCatalogueYouMaintain"},
+	{name: "HandleTranslationGaps", kind: ungated, method: "GET",
+		why: "reports only on catalogues the caller may edit, by the same mayEdit the two reports above use; the outsider case is an empty report, proved in TestTheTranslationReportFollowsTheCatalogueYouMaintain"},
+	{name: "HandleSaveItem", kind: gated, want: http.StatusNotFound, method: "POST",
+		body: `{"id":"x","homeCatalog":"CAT","state":"active","texts":{"de":"X"},"approval":{"kind":"none"},"provisionProcess":"p","deprovisionProcess":"d"}`},
+	// A document names its catalogues by id, so an outsider importing one that names a
+	// catalogue they cannot see is refused without anything being written. It is 403
+	// rather than 404 because the id is the document's own: any refusal at all says
+	// that something already holds it, and 403 says no more than that — neither whose
+	// it is nor what is in it.
+	{name: "HandleImportDocument", kind: gated, want: http.StatusForbidden, method: "POST",
+		body: `{"catalogs":[{"id":"CAT","rank":5,"languages":["de"]}]}`},
+	// An export is the whole record, so it is gated on maintaining the catalogue and
+	// not on seeing it; an outsider sees nothing and is answered 404.
+	{name: "HandleExportCatalog", kind: gated, want: http.StatusNotFound, method: "GET", id: true},
+	{name: "HandleExportProducts", kind: ungated, method: "GET",
+		why: "names its products in the query, which this harness does not carry; it is gated per product on maintaining its home, and the outsider case — 404, as the product listing hides it — is proved in TestChosenProductsExportWithTheEdgesBetweenThem"},
+	{name: "HandleImport", kind: gated, want: http.StatusNotFound, method: "POST",
+		body: `<?xml version="1.0" encoding="UTF-8"?><model xmlns="http://www.opengroup.org/xsd/archimate/3.0/" identifier="m"/>`,
+		id:   true},
+	{name: "HandleSetTheme", kind: gated, want: http.StatusNotFound, method: "PUT",
+		body: `{"accent":"#112233"}`, id: true},
+	{name: "HandleGetLogo", kind: gated, want: http.StatusNotFound, method: "GET", id: true},
+	// The body is a real PNG and the header is right, so what the outsider meets is
+	// the gate and not the format check. That order matters for the test and not for
+	// the endpoint: a 415 is decided by the caller's own header and says nothing
+	// about whether the catalogue exists.
+	{name: "HandleSetLogo", kind: gated, want: http.StatusNotFound, method: "PUT",
+		contentType: "image/png", body: "\x89PNG\r\n\x1a\n" + "body", id: true},
+	{name: "HandleDeleteLogo", kind: gated, want: http.StatusNotFound, method: "DELETE", id: true},
+	// A product's picture, gated on the product's home catalogue. The bytes are a
+	// real PNG for the reason the logo's are: what the outsider must meet is the
+	// gate and not the format check.
+	{name: "HandleGetPicture", kind: gated, want: http.StatusNotFound, method: "GET",
+		id: true, product: true},
+	{name: "HandleSetPicture", kind: gated, want: http.StatusNotFound, method: "PUT",
+		contentType: "image/png", body: "\x89PNG\r\n\x1a\n" + "body", id: true, product: true},
+	{name: "HandleDeletePicture", kind: gated, want: http.StatusNotFound, method: "DELETE",
+		id: true, product: true},
+	{name: "HandleMyCatalog", kind: ungated, method: "GET",
+		why: "is the visibility resolution itself: it answers from the caller's own groups and returns 404 when they reach none"},
+}
+
+// TestEveryHandlerIsClassified is the drift half. Reflection gives the handlers
+// that exist; the table gives the ones somebody thought about.
+func TestEveryHandlerIsClassified(t *testing.T) {
+	named := map[string]bool{}
+	for _, g := range catalogGates {
+		named[g.name] = true
+	}
+
+	var missing []string
+	typ := reflect.TypeOf(&Service{})
+	handler := reflect.TypeOf(http.HandlerFunc(nil))
+	for i := 0; i < typ.NumMethod(); i++ {
+		m := typ.Method(i)
+		// A handler is a method assignable to http.HandlerFunc.
+		if m.Type.NumIn() != 3 || m.Type.NumOut() != 0 {
+			continue
+		}
+		fn := reflect.FuncOf([]reflect.Type{m.Type.In(1), m.Type.In(2)}, nil, false)
+		if !fn.ConvertibleTo(handler) {
+			continue
+		}
+		if !named[m.Name] {
+			missing = append(missing, m.Name)
+		}
+	}
+	if len(missing) > 0 {
+		t.Fatalf("handlers with no entry in catalogGates: %v\n"+
+			"Every handler is either gated on the object axis or deliberately not, "+
+			"with the reason written down. A route nobody classified is a route "+
+			"nobody checked.", missing)
+	}
+
+	// And no stale entries: a table naming handlers that no longer exist stops
+	// being read.
+	for _, g := range catalogGates {
+		if _, ok := typ.MethodByName(g.name); !ok {
+			t.Errorf("catalogGates names %q, which is not a handler on this service", g.name)
+		}
+	}
+}
+
+// TestEveryGatedHandlerRefusesAnOutsider is the behaviour half. It asks each one
+// rather than reading it, because a gate is what it does and not what it says.
+func TestEveryGatedHandlerRefusesAnOutsider(t *testing.T) {
+	for _, g := range catalogGates {
+		if g.kind != gated {
+			continue
+		}
+		t.Run(g.name, func(t *testing.T) {
+			s := serviceWithAdmin(t)
+			cat := makeCatalog(t, s, user("usr_owner"))
+			as(t, s.HandleUpdateCatalog, user("usr_owner"), "PATCH",
+				`{"groups":["grp_inside"]}`, "id", cat.ID)
+
+			h := reflect.ValueOf(s).MethodByName(g.name).
+				Interface().(func(http.ResponseWriter, *http.Request))
+
+			body := g.body
+			if body != "" {
+				body = strings.ReplaceAll(body, "CAT", cat.ID)
+			}
+			// The object the path names. A product handler is asked about a product
+			// that exists and belongs to this catalogue, so the 404 it answers with is
+			// the gate's and not the absence of the thing.
+			object := cat.ID
+			if g.product {
+				object = makeItem(t, s, user("usr_owner"), cat.ID)
+			}
+			outsider := &httpapi.Principal{UserID: "usr_out", Roles: []string{"productmanager"},
+				GroupIDs: []string{"grp_elsewhere"}}
+
+			var rec = asTyped(t, h, outsider, g.method, g.contentType, body)
+			if g.id {
+				rec = asTyped(t, h, outsider, g.method, g.contentType, body, "id", object)
+			}
+			if rec.Code != g.want {
+				t.Fatalf("%s gave an outsider %d (%s), want %d",
+					g.name, rec.Code, rec.Body, g.want)
+			}
+		})
+	}
+}
+
+// TestEveryUngatedHandlerSaysWhy: an exemption with no reason is an exemption
+// nobody reviewed.
+func TestEveryUngatedHandlerSaysWhy(t *testing.T) {
+	for _, g := range catalogGates {
+		if g.kind == ungated && g.why == "" {
+			t.Errorf("%s is ungated with no reason given", g.name)
+		}
+		if g.kind == gated && g.why != "" {
+			t.Errorf("%s is gated but carries an exemption reason", g.name)
+		}
+	}
+}
+
+// makeItem saves one product under the given catalogue and returns its id.
+func makeItem(t *testing.T, s *Service, owner *httpapi.Principal, catalogID string) string {
+	t.Helper()
+	rec := as(t, s.HandleSaveItem, owner, "POST",
+		`{"id":"prd_gate","homeCatalog":"`+catalogID+`","state":"active",`+
+			`"texts":{"de":"Produkt"},"approval":{"kind":"none"},`+
+			`"provisionProcess":"p","deprovisionProcess":"d"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save product = %d (%s)", rec.Code, rec.Body)
+	}
+	// And a picture on it, because the read gate is only provable against a product
+	// that has one: asked about a product with no picture, a handler with no gate at
+	// all answers the same 404 as one that refused the caller.
+	rec = asTyped(t, s.HandleSetPicture, owner, "PUT", "image/png", onePNG, "id", "prd_gate")
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("set picture = %d (%s)", rec.Code, rec.Body)
+	}
+	return "prd_gate"
+}

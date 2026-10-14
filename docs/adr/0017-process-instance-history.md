@@ -1,6 +1,7 @@
 # ADR-0017: Retain finished process instances in a history index
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-22
 - **Deciders:** Atlas engine maintainers
 

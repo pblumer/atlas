@@ -2,6 +2,7 @@
 
 - **Status:** Accepted (amended 2026-08-21 — fixed-width and attribute-value
   formats, and a write direction; see the amendment note below)
+- **Implementation:** Landed
 
 > **Amendment (2026-08-21): the text-table family.** This record shipped one format in
 > one direction. MIM has three text-table agents — *Delimited text file*,

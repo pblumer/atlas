@@ -119,6 +119,11 @@ func newInstanceRow(key uint64, v *model.ProcessInstanceValue, defs defIndex) in
 		CompletedAt:    v.CompletedAt,
 		CorrelationKey: v.CorrelationKey,
 		Variables:      []variableView{},
+		// The two ends of a fork link (ADR-0389): both are
+		// zero for an instance that neither continues another nor was continued by one,
+		// which is every instance that has not been forked.
+		PredecessorInstanceKey: v.PredecessorInstanceKey,
+		SuccessorInstanceKey:   v.SuccessorInstanceKey,
 	}
 	// A row whose definition is gone (deleted after the instance ran) keeps its keys
 	// and simply carries no labels.
@@ -317,7 +322,10 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 	raw := query.Get("q")
 	pred, ok := parseVarQuery(raw)
 	if !ok {
-		httpapi.JSON(w, http.StatusOK, []instanceResp{})
+		// A query that parses to nothing matches nothing, and says so in the same
+		// shape as a query that did run — a caller reading .items should not have to
+		// know which branch answered it.
+		httpapi.JSON(w, http.StatusOK, httpapi.PageOf([]instanceResp{}, false))
 		return
 	}
 	out := []instanceResp{}
@@ -325,8 +333,10 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 	scanErr := s.readOffLoop(func(rv *state.ReadView, d defIndex) error {
 		var err error
 		defs = d
-		out, err = searchInstances(rv, d, defKey, raw, pred)
-		return err
+		if out, err = searchInstances(rv, d, defKey, raw, pred); err != nil {
+			return err
+		}
+		return countParkedTokens(rv, out)
 	})
 	switch {
 	case errors.Is(scanErr, errLoopClosing):
@@ -345,5 +355,56 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Archive-State", archive.State)
 		out = append(out, archiveRows(archive.Instances, defs)...)
 	}
-	httpapi.JSON(w, http.StatusOK, out)
+	// This listing said nothing about its own cap until now, and the console filled the
+	// gap by guessing: it printed "showing first 200" whenever it received exactly 200
+	// rows, which cannot tell a search that found 200 from one that found more
+	// (ADR-0378).
+	// The cap is the server's fact, so the server states it.
+	//
+	// A search that came in under the cap found everything there was, so its total is
+	// exact; one that hit the cap reports a floor. Counting past it would mean the scan
+	// the cap exists to avoid.
+	httpapi.JSON(w, http.StatusOK, httpapi.PageOf(out, len(out) >= maxInstanceSearchResults))
+}
+
+// countParkedTokens fills in each running row's incident count, from the instance's
+// own element index.
+//
+// The console used to answer this by bucketing GET /api/v1/incidents — the server's
+// whole list, capped at 5 000 rows — and flagging a hit when its key turned up in the
+// bucket. Past that cap the bucket is a page, so an instance beyond it carried no flag
+// and rendered as a plain "active": the word an operator reads as healthy, on the
+// surface they debug from. Measured on a store holding 5 200 parked instances, 200 of
+// them came back unflagged, and the truncation header that said so was not read
+// (ADR-0378).
+//
+// Here the number is the row's own. A result set is capped at maxInstanceSearchResults,
+// so this is a bounded number of walks, each bounded by one instance's live tokens —
+// the shape ADR-0080 settled for a per-instance question, and the same one the
+// single-instance overlay uses.
+//
+// Finished and archived rows are left alone: an instance that has ended holds no token
+// to park, and an archived row is the exported log's answer rather than this store's.
+func countParkedTokens(rv *state.ReadView, rows []instanceResp) error {
+	for i := range rows {
+		if rows[i].State != "active" || rows[i].Archived {
+			continue
+		}
+		parked := 0
+		err := rv.ElementInstancesOfProcess(rows[i].Key, func(elKey uint64) error {
+			inc, err := rv.GetIncident(elKey)
+			if err != nil {
+				return err
+			}
+			if inc != nil {
+				parked++
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		rows[i].Incidents = &parked
+	}
+	return nil
 }

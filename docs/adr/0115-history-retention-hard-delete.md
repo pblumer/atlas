@@ -1,6 +1,7 @@
 # ADR-0115: History retention — an export-gated, age-based hard delete of finished instances
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-12
 - **Deciders:** Atlas engine team
 

@@ -49,7 +49,7 @@ func TestTheNewestVersionWinsWhicheverOrderTheRegistryHandsThemOver(t *testing.T
 func oneTaskProcess(t *testing.T) *compiler.CompiledProcess {
 	t.Helper()
 	b := compiler.NewBuilder(1, "p", 1)
-	b.AddUserTask("", "", "", "", 0, 0, 1)
+	b.AddUserTask("", compiler.Assignment{Literal: ""}, compiler.Assignment{Literal: ""}, "", 0, 0, 1)
 	cp, err := b.Build()
 	if err != nil {
 		t.Fatalf("build: %v", err)

@@ -50,10 +50,12 @@ func WithExternalURL(origin string) Option {
 // the scheme is how it arrived — honouring X-Forwarded-Proto, which is the one
 // forwarded header consulted anywhere in this package.
 //
-// That is a deliberate difference from httpapi.ClientIP, which refuses
-// X-Forwarded-For. The question there feeds a security decision: which bucket a
-// login attempt is charged to, where a client-supplied value would let an attacker
-// spread a password guess across as many buckets as it likes. The question here
+// That is a deliberate difference from httpapi.ClientIP, which reads
+// X-Forwarded-For only from a proxy listed in --trusted-proxies and refuses it from
+// everyone else (ADR-0448). The question there feeds a security
+// decision: which bucket a login attempt is charged to, where a client-supplied
+// value would let an attacker spread a password guess across as many buckets as it
+// likes. The question here
 // shapes a URL in the caller's own response and reaches nothing: a caller who lies
 // about the scheme is told about a document at a scheme of their choosing, on a
 // host they already addressed, and no other caller is affected — the document

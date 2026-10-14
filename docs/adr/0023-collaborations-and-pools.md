@@ -1,6 +1,7 @@
 # ADR-0023: Collaborations and pools as multi-process deployments
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-22
 - **Deciders:** Atlas engine maintainers
 

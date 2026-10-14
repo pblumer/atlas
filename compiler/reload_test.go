@@ -105,3 +105,84 @@ func TestParseNamedStillRefusesADottedTarget(t *testing.T) {
 		t.Fatalf("ParseNamed error = %v, want the %s rule", err, RuleDottedTarget)
 	}
 }
+
+// nullCallReloadModel calls a FEEL function this build does not have. Today's
+// deploy refuses it (ADR-0388) — the call can only ever evaluate to null, so it
+// cannot be doing what its author meant. But the refusal arrived after models
+// carrying such a call had already been deployed, and one of those took a server
+// down on upgrade: the reload compiled it, the refusal came back as a plain error
+// rather than as a gate refusal, and every other definition and every running
+// instance sat behind a definition that would not load.
+const nullCallReloadModel = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                 xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="probe" isExecutable="true">
+    <startEvent id="start"/>
+    <scriptTask id="s_keys">
+      <extensionElements><zeebe:script expression="= get keys(kunde)" resultVariable="keys"/></extensionElements>
+    </scriptTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="s_keys"/>
+    <sequenceFlow id="f2" sourceRef="s_keys" targetRef="end"/>
+  </process>
+</definitions>`
+
+// TestReloadNamedKeepsAModelWhoseCallCanOnlyBeNull is the regression: a rule the
+// compiler gained after a definition was stored decides whether that definition
+// may be *deployed*, never whether the server may start (ADR-0177).
+func TestReloadNamedKeepsAModelWhoseCallCanOnlyBeNull(t *testing.T) {
+	cp, problems, err := ReloadNamed(379, 1, strings.NewReader(nullCallReloadModel), "probe")
+	if err != nil {
+		t.Fatalf("ReloadNamed: %v", err)
+	}
+	if cp == nil {
+		t.Fatal("ReloadNamed returned no compiled process")
+	}
+	if cp.Key != 379 || cp.ProcessId() != "probe" {
+		t.Fatalf("reloaded key=%d id=%q, want 379/probe", cp.Key, cp.ProcessId())
+	}
+	if !HasErrors(problems) {
+		t.Fatalf("problems = %v, want the null-only call reported", problems)
+	}
+	var said string
+	for _, p := range problems {
+		if p.Rule == RuleNullCall {
+			said = p.Message
+		}
+	}
+	if said == "" {
+		t.Fatalf("no %s problem in %v", RuleNullCall, problems)
+	}
+	// The operator has to be able to find the model and the name to fix. There is no
+	// element anchor here, so the expression itself has to be in the message.
+	for _, want := range []string{"get keys", "get keys(kunde)"} {
+		if !strings.Contains(said, want) {
+			t.Errorf("problem does not mention %q:\n%s", want, said)
+		}
+	}
+}
+
+// TestDeployStillRefusesACallThatCanOnlyBeNull keeps the two halves apart: the
+// reload's tolerance is for definitions that are already running, and must not
+// soften the deploy, which is the moment ADR-0388 exists for.
+func TestDeployStillRefusesACallThatCanOnlyBeNull(t *testing.T) {
+	if _, err := ParseNamed(379, 1, strings.NewReader(nullCallReloadModel), "probe"); err == nil {
+		t.Fatal("a model whose call can only ever be null deployed clean")
+	} else if !strings.Contains(err.Error(), "s_keys") || !strings.Contains(err.Error(), "get keys") {
+		t.Fatalf("refusal names neither the element nor the call: %v", err)
+	}
+}
+
+// TestACleanModelReloadsWithNoNullCallProblem keeps the report meaningful: a
+// definition with nothing wrong reloads with an empty list, so a caller can log on
+// len(problems) > 0 without filtering.
+func TestACleanModelReloadsWithNoNullCallProblem(t *testing.T) {
+	_, problems, err := ReloadNamed(1, 1, strings.NewReader(cleanReloadModel), "dotted")
+	if err != nil {
+		t.Fatalf("ReloadNamed: %v", err)
+	}
+	for _, p := range problems {
+		if p.Rule == RuleNullCall {
+			t.Fatalf("clean model reported a null call: %+v", p)
+		}
+	}
+}

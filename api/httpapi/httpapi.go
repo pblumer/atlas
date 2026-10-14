@@ -17,8 +17,11 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
+
+	"github.com/pblumer/atlas/internal/trustedproxy"
 )
 
 // JSON writes v as the response body with the given status. Encoding errors are
@@ -39,16 +42,31 @@ func Error(w http.ResponseWriter, status int, msg string) {
 	JSON(w, status, map[string]string{"error": msg})
 }
 
-// ClientIP is the host part of a request's remote address, without the source
-// port. Rate limiting buckets on it, so it must be stable across the many
-// connections one caller opens. An address that carries no port is used as-is.
+// ClientIP is the address a request came from, without the source port. Rate
+// limiting buckets on it, so it must be stable across the many connections one
+// caller opens, and every audit line records it.
+//
+// Behind a proxy listed in --trusted-proxies it is the client that proxy named, in
+// X-Forwarded-For or a PROXY protocol header. From anywhere else it is the host
+// part of the connection's own address, and a forwarded header is never read: a
+// client-supplied value would let one caller spread its login attempts across as
+// many throttle buckets as it cares to invent (ADR-0197, ADR-0448).
+// An address that carries no port is used as-is.
 func ClientIP(r *http.Request) string {
+	if ip, ok := trustedproxy.Client(r); ok {
+		return ip
+	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
 	}
 	return host
 }
+
+// Via is the trusted proxy that named ClientIP, or empty where none did. An audit
+// line keeps it beside the client, so a request that came through the balancer can
+// be told from one that came round it.
+func Via(r *http.Request) string { return trustedproxy.Via(r) }
 
 // Principal is an authenticated caller: a person with a session, the service
 // identity of a process the server started itself, or a peer authenticated by a
@@ -60,15 +78,46 @@ type Principal struct {
 	Roles    []string
 	// GroupIDs are the ids of the groups the user belongs to, snapshotted at login
 	// like Roles, so a scope's group grant resolves as a pure check against this
-	// slice without a store read (ADR-0180). A membership change
-	// takes effect on the user's next login.
+	// slice without a store read (ADR-0180).
+	//
+	// The snapshot is kept current rather than left to expire: adding or removing a
+	// member pushes the change into that account's live sessions (ADR-0185), so it
+	// applies from their next request. This comment said "takes effect on the user's
+	// next login" long after that stopped being true, which is the worse kind of
+	// stale documentation — it describes a delay an administrator would then wait
+	// for, and tell a colleague to sign out and in again for no reason.
 	GroupIDs []string
 	// Scope confines a principal authenticated by a machine credential to a named
 	// set of operations, whatever its roles would otherwise permit. Empty for a
 	// person: a session is not scoped, it is who you are. The boundary enforces it
 	// in one place; handlers never read it.
 	Scope string
+	// Reach confines a principal authenticated by a machine credential to named
+	// subjects — today the projects it may see (ADR-0410). Scope says *which
+	// routes*; this says *which subjects*, which no scope could express: a machine
+	// principal has no account to own or be a member of anything, so it would
+	// otherwise hold whatever role the sharing scopes give a caller with none.
+	//
+	// It only ever takes away. Empty means the credential states no reach and
+	// nothing is narrowed, which is what keeps every credential already in the field
+	// working; a credential that must state one is refused at minting instead.
+	Reach []string
 }
+
+// ErrNoSuchPrincipal says a name did not resolve to anybody.
+//
+// It exists because "who is this" fails for two reasons that a caller must be
+// able to tell apart, and an error string cannot say which: the name is not
+// anybody's (the caller's input is wrong) or the store could not be read (the
+// server is). Both were being answered the same way — the approval inbox turned
+// an unreadable user store into "no such person", and an order for a misspelled
+// recipient came back as an internal error — and each is the wrong half of the
+// truth.
+//
+// It lives here rather than beside a resolver because both halves of that
+// mistake are in different packages, and this is the one both already import.
+// Wrap it with %w; compare with errors.Is.
+var ErrNoSuchPrincipal = errors.New("no such principal")
 
 // InGroup reports whether the principal belongs to the group with the given id.
 func (p *Principal) InGroup(groupID string) bool {
@@ -109,4 +158,94 @@ func WithPrincipal(ctx context.Context, p *Principal) context.Context {
 func PrincipalFrom(ctx context.Context) *Principal {
 	p, _ := ctx.Value(principalCtxKey{}).(*Principal)
 	return p
+}
+
+// Page is what a *capped* listing answers with: the rows it could fit, and the facts
+// about the population those rows came out of
+// (ADR-0378).
+//
+// A bare `[]T` cannot carry those facts, and that is not a cosmetic problem. Five
+// times in this codebase a caller took such an array, counted its rows, and rendered
+// the count as a fact about the population — and every one of those survived review,
+// because while the population fits inside the page the two numbers agree. They stop
+// agreeing exactly when the number starts to matter, and because every capped listing
+// here is *ordered*, what falls off is a contiguous slice rather than a sample: a
+// whole class of subject goes missing together and the count reads zero, not low.
+//
+// The guards in api/pagecount_internal_test.go catch three shapes of that mistake in
+// the console's text. This closes the class instead: `response.length` on a Page is
+// `undefined`, `page.items.length` is visibly the page, and `page.total` is the short
+// way to the number — so the wrong answer stops being the one within reach.
+//
+// Only capped listings take this shape. A design-time listing — deployed processes,
+// forms, projects — is bounded by what somebody authored, has no cap to report, and
+// stays a bare array: a wrapper there would carry `truncated: false` and a `total`
+// equal to `len(items)` forever, which is ceremony rather than information.
+type Page[T any] struct {
+	// Items are the rows this response could carry. Never nil: an empty page
+	// serializes as `[]` rather than `null`, because every client iterates it.
+	Items []T `json:"items"`
+	// Total is how many there are. Read TotalExact before believing it.
+	Total int `json:"total"`
+	// TotalExact says whether Total is the population or merely what this request saw.
+	// It is not a hedge. Some totals are a maintained counter — the instance listing's,
+	// which is a point read (ADR-0080/0083) — or a walk the request was making anyway,
+	// as the grant audit already holds every event it filters. Others would cost a walk
+	// of seventy times what serving the page costs: measured at 108 ms against 1.6 ms
+	// for the open-task listing at 6 000 instances. Paying that on every inbox load, for
+	// a number most callers do not read, is the wrong trade; claiming the number anyway
+	// would be the original defect wearing a new field name.
+	//
+	// False therefore means: Total is a floor, this endpoint cannot cheaply do better,
+	// and the endpoint that *can* is named in this listing's API description.
+	TotalExact bool `json:"totalExact"`
+	// Truncated says the cap bit: there are rows this response left out. It is about
+	// the rows and says nothing about Total, which may be exact on a truncated page —
+	// that is the normal case for instances, where the counter knows the population
+	// and the page holds a thousand of it.
+	Truncated bool `json:"truncated"`
+	// NextCursor continues the listing where this page stopped, for the listings that
+	// page. Empty when there is no more, and on the listings that do not page at all.
+	NextCursor string `json:"nextCursor,omitempty"`
+}
+
+// PageOf returns a Page whose total is its own row count, exact exactly when the cap
+// did not bite.
+//
+// That conditional is the whole of it, and it is worth stating because it is the step
+// every one of the defects behind this type skipped: an **un-truncated** page holds the
+// whole population, so counting its rows is counting the thing — free and exact. Only a
+// truncated page is a slice, and only there is the count a floor. Most listings need
+// nothing more than this; [Rows] is for the few that can do better than a floor when
+// truncated, because a maintained counter already knows the answer.
+func PageOf[T any](items []T, truncated bool) Page[T] {
+	return Page[T]{Items: nonNil(items), Total: len(items), TotalExact: !truncated, Truncated: truncated}
+}
+
+// Rows returns a Page whose total comes from something that knows it — a maintained
+// counter, or a walk the request was making anyway — so it stays exact even on a
+// truncated page.
+func Rows[T any](items []T, total int, truncated bool) Page[T] {
+	return Page[T]{Items: nonNil(items), Total: total, TotalExact: true, Truncated: truncated}
+}
+
+// FloorRows returns a Page whose total is a floor whether or not the cap bit — for a
+// listing that cannot even count what it returned as the population, because it
+// filtered rows out after reading them.
+func FloorRows[T any](items []T, seen int, truncated bool) Page[T] {
+	return Page[T]{Items: nonNil(items), Total: seen, Truncated: truncated}
+}
+
+// WithCursor returns p carrying the cursor that continues it.
+func (p Page[T]) WithCursor(cursor string) Page[T] {
+	p.NextCursor = cursor
+	return p
+}
+
+// nonNil keeps an empty page an empty JSON array rather than null.
+func nonNil[T any](items []T) []T {
+	if items == nil {
+		return []T{}
+	}
+	return items
 }

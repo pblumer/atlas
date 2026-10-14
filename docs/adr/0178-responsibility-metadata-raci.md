@@ -1,6 +1,7 @@
 # ADR-0178: Responsibility metadata — RACI on the element, with R derived from the assignment
 
 - **Status:** Proposed
+- **Implementation:** Not started
 - **Date:** 2026-08-24
 - **Deciders:** Atlas maintainers
 

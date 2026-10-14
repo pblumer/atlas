@@ -78,7 +78,7 @@ func TestDeploySpanningTwoModels(t *testing.T) {
 	var instances []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(list, &instances); err != nil || len(instances) == 0 {
+	if err := json.Unmarshal(listRows(t, list), &instances); err != nil || len(instances) == 0 {
 		t.Fatalf("decode instances: %v body=%s", err, list)
 	}
 	_, decs := x.do(http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/decisions", instances[0].Key), "")
@@ -135,7 +135,7 @@ func TestMultiModelDeploySurvivesRestart(t *testing.T) {
 	var instances []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(list, &instances); err != nil || len(instances) == 0 {
+	if err := json.Unmarshal(listRows(t, list), &instances); err != nil || len(instances) == 0 {
 		t.Fatalf("instances after restart: %v body=%s", err, list)
 	}
 	_, decs := x2.do(http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/decisions", instances[0].Key), "")

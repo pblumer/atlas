@@ -32,6 +32,13 @@ const sampleBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MO
 // server, mirroring api/server_test.go's setup.
 func newAtlas(t *testing.T) *httptest.Server {
 	t.Helper()
+	return newAtlasWith(t)
+}
+
+// newAtlasWith is newAtlas with server Options applied, for a test about how the
+// adapter meets a differently configured server.
+func newAtlasWith(t *testing.T, opts ...api.Option) *httptest.Server {
+	t.Helper()
 	dir := t.TempDir()
 	wl, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
 	if err != nil {
@@ -45,7 +52,7 @@ func newAtlas(t *testing.T) *httptest.Server {
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv, err := api.New(proc, store, dir)
+	srv, err := api.New(proc, store, dir, opts...)
 	if err != nil {
 		t.Fatalf("api.New: %v", err)
 	}

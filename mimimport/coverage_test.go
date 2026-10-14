@@ -82,12 +82,28 @@ func TestConvertInvalidInput(t *testing.T) {
 	}
 }
 
-func TestCDATAHelper(t *testing.T) {
-	if got := cdata("<a/>"); !strings.HasPrefix(got, "<![CDATA[") {
-		t.Errorf("plain payload should be wrapped in CDATA, got %q", got)
+// TestPreservedSourceIsNotCDATA guards the fix for the escaping bug: preserved
+// markup must be escaped character data, because a CDATA section would turn an
+// escaped quotation mark into the literal text &#34;.
+func TestPreservedSourceIsNotCDATA(t *testing.T) {
+	res, err := Convert(strings.NewReader(
+		`<SequentialWorkflow><PowerShellActivity ScriptText="Write-Host &quot;hi&quot;"/></SequentialWorkflow>`), "Q")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
 	}
-	if got := cdata("x]]>y"); strings.Contains(got, "CDATA") {
-		t.Errorf("payload with terminator must fall back to escaping, got %q", got)
+	if strings.Contains(string(res.BPMN), "<![CDATA[") {
+		t.Errorf("preserved source must not use CDATA:\n%s", res.BPMN)
+	}
+	sources := mimSources(t, res.BPMN)
+	if len(sources) != 1 {
+		t.Fatalf("want one preserved source, got %d", len(sources))
+	}
+	n, _, err := decodeNode([]byte(sources[0]))
+	if err != nil {
+		t.Fatalf("preserved source did not re-parse: %v\n%s", err, sources[0])
+	}
+	if got, _ := n.attr("ScriptText"); got != `Write-Host "hi"` {
+		t.Errorf("ScriptText = %q, want %q", got, `Write-Host "hi"`)
 	}
 }
 
@@ -132,12 +148,22 @@ func TestCleanEmbeddedHelper(t *testing.T) {
 	}
 }
 
-func TestLastSegmentHelper(t *testing.T) {
-	if got := lastSegment("http://a/b/xaml/"); got != "xaml" {
-		t.Errorf("lastSegment trailing = %q", got)
+func TestClrTypeHelper(t *testing.T) {
+	const asm = "Microsoft.ResourceManagement, Version=4.6.0.0, Culture=neutral"
+	typ, got := clrType("clr-namespace:Microsoft.ResourceManagement.Workflow.Activities;Assembly="+asm, "ApprovalActivity")
+	if want := "Microsoft.ResourceManagement.Workflow.Activities.ApprovalActivity"; typ != want {
+		t.Errorf("type = %q, want %q", typ, want)
 	}
-	if got := lastSegment("plain"); got != "plain" {
-		t.Errorf("lastSegment plain = %q", got)
+	if got != asm {
+		t.Errorf("assembly = %q, want %q", got, asm)
+	}
+	// A namespace that names no .NET type yields neither.
+	if typ, asm := clrType("http://schemas.microsoft.com/winfx/2006/xaml/workflow", "If"); typ != "" || asm != "" {
+		t.Errorf("non-clr namespace = (%q, %q), want empty", typ, asm)
+	}
+	// An assembly-less clr-namespace still names the type.
+	if typ, asm := clrType("clr-namespace:Foo.Bar", "Widget"); typ != "Foo.Bar.Widget" || asm != "" {
+		t.Errorf("assembly-less = (%q, %q)", typ, asm)
 	}
 }
 

@@ -1,6 +1,7 @@
 # ADR-0077: Multi-instance activities (parallel and sequential)
 
 - **Status:** Accepted (amended 2026-08-17: the marker runs on every activity kind)
+- **Implementation:** Landed
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 

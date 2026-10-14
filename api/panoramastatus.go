@@ -28,10 +28,16 @@ import (
 // makes every process the scan did not reach a floor rather than a verdict, which
 // is what panorama.Status.Partial says.
 //
-// It is deliberately the same order as the live overlay's bound
-// (maxRuntimeIncidentScan): the two answer the same question at different
-// altitudes, and a mesh that scanned further than the view an operator drills into
-// would report a problem the drilldown then could not find.
+// The live overlay used to carry a bound of the same order, and this one was set to
+// match it so the Starmap could not report a problem the drilldown would then fail to
+// find. That symmetry is gone, in the direction that is safe: the overlay now walks the
+// whole family off the loop and is exact
+// (ADR-0366), so anything this scan reaches, the
+// drilldown reaches too. What stays true is the other half — a process this scan did
+// not get to is a floor and not a verdict, which is what panorama.Status.Partial says.
+//
+// Lifting this bound the same way is a separate change: the mesh is derived on the loop
+// in one turn, so it is not a cap to remove but a derivation to move off it.
 const maxStatusIncidentScan = 2000
 
 // incidentsByDefinition counts unresolved incidents per process definition, and
@@ -66,6 +72,14 @@ func (s *Server) incidentsByDefinition() (map[uint64]incidentTally, bool, error)
 		}
 		tally := out[pi.ProcessDefKey]
 		tally.Count++
+		// The earliest raise wins, and a record with no moment on it is skipped
+		// rather than treated as the earliest of all: RaisedAt is frozen into the
+		// event when the incident is raised, so a zero is an incident written before
+		// the engine recorded it, and letting the epoch win would date every process
+		// holding one to 1970.
+		if v.RaisedAt > 0 && (tally.OldestRaisedAt == 0 || v.RaisedAt < tally.OldestRaisedAt) {
+			tally.OldestRaisedAt = v.RaisedAt
+		}
 		out[pi.ProcessDefKey] = tally
 		s.recordIncidentSite(sites, pi.ProcessDefKey, v)
 		return nil
@@ -85,7 +99,13 @@ func (s *Server) incidentsByDefinition() (map[uint64]incidentTally, bool, error)
 // there are, and where in its diagram they are parked.
 type incidentTally struct {
 	Count int
-	Sites []panorama.IncidentSite
+	// OldestRaisedAt is when the earliest of them was raised, as Unix nanoseconds,
+	// and zero where none of them carries the moment. It costs nothing to collect —
+	// the scan already reads every incident, and the field is on the record it reads
+	// — and it is the one thing the count cannot say: whether this is a worker that
+	// fell over five minutes ago or a process nobody has come back to since Friday.
+	OldestRaisedAt int64
+	Sites          []panorama.IncidentSite
 }
 
 // maxIncidentSites bounds how many elements one process reports. A process with

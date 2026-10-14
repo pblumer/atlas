@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
@@ -106,6 +107,18 @@ func (p project) effectiveRole(pr *httpapi.Principal, authEnabled bool) string {
 	if pr == nil {
 		return ""
 	}
+	// A credential that states its reach is narrowed to it, before any role is
+	// considered (ADR-0410). Above this line rather than below because the branches
+	// below grant: an admin is Owner everywhere and a deploy agent Viewer
+	// everywhere, so a reach consulted afterwards would narrow nobody who mattered
+	// — which is exactly the escalation ADR-0402 §1 could not close.
+	//
+	// One-way by construction: an empty reach narrows nothing, and a stated one can
+	// only subtract. So this is safe to sit in the function every route's visibility
+	// check already goes through, and there is one filter rather than two.
+	if len(pr.Reach) > 0 && !slices.Contains(pr.Reach, p.ID) {
+		return ""
+	}
 	if pr.HasRole(RoleAdmin) {
 		return ScopeRoleOwner
 	}
@@ -156,6 +169,38 @@ func (p project) effectiveRole(pr *httpapi.Principal, authEnabled bool) string {
 		if best != "" {
 			return best
 		}
+	}
+	// A credential that states a reach is a **viewer inside it**, and this is the half
+	// ADR-0410 shipped without — found by pointing two
+	// installations at each other rather than by reading the code.
+	//
+	// The check at the top of this function subtracts: outside the reach, nothing. That is
+	// all a reach could do, and on its own it filters an empty set — because a credential
+	// has no account, so none of the branches above can grant it anything: ownership is an
+	// account, a membership is an account, and a role is only carried by a credential
+	// minted with one. A landscape token minted the obvious way therefore answered with a
+	// landscape of *zero* nodes, which the estate drew as a peer holding nothing: an empty
+	// installation and a credential that grants nothing, rendered identically.
+	//
+	// So the reach grants as well as bounds — which is what ADR-0402 §1's "one peer
+	// credential per administrative unit" means, and what the deploy agent above already
+	// has wholesale.
+	//
+	// It is a **floor, at the very bottom**, and the position is the whole of its
+	// correctness. Above the ownership and membership branches it would *demote* the
+	// person presenting the credential — an owner inside their own reach would come back
+	// a viewer — so it is reached only when everything that grants has declined. Viewer,
+	// never more: this is a read of a derived picture, and a credential that should do
+	// more carries the role that says so.
+	//
+	// It is below the ownerless guard as well, which is a decision rather than an accident
+	// of order: a project with no owner is legacy state nobody has curated, and widening it
+	// to whoever is named in a credential's reach is exactly the direction not to guess in.
+	// Such a project stays what it has always been — admin only. Every project an
+	// authenticated installation creates has an owner, so this is the legacy case and not
+	// the ordinary one.
+	if len(pr.Reach) > 0 {
+		return ScopeRoleViewer
 	}
 	return ""
 }
@@ -211,7 +256,7 @@ func (s *Server) authorizeProject(r *http.Request, id, minRole string) (project,
 func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	userID := r.PathValue("userId")
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

@@ -13,6 +13,8 @@ import (
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
+	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -859,6 +861,74 @@ func discordFields(rec inboundSubscription, m map[string]any) map[string]any {
 	return out
 }
 
+// --- mail ---
+
+// mailWatchBatch caps one read of a mail watch. Every message is one fetch — and with
+// a body, two — so the bridge's own cap (256) would be a page no provider answers
+// inside the worker budget. Fifty is a busy morning's mail.
+const mailWatchBatch = 50
+
+// mailWatchBudget bounds one read of a mail watch: a few calls under the shared
+// worker budget each, since a Gmail page is one history read and a get per message.
+const mailWatchBudget = 3 * nettimeout.Default
+
+// mailSource reads one folder of a mail Worker's mailbox (ADR-0438).
+// Which mark a message is deduplicated under is the provider's business — one per
+// folder for IMAP and Gmail, whose sequences are logs, one per message for Graph,
+// whose receive time two messages can share — so the source passes the mailbox's own
+// marks through, and the bridge never learns which provider it is reading.
+//
+// What it does decide is who may start a process: a message from a sender the watch
+// does not allow, or without a DMARC pass when the watch requires one, is dropped
+// here. The page's cursor still moves past it, so it is consumed, not deferred.
+type mailSource struct{ mb mail.Mailbox }
+
+func (s mailSource) Read(ctx context.Context, rec inboundSubscription, limit int) ([]inboundEvent, string, error) {
+	if limit <= 0 || limit > mailWatchBatch {
+		limit = mailWatchBatch
+	}
+	ctx, cancel := context.WithTimeout(ctx, mailWatchBudget)
+	defer cancel()
+	page, err := s.mb.WatchSince(ctx, mail.WatchRequest{
+		Folder: rec.MailFolder, Cursor: rec.LastEventID, Limit: limit, IncludeBody: rec.IncludeBody,
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	if page.Gap != "" {
+		logging.Warn(logging.InboundWatchGap, "a mail watch skipped mail it could no longer read: "+page.Gap,
+			slog.String("subscription", rec.ID), slog.String("messageName", rec.MessageName))
+	}
+	out := make([]inboundEvent, 0, len(page.Items))
+	for _, it := range page.Items {
+		if !mailAdmitted(rec, it.Envelope) {
+			continue
+		}
+		fields := it.Envelope.Fields(rec.IncludeBody)
+		fields["eventType"] = "mail.received"
+		out = append(out, inboundEvent{MarkKey: it.MarkKey, Seq: it.Seq, Fields: fields})
+	}
+	return out, page.Cursor, nil
+}
+
+func (s mailSource) Prime(ctx context.Context, rec inboundSubscription) (string, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, mailWatchBudget)
+	defer cancel()
+	cursor, err := s.mb.WatchTip(ctx, rec.MailFolder)
+	if err != nil {
+		return "", false, err
+	}
+	return cursor, true, nil
+}
+
+// mailAdmitted applies a mail watch's sender rules.
+func mailAdmitted(rec inboundSubscription, e mail.Envelope) bool {
+	if !mail.SenderAllowed(e.From, rec.AllowedSenders) {
+		return false
+	}
+	return !rec.RequireDmarcPass || e.Auth.DMARC == "pass"
+}
+
 // validateInboundWatch checks a watch against the kind of worker it names, returning
 // the message to refuse it with or "" when it is usable. The kind is the discriminator
 // (ADR-0214), so this is where a clio watch's subject and a jira watch's query are each
@@ -868,6 +938,10 @@ func discordFields(rec inboundSubscription, m map[string]any) map[string]any {
 // It normalizes in place, the way the worker validators do: an unset cursor field
 // becomes the default rather than a value every reader has to defend against.
 func validateInboundWatch(kind string, rec *inboundSubscription) string {
+	if kind != connectorKindMail && kind != "" &&
+		(rec.MailFolder != "" || rec.IncludeBody || len(rec.AllowedSenders) > 0 || rec.RequireDmarcPass) {
+		return "mailFolder, includeBody, allowedSenders and requireDmarcPass belong to a mail watch"
+	}
 	switch kind {
 	case connectorKindClio:
 		if rec.WatchedSubject == "" {
@@ -947,11 +1021,43 @@ func validateInboundWatch(kind string, rec *inboundSubscription) string {
 		}
 		return ""
 
+	case connectorKindMail:
+		return validateMailWatch(rec)
+
 	case "":
 		return "no worker with that id"
 	default:
-		return "Worker Type " + kind + " has no inbound half: only clio, jira, googlesheets and discord workers can carry a watch"
+		return "Worker Type " + kind + " has no inbound half: only clio, jira, googlesheets, discord and mail workers can carry a watch"
 	}
+}
+
+// validateMailWatch checks a watch on a mail Worker (ADR-0438). It
+// names a folder, defaulted to the inbox, and nothing that belongs to another kind's
+// watch. A mailbox's sequence is the provider's own — a UID, a history id, a receive
+// time with the delivered ids beside it — so there is no cursor field to choose and
+// no lag to tune.
+func validateMailWatch(rec *inboundSubscription) string {
+	if rec.WatchedSubject != "" || rec.Recursive || rec.JQL != "" || rec.SpreadsheetID != "" ||
+		rec.FolderID != "" || rec.ChannelID != "" || rec.WatchRange != "" || rec.HeaderRow {
+		return "watchedSubject, recursive, jql, spreadsheetId, folderId, channelId, watchRange and headerRow " +
+			"belong to another kind's watch; a mail watch names a mailFolder"
+	}
+	if rec.CursorField != "" || rec.LagSeconds != 0 {
+		return "cursorField and lagSeconds belong to a jira or google watch; a mail watch follows its " +
+			"provider's own sequence"
+	}
+	if rec.PollSeconds < 0 {
+		return "pollSeconds cannot be negative"
+	}
+	if rec.MailFolder == "" {
+		rec.MailFolder = mail.DefaultFolder
+	}
+	allowed, err := mail.NormalizeAllowedSenders(rec.AllowedSenders)
+	if err != nil {
+		return err.Error()
+	}
+	rec.AllowedSenders = allowed
+	return ""
 }
 
 // validateGoogleWatch checks a watch on a Google Worker. The subscription names

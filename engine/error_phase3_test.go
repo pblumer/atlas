@@ -102,9 +102,10 @@ func TestWorkerErrorUncaughtRaisesIncident(t *testing.T) {
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle (throw): %v", err)
 	}
-	// The job is consumed and an incident parks the token on the task.
+	// The job leaves the workers' reach and an incident parks the token on the task. The
+	// job itself is kept for the retry a resolve gives it (error_resolve_test.go).
 	if !jobGone(t, h.store, jobType) {
-		t.Error("job survived an uncaught worker error (should be canceled)")
+		t.Error("job still offered to workers after an uncaught worker error")
 	}
 	if incs := incidents(t, h.store); len(incs) != 1 {
 		t.Fatalf("incidents = %d, want 1 (uncaught worker error)", len(incs))

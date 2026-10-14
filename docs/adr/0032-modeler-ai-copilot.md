@@ -1,6 +1,7 @@
 # ADR-0032: In-Modeler AI copilot over the MCP/HTTP surface
 
 - **Status:** Proposed
+- **Implementation:** Partial
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
 

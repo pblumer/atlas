@@ -185,7 +185,7 @@ func TestUserTaskCompletionIsNotAudited(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(raw, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, raw), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v", err)
 	}
 	if len(tasks) == 0 {

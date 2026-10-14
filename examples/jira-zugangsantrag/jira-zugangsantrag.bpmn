@@ -50,7 +50,7 @@
              xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_jira_zugangsantrag" targetNamespace="http://atlas/examples">
   <process id="proc_jira_zugangsantrag" name="Zugangsantrag mit Freigabe (Jira)" isExecutable="true">
-    <documentation>Legt einen Zugangsantrag als Jira-Vorgang an, holt eine menschliche Freigabe in Atlas ein und schaltet den Vorgang weiter oder vermerkt die Ablehnung. Startvariablen kommen aus dem Formular za-antrag; der Worker heisst "jira".</documentation>
+    <documentation>Legt einen Zugangsantrag als Jira-Vorgang an, holt eine menschliche Freigabe in atlas ein und schaltet den Vorgang weiter oder vermerkt die Ablehnung. Startvariablen kommen aus dem Formular za-antrag; der Worker heisst "jira".</documentation>
 
     <startEvent id="start" name="Antrag eingegangen">
       <extensionElements>
@@ -66,7 +66,7 @@
           project="=jiraProjekt"
           issueType="=vorgangstyp"
           summary="=&quot;Zugang zu &quot; + system + &quot; für &quot; + antragsteller"
-          description="=&quot;Antragsteller: &quot; + antragsteller + &quot;\nSystem: &quot; + system + &quot;\nBegründung: &quot; + begruendung + &quot;\n\nAngelegt von Atlas, Prozessinstanz &quot; + processInstanceKey"
+          description="=&quot;Antragsteller: &quot; + antragsteller + &quot;\nSystem: &quot; + system + &quot;\nBegründung: &quot; + begruendung + &quot;\n\nAngelegt von atlas, Prozessinstanz &quot; + processInstanceKey"
           resultVariable="ticket">
           <atlas:jiraField name="labels" value="=[&quot;atlas-demo&quot;]"/>
         </atlas:jiraConnector>
@@ -97,7 +97,7 @@
         <atlas:jiraConnector connector="jira" operation="transition-issue"
           issueKey="=ticket.key"
           transition="=transitionFertig"
-          comment="=&quot;Freigegeben in Atlas.\n\n&quot; + kommentar"/>
+          comment="=&quot;Freigegeben in atlas.\n\n&quot; + kommentar"/>
       </extensionElements>
       <incoming>f_freigegeben</incoming>
       <outgoing>f_abschliessen_join</outgoing>
@@ -108,7 +108,7 @@
       <extensionElements>
         <atlas:jiraConnector connector="jira" operation="add-comment"
           issueKey="=ticket.key"
-          comment="=&quot;Antrag abgelehnt in Atlas.\n\nBegründung: &quot; + kommentar"/>
+          comment="=&quot;Antrag abgelehnt in atlas.\n\nBegründung: &quot; + kommentar"/>
       </extensionElements>
       <incoming>f_abgelehnt</incoming>
       <outgoing>f_ablehnen_join</outgoing>

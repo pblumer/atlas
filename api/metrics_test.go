@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/engine"
@@ -168,6 +169,12 @@ func TestMetricsCarryOnlyAllowlistedLabels(t *testing.T) {
 		"revision":  true,
 		"partition": true, // fixed by the deployment, not by the data
 		"outcome":   true, // a closed enum
+		// The FEEL assistant's round counters: closed lists feelgen declares and
+		// TestTheLabelsAreClosed holds (feelgeneration.go).
+		"format": true,
+		"fault":  true,
+		// The FEEL assistant's prompt version: a constant label, one value per build.
+		"prompt": true,
 		// A histogram's bucket boundaries and a summary's quantiles are chosen in the
 		// code, so their series count is fixed at compile time — the rule is that a
 		// label's values must not come from the data, not that no label may exist.
@@ -423,7 +430,7 @@ func TestMetricsRuntimeGaugesFallWhenInstancesFinish(t *testing.T) {
 	var rows []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	if len(rows) != 2 {
@@ -447,7 +454,7 @@ func TestMetricsReportOpenWork(t *testing.T) {
 	h.deploy()
 
 	exposition := scrape(t, h)
-	for _, name := range []string{"atlas_open_jobs", "atlas_pending_timers", "atlas_message_subscriptions"} {
+	for _, name := range []string{"atlas_open_jobs", "atlas_pending_timers", "atlas_message_subscriptions", "atlas_buffered_messages"} {
 		if got := sampleValue(t, exposition, name); got != 0 {
 			t.Errorf("%s = %v before anything started, want 0", name, got)
 		}
@@ -638,5 +645,127 @@ func TestRecoveryMetricsAbsentBeforeRecovery(t *testing.T) {
 	}
 	if hasMetric(string(body), "atlas_recovery_seconds") {
 		t.Error("recovery cost is reported on a processor that never recovered")
+	}
+}
+
+// TestLeaseAndIncidentMetrics closes the two gaps ADR-0142 carried as open: the lease
+// half of the job protocol, and the count of tokens parked waiting for an operator.
+//
+// The three series here answer questions the existing ones cannot. `jobs_activated`
+// says whether workers are pulling at all — a backlog nobody has taken and a backlog
+// being worked through are the same picture in created-minus-completed. `open_incidents`
+// says how much is parked, which is the number an operator is expected to drive to zero.
+// The lease-timeout counter is exercised at the engine level, where the clock can be
+// moved (engine.TestLeaseTransitionsAreCounted); here it only has to exist, because a
+// series that is absent until the first timeout cannot be alerted on.
+func TestLeaseAndIncidentMetrics(t *testing.T) {
+	dir := t.TempDir()
+	h := newCompactionHarness(t, dir)
+	h.deploy()
+	h.create(2)
+
+	exposition := scrape(t, h)
+	for _, name := range []string{"atlas_jobs_activated_total", "atlas_jobs_lease_timeouts_total"} {
+		if got := sampleValue(t, exposition, name); got != 0 {
+			t.Errorf("%s = %v before any worker pulled, want 0", name, got)
+		}
+	}
+	if got := sampleValue(t, exposition, "atlas_open_incidents"); got != 0 {
+		t.Errorf("open incidents = %v on a healthy engine, want 0", got)
+	}
+
+	var keys []uint64
+	if err := h.store.AllActivatableJobs(func(k uint64) error {
+		keys = append(keys, k)
+		return nil
+	}); err != nil {
+		t.Fatalf("AllActivatableJobs: %v", err)
+	}
+	if len(keys) != 2 {
+		t.Fatalf("activatable jobs = %d, want 2", len(keys))
+	}
+
+	if code, body := h.x.do(http.MethodPost,
+		"/api/v1/jobs/"+strconv.FormatUint(keys[0], 10)+"/activate",
+		`{"worker":"worker-1","leaseMs":60000}`); code != http.StatusOK {
+		t.Fatalf("activate status=%d body=%s", code, body)
+	}
+	after := scrape(t, h)
+	if got := sampleValue(t, after, "atlas_jobs_activated_total"); got != 1 {
+		t.Errorf("jobs activated = %v after one lease, want 1", got)
+	}
+	// A leased job is held, not finished: it leaves the activatable index without
+	// closing, so the open-jobs gauge counts it still.
+	if got := sampleValue(t, after, "atlas_open_jobs"); got != 2 {
+		t.Errorf("open jobs = %v while one of two is leased, want 2", got)
+	}
+
+	// Failing with no retries left parks the token with an incident (ADR-0061), which
+	// is what the gauge is for.
+	if code, body := h.x.do(http.MethodPost, "/api/v1/jobs/"+strconv.FormatUint(keys[1], 10)+"/fail",
+		`{"retries":0,"errorMessage":"nothing left to try"}`); code != http.StatusOK {
+		t.Fatalf("fail status=%d body=%s", code, body)
+	}
+	if got := sampleValue(t, scrape(t, h), "atlas_open_incidents"); got != 1 {
+		t.Errorf("open incidents = %v after one job exhausted its retries, want 1", got)
+	}
+}
+
+// agreedTurnCounts reads the two turn histograms until their counts agree, and fails
+// on the deadline rather than on the first disagreement.
+//
+// A scrape is itself a run-loop turn — collecting the gauges takes the loop — and the
+// registry gathers the two histograms one after the other, in name order: held before
+// wait. A turn that completes between those two reads is counted by the second and not
+// by the first, so on a server doing anything at all the counts differ by one for as
+// long as it takes to read the next sample. Measured on an idle machine, that was four
+// failures in sixteen runs of a test about something else entirely (#1038).
+//
+// Reading again is the fix, and a tolerance of one would not be: the drift this test
+// exists to catch — one histogram fed from somewhere the other is not — never
+// converges, however often it is read, while the reading artefact converges on the
+// next sample. So the property is kept exactly and the false alarm goes.
+
+// TestRunLoopTurnsAreReported: the single writer's own latency reaches the exposition.
+//
+// It is the one duration in Atlas that is about the whole server rather than one
+// request — the loop is the writer *and* the gate every request passes through — and
+// nothing else measures it. The batch counters do not: the two turns that hurt most,
+// publishing a checkpoint and resolving a compaction cut, are not batches at all.
+func TestRunLoopTurnsAreReported(t *testing.T) {
+	dir := t.TempDir()
+	h := newCompactionHarness(t, dir)
+	h.deploy()
+	h.create(3)
+
+	// Every turn has both halves, so the two histograms count the same turns. A drift
+	// would mean one of them is being fed from somewhere the other is not — which is
+	// what this reads until it is satisfied, rather than once. See [agreedTurnCounts].
+	held, waited, exposition := agreedTurnCounts(t, h, 5*time.Second)
+	if held == 0 || waited == 0 {
+		t.Fatalf("held=%v waited=%v turns observed after real work, want both non-zero", held, waited)
+	}
+	// The sums are durations, so they are non-negative — and held is real work, so on a
+	// server that just deployed and started three instances it cannot be exactly zero.
+	if sum := sampleValue(t, exposition, "atlas_runloop_turn_held_seconds_sum"); sum <= 0 {
+		t.Errorf("held seconds sum = %v, want a positive total", sum)
+	}
+}
+
+func agreedTurnCounts(t *testing.T, h *compactionHarness, within time.Duration) (float64, float64, string) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for {
+		exposition := scrape(t, h)
+		held := sampleValue(t, exposition, "atlas_runloop_turn_held_seconds_count")
+		waited := sampleValue(t, exposition, "atlas_runloop_turn_wait_seconds_count")
+		if held == waited {
+			return held, waited, exposition
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("held count %v and wait count %v still disagree after %s; each turn must report both",
+				held, waited, within)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }

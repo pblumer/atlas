@@ -3,6 +3,7 @@
 - **Status:** Accepted (2026-08-27: options 3 and 4 implemented — resource server,
   authorization server, and dynamic client registration off by default. CIMD is not
   built; option 5 waits on O-02)
+- **Implementation:** Landed
 - **Date:** 2026-08-27
 - **Deciders:** Atlas maintainers
 

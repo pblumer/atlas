@@ -466,7 +466,7 @@ func TestRestrictedProcessesAndWorkersDoNotShareAPlaceholder(t *testing.T) {
 // is where its dependency actually points.
 func TestDeriveGraphDrawsDecisionDependencies(t *testing.T) {
 	p := proc(1, "invoice", "Invoice", "a1")
-	p.Decisions = []string{"credit-score"}
+	p.Decisions = []DecisionUse{{DecisionID: "credit-score"}}
 
 	g := DeriveGraph(Landscape{
 		Applications: []Application{app("a1", "Billing")},
@@ -551,9 +551,9 @@ func TestUnresolvedProcessAndWorkerIdsDoNotCollide(t *testing.T) {
 // and it can simply not be registered — and those stay two findings here too.
 func TestDeriveGraphHandlesHiddenAndMissingDecisions(t *testing.T) {
 	hidden := proc(1, "invoice", "Invoice", "a1")
-	hidden.Decisions = []string{"payroll-band"}
+	hidden.Decisions = []DecisionUse{{DecisionID: "payroll-band"}}
 	missing := proc(2, "dunning", "Dunning", "a1")
-	missing.Decisions = []string{"never-registered"}
+	missing.Decisions = []DecisionUse{{DecisionID: "never-registered"}}
 
 	g := DeriveGraph(Landscape{
 		Applications: []Application{app("a1", "Billing")},

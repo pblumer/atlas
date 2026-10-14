@@ -29,6 +29,8 @@
 // nothing about having dropped them; the narrowing, by contrast, is a question
 // somebody asked, so it is kept and named in the stamp.
 
+import { fmtCount, spanText } from "./numfmt.js";
+
 // EXPORT_WIDTH is the exported picture's width in pixels. Everything else — the
 // height, the stamp's type sizes — is derived from it, so one number decides how
 // large the artifact is.
@@ -78,7 +80,26 @@ export function formatObserved(seconds) {
 // scopeText names which landscape this is, in the reader's terms. "The whole
 // landscape" is a claim, so it is only made when nothing narrowed the picture.
 export function scopeText(scope = {}) {
-  if (scope.kind === "filter" && scope.term) return `filtered by “${scope.term}”`;
+  // Element types switched off narrow the picture as surely as a term does, and
+  // they leave no trace on the canvas — no word in a box, no breadcrumb, just fewer
+  // things. So the clause composes with whichever of the three scopes applies
+  // rather than replacing one of them: a reader has to be able to see both that the
+  // picture was drilled and that a kind is missing from what the drilldown found.
+  const off = Array.isArray(scope.hiddenKinds) ? scope.hiddenKinds.filter(Boolean) : [];
+  // The product facets narrow the same way and leave the same absence of a trace,
+  // so they join the same clause rather than starting a second one: a reader
+  // needs one sentence saying what this picture is, not three competing ones.
+  //
+  // Joined to the types by the same "without", because from the file's point of
+  // view they did the same thing — something that was in the landscape is not in
+  // this picture. Which control did it is the next line's business.
+  const facets = [
+    ...(Array.isArray(scope.hiddenStates) ? scope.hiddenStates.filter(Boolean) : []),
+    ...(Array.isArray(scope.hiddenApprovals) ? scope.hiddenApprovals.filter(Boolean) : []),
+  ];
+  const gone = [...off, ...facets];
+  const without = gone.length ? `, without ${listOf(gone)}` : "";
+  if (scope.kind === "filter" && scope.term) return `filtered by “${scope.term}”${without}`;
   if (scope.kind === "drill") {
     const hops = scope.hops === "all" || scope.hops === Infinity ? "any" : scope.hops;
     // The path, when there is one. A picture cropped to one node with no account of
@@ -87,9 +108,16 @@ export function scopeText(scope = {}) {
     // route matters most.
     const via = Array.isArray(scope.via) && scope.via.length
       ? ` (via ${scope.via.join(" › ")})` : "";
-    return `drilled into ${scope.name || "one node"}${via}, within ${hops} hop(s)`;
+    return `drilled into ${scope.name || "one node"}${via}, within ${hops} hop(s)${without}`;
   }
-  return "the whole starmap";
+  return gone.length ? `the starmap${without}` : "the whole starmap";
+}
+
+// listOf joins names the way a sentence does. Two joined by "and" rather than by a
+// comma, because the line is read aloud in a ticket as often as it is scanned.
+function listOf(names) {
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
 // exportName is the file's name. Sortable date first, because the second thing
@@ -99,6 +127,56 @@ export function exportName(extension, at = new Date()) {
     `${pad2(at.getHours())}${pad2(at.getMinutes())}`;
   return `atlas-starmap-${stamp}.${extension}`;
 }
+
+// HEAT_STAMPS is what each heat weighting (ADR-0211 §8) says about itself in a file.
+//
+// A copy of the sentences the key writes on screen, and deliberately a copy rather
+// than an import: this module is the artifact's own vocabulary — it renders a picture
+// that has left the app, and it must not acquire a dependency on the view that drew
+// it. The two are checked against the same expectations in e2e.
+const HEAT_STAMPS = {
+  instances: {
+    heading: "Size is load here, not structure:",
+    leastPhrase: "one running instance",
+    peakPhrase: (peak) => `the busiest one on this landscape, which is running ` +
+      `${fmtCount(peak)}`,
+    floorNote: `Anything with no running instances of its own sits at the floor — a ` +
+      `worker, a decision, and an application too, whose load is on the processes it ` +
+      `holds.`,
+    quiet: `Size is load here, not structure — and nothing was running on this ` +
+      `landscape, so every node is drawn at the same floor.`,
+    absent: `Running instances are drawn under the names that have any, as observed ` +
+      `above. A process with none carries no number.`,
+  },
+  "incident-age": {
+    heading: "Size is age here, not structure:",
+    leastPhrase: "a minute stuck",
+    peakPhrase: (peak) => `the longest-parked one on this landscape, which has been ` +
+      `stuck ${spanText(peak)}`,
+    floorNote: `Everything with nothing parked on it sits at the floor. A process that ` +
+      `parked its first token an hour ago is small beside one that parked its first on ` +
+      `Friday, however many each is holding.`,
+    quiet: `Size is age here, not structure — and nothing on this landscape was parked ` +
+      `at all, so every node is drawn at the same floor. That is the answer, not a ` +
+      `missing one.`,
+    absent: `How long each has been stuck is drawn under the names that have any, ` +
+      `measured at the moment above. A node with nothing parked carries no number.`,
+  },
+  incidents: {
+    heading: "Size is trouble here, not structure:",
+    leastPhrase: "one incident",
+    peakPhrase: (peak) => `the worst one on this landscape, which is holding ` +
+      `${fmtCount(peak)}`,
+    floorNote: `Everything with nothing parked on it sits at the floor, so a healthy ` +
+      `estate reads as a flat one and the exceptions are the only things that stand up.`,
+    quiet: `Size is trouble here, not structure — and nothing on this landscape was ` +
+      `parked at all, so every node is drawn at the same floor. That is the answer, ` +
+      `not a missing one.`,
+    absent: `Open incidents are drawn under the names that have any, as observed ` +
+      `above. A node with none carries no number, and a kind that cannot hold one — a ` +
+      `worker, a decision — never does.`,
+  },
+};
 
 // stampLines is what §10 requires rendered into the artifact, in the order somebody
 // reads it: what this is, when and where it came from, and then everything it is
@@ -135,6 +213,32 @@ export function stampLines(meta = {}) {
       `and this is not a ${spoken.short} document.` });
     for (const loss of spoken.loss || []) lines.push({ text: `— ${loss}` });
   }
+  // And what switching a type off actually cost, which the headline clause states
+  // but does not explain. The second sentence is the part a reader of the file
+  // cannot work out for themselves: what is missing is not only the hidden kind, it
+  // is everything the picture reached *through* one — a process that was on screen
+  // only because a product bound it goes with the products.
+  const off = Array.isArray(meta.scope?.hiddenKinds) ? meta.scope.hiddenKinds.filter(Boolean) : [];
+  if (off.length) {
+    lines.push({ text: `Element types switched off: ${off.join(", ")}. Nothing of those ` +
+      `kinds is drawn, and nothing that was only reachable through one.` });
+  }
+  // And which offerings were put down, said separately from the types above because
+  // what it costs the reader is different. Switching a type off removes a whole
+  // layer and the picture looks like it. Filtering products by a catalogue facet
+  // leaves the catalogues, the processes and the shape of the thing intact and
+  // removes some of the tiles — which is the narrowing a reader is least likely to
+  // notice and most likely to draw a conclusion from. "This catalogue offers four
+  // things" is exactly the sentence this line exists to stop somebody writing.
+  const facetOff = [
+    ...(Array.isArray(meta.scope?.hiddenStates) ? meta.scope.hiddenStates.filter(Boolean) : []),
+    ...(Array.isArray(meta.scope?.hiddenApprovals) ? meta.scope.hiddenApprovals.filter(Boolean) : []),
+  ];
+  if (facetOff.length) {
+    lines.push({ text: `Products switched off: ${facetOff.join(", ")}. Every other ` +
+      `element type is drawn in full, so a catalogue here may offer more than the ` +
+      `products shown under it.` });
+  }
   // A maintenance window is rings on three nodes and nothing else. On screen the
   // panel beside the canvas says what they are; in a file there is no panel, and a
   // picture with three circled nodes and no sentence is a picture whose whole point
@@ -146,9 +250,26 @@ export function stampLines(meta = {}) {
         ? "are needed by them" : "depend on them"} within ${plan.hops} hop(s); ` +
       `one at a time they come to ${plan.sum}.` });
   }
-  if (meta.instances) {
-    lines.push({ text: `Running instances are drawn under the names that have any, as ` +
-      `observed above. A process with none carries no number.` });
+  // Size means a quantity in this file rather than structure, and the reference it is
+  // measured against has to travel with it. On screen the key is beside the picture;
+  // a file pasted into a ticket has no key, and a reader who took these radii for the
+  // structural ones would read the estate exactly backwards.
+  //
+  // `heat` names the weighting; `instances` is what a picture exported before there
+  // was more than one of them carries, and it still means the same thing.
+  const heat = HEAT_STAMPS[meta.heat] || (meta.instances ? HEAT_STAMPS.instances : null);
+  if (heat) {
+    lines.push({ text: meta.peak > 0
+      ? `${heat.heading} A node carrying nothing sits at the floor; ` +
+        `${heat.leastPhrase} is already a step above it, and from there the size ` +
+        `grows with each tenfold rather than with the count itself, so equal steps ` +
+        `of size are equal multiples. The largest node here is ` +
+        `${heat.peakPhrase(meta.peak)}. ${heat.floorNote} The area is therefore not ` +
+        `the tally: the scale answers how many times rather than how much. The row of ` +
+        `circles in the key below is that scale. ` +
+        `Kind is still carried by shape and colour.`
+      : `${heat.quiet} Kind is still carried by shape and colour.` });
+    lines.push({ text: heat.absent });
   }
   // Whether saved-but-undeployed diagrams are in this file, by the same argument the
   // instance counts make: a reader receiving a picture with no drafts on it cannot

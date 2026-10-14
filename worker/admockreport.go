@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pblumer/atlas/limits"
 	"io"
 	"log/slog"
 	"net/http"
@@ -209,7 +210,7 @@ func (r *adMockReporter) post(ctx context.Context, snap ad.MockSnapshot) error {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, limits.Default().ErrorBody))
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("%s answered %s", r.url, resp.Status)
 	}

@@ -60,17 +60,19 @@ func TestListInstancesForwardsScopeAndElement(t *testing.T) {
 	}
 }
 
-// TestListInstancesReturnsAPage covers the response shape: the same
-// {items, truncated, nextCursor} envelope atlas_list_tasks returns, so an agent
-// paging one list does not have to learn a second protocol for the other — and so a
-// capped page says it is capped. A bare array could not: it would report the first
-// page of three hundred thousand instances as though it were all of them.
+// TestListInstancesReturnsAPage covers what the agent is handed: the server's own
+// {items, total, totalExact, truncated, nextCursor} envelope, unchanged.
+//
+// The tool used to build that object itself, out of a bare array and two headers,
+// because an agent handed a bare array cannot tell a complete listing from the first
+// page of three hundred thousand instances. The server answers in that shape now, so
+// the tool's job here is to not get in the way — and this test fails if it starts
+// reshaping the response again.
 func TestListInstancesReturnsAPage(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Instances-Truncated", "true")
-		w.Header().Set("X-Instances-Next-Cursor", "1757248000000000000.281474976710658")
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[{"key":88},{"key":77}]`))
+		_, _ = w.Write([]byte(`{"items":[{"key":88},{"key":77}],"total":300000,"totalExact":true,` +
+			`"truncated":true,"nextCursor":"1757248000000000000.281474976710658"}`))
 	}))
 	defer backend.Close()
 
@@ -84,6 +86,8 @@ func TestListInstancesReturnsAPage(t *testing.T) {
 		Items []struct {
 			Key uint64 `json:"key"`
 		} `json:"items"`
+		Total      int    `json:"total"`
+		TotalExact bool   `json:"totalExact"`
 		Truncated  bool   `json:"truncated"`
 		NextCursor string `json:"nextCursor"`
 	}
@@ -96,8 +100,13 @@ func TestListInstancesReturnsAPage(t *testing.T) {
 	if !page.Truncated {
 		t.Error("a capped page did not report itself as capped")
 	}
+	// The whole point of the total: two rows, and the agent is still told there are
+	// three hundred thousand.
+	if page.Total != 300000 || !page.TotalExact {
+		t.Errorf("total = %d (exact=%v), want 300000 exact", page.Total, page.TotalExact)
+	}
 	if page.NextCursor != "1757248000000000000.281474976710658" {
-		t.Errorf("nextCursor = %q, want the header verbatim", page.NextCursor)
+		t.Errorf("nextCursor = %q, want the server's cursor verbatim", page.NextCursor)
 	}
 }
 
@@ -106,7 +115,7 @@ func TestListInstancesReturnsAPage(t *testing.T) {
 func TestListInstancesUncappedPageOmitsCursor(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[{"key":88}]`))
+		_, _ = w.Write([]byte(`{"items":[{"key":88}],"total":1,"totalExact":true,"truncated":false}`))
 	}))
 	defer backend.Close()
 
@@ -195,13 +204,17 @@ func TestListInstancesRejectsMalformedNumbers(t *testing.T) {
 	}
 }
 
-// TestListInstancesEmptyPageIsAnEmptyList pins the one shape an agent iterating
-// items must never meet: a JSON null. An engine holding no instances answers with an
-// empty array, and so does the page around it.
+// TestListInstancesEmptyPageIsAnEmptyList pins the one shape an agent iterating items
+// must never meet: a JSON null.
+//
+// That guarantee is the server's now — httpapi.Page turns a nil slice into `[]`, and
+// api.TestACappedListingAnswersWithAPage asks the live endpoint for it — so what is
+// checked here is that an empty page survives the trip: the tool neither re-wraps it
+// nor drops the fields that say the listing really is complete.
 func TestListInstancesEmptyPageIsAnEmptyList(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`null`)) // the shape a server could answer with, but should not
+		_, _ = w.Write([]byte(`{"items":[],"total":0,"totalExact":true,"truncated":false}`))
 	}))
 	defer backend.Close()
 
@@ -209,7 +222,7 @@ func TestListInstancesEmptyPageIsAnEmptyList(t *testing.T) {
 	if isErr {
 		t.Fatalf("atlas_list_instances returned tool error: %s", text)
 	}
-	if !strings.Contains(text, `"items":[]`) {
-		t.Errorf("empty page = %s, want an empty items array", text)
+	if !strings.Contains(text, `"items":[]`) || !strings.Contains(text, `"truncated":false`) {
+		t.Errorf("empty page = %s, want an empty items array on a page that says it is complete", text)
 	}
 }

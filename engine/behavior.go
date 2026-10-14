@@ -30,23 +30,33 @@ func handlerKey(vt model.ValueType, intent model.Intent) uint16 {
 
 func (p *Processor) registerHandlers() {
 	p.handlers = map[uint16]func(*ProcessingContext){
-		handlerKey(model.VTProcessInstance, model.IntentActivating):       handleProcessInstanceActivating,
-		handlerKey(model.VTProcessInstance, model.IntentTerminating):      handleProcessInstanceTerminating,
-		handlerKey(model.VTProcessInstance, model.IntentPurging):          handleProcessInstancePurging,
-		handlerKey(model.VTProcessMigration, model.IntentMigrating):       handleProcessMigrating,
-		handlerKey(model.VTProcessInstance, model.IntentConditionRecheck): handleConditionRecheck,
-		handlerKey(model.VTElementInstance, model.IntentActivating):       handleElementActivating,
-		handlerKey(model.VTElementInstance, model.IntentCompleting):       handleElementCompleting,
-		handlerKey(model.VTJob, model.IntentJobCompleted):                 handleJobCompleted,
-		handlerKey(model.VTJob, model.IntentJobFailed):                    handleJobFailed,
-		handlerKey(model.VTJob, model.IntentJobErrorThrown):               handleJobError,
-		handlerKey(model.VTJob, model.IntentJobAssigned):                  handleJobAssigned,
-		handlerKey(model.VTJob, model.IntentJobActivated):                 handleJobActivate,
-		handlerKey(model.VTIncident, model.IntentIncidentResolved):        handleIncidentResolved,
-		handlerKey(model.VTTimer, model.IntentTimerTriggered):             handleTimerTriggered,
-		handlerKey(model.VTTimer, model.IntentTimerStartArm):              handleTimerStartArm,
-		handlerKey(model.VTMessage, model.IntentMessagePublished):         handleMessagePublished,
-		handlerKey(model.VTVariable, model.IntentVariableModify):          handleVariablesModify,
+		handlerKey(model.VTProcessInstance, model.IntentActivating):            handleProcessInstanceActivating,
+		handlerKey(model.VTProcessInstance, model.IntentTerminating):           handleProcessInstanceTerminating,
+		handlerKey(model.VTProcessInstance, model.IntentPurging):               handleProcessInstancePurging,
+		handlerKey(model.VTProcessMigration, model.IntentMigrating):            handleProcessMigrating,
+		handlerKey(model.VTProcessInstance, model.IntentForking):               handleProcessInstanceForking,
+		handlerKey(model.VTVariableIndex, model.IntentVariableReindex):         handleVariableReindex,
+		handlerKey(model.VTProcessInstance, model.IntentConditionRecheck):      handleConditionRecheck,
+		handlerKey(model.VTElementInstance, model.IntentActivating):            handleElementActivating,
+		handlerKey(model.VTElementInstance, model.IntentCompleting):            handleElementCompleting,
+		handlerKey(model.VTJob, model.IntentJobCompleted):                      handleJobCompleted,
+		handlerKey(model.VTJob, model.IntentJobFailed):                         handleJobFailed,
+		handlerKey(model.VTJob, model.IntentJobErrorThrown):                    handleJobError,
+		handlerKey(model.VTJob, model.IntentJobAssigned):                       handleJobAssigned,
+		handlerKey(model.VTJob, model.IntentJobActivated):                      handleJobActivate,
+		handlerKey(model.VTIncident, model.IntentIncidentResolved):             handleIncidentResolved,
+		handlerKey(model.VTEntitlement, model.IntentEntitlementGranted):        handleEntitlementGranted,
+		handlerKey(model.VTEntitlementHistory, model.IntentEntitlementRevoked): handleEntitlementRevoked,
+		handlerKey(model.VTTimer, model.IntentTimerTriggered):                  handleTimerTriggered,
+		handlerKey(model.VTTimer, model.IntentTimerStartArm):                   handleTimerStartArm,
+		handlerKey(model.VTMessage, model.IntentMessagePublished):              handleMessagePublished,
+		handlerKey(model.VTMessage, model.IntentMessageExpiring):               handleMessageExpiring,
+		handlerKey(model.VTVariable, model.IntentVariableModify):               handleVariablesModify,
+		handlerKey(model.VTTriggerReceipt, model.IntentTriggering):             handleTriggering,
+		handlerKey(model.VTTriggerReceipt, model.IntentTriggerReceiptsPruning): handleTriggerReceiptsPruning,
+		handlerKey(model.VTFeedRetention, model.IntentFeedPruning):             handleFeedPruning,
+		handlerKey(model.VTTriggerReceipt, model.IntentDelivering):             handleDelivering,
+		handlerKey(model.VTActionOutcome, model.IntentActionReporting):         handleActionReporting,
 	}
 }
 
@@ -91,6 +101,13 @@ func (p *Processor) registerBehaviors() {
 	// of their own, exactly like a token passing through a none event.
 	p.behaviors[compiler.TypeLinkThrowEvent] = passThroughBehavior{}
 	p.behaviors[compiler.TypeLinkCatchEvent] = passThroughBehavior{}
+	// A none throw event throws nothing and waits for nothing
+	// (ADR-0307), so its execution
+	// is a pass-through too. The element is not therefore pointless: what it exists to
+	// produce is the record of having been reached, which activation and completion write
+	// whatever the behavior does. That is the whole difference between a milestone and a
+	// label on a sequence flow.
+	p.behaviors[compiler.TypeNoneThrowEvent] = passThroughBehavior{}
 	// A conditional catch arms inert and waits until its FEEL condition becomes true
 	// (ADR-0137): OnActivated self-evaluates, else a variable-change re-check drives it to
 	// Completing. Conditional boundaries reuse boundaryEventBehavior with BoundaryConditional.
@@ -124,11 +141,66 @@ func (p *Processor) registerBehaviors() {
 
 // --- command handlers ---
 
+// instanceSeed is everything a new process instance is built from beyond its own key:
+// the record it starts life with, the variables and data objects it is seeded with, and
+// the elements it starts at.
+//
+// It exists because an instance is created in two ways now — a creation command, and a
+// fork continuing another instance's work (ADR-0389) — and
+// both must emit the *identical* events. An instance built by a second code path would
+// be an instance recovery rebuilds differently from the one that ran.
+type instanceSeed struct {
+	// Instance is the record the creation writes: the definition key, plus whichever of
+	// CorrelationKey, ParentElementInstanceKey and PredecessorInstanceKey applies.
+	Instance model.ProcessInstanceValue
+	// Vars are seeded under the instance scope before any element runs; each one's
+	// ScopeKey is rewritten to the new instance.
+	Vars []model.VariableValue
+	// StartElements names the elements to seed a token at, or nil for the process's own
+	// entry points (see startElementsFor).
+	StartElements []int32
+	// DataObjects are values carried in from an instance being continued, by name. A
+	// declared object not named here is seeded the way every ordinary creation seeds
+	// one: its declared initial state, and no value.
+	DataObjects map[string]model.DataObjectValue
+}
+
 // handleProcessInstanceActivating creates the process instance and activates
 // each start event.
 func handleProcessInstanceActivating(c *ProcessingContext) {
-	defKey := c.cmd.Value.process.ProcessDefKey
-	piKey := c.NewKey()
+	// A child creation names the call activity that will resume when it finishes.
+	// If that element instance is already gone, the caller was cancelled between
+	// scheduling this command and running it, and starting the child now would
+	// produce an execution with nobody to report back to — the same orphan a cancel
+	// arriving the other way round produces, from the other side of the batch
+	// boundary (ADR-0284). Read through the transaction so
+	// a teardown applied earlier in this very batch counts.
+	//
+	// Only child creations are gated: an API, timer, message or signal start carries
+	// no parent element and must always be free to start.
+	if parentEl := c.cmd.Value.process.ParentElementInstanceKey; parentEl != 0 {
+		if c.GetElementInstance(parentEl) == nil {
+			return
+		}
+	}
+	key := c.NewKey()
+	if c.cmd.Created != nil {
+		*c.cmd.Created = key
+	}
+	activateInstance(c, key, instanceSeed{
+		Instance:      c.cmd.Value.process,
+		Vars:          c.cmd.StartVars,
+		StartElements: c.cmd.StartElements,
+	})
+}
+
+// activateInstance writes one process instance into existence: its record, its TTL
+// expiry timer, its seed variables and data objects, a token at each element it starts
+// at, and its root-scope event subprocesses. It is the only path that does so — a
+// creation command and a fork both come through here — so whatever an instance is, it
+// is the same thing however it was started.
+func activateInstance(c *ProcessingContext, piKey uint64, seed instanceSeed) {
+	defKey := seed.Instance.ProcessDefKey
 	cp := c.process(defKey)
 
 	// If the definition carries an instance TTL, schedule its self-cleaning expiry
@@ -144,12 +216,10 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 	// The correlation key (empty for a timer or API start) rides in on the create
 	// command so the instance records which message key it began with (ADR-0020);
 	// CreatedAt is stamped from the event timestamp in applyToState.
-	c.AppendProcessInstanceEvent(piKey, model.IntentActivated, model.ProcessInstanceValue{
-		ProcessDefKey:            defKey,
-		CorrelationKey:           c.cmd.Value.process.CorrelationKey,
-		ParentElementInstanceKey: c.cmd.Value.process.ParentElementInstanceKey,
-		ExpiryDueDate:            expiryDue,
-	})
+	activated := seed.Instance
+	activated.State = model.PIActive
+	activated.ExpiryDueDate = expiryDue
+	c.AppendProcessInstanceEvent(piKey, model.IntentActivated, activated)
 	if expiryDue > 0 {
 		// An expiry timer carries no owning element instance (ElementInstanceKey 0) — the
 		// shape handleTimerTriggered dispatches to instance termination (ADR-0085).
@@ -161,11 +231,74 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 		})
 	}
 
+	// Seed the process's constants first (ADR-0454): every instance
+	// carries them, however it was started, and writing them before the start variables
+	// is what makes a start variable — or a message payload, or a forked instance's
+	// value — that names one fall to keepsConstant (context.go) rather than replace it. The
+	// values were canonicalised at deploy, so this parses nothing (I5) and replays the
+	// events it writes (I6).
+	//
+	// The constants whose values the installation holds are not variables of their own:
+	// they are the members of a namespace, read as application.NAME or server.NAME
+	// (ADR-0456), beside the facts the process declares from it. Each
+	// takes the value held on this server, else its fallback, else it is absent; the object
+	// is built once per definition and configuration and frozen into the event like any
+	// other value. A start without a value a person could have supplied was refused before
+	// it got here.
+	consts := cp.Constants()
+	for i := range consts {
+		k := &consts[i]
+		if k.Bound() {
+			continue
+		}
+		c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+			ScopeKey: piKey,
+			Name:     k.Name,
+			Kind:     toVarKind(k.Kind),
+			Bool:     k.Bool,
+			Text:     k.Text,
+		})
+	}
+	for _, ns := range [...]string{compiler.ApplicationNamespace, compiler.ServerNamespace} {
+		if cp.Binds(ns) {
+			c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+				ScopeKey: piKey,
+				Name:     ns,
+				Kind:     model.VarJSON,
+				Text:     c.namespaceValue(defKey, cp, ns),
+			})
+		}
+	}
+
 	// Seed the instance's start variables under its scope before any element runs.
-	for i := range c.cmd.StartVars {
-		v := c.cmd.StartVars[i]
+	for i := range seed.Vars {
+		v := seed.Vars[i]
 		v.ScopeKey = piKey
 		c.AppendVariableEvent(model.IntentVariableCreated, v)
+	}
+
+	// And a declared start variable the start did not supply takes the default the process
+	// declares (ADR-0455), on every path that starts an instance:
+	// the API, MCP, a timer, a message, a signal, a call activity, a CSV row. Supplied
+	// means named, so a start that sends null for it keeps its null. A fork is not a start:
+	// it continues an instance with the values that instance had reached, and adding one it
+	// never had would be a change nobody made. Like the constants, the default was parsed
+	// at deploy, so this parses nothing (I5) and replays the events it writes (I6).
+	if seed.Instance.PredecessorInstanceKey == 0 {
+		decl := cp.StartVariables()
+		for i := range decl {
+			sv := &decl[i]
+			if !sv.HasDefault || suppliesVariable(seed.Vars, sv.Name) {
+				continue
+			}
+			c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+				ScopeKey: piKey,
+				Name:     sv.Name,
+				Kind:     toVarKind(sv.Kind),
+				Bool:     sv.Bool,
+				Text:     sv.Text,
+			})
+		}
 	}
 
 	// Seed the process's declared data objects under the instance scope, each with
@@ -173,15 +306,27 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 	// values in a later slice). Like the start variables, this is deterministic
 	// state mutation from already-decided data, so it replays identically (ADR-0053).
 	for _, d := range cp.DataObjects() {
-		c.AppendDataObjectEvent(model.IntentDataObjectCreated, model.DataObjectValue{
+		obj := model.DataObjectValue{
 			ScopeKey: piKey,
 			Name:     cp.Intern(d.Name),
 			State:    cp.Intern(d.InitialState),
 			Kind:     model.VarNull,
-		})
+		}
+		// A fork carries the value and data state the instance it continues had reached
+		// (ADR-0389). Resetting an object to its declared
+		// initial state would be the one piece of that instance's work silently thrown
+		// away — and the declared state is still the answer for an object the
+		// predecessor never wrote, because the map simply does not name it.
+		if carried, ok := seed.DataObjects[obj.Name]; ok {
+			obj.Kind, obj.Text, obj.Bool = carried.Kind, carried.Text, carried.Bool
+			if carried.State != "" {
+				obj.State = carried.State
+			}
+		}
+		c.AppendDataObjectEvent(model.IntentDataObjectCreated, obj)
 	}
 
-	for _, startID := range startElementsFor(cp, c.cmd.StartElements) {
+	for _, startID := range startElementsFor(cp, seed.StartElements) {
 		node := cp.Node(startID)
 		key := c.NewKey()
 		c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
@@ -197,6 +342,18 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 	// Arm the root-scope event subprocesses: each opens its trigger (message/timer) and
 	// waits, ready to run its handler while the instance runs (ADR-0082).
 	armEventSubprocesses(c, piKey, defKey, piKey, cp.RootEventSubprocesses())
+}
+
+// suppliesVariable reports whether a start's variables name this one. A scan rather than
+// a set: a start carries a handful of variables, and a set would allocate on every start
+// of a process that declares a default.
+func suppliesVariable(vars []model.VariableValue, name string) bool {
+	for i := range vars {
+		if vars[i].Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // startElementsFor decides which root start events a new instance is seeded at.
@@ -262,12 +419,25 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 	if pi == nil {
 		return
 	}
+	terminateInstance(c, piKey, pi, 0)
+}
+
+// terminateInstance is that teardown, with one addition: successor is the instance
+// continuing this one's work when the termination is a fork
+// (ADR-0389), and 0 for every ordinary cancellation. It is
+// written onto the terminal event, so the history record still names where the work
+// went — which is what keeps a forked-away instance distinguishable from a cancelled
+// one, both of which are PITerminated.
+func terminateInstance(c *ProcessingContext, piKey uint64, pi *model.ProcessInstanceValue, successor uint64) {
 	cancelExpiryTimer(c, piKey, pi.ExpiryDueDate)
 	// A terminated instance is a finished one: schedule its history purge like a
 	// completed instance does (ADR-0146), so an instance ended by its TTL, by a bulk
 	// cancel, or by an operator is retained for the same declared time.
 	terminated := *pi
 	terminated.PurgeDueDate = historyPurgeDue(c, terminated.ProcessDefKey)
+	if successor != 0 {
+		terminated.SuccessorInstanceKey = successor
+	}
 	c.ForEachElementInstance(piKey, func(elKey uint64) {
 		if ei := c.GetElementInstance(elKey); ei != nil {
 			terminateChildInstance(c, elKey, ei.BpmnElementType)
@@ -283,6 +453,23 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 		}
 	})
 	c.AppendProcessInstanceEvent(piKey, model.IntentTerminated, terminated)
+	// A cancel tears down what exists now, and the work this instance still had
+	// scheduled has to go with it. That work is not hypothetical: a call activity's
+	// child can be created and its caller cancelled in one batch, which leaves the
+	// child's own start event queued at the moment the teardown cascades into it.
+	// Left in the queue it would activate against a terminated instance a batch
+	// later and rebuild the execution the cancel just removed — an element instance
+	// and an activatable job belonging to nobody
+	// (ADR-0284).
+	//
+	// This is scheduling, not state: commands are never persisted and never
+	// replayed (I6), so dropping them changes what runs next and nothing about what
+	// recovery rebuilds. A waiting timer, subscription or job is left alone, as
+	// before — those self-retire when they fire and find no element instance.
+	if c.p.terminatedThisBatch == nil {
+		c.p.terminatedThisBatch = make(map[uint64]struct{})
+	}
+	c.p.terminatedThisBatch[piKey] = struct{}{}
 }
 
 // handleProcessInstancePurging hard-deletes a finished instance's history (ADR-0115):
@@ -339,6 +526,51 @@ func handleProcessMigrating(c *ProcessingContext) {
 		Actor:              c.cmd.Actor,
 		Reason:             c.cmd.Reason,
 		FromProcessDefKey:  v.FromProcessDefKey,
+	})
+	// The instance now runs a version that may declare other variables searchable than
+	// the one that stamped its values (ADR-0244). Without this it would be missing from
+	// the index its new version's search reads — a wrong answer, not a slow one, because
+	// a declared name is answered from the index alone.
+	appendVariableIndexChanges(c, v.ProcessInstanceKey, to)
+}
+
+// handleVariableReindex brings one instance's variable-index membership back in line
+// with what its own process declares — the repair an operator asks for over instances
+// that were migrated before the migration itself did this, or after a declaration was
+// added to a version that already had instances on it. It emits nothing for an instance
+// already in step, so running it twice writes nothing the second time.
+func handleVariableReindex(c *ProcessingContext) {
+	piKey := c.cmd.Key
+	pi := c.GetProcessInstance(piKey)
+	if pi == nil {
+		return // finished and purged, or never there
+	}
+	cp := c.process(pi.ProcessDefKey)
+	if cp == nil {
+		return // the definition was undeployed between the API's check and this command
+	}
+	appendVariableIndexChanges(c, piKey, cp)
+}
+
+// appendVariableIndexChanges compares an instance's root-scope variables against what
+// cp declares searchable and emits one event per variable whose membership differs.
+//
+// Only the root scope is asked, because only it is indexed: an activity-local scope is
+// scratch that disappears when the activity completes (ADR-0068). The comparison is by
+// name alone, exactly as the write path stamps it — whether a value can be indexed at
+// all (a scalar, short enough) is the index's own question, asked where the entry is
+// written, so that one answer cannot drift into two.
+func appendVariableIndexChanges(c *ProcessingContext, piKey uint64, cp *compiler.CompiledProcess) {
+	c.VariablesOfScope(piKey, func(v model.VariableValue) {
+		want := cp.IsSearchableVariable(v.Name)
+		if want == v.Indexed {
+			return
+		}
+		c.AppendVariableIndexEvent(model.VariableIndexValue{
+			ProcessInstanceKey: piKey,
+			Name:               v.Name,
+			Indexed:            want,
+		})
 	})
 }
 
@@ -401,13 +633,47 @@ func isEventSubTrigger(ei *model.ElementInstanceValue) bool {
 func handleElementActivating(c *ProcessingContext) {
 	ei := &c.cmd.Value.element
 	c.AppendElementEvent(c.cmd.Key, model.IntentActivated, *ei)
+	// The token exists here and its behavior has not run yet, which is the one point
+	// where stopping it costs nothing: the element instance is on the log and can
+	// carry an incident, and nothing downstream has been set in motion
+	// (ADR-0272).
+	if c.p.chargeToken(ei.TokenID) {
+		parkOverBudget(c, c.cmd.Key, ei)
+		return
+	}
+	runElementBehavior(c, c.cmd.Key, ei)
+}
+
+// parkOverBudget stops a token that has used up its execution budget: the element
+// stays Activated, its behavior never runs, and an incident says why. Resolving it
+// runs the behavior — resumeParkedElement dispatches on the incident's reason, which
+// is what makes "this element never got to start" distinguishable from every other
+// way an element can be parked (ADR-0272).
+func parkOverBudget(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		ElementId:          ei.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            c.p.overBudgetMessage(),
+		Reason:             model.IncidentOverBudget,
+	})
+}
+
+// runElementBehavior is what an activated element does: seed its iterations if it is
+// a multi-instance body, otherwise map its inputs, run its behavior and arm its
+// boundary events. Split out of handleElementActivating because an element the
+// execution budget stopped runs exactly this, later, when its incident is resolved —
+// so the resumed element starts the same way a fresh one would rather than a
+// second, drifting copy of it.
+func runElementBehavior(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	// A multi-instance body seeds its iterations rather than running the node's real
 	// behavior; its per-iteration data-input associations and io-mappings apply on
 	// each inner instance, not on the body (ADR-0077). An inner instance (role 2)
 	// falls through to the normal path and runs the real behavior.
 	if node := c.process(ei.ProcessDefKey).Node(ei.ElementId); node.MultiInstance >= 0 && ei.MultiInstance != miInner {
-		seedMultiInstance(c, c.cmd.Key, ei)
-		armBoundaryEvents(c, c.cmd.Key, ei)
+		seedMultiInstance(c, key, ei)
+		armBoundaryEvents(c, key, ei)
 		return
 	}
 	// Read the activity's data-input associations into process variables before its
@@ -419,12 +685,19 @@ func handleElementActivating(c *ProcessingContext) {
 	// isEventSubTrigger.
 	if !isEventSubTrigger(ei) {
 		applyDataInputAssociations(c, ei)
-		if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
-			applyInputMappings(c, c.cmd.Key, ei)
+		if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) && !applyInputMappings(c, key, ei) {
+			// An input past the budget was refused with an incident on this element.
+			// Running the behaviour anyway would work from an input that is not there —
+			// a worker would be handed a job missing what the model said to give it — and
+			// completing later would clear the incident with the element. So the element
+			// stays activated, exactly as the execution budget leaves one (ADR-0272), and
+			// resolving re-runs this activation
+			// (ADR-0294).
+			return
 		}
 	}
-	c.p.behavior(ei.BpmnElementType).OnActivated(c, c.cmd.Key, ei)
-	armBoundaryEvents(c, c.cmd.Key, ei)
+	c.p.behavior(ei.BpmnElementType).OnActivated(c, key, ei)
+	armBoundaryEvents(c, key, ei)
 }
 
 // Multi-instance element-instance roles (ADR-0077), mirrored on
@@ -527,8 +800,15 @@ func handleElementCompleting(c *ProcessingContext) {
 		// Re-evaluating them over the body scope — which holds no round's raw result —
 		// evaluated to null, and wrote that null into the enclosing scope, fabricating
 		// a variable no run produced and overwriting any real value of that name.
-		if c.process(ei.ProcessDefKey).Node(ei.ElementId).Type != compiler.TypeCallActivity && ei.MultiInstance != miBody {
-			applyOutputMappings(c, c.cmd.Key, ei)
+		if c.process(ei.ProcessDefKey).Node(ei.ElementId).Type != compiler.TypeCallActivity && ei.MultiInstance != miBody &&
+			!applyOutputMappings(c, c.cmd.Key, ei) {
+			// An output past the budget was refused with an incident on this element.
+			// Completing it would clear that incident and drop the result the mapping was
+			// meant to promote, leaving an activity that looks finished and produced
+			// nothing (ADR-0294). The local scope is not dropped
+			// either: it still holds the raw result the mapping reads, and resolving
+			// re-runs this completion over it.
+			return
 		}
 		// A loop's element instances drop their own scope further down this same
 		// command, and it must not happen before the loop has read it: an iteration's
@@ -586,39 +866,47 @@ func applyDataOutputAssociations(c *ProcessingContext, ei *model.ElementInstance
 		name := cp.Intern(a.DataObject)
 		cur := c.GetDataObject(ei.ProcessInstanceKey, name)
 
+		// One arrow is one fact (invariant I6), whatever the number of members it sets:
+		// the writes accumulate into a single value here and are appended once below.
+		// An arrow with no writes is ADR-0058's state-only transition, and falls out of
+		// the same loop running zero times over the object's current value.
 		out := model.DataObjectValue{ScopeKey: ei.ProcessInstanceKey, Name: name}
-		switch {
-		case a.Value != nil:
-			result, err := a.Value.Eval(bindInputs(c, a.Value.Inputs(), ei.ProcessInstanceKey))
+		if cur != nil {
+			out.Kind, out.Bool, out.Text = cur.Kind, cur.Bool, cur.Text
+		}
+		for j := range a.Writes {
+			w := &a.Writes[j]
+			result, err := w.Value.Eval(bindInputs(c, w.Value.Inputs(), ei.ProcessInstanceKey))
 			if err != nil {
 				// Incidents are not modeled yet; FEEL is null-propagating, so a failed
 				// evaluation writes null rather than halting the processor.
 				result = expr.Null
 			}
-			if a.TargetPath >= 0 {
-				// Write only one member of the (structured) object, keeping the rest
-				// (ADR-0060): read the current JSON, set the member to the result, and
-				// write the merged canonical value back.
-				leaf, ok := expr.ToJSON(result)
-				if !ok {
-					leaf = "null"
-				}
-				current := ""
-				if cur != nil && cur.Kind == model.VarJSON {
-					current = cur.Text
-				}
-				if merged, err := setJSONMember(current, cp.Intern(a.TargetPath), leaf); err == nil {
-					out.Kind, out.Text = model.VarJSON, merged
-				} else if cur != nil {
-					out.Kind, out.Bool, out.Text = cur.Kind, cur.Bool, cur.Text
-				}
-			} else {
+			if w.TargetPath < 0 {
+				// No path: this write replaces the whole value, including whatever an
+				// earlier write on the same arrow put there (ADR-0058).
 				kind, b, text := expr.Classify(result)
 				out.Kind, out.Bool, out.Text = toVarKind(kind), b, text
+				continue
 			}
-		case cur != nil:
-			// State-only transition: keep the object's current value.
-			out.Kind, out.Bool, out.Text = cur.Kind, cur.Bool, cur.Text
+			// Write only one member of the (structured) object, keeping the rest
+			// (ADR-0060): read the value built so far, set the member to the result,
+			// and keep the merged canonical value. Reading what this loop has built
+			// rather than the stored object is what lets several members of one object
+			// be set from one arrow — and with one write the two are the same thing.
+			leaf, ok := expr.ToJSON(result)
+			if !ok {
+				leaf = "null"
+			}
+			current := ""
+			if out.Kind == model.VarJSON {
+				current = out.Text
+			}
+			if merged, err := setJSONMember(current, cp.Intern(w.TargetPath), leaf); err == nil {
+				out.Kind, out.Bool, out.Text = model.VarJSON, false, merged
+			}
+			// A merge that fails leaves the value as it stands — the same nothing an
+			// unmergeable write did before, now stated once rather than per write.
 		}
 
 		if a.TargetState >= 0 {
@@ -698,10 +986,13 @@ func handleJobCompleted(c *ProcessingContext) {
 	// claims, which is the whole of what a service task produces
 	// (ADR-0219).
 	c.producer = job.ElementInstanceKey
+	refused := false
 	for i := range c.cmd.StartVars {
 		v := c.cmd.StartVars[i]
 		v.ScopeKey = resultScope
-		c.AppendVariableEvent(model.IntentVariableCreated, v)
+		if !c.AppendVariableEvent(model.IntentVariableCreated, v) {
+			refused = true
+		}
 	}
 
 	// A business rule task's worker evaluates its decision off the processor
@@ -714,6 +1005,14 @@ func handleJobCompleted(c *ProcessingContext) {
 		dv.ProcessInstanceKey = job.ProcessInstanceKey
 		dv.ElementInstanceKey = job.ElementInstanceKey
 		c.AppendDecisionEvaluationEvent(dv)
+	}
+
+	// A shop send task states how an action ended (ADR-0429 §4); the outcome rides
+	// the completion and is appended here, in the same batch, stamped with the
+	// instance that carried the action out.
+	if o := c.cmd.Value.actionOutcome; o.Valid() {
+		o.InstanceKey = job.ProcessInstanceKey
+		appendActionOutcome(c, o)
 	}
 
 	// An operator forced this completion rather than a worker reporting real work
@@ -732,6 +1031,15 @@ func handleJobCompleted(c *ProcessingContext) {
 	}
 
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
+		// A result past the variable budget was refused above, with an incident on this
+		// element. Completing anyway would take that incident with it — terminating an
+		// element clears the one it carries — and the task would look successful while
+		// its result was never written. So the element stays activated: the job is done
+		// and cannot be redone, and resolving the incident is what moves it on
+		// (ADR-0294).
+		if refused {
+			return
+		}
 		// An agent-driven ad-hoc's round job is not a step that finishes its element: it
 		// decides the next one. When it comes back naming tools, the container activates
 		// them and stays Activated; only a completion naming none falls through to the
@@ -826,21 +1134,40 @@ func handleJobFailed(c *ProcessingContext) {
 	// also what stops the reporting worker from reporting twice, since a fenced report
 	// requires a live lease.
 	job.LeaseExpiresAt = 0
+	recordJobFailure(c, c.cmd.Key, job, c.cmd.RetryBackoff, c.cmd.Value.incident.Message, model.IncidentUnclassified)
+}
+
+// recordJobFailure emits a failed job — its retries already set and its lease already
+// released — and what its retry count makes of it: another attempt, held off by backoff
+// nanoseconds when that is positive, while it has retries left; an incident with message
+// and reason once it has none. It is a worker's failure report (handleJobFailed) and also
+// a worker error nothing catches (handleJobError), which is a failure with no retries
+// left: the job stays, and resolving the incident is the retry (ADR-0061).
+func recordJobFailure(c *ProcessingContext, key uint64, job *model.JobValue, backoff int64, message string, reason model.IncidentReason) {
 	// A worker-requested retry backoff (ADR-0111): with retries left and a positive delay,
 	// hold the job off the activatable index (RetryDueDate keeps PutJob from indexing it) and
 	// arm a retry timer that re-activates it when the backoff elapses. The due date is read
 	// from the clock here and frozen into the event (I6). A zero backoff is the pre-0111 path.
-	if job.Retries > 0 && c.cmd.RetryBackoff > 0 {
-		job.RetryDueDate = c.Now() + c.cmd.RetryBackoff
-		c.AppendJobEvent(c.cmd.Key, model.IntentJobFailed, *job)
+	if job.Retries > 0 && backoff > 0 {
+		job.RetryDueDate = c.Now() + backoff
+		c.AppendJobEvent(key, model.IntentJobFailed, *job)
 		c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
 			ProcessInstanceKey: job.ProcessInstanceKey,
-			JobKey:             c.cmd.Key,
+			JobKey:             key,
 			DueDate:            job.RetryDueDate,
 		})
 		return
 	}
-	c.AppendJobEvent(c.cmd.Key, model.IntentJobFailed, *job)
+	c.AppendJobEvent(key, model.IntentJobFailed, *job)
+	// With retries left and nothing holding it, the job is back on the activatable index
+	// the moment this batch is durable, and a worker long-polling its type must be told —
+	// every other path that puts a job there does (creation, a backoff or a lease
+	// running out, a resolved incident). Without it a waiting worker slept out its whole
+	// poll while the job it was waiting for sat there, which is the dead time releasing
+	// the lease above was meant to remove.
+	if job.Retries > 0 && job.RetryDueDate == 0 {
+		c.NotifyJobAvailable(job.JobType)
+	}
 	if job.Retries <= 0 {
 		var elementId int32
 		if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
@@ -849,10 +1176,11 @@ func handleJobFailed(c *ProcessingContext) {
 		c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
 			ProcessInstanceKey: job.ProcessInstanceKey,
 			ElementInstanceKey: job.ElementInstanceKey,
-			JobKey:             c.cmd.Key,
+			JobKey:             key,
 			ElementId:          elementId,
 			RaisedAt:           c.Now(),
-			Message:            c.cmd.Value.incident.Message,
+			Message:            message,
+			Reason:             reason,
 		})
 	}
 }
@@ -930,16 +1258,51 @@ func expireJobLease(c *ProcessingContext, jobKey uint64) {
 // handleJobError handles a worker throwing a BPMN error from its job (ADR-0089): it
 // cancels the job (the token neither retries nor completes) and propagates the error from
 // the job's element to the nearest matching error handler. A matching error boundary on the
-// service task — or an enclosing scope — catches it; uncaught, it raises an incident. The
-// thrown code rides in the command's incident.Message (a transient command carrier).
-// Throwing on a job that is gone is a no-op.
+// service task — or an enclosing scope — catches it, and an error leaving a call
+// activity's child goes on to the caller. The thrown code rides in the command's
+// incident.Message (a transient command carrier). Throwing on a job that is gone is a
+// no-op.
+//
+// An error with nowhere to go is the exception: the job is kept rather than canceled,
+// its retries spent, under a job incident naming the code. That is the shape a failed
+// job with no retries left has, so resolving it is the same genuine retry — the job
+// goes back to the workers (ADR-0061). Canceling it instead left the incident pointing
+// at nothing, and resolving that cleared the incident and left the token on the task
+// with neither a job nor an incident.
 func handleJobError(c *ProcessingContext) {
 	job := c.GetJob(c.cmd.Key)
 	if job == nil {
 		return
 	}
+	code := c.cmd.Value.incident.Message
+	// An operator forced this throw rather than a worker reporting it (ADR-0159): who,
+	// why and which code are frozen into the audit history ahead of whatever the throw
+	// does, caught or not, so replay rebuilds the trail without re-running the command.
+	if c.cmd.Manual {
+		c.AppendOperatorActionEvent(model.OperatorActionValue{
+			ProcessInstanceKey: job.ProcessInstanceKey,
+			ElementInstanceKey: job.ElementInstanceKey,
+			JobKey:             c.cmd.Key,
+			Kind:               model.OperatorActionThrowJobError,
+			Actor:              c.cmd.Actor,
+			Reason:             c.cmd.Reason,
+			ErrorCode:          code,
+		})
+	}
+	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil && errorUncaughtAtRoot(c, job.ElementInstanceKey, ei, code) {
+		// Given back as a failing worker gives it back (handleJobFailed): the lease is
+		// released, Assignee left alone.
+		job.Retries = 0
+		job.LeaseExpiresAt = 0
+		msg := unhandledErrorMessage(code)
+		if c.cmd.ErrorMessage != "" {
+			msg += ": " + c.cmd.ErrorMessage
+		}
+		recordJobFailure(c, c.cmd.Key, job, 0, msg, model.IncidentUnhandledError)
+		return
+	}
 	c.AppendJobEvent(c.cmd.Key, model.IntentJobCanceled, *job)
-	propagateError(c, job.ElementInstanceKey, c.cmd.Value.incident.Message)
+	propagateError(c, job.ElementInstanceKey, code)
 }
 
 // handleIncidentResolved clears an incident and resumes the work it blocked
@@ -957,7 +1320,7 @@ func handleIncidentResolved(c *ProcessingContext) {
 	if inc.JobKey == 0 {
 		// A timer incident carries no job (ADR-0064): re-arm the parked catch/boundary
 		// element instead of re-creating one.
-		rearmTimerElement(c, inc.ElementInstanceKey)
+		resumeParkedElement(c, inc.ElementInstanceKey, inc.Reason)
 		return
 	}
 	job := c.GetJob(inc.JobKey)
@@ -969,11 +1332,13 @@ func handleIncidentResolved(c *ProcessingContext) {
 	c.NotifyJobAvailable(job.JobType)
 }
 
-// rearmTimerElement re-runs the timer arm for a parked catch/boundary element
-// whose FEEL schedule failed and raised an incident (ADR-0064). Re-evaluated
-// against the instance's current variables, the schedule either resolves — a
-// timer is created and the token waits normally — or fails again, raising a fresh
-// incident (resolve is a genuine retry, not a blind clear).
+// resumeParkedElement resumes a parked element whose incident carries no job: it
+// re-runs whatever the element was doing when it stopped. That began as re-arming a
+// catch/boundary timer whose FEEL schedule failed (ADR-0064) and now covers a
+// mockup task's next attempt (ADR-0120), a runaway loop's next runs (ADR-0133) and a
+// gateway's routing decision (ADR-0273). In every case the
+// work is *re-run*, not skipped: it either succeeds and the token moves on, or fails
+// again and raises a fresh incident. Resolve is a genuine retry, never a blind clear.
 //
 // The element cannot actually be gone here, despite what the check below reads
 // like: this is only reached from handleIncidentResolved once it has found the
@@ -981,13 +1346,22 @@ func handleIncidentResolved(c *ProcessingContext) {
 // so an incident never outlives its element. The check stays because the processor
 // loop has no recover() — if that invariant ever shifts, returning is a no-op while
 // dereferencing nil would take the whole partition down with it.
-func rearmTimerElement(c *ProcessingContext, elKey uint64) {
+func resumeParkedElement(c *ProcessingContext, elKey uint64, reason model.IncidentReason) {
 	ei := c.GetElementInstance(elKey)
 	if ei == nil {
 		return
 	}
 	cp := c.process(ei.ProcessDefKey)
 	if cp == nil {
+		return
+	}
+	// An element the execution budget stopped never ran at all, whatever its type, so
+	// running it now is the whole of the resume (ADR-0272). The
+	// reason says so outright; every case below infers the resume from the node type,
+	// which only works while a node type has one way of getting stuck.
+	switch reason {
+	case model.IncidentOverBudget, model.IncidentTooManyIterations:
+		runElementBehavior(c, elKey, ei)
 		return
 	}
 	// A parked runaway loop carries a job-less incident too (ADR-0133, amended), on the
@@ -998,6 +1372,35 @@ func rearmTimerElement(c *ProcessingContext, elKey uint64) {
 	}
 	node := cp.Node(ei.ElementId)
 	switch node.Type {
+	case compiler.TypeUserTask:
+		// A user task whose assignment expression could not be resolved parked
+		// without a job. Re-running the activation re-evaluates it against the
+		// variables as they are now, which is the whole of the retry: it either
+		// addresses somebody and creates the job, or parks again on a fresh
+		// incident. It never creates a job addressed to nobody.
+		c.p.behavior(ei.BpmnElementType).OnActivated(c, elKey, ei)
+	case compiler.TypeExclusiveGateway, compiler.TypeInclusiveGateway:
+		// A gateway that could not route parked holding its token
+		// (ADR-0273). Resolving re-runs the decision from
+		// the same entry point the arrival ran, so the retry is genuine: a gateway
+		// that still cannot route parks again on a fresh incident instead of
+		// quietly clearing, and one that now can takes its flow exactly once.
+		c.p.behavior(ei.BpmnElementType).OnActivated(c, elKey, ei)
+	case compiler.TypeCallActivity:
+		// A call activity whose target only its triggers can start parked without
+		// creating the child (ADR-0426). Re-running the activation resolves the
+		// target again, as it is now: a target that gained a none start or was
+		// redirected is called, one that still cannot say where to begin parks again.
+		c.p.behavior(ei.BpmnElementType).OnActivated(c, elKey, ei)
+	case compiler.TypeErrorEndEvent:
+		// An error end parks only when nothing caught its error (ADR-0089), so an
+		// incident recorded before IncidentUnhandledError existed is that one too.
+		// Resolving throws the error again rather than clearing the incident and
+		// leaving the token behind none: a handler that has come into reach catches
+		// it, and one still missing parks it again on a fresh incident.
+		if reason == model.IncidentUnhandledError || reason == model.IncidentUnclassified {
+			propagateError(c, elKey, cp.ErrorEnd(node.Detail).ErrorCode)
+		}
 	case compiler.TypeMockupTask:
 		// A resolved mockup-failure incident (ADR-0120): re-arm a fresh attempt. The
 		// new timer key drives an independent duration and failure draw, so a retry can
@@ -1097,7 +1500,7 @@ func handleTimerTriggered(c *ProcessingContext) {
 // occurrence that just fired and either fires it (arming the next occurrence) or, if the FEEL
 // can't be re-evaluated against the instance's current variables, raises the ADR-0064 job-less
 // incident and parks — instead of silently ceasing to recur (ADR-0111). Resolving the incident
-// re-arms the element (rearmTimerElement).
+// re-arms the element (resumeParkedElement).
 func fireRecurringOrIncident(c *ProcessingContext, timer model.TimerValue, ei *model.ElementInstanceValue, raw compiler.TimerSchedule, fire func(*ProcessingContext, model.TimerValue, *model.ElementInstanceValue, compiler.TimerSchedule)) {
 	sched, err := resolveScheduleErr(c, raw, ei.ProcessInstanceKey)
 	if err != nil {
@@ -1329,8 +1732,101 @@ func handleMessagePublished(c *ProcessingContext) {
 		}
 		c.AppendInboundDeliveryEvent(src)
 	}
+	ttl := c.cmd.MessageTTL
+	id := c.cmd.MessageID
+	if ttl <= 0 {
+		// No time to live: ADR-0020's publish, a no-op when nothing matches, and an id
+		// means nothing without a lifetime to remember it for.
+		correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
+		return
+	}
+	// A message with an id that is still remembered is the same message again: a
+	// sender's retry. It is dropped whether the first copy waits in the buffer or was
+	// delivered at once (ADR-0370 idempotency).
+	if id != "" {
+		taken, err := c.tx.MessageIdTaken(pub.MessageName, pub.CorrelationKey, id)
+		if err != nil {
+			c.p.fail(err)
+			return
+		}
+		if taken {
+			return
+		}
+	}
 	// An API publish has no sending instance, so the recorded flow's sender is 0.
-	correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
+	delivered := correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
+	// The expiry is read from the clock here and frozen into the event, so replay
+	// keeps the message exactly as long as the live run did (I6).
+	now := c.Now()
+	msg := model.MessageValue{
+		MessageName:    pub.MessageName,
+		CorrelationKey: pub.CorrelationKey,
+		MessageId:      id,
+		ExpiresAt:      now + int64(ttl),
+		BufferedAt:     now,
+	}
+	switch {
+	case !delivered:
+		msg.Variables = c.cmd.StartVars
+		c.AppendMessageEvent(c.NewKey(), model.IntentMessageBuffered, msg)
+	case id != "":
+		c.AppendMessageEvent(c.NewKey(), model.IntentMessageIdRecorded, msg)
+	}
+}
+
+// handleMessageExpiring drops a message whose time to live has passed (ADR-0370). The
+// sweep read the due entry outside the batch, so the handler checks it is still there:
+// two sweeps may offer the same message, and a message without an id that was consumed
+// meanwhile has no entry left to expire. Expiry is not an incident — a message nobody
+// was waiting for is an ordinary outcome (ADR-0370, ADR-0337).
+func handleMessageExpiring(c *ProcessingContext) {
+	msg := c.cmd.Value.message
+	pending, err := c.tx.MessageExpiryPending(c.cmd.Key, msg.ExpiresAt)
+	if err != nil {
+		c.p.fail(err)
+		return
+	}
+	if !pending {
+		return
+	}
+	c.AppendMessageEvent(c.cmd.Key, model.IntentMessageExpired, msg.WithoutPayload())
+}
+
+// openMessageSubscription opens the subscription an element waits on and, when a
+// message for its name and key already waits in the buffer, delivers the oldest one at
+// once (ADR-0370): the subscription that opens after its message was published is the
+// one the buffer exists for. The four places a message subscription opens — a catch
+// event, a receive task, a boundary event and an event subprocess's trigger — share it,
+// so a buffered message reaches each of them the same way.
+func openMessageSubscription(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, sub model.MessageSubscriptionValue) {
+	c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, sub)
+	// One catch per event-based gateway takes a buffered message. The others arm after
+	// it in the same run and are cancelled when it completes (ADR-0110); a message one
+	// of them took would be spent on a branch that never runs, so they leave theirs
+	// waiting.
+	gateway := ei.EventGatewayKey
+	if gateway != 0 {
+		if _, taken := c.p.gatewayRaceTaken[gateway]; taken {
+			return
+		}
+	}
+	msgKey, msg, ok, err := c.tx.OldestBufferedMessage(sub.MessageName, sub.CorrelationKey, c.Now())
+	if err != nil {
+		c.p.fail(err)
+		return
+	}
+	if !ok {
+		return
+	}
+	c.AppendMessageEvent(msgKey, model.IntentMessageConsumed, msg.WithoutPayload())
+	// A buffered message has no sending instance to name, as an API publish has none.
+	deliverToSubscriptions(c, []subscriptionMatch{{elKey: key, sub: sub}}, sub.MessageName, sub.CorrelationKey, msg.Variables, 0)
+	if gateway != 0 {
+		if c.p.gatewayRaceTaken == nil {
+			c.p.gatewayRaceTaken = map[uint64]struct{}{}
+		}
+		c.p.gatewayRaceTaken[gateway] = struct{}{}
+	}
 }
 
 // behavior resolves the behavior for a BPMN element type.
@@ -1377,8 +1873,17 @@ func completeAndTakeFlows(c *ProcessingContext, key uint64, ei *model.ElementIns
 // outgoing flow — which may in turn drain the parent scope. The decision is a pure
 // function of state (GetElementInstance / ActiveChildren), so recovery reconstructs
 // it identically (I4/I6). A no-op while the scope still has active children.
+//
+// Nor while a token is still on its way into the scope (TokenEntering). The
+// active-child counter drops when an element completes and rises only when its
+// successor activates, a batch later, so a branch that ended in between used to find
+// the scope empty and complete it — and the successor then ran inside an instance
+// that had reported itself done, a job for it left with no instance to collect it
+// (#1013). The token that is on its way ends in an end event or a dead end of its own,
+// and that calls here again. A liveness guard on activation must not be the fix for
+// this: it drops exactly that token (ADR-0284).
 func completeScope(c *ProcessingContext, scope uint64) {
-	if c.ActiveChildren(scope) != 0 {
+	if c.ActiveChildren(scope) != 0 || c.TokenEntering(scope) {
 		return
 	}
 	if ei := c.GetElementInstance(scope); ei != nil {
@@ -1424,6 +1929,17 @@ func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, flowI
 	tokenID, parentID := ei.TokenID, uint64(0)
 	if tokenID == 0 || fork {
 		parentID, tokenID = ei.TokenID, key
+		// Taking a flow continues a thread of control even where it mints a new token
+		// id — a fork's branches, a join's continuation, a subprocess's exit — so the
+		// execution budget carries over. Otherwise a cycle through any of them would
+		// reset its own budget every lap (ADR-0272). A parallel
+		// join hands over a continuation whose own TokenID is already cleared and
+		// whose lineage is in ParentTokenID, so that is where its ancestry is read.
+		from := parentID
+		if from == 0 {
+			from = ei.ParentTokenID
+		}
+		c.p.inheritTokenSteps(tokenID, from)
 	}
 	c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
@@ -1606,13 +2122,23 @@ func takeOutgoingFlows(c *ProcessingContext, ei *model.ElementInstanceValue) {
 	}
 }
 
-// takeInclusiveOutgoing takes every outgoing flow whose FEEL condition holds (an
-// unconditional, non-default flow always holds), or the default flow if none do.
-// This is the inclusive (OR) split: unlike the exclusive gateway, it may take
-// more than one branch.
-func takeInclusiveOutgoing(c *ProcessingContext, ei *model.ElementInstanceValue) {
+// inclusiveRouteOrPark decides which outgoing flows an inclusive gateway takes:
+// every flow whose FEEL condition holds (an unconditional, non-default flow always
+// holds), or the default flow if none do. Unlike the exclusive gateway it may take
+// more than one branch, which is why fork is reported separately — the default
+// alone is one token continuing, not a fork.
+//
+// It decides, it does not act: the caller consumes tokens and takes the flows, in
+// that order, so a gateway that cannot decide still has its tokens
+// (ADR-0273). When it cannot decide it parks the gateway
+// with an incident itself and returns ok=false; the caller must then do nothing at
+// all.
+func inclusiveRouteOrPark(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) (flows []int32, fork, ok bool) {
 	cp := c.process(ei.ProcessDefKey)
-	took := false
+	// The buffer is processor-owned and reused, so an OR split allocates nothing per
+	// decision (I1). Nothing between here and the caller taking the flows routes
+	// again, so the alias stays valid.
+	taken := c.p.routeBuf[:0]
 	defaultFlow := int32(-1)
 	for _, flowID := range cp.Outgoing(ei.ElementId) {
 		f := cp.Flow(flowID)
@@ -1621,20 +2147,32 @@ func takeInclusiveOutgoing(c *ProcessingContext, ei *model.ElementInstanceValue)
 			continue
 		}
 		if f.Condition == nil {
-			activateElement(c, ei, flowID, true)
-			took = true
+			taken = append(taken, flowID)
 			continue
 		}
-		// Over the gateway's scope chain, matching the exclusive gateway (ADR-0085).
+		// Over the gateway's scope chain, matching the exclusive gateway (ADR-0086).
 		v, err := f.Condition.Eval(bindInputsChain(c, f.Condition.Inputs(), ei.FlowScopeKey))
-		if err == nil && expr.IsTrue(v) {
-			activateElement(c, ei, flowID, true)
-			took = true
+		if err != nil {
+			c.p.routeBuf = taken
+			parkUnroutableGateway(c, key, ei, conditionFailure(cp, flowID, err))
+			return nil, false, false
+		}
+		if expr.IsTrue(v) {
+			taken = append(taken, flowID)
 		}
 	}
-	if !took && defaultFlow >= 0 {
-		activateElement(c, ei, defaultFlow, false)
+	c.p.routeBuf = taken
+	if len(taken) > 0 {
+		return taken, true, true
 	}
+	if defaultFlow >= 0 {
+		// The default is one token continuing, not a branch of a fork.
+		taken = append(taken, defaultFlow)
+		c.p.routeBuf = taken
+		return taken, false, true
+	}
+	parkUnroutableGateway(c, key, ei, noRouteMessage)
+	return nil, false, false
 }
 
 // builtinProcessInstanceKey is a reserved FEEL identifier that resolves to the
@@ -1719,7 +2257,7 @@ func armOneShotTimer(c *ProcessingContext, key uint64, ei *model.ElementInstance
 // schedule could not be evaluated (ADR-0064/0111): the initial arm (armOneShotTimer) and a
 // recurring re-arm (handleTimerTriggered) share it, so a failure at either point parks the
 // element visibly with the same operator-resolvable incident (JobKey stays zero — the marker
-// that routes resolution back to rearmTimerElement).
+// that routes resolution back to resumeParkedElement).
 func raiseTimerScheduleIncident(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, err error) {
 	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
@@ -1831,11 +2369,15 @@ func ioResultScope(cp *compiler.CompiledProcess, elementKey uint64, ei *model.El
 // scope, so a later input can read an earlier one and unmapped names resolve to the
 // enclosing scope. The value is frozen into a VariableCreated event, so replay
 // re-applies it rather than re-evaluating (invariants I4/I6).
-func applyInputMappings(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+func applyInputMappings(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) bool {
 	cp := c.process(ei.ProcessDefKey)
+	fits := true
 	for _, m := range cp.IOInputs(ei.ElementId) {
-		c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, cp, m, key, key))
+		if !c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, cp, m, key, key)) {
+			fits = false
+		}
 	}
+	return fits
 }
 
 // evalMapping evaluates one I/O mapping's FEEL source over the scope chain from
@@ -1844,6 +2386,9 @@ func applyInputMappings(c *ProcessingContext, key uint64, ei *model.ElementInsta
 // yields null rather than halting the processor — the same rule the inline script
 // task and data associations follow.
 func evalMapping(c *ProcessingContext, cp *compiler.CompiledProcess, m compiler.IOMapping, evalScope, destScope uint64) model.VariableValue {
+	if m.Verbatim {
+		return copyMapping(c, cp, m, evalScope, destScope)
+	}
 	result, err := m.Source.Eval(bindInputsChain(c, m.Source.Inputs(), evalScope))
 	if err != nil {
 		result = expr.Null
@@ -1858,18 +2403,37 @@ func evalMapping(c *ProcessingContext, cp *compiler.CompiledProcess, m compiler.
 	}
 }
 
+// copyMapping hands a personal value out under its own name (ADR-0314, amended): the
+// stored record, a sealed envelope the engine holds no key for, is copied unchanged,
+// resolved over the same scope chain an evaluated source would read. Evaluating it
+// instead would decode the envelope as a FEEL context and encode it again, which
+// reorders its members — still openable, but only by accident, and not the identical
+// bytes every copy of a sealed value is supposed to carry. A value nobody wrote copies
+// as null, as `=name` over a missing variable evaluates.
+func copyMapping(c *ProcessingContext, cp *compiler.CompiledProcess, m compiler.IOMapping, evalScope, destScope uint64) model.VariableValue {
+	out := model.VariableValue{ScopeKey: destScope, Name: cp.Intern(m.Target), Kind: model.VarNull}
+	if vv := c.ResolveVariable(evalScope, out.Name); vv != nil {
+		out.Kind, out.Bool, out.Text = vv.Kind, vv.Bool, vv.Text
+	}
+	return out
+}
+
 // applyOutputMappings evaluates a completing activity's zeebe:ioMapping outputs over
 // its activity-local scope and promotes each into the parent (flow) scope, so only
 // the selected, possibly reshaped values escape the activity (ADR-0068). Sources are
 // evaluated here (command processing) and frozen into VariableCreated events, so
 // replay re-applies them without re-evaluating (I4/I6). The raw result and input
 // locals are removed separately by dropLocalScope.
-func applyOutputMappings(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+func applyOutputMappings(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) bool {
 	cp := c.process(ei.ProcessDefKey)
+	fits := true
 	for _, m := range cp.IOOutputs(ei.ElementId) {
 		// Evaluate over the local scope chain (key), promote to the parent (flow) scope.
-		c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, cp, m, key, ei.FlowScopeKey))
+		if !c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, cp, m, key, ei.FlowScopeKey)) {
+			fits = false
+		}
 	}
+	return fits
 }
 
 // dropLocalScope deletes every variable in an activity's local scope when it
@@ -1961,13 +2525,19 @@ func (scriptTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mode
 	}
 
 	kind, b, text := expr.Classify(result)
-	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+	if !c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
 		ScopeKey: ioResultScope(cp, key, ei),
 		Name:     detail.ResultVar,
 		Kind:     toVarKind(kind),
 		Bool:     b,
 		Text:     text,
-	})
+	}) {
+		// A result past the variable budget was refused with an incident on this task.
+		// Completing it would clear that incident with the element and leave a script
+		// that looks to have run and produced nothing (ADR-0294). The task stays
+		// activated; resolving re-runs it, which re-evaluates the expression.
+		return
+	}
 	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 
@@ -2053,7 +2623,7 @@ const (
 // the duration reproduces on replay without any new nondeterministic source (I6).
 // Because the key is fresh on every arm, each re-arm (after a simulated failure is
 // resolved) draws an independent duration and failure outcome. Shared by OnActivated
-// and rearmTimerElement so the two never diverge.
+// and resumeParkedElement so the two never diverge.
 func armMockupTimer(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.MockupTask(cp.Node(ei.ElementId).Detail)
@@ -2096,7 +2666,7 @@ func mockupFailMessage(detail *compiler.MockupTaskDetail) string {
 
 // raiseMockupIncident parks a mockup task with a job-less incident on a simulated
 // failure (ADR-0120), mirroring raiseTimerScheduleIncident: JobKey stays zero, the
-// marker that routes resolution back through rearmTimerElement — which re-arms a
+// marker that routes resolution back through resumeParkedElement — which re-arms a
 // fresh attempt.
 func raiseMockupIncident(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, message string) {
 	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
@@ -2156,7 +2726,7 @@ type messageCatchEventBehavior struct{}
 func (messageCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.MessageCatch(cp.Node(ei.ElementId).Detail)
-	c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
+	openMessageSubscription(c, key, ei, model.MessageSubscriptionValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
 		MessageName:        detail.MessageName,
@@ -2184,7 +2754,7 @@ type receiveTaskBehavior struct{}
 func (receiveTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.ReceiveTask(cp.Node(ei.ElementId).Detail)
-	c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
+	openMessageSubscription(c, key, ei, model.MessageSubscriptionValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
 		MessageName:        detail.MessageName,
@@ -2285,23 +2855,18 @@ func evalStartCorrelationKey(e *expr.Compiled, vars []model.VariableValue) strin
 	return v.String()
 }
 
-// correlateMessage delivers a message with the given name and correlation key to
-// every open subscription that matches. For each match it emits
-// SubscriptionCorrelated (which retires the subscription), writes the message's
-// payload variables into that instance's scope, and commands the waiting element
-// instance to complete. Matches are collected before any mutation so retiring a
-// subscription can't disturb the scan. A message that matches nothing is a no-op
-// — there is no buffering yet (ADR-0020).
-func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) {
-	type match struct {
-		elKey uint64
-		sub   model.MessageSubscriptionValue
-	}
-	var matches []match
-	c.p.fail(c.tx.CorrelatableSubscriptions(name, correlationKey, func(elKey uint64, v *model.MessageSubscriptionValue) error {
-		matches = append(matches, match{elKey: elKey, sub: *v})
-		return nil
-	}))
+// subscriptionMatch is one open message subscription a delivery reaches.
+type subscriptionMatch struct {
+	elKey uint64
+	sub   model.MessageSubscriptionValue
+}
+
+// deliverToSubscriptions hands a message to each matched subscription: it retires
+// the subscription, records the message flow, writes the payload into the waiting
+// instance's scope and commands the waiting element to complete. Shared by the
+// name-correlated publish and the directed delivery to one instance, so a message
+// arrives the same way whichever of the two sent it.
+func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) {
 	// A payload is attributed to the catch event that received it (below); the command
 	// driving this may itself be an element's — a throw event publishing the message — so
 	// the producer is put back rather than zeroed (ADR-0219).
@@ -2323,16 +2888,43 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 		// attributed to the element that received it and not to whatever published the
 		// message.
 		c.producer = m.elKey
+		fits := true
 		for j := range vars {
 			vv := vars[j]
 			vv.ScopeKey = m.sub.ProcessInstanceKey
-			c.AppendVariableEvent(model.IntentVariableCreated, vv)
+			if !c.AppendVariableEvent(model.IntentVariableCreated, vv) {
+				fits = false
+			}
 		}
 		c.producer = prevProducer
-		if ei := c.GetElementInstance(m.elKey); ei != nil {
+		// A payload past the budget was refused with an incident on this catch event.
+		// Completing it anyway would clear that incident with the element and let the
+		// instance carry on as though the message had been received in full — the
+		// subscription is already correlated, so the message will not come again
+		// (ADR-0294).
+		if ei := c.GetElementInstance(m.elKey); ei != nil && fits {
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
 		}
 	}
+}
+
+// correlateMessage delivers a message with the given name and correlation key to
+// every open subscription that matches. For each match it emits
+// SubscriptionCorrelated (which retires the subscription), writes the message's
+// payload variables into that instance's scope, and commands the waiting element
+// instance to complete. Matches are collected before any mutation so retiring a
+// subscription can't disturb the scan. A message that matches nothing is a no-op here;
+// it reports so, and a publish with a time to live then buffers it (ADR-0370).
+// delivered is whether a subscription received the message or an instance was started
+// from it.
+func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) (delivered bool) {
+	var matches []subscriptionMatch
+	c.p.fail(c.tx.CorrelatableSubscriptions(name, correlationKey, func(elKey uint64, v *model.MessageSubscriptionValue) error {
+		matches = append(matches, subscriptionMatch{elKey: elKey, sub: *v})
+		return nil
+	}))
+	deliverToSubscriptions(c, matches, name, correlationKey, vars, senderPIKey)
+	delivered = len(matches) > 0
 	// A message also instantiates every deployed process with a matching message
 	// start event, seeded with the payload (ADR-0035). Matching is by name; the
 	// created instance additionally records the correlation key its start event
@@ -2354,13 +2946,14 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 			taken, err := c.singletonStartTaken(ref.defKey, startKey)
 			if err != nil {
 				c.p.fail(err)
-				return
+				return delivered
 			}
 			if taken {
 				continue // a live instance for this key already exists (or is being started this batch)
 			}
 		}
 		c.AppendCreateInstanceCommand(ref.defKey, vars, startKey, ref.elementId)
+		delivered = true
 		// Retain the delivery into the message-start event too, so the replay shows
 		// the message that opened the receiving pool. The receiver instance does not
 		// exist yet (the create is a followup), so its key is left 0 (ADR-0038).
@@ -2372,6 +2965,7 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 			CorrelationKey:           correlationKey,
 		})
 	}
+	return delivered
 }
 
 // signalCatchEventBehavior: an intermediate signal catch event. On activation it
@@ -2468,13 +3062,21 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 		// production, not the broadcaster's, and the producer of the command that got
 		// here is put back afterwards (ADR-0219).
 		c.producer = m.elKey
+		fits := true
 		for j := range vars {
 			vv := vars[j]
 			vv.ScopeKey = m.sub.ProcessInstanceKey
-			c.AppendVariableEvent(model.IntentVariableCreated, vv)
+			if !c.AppendVariableEvent(model.IntentVariableCreated, vv) {
+				fits = false
+			}
 		}
 		c.producer = prevProducer
-		if ei := c.GetElementInstance(m.elKey); ei != nil {
+		// A payload past the budget was refused with an incident on this catch event.
+		// Completing it anyway would clear that incident with the element and let the
+		// instance carry on as though the signal had been received in full — and a
+		// broadcast is not replayed for a subscriber that missed it
+		// (ADR-0294).
+		if ei := c.GetElementInstance(m.elKey); ei != nil && fits {
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
 		}
 	}
@@ -2550,10 +3152,18 @@ func propagateError(c *ProcessingContext, fromKey uint64, code string) {
 	}
 }
 
-// errorCaughtInInstance walks the scope chain of one instance from fromKey up to its root,
-// firing the nearest matching error catch (an event subprocess before a boundary at each
-// scope; the root's event subprocesses last), and reports whether one fired (ADR-0089).
+// errorCaughtInInstance fires the nearest matching error catch in one instance
+// (errorCatchInInstance) and reports whether one fired (ADR-0089).
 func errorCaughtInInstance(c *ProcessingContext, piKey, fromKey uint64, code string) bool {
+	return fireErrorCatch(c, errorCatchInInstance(c, piKey, fromKey, code))
+}
+
+// errorCatchInInstance walks the scope chain of one instance from fromKey up to its root
+// and returns the nearest matching error catch — an event subprocess before a boundary at
+// each scope, the root's event subprocesses last — or 0 when nothing in the instance
+// catches the code (ADR-0089). It only looks: firing is errorCaughtInInstance's, so a
+// caller can ask where an error would go before anything is torn down.
+func errorCatchInInstance(c *ProcessingContext, piKey, fromKey uint64, code string) uint64 {
 	for depth, scope := 0, fromKey; depth <= maxScopeDepth; depth++ {
 		ei := c.GetElementInstance(scope)
 		if ei == nil {
@@ -2561,17 +3171,38 @@ func errorCaughtInInstance(c *ProcessingContext, piKey, fromKey uint64, code str
 		}
 		// An error event subprocess declared in this scope catches errors thrown within it,
 		// nearer than a boundary on the scope's activity (which catches the error leaving it).
-		if fireErrorCatch(c, findErrorEventSub(c, piKey, scope, code)) {
-			return true
+		if k := findErrorEventSub(c, piKey, scope, code); liveCatch(c, k) {
+			return k
 		}
-		if fireErrorCatch(c, findErrorBoundary(c, piKey, scope, code)) {
-			return true
+		if k := findErrorBoundary(c, piKey, scope, code); liveCatch(c, k) {
+			return k
 		}
 		scope = ei.FlowScopeKey
 	}
 	// The process root's own error event subprocesses are keyed by the instance scope, which
 	// is not an element instance — so they are checked here, after the element-scope walk.
-	return fireErrorCatch(c, findErrorEventSub(c, piKey, piKey, code))
+	if k := findErrorEventSub(c, piKey, piKey, code); liveCatch(c, k) {
+		return k
+	}
+	return 0
+}
+
+// liveCatch reports whether a found catch key names an element instance that is still
+// there. A zero or vanished key is not a catch.
+func liveCatch(c *ProcessingContext, catchKey uint64) bool {
+	return catchKey != 0 && c.GetElementInstance(catchKey) != nil
+}
+
+// errorUncaughtAtRoot reports whether an error thrown from element elKey (ei) has nowhere
+// to go: no catch in its own instance, and no caller for it to leave to, because the
+// instance is not a call activity's child (ADR-0076). It is propagateError's terminal
+// case, asked before anything is torn down.
+func errorUncaughtAtRoot(c *ProcessingContext, elKey uint64, ei *model.ElementInstanceValue, code string) bool {
+	if errorCatchInInstance(c, ei.ProcessInstanceKey, elKey, code) != 0 {
+		return false
+	}
+	pi := c.GetProcessInstance(ei.ProcessInstanceKey)
+	return pi == nil || pi.ParentElementInstanceKey == 0
 }
 
 // fireErrorCatch drives a found error catch (a boundary or event-subprocess trigger element)
@@ -2649,17 +3280,22 @@ func raiseErrorIncident(c *ProcessingContext, elKey uint64, code string) {
 	if ei == nil {
 		return
 	}
-	msg := "unhandled error"
-	if code != "" {
-		msg = "unhandled error '" + code + "'"
-	}
 	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: elKey,
 		ElementId:          ei.ElementId,
 		RaisedAt:           c.Now(),
-		Message:            msg,
+		Message:            unhandledErrorMessage(code),
+		Reason:             model.IncidentUnhandledError,
 	})
+}
+
+// unhandledErrorMessage is an uncaught error's incident message, naming its code.
+func unhandledErrorMessage(code string) string {
+	if code == "" {
+		return "unhandled error"
+	}
+	return "unhandled error '" + code + "'"
 }
 
 // --- Escalation (ADR-0125) ---
@@ -3100,15 +3736,21 @@ func (exclusiveGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei
 }
 
 func (exclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
-	c.AppendElementEvent(key, model.IntentCompleted, *ei)
 	cp := c.process(ei.ProcessDefKey)
-	flowID := selectExclusiveFlow(c, cp, ei)
-	if flowID < 0 {
-		// No condition matched and there is no default flow: nothing is taken.
-		// This is a modeling error that becomes an incident once incidents land
-		// (Milestone 2); for now the branch simply ends here.
+	// Decide first, complete second. The gateway used to emit Completed and *then*
+	// look for a flow, so a decision that found none had already consumed the token:
+	// the instance stayed active with nothing in it, nothing downstream, and nothing
+	// to resolve (audit F08). A gateway that cannot route now never completes.
+	flowID, failure := selectExclusiveFlow(c, cp, ei)
+	if failure != "" {
+		parkUnroutableGateway(c, key, ei, failure)
 		return
 	}
+	if flowID < 0 {
+		parkUnroutableGateway(c, key, ei, noRouteMessage)
+		return
+	}
+	c.AppendElementEvent(key, model.IntentCompleted, *ei)
 	// Taking the flow goes through activateElement rather than building the element
 	// instance here: it is the one place that knows a flow into a multi-instance
 	// activity activates its *body* (ADR-0077). Hand-rolled, the gateway activated the
@@ -3122,10 +3764,31 @@ func (exclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 // once, producing a token on every outgoing flow. As a join (several incoming) it
 // waits until a token has arrived on each incoming flow — every arrival parks as a
 // live element instance on the gateway — then consumes them all and fires the
-// outgoing flow(s) once. The synchronization is captured entirely by which
+// outgoing flow(s) once. It synchronizes *within its own execution scope*: two
+// iterations of a multi-instance subprocess each have their own join
+// (ADR-0277). The synchronization is captured entirely by which
 // element instances exist and by the Completed/Activating events emitted, so it
 // replays deterministically without re-counting (invariants I4/I6).
 type parallelGatewayBehavior struct{}
+
+// consumeSet completes the tokens one join firing takes — exactly the set chosen by
+// OldestPerFlow, one per incoming flow, leaving anything else on the node alone. It
+// returns the token the continuation descends from: the one consumed on the flow the
+// triggering arrival came in on, which is either that arrival or the older token it
+// was queued behind. Falls back to fallback when that flow is not in the set, which
+// is how an inclusive join's later firings find a lineage at all.
+func consumeSet(c *ProcessingContext, set []Arrival, arrivedOn int32, fallback uint64) uint64 {
+	parent := fallback
+	for _, a := range set {
+		if v := c.GetElementInstance(a.Key); v != nil {
+			if a.Flow == arrivedOn {
+				parent = v.TokenID
+			}
+			c.AppendElementEvent(a.Key, model.IntentCompleted, *v)
+		}
+	}
+	return parent
+}
 
 func (parallelGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	node := c.process(ei.ProcessDefKey).Node(ei.ElementId)
@@ -3133,20 +3796,20 @@ func (parallelGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei 
 		c.AppendElementCommand(key, model.IntentCompleting, *ei) // fork: fire now
 		return
 	}
-	// Join: fire only when a token sits on every incoming flow. Until then this
+	// Join: fire only when a token sits on *every incoming flow* — BPMN 2.0.2 §13.4,
+	// and a different question from how many tokens are on the node. Until then this
 	// arrival waits here (stays Activated).
-	arrived := c.ElementInstancesOnNode(ei.ProcessInstanceKey, ei.ElementId)
-	if int32(len(arrived)) < node.IncomingCount {
+	//
+	// A set is completed only by an arrival, so checking once per arrival is both
+	// sufficient and complete: no set can become full while nothing is arriving.
+	set := c.OldestPerFlow(c.ArrivalsOnNode(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId))
+	if int32(len(set)) < node.IncomingCount {
 		return
 	}
-	// All arrived: consume every waiting token, then fire the outgoing flow(s) once.
-	for _, k := range arrived {
-		if a := c.GetElementInstance(k); a != nil {
-			c.AppendElementEvent(k, model.IntentCompleted, *a)
-		}
-	}
+	// One token from each flow is consumed. Anything else waiting here belongs to the
+	// next firing and stays put (ADR-0290).
 	continuation := *ei
-	continuation.ParentTokenID = ei.TokenID
+	continuation.ParentTokenID = consumeSet(c, set, ei.SourceFlowId, ei.TokenID)
 	continuation.TokenID = 0
 	takeOutgoingFlows(c, &continuation)
 }
@@ -3157,9 +3820,10 @@ func (parallelGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei
 
 // inclusiveGatewayBehavior: an OR gateway. As a split (one incoming) it fires at
 // once, taking every outgoing flow whose condition holds (or the default). As a
-// join (several incoming) it waits until no token could still arrive — no active
-// token upstream and none in flight toward it — then consumes every token parked
-// on it and fires the outgoing flow(s) once. That "no more can arrive" test is
+// join (several incoming) it waits until no token could still arrive *in its own
+// execution scope* — no active token upstream and none in flight toward it — then
+// consumes every token parked on it in that scope and fires the outgoing flow(s)
+// once (ADR-0277). That "no more can arrive" test is
 // what distinguishes it from a parallel join, which waits for a fixed count: an
 // inclusive join waits only for the branches the split actually took.
 type inclusiveGatewayBehavior struct{}
@@ -3171,20 +3835,53 @@ func (inclusiveGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei
 		return
 	}
 	// Join: park until nothing more can arrive at this gateway.
-	if c.TokenCanStillReach(ei.ProcessInstanceKey, ei.ElementId, cp.NodesReaching(ei.ElementId)) {
+	if c.TokenCanStillReach(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId, cp.InclusiveJoinReach(ei.ElementId)) {
 		return
 	}
-	for _, k := range c.ElementInstancesOnNode(ei.ProcessInstanceKey, ei.ElementId) {
-		if a := c.GetElementInstance(k); a != nil {
-			c.AppendElementEvent(k, model.IntentCompleted, *a)
+	// Route before consuming: a join that cannot decide must leave every arrival
+	// parked, or the tokens are gone and the incident has nothing to resume (F08).
+	// Once, not per firing: the conditions read variables nothing below changes.
+	flows, fork, ok := inclusiveRouteOrPark(c, key, ei)
+	if !ok {
+		return
+	}
+	// One token per occupied incoming flow, per firing — §13.4 again, with the
+	// inclusive gateway's "the flows that have one" in place of the parallel one's
+	// "every flow". Repeated until nothing is left, because nothing more can arrive:
+	// a surplus set that waited here would wait for an arrival that will never come,
+	// where a parallel join's surplus is right to wait (ADR-0290).
+	//
+	// Every firing consumes at least one waiting token and nothing arrives while this
+	// runs — an activation is a queued command, not an immediate one — so the tokens
+	// waiting at the start bound the number of firings. The loop re-scans; it cannot
+	// run on.
+	for range len(c.ArrivalsOnNode(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId)) {
+		set := c.OldestPerFlow(c.ArrivalsOnNode(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId))
+		if len(set) == 0 {
+			return
+		}
+		// A firing after the first consumes tokens this arrival is not among, so the
+		// continuation is a fresh token descending from the one consumed on its flow —
+		// as at the parallel join, and unlike the old code, which carried this arrival's
+		// own token through however many firings it triggered.
+		continuation := *ei
+		continuation.ParentTokenID = consumeSet(c, set, ei.SourceFlowId, ei.TokenID)
+		continuation.TokenID = 0
+		for _, flowID := range flows {
+			activateElement(c, &continuation, flowID, fork)
 		}
 	}
-	takeInclusiveOutgoing(c, ei)
 }
 
 func (inclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	flows, fork, ok := inclusiveRouteOrPark(c, key, ei)
+	if !ok {
+		return
+	}
 	c.AppendElementEvent(key, model.IntentCompleted, *ei)
-	takeInclusiveOutgoing(c, ei)
+	for _, flowID := range flows {
+		activateElement(c, ei, flowID, fork)
+	}
 }
 
 // eventBasedGatewayBehavior is a deferred choice (ADR-0110): on activation it arms every
@@ -3247,7 +3944,15 @@ func cancelEventGatewaySiblings(c *ProcessingContext, procKey, groupKey, selfKey
 // selectExclusiveFlow returns the outgoing flow an exclusive gateway takes: the
 // first (in flow order) whose FEEL condition is true, an unconditional non-default
 // flow, or the default flow; -1 if none apply.
-func selectExclusiveFlow(c *ProcessingContext, cp *compiler.CompiledProcess, ei *model.ElementInstanceValue) int32 {
+//
+// A condition that *fails to evaluate* stops the scan and comes back as a non-empty
+// failure message instead. It is deliberately not folded into "false". Atlas's rule
+// for a failed FEEL evaluation elsewhere is to write null and let the token carry on
+// (the rule TestFeelEvaluationFailureWritesNull pins) — that rule works because there
+// is a value to write and null is a defensible one. A routing decision has no such answer: treating an unevaluable
+// condition as false sends the token down the default branch, which nobody chose, or
+// nowhere at all (ADR-0273).
+func selectExclusiveFlow(c *ProcessingContext, cp *compiler.CompiledProcess, ei *model.ElementInstanceValue) (int32, string) {
 	defaultFlow := int32(-1)
 	for _, flowID := range cp.Outgoing(ei.ElementId) {
 		f := cp.Flow(flowID)
@@ -3256,18 +3961,52 @@ func selectExclusiveFlow(c *ProcessingContext, cp *compiler.CompiledProcess, ei 
 			continue
 		}
 		if f.Condition == nil {
-			return flowID // an unconditional flow is taken whenever reached
+			return flowID, "" // an unconditional flow is taken whenever reached
 		}
 		// Resolve the condition over the gateway's scope chain, so a gateway inside a
 		// subprocess or multi-instance body branches on that scope's variables, not
-		// only the process root (ADR-0085). For a top-level gateway FlowScopeKey is
+		// only the process root (ADR-0086). For a top-level gateway FlowScopeKey is
 		// the process-instance key, so this reads exactly the root as before.
 		v, err := f.Condition.Eval(bindInputsChain(c, f.Condition.Inputs(), ei.FlowScopeKey))
-		if err == nil && expr.IsTrue(v) {
-			return flowID
+		if err != nil {
+			return -1, conditionFailure(cp, flowID, err)
+		}
+		if expr.IsTrue(v) {
+			return flowID, ""
 		}
 	}
-	return defaultFlow
+	return defaultFlow, ""
+}
+
+// noRouteMessage is the incident an operator sees when a gateway's conditions all
+// held false and the model gave it no default flow. The wording names the modeling
+// error rather than the engine's internals: it is a diagram to fix, and until it is
+// fixed the token waits here.
+const noRouteMessage = "no outgoing sequence flow was taken and the gateway has no default flow"
+
+// conditionFailure is the incident message for a sequence-flow condition that could
+// not be evaluated, naming the flow by its target so the operator can find it in the
+// diagram. Built only on the failure path, so its concatenation costs nothing on a
+// gateway that routes (I1).
+func conditionFailure(cp *compiler.CompiledProcess, flowID int32, err error) string {
+	return "the condition on the sequence flow to " + cp.ElementBpmnId(cp.Flow(flowID).Target) +
+		" could not be evaluated: " + err.Error()
+}
+
+// parkUnroutableGateway leaves a gateway that could not decide exactly where it is —
+// Activated, holding its token — and raises an incident naming why (audit F08,
+// ADR-0273). It is the gateway's form of parkRunawayLoop:
+// no Completed event, so nothing downstream runs on a decision that was never made,
+// and the token is a thing an operator can see and resume rather than one that
+// silently left the process.
+func parkUnroutableGateway(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, why string) {
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		ElementId:          ei.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            why,
+	})
 }
 
 // toVarKind maps the expr scalar kind to the model's stored kind (same order,
@@ -3406,6 +4145,23 @@ func (userTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.
 	if detail.DueDateNanos != 0 {
 		deadline = c.Now() + detail.DueDateNanos
 	}
+	// Who the task is for. A model may name the person and the group outright or
+	// write a FEEL expression for either; the expression is evaluated here, at
+	// command processing, and frozen into the job-created event below — exactly
+	// like the due date above, and for the same reason: replay must reproduce the
+	// assignment rather than re-evaluate it against variables that have moved on
+	// (I4/I6).
+	assignee, err := resolveAssignment(c, cp, key, detail.Assignee, detail.AssigneeExpr)
+	if err != nil {
+		raiseAssignmentIncident(c, key, ei, "assignee", err)
+		return
+	}
+	groups, err := resolveAssignment(c, cp, key, detail.CandidateGroups, detail.CandidateGroupsExpr)
+	if err != nil {
+		raiseAssignmentIncident(c, key, ei, "candidateGroups", err)
+		return
+	}
+
 	jobKey := c.NewKey()
 	c.AppendJobEvent(jobKey, model.IntentJobCreated, model.JobValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
@@ -3415,9 +4171,57 @@ func (userTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.
 		Deadline:           deadline,
 		// Seed the runtime assignee with the model's default; claim/unclaim
 		// rewrites it through the job lifecycle (ADR-0042).
-		Assignee: cp.Intern(detail.Assignee),
+		Assignee:        assignee,
+		CandidateGroups: groups,
 	})
 	c.NotifyJobAvailable(detail.JobType)
+}
+
+// resolveAssignment reads one half of a user task's assignment: the interned
+// literal when the model wrote a name, or the value of the expression it wrote
+// instead. An absent assignment is the empty string and not an error — most tasks
+// name nobody.
+//
+// A non-string result is refused rather than coerced. "Who is this for" has one
+// correct shape, and a number or a context stringified into an assignee is a task
+// addressed to somebody who does not exist — silently, and to the one gate that
+// decides who may act on it. A FEEL *list* of candidate groups is likewise refused
+// for now: the engine stores them as one comma-separated string, and a model that
+// wants two writes ="a,b".
+func resolveAssignment(c *ProcessingContext, cp *compiler.CompiledProcess, scope uint64, literal int32, e *expr.Compiled) (string, error) {
+	if e == nil {
+		return cp.Intern(literal), nil
+	}
+	v, err := e.Eval(bindInputsChain(c, e.Inputs(), scope))
+	if err != nil {
+		return "", err
+	}
+	kind, _, text := expr.Classify(v)
+	if kind != expr.KindString {
+		return "", errors.New("evaluated to something that is not a name")
+	}
+	if strings.TrimSpace(text) == "" {
+		// An empty result is the dangerous case, not a harmless one: a task nobody
+		// was addressed to is open work, so an approval whose approver could not be
+		// resolved would become everybody's. It parks instead.
+		return "", errors.New("evaluated to nothing, which would leave the task addressed to nobody")
+	}
+	return text, nil
+}
+
+// raiseAssignmentIncident parks a user task whose assignment could not be
+// resolved (ADR-0318), with no job created: the
+// element stays Activated and visible, an operator fixes the data, and resolving
+// the incident re-runs the activation against the corrected variables. The job-less
+// incident is the same shape a failed timer schedule raises (ADR-0064).
+func raiseAssignmentIncident(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, what string, err error) {
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		ElementId:          ei.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            "user task " + what + ": " + err.Error(),
+	})
 }
 
 func (userTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -3531,7 +4335,7 @@ func openBoundarySubscription(c *ProcessingContext, key uint64, ei *model.Elemen
 		})
 		return
 	}
-	c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
+	openMessageSubscription(c, key, ei, model.MessageSubscriptionValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
 		MessageName:        d.MessageName,
@@ -3686,7 +4490,7 @@ func (eventSubProcessStartBehavior) OnActivated(c *ProcessingContext, key uint64
 	case compiler.BoundaryTimer:
 		armOneShotTimer(c, key, ei, d.Schedule)
 	case compiler.BoundaryMessage:
-		c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
+		openMessageSubscription(c, key, ei, model.MessageSubscriptionValue{
 			ProcessInstanceKey: ei.ProcessInstanceKey,
 			ElementInstanceKey: key,
 			MessageName:        d.MessageName,
@@ -3785,9 +4589,19 @@ func seedMultiInstance(c *ProcessingContext, bodyKey uint64, ei *model.ElementIn
 		seedMultiInstanceIteration(c, bodyKey, ei, cp, d, 0, expr.Null)
 		return
 	}
-	items := multiInstanceItems(c, d, bodyKey)
-	if d.OutputCollection >= 0 {
-		writeList(c, bodyKey, cp.Intern(d.OutputCollection), nullList(len(items)))
+	items, asked := multiInstanceItems(c, d, bodyKey)
+	if asked > 0 {
+		parkOversizedLoop(c, bodyKey, ei, asked)
+		return
+	}
+	if d.OutputCollection >= 0 && !writeList(c, bodyKey, cp.Intern(d.OutputCollection), nullList(len(items))) {
+		// The collection did not fit, so it was not written and an incident says so.
+		// Returning is the other half of that refusal: the body stays activated holding
+		// its token, no iteration is seeded, and resolving runs this behaviour again.
+		// Carrying on would seed a loop whose results have nowhere to land, and the
+		// instance would complete as though nothing were wrong — taking the incident
+		// with it (ADR-0294).
+		return
 	}
 	if len(items) == 0 {
 		// No iterations: the body completes immediately, taking its outgoing flow.
@@ -3907,28 +4721,60 @@ func standardLoop(cp *compiler.CompiledProcess, elementId int32) bool {
 // concrete list of N items: the input collection's elements, or — for a cardinality —
 // N nulls (there is no input element to bind). A non-list collection, a non-integer or
 // negative cardinality, or an evaluation error yields no iterations rather than a panic.
-func multiInstanceItems(c *ProcessingContext, d *compiler.MultiInstanceDetail, bodyKey uint64) []expr.Value {
+//
+// asked is non-zero when the loop wanted more iterations than the budget allows, and
+// then items is nil: the count comes from the model or from an instance variable, so
+// the check happens *before* the list is built rather than after
+// (ADR-0276). The caller parks the body.
+func multiInstanceItems(c *ProcessingContext, d *compiler.MultiInstanceDetail, bodyKey uint64) (items []expr.Value, asked int) {
+	ceiling := c.p.iterationCeiling()
 	if d.InputCollection != nil {
 		v, err := d.InputCollection.Eval(bindInputsChain(c, d.InputCollection.Inputs(), bodyKey))
 		if err != nil {
-			return nil
+			return nil, 0
 		}
-		items, ok := expr.AsList(v)
+		got, ok := expr.AsList(v)
 		if !ok {
-			return nil
+			return nil, 0
 		}
-		return items
+		// The list itself already exists — it came from a variable — but seeding an
+		// iteration per element does not, and that is the part that is unbounded.
+		if len(got) > ceiling {
+			return nil, len(got)
+		}
+		return got, 0
 	}
 	if d.Cardinality != nil {
 		v, err := d.Cardinality.Eval(bindInputsChain(c, d.Cardinality.Inputs(), bodyKey))
 		if err != nil {
-			return nil
+			return nil, 0
 		}
 		if n, ok := expr.AsInt(v); ok && n >= 0 {
-			return nullList(n)
+			// Before nullList(n), not after: n is whatever the expression produced, and
+			// a variable holding a billion is a billion FEEL nulls in one call.
+			if n > ceiling {
+				return nil, n
+			}
+			return nullList(n), 0
 		}
 	}
-	return nil
+	return nil, 0
+}
+
+// parkOversizedLoop refuses a multi-instance activity that asked for more iterations
+// than the budget allows: the body stays activated holding its token, no iteration is
+// seeded, and an incident says how many were asked for and what the limit is
+// (ADR-0276). Resolving re-evaluates the count, so fixing the data
+// — or raising the budget — lets the loop run, and leaving it parks it again.
+func parkOversizedLoop(c *ProcessingContext, bodyKey uint64, body *model.ElementInstanceValue, asked int) {
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: body.ProcessInstanceKey,
+		ElementInstanceKey: bodyKey,
+		ElementId:          body.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            c.p.tooManyIterationsMessage(asked),
+		Reason:             model.IncidentTooManyIterations,
+	})
 }
 
 // finishMultiInstanceIteration completes one inner iteration (ADR-0077): it collects the
@@ -3949,7 +4795,15 @@ func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.El
 		if err != nil {
 			val = expr.Null
 		}
-		setListElement(c, bodyKey, cp.Intern(d.OutputCollection), idx, val)
+		if !setListElement(c, bodyKey, cp.Intern(d.OutputCollection), idx, val) {
+			// The collection outgrew its budget on this iteration. The iteration's own
+			// work is done and its result is the thing that will not fit, so the
+			// iteration stays where it is with the incident on it rather than
+			// completing: a loop that carried on would drop this result and every later
+			// one, and finish looking successful
+			// (ADR-0294).
+			return
+		}
 	}
 	// The completion condition — for a standard loop, the loop condition (ADR-0133) —
 	// is evaluated over this iteration's scope chain (so it can read loopCounter, the
@@ -3990,7 +4844,11 @@ func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.El
 			}
 		}
 	} else if d.Sequential {
-		if items := multiInstanceItems(c, d, bodyKey); idx+1 < len(items) {
+		// A loop that got past the budget when it was seeded is under it here too, so
+		// the refusal count is not re-examined: an over-budget answer would mean the
+		// collection grew mid-loop, and the empty list it yields ends the loop, which
+		// is the same thing a shrunk collection does.
+		if items, _ := multiInstanceItems(c, d, bodyKey); idx+1 < len(items) {
 			if body := c.GetElementInstance(bodyKey); body != nil {
 				seedMultiInstanceIteration(c, bodyKey, body, cp, d, idx+1, items[idx+1])
 			}
@@ -4026,7 +4884,13 @@ func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.
 		if v := c.GetVariable(bodyKey, cp.Intern(d.OutputCollection)); v != nil {
 			out := *v
 			out.ScopeKey = ei.FlowScopeKey // promote to the parent scope
-			c.AppendVariableEvent(model.IntentVariableCreated, out)
+			// The collection's own budget, not the variable one: it fitted at the body
+			// scope, so refusing it one scope up would park a loop for having finished.
+			// It fitted because setListElement measured every round against this same
+			// budget before recording it. That measure is what keeps the refusal below
+			// unreachable — were it reached, the collection would be dropped with the
+			// scope and the loop would complete without it (ADR-0296, amended).
+			c.appendCollection(model.IntentVariableCreated, out)
 		}
 	}
 	dropLocalScope(c, bodyKey)
@@ -4052,12 +4916,141 @@ func nullList(n int) []expr.Value {
 	return items
 }
 
-// writeList writes a FEEL list value (canonical JSON) into scope under name (ADR-0077).
-func writeList(c *ProcessingContext, scope uint64, name string, elems []expr.Value) {
+// writeList writes a FEEL list value (canonical JSON) into scope under name
+// (ADR-0077), unless the serialised collection is past the collection budget — then
+// nothing is written and the element owning the scope is parked with an incident
+// (ADR-0294). It reports whether the write happened.
+//
+// The check is on the serialised text rather than before it, and the difference is
+// worth stating: the elements are already in memory, so what this bounds is the
+// canonical copy and everything downstream of it — the event, the log record, the
+// state write, and every later re-serialisation of the same collection. It is not the
+// "before the allocation" the iteration budget manages (ADR-0276), because by the
+// time a list is being written its elements exist; it is the point past which the
+// engine stops making the problem durable.
+func writeList(c *ProcessingContext, scope uint64, name string, elems []expr.Value) bool {
 	kind, b, text := expr.Classify(expr.ListOf(elems...))
-	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+	return c.appendCollection(model.IntentVariableCreated, model.VariableValue{
 		ScopeKey: scope, Name: name, Kind: toVarKind(kind), Bool: b, Text: text,
 	})
+}
+
+// parkOversizedWrite refuses a write whose value is past its budget: nothing is
+// written, and an incident on the element that produced it names the variable and both
+// sizes (ADR-0294). Resolving the incident does not retry the write: nothing re-runs
+// it, so the incident goes and the element stays where it stopped (#1123).
+//
+// The element is the scope's own when the scope is one (a loop's body, a container),
+// and otherwise the write's producer, which is the element instance whose processing
+// wrote the value (ADR-0219). One of the two always names something an operator can
+// act on.
+func parkOversizedWrite(c *ProcessingContext, scope uint64, name string, size, ceiling int64) {
+	inc := model.IncidentValue{
+		ElementInstanceKey: scope,
+		RaisedAt:           c.Now(),
+		Message:            c.p.tooLargeVariableMessage(name, size, ceiling),
+		Reason:             model.IncidentVariableTooLarge,
+	}
+	if ei := c.GetElementInstance(scope); ei != nil {
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else if ei := c.GetElementInstance(c.producer); ei != nil {
+		inc.ElementInstanceKey = c.producer
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else {
+		inc.ProcessInstanceKey = scope // an instance-root write: the instance is the subject
+	}
+	c.AppendIncidentEvent(model.IntentIncidentCreated, inc)
+}
+
+// parkClearPersonalWrite refuses a write of a declared personal variable that arrived
+// readable, and parks an incident naming it (ADR-0314). It mirrors parkOversizedWrite,
+// including how it locates the element to attach to, because the two are the same shape:
+// the work happened and its *result* is what cannot be written.
+func parkClearPersonalWrite(c *ProcessingContext, scope uint64, name string) {
+	inc := model.IncidentValue{
+		ElementInstanceKey: scope,
+		RaisedAt:           c.Now(),
+		Message: "the value written to \"" + name + "\" is declared personal (atlas:personal) and arrived in the clear. " +
+			"A personal value is enciphered where it enters atlas — a form submission, a worker's result, an operator's write — " +
+			"and the engine cannot encipher it, because it holds no key. This write came from a path with no such edge, " +
+			"most likely a message payload or an inbound event. Deliver the value through a task or a worker result, " +
+			"or stop declaring it personal; then resolve to retry the write",
+		Reason: model.IncidentPersonalInTheClear,
+	}
+	if ei := c.GetElementInstance(scope); ei != nil {
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else if ei := c.GetElementInstance(c.producer); ei != nil {
+		inc.ElementInstanceKey = c.producer
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else {
+		inc.ProcessInstanceKey = scope // an instance-root write: the instance is the subject
+	}
+	c.AppendIncidentEvent(model.IntentIncidentCreated, inc)
+}
+
+// parkMovedDataSubject refuses a write that would change the instance's data subject
+// after values were sealed under the previous one, and parks an incident naming it
+// (ADR-0314).
+func parkMovedDataSubject(c *ProcessingContext, scope uint64, name string) {
+	inc := model.IncidentValue{
+		ElementInstanceKey: scope,
+		RaisedAt:           c.Now(),
+		Message: "the write to \"" + name + "\" would change this instance's data subject, and personal values are " +
+			"already enciphered under the previous one. Allowing it would split one person's data across two keys, " +
+			"so erasing either subject would leave the other half readable. Start an instance with the correct " +
+			"data subject instead; resolving this will only retry the same write",
+		Reason: model.IncidentDataSubjectMoved,
+	}
+	if ei := c.GetElementInstance(scope); ei != nil {
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else if ei := c.GetElementInstance(c.producer); ei != nil {
+		inc.ElementInstanceKey = c.producer
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else {
+		inc.ProcessInstanceKey = scope
+	}
+	c.AppendIncidentEvent(model.IntentIncidentCreated, inc)
+}
+
+// parkPersonalOfAnotherSubject refuses a sealed personal value written into a scope whose
+// data subject is somebody else, and parks an incident naming it (ADR-0314).
+func parkPersonalOfAnotherSubject(c *ProcessingContext, scope uint64, name string) {
+	parkForeignSubject(c, scope, "the value written to \""+name+"\" is personal and enciphered for a different "+
+		"data subject than the one this scope names. It would still open under its own subject's key, so erasing "+
+		"this instance's subject would leave it readable. It most likely reached here through an output mapping "+
+		"out of a scope that set its own data subject; keep the data subject the same across the instance "+
+		"instead. Resolving this only retries the same write")
+}
+
+// parkSubjectOfAnotherPerson is the same refusal from the other side: the data subject
+// written to name arrives in a scope already holding a personal value sealed for somebody
+// else, which got there as a copy before the subject did (ADR-0314, amended).
+func parkSubjectOfAnotherPerson(c *ProcessingContext, scope uint64, name string) {
+	parkForeignSubject(c, scope, "the data subject written to \""+name+"\" names a different person than a "+
+		"personal value already sealed in this scope. That value arrived as a copy before the subject did — "+
+		"seeded by a call activity, or handed out of a subprocess that set its own data subject — and would "+
+		"stay readable after erasing the subject named now. Keep the data subject the same across the "+
+		"instance instead. Resolving this only retries the same write")
+}
+
+// parkForeignSubject parks the incident both refusals share, on the scope's element when
+// there is one and on the producing element otherwise, as parkMovedDataSubject does.
+func parkForeignSubject(c *ProcessingContext, scope uint64, message string) {
+	inc := model.IncidentValue{
+		ElementInstanceKey: scope,
+		RaisedAt:           c.Now(),
+		Message:            message,
+		Reason:             model.IncidentPersonalOfAnotherSubject,
+	}
+	if ei := c.GetElementInstance(scope); ei != nil {
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else if ei := c.GetElementInstance(c.producer); ei != nil {
+		inc.ElementInstanceKey = c.producer
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else {
+		inc.ProcessInstanceKey = scope
+	}
+	c.AppendIncidentEvent(model.IntentIncidentCreated, inc)
 }
 
 // readList reads a stored JSON list variable back into FEEL values; nil if absent or
@@ -4073,13 +5066,62 @@ func readList(c *ProcessingContext, scope uint64, name string) []expr.Value {
 
 // setListElement sets index idx of a stored JSON list variable and writes it back; a
 // no-op if idx is out of range (ADR-0077).
-func setListElement(c *ProcessingContext, scope uint64, name string, idx int, val expr.Value) {
-	elems := readList(c, scope, name)
-	if idx < 0 || idx >= len(elems) {
-		return
+// It reports whether the collection was written: an index out of range is nothing to
+// write and counts as written, while a collection past its budget is a refusal the
+// caller has to act on.
+func setListElement(c *ProcessingContext, scope uint64, name string, idx int, val expr.Value) bool {
+	kind, b, text := expr.Classify(val)
+	if int64(len(text)) > c.p.variableCeiling() {
+		// One iteration's own result, measured against the budget for one value: it is
+		// a business record, and the collection it joins has its own, larger ceiling
+		// (ADR-0294). Refusing here rather than after the round trip means the element
+		// that produced it is the one the incident names.
+		parkOversizedWrite(c, scope, name, int64(len(text)), c.p.variableCeiling())
+		return false
 	}
-	elems[idx] = val
-	writeList(c, scope, name, elems)
+	vk := toVarKind(kind)
+	// The collection this element produces, measured against the collection's own
+	// budget before the element is recorded. The element event does not carry the list
+	// (ADR-0296), so this is the last point at which anything can: the promotion that
+	// measures it again when the loop finishes cannot refuse without dropping every
+	// result the loop produced, and did exactly that.
+	if size, fits := collectionAfter(c, scope, name, idx, expr.FromStored(toExprKind(vk), b, text)); !fits {
+		parkOversizedWrite(c, scope, name, size, c.p.collectionCeiling())
+		return false
+	}
+	return c.appendVariableElement(model.VariableValue{
+		ScopeKey: scope, Name: name, Index: int32(idx),
+		Kind: vk, Bool: b, Text: text,
+	})
+}
+
+// collectionAfter reports whether the list at (scope, name) still fits the collection
+// budget once element idx is el, and, where it does not, the size it would have — the
+// size setVariableElement would store when the element event is applied, computed the
+// same way. A write that fold ignores — no list there, or an index outside it — fits.
+//
+// It does not re-serialise the list on the common path. The list as it stands plus
+// the element as the list will hold it is an upper bound, since setting an element
+// replaces one; only a list within one element of its budget is folded to learn its
+// exact size. That is the one case where the difference decides anything, and a bound
+// used there would refuse a loop that ends exactly at the budget, which is allowed.
+func collectionAfter(c *ProcessingContext, scope uint64, name string, idx int, el expr.Value) (int64, bool) {
+	ceiling := c.p.collectionCeiling()
+	cur := c.GetVariable(scope, name)
+	if cur == nil || cur.Kind != model.VarJSON {
+		return 0, true
+	}
+	_, _, elem := expr.Classify(expr.ListOf(el))
+	if int64(len(cur.Text)+len(elem)) <= ceiling {
+		return 0, true
+	}
+	elems, ok := expr.AsList(expr.FromStored(expr.KindJSON, false, cur.Text))
+	if !ok || idx < 0 || idx >= len(elems) {
+		return 0, true
+	}
+	elems[idx] = el
+	_, _, text := expr.Classify(expr.ListOf(elems...))
+	return int64(len(text)), int64(len(text)) <= ceiling
 }
 
 // callActivityBehavior runs a call activity: on activation it starts a separate
@@ -4105,6 +5147,17 @@ func (callActivityBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mo
 		// deploy-then-retry / incident is a follow-up (ADR-0076).
 		return
 	}
+	// A call activity is an untriggered create: the child would be seeded by
+	// startElementsFor at its none starts, or, having none, at every start it has.
+	// With several, that runs branches nobody triggered — a product's lifecycle
+	// process would provision and deprovision at once — so the child is not created
+	// and the token parks on an incident instead (ADR-0426). The check reads the
+	// slice the create reads anyway; resolving re-runs this activation, so a target
+	// fixed and redeployed meanwhile is called then.
+	if child := c.process(childDefKey); child != nil && child.UntriggeredStartAmbiguous() {
+		raiseAmbiguousCallIncident(c, key, ei, child)
+		return
+	}
 	var startVars []model.VariableValue
 	if detail.PropagateAllParent {
 		c.VariablesOfScope(ei.ProcessInstanceKey, func(v model.VariableValue) {
@@ -4122,6 +5175,31 @@ func (callActivityBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mo
 
 func (callActivityBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
+}
+
+// raiseAmbiguousCallIncident parks a call activity whose target only its triggers
+// can start (ADR-0426). Job-less, like a mockup or gateway incident, so resolving
+// it goes through resumeParkedElement and re-runs the activation. The message names
+// the target's start events, because what the operator has to decide is which of
+// them the caller meant — and a call activity cannot say.
+func raiseAmbiguousCallIncident(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, child *compiler.CompiledProcess) {
+	var names strings.Builder
+	for i, id := range child.StartEvents() {
+		if i > 0 {
+			names.WriteString(", ")
+		}
+		names.WriteString(child.ElementBpmnId(id))
+	}
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		ElementId:          ei.ElementId,
+		RaisedAt:           c.Now(),
+		Message: "called process " + child.ProcessId() + " has no none start event and " +
+			"several start events (" + names.String() + "); a call activity triggers none " +
+			"of them and would run every branch at once — start it through one of its " +
+			"triggers, or give it a none start (ADR-0426)",
+	})
 }
 
 // resumeCaller promotes a completed child instance's variables into its caller and
@@ -4143,20 +5221,32 @@ func resumeCaller(c *ProcessingContext, childScope, callerKey uint64) {
 	// than deferred: a closure would allocate on the command path (I1).
 	prevProducer := c.producer
 	c.producer = callerKey
+	fits := true
 	if detail.PropagateAllChild {
 		// All child variables merge into the caller's instance scope.
 		c.VariablesOfScope(childScope, func(v model.VariableValue) {
 			v.ScopeKey = caller.ProcessInstanceKey
-			c.AppendVariableEvent(model.IntentVariableCreated, v)
+			if !c.AppendVariableEvent(model.IntentVariableCreated, v) {
+				fits = false
+			}
 		})
 	} else {
 		// Only the output mappings escape: each source is FEEL over the child's
 		// variables, promoted to the caller's instance scope.
 		for _, m := range callerCp.IOOutputs(caller.ElementId) {
-			c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, callerCp, m, childScope, caller.ProcessInstanceKey))
+			if !c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, callerCp, m, childScope, caller.ProcessInstanceKey)) {
+				fits = false
+			}
 		}
 	}
 	c.producer = prevProducer
+	// A result past the budget was refused with an incident on the call activity.
+	// Resuming it anyway would clear that incident with the element and let the caller
+	// carry on without the result it called for — and the child is already gone, so
+	// nothing would produce it again (ADR-0294).
+	if !fits {
+		return
+	}
 	c.AppendElementCommand(callerKey, model.IntentCompleting, *caller)
 }
 

@@ -39,10 +39,10 @@ const (
 	// the property that makes the reach of all of them provable by reading one file.
 	apiScopeDeploy = "deploy"
 
-	// apiScopeWorker reaches the four operations an out-of-process worker performs
+	// apiScopeWorker reaches only operations an out-of-process worker performs
 	// and nothing else (ADR-0007/0168). This is the scope that earns the mechanism:
 	// a worker is a long-lived credential on another host, often in another network
-	// zone, and its whole job is four calls.
+	// zone, and its whole job is this small, enumerated protocol.
 	apiScopeWorker = "worker"
 
 	// apiScopeMCP reaches the Model Context Protocol transport and nothing else. It
@@ -64,12 +64,69 @@ const (
 	// one to hand out (ADR-0198).
 	apiScopeMetrics = "metrics"
 
+	// apiScopeDirectory reaches the two directory-synchronisation routes and nothing
+	// else (ADR-0332). It is the scope that carries the
+	// argument for scopes furthest: the credential behind it is held by a scheduled
+	// process that creates and disables accounts, so the question "what else could
+	// this do if it leaked" has to have a two-line answer — and it does. It cannot
+	// deploy, which is the property an operator asked for by name: a provisioning
+	// token is not also a deployment token.
+	//
+	// It does not, and must not, make the credential an administrator.
+	// TestTokenRolesNeverIncludeAdmin still holds: what a directory token carries is
+	// the ordinary machine role set, and what confines it is this list.
+	apiScopeDirectory = "directory"
+
+	// apiScopeInventory reaches the two commissioning-load routes and nothing else
+	// (ADR-0333). The credential behind it is held by
+	// the process that reads a target system's memberships, which is a process
+	// somebody runs once at commissioning and then leaves armed — so the question
+	// "what else could this do if it leaked" needs the same two-line answer the
+	// directory scope has.
+	//
+	// It is a separate scope from apiScopeDirectory rather than an addition to it,
+	// and the separation is the point: the mirror creates accounts, the load records
+	// what they already hold, and a single credential that could do both would be
+	// able to invent a person and then give them the estate's rights in two calls.
+	apiScopeInventory = "inventory"
+
 	// apiScopeStatus reaches this server's node descriptor and nothing else. It is
 	// what ADR-0189 §6 requires of remote correlation: another Atlas asking "who are
 	// you, and what can you be asked for" must not be handed a deploy credential to
 	// get the answer, and a credential handed to a peer should be the narrowest one
 	// that answers the question — here, one GET.
 	apiScopeStatus = "status"
+
+	// apiScopeLandscape reaches the derived landscape and nothing else: the mesh and
+	// its ArchiMate projection, both read-only. It is ADR-0402 §1's least-privilege
+	// scope for a peer that is asked for its own picture — it can neither deploy,
+	// read an instance, nor list a person — and it is the scope whose credentials
+	// must state a reach (ADR-0410), because the answer it serves is wide enough
+	// that "viewer on everything" would be the escalation §1 set out to avoid.
+	apiScopeLandscape = "landscape"
+
+	// apiScopeReminders reaches one route: what is waiting for one named person
+	// (ADR-0343). It is what a reminder process carries.
+	//
+	// A scope of its own rather than an addition to apiScopeInventory, which would
+	// have been the cheap choice because the reconciliation run is already there.
+	// That scope's argument is "reads and writes about what the estate holds"; this
+	// is about what people owe, and a scope whose name no longer describes its
+	// contents is one nobody can reason about — which defeats the single property
+	// ADR-0194 asks of a scope, that its reach is short enough to read in a glance
+	// and see whole.
+	//
+	// It cannot read an inventory, run a comparison or decide anything. It can find
+	// out who owes what, and that is all. Sending is not in it either: sending is a
+	// mail task, not a route.
+	apiScopeReminders = "reminders"
+
+	// apiScopeEvents reaches the event feed and nothing else (ADR-0429 §5): what a CMDB
+	// or a billing system holds to follow how actions ended and what rights were
+	// granted and revoked. Its token carries the feedreader role and no other
+	// (scopeRoles), so the role the route asks for and the reach the scope allows name
+	// the same single door.
+	apiScopeEvents = "events"
 )
 
 // apiScopeAllowed is the complete reach of each confined scope. A scope absent
@@ -89,12 +146,31 @@ var apiScopeAllowed = map[string][]string{
 		"POST /api/v1/applications/import",
 		"GET /api/v1/applications/{id}/deployments",
 	},
+	// The landscape is one read and its projection of the same picture. Nothing else
+	// belongs here: a peer asked for a starmap is not thereby asked for an instance.
+	apiScopeLandscape: {
+		// The descriptor, because the estate read is two steps and not one
+		// (ADR-0402 §3): a peer is asked who it is
+		// *before* it is asked for a landscape, so a version boundary can be told from a
+		// fault. Without this route a landscape credential fails at the first step and
+		// every peer is reported unreachable — which is what a real two-installation run
+		// found, and no test with an unauthenticated peer could.
+		//
+		// It adds nothing this scope did not already imply: the same descriptor is what
+		// the narrower `status` scope exists for, and it carries an id, a build and a
+		// feature list.
+		"GET /api/v1/node",
+		"GET /api/v1/panorama/mesh",
+		"GET /api/v1/panorama/mesh/archimate",
+	},
 	apiScopeWorker: {
 		"POST /api/v1/jobs/activate",
 		"POST /api/v1/jobs/{key}/complete",
 		"POST /api/v1/jobs/{key}/fail",
+		"POST /api/v1/jobs/{key}/error",
 		"POST /api/v1/mail/outbox",
 		"POST /api/v1/ad/mock-directory",
+		"POST /api/v1/sql/mock-journal",
 	},
 	// One route, and not one of /api/v1's: the exposition is mounted beside the
 	// probes. A scope is a set of mounted patterns, not of API operations, which is
@@ -102,10 +178,42 @@ var apiScopeAllowed = map[string][]string{
 	apiScopeMetrics: {
 		"GET /metrics",
 	},
+	// One read. The feed is paged by a cursor its reader keeps, so there is nothing
+	// else a follower of it needs to ask.
+	apiScopeEvents: {
+		"GET /api/v1/events",
+	},
 	// Read-only, and deliberately not the PUT on the same path: a peer reads an
 	// identity, it never sets one.
 	apiScopeStatus: {
 		"GET /api/v1/node",
+	},
+	// One pattern. The route it names refuses `?principal=` to anything without the
+	// operator role, so this scope's reach and that check are two locks on the same
+	// door — a token minted here still has to be held by an account that may ask.
+	apiScopeReminders: {
+		"GET /api/v1/pending-work",
+	},
+	// Two patterns, and the pair is the whole of what a directory mirror does: ask
+	// where to resume, report what was read. Nothing else is added here without the
+	// decision record that argues for it — the value of this entry is that it is
+	// short enough to read in one glance and see the reach whole.
+	apiScopeDirectory: {
+		"GET /api/v1/directory-sync",
+		"POST /api/v1/directory-sync",
+	},
+	// Two patterns again, and the same discipline: ask whether this system has ever
+	// been loaded, report what it grants.
+	apiScopeInventory: {
+		"GET /api/v1/inventory-load",
+		"POST /api/v1/inventory-load",
+		// The reconciliation *run* and nothing else of that surface. A scheduled
+		// process may compare unattended, because comparing writes no entitlement
+		// and reaches no target system — it records a journal entry. The three
+		// actions are deliberately absent: each of them either changes what Atlas
+		// asserts about somebody's access or takes access away, and neither belongs
+		// behind a credential a model carries (ADR-0334).
+		"POST /api/v1/reconciliation",
 	},
 	// The transport, both the exact path and everything under it, because that is
 	// how it is mounted. No method: the transport answers POST for JSON-RPC and GET
@@ -144,7 +252,7 @@ const mcpTransportHeader = "X-Atlas-Via-MCP"
 // apiMintableScopes lists the scopes an API token may be minted with. It is not
 // every scope: apiScopeDeploy belongs to a credential with its own store, so
 // nothing here can ask for it.
-var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus}
+var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus, apiScopeDirectory, apiScopeInventory, apiScopeLandscape, apiScopeEvents}
 
 // apiScopes returns the mintable scopes, sorted, for the error message that names
 // them when a request asks for something else.

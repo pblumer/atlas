@@ -48,7 +48,7 @@ test("a class reads as UML: its kind, its members, and which of them identify it
 test("the canvas refuses what the server would refuse, in the server's words", async ({ page }) => {
   // A value type cannot be the whole that owns parts, so Address → Customer as a
   // composition must be refused while it is being drawn.
-  await page.locator('.im-connect[data-kind="composition"]').click();
+  await page.locator('.djs-palette [data-action=\"composition\"]').click();
   await box(page, "Address").click();
   // Every class the matrix rules out fades, so the canvas offers only what is legal.
   await expect(box(page, "Customer").locator(".uml-class")).toHaveClass(/unreachable/);
@@ -64,7 +64,7 @@ test("the canvas refuses what the server would refuse, in the server's words", a
 });
 
 test("an enumeration cannot be related to at all", async ({ page }) => {
-  await page.locator('.im-connect[data-kind="association"]').click();
+  await page.locator('.djs-palette [data-action=\"association\"]').click();
   await box(page, "Order").click();
   await expect(box(page, "OrderStatus").locator(".uml-class")).toHaveClass(/unreachable/);
   await box(page, "OrderStatus").click();
@@ -73,7 +73,7 @@ test("an enumeration cannot be related to at all", async ({ page }) => {
 });
 
 test("a legal relationship is drawn, and the panel states how to read it", async ({ page }) => {
-  await page.locator('.im-connect[data-kind="composition"]').click();
+  await page.locator('.djs-palette [data-action=\"composition\"]').click();
   await box(page, "Order").click();
   await box(page, "Address").click();
 
@@ -107,13 +107,46 @@ test("a relationship is picked off the drawing, and stays picked while it is edi
   expect(page.__errors).toEqual([]);
 });
 
+// Drawing is how a relationship is made; it was also the only way to change one, so an
+// end aimed at the wrong class meant deleting the line and drawing it again — losing
+// its name, its roles and its multiplicities with it.
+test("a relationship's end can be moved to another class, keeping the rest of it", async ({ page }) => {
+  await page.locator(".djs-element:has(.uml-edge)").click();
+  await expect(page.locator(".im-reading")).toHaveText("Customer → Order");
+
+  await page.locator('[data-side="to"][data-f="classId"]').selectOption({ label: "Address" });
+  await expect(page.locator(".im-reading")).toHaveText("Customer → Address");
+  // What it was called and how the two ends refer to each other survive the move.
+  await expect(page.locator('[data-side="to"][data-f="role"]')).toHaveValue("orders");
+
+  await page.locator("#im-save").click();
+  const saved = await page.evaluate(() => window.__saved.associations[0]);
+  expect(saved).toMatchObject({ name: "places", to: { classId: "c3", role: "orders", multiplicity: "0..*" } });
+  expect(page.__errors).toEqual([]);
+});
+
+test("a class this kind of relationship cannot reach is offered, and refused", async ({ page }) => {
+  await page.locator(".djs-element:has(.uml-edge)").click();
+  // Disabled rather than hidden, and carrying its reason: nothing points at an
+  // enumeration, because an enumeration is a set of values and not a thing. It is the
+  // same matrix Kind reads, from the other side.
+  const blocked = page.locator('[data-side="to"][data-f="classId"] option[disabled]');
+  await expect(blocked).toHaveText("OrderStatus — no association from here");
+  expect(page.__errors).toEqual([]);
+});
+
 test("a generalization has no roles, because is-a is not counted", async ({ page }) => {
-  await page.locator('.im-connect[data-kind="generalization"]').click();
+  await page.locator('.djs-palette [data-action=\"generalization\"]').click();
   await box(page, "Order").click();
   await box(page, "Customer").click();
   await expect(page.locator(".im-reading")).toHaveText("Order → Customer");
-  await expect(page.locator(".im-end")).toHaveCount(0);
   await expect(page.locator(".im-hint-text")).toContainText("not a counted relationship");
+  // Which classes it runs between is still a fact about it — and the only one, since
+  // "is a kind of" is not counted.
+  await expect(page.locator(".im-end")).toHaveCount(2);
+  await expect(page.locator('.im-end [data-f="classId"]')).toHaveCount(2);
+  await expect(page.locator('.im-end [data-f="role"]')).toHaveCount(0);
+  await expect(page.locator('.im-end [data-f="multiplicity"]')).toHaveCount(0);
 });
 
 test("editing a class updates the drawing, and a rename retypes what referred to it", async ({ page }) => {
@@ -128,6 +161,47 @@ test("editing a class updates the drawing, and a rename retypes what referred to
   await page.locator("#im-c-stereo").selectOption("valueType");
   await expect(page.locator(".im-attrs input[type=checkbox]")).toHaveCount(0);
   await expect(box(page, "Order").locator(".uml-attr.key")).toHaveCount(0);
+});
+
+// A store names the class it holds by name (DataStore.Class), like an attribute's type
+// and a lifecycle's `statesFrom`. So it has to follow a rename, and cannot follow a
+// delete — which makes the two cases one rule and two behaviours, and neither of them
+// was here before: the rename left the store naming a class nothing declared, and the
+// model was then refused on save with `store-unknown-class`.
+test("a rename follows the store that holds the class, and a delete says it cannot", async ({ page }) => {
+  await box(page, "Order").click();
+  await page.locator("#im-c-name").fill("Auftrag");
+  await expect(box(page, "Auftrag")).toBeVisible();
+
+  await page.locator("#im-save").click();
+  await expect.poll(() => page.evaluate(() => window.__saved)).toBeTruthy();
+  const saved = await page.evaluate(() => window.__saved);
+  // The store came with it. Without this the model does not validate at all, so the
+  // edit could not be saved until the class was renamed back by hand.
+  expect(saved.stores.map((st) => ({ name: st.name, class: st.class })))
+    .toEqual([{ name: "Orders", class: "Auftrag" }]);
+  // And the class itself carries the new name, so the store and the class agree — which
+  // is the whole of what `store-unknown-class` checks.
+  expect(saved.classes.map((c) => c.name)).toContain("Auftrag");
+  expect(saved.classes.map((c) => c.name)).not.toContain("Order");
+  expect(page.__errors).toEqual([]);
+});
+
+test("deleting a class a store holds says so before it is confirmed", async ({ page }) => {
+  const asked = [];
+  // Declined, so nothing is deleted: what is under test is what the question says.
+  page.on("dialog", async (d) => { asked.push(d.message()); await d.dismiss(); });
+
+  await box(page, "Order").click();
+  await page.locator('[data-act="del-class"]').click();
+  await expect.poll(() => asked.length).toBe(1);
+
+  // ADR-0331's rule on this surface: the cost is stated before the click, not met as a
+  // refusal on the next save.
+  expect(asked[0]).toContain("Orders");
+  expect(asked[0]).toContain("will not save");
+  await expect(box(page, "Order")).toBeVisible(); // declined, so it is still there
+  expect(page.__errors).toEqual([]);
 });
 
 // The order of a class's attributes is not a view setting: a class box reads top to
@@ -200,7 +274,7 @@ test("a move past either end is refused rather than wrapping", async ({ page }) 
 });
 
 test("saving sends local handles for new shapes and lets the server name them", async ({ page }) => {
-  await page.locator('.im-add[data-stereotype="businessObject"]').click();
+  await page.locator('.djs-palette [data-action=\"businessObject\"]').click();
   await page.locator("#im-c-name").fill("Invoice");
   await page.locator('[data-act="add-attr"]').click();
   await page.locator("#im-save").click();
@@ -233,6 +307,205 @@ test("a refused save shows the server's findings rather than one sentence", asyn
   await expect(page.locator(".phead .kv")).toHaveText("Business object");
   // The header names the element, so it carries the rename that caused the finding.
   await expect(page.locator(".phead b")).toHaveText("Ordr");
+});
+
+// The Problems bar used to show the verdict of the *last save*, so every edit that
+// broke the model was silent until somebody pressed Save — and the refusal then named
+// an edit they had stopped thinking about. It now asks the server as the model changes,
+// which is what closes that whole category rather than one case of it
+// (ADR-0364).
+test.describe("the verdict is live", () => {
+  test("an edit is judged without saving, and the bar says so", async ({ page }) => {
+    await expect(page.locator(".im-ok")).toBeVisible();
+
+    // The server's answer, not the canvas's: the rules live in one place and are asked
+    // for, never reimplemented here.
+    await page.evaluate(() => {
+      window.__findings = [{ code: "store-unknown-class", reason: "notation", storeId: "st1",
+        message: 'Orders holds "Auftrag", and this model has no class of that name.' }];
+    });
+    await box(page, "Order").click();
+    await page.locator("#im-c-name").fill("Auftrag");
+
+    await expect(page.locator(".im-problem-head")).toHaveText("1 problem");
+    await expect(page.locator("button.im-problem")).toContainText("no class of that name");
+    // Nothing was saved to earn that answer.
+    expect(await page.evaluate(() => window.__saved)).toBeNull();
+    await expect(page.locator("#im-dirty")).toBeVisible();
+  });
+
+  test("what is judged is the model in the canvas, not the one last saved", async ({ page }) => {
+    await box(page, "Order").click();
+    await page.locator("#im-c-name").fill("Auftrag");
+    await expect.poll(() => page.evaluate(() => window.__validated)).toBeTruthy();
+
+    const asked = await page.evaluate(() => window.__validated);
+    expect(asked.classes.map((c) => c.name)).toContain("Auftrag");
+    // The whole document, because a rule can be about any part of it — a store names
+    // its class, an association names its ends.
+    expect(asked.stores.map((st) => st.name)).toEqual(["Orders"]);
+    expect(Array.isArray(asked.associations)).toBe(true);
+  });
+
+  test("a verdict that clears is cleared on the bar too", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__findings = [{ code: "unknown-type", reason: "notation", classId: "c2",
+        message: "Something is wrong." }];
+    });
+    await box(page, "Order").click();
+    await page.locator("#im-c-name").fill("Auftrag");
+    await expect(page.locator(".im-problem-head")).toHaveText("1 problem");
+
+    // The finding goes when what caused it goes, without a save in between.
+    await page.evaluate(() => { window.__findings = []; });
+    await page.locator("#im-c-name").fill("Order");
+    await expect(page.locator(".im-ok")).toBeVisible();
+  });
+
+  test("a server that cannot answer leaves the last verdict standing", async ({ page }) => {
+    await page.evaluate(() => { window.__validateFails = true; });
+    await box(page, "Order").click();
+    await page.locator("#im-c-name").fill("Auftrag");
+
+    // Not blanked into a false "consistent", and not an error thrown at the author:
+    // a verdict nobody could fetch is simply not news.
+    await expect(page.locator(".im-ok")).toBeVisible();
+    await expect(box(page, "Auftrag")).toBeVisible();
+    expect(page.__errors).toEqual([]);
+  });
+});
+
+// Where a class is used, read onto the drawing itself
+// (ADR-0363).
+//
+// The reading is the Business objects page's, asked once for this model's application,
+// so the drawing cannot say anything that page does not. What these pin is the *rule*
+// that turns it into marks — which is the part that can be wrong in a way nobody
+// notices, because a faint member reads as "safe to delete".
+test.describe("shaded by where it is used", () => {
+  // One row per class, as GET /api/v1/infomodel/classes answers it. The last row is
+  // another model's Order: same name, different model, and its members must not be read
+  // as this one's.
+  const CATALOG = [
+    { modelId: "m1", name: "Customer", usage: { processes: 1, modelUses: 1, attributes: [] } },
+    { modelId: "m1", name: "Order", usage: { processes: 2, modelUses: 1, attributes: ["total"], states: ["approved"] } },
+    { modelId: "m1", name: "Address", usage: { processes: 0, modelUses: 0 } },
+    { modelId: "m1", name: "OrderStatus", usage: { processes: 0, modelUses: 2 } },
+    { modelId: "m2", name: "Order", usage: { processes: 9, modelUses: 9, attributes: ["placedOn"] } },
+  ];
+  const shade = async (page, rows = CATALOG) => {
+    await page.evaluate((r) => { window.__classes = r; }, rows);
+    await page.locator('[data-tool="usage"]').click();
+    await expect(page.locator("#im-usage-legend")).toBeVisible();
+  };
+
+  test("a member a deployed process names comes forward, one nothing names recedes", async ({ page }) => {
+    await shade(page);
+    const order = box(page, "Order");
+    // `total` because a process writes it by name; `id` because it is the business key
+    // — no write ever names one, and it is what every store lookup resolves against, so
+    // fading it would point at the member that must not go.
+    await expect(order.locator(".uml-attr.used .uml-attr-name")).toHaveText(["⚿ id", "total"]);
+    // `placedOn` is named by the *other* model's Order. A name is scoped to its model,
+    // and a reading that joined the two would call a member used on the strength of a
+    // process that has never seen this class.
+    await expect(order.locator(".uml-attr.unused .uml-attr-name")).toHaveText(["placedOn"]);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("a class nothing uses is faint; one only the vocabulary uses is not", async ({ page }) => {
+    await shade(page);
+    // Used by no process and by nothing in the model either — the only case in which
+    // the reading is entitled to fade a whole class.
+    await expect(box(page, "Address").locator(".uml-class")).toHaveClass(/unused/);
+    // An «enumeration» is normally declared by no data object at all, so a fade that
+    // counted only processes would grey out the most shared elements in the model.
+    await expect(box(page, "OrderStatus").locator(".uml-class")).not.toHaveClass(/unused/);
+    // Customer is used by a process, so its box stands — and no process names either of
+    // its members, so `name` recedes while the key does not.
+    await expect(box(page, "Customer").locator(".uml-class")).not.toHaveClass(/unused/);
+    await expect(box(page, "Customer").locator(".uml-attr.unused .uml-attr-name")).toHaveText(["name"]);
+  });
+
+  test("a name the reading has never seen is left alone, not called unused", async ({ page }) => {
+    await shade(page);
+    await box(page, "Order").click();
+    await page.locator("#im-c-name").fill("Bestellung");
+    await expect(box(page, "Bestellung")).toBeVisible();
+    // The reading made no claim about `Bestellung`. Fading it would turn every rename
+    // into a scare about a member nothing had said anything about.
+    await expect(box(page, "Bestellung").locator(".uml-class")).not.toHaveClass(/unused/);
+    await expect(box(page, "Bestellung").locator(".uml-attr.unused")).toHaveCount(0);
+    await expect(box(page, "Bestellung").locator(".uml-attr.used")).toHaveCount(0);
+  });
+
+  test("the reading is asked for this model's application, and pressing again puts the drawing back", async ({ page }) => {
+    await shade(page);
+    expect(await page.evaluate(() => window.__catalogAskedFor)).toContain("applicationId=app-1");
+
+    await page.locator('[data-tool="usage"]').click();
+    await expect(page.locator("#im-usage-legend")).toBeHidden();
+    await expect(page.locator('[data-tool="usage"]')).toHaveAttribute("aria-pressed", "false");
+    // Not "everything bright" — nothing marked at all, which is the drawing as it is
+    // when nobody has asked the question.
+    await expect(page.locator(".uml-attr.used")).toHaveCount(0);
+    await expect(page.locator(".uml-attr.unused")).toHaveCount(0);
+    await expect(page.locator(".uml-class.unused")).toHaveCount(0);
+  });
+
+  // A literal is the one member no process ever names. What a process names is a
+  // *state* — a `<dataState>` on a write — and a literal becomes a state only where some
+  // class's lifecycle takes its states from this enumeration (ADR-0306). So the question
+  // is asked of the classes that borrow it, and only where one of them is used at all.
+  test("a literal is read through the lifecycles that borrow it, and not before", async ({ page }) => {
+    await shade(page);
+    const status = box(page, "OrderStatus");
+    // Nothing borrows these literals yet. "No process reaches this state" and "no
+    // process was in a position to" are different claims, and only the second is true.
+    await expect(status.locator(".uml-literal.used")).toHaveCount(0);
+    await expect(status.locator(".uml-literal.unused")).toHaveCount(0);
+
+    await box(page, "Order").click();
+    await page.locator("#im-c-lcfrom").selectOption("OrderStatus");
+
+    // Now they are Order's states, and Order is written into `approved` by a deployed
+    // process. `draft` is reached by nothing deployed — which is a claim the reading can
+    // now make, because it could see the borrower.
+    await expect(status.locator(".uml-literal.used")).toHaveText(["approved"]);
+    await expect(status.locator(".uml-literal.unused")).toHaveText(["draft"]);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("a borrower no deployed process uses leaves the literals unshaded", async ({ page }) => {
+    await shade(page, [
+      { modelId: "m1", name: "Order", usage: { processes: 0, modelUses: 1 } },
+      { modelId: "m1", name: "OrderStatus", usage: { processes: 0, modelUses: 2 } },
+    ]);
+    await box(page, "Order").click();
+    await page.locator("#im-c-lcfrom").selectOption("OrderStatus");
+
+    // The lifecycle is there and the reading saw the class; what it did not see is any
+    // process moving an Order anywhere. Fading both literals would report a state
+    // machine nothing drives as a state machine nothing reaches.
+    const status = box(page, "OrderStatus");
+    await expect(status.locator(".uml-literal")).toHaveCount(2);
+    await expect(status.locator(".uml-literal.unused")).toHaveCount(0);
+    await expect(status.locator(".uml-literal.used")).toHaveCount(0);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("a reading that cannot be had shades nothing and says so", async ({ page }) => {
+    await page.evaluate(() => { window.__classesFail = true; });
+    await page.locator('[data-tool="usage"]').click();
+    await expect.poll(() => page.evaluate(() => window.__toasts.length)).toBe(1);
+    expect((await page.evaluate(() => window.__toasts))[0].msg)
+      .toContain("Could not read where these classes are used");
+    // A diagram that fades members on a reading that failed is a diagram saying
+    // something nobody checked.
+    await expect(page.locator("#im-usage-legend")).toBeHidden();
+    await expect(page.locator(".uml-attr.unused")).toHaveCount(0);
+    await expect(page.locator('[data-tool="usage"]')).toHaveAttribute("aria-pressed", "false");
+  });
 });
 
 test("the JSON Schema projection is shown as derived, and says what it dropped", async ({ page }) => {
@@ -290,14 +563,15 @@ test("a relationship's ends are their own group, and a generalization says why i
   // Roles and multiplicities are content, so the group says so before it is opened.
   await expect(page.locator('.pgroup[data-group="Ends"] .pgroup-dot')).toHaveCount(1);
 
-  await page.locator('.im-connect[data-kind="generalization"]').click();
+  await page.locator('.djs-palette [data-action=\"generalization\"]').click();
   await box(page, "Order").click();
   await box(page, "Customer").click();
   await expect(page.locator(".phead .kv")).toHaveText("Generalization");
-  // The group is still there — it is where the sentence explaining the absence goes.
+  // The group is still there — it is where the sentence explaining the absence goes,
+  // above the two ends it still has.
   await expect(page.locator('.pgroup[data-group="Ends"] .im-hint-text'))
     .toContainText("not a counted relationship");
-  await expect(page.locator(".im-end")).toHaveCount(0);
+  await expect(page.locator('.im-end [data-f="role"]')).toHaveCount(0);
 });
 
 // Data stores on the class canvas (ADR-0230, slice 5b).
@@ -332,7 +606,7 @@ test.describe("data stores", () => {
   });
 
   test("adding a store puts it on the canvas and selects it", async ({ page }) => {
-    await page.locator('[data-add="store"]').click();
+    await page.locator('.djs-palette [data-action="store"]').click();
     await expect(page.locator(".uml-store")).toHaveCount(2);
     await expect(page.locator(".phead .kv")).toHaveText("Data store");
     await page.locator("#im-s-name").fill("Invoices");
@@ -725,7 +999,10 @@ test.describe("room for a long member list", () => {
 // editor would put that one back as the selection and the other three would be gone
 // before anything could be done with them — a marquee that looks like it worked.
 test.describe("selecting several at once", () => {
-  const marquee = (page) => page.locator('#im-canvas [data-tool="marquee"]');
+  // The lasso lives in the palette's tools group now, where bpmn-js keeps it, and
+  // diagram-js lights it itself off its own tool events — so "armed" is the library's
+  // `highlighted-entry` class rather than an aria-pressed this view maintained.
+  const marquee = (page) => page.locator('.djs-palette [data-action="lasso"]');
 
   // A box drawn round the lower row — OrderStatus and Address — because those two
   // have empty sheet on every side of them: the box has to *enclose* what it takes,
@@ -748,9 +1025,9 @@ test.describe("selecting several at once", () => {
   }
 
   test("a box takes hold of what is inside it, and the panel says what it holds", async ({ page }) => {
-    await expect(marquee(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(marquee(page)).not.toHaveClass(/highlighted-entry/);
     await marquee(page).click();
-    await expect(marquee(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(marquee(page)).toHaveClass(/highlighted-entry/);
 
     await boxLowerRow(page);
 
@@ -764,7 +1041,7 @@ test.describe("selecting several at once", () => {
 
     // The mode is spent with the box. A button still lit would promise a gesture that
     // is back to panning.
-    await expect(marquee(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(marquee(page)).not.toHaveClass(/highlighted-entry/);
     expect(page.__errors).toEqual([]);
   });
 
@@ -839,9 +1116,9 @@ test.describe("selecting several at once", () => {
 
   test("Escape gives the drag back to panning", async ({ page }) => {
     await marquee(page).click();
-    await expect(marquee(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(marquee(page)).toHaveClass(/highlighted-entry/);
     await page.keyboard.press("Escape");
-    await expect(marquee(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(marquee(page)).not.toHaveClass(/highlighted-entry/);
 
     // The same gesture now moves the sheet, and takes hold of nothing.
     const before = await box(page, "OrderStatus").boundingBox();

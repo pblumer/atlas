@@ -1,6 +1,7 @@
 # ADR-0049: Internal service authentication for the in-process MCP adapter
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas maintainers
 

@@ -6,6 +6,15 @@
 // the real editor.js mounts.
 import { test, expect } from "@playwright/test";
 
+// listing is how every capped list endpoint answers since
+// ADR-0378: the rows under
+// .items, beside the count of what is really there and whether the cap bit. A stub that
+// hands back a bare array would make the console read undefined, not a wrong number —
+// so it would fail for the wrong reason.
+const listing = (items, extra = {}) => ({
+  items, total: items.length, totalExact: true, truncated: false, ...extra,
+});
+
 const open = async (page) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -216,15 +225,73 @@ test.describe("reconfiguring the worker", () => {
     expect(page.__errors).toEqual([]);
   });
 
-  test("a name nobody configured points at the Console instead", async ({ page }) => {
+  test("a name nobody configured is created from the incident, and the task retries", async ({ page }) => {
     await open(page);
     await page.evaluate(() => window.__unconfigureConnector());
     await page.evaluate(() => window.__mountLive(window.__STUCK));
 
     const row = page.locator("#var-panel .inc-row");
     await expect(row.locator(".inc-conn")).toContainText("not configured");
-    // Nothing to open: the fix is to create one, and that lives in the Console.
+    // There is no record to edit, so the row offers the act that is actually missing:
+    // create the worker the model names. Sending the operator to the Console with the
+    // name in their head was the pre-ADR-0160 detour ADR-0160 removed everywhere else.
     await expect(row.locator("[data-fix-conn]")).toHaveCount(0);
+    await row.locator("[data-add-conn]").click();
+
+    const modal = page.locator(".conn-modal");
+    await expect(modal).toBeVisible();
+    // Name and Worker Type come from the incident and are not typed again: the name is
+    // the binding every model references, so a typo here would create a second worker
+    // and leave the task parked on the first.
+    await expect(modal.locator("#conn-name")).toHaveValue("Patrick Blumer");
+    await expect(modal.locator("#conn-name")).toBeDisabled();
+    await expect(modal.locator("#conn-kind")).toHaveValue("mail");
+    await expect(modal).toContainText("Task_pay is parked on this worker");
+
+    await modal.locator("#conn-endpoint").fill("smtp.example.com:587");
+    await modal.locator("#conn-credref").fill("smtp_pw");
+    await modal.locator("[data-conn-extra]").click();
+    await expect(page.locator(".conn-modal")).toHaveCount(0);
+
+    // One action: the worker exists now, under the name the model states, and the
+    // parked job was handed an attempt against it.
+    await expect.poll(() => page.evaluate(() => window.__connCreates)).toEqual([
+      {
+        name: "Patrick Blumer", kind: "mail", provider: "smtp",
+        endpoint: "smtp.example.com:587", sender: "", credentialsRef: "smtp_pw",
+      },
+    ]);
+    await expect.poll(() => page.evaluate(() => window.__resolved)).toEqual([{ key: "1001", retries: 1 }]);
+    await expect(page.locator("#var-panel .inc-row")).toHaveCount(0);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("creating without retrying leaves the incident standing", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => window.__unconfigureConnector());
+    await page.evaluate(() => window.__mountLive(window.__STUCK));
+    await page.locator("#var-panel .inc-row [data-add-conn]").click();
+
+    const modal = page.locator(".conn-modal");
+    await modal.locator("#conn-endpoint").fill("smtp.example.com:2525");
+    await modal.locator("[data-conn-save]").click();
+    await expect(page.locator(".conn-modal")).toHaveCount(0);
+
+    await expect.poll(() => page.evaluate(() => window.__connCreates.length)).toBe(1);
+    expect(await page.evaluate(() => window.__resolved)).toEqual([]);
+    await expect(page.locator("#var-panel .inc-row")).toHaveCount(1);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("a worker whose Worker Type the incident does not name still points at the Console", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => window.__unconfigureConnector(""));
+    await page.evaluate(() => window.__mountLive(window.__STUCK));
+
+    // Without a Worker Type there is nothing to create *as*, so the dialog would have
+    // to guess. The Console, where the type is picked, stays the honest answer.
+    const row = page.locator("#var-panel .inc-row");
+    await expect(row.locator("[data-add-conn]")).toHaveCount(0);
     await expect(row.locator('a[href="#/console/workers"]')).toContainText("Configure");
     expect(page.__errors).toEqual([]);
   });
@@ -334,23 +401,65 @@ const OVERVIEW = {
   // Two incidents on the OLD version and one on the latest: linking to the latest
   // would land the operator on the diagram holding the fewest of them.
   incidents: [
-    { elementInstanceKey: "1001", processInstanceKey: "900001", processDefKey: 6, elementId: "Task_pay", type: "job", jobKey: "5001", raisedAt: 1, message: "boom" },
-    { elementInstanceKey: "1002", processInstanceKey: "900002", processDefKey: 6, elementId: "Task_pay", type: "job", jobKey: "5002", raisedAt: 2, message: "boom" },
-    { elementInstanceKey: "1003", processInstanceKey: "900003", processDefKey: 7, elementId: "Task_pay", type: "job", jobKey: "5003", raisedAt: 3, message: "boom" },
+    { elementInstanceKey: "1001", processInstanceKey: "900001", processDefKey: 6, elementId: "Task_pay", elementIndex: 2, type: "job", jobKey: "5001", raisedAt: 1, message: "boom" },
+    { elementInstanceKey: "1002", processInstanceKey: "900002", processDefKey: 6, elementId: "Task_pay", elementIndex: 2, type: "job", jobKey: "5002", raisedAt: 2, message: "boom" },
+    { elementInstanceKey: "1003", processInstanceKey: "900003", processDefKey: 7, elementId: "Task_pay", elementIndex: 2, type: "job", jobKey: "5003", raisedAt: 3, message: "boom" },
   ],
+  // Each search row carries its own incident count, counted by the server through that
+  // instance's element index. It used to be inferred in the browser from a page of the
+  // server's whole incident list, which made a row past that page render as plainly
+  // "active" (ADR-0365) — so the mock answers the way
+  // the server does: 900001 is parked, 900009 is genuinely not, and the zero is as much
+  // a statement as the one.
   search: [
-    { key: 900001, processId: "zahlung", processDefKey: 6, version: 1, state: "active", createdAt: 1, variables: [{ name: "betrag", value: "42", kind: "number" }] },
-    { key: 900009, processId: "zahlung", processDefKey: 7, version: 2, state: "active", createdAt: 2, variables: [{ name: "betrag", value: "42", kind: "number" }] },
+    { key: 900001, processId: "zahlung", processDefKey: 6, version: 1, state: "active", createdAt: 1, incidents: 1, variables: [{ name: "betrag", value: "42", kind: "number" }] },
+    { key: 900009, processId: "zahlung", processDefKey: 7, version: 2, state: "active", createdAt: 2, incidents: 0, variables: [{ name: "betrag", value: "42", kind: "number" }] },
   ],
 };
 
-const bootOverview = async (page, { truncated = false } = {}) => {
+// groupsOf is the server's incident summary, computed from the same mutable list the
+// mock resolves against: one group per (definition, element, kind), biggest first. The
+// Incidents view and the overview's incident column both read this rather than the rows
+// (ADR-0337), so the mock has to answer it the way the server does or
+// the tests would pass against a shape nothing serves.
+const groupsOf = (incidents) => {
+  const by = new Map();
+  for (const inc of incidents) {
+    const key = `${inc.processDefKey}/${inc.elementId}/${inc.type}`;
+    const g = by.get(key);
+    if (!g) {
+      by.set(key, {
+        processDefKey: inc.processDefKey, processId: inc.processId || "zahlung", version: 1,
+        elementId: inc.elementId, elementIndex: inc.elementIndex, type: inc.type, count: 1,
+        oldestRaisedAt: inc.raisedAt, newestRaisedAt: inc.raisedAt, message: inc.message,
+      });
+      continue;
+    }
+    g.count++;
+    if (inc.raisedAt > g.newestRaisedAt) g.newestRaisedAt = inc.raisedAt;
+  }
+  return [...by.values()].sort((a, b) => b.count - a.count);
+};
+
+// matchesScope evaluates a bulk-resolve body's scope the way the server's shared
+// selector does, so "Resolve all" in these tests really clears a cause and nothing else.
+const matchesScope = (inc, body) => (!body.processDefKey || inc.processDefKey === body.processDefKey)
+  && (!body.elementId || inc.elementId === body.elementId)
+  && (body.elementIndex === undefined || body.elementIndex === null || inc.elementIndex === body.elementIndex)
+  && (!body.type || inc.type === body.type)
+  && (!body.message || (inc.message || "").toLowerCase().includes(String(body.message).toLowerCase()));
+
+const bootOverview = async (page, { truncated = false, seed = OVERVIEW.incidents } = {}) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.__errors = errors;
   // Mutable, so a resolve really removes one and both the table and the nav badge
   // (which reads the count off /stats) have to agree afterwards.
-  let incidents = OVERVIEW.incidents.slice();
+  let incidents = seed.slice();
+  // What the page asked the bulk endpoint for, recorded here in the test process so a
+  // route handler never has to reach back into the page to store it.
+  const bulk = [];
+  page.__bulk = bulk;
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -360,6 +469,18 @@ const bootOverview = async (page, { truncated = false } = {}) => {
         incidents = incidents.filter((i) => i.elementInstanceKey !== m[1]);
         return route.fulfill({ json: { elementInstanceKey: m[1] } });
       }
+      if (path === "/api/v1/incidents/resolve") {
+        const body = JSON.parse(route.request().postData() || "{}");
+        const before = incidents.length;
+        if (body.keys) {
+          const keys = new Set(body.keys.map(String));
+          incidents = incidents.filter((i) => !keys.has(String(i.elementInstanceKey)));
+        } else {
+          incidents = incidents.filter((i) => !matchesScope(i, body));
+        }
+        bulk.push(body);
+        return route.fulfill({ json: { resolved: before - incidents.length, notFound: 0, remaining: false, stats: {} } });
+      }
       return route.fulfill({ json: {} });
     }
     if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
@@ -368,13 +489,33 @@ const bootOverview = async (page, { truncated = false } = {}) => {
     if (path === "/api/v1/stats") {
       return route.fulfill({ json: { activeProcessInstances: 6, activeElementInstances: 6, unresolvedIncidents: incidents.length } });
     }
-    if (path === "/api/v1/incidents") {
+    if (path === "/api/v1/incidents/summary") {
       return route.fulfill({
-        json: { incidents },
-        headers: truncated ? { "X-Incidents-Truncated": "true" } : {},
+        json: {
+          total: incidents.length,
+          groups: groupsOf(incidents),
+          groupsTruncated: truncated,
+          ungrouped: truncated ? 2 : 0,
+        },
       });
     }
-    if (path === "/api/v1/instances/search") return route.fulfill({ json: OVERVIEW.search });
+    if (path === "/api/v1/incidents") {
+      // The view fetches a page of one scope; the mock answers the same selector the
+      // server does, so "Show" really narrows the rows.
+      const idx = url.searchParams.get("elementIndex");
+      const scoped = incidents.filter((i) => matchesScope(i, {
+        processDefKey: Number(url.searchParams.get("process")) || 0,
+        elementId: url.searchParams.get("element") || "",
+        elementIndex: idx === null ? undefined : Number(idx),
+        type: url.searchParams.get("type") || "",
+        message: url.searchParams.get("message") || "",
+      }));
+      return route.fulfill({
+        json: listing(scoped, { total: incidents.length, totalExact: !truncated, truncated }),
+      });
+    }
+    if (path === "/api/v1/instances/search") return route.fulfill({ json: listing(OVERVIEW.search) });
+    if (path === "/api/v1/instances" || path === "/api/v1/tasks") return route.fulfill({ json: listing([]) });
     return route.fulfill({ json: [] });
   });
   await page.goto("/index.html");
@@ -402,7 +543,7 @@ test.describe("instances overview", () => {
     expect(page.__errors).toEqual([]);
   });
 
-  test("a capped incident page says the counts are a lower bound", async ({ page }) => {
+  test("a capped cause summary says the counts are a lower bound", async ({ page }) => {
     await bootOverview(page, { truncated: true });
     await expect(page.locator("#ops-inc-note")).toContainText("lower bound");
     expect(page.__errors).toEqual([]);
@@ -421,6 +562,237 @@ test.describe("instances overview", () => {
     await expect(stuck).toHaveText("⚠ 1");
     await expect(stuck).toHaveAttribute("href", "#/operations/i/900001");
     await expect(results.filter({ hasText: "900009" }).locator("a.pill.err")).toHaveCount(0);
+    expect(page.__errors).toEqual([]);
+  });
+});
+
+// The Incidents view opens on *causes* (ADR-0337): one broken
+// integration parks every instance that reaches it, so the useful first reading is
+// "this element of this process, this failure, N tokens behind it" — and the action
+// that matches it clears all N. The row list below stays for reading and for the
+// per-incident ways out, now as a page of a chosen cause.
+const openIncidents = async (page) => {
+  await page.evaluate(() => { location.hash = "#/operations/incidents"; });
+  await expect(page.locator("#view h1").first()).toHaveText("Incidents");
+  await expect(page.locator("#causes tr").first()).toBeVisible();
+};
+
+test.describe("incidents by cause", () => {
+  test("groups the flood into one line per cause, biggest first", async ({ page }) => {
+    await bootOverview(page);
+    await openIncidents(page);
+
+    // Three incidents, two causes: two on v1's Task_pay and one on v2's.
+    const causes = page.locator("#causes tr");
+    await expect(causes).toHaveCount(2);
+    await expect(causes.first()).toContainText("Task_pay");
+    await expect(causes.first()).toContainText("2");
+    // The rows below still list every incident until a cause is chosen.
+    await expect(page.locator("#rows tr")).toHaveCount(3);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("Show narrows the row list to that cause", async ({ page }) => {
+    await bootOverview(page);
+    await openIncidents(page);
+
+    await page.locator("#causes tr").first().locator("button[data-show]").click();
+    await expect(page.locator("#rows tr")).toHaveCount(2);
+    await expect(page.locator("#rows-title")).toContainText("Task_pay");
+    // …and back to everything.
+    await page.locator("#scope-clear").click();
+    await expect(page.locator("#rows tr")).toHaveCount(3);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("Resolve all clears the whole cause in one call, not one per row", async ({ page }) => {
+    await bootOverview(page);
+    await openIncidents(page);
+    await expect(page.locator("#topnav .nav-badge[data-badge=incidents]")).toHaveText("3");
+
+    await page.locator("#causes tr").first().locator("button[data-resolve-cause]").click();
+    const modal = page.locator(".modal-ov");
+    await expect(modal).toBeVisible();
+    await expect(modal).toContainText("Fix the cause first");
+    await modal.locator("[data-inc-go]").click();
+
+    // One request, carrying the cause as its scope — not two single resolves.
+    await expect.poll(() => page.__bulk.length).toBe(1);
+    expect(page.__bulk[0]).toMatchObject({ processDefKey: 6, elementId: "Task_pay", type: "job", retries: 1 });
+    // The cause is gone, the other one stands, and the nav badge agrees at once.
+    await expect(page.locator("#causes tr")).toHaveCount(1);
+    await expect(page.locator("#rows tr")).toHaveCount(1);
+    await expect(page.locator("#topnav .nav-badge[data-badge=incidents]")).toHaveText("1");
+    expect(page.__errors).toEqual([]);
+  });
+
+  // An error end whose error nothing caught (ADR-0089): resolving throws the error
+  // again, so the cause reads as an error and the dialog grants no retries.
+  test("an uncaught error reads as one, and resolving it grants no retries", async ({ page }) => {
+    await bootOverview(page, {
+      seed: [{
+        elementInstanceKey: "2001", processInstanceKey: "900001", processDefKey: 6, elementId: "End_fail",
+        elementIndex: 3, type: "error", raisedAt: 1, message: "unhandled error 'NOPE'",
+      }],
+    });
+    await openIncidents(page);
+
+    const cause = page.locator("#causes tr").first();
+    await expect(cause.locator("span.pill.err", { hasText: "error" })).toHaveCount(1);
+    await expect(page.locator("#rows tr").first().locator("span.pill.err", { hasText: "error" })).toHaveCount(1);
+
+    await cause.locator("button[data-resolve-cause]").click();
+    const modal = page.locator(".modal-ov");
+    await expect(modal).toContainText("Each error is thrown again");
+    await expect(modal).toContainText("ignored by an error incident");
+    await expect(modal.locator("#inc-bulk-retries")).toBeDisabled();
+    await modal.locator("[data-inc-go]").click();
+
+    await expect.poll(() => page.__bulk.length).toBe(1);
+    expect(page.__bulk[0]).toMatchObject({ processDefKey: 6, elementId: "End_fail", type: "error", retries: 1 });
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("ticked rows resolve as exactly that set", async ({ page }) => {
+    await bootOverview(page);
+    await openIncidents(page);
+
+    // Nothing selected, no bulk bar: the bar is a consequence of a selection, not a
+    // mode to enter first.
+    await expect(page.locator("#inc-bulk")).toBeHidden();
+    await page.locator("#rows tr").first().locator("input[data-pick]").check();
+    await expect(page.locator("#inc-bulk")).toContainText("1 selected");
+
+    await page.locator("#inc-bulk-resolve").click();
+    const modal = page.locator(".modal-ov");
+    await expect(modal).toBeVisible();
+    await modal.locator("[data-inc-go]").click();
+
+    await expect.poll(() => page.__bulk.length).toBe(1);
+    expect(page.__bulk[0].keys).toEqual(["1001"]);
+    await expect(page.locator("#rows tr")).toHaveCount(2);
+    await expect(page.locator("#inc-bulk")).toBeHidden();
+    expect(page.__errors).toEqual([]);
+  });
+});
+
+// The Incidents view is two tables, and it has to fit the window it is opened in. It
+// used to sit in the console's centred 1120px column, where the cause table's
+// unbreakable cells — a long process id, a timestamp, a URL inside the message, three
+// controls on the action line — added up to more than the card: the table scrolled
+// inside it and the actions were cut off at its right edge, while the rest of a wide
+// screen stayed empty. The fixture is shaped like that production screen.
+const WIDE_CAUSES = [
+  ["proc_erster_stress_test", 1, 11, "Activity_16rrpt3", "timer", 7, "mockup task simulated failure", {}],
+  ["proc_marktleistung_auto", 3, 14, "event_karosserie", "job", 1, 'clio: no connector registered as "clio"', { connector: "clio", connectorKind: "clio" }],
+  ["proc_discord_stoerung", 3, 15, "Task_Antwort", "job", 1, "discord: send-message returned HTTP 400: Cannot send an empty message (code 50006)", { connector: "discord_pblumer", connectorKind: "discord", connectorId: "c9" }],
+  ["proc_benutzer_aufnahme", 9, 16, "ablehnung_mail", "job", 1, 'mail: token endpoint https://oauth2.googleapis.com/token returned HTTP 400: { "error": "invalid_grant", "error_description": "Bad Request" }', {}],
+].map(([processId, version, processDefKey, elementId, type, count, message, extra], i) => ({
+  processId, version, processDefKey, elementId, elementIndex: 3, type, count, message,
+  oldestRaisedAt: (1_789_000_000_000 + i * 60_000) * 1e6, newestRaisedAt: (1_789_000_000_000 + i * 60_000) * 1e6,
+  ...extra,
+}));
+const WIDE_ROWS = WIDE_CAUSES.map((g, i) => ({
+  elementInstanceKey: String(1000 + i), processInstanceKey: String(281474978841952 + i),
+  processDefKey: g.processDefKey, processId: g.processId, elementId: g.elementId,
+  elementIndex: g.elementIndex, type: g.type,
+  jobKey: g.type === "job" ? String(2251799813685248 + i) : undefined,
+  raisedAt: g.oldestRaisedAt, message: g.message,
+  connector: g.connector, connectorKind: g.connectorKind, connectorId: g.connectorId,
+}));
+
+const bootWide = async (page, size) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.__errors = errors;
+  await page.setViewportSize(size);
+  await page.route("**/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (path === "/api/v1/stats") return route.fulfill({ json: { unresolvedIncidents: WIDE_ROWS.length } });
+    if (path === "/api/v1/incidents/summary") {
+      return route.fulfill({ json: { total: WIDE_ROWS.length, groups: WIDE_CAUSES, groupsTruncated: false, ungrouped: 0 } });
+    }
+    if (path === "/api/v1/incidents") return route.fulfill({ json: listing(WIDE_ROWS) });
+    if (path === "/api/v1/instances" || path === "/api/v1/tasks") return route.fulfill({ json: listing([]) });
+    return route.fulfill({ json: [] });
+  });
+  await page.goto("/index.html");
+  await page.waitForFunction(
+    () => document.querySelector("#view") && document.querySelector("#view").children.length > 0,
+    null, { timeout: 15000 });
+  await openIncidents(page);
+  await expect(page.locator("#causes td.row-actions")).toHaveCount(WIDE_CAUSES.length);
+  await expect(page.locator("#rows td.row-actions")).toHaveCount(WIDE_ROWS.length);
+};
+
+// fit measures one table against the card that holds it: whether the card had to
+// scroll it, and how far past the card's right edge any control of the action column
+// was laid out. A control past that edge is the cut-off "Reso…" an operator saw.
+const fit = (page, tbodyId) => page.evaluate((id) => {
+  const card = document.getElementById(id).closest(".card");
+  const edge = card.getBoundingClientRect().right;
+  const controls = [...card.querySelectorAll("td.row-actions > *")];
+  return {
+    clientWidth: card.clientWidth,
+    scrollWidth: card.scrollWidth,
+    controls: controls.length,
+    overhang: Math.max(0, ...controls.map((c) => c.getBoundingClientRect().right - edge)),
+  };
+}, tbodyId);
+
+test.describe("incidents layout", () => {
+  for (const width of [1600, 1280]) {
+    test(`both tables fit their cards at ${width}px, actions and all`, async ({ page }) => {
+      await bootWide(page, { width, height: 900 });
+      for (const id of ["causes", "rows"]) {
+        const f = await fit(page, id);
+        expect(f.controls).toBeGreaterThan(0);
+        expect(f.scrollWidth, `#${id} scrolls inside its card`).toBeLessThanOrEqual(f.clientWidth);
+        expect(f.overhang, `#${id} lays a control past its card`).toBeLessThanOrEqual(0);
+      }
+      expect(page.__errors).toEqual([]);
+    });
+  }
+
+  test("a wide window widens the tables, and the prose keeps its measure", async ({ page }) => {
+    await bootWide(page, { width: 1600, height: 900 });
+    const b = await page.evaluate(() => ({
+      main: document.querySelector("main").getBoundingClientRect().width,
+      card: document.getElementById("causes").closest(".card").getBoundingClientRect().width,
+      lead: document.querySelector("#view p.muted").getBoundingClientRect().width,
+      viewport: document.documentElement.clientWidth,
+    }));
+    // The column is gone: the view spans the window…
+    expect(b.main).toBeGreaterThan(1120);
+    expect(b.main).toBeGreaterThanOrEqual(b.viewport - 2);
+    expect(b.card).toBeGreaterThan(1120);
+    // …while the explanation above the tables stays as wide as it was in the column,
+    // rather than becoming one line across the screen.
+    expect(b.lead).toBeLessThanOrEqual(1076 + 1);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("the other Operations views keep the centred column", async ({ page }) => {
+    await bootWide(page, { width: 1600, height: 900 });
+    await page.evaluate(() => { location.hash = "#/operations"; });
+    await expect(page.locator("#view h1").first()).toHaveText("Instances");
+    const main = await page.evaluate(() => document.querySelector("main").getBoundingClientRect().width);
+    expect(main).toBeLessThanOrEqual(1120);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("a timestamp stays on one line", async ({ page }) => {
+    await bootWide(page, { width: 1280, height: 900 });
+    const lines = await page.evaluate(() => [...document.querySelectorAll("#rows tr")].map((tr) => {
+      const td = tr.children[4]; // Raised
+      const r = document.createRange();
+      r.selectNodeContents(td);
+      return r.getClientRects().length;
+    }));
+    // "9/11/2026, 11:39:16 AM" used to break into three lines, leaving "AM" on its own.
+    expect(lines.length).toBe(WIDE_ROWS.length);
+    for (const n of lines) expect(n).toBe(1);
     expect(page.__errors).toEqual([]);
   });
 });
@@ -479,7 +851,8 @@ test.describe("operations nav", () => {
       if (path === "/api/v1/stats") {
         return route.fulfill({ json: { activeProcessInstances: 2, activeElementInstances: 2, unresolvedIncidents: 0 } });
       }
-      if (path === "/api/v1/incidents") return route.fulfill({ json: { incidents: [] } });
+      if (path === "/api/v1/incidents") return route.fulfill({ json: listing([]) });
+      if (path === "/api/v1/instances" || path === "/api/v1/tasks") return route.fulfill({ json: listing([]) });
       return route.fulfill({ json: [] });
     });
     await page.goto("/index.html");

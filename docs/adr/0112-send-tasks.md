@@ -1,6 +1,7 @@
 # ADR-0112: Send tasks
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-11
 - **Deciders:** Atlas engine team
 

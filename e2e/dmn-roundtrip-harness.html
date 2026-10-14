@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas decision round-trip e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js for the one flow that changed shape when the
+         decision editor stopped being an overlay
+         (ADR-0320): "＋ New decision" on a business rule
+         task now leaves the diagram for a page of its own, and what was authored is
+         adopted when the author comes back. Both halves run here against a mock `api`:
+         the outward navigation (which route, carrying which task) and the return
+         (selecting that task and filling in its decision, inputs and result variable).
+         Mounted as a draft, because a round trip needs a diagram there is a way back
+         to. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_rt" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="orders" name="Orders" isExecutable="true">
+    <bpmn:startEvent id="Start_1"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:businessRuleTask id="Activity_rule" name="Check eligibility">
+      <bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+    <bpmn:businessRuleTask id="Activity_rule_set" name="Score">
+      <bpmn:extensionElements><zeebe:calledDecision decisionId="eligibility" resultVariable="verdict"/></bpmn:extensionElements>
+      <bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+    <bpmn:endEvent id="End_1"><bpmn:incoming>f2</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Activity_rule"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Activity_rule" targetRef="Activity_rule_set"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="Activity_rule_set" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="orders">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Activity_rule_di" bpmnElement="Activity_rule"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Activity_rule_set_di" bpmnElement="Activity_rule_set"><dc:Bounds x="420" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="580" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="520" y="138"/><di:waypoint x="580" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // The decision as the catalog describes it once it has been authored: one input
+      // data node and an output, which is what a task adopts.
+      const DECISIONS = [{
+        id: "eligibility",
+        name: "eligibility",
+        model: "Eligibility",
+        modelRef: "eligibility",
+        inputs: [{ name: "amount", type: "number" }],
+        output: { name: "verdict", type: "string" },
+      }];
+
+      const api = async (method, url) => {
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/drafts\/[^/]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/drafts$/.test(url)) return [{ processId: "orders", name: "Orders" }];
+        if (method === "GET" && /\/decisions/.test(url)) return DECISIONS;
+        if (method === "GET" && /\/dmnrefs$/.test(url)) {
+          return [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "" }];
+        }
+        if (method === "GET" && /\/connector-kinds$/.test(url)) return { kinds: [{ id: "dmn", placement: "engine" }] };
+        if (method === "GET" && /\/processes$/.test(url)) return [];
+        if (method === "GET" && /\/(connectors|configured-workers)$/.test(url)) return [];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        return {};
+      };
+
+      // opts carries `adopt` for the return leg; omitted, this is a plain open.
+      window.__mount = (opts) =>
+        mountEditor(view, { api, toast: noop, draftId: "orders", ...(opts || {}) });
+      window.__select = (id) =>
+        window.__atlasModeler.get("selection").select(window.__atlasModeler.get("elementRegistry").get(id));
+      window.__selected = () => {
+        const sel = window.__atlasModeler.get("selection").get() || [];
+        return sel.length ? sel[0].id : "";
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

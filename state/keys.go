@@ -52,6 +52,14 @@ const (
 	cfElementTermination     columnFamily = 0x27 // elTerm:<procDefKey>:<piKey>:<elementId> → int64 count
 	cfElementTerminationAgg  columnFamily = 0x28 // elTermAgg:<procDefKey>:<elementId> → int64 cumulative terminations (merge)
 	cfInstanceByElement      columnFamily = 0x29 // piByEl:<procDefKey>:<elementId>:<piKey>:<elKey> → nil
+	cfEntitlement            columnFamily = 0x2A // ent:<principal>:0x00:<itemId> → EntitlementValue (ADR-0312)
+	cfEntitlementHistory     columnFamily = 0x2B // entHist:<principal>:0x00:<endedAt>:<itemId> → EntitlementHistoryValue (ADR-0346)
+	cfTriggerReceipt         columnFamily = 0x2C // trigRcpt:<source>:0x00:<triggerId> → instanceKey(8) at(8) (ADR-0425)
+	cfActionOutcome          columnFamily = 0x2D // actOut:<order>:0x00:<position>:0x00:<commandId> → ActionOutcomeValue (ADR-0429)
+	cfFeed                   columnFamily = 0x2E // feed:0x00:<partition>:<position> → kind(1) at(8) value; feed:0x01:<partition> → pruned through (ADR-0429 §5)
+	cfBufferedMessage        columnFamily = 0x2F // msgBuf:<name>:<corrKey>:<msgKey> → MessageValue (ADR-0370)
+	cfMessageExpiry          columnFamily = 0x30 // msgExp:<expiresAt>:<msgKey> → MessageValue without payload (ADR-0370)
+	cfMessageId              columnFamily = 0x31 // msgId:<name>:<corrKey>:<messageId> → msgKey(8) (ADR-0370)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -92,6 +100,7 @@ const (
 	rtOpenJobs             runtimeTotalKind = 1
 	rtPendingTimers        runtimeTotalKind = 2
 	rtMessageSubscriptions runtimeTotalKind = 3
+	rtBufferedMessages     runtimeTotalKind = 4 // messages waiting in the buffer (ADR-0370)
 )
 
 // keyRuntimeTotal keys an engine-wide live-entity counter. One key per kind, so the
@@ -697,4 +706,54 @@ func trailingKey(k []byte) uint64 {
 // which a whole-store scan needs and a per-instance one already knew.
 func instanceFromReplayKey(k []byte) uint64 {
 	return binary.BigEndian.Uint64(k[1:])
+}
+
+// entitlementPrefix keys everything one principal holds.
+//
+// The principal comes first because that is the question the inventory is asked:
+// what does this person have. A separator byte follows it — 0x00, which no
+// principal id contains — so a principal whose id is a prefix of another's cannot
+// have the other's entitlements scanned into their own answer. The item id is the
+// trailing, variable-length component, exactly as a variable's name is under its
+// scope.
+func entitlementPrefix(principal string) []byte {
+	out := append([]byte{byte(cfEntitlement)}, principal...)
+	return append(out, 0x00)
+}
+
+// entitlementHistoryPrefix bounds one principal's ended holds. The principal
+// comes first for the reason it does in the inventory — that is the question the
+// family is asked — and the same 0x00 separator keeps a principal whose id
+// prefixes another's from scanning the other's rows into their own answer.
+func entitlementHistoryPrefix(principal string) []byte {
+	out := append([]byte{byte(cfEntitlementHistory)}, principal...)
+	return append(out, 0x00)
+}
+
+// keyEntitlementHistory keys one ended hold.
+//
+// The end time comes before the item id, which is the difference between this
+// family and the inventory and the whole reason it is a separate one. An
+// entitlement key is (principal, item) because holding the same item twice is one
+// entitlement; a history row is an *event*, so the same person holding the same
+// product in 2024 and again in 2026 is two rows and must be. Ordering by end time
+// is also what the questions asked here need: "everything since January" is a
+// range scan, and "what did they hold in March" is bounded from below by it.
+//
+// Big-endian, so byte order is time order. Two holds of different items ending in
+// the same nanosecond are separated by the trailing item id; two holds of the
+// *same* item ending in the same nanosecond cannot occur, because one principal
+// holds one item once (keyEntitlement) and the single writer (invariant I3) gives
+// each revocation its own moment.
+func keyEntitlementHistory(principal string, endedAt int64, itemID string) []byte {
+	out := appendBE64(entitlementHistoryPrefix(principal), uint64(endedAt))
+	return append(out, itemID...)
+}
+
+// keyEntitlement keys one thing one principal holds. Holding the same item twice
+// is one entitlement, not two: whether a service may be held more than once is a
+// property of the service, and where it is, the variant is what distinguishes the
+// two — which is a per-variant key and a migration, named as such in the record.
+func keyEntitlement(principal, itemID string) []byte {
+	return append(entitlementPrefix(principal), itemID...)
 }

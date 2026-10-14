@@ -234,6 +234,8 @@ func (s *Server) handleSetCallOverride(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Durable before visible (I2): persist the record, then apply to the engine.
+		// The Starmap's reading of what calls what no longer describes this server.
+		s.forgetLandscape()
 		if err := s.callOverrides.Save(rec); err != nil {
 			saveErr = err
 			return
@@ -258,6 +260,7 @@ func (s *Server) handleDeleteCallOverride(w http.ResponseWriter, r *http.Request
 	pid := r.PathValue("processId")
 	var delErr error
 	s.do(func() {
+		s.forgetLandscape()
 		if err := s.callOverrides.Delete(pid); err != nil {
 			delErr = err
 			return

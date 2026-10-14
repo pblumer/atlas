@@ -144,7 +144,7 @@ func listTasks(t *testing.T, x deployTestHarness) []taskRow {
 		t.Fatalf("list tasks: %d %s", code, b)
 	}
 	var tasks []taskRow
-	if err := json.Unmarshal(b, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, b), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, b)
 	}
 	return tasks
@@ -159,7 +159,7 @@ func singleInstanceKey(t *testing.T, x deployTestHarness) uint64 {
 	var instances []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(b, &instances); err != nil {
+	if err := json.Unmarshal(listRows(t, b), &instances); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	if len(instances) != 1 {

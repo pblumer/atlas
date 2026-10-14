@@ -1,6 +1,7 @@
 # ADR-0124: Server-side BPMN diagram auto-layout in Go
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-13
 - **Deciders:** Atlas engine team
 

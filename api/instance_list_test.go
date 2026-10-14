@@ -10,9 +10,9 @@ import (
 
 // TestListInstancesCapAndSummary covers the read-path hardening that keeps the
 // operations page reachable under a large instance count: the list endpoint caps its
-// page (and marks a capped page with X-Instances-Truncated), filters to one
-// definition with ?process=, and the lean summary endpoint reports per-definition
-// counts without enriching every instance.
+// page (and marks a capped page as truncated in the body), filters to one definition
+// with ?process=, and the lean summary endpoint reports per-definition counts without
+// enriching every instance.
 func TestListInstancesCapAndSummary(t *testing.T) {
 	ts := newTestServer(t)
 
@@ -33,22 +33,22 @@ func TestListInstancesCapAndSummary(t *testing.T) {
 		}
 	}
 
-	// A capped page returns at most ?limit rows and flags truncation in a header.
+	// A capped page returns at most ?limit rows and says the cap bit.
 	res, err := http.Get(ts.URL + "/api/v1/instances?limit=2")
 	if err != nil {
 		t.Fatalf("GET instances?limit=2: %v", err)
 	}
+	capped := readPage(t, res)
+	res.Body.Close()
 	var page []struct {
 		Key   uint64 `json:"key"`
 		State string `json:"state"`
 	}
-	_ = json.NewDecoder(res.Body).Decode(&page)
-	res.Body.Close()
-	if len(page) != 2 {
-		t.Fatalf("capped page = %d rows, want 2", len(page))
+	if err := json.Unmarshal(capped.Items, &page); err != nil {
+		t.Fatalf("decode capped page: %v", err)
 	}
-	if res.Header.Get("X-Instances-Truncated") != "true" {
-		t.Fatalf("truncation header = %q, want true", res.Header.Get("X-Instances-Truncated"))
+	if len(page) != 2 || !capped.Truncated {
+		t.Fatalf("capped page = %d rows truncated=%v, want 2 + true", len(page), capped.Truncated)
 	}
 
 	// The summary reports the full active count without shipping every instance.
@@ -68,13 +68,13 @@ func TestListInstancesCapAndSummary(t *testing.T) {
 	// ?process= narrows to one definition; an unmatched key yields an empty list.
 	_, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/instances?process=%d", dep.Key), "", "")
 	var filtered []json.RawMessage
-	_ = json.Unmarshal(body, &filtered)
+	_ = json.Unmarshal(listRows(t, body), &filtered)
 	if len(filtered) != n {
 		t.Fatalf("?process filter returned %d, want %d", len(filtered), n)
 	}
 	_, body = doReq(t, ts, http.MethodGet, "/api/v1/instances?process=424242", "", "")
-	if string(body) != "[]\n" && string(body) != "[]" {
-		t.Fatalf("?process=<unknown> = %s, want empty list", body)
+	if empty := decodePage(t, body); empty.Total != 0 || string(empty.Items) != "[]" {
+		t.Fatalf("?process=<unknown> = %s, want an empty page", body)
 	}
 
 	// Malformed query params are rejected.
@@ -128,11 +128,10 @@ func TestListInstancesCompletedCounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET instances?limit=2: %v", err)
 	}
-	var page []json.RawMessage
-	_ = json.NewDecoder(res.Body).Decode(&page)
+	page := readPage(t, res)
 	res.Body.Close()
-	if len(page) != 2 || res.Header.Get("X-Instances-Truncated") != "true" {
-		t.Fatalf("capped finished page = %d rows, truncated=%q; want 2 rows + true", len(page), res.Header.Get("X-Instances-Truncated"))
+	if page.Total != 2 || !page.Truncated {
+		t.Fatalf("capped finished page = %d rows, truncated=%v; want 2 rows + true", page.Total, page.Truncated)
 	}
 
 	// A second definition, also completing, so the summary has more than one row
@@ -173,7 +172,7 @@ func TestListInstancesCompletedCounts(t *testing.T) {
 		ProcessDefKey uint64 `json:"processDefKey"`
 		State         string `json:"state"`
 	}
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	if len(rows) != n {
@@ -198,7 +197,15 @@ const autoCompleteBPMN2 = `<definitions xmlns="http://www.omg.org/spec/BPMN/2010
 
 // listPage issues a GET against the instances list and returns the decoded rows
 // with the pagination headers, which is where the newest-first cursor rides.
-func listPage(t *testing.T, ts *httptest.Server, query string) ([]listRow, http.Header) {
+// listingFacts is what a capped listing says about itself beside its rows.
+type listingFacts struct {
+	total      int
+	totalExact bool
+	truncated  bool
+	nextCursor string
+}
+
+func listPage(t *testing.T, ts *httptest.Server, query string) ([]listRow, listingFacts) {
 	t.Helper()
 	res, err := http.Get(ts.URL + "/api/v1/instances" + query)
 	if err != nil {
@@ -208,11 +215,24 @@ func listPage(t *testing.T, ts *httptest.Server, query string) ([]listRow, http.
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("GET instances%s: status=%d", query, res.StatusCode)
 	}
-	var rows []listRow
-	if err := json.NewDecoder(res.Body).Decode(&rows); err != nil {
+	// The envelope, not the headers: a capped listing says so in its body now
+	// (ADR-0378).
+	var page struct {
+		Items      []listRow `json:"items"`
+		Total      int       `json:"total"`
+		TotalExact bool      `json:"totalExact"`
+		Truncated  bool      `json:"truncated"`
+		NextCursor string    `json:"nextCursor"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&page); err != nil {
 		t.Fatalf("decode instances%s: %v", query, err)
 	}
-	return rows, res.Header
+	return page.Items, listingFacts{
+		total:      page.Total,
+		totalExact: page.TotalExact,
+		truncated:  page.Truncated,
+		nextCursor: page.NextCursor,
+	}
 }
 
 type listRow struct {
@@ -313,13 +333,13 @@ func TestListInstancesActiveStatePaging(t *testing.T) {
 			}
 			seen[r.Key] = true
 		}
-		if hdr.Get("X-Instances-Truncated") != "true" {
+		if !hdr.truncated {
 			if len(rows) > 2 {
 				t.Fatalf("uncapped page = %d rows, want at most 2", len(rows))
 			}
 			break
 		}
-		cursor = hdr.Get("X-Instances-Next-Cursor")
+		cursor = hdr.nextCursor
 		if cursor == "" {
 			t.Fatal("a truncated page carried no cursor")
 		}
@@ -362,7 +382,7 @@ func TestListInstancesFinishedStatePaging(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != n {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != n {
 		t.Fatalf("expected %d tasks, got %v (%s)", n, err, body)
 	}
 	for _, task := range tasks {
@@ -394,10 +414,10 @@ func TestListInstancesFinishedStatePaging(t *testing.T) {
 			}
 			lastCompletedAt = r.CompletedAt
 		}
-		if hdr.Get("X-Instances-Truncated") != "true" {
+		if !hdr.truncated {
 			break
 		}
-		cursor = hdr.Get("X-Instances-Next-Cursor")
+		cursor = hdr.nextCursor
 		if cursor == "" {
 			t.Fatal("a truncated page carried no cursor")
 		}
@@ -488,7 +508,7 @@ func TestListInstancesStateFiltersHalves(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 2 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 2 {
 		t.Fatalf("expected 2 tasks, got %v (%s)", err, body)
 	}
 	if code, b := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/tasks/%d/complete", tasks[0].Key), "{}", "application/json"); code != http.StatusOK {
@@ -516,5 +536,219 @@ func TestListInstancesStateFiltersHalves(t *testing.T) {
 		if isActive := rows[0].State == "active"; isActive != tc.active {
 			t.Errorf("GET instances%s returned state %q, want active=%v", tc.query, rows[0].State, tc.active)
 		}
+	}
+}
+
+// secondWaiterBPMN parks like timerWaitBPMN but under a second process id, so a test
+// can hold live instances of two definitions at once.
+const secondWaiterBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="waiter-two" name="Waiter Two" isExecutable="true">
+    <startEvent id="s"/>
+    <intermediateCatchEvent id="w"><timerEventDefinition><timeDuration>PT3600S</timeDuration></timerEventDefinition></intermediateCatchEvent>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="w"/>
+    <sequenceFlow id="f2" sourceRef="w" targetRef="e"/>
+  </process>
+</definitions>`
+
+// TestANewInstanceIsOffTheCappedListingButOnItsOwnDefinitionsPage pins the contract
+// the hosted apps under api/web depend on to find the instance they just started.
+//
+// The unscoped listing is a page, not the set. It is capped, and its active half is
+// scanned in ascending instance-key order — oldest first — so the newest instance is
+// the first row the cap drops. A client that starts an instance and then looks for it
+// on that page therefore finds nothing on any engine holding more active instances
+// than the cap, and reports an instance that is running perfectly well as missing.
+//
+// That is a production failure rather than a hypothesis: reisebuchung-kunde.html
+// located its instance by diffing the unscoped listing, and stopped working the day a
+// load test left tens of thousands of active instances in front of it — without a
+// deploy, and with the page's own code unchanged for weeks.
+//
+// Two reads answer the question without a scan, and this pins both: the listing
+// scoped with ?process=, which reads one definition's own index newest-first, and
+// /instances/search?q=<key>, which is a point read of one instance.
+//
+// The cap is driven with ?limit= rather than by creating maxInstanceListDefault
+// instances. The ordering is the property under test; how many rows it takes to reach
+// the cap is not, and a thousand instances would buy nothing but a slow test.
+func TestANewInstanceIsOffTheCappedListingButOnItsOwnDefinitionsPage(t *testing.T) {
+	ts := newTestServer(t)
+
+	deploy := func(bpmn string) uint64 {
+		t.Helper()
+		code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", bpmn, "application/xml")
+		if code != http.StatusOK {
+			t.Fatalf("deploy status=%d body=%s", code, body)
+		}
+		var dep struct {
+			Key uint64 `json:"key"`
+		}
+		if err := json.Unmarshal(body, &dep); err != nil {
+			t.Fatalf("decode deploy: %v", err)
+		}
+		return dep.Key
+	}
+	start := func(defKey uint64) {
+		t.Helper()
+		path := fmt.Sprintf("/api/v1/processes/%d/instances", defKey)
+		if code, b := doReq(t, ts, http.MethodPost, path, "{}", "application/json"); code != http.StatusOK {
+			t.Fatalf("create instance of %d: status=%d body=%s", defKey, code, b)
+		}
+	}
+	list := func(query string) []instanceRow {
+		t.Helper()
+		_, body := doReq(t, ts, http.MethodGet, "/api/v1/instances"+query, "", "")
+		var rows []instanceRow
+		if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
+			t.Fatalf("decode /instances%s: %v (%s)", query, err, body)
+		}
+		return rows
+	}
+
+	// Three instances of one definition stand in for the engine's existing population,
+	// then one instance of another is the one a client just started. It is the newest,
+	// so it carries the highest key.
+	noise, mine := deploy(timerWaitBPMN), deploy(secondWaiterBPMN)
+	for i := 0; i < 3; i++ {
+		start(noise)
+	}
+	start(mine)
+
+	// Scoped to its definition, the new instance is simply there — this is the read a
+	// client should be making.
+	scoped := list(fmt.Sprintf("?process=%d", mine))
+	if len(scoped) != 1 {
+		t.Fatalf("?process=%d returned %d rows, want exactly the one instance started", mine, len(scoped))
+	}
+	fresh := scoped[0]
+	if fresh.ProcessDefKey != mine || fresh.State != "active" {
+		t.Fatalf("scoped row = %+v, want defKey %d in state active", fresh, mine)
+	}
+
+	// Unscoped and capped, it is not — the page is filled by the older instances of the
+	// other definition, and the caller is given no row for the instance it just made.
+	res, err := http.Get(ts.URL + "/api/v1/instances?limit=3")
+	if err != nil {
+		t.Fatalf("GET instances?limit=3: %v", err)
+	}
+	facts := readPage(t, res)
+	res.Body.Close()
+	var page []instanceRow
+	if err := json.Unmarshal(facts.Items, &page); err != nil {
+		t.Fatalf("decode capped page: %v", err)
+	}
+	if len(page) != 3 {
+		t.Fatalf("capped page = %d rows, want 3", len(page))
+	}
+	if !facts.Truncated {
+		t.Fatal("the page does not say it is truncated — a client cannot even tell it is partial")
+	}
+	for _, r := range page {
+		if r.Key == fresh.Key {
+			t.Fatalf("the capped page still carries the newest instance %d; the active half is "+
+				"supposed to be scanned oldest-key-first, and this test no longer reproduces "+
+				"the failure it exists for", fresh.Key)
+		}
+	}
+
+	// And the point read answers for one key without reference to any page at all.
+	_, body := doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/instances/search?q=%d", fresh.Key), "", "")
+	var found []instanceRow
+	if err := json.Unmarshal(listRows(t, body), &found); err != nil {
+		t.Fatalf("decode search: %v (%s)", err, body)
+	}
+	if len(found) != 1 || found[0].Key != fresh.Key || found[0].State != "active" {
+		t.Fatalf("search?q=%d = %+v, want the one live instance", fresh.Key, found)
+	}
+}
+
+// instanceRow is the part of an instance listing row these assertions read.
+type instanceRow struct {
+	Key           uint64 `json:"key"`
+	ProcessDefKey uint64 `json:"processDefKey"`
+	State         string `json:"state"`
+}
+
+// TestTheInstanceListingSaysWhereItsTotalCameFrom pins the distinction the envelope
+// exists to carry: `total` is exact where a maintained counter answers the query, and
+// a floor where none does — and the response says which
+// (ADR-0378).
+//
+// It is here because getting this wrong is silent. A floor reported as exact reads
+// exactly like a truth, and the only way to notice is to hold more instances than the
+// page and check the number against something that knows. That is what this does.
+func TestTheInstanceListingSaysWhereItsTotalCameFrom(t *testing.T) {
+	ts := newTestServer(t)
+
+	deploy := func(xml string) uint64 {
+		t.Helper()
+		code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", xml, "application/xml")
+		if code != http.StatusOK {
+			t.Fatalf("deploy: status=%d body=%s", code, body)
+		}
+		var dep struct {
+			Key uint64 `json:"key"`
+		}
+		if err := json.Unmarshal(body, &dep); err != nil {
+			t.Fatalf("decode deploy: %v", err)
+		}
+		return dep.Key
+	}
+	start := func(def uint64, payload string, n int) {
+		t.Helper()
+		for i := 0; i < n; i++ {
+			if code, b := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", def), payload, "application/json"); code != http.StatusOK {
+				t.Fatalf("create instance: status=%d body=%s", code, b)
+			}
+		}
+	}
+
+	// Five parked instances of one definition, three finished ones of another, and a
+	// third definition whose tokens are split across two named waits — enough that
+	// every branch of the total has something to be right or wrong about.
+	waiting := deploy(timerWaitBPMN)
+	start(waiting, "{}", 5)
+	done := deploy(autoCompleteBPMN)
+	start(done, "{}", 3)
+	forked := deploy(forkedWaitBPMN)
+	start(forked, `{"variables":{"branch":"left"}}`, 2)
+	start(forked, `{"variables":{"branch":"right"}}`, 1)
+
+	for _, tc := range []struct {
+		name  string
+		query string
+		total int
+		exact bool
+		why   string
+	}{
+		{"one definition's live half, capped", fmt.Sprintf("?process=%d&state=active&limit=2", waiting), 5, true,
+			"DefInstanceCount knows the population, so a two-row page still says five"},
+		{"one definition's finished half", fmt.Sprintf("?process=%d&state=finished", done), 3, true,
+			"DefCompletedCount knows it"},
+		{"the whole engine's live half", "?state=active", 8, true,
+			"TotalActiveInstances is maintained engine-wide"},
+		{"both halves of one definition", fmt.Sprintf("?process=%d", done), 3, true,
+			"both halves have a counter, so their sum is exact"},
+		{"both halves of the whole engine", "", 11, false,
+			"the completed family has no engine-wide counter, so a sum with it in is a floor"},
+		{"one element of one definition", fmt.Sprintf("?process=%d&element=left", forked), 2, false,
+			"the element index is a position list, not a tally"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rows, facts := listPage(t, ts, tc.query)
+			if facts.total != tc.total {
+				t.Errorf("total = %d, want %d (%s)", facts.total, tc.total, tc.why)
+			}
+			if facts.totalExact != tc.exact {
+				t.Errorf("totalExact = %v, want %v — %s", facts.totalExact, tc.exact, tc.why)
+			}
+			// A floor is a floor: it may not exceed the population, and it is at least
+			// what came back. An exact total may be larger than the page; a floor may not.
+			if !tc.exact && facts.total != len(rows) {
+				t.Errorf("an inexact total of %d against %d rows: a page that cannot count the "+
+					"population can only report what it saw", facts.total, len(rows))
+			}
+		})
 	}
 }

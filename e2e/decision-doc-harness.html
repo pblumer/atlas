@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas decision documentation e2e harness</title>
+    <!-- Drives the real api/web/decision-doc.js over a DMN model carrying exactly
+         what a decision document exists to capture: a decision with a description,
+         the input data it reads, a decision table with a hit policy, labelled
+         columns, rules with their own annotations, and a second decision whose
+         logic is a literal expression rather than a table. The collector reads the
+         XML, so no modeler is mounted here — the XML is the thing that gets stored
+         and handed to temis, which is exactly what a document describes. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>html, body { margin: 0; height: 100%; background: #fff; }</style>
+  </head>
+  <body>
+    <script type="module">
+      import {
+        collectDecisionDocumentation, buildDecisionDocumentationPdf, exportDecisionDocumentation,
+      } from "/decision-doc.js";
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="Definitions_doc" name="Antragsprüfung" namespace="http://atlas/dmn">
+  <inputData id="id_betrag" name="betrag">
+    <variable id="v_betrag" name="betrag" typeRef="number"/>
+  </inputData>
+  <inputData id="id_land" name="land">
+    <variable id="v_land" name="land" typeRef="string"/>
+  </inputData>
+  <decision id="eignung" name="Eignung">
+    <description>Ob der Antrag ohne weitere Prüfung angenommen wird.</description>
+    <informationRequirement id="ir1"><requiredInput href="#id_betrag"/></informationRequirement>
+    <informationRequirement id="ir2"><requiredInput href="#id_land"/></informationRequirement>
+    <decisionTable id="dt" hitPolicy="COLLECT" aggregation="SUM">
+      <input id="in1" label="Betrag"><inputExpression id="ie1" typeRef="number"><text>betrag</text></inputExpression></input>
+      <input id="in2"><inputExpression id="ie2" typeRef="string"><text>land</text></inputExpression></input>
+      <output id="out1" label="Urteil" name="urteil" typeRef="string"/>
+      <rule id="r1">
+        <description>Grosse Beträge im Inland</description>
+        <inputEntry id="e1"><text>&gt;= 1000</text></inputEntry>
+        <inputEntry id="e2"><text>"CH"</text></inputEntry>
+        <outputEntry id="o1"><text>"annehmen"</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <inputEntry id="e3"><text>&lt; 1000</text></inputEntry>
+        <inputEntry id="e4"><text>-</text></inputEntry>
+        <outputEntry id="o2"><text>"prüfen"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <decision id="gebuehr" name="Gebühr">
+    <description>Was die Prüfung kostet.</description>
+    <literalExpression id="le1"><text>0.02 * betrag</text></literalExpression>
+  </decision>
+</definitions>`;
+
+      const NO_DECISIONS = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="Definitions_empty" name="Leer">
+  <inputData id="id_a" name="a"/>
+</definitions>`;
+
+      window.__dmndoc = { collectDecisionDocumentation, buildDecisionDocumentationPdf, exportDecisionDocumentation };
+      window.__xml = XML;
+      window.__emptyXml = NO_DECISIONS;
+
+      window.__asLatin1 = (bytes) => {
+        let s = "";
+        for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+        return s;
+      };
+
+      // A stand-in for the app's api(): records the call and answers like the real
+      // POST .../documentation route. A modeler stub stands in for dmn-js, whose
+      // only part in the export is handing over the picture.
+      window.__apiCalls = [];
+      window.__api = async (method, path, body) => {
+        window.__apiCalls.push({ method, path, body });
+        return { id: "abc123", decisionId: "eignung", version: 1, pdfUrl: "/api/v1/decision-docs/abc123/pdf" };
+      };
+      window.__modeler = { saveSVG: async () => { throw new Error("no canvas in this harness"); } };
+
+      window.__ready = true;
+    </script>
+  </body>
+</html>

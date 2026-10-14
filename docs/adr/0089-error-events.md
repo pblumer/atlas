@@ -1,6 +1,7 @@
 # ADR-0089: Error events (scoped propagation to the nearest handler)
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-11 — an uncaught worker error keeps its job, resolving an uncaught error retries it, and workers and operators can throw over HTTP; see the notes under Consequences)
+- **Implementation:** Landed
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
 
@@ -261,6 +262,7 @@ decision (I6); it runs only live (a throw is a command), never during replay.
   `FailJob`) whose handler, instead of decrementing retries, calls
   `propagateError(c, job.ElementInstanceKey, code)` — so a service task with an error boundary
   catches a worker-thrown error. The job is consumed (canceled), the boundary fires.
+  (Amended 2026-10-11: an error with nowhere to go keeps its job; see Consequences.)
 
 ### Compiler
 
@@ -342,6 +344,66 @@ decision (I6); it runs only live (a throw is a command), never during replay.
   need explicit ordering tests. Signal-vs-error is deliberately opposite (broadcast vs nearest);
   a future `bpmn:escalation` (non-interrupting, propagating) is a third variant deferred with
   compensation.
+- **Amendment 2026-10-11:** the incident terminal did not resume. An uncaught error's
+  incident carried no job and no reason, and resolving it (ADR-0061) found no case for a
+  service task or an error end event, so it cleared the incident and left the token parked
+  behind none: an instance stuck where nothing reported it. Two changes make the resolve the
+  genuine retry ADR-0061 promises.
+  - An uncaught *worker* error no longer cancels the job. When nothing in the instance
+    catches the code and the instance has no caller to leave to, the job is kept with its
+    retries spent and its lease released, under a job incident (`IncidentUnhandledError`,
+    "unhandled error '<code>'"). That is the shape of a failed job with no retries left,
+    so resolving it hands the same job back to the workers with the retries the resolve
+    gives. Canceling it and building a new job on resolve was the alternative; it needs a
+    resume case of its own per job-bearing node type, must take care not to re-arm the
+    boundary events the task still has armed, and would build the job from the definition
+    rather than with the retries the resolve names. Keeping the job reuses the resolve
+    path every failed job already takes.
+    An error that is caught, or that leaves a call activity's child for its caller, is
+    unchanged: the job is canceled and the error propagates.
+  - An uncaught error end event's incident is marked `IncidentUnhandledError`, and
+    resolving it throws the error again: a handler that has come into reach (a migration
+    to a version with one, ADR-0162) catches it, and one still missing parks it on a fresh
+    incident. An incident on an error end from before the reason existed is read the same
+    way, since an error end parks for no other reason the resolve path does not already
+    recognise.
+  A mockup task's simulated error and a call activity whose child's error went uncaught
+  were already resumed by their node type, and still are. Nothing yet lets a worker reach
+  `ThrowJobError` over HTTP, the worker client or MCP; this amendment makes the uncaught
+  case safe to expose before that door opens.
+- **Amendment 2026-10-11, the worker door:** Phase 3 delivered the throw as an engine
+  command only; the playground and the conformance driver were its sole callers, so no
+  real worker could raise an error a boundary catches. It now has the doors a completion
+  has.
+  - `POST /api/v1/jobs/{key}/error` takes an `errorCode` (required) and an optional
+    `errorMessage`, from the lease-holding worker (`worker` + `leaseToken`, fenced as a
+    completion is, ADR-0007) or from an operator with a required `reason`. A throw by
+    hand is an intervention like a completion by hand (ADR-0159): it writes an
+    `OperatorActionThrowJobError` record with who, why and the code, which the record
+    now carries in an append-compatible `ErrorCode` field written only when set.
+  - The message travels with the command and is read only when nothing catches the
+    error: it follows the code on the incident, "unhandled error '<code>': <message>".
+    Error variables (a payload handed to the catch) are not part of this; where they
+    would land is a decision of its own.
+  - The Go worker (`worker` package) throws when a handler returns a `*BPMNError`,
+    wrapped or not, and fails the job as before for any other error, or for a
+    `BPMNError` with no code. The command contract of `CmdExec` (exit status, stdout)
+    has no way to say "BPMN error" yet, and the in-process Worker Types do not throw.
+  - The MCP tool `atlas_throw_job_error` is the operator door, with the reason required.
+  - A thrown error neither closes nor feeds a circuit breaker (ADR-0340): it says nothing
+    about whether the target answered. The worker's job row records it as "error
+    thrown".
+- **Amendment 2026-10-12, the label:** the operator surfaces read an incident's kind from
+  one function (`incidentType`, ADR-0150), and it knew only a job, the execution budget
+  and, for everything else, a timer, so an uncaught error end read as a timer whose
+  schedule stopped resolving. A job-less incident marked `IncidentUnhandledError` now
+  reads `error`: in the listing and its `?type=` filter, the summary's causes, the bulk
+  resolve's scope, the `atlas.incident.raised` and `.resolved` feed events, and the
+  Console's pill and resolve dialog, which says the error is thrown again and that the
+  retry count does not apply. A worker's uncaught error keeps reading `job`, because it
+  keeps its job and resolving retries that job with the retries granted. An incident an
+  error end raised before the reason existed still reads `timer` until it is resolved;
+  the incident the re-throw raises reads `error`.
 
 ## Pros and cons of the options
 

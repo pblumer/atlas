@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/pblumer/atlas/checkpoint"
@@ -48,25 +49,16 @@ import (
 // below. Exactly one checkpoint rides along — the archive should not carry every kept
 // snapshot of the same store.
 
-// fullBackupDirs is the whole-instance snapshot's directory set: the WAL first (so
-// the design-time and secret dirs captured after it are a superset of whatever the
-// WAL cut references — a deployment's sidecar is written before the WAL record that
-// starts an instance on it), then the design-time allowlist, then the credential
-// dirs — user accounts and peer deploy tokens (ADR-0129).
+// What a whole-instance snapshot carries is derived from the store registry
+// (storeregistry.go): everything that cannot be rebuilt from the rest. That is the
+// difference from the design-time backup, which carries only what an author would
+// move between installations.
 //
-// Deploy tokens ride in the snapshot but deliberately *not* in the design-time
-// backup (ADR-0107): a backup is a portable file meant to carry your models, and a
-// peer's credential is not part of your models. A snapshot, by contrast, exists to
-// reconstitute this exact engine elsewhere, which includes who may publish to it.
-var fullBackupDirs = func() []string {
-	dirs := []string{"wal"}
-	dirs = append(dirs, backupDirs...)
-	return append(dirs, "users", "deploy-tokens")
-}()
-
-// fullBackupFiles are the top-level files (not directories) in the snapshot. The
-// vault key is a single file at the data-dir root.
-var fullBackupFiles = []string{"vault.key"}
+// The distinction it now enforces used to be the bug. Deploy tokens rode in the
+// snapshot but not in the design-time backup, for a good reason (ADR-0107/0129);
+// the vault *key* rode in it while the encrypted secrets it opens did not, for no
+// reason at all — nobody had decided, because nothing made them
+// (ADR-0282).
 
 // newestVerifiedCheckpoint returns the archive-relative directory of the newest
 // checkpoint under dataDir that passes full verification — manifest *and* state files —
@@ -137,16 +129,16 @@ func streamFullBackup(w io.Writer, fsys fs.FS, checkpointDir string) error {
 // (WAL leads) and its top-level files into tw.
 func writeFullBackup(tw *tar.Writer, fsys fs.FS, checkpointDir string) error {
 	if checkpointDir != "" {
-		if err := walkDirInto(tw, fsys, checkpointDir); err != nil {
+		if err := walkDirInto(tw, fsys, checkpointDir, nil); err != nil {
 			return err
 		}
 	}
-	for _, name := range fullBackupDirs {
-		if err := walkDirInto(tw, fsys, name); err != nil {
+	for _, name := range fullBackupDirs() {
+		if err := walkDirInto(tw, fsys, name, nil); err != nil {
 			return err
 		}
 	}
-	for _, name := range fullBackupFiles {
+	for _, name := range fullBackupFiles() {
 		if err := writeFileInto(tw, fsys, name); err != nil {
 			return err
 		}
@@ -158,7 +150,11 @@ func writeFullBackup(tw *tar.Writer, fsys fs.FS, checkpointDir string) error {
 // named relative to the data-dir root. A directory that was never created is simply
 // absent and skipped. Shared by the design-time backup (ADR-0107) and the full
 // snapshot (ADR-0109).
-func walkDirInto(tw *tar.Writer, fsys fs.FS, name string) error {
+// keep, when non-nil, decides which files this archive carries. The two archives
+// differ in exactly that: the snapshot passes nil and takes the directory whole,
+// while the portable backup leaves this installation's own identity behind (see
+// backupportability.go).
+func walkDirInto(tw *tar.Writer, fsys fs.FS, name string, keep func(string) bool) error {
 	return fs.WalkDir(fsys, name, func(path string, d fs.DirEntry, err error) error {
 		switch {
 		case err != nil:
@@ -168,6 +164,8 @@ func walkDirInto(tw *tar.Writer, fsys fs.FS, name string) error {
 			return err
 		case !d.Type().IsRegular(), strings.HasSuffix(path, ".tmp"):
 			return nil // directories are implied by their files; skip specials and in-flight temps
+		case keep != nil && !keep(path):
+			return nil
 		}
 		return writeFileInto(tw, fsys, path)
 	})
@@ -198,7 +196,7 @@ func writeFileInto(tw *tar.Writer, fsys fs.FS, name string) error {
 // path (ApplyPendingRestore) moves it into place and lets recovery rebuild state
 // from the restored WAL. Admin-gated when auth is on.
 func (s *Server) handleRestoreFull(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxRestoreBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, s.budgets().Archive)
 	defer r.Body.Close()
 
 	staging := filepath.Join(s.dataDir, restorePendingDir)
@@ -213,7 +211,7 @@ func (s *Server) handleRestoreFull(w http.ResponseWriter, r *http.Request) {
 	}
 	defer gz.Close()
 
-	tr := tar.NewReader(io.LimitReader(gz, maxRestoreBytes))
+	tr := tar.NewReader(io.LimitReader(gz, s.budgets().Archive))
 	restored, entries := 0, 0
 	sawWAL := false
 	for {
@@ -311,12 +309,12 @@ func allowedFullEntry(top string) bool {
 	if top == checkpoint.DirBase {
 		return true // the recovery checkpoint that covers a compacted prefix (ADR-0131)
 	}
-	for _, d := range fullBackupDirs {
+	for _, d := range fullBackupDirs() {
 		if d == top {
 			return true
 		}
 	}
-	for _, f := range fullBackupFiles {
+	for _, f := range fullBackupFiles() {
 		if f == top {
 			return true
 		}
@@ -339,6 +337,13 @@ func ApplyPendingRestore(dataDir string) (bool, error) {
 	staging := filepath.Join(dataDir, restorePendingDir)
 	if _, err := os.Stat(filepath.Join(staging, restoreReady)); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
+			// Windows reports a regular file in the staging directory's place as the
+			// marker being absent, where Unix fails the Stat with ENOTDIR. Either way
+			// it is not a staging this code wrote, and deleting it as "leftovers" would
+			// hide whatever put it there.
+			if fi, serr := os.Stat(staging); serr == nil && !fi.IsDir() {
+				return false, &fs.PathError{Op: "stat", Path: staging, Err: syscall.ENOTDIR}
+			}
 			// No complete staging. Discard any marker-less leftovers from an
 			// interrupted upload so they cannot accumulate.
 			return false, os.RemoveAll(staging)
@@ -375,6 +380,45 @@ func ApplyPendingRestore(dataDir string) (bool, error) {
 		return false, err
 	}
 	return true, os.RemoveAll(staging)
+}
+
+// SeedStateFromCheckpoint gives a data directory with no state store its starting
+// point, from the newest checkpoint that verifies. It reports whether it seeded
+// one.
+//
+// It exists because a compacted log no longer carries the prefix that would
+// rebuild the store: those records were deleted, and they live only in the
+// checkpoint (ADR-0131). Recovery can detect that gap and refuse — and does
+// (ADR-0280) — but refusing is only the right answer when
+// nothing can close it. Where a checkpoint can, the server should start.
+//
+// This runs at startup, before the store is opened, because that is the only
+// moment installing state files is possible: replacing the files under an open
+// Pebble store is not. It is the same installation the whole-instance restore
+// performs, called rather than copied, so the two cannot come to disagree about
+// what a checkpoint restores to.
+//
+// A directory that already has a state store is left alone. That store is the
+// newer answer, and replacing it with a checkpoint would discard everything
+// applied since.
+func SeedStateFromCheckpoint(dataDir string) (bool, error) {
+	if _, err := os.Stat(filepath.Join(dataDir, "state")); err == nil {
+		return false, nil // already has one: the newer answer wins
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return false, err
+	}
+	before, err := checkpoint.List(checkpoint.Dir(dataDir))
+	if err != nil {
+		return false, err
+	}
+	if err := installCheckpointState(dataDir); err != nil {
+		return false, err
+	}
+	if len(before) == 0 {
+		return false, nil // nothing to seed from; a whole log replays from genesis
+	}
+	_, statErr := os.Stat(filepath.Join(dataDir, "state"))
+	return statErr == nil, nil
 }
 
 // installCheckpointState seeds <dataDir>/state from the newest verified checkpoint the

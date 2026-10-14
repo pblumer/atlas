@@ -3,6 +3,7 @@ package engine
 import (
 	"testing"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -128,3 +129,46 @@ var (
 	sinkEvents   int
 	sinkFailures int
 )
+
+// TestJoinReachabilityNoAlloc pins the half of I1 an inclusive join used to break.
+// Deciding "could a token still arrive here?" needs the join's ancestors, and the
+// engine derived them on every arrival: a reverse adjacency over the whole graph, a
+// map and a stack, allocated and discarded per token movement. Topology does not
+// change while a process runs, so it is compiled once and looked up
+// (ADR-0279).
+//
+// The set lookup and every membership test it answers must therefore be free.
+func TestJoinReachabilityNoAlloc(t *testing.T) {
+	b := compiler.NewBuilder(1, "reach-alloc", 1)
+	start := b.AddStartEvent()
+	split := b.AddInclusiveGateway()
+	one, two := b.AddTask(), b.AddTask()
+	join := b.AddInclusiveGateway()
+	end := b.AddEndEvent()
+	b.Connect(start, split)
+	b.Connect(split, one)
+	b.Connect(split, two)
+	b.Connect(one, join)
+	b.Connect(two, join)
+	b.Connect(join, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	var hits int
+	allocs := testing.AllocsPerRun(1000, func() {
+		reaches := cp.InclusiveJoinReach(join)
+		for id := int32(0); id <= end; id++ {
+			if reaches.Has(id) {
+				hits++
+			}
+		}
+	})
+	if allocs != 0 {
+		t.Errorf("asking a join for its ancestors allocated %v times per run, want 0", allocs)
+	}
+	if hits == 0 {
+		t.Error("the set answered nothing, so the measurement above proves nothing")
+	}
+}

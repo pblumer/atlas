@@ -1,8 +1,19 @@
 # ADR-0117: An AI agent task — an LLM agent as a managed connector on the job path
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-08-12
 - **Deciders:** Atlas engine team
+
+> **Implementation status (2026-10-11).** Partial. Built: the service task itself, by
+> way of [ADR-0256](0256-the-model-is-authored-the-provider-is-configured.md) — connector, model, FEEL prompt,
+> `resultVariable` and retries (`compiler/connector_compile.go`, `connector/agent/aitask.go`)
+> — and tool use through [ADR-0253](0253-agent-tool-calls-drive-adhoc-activation.md)'s ad-hoc
+> container. Not built: the output schema, the model-authored limits `maxIterations`,
+> `timeout` and `tokenBudget`, the `VTAgentRun` record with its token usage,
+> `GET /api/v1/instances/{key}/agent-runs`, and its Operations view. The only limits today are
+> a Worker's `ATLAS_AGENT_<NAME>_MAX_TOKENS` (a per-response cap) and a fixed two-minute HTTP
+> timeout. Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

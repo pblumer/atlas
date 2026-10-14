@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -31,7 +32,7 @@ type validateResp struct {
 // model is reported as a problem, not an HTTP error); only a missing body or an
 // unreadable request is a 4xx, matching the deploy endpoint.
 func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -54,12 +55,38 @@ func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
 	if appID := strings.TrimSpace(r.URL.Query().Get("applicationId")); appID != "" {
 		problems = append(problems, s.dataFlowProblems(bytes.NewReader(body), appID)...)
 	}
+	problems = append(problems, s.ambiguousCallProblems(bytes.NewReader(body))...)
+	// The deploy's own rule on listeners to personal data atlas emits, from the same
+	// function, so the panel and the deploy cannot disagree (ADR-0435 §6). The finding
+	// depends on who asks: an administrator's panel has none.
+	problems = append(problems, s.personalListenerProblems(r, body)...)
 	// A nil slice would serialize as JSON null; the panel expects an array, so
 	// normalize "no problems" to an empty list.
 	if problems == nil {
 		problems = []compiler.Problem{}
 	}
 	httpapi.JSON(w, http.StatusOK, validateResp{Version: Version, Problems: problems})
+}
+
+// ambiguousCallProblems reports the call activities of a draft whose target only its
+// triggers can start (ADR-0426). A model that does not compile has no call
+// activities to check, and its compile errors are already in the list.
+func (s *Server) ambiguousCallProblems(r io.Reader) []compiler.Problem {
+	deployables, err := compiler.ParseAll(0, 1, r)
+	if err != nil {
+		return nil
+	}
+	siblings := make([]*compiler.CompiledProcess, 0, len(deployables))
+	for _, d := range deployables {
+		siblings = append(siblings, d.Process)
+	}
+	var out []compiler.Problem
+	s.do(func() {
+		for _, cp := range siblings {
+			out = append(out, s.ambiguousCallTargetsOnLoop(cp, siblings)...)
+		}
+	})
+	return out
 }
 
 // dataFlowWarnings renders the information model's findings on a compiled process
@@ -71,7 +98,14 @@ func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
 // that will write a datum has been drawn. The author is told at deploy rather than
 // by the first token to read a null.
 func dataFlowWarnings(cp *compiler.CompiledProcess, vocab *infomodel.Vocabulary) []string {
-	problems := infomodel.CheckDataFlow(cp, vocab)
+	return renderProblems(infomodel.CheckDataFlow(cp, vocab))
+}
+
+// renderProblems turns findings into the deploy response's one-line strings. A
+// finding that names no element — `data.unreachable-state` is about the model rather
+// than about any element of any process — reads as its own sentence rather than being
+// prefixed with an empty name.
+func renderProblems(problems []compiler.Problem) []string {
 	if len(problems) == 0 {
 		return nil
 	}
@@ -106,8 +140,137 @@ func (s *Server) dataFlowProblems(r io.Reader, applicationID string) []compiler.
 		return nil // best-effort: the compiler's own findings still stand
 	}
 	var out []compiler.Problem
+	drafted := make([]*compiler.CompiledProcess, 0, len(deployables))
 	for _, d := range deployables {
 		out = append(out, infomodel.CheckDataFlow(d.Process, vocab)...)
+		drafted = append(drafted, d.Process)
+	}
+	// The application read with the drafts *added to* what is deployed, so adding the
+	// write that reaches a state clears the finding while it is being drawn.
+	//
+	// It is a union and not a replacement: a draft that *removes* the only write
+	// reaching a state stays silent here, because the deployed version still writes
+	// it and the application still reaches it today. The finding appears at deploy,
+	// which is when it becomes true. Superseding a draft's own deployed predecessor
+	// would need the BPMN process id off the compiled process, which it does not
+	// carry — worth doing if this silence is ever felt, and not guessed at now.
+	var app []*compiler.CompiledProcess
+	s.do(func() { app = s.applicationProcessesOnLoop(applicationID, drafted...) })
+	return append(out, infomodel.CheckApplication(app, vocab)...)
+}
+
+// startVariableDefaultWarnings names each declared start variable whose default the
+// engine does not seed (ADR-0455): one that is not a literal of
+// its type, or one that holds personal data. A warning and never a refusal, because the
+// declaration has always been accepted as written — the start form still prefills it, and
+// an instance started without the variable does not have it.
+func startVariableDefaultWarnings(processID string, cp *compiler.CompiledProcess) []string {
+	var out []string
+	for _, sv := range cp.StartVariables() {
+		if sv.DefaultProblem != "" {
+			out = append(out, fmt.Sprintf("%s: the default of start variable %q is not seeded into an instance started without it: %s",
+				processID, sv.Name, sv.DefaultProblem))
+		}
+	}
+	return out
+}
+
+// deployWarningsOnLoop is the deploy-time preflight, in one place so every deploy
+// path runs the same one (ADR-0287).
+//
+// It used to be four lines inside handleDeploy, which meant it ran for a single-model
+// deploy and for nothing else: publishing an application (ADR-0128) and importing a
+// release (ADR-0129) reach deployModel directly, and both deployed models whose worker
+// references resolved to nothing without saying a word. Publish is the route most
+// applications reach production through, so the one warning ADR-0158 exists to give —
+// "this names a worker nobody configured" — was missing exactly where it was most
+// needed, and the first token to park was again the first anybody heard of it.
+//
+// Reads the deployment registry, the worker store and the live registries, so it runs
+// on the run-loop goroutine (invariant I3), inside the same closure as the deploy it
+// describes. The model's own bytes are not needed here: foreignAtlasNamespaceWarnings
+// reads them and runs off the loop, where its caller keeps it.
+//
+// applicationID is the application the deploy filed under; it decides which
+// information model a data object's declared type resolves against (ADR-0230). A
+// vocabulary that cannot be read costs the data-flow half and keeps the worker half,
+// because a best-effort warning must not be able to suppress another one.
+func (s *Server) deployWarningsOnLoop(deployed []deployedProcess, applicationID string) []string {
+	vocab, vocabErr := s.infomodel.VocabularyOnLoop(applicationID)
+	var out []string
+	for _, d := range deployed {
+		dep, ok := s.deployments[d.Key]
+		if !ok || dep.cp == nil {
+			continue
+		}
+		out = append(out, s.connectorWarnings(dep.cp)...)
+		out = append(out, renderProblems(s.ambiguousCallTargetsOnLoop(dep.cp, nil))...)
+		out = append(out, s.heldOnOlderVersionsOnLoop(d.Key, d.ProcessID)...)
+		out = append(out, s.boundConstantWarningsOnLoop(dep)...)
+		out = append(out, startVariableDefaultWarnings(d.ProcessID, dep.cp)...)
+		if vocabErr == nil {
+			out = append(out, dataFlowWarnings(dep.cp, vocab)...)
+		}
+	}
+	// And once for the application, not once per process: whether a declared state is
+	// ever reached is a question the set answers and no member of it can. The models
+	// deployed in this call are already in the registry by the time this runs, so they
+	// count themselves.
+	if vocabErr == nil {
+		out = append(out, renderProblems(infomodel.CheckApplication(
+			s.applicationProcessesOnLoop(applicationID), vocab))...)
+	}
+	return out
+}
+
+// applicationProcessesOnLoop is the application as it actually runs: the newest
+// version of each of its processes, minus the ones somebody has deactivated.
+//
+// It is what `data.unreachable-state` is asked against (ADR-0259 §3), and the three
+// words in that sentence are all load-bearing. *Newest version*, because a state only
+// v1 wrote is not one this application reaches any more. *Not deactivated*, because a
+// process that cannot start an instance writes nothing. *Of this application*,
+// because a lifecycle belongs to one application's information model and another's
+// processes say nothing about it.
+//
+// `also` are processes not in the registry yet — the ones being deployed or dry-run
+// right now — so the process that finally cancels an order clears the finding as it
+// arrives rather than one deploy later.
+func (s *Server) applicationProcessesOnLoop(applicationID string, also ...*compiler.CompiledProcess) []*compiler.CompiledProcess {
+	out := append([]*compiler.CompiledProcess{}, also...)
+	if applicationID == "" {
+		return out // a process deployed outside an application has no vocabulary either
+	}
+	for _, key := range s.order {
+		d, ok := s.deployments[key]
+		if !ok || d.cp == nil || d.inactive || d.ProjectID != applicationID {
+			continue
+		}
+		if d.Version != s.versions[d.ProcessID] {
+			continue
+		}
+		out = append(out, d.cp)
+	}
+	return out
+}
+
+// dedupeWarnings drops the exact repeats a bundle produces and keeps the order the
+// warnings were found in. A namespace mistake is bound once per document, so several
+// drafts carrying the same one say the same sentence; printing it per draft tells the
+// reader nothing the first one did not. Only identical strings collapse — a warning
+// that names its element is already distinct per draft and survives.
+func dedupeWarnings(in []string) []string {
+	if len(in) < 2 {
+		return in
+	}
+	seen := make(map[string]bool, len(in))
+	out := in[:0:0]
+	for _, w := range in {
+		if seen[w] {
+			continue
+		}
+		seen[w] = true
+		out = append(out, w)
 	}
 	return out
 }

@@ -26,7 +26,7 @@ All canonical commands live in the [`Makefile`](Makefile):
 |------|-------------|-------------|
 | Build | `make build` | `go build ./...` |
 | Test | `make test` | `go test ./...` |
-| Test + race (required) | `make race` | `go test -race -timeout=25m ./...` |
+| Test + race (required) | `make race` | `go test -race -timeout=45m ./...` |
 | Vet | `make vet` | `go vet ./...` |
 | Format | `make fmt` | `gofmt -w .` |
 | Format check | `make fmt-check` | `gofmt -l .` (must be empty) |
@@ -88,7 +88,7 @@ Releases are driven entirely by a git tag — there is no manual binary building
    `## [x.y.z]` heading with today's date, and update the compare links at the
    bottom.
 2. Make sure the full check sequence is green on `main` (`go build ./...`,
-   `go test -race -timeout=25m ./...`, `go vet ./...`, empty `gofmt -l .`).
+   `go test -race -timeout=45m ./...`, `go vet ./...`, empty `gofmt -l .`).
 3. Tag and push:
 
    ```bash
@@ -99,7 +99,8 @@ Releases are driven entirely by a git tag — there is no manual binary building
 The [`release` workflow](.github/workflows/release.yml) then cross-compiles the
 single binary for linux (amd64, arm64, 32-bit arm/v6), macOS (amd64, arm64), and
 windows (amd64), stamps the tag into the
-version string via `-ldflags` (so `atlas version` reports it), and publishes a
-GitHub Release with the archives and a `SHA256SUMS` file. Every `0.x` tag is
+version string via `-ldflags` (so `atlas version` reports it) and into the
+version resource of `atlas.exe` (so Explorer's Properties → Details shows it),
+and publishes a GitHub Release with the archives and a `SHA256SUMS` file. Every `0.x` tag is
 marked a prerelease. No CGO is involved, so all targets build from the one Linux
 runner.

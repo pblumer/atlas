@@ -1,7 +1,7 @@
 # Prüfung mit Zeitlimit und DMN-Bewertung
 
 Ein Assessment (Prüfung) als BPMN-Prozess — das Beispiel zu der Frage „kann man
-Prüfungen mit Atlas abbilden?". Es zeigt drei Dinge, die eine Workflow-Engine
+Prüfungen mit atlas abbilden?". Es zeigt drei Dinge, die eine Workflow-Engine
 einer reinen Prüfungssoftware voraushat:
 
 1. **Ein hartes Zeitlimit** als unterbrechendes **Boundary-Timer-Event** am
@@ -63,7 +63,7 @@ atlas_instance_decisions    key=<instanceKey>   # DMN-Trace: welche Regel traf
 atlas_instance_variables    key=<instanceKey>   # punkte + bewertung
 ```
 
-Gegen einen laufenden Atlas-Server (`0.1.0-dev`) verifiziert:
+Gegen einen laufenden atlas-Server (`0.1.0-dev`) verifiziert:
 
 - **Alle vier richtig** → `punkte=100`, DMN-Regel `r_sehrgut` trifft →
   `bewertung={bestanden:true, note:"sehr gut"}` → Ende *„Prüfung bestanden"*.

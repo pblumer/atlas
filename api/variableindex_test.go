@@ -68,7 +68,7 @@ func TestSearchByDeclaredVariableIsExact(t *testing.T) {
 			t.Fatalf("search %q: status=%d body=%s", q, code, body)
 		}
 		var rows []searchRow
-		if err := json.Unmarshal(body, &rows); err != nil {
+		if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 			t.Fatalf("decode %q: %v (%s)", q, err, body)
 		}
 		return rows
@@ -109,7 +109,7 @@ func TestSearchByUndeclaredVariableStillWalks(t *testing.T) {
 			t.Fatalf("search %q: status=%d body=%s", q, code, body)
 		}
 		var rows []searchRow
-		if err := json.Unmarshal(body, &rows); err != nil {
+		if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 			t.Fatalf("decode %q: %v", q, err)
 		}
 		return rows
@@ -144,7 +144,7 @@ func TestSearchByDeclaredVariableStaysScoped(t *testing.T) {
 			t.Fatalf("search: status=%d body=%s", code, body)
 		}
 		var rows []searchRow
-		if err := json.Unmarshal(body, &rows); err != nil {
+		if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
 		return rows
@@ -173,7 +173,7 @@ func TestSearchByDeclaredVariableAfterTheValueChanges(t *testing.T) {
 			t.Fatalf("search %q: status=%d body=%s", q, code, body)
 		}
 		var out []searchRow
-		if err := json.Unmarshal(body, &out); err != nil {
+		if err := json.Unmarshal(listRows(t, body), &out); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
 		return out
@@ -214,7 +214,7 @@ func TestSearchByDeclaredVariableStopsAtTheCap(t *testing.T) {
 		t.Fatalf("search: status=%d body=%s", code, body)
 	}
 	var rows []searchRow
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
 	if len(rows) != 200 {
@@ -242,7 +242,7 @@ func TestSearchByDeclaredVariableFiltersAfterTheSeek(t *testing.T) {
 			t.Fatalf("search %q: status=%d body=%s", q, code, body)
 		}
 		var rows []searchRow
-		if err := json.Unmarshal(body, &rows); err != nil {
+		if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 			t.Fatalf("decode %q: %v (%s)", q, err, body)
 		}
 		return rows
