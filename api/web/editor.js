@@ -895,10 +895,11 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   // editable draft is the same process, so the collision is the point rather than an
   // accident — it is offered as an explicit overwrite instead of a flat refusal.
   const identity = { draftId: draftId != null ? draftId : null, fromDeployment: draftId == null && key != null };
-  // sourceEdited says the canvas has been replaced from the XML source view. That is an
-  // edit the undo stack cannot see — the import starts it afresh — so the question of
-  // whether leaving loses work reads it beside the stack (makeKeepEdits).
-  identity.sourceEdited = false;
+  // importedEdit says this session has replaced the canvas by importing a document of
+  // its own making — an applied XML source, an auto-layout. That is an edit the undo
+  // stack cannot see, because the import starts it afresh, so the question of whether
+  // leaving loses work reads it beside the stack (makeKeepEdits).
+  identity.importedEdit = false;
   // ownId is the id this session may save onto without colliding with somebody else:
   // the draft it opened, or — for a deployed definition being pulled back into a draft
   // — that process's own id, where landing on the existing draft is the point and is
@@ -10521,9 +10522,10 @@ function askStartForm(api, formId, declared, texts = {}) {
 
 // importOver replaces what the modeler shows with xml, keeping the author's viewport,
 // and resolves to the import's warnings. When the import fails it puts the diagram
-// that was there back before rethrowing, because bpmn-js clears the canvas before it
-// knows whether the new document will read — a refused import must not cost the
-// diagram it was meant to correct.
+// that was there back before rethrowing. bpmn-js refuses a document that is not BPMN
+// while parsing it, with the canvas untouched, but one that is BPMN and has nothing it
+// can draw — no diagram, no process — only after it has cleared the canvas; a refused
+// import must not cost the diagram it was meant to change.
 async function importOver(modeler, xml) {
   const { xml: before } = await modeler.saveXML({ format: true });
   const canvas = modeler.get("canvas");
@@ -10541,6 +10543,16 @@ async function importOver(modeler, xml) {
   }
 }
 
+// markImportedEdit records that the canvas now holds work this session put there by an
+// import. An import is not a command: it starts the undo stack afresh and fires none of
+// the element events the live session listens to, so both are told explicitly — or the
+// editor would believe the diagram was nothing to lose, leaving without asking and
+// letting a collaborator's draft be pulled over it (ADR-0140).
+function markImportedEdit(identity) {
+  identity.importedEdit = true;
+  if (collab && collab.markDirty) collab.markDirty();
+}
+
 // makeKeepEdits builds the "may we leave this diagram now" question every action that
 // navigates away has to ask: true once this diagram's work is safe. A session that
 // addresses a draft saves it; one that does not has nowhere to put the edits without
@@ -10555,9 +10567,10 @@ function makeKeepEdits(modeler, identity, saveDraft, what, saveNew) {
   return async () => {
     let dirty = false;
     try { dirty = modeler.get("commandStack").canUndo(); } catch { /* no stack, nothing to lose */ }
-    // An applied XML source replaced the canvas through an import, which starts the
-    // undo stack afresh — so the stack alone would call that diagram untouched.
-    if (identity.sourceEdited) dirty = true;
+    // An applied XML source or an auto-layout replaced the canvas through an import,
+    // which starts the undo stack afresh — so the stack alone would call that diagram
+    // untouched.
+    if (identity.importedEdit) dirty = true;
     if (!dirty) return true;
     if (identity.draftId != null) return await saveDraft(false);
     if (saveNew && !identity.fromDeployment) return await saveDraft(false);
@@ -10652,7 +10665,11 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     try {
       const { xml } = await modeler.saveXML({ format: true });
       const relaid = await api("POST", "/api/v1/layout", xml, true);
-      await modeler.importXML(typeof relaid === "string" ? relaid : String(relaid));
+      // An import like the XML source's Apply, and so the same two consequences: a
+      // document the modeler cannot draw puts the diagram back rather than leaving an
+      // empty canvas, and a re-flowed one is unsaved work the editor has to know about.
+      await importOver(modeler, typeof relaid === "string" ? relaid : String(relaid));
+      markImportedEdit(identity);
       modeler.get("canvas").zoom("fit-viewport");
       toast("Diagram auto-laid out", "ok");
     } catch (e) {
@@ -10729,12 +10746,8 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
   // XML source: the diagram as BPMN XML, read off the canvas — so it is what the author
   // is looking at, saved or not — and, once corrected, imported back onto it. What
   // reaches the canvas goes through repairModel like any diagram opened from the
-  // server, so a hand-written dangling reference is declared rather than dropped.
-  //
-  // An import is not a command: it starts the undo stack afresh and fires none of the
-  // element events the live session listens to. Both are told explicitly, or the
-  // editor would believe an applied source was nothing to lose — leaving without
-  // asking, and letting a collaborator's draft be pulled over it.
+  // server, so a hand-written dangling reference is declared rather than dropped, and
+  // it is marked as the unsaved edit it is (markImportedEdit).
   root.querySelector("#xmlsource").addEventListener("click", () => openXmlSource({
     kind: "BPMN",
     subject: "diagram",
@@ -10742,8 +10755,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     read: async () => (await modeler.saveXML({ format: true })).xml,
     apply: async (text) => {
       const res = await importOver(modeler, repairModel(text));
-      identity.sourceEdited = true;
-      if (collab && collab.markDirty) collab.markDirty();
+      markImportedEdit(identity);
       return res;
     },
   }));

@@ -9,7 +9,8 @@
          draftId null), where an applied source has no draft to go into and leaving has
          to ask; __mountDraft() is the draft mode, where Save writes it and a live
          session is attached — through the fake EventSource below, so a test can play a
-         collaborator's change into it. -->
+         collaborator's change into it. Auto-layout replaces the canvas by the same kind
+         of import, so the same harness asks the same questions of it. -->
     <link rel="stylesheet" href="/app.css" />
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }
@@ -100,6 +101,8 @@
           const m = /<bpmn:process id="([^"]+)"/.exec(String(body || ""));
           return { processId: m ? m[1] : "draft", name: m ? m[1] : "Draft" };
         }
+        // Auto-layout hands back a diagram to import; the same one keeps the canvas valid.
+        if (method === "POST" && /\/layout$/.test(url)) return XML;
         if (method === "GET" && /\/forms$/.test(url)) return [];
         if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
         return {};

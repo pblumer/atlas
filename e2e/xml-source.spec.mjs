@@ -172,22 +172,33 @@ test("malformed XML is refused with the line it breaks on, and the canvas keeps 
   expect(page.__errors).toEqual([]);
 });
 
-test("XML the modeler cannot read leaves the diagram as it was", async ({ page }) => {
-  await mountBpmn(page);
-  await openBpmnSource(page);
-  // Well-formed, so it passes the first check — but not a BPMN document.
-  await page.locator(".xml-ta").fill('<?xml version="1.0"?>\n<notes><note>nothing to draw</note></notes>');
-  await page.locator(".xml-modal [data-apply]").click();
+// Two ways a well-formed document can fail to import, and bpmn-js treats them
+// differently: one that is not BPMN at all is refused while it is parsed, with the
+// canvas untouched; one that is BPMN but has nothing to draw — no diagram, no process —
+// is refused only after bpmn-js has cleared the canvas. The second is the one the
+// rollback exists for.
+const EMPTY_BPMN = '<?xml version="1.0"?>\n<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Empty" targetNamespace="http://atlas/bpmn"></bpmn:definitions>';
+for (const [what, doc] of [
+  ["not BPMN at all", '<?xml version="1.0"?>\n<notes><note>nothing to draw</note></notes>'],
+  ["BPMN with nothing to draw", EMPTY_BPMN],
+]) {
+  test(`XML the modeler cannot read leaves the diagram as it was: ${what}`, async ({ page }) => {
+    await mountBpmn(page);
+    await openBpmnSource(page);
+    // Well-formed, so it passes the first check.
+    await page.locator(".xml-ta").fill(doc);
+    await page.locator(".xml-modal [data-apply]").click();
 
-  const status = page.locator(".xml-modal .xml-status");
-  await expect(status).toHaveClass(/\berr\b/);
-  await expect(status).toContainText("unchanged");
-  await expect(page.locator(".xml-modal")).toBeVisible();
-  // Not an empty canvas: the import that failed was rolled back to what was there.
-  expect(await taskName(page)).toBe("Pruefen");
-  await expect(page.locator('[data-element-id="Call_1"]').first()).toBeVisible();
-  expect(page.__errors).toEqual([]);
-});
+    const status = page.locator(".xml-modal .xml-status");
+    await expect(status).toHaveClass(/\berr\b/);
+    await expect(status).toContainText("unchanged");
+    await expect(page.locator(".xml-modal")).toBeVisible();
+    // Not an empty canvas: whatever the import did to it was put back.
+    expect(await taskName(page)).toBe("Pruefen");
+    await expect(page.locator('[data-element-id="Call_1"]').first()).toBeVisible();
+    expect(page.__errors).toEqual([]);
+  });
+}
 
 test("closing with an unapplied edit asks first; closing an untouched source does not", async ({ page }) => {
   await mountBpmn(page);
@@ -314,6 +325,68 @@ test("a collaborator's change does not overwrite an applied source", async ({ pa
   expect(page.__errors).toEqual([]);
 });
 
+// Auto-layout replaces the canvas by the same kind of import — the server's re-flowed
+// document, read back in — and so had the same blind spot: the undo stack it reads
+// "anything to lose?" from came back empty, and the live session was never told.
+
+async function autoLayout(page) {
+  await page.locator("#bar-more").click();
+  await page.locator("#bar-menu #autolayout").click();
+  await expect.poll(() => page.evaluate(() => window.__toasts.map((t) => t.msg).join("\n"))).toContain("auto-laid out");
+}
+
+test("an auto-layout counts as an edit: leaving a deployment asks first", async ({ page }) => {
+  await mountBpmn(page);
+  const asked = [];
+  page.on("dialog", (d) => { asked.push(d.message()); d.dismiss(); });
+  await autoLayout(page);
+
+  const marker = await page.locator('[data-element-id="Call_1"] path[data-marker="sub-process"]').boundingBox();
+  await page.mouse.dblclick(marker.x + marker.width / 2, marker.y + marker.height / 2);
+  await expect.poll(() => asked.length).toBe(1);
+  expect(asked[0]).toContain("unsaved changes");
+  expect(await page.evaluate(() => location.hash)).toBe("");
+  expect(page.__errors).toEqual([]);
+});
+
+test("a collaborator's change does not overwrite an auto-layout", async ({ page }) => {
+  await mountBpmn(page, "__mountDraft");
+  await page.evaluate(() => window.__es.emit("sync", { self: "me", canEdit: true, participants: [], locks: [] }));
+  await autoLayout(page);
+
+  await page.evaluate(() => { window.__calls.length = 0; });
+  await page.evaluate(() => window.__es.emit("change", { by: "peer", elementId: "End_1" }));
+  await expect.poll(() => page.evaluate(() => window.__toasts.map((t) => t.msg).join("\n")))
+    .toContain("A collaborator changed the diagram");
+  await page.waitForTimeout(600);
+  const fetched = await page.evaluate(() =>
+    window.__calls.filter((c) => c.method === "GET" && /\/drafts\/[^/]+\/xml$/.test(c.url)).length);
+  expect(fetched, "the peer's draft must not be pulled over the re-flowed layout").toBe(0);
+  expect(page.__errors).toEqual([]);
+});
+
+test("an auto-layout the modeler cannot read leaves the diagram as it was", async ({ page }) => {
+  await mountBpmn(page);
+  // The server answers with BPMN that has nothing to draw. The import fails — and
+  // bpmn-js has cleared the canvas by then, so without a rollback the author is left
+  // looking at nothing.
+  await page.evaluate((empty) => {
+    const m = window.__atlasModeler;
+    const real = m.importXML.bind(m);
+    let first = true;
+    m.importXML = (xml) => {
+      if (first) { first = false; return real(empty); }
+      return real(xml);
+    };
+  }, EMPTY_BPMN);
+  await page.locator("#bar-more").click();
+  await page.locator("#bar-menu #autolayout").click();
+  await expect.poll(() => page.evaluate(() => window.__toasts.map((t) => t.msg).join("\n"))).toContain("auto-layout failed");
+  expect(await taskName(page)).toBe("Pruefen");
+  await expect(page.locator('[data-element-id="Call_1"]').first()).toBeVisible();
+  expect(page.__errors).toEqual([]);
+});
+
 test("Copy puts the source on the clipboard", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await mountBpmn(page);
@@ -353,13 +426,27 @@ const DMN_XML = `<?xml version="1.0" encoding="UTF-8"?>
 </definitions>`;
 
 // stubDecisionServer answers what opening one stored decision asks for, and records
-// the draft saves so a test can see what Save sent.
-function stubDecisionServer(page) {
+// the draft saves so a test can see what Save sent. With `draft`, the decision has a
+// draft — which is what a live session is keyed on (ADR-0323) — and every read of the
+// draft's XML is counted, since that read is how a peer's change arrives.
+function stubDecisionServer(page, { draft = false } = {}) {
   const draftSaves = [];
+  const draftReads = [];
   page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (/\/session\/(presence|lock|change|leave)$/.test(path)) return route.fulfill({ status: 204, body: "" });
+    if (path === "/api/v1/dmn-drafts" && request.method() === "GET") {
+      return route.fulfill({ json: draft ? [{ id: "ref-1", refId: "ref-1", modelRef: "eligibility", projectId: "app-1" }] : [] });
+    }
+    if (path === "/api/v1/dmn-drafts/ref-1/xml") {
+      draftReads.push(path);
+      return route.fulfill({ body: DMN_XML, contentType: "application/xml" });
+    }
+    if (path === "/api/v1/dmn-layout" && request.method() === "POST") {
+      return route.fulfill({ body: DMN_XML.replace('x="160" y="100"', 'x="60" y="60"'), contentType: "application/xml" });
+    }
     if (path === "/api/v1/applications") return route.fulfill({ json: [{ id: "app-1", name: "Order Management", myRole: "owner" }] });
     if (path === "/api/v1/dmnrefs" && request.method() === "GET") {
       return route.fulfill({ json: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }] });
@@ -374,7 +461,34 @@ function stubDecisionServer(page) {
     }
     return route.fulfill({ json: [] });
   });
-  return { draftSaves };
+  return { draftSaves, draftReads };
+}
+
+// fakeSessionStream stands in for the live session's stream before the Console loads,
+// so a test can play a collaborator's frames into the decision editor.
+async function fakeSessionStream(page) {
+  await page.addInitScript(() => {
+    window.__streams = [];
+    window.EventSource = class {
+      constructor(url) { this.url = url; this.listeners = {}; window.__streams.push(this); }
+      addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }
+      close() {}
+      emit(type, data) { for (const fn of this.listeners[type] || []) fn({ data: JSON.stringify(data) }); }
+    };
+  });
+}
+
+// peerChangesTheDraft joins the session and plays a collaborator's change into it, and
+// answers whether the editor then fetched the draft to pull it over its canvas.
+async function peerChangesTheDraft(page, server) {
+  const before = server.draftReads.length;
+  await page.evaluate(() => {
+    const es = window.__streams.find((s) => s.url.includes("/dmn-drafts/"));
+    es.emit("change", { by: "peer", elementId: "Decision_src" });
+  });
+  await expect(page.locator("#toast")).toContainText("A collaborator changed the diagram");
+  await page.waitForTimeout(600); // past the session's 300 ms coalescing window
+  return server.draftReads.length - before;
 }
 
 async function openDecision(page) {
@@ -438,6 +552,39 @@ test("a changed DMN version is refused by name, and the decision stays as it was
   await expect(page.locator(".xml-modal")).toHaveCount(0);
   await expect(page.locator("#dmn-views button", { hasText: "eligibility-15" })).toHaveCount(0);
   await expect(page.locator("#dmn-views button", { hasText: "eligibility" }).first()).toBeVisible();
+  expect(page.__errors).toEqual([]);
+});
+
+test("in the decision editor, a collaborator's change waits for an applied source", async ({ page }) => {
+  await fakeSessionStream(page);
+  const server = stubDecisionServer(page, { draft: true });
+  await openDecision(page);
+  await page.evaluate(() => window.__streams.find((s) => s.url.includes("/dmn-drafts/"))
+    .emit("sync", { self: "me", canEdit: true, participants: [], locks: [] }));
+
+  await openDmnSource(page);
+  const ta = page.locator(".xml-ta");
+  await ta.fill((await ta.inputValue()).replace('name="eligibility"', 'name="eligibility-fixed"'));
+  await page.locator(".xml-modal [data-apply]").click();
+  await expect(page.locator(".xml-modal")).toHaveCount(0);
+
+  expect(await peerChangesTheDraft(page, server), "the peer's draft must wait for this one's Save").toBe(0);
+  await expect(page.locator("#dmn-views button", { hasText: "eligibility-fixed" })).toBeVisible();
+  expect(page.__errors).toEqual([]);
+});
+
+test("in the decision editor, a collaborator's change waits for an auto-layout", async ({ page }) => {
+  await fakeSessionStream(page);
+  const server = stubDecisionServer(page, { draft: true });
+  await openDecision(page);
+  await page.evaluate(() => window.__streams.find((s) => s.url.includes("/dmn-drafts/"))
+    .emit("sync", { self: "me", canEdit: true, participants: [], locks: [] }));
+
+  await page.locator("#dmn-more").click();
+  await page.locator("#dmn-menu #dmn-autolayout").click();
+  await expect(page.locator("#toast")).toContainText("laid out");
+
+  expect(await peerChangesTheDraft(page, server), "the peer's draft must wait for this one's Save").toBe(0);
   expect(page.__errors).toEqual([]);
 });
 

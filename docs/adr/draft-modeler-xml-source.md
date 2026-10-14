@@ -56,8 +56,10 @@ text is what the author is looking at rather than what a server last stored. It 
 the text with the browser's XML parser while the author types and refuses a malformed
 document on Apply, naming and marking the line the parser stopped on — nothing that is
 not XML reaches the modeler. A well-formed document is imported; if the modeler cannot
-read it, the editor re-imports what was there before and says the model is unchanged,
-because bpmn-js and dmn-js clear the canvas before they know whether a document reads.
+read it, the editor re-imports what was there before and says the model is unchanged.
+That matters for one kind of failure in particular: bpmn-js refuses a document that is
+not BPMN while parsing it, with the canvas untouched, but one that is BPMN with nothing
+to draw (no diagram, no process) only after it has cleared the canvas.
 An import that succeeds with warnings (an unresolved reference, an unknown element)
 keeps the dialog open on them, since what was left out is exactly what an author
 correcting the source needs to see. Closing with an unapplied edit asks first.
@@ -68,10 +70,17 @@ from:
 - **The undo history starts afresh.** The dialog says so before Apply is pressed.
 - **The editor is told that it holds an edit.** The BPMN editor asked "is there
   anything to lose?" of the undo stack alone, which an import empties; it now also
-  reads a flag the source view sets. The live session marked the canvas dirty on
-  element events, which an import does not fire; it now has `markDirty()`, the
-  counterpart of `markSaved()`, so a collaborator's draft is deferred rather than
-  pulled over an applied, unsaved correction.
+  reads a flag an import of the editor's own making sets. The live session marked the
+  canvas dirty on element events, which an import does not fire; it now has
+  `markDirty()`, the counterpart of `markSaved()`, so a collaborator's draft is
+  deferred rather than pulled over an applied, unsaved correction.
+- **Auto-layout is the same kind of act, and is treated the same.** It replaced the
+  canvas with the server's re-flowed document by the same import, and so already had
+  the same gap: after an auto-layout a deployment could be left without a question, a
+  collaborator's draft could overwrite the new layout in a live session, and a
+  document the modeler could not draw left an empty canvas. Both editors now route it
+  through the same import as the source view's Apply — rollback, the flag and
+  `markDirty()` included.
 - **A DMN document of another version is refused in words.** The DMN modeler is built
   for one version when the page opens and cannot change (#994); importing a 1.5
   document into a 1.3 modeler fails with a parse error that never mentions a version.
@@ -87,18 +96,17 @@ from:
   Ctrl+Z, and the canvas edits made before it cannot be either. The author can close
   without saving, or apply the earlier text again; the dialog states the cost rather
   than hiding it. A change of DMN version cannot be made here at all.
-- **Follow-ups / risks to watch:** Auto-layout re-imports the diagram the same way and
-  still leaves the BPMN editor's "anything to lose?" reading an empty undo stack, and
-  the live session believing the canvas clean; the flag and `markDirty()` are the
-  mechanism to close that, and this record does not apply them there. The Playground's
-  "the diagram changed" hint ([ADR-0215](0215-modeler-playground.md)) listens for element
-  edits and does not appear when a source is applied under a running sandbox.
+- **Follow-ups / risks to watch:** The Playground's "the diagram changed" hint
+  ([ADR-0215](0215-modeler-playground.md)) listens for element edits and does not appear
+  when a source is applied, or an auto-layout run, under a running sandbox. A live
+  session's own re-import of a peer's saved draft is deliberately *not* marked as an
+  edit: it is what the server already holds.
 
 ### As built
 
 The dialog is `api/web/xml-source.js`; the editors pass it `read` and `apply`, and own
-the rollback and the dirty marking (`importOver` in `editor.js`, `applySource` in
-`dmn-editor.js`). Its key handler sits on the window in the capture phase, because the
+the rollback and the dirty marking — `importOver` and `markImportedEdit` in `editor.js`,
+`importLocal` in `dmn-editor.js` — which Auto-layout uses too. Its key handler sits on the window in the capture phase, because the
 editor's own F4/F8 and the Console's Ctrl+K and Ctrl+Shift+E are bound on the document
 in that phase and would otherwise act on the canvas behind the dialog.
 

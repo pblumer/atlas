@@ -1781,22 +1781,16 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     }
   }
 
-  // applySource imports a corrected document from the XML source view. It answers the
-  // view's contract: resolve with the import's warnings, or throw with the decision as
-  // it was — dmn-js clears its views before it knows whether the new document reads, so
-  // a refused import puts back the model it was meant to correct. The author stays on
-  // the view they were reading, where the document still has it.
+  // importLocal puts a document this editor produced — a corrected source, a re-flowed
+  // layout — onto the canvas as local, unsaved work, and resolves to the import's
+  // warnings. If the import fails it puts back the model that was there before
+  // rethrowing, so a refused import cannot cost the decision it was meant to change.
+  // The author stays on the view they were reading, where the document still has it.
   //
-  // A document of another DMN version is refused before dmn-js sees it, because the
-  // moddle it would be read with was chosen when the page opened (dmnVersionOf), and
-  // what dmn-js says when the two disagree is a parse failure that never mentions a
-  // version.
-  async function applySource(text) {
-    const wants = dmnVersionOf(text);
-    if (wants !== builtFor) {
-      throw new Error(`This XML is DMN ${wants}, and this editor opened the decision as DMN ${builtFor}: ` +
-        `the version is fixed when the page opens. Keep the DMN ${builtFor} namespace here.`);
-    }
+  // An import is not an edit the live session sees (ADR-0323): it fires none of the
+  // element events the session marks the canvas dirty on, so it is told — otherwise a
+  // peer's draft would be pulled over this one before it is saved.
+  async function importLocal(text) {
     const { xml: before } = await modeler.saveXML({ format: true });
     const was = modeler.getActiveView();
     const reopen = async () => {
@@ -1814,12 +1808,27 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
       throw e;
     }
     await reopen();
-    // An import is not an edit the live session sees (ADR-0323): tell it, so a peer's
-    // draft is not pulled over this one before it is saved.
     if (collab && collab.markDirty) collab.markDirty();
     lastDeployedID = null; // the import replaced the canvas; re-read the chip's subject
     refreshDeployed(true);
     return { warnings: warnings || [] };
+  }
+
+  // applySource imports a corrected document from the XML source view, answering the
+  // view's contract through importLocal: resolve with the warnings, or throw with the
+  // decision as it was.
+  //
+  // A document of another DMN version is refused before dmn-js sees it, because the
+  // moddle it would be read with was chosen when the page opened (dmnVersionOf), and
+  // what dmn-js says when the two disagree is a parse failure that never mentions a
+  // version.
+  async function applySource(text) {
+    const wants = dmnVersionOf(text);
+    if (wants !== builtFor) {
+      throw new Error(`This XML is DMN ${wants}, and this editor opened the decision as DMN ${builtFor}: ` +
+        `the version is fixed when the page opens. Keep the DMN ${builtFor} namespace here.`);
+    }
+    return importLocal(text);
   }
 
   const openSource = () => openXmlSource({
@@ -1840,13 +1849,14 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         const { xml } = await currentXml();
         const relaid = await api("POST", "/api/v1/dmn-layout", xml, true);
         if (typeof relaid !== "string" || !relaid) throw new Error("the model came back empty");
-        await modeler.importXML(relaid);
+        // The same import as the XML source's Apply, with the same consequences: a
+        // model that does not read is put back, and the re-flowed graph is unsaved work
+        // the live session must not pull a peer's draft over.
+        await importLocal(relaid);
         const view = modeler.getActiveView();
         if (view && view.type === "drd") {
           try { modeler.getActiveViewer().get("canvas").zoom("fit-viewport"); } catch { /* nothing to fit */ }
         }
-        lastDeployedID = null; // the import replaced the canvas; re-read the chip's subject
-        await refreshDeployed(true);
         toast && toast("Decision requirements graph laid out", "ok");
       } catch (e) {
         toast && toast("Auto-layout failed: " + e.message, "err");

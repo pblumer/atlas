@@ -441,9 +441,13 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   toggle Variables or run Auto-layout behind it, and do again once it is closed; an applied source
   counts as an edit, so
   leaving a deployment asks, Save writes it, and a collaborator's change arriving over the live
-  session (a fake `EventSource`) is deferred rather than pulled over it; Copy copies it. In the
-  decision editor the views are rebuilt from the applied document and Save keeps it, and a document
-  of another DMN version is refused naming both versions. The form editor's schema tab says
+  session (a fake `EventSource`) is deferred rather than pulled over it; Copy copies it. A document
+  that is BPMN but has nothing to draw — which bpmn-js refuses only after clearing the canvas — is
+  rolled back too. **Auto-layout** imports the same way and is held to the same: it counts as an
+  edit for leaving a deployment, a collaborator's change waits for it, and a re-flowed document that
+  cannot be drawn puts the diagram back. In the decision editor the views are rebuilt from the
+  applied document and Save keeps it, a document of another DMN version is refused naming both
+  versions, and a collaborator's change waits for an applied source and for an auto-layout. The form editor's schema tab says
   **Source**, and an edit there is what Save writes.
 
 ## Rendering a conformance gallery diagram

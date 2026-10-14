@@ -112,6 +112,18 @@ _Changed_ / _Removed_ for each version.
   `application.ENTRA_CERTIFICATE_SUBJECT`**: the tenant once per installation, the app
   registration per application.
 
+### Fixed
+
+- **An auto-layout is an unsaved edit the Modeler protects.** Auto-layout replaces the
+  diagram or decision with the server's re-flowed document by an import, which empties
+  the undo stack and fires no edit events. So after one, leaving a deployed process for
+  its called process did not ask, a collaborator's draft could be pulled over the new
+  layout in a live session, and in the process editor a document bpmn-js could not draw
+  left an empty canvas. It now goes through the same import as the XML source view's Apply: the
+  layout counts as unsaved work, the session defers a peer's draft until it is saved,
+  and a failed import puts the diagram back
+  ([ADR-draft-modeler-xml-source](docs/adr/draft-modeler-xml-source.md)).
+
 ## [0.12.0] — 2026-10-13
 
 **A value that differs between DEV, INT and PROD lives on the installation, not in the
