@@ -1,9 +1,11 @@
 package engine
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -37,16 +39,92 @@ func (c *ProcessingContext) latestDefKey(processId string) (uint64, bool) {
 	return k, ok
 }
 
-// applicationValue is the value the application a definition is filed under holds on this
-// server for name (ADR-0453). A pure read of
-// run-loop-owned operator config — no allocation (I1).
-func (c *ProcessingContext) applicationValue(defKey uint64, name string) (ApplicationValue, bool) {
-	app, ok := c.p.defApplication[defKey]
-	if !ok {
-		return ApplicationValue{}, false
+// namespaceValue is the value of a namespace an instance of cp starts with
+// (ADR-0456): a JSON object holding each member the process declares
+// in it — for a constant, the value the installation holds on this server; for a fact,
+// what Atlas knows — else the member's fallback, else nothing, so the member reads as
+// null. The object is built once per definition and configuration change and cached on
+// the processor, so the creations after the first allocate nothing (I1); the text is
+// frozen into the creation event like any variable's, so replay never builds it (I6).
+func (c *ProcessingContext) namespaceValue(defKey uint64, cp *compiler.CompiledProcess, namespace string) string {
+	cache := c.p.serverNamespace
+	if namespace == compiler.ApplicationNamespace {
+		cache = c.p.appNamespace
 	}
-	v, ok := c.p.appValues[app][name]
-	return v, ok
+	if text, ok := cache[defKey]; ok {
+		return text
+	}
+	app := c.p.defApplication[defKey]
+	members := map[string]any{}
+	for _, k := range cp.Constants() {
+		if k.Namespace != namespace {
+			continue
+		}
+		if v, ok := c.heldMember(namespace, app, &k); ok {
+			members[k.Name] = v
+		} else if k.HasFallback {
+			members[k.Name] = namespaceMember(toVarKind(k.Kind), k.Bool, k.Text)
+		}
+	}
+	_, _, text := expr.Classify(expr.FromJSON(members))
+	cache[defKey] = text
+	return text
+}
+
+// heldMember is what this installation holds for one declared member of a namespace: a
+// constant's held value, or a fact Atlas knows. An empty fact is not held — a node with no
+// environment set says nothing, and the member falls back like a missing constant.
+func (c *ProcessingContext) heldMember(namespace, app string, k *compiler.Constant) (any, bool) {
+	if k.Info {
+		var fact string
+		switch {
+		case namespace == compiler.ApplicationNamespace && k.Name == "id":
+			fact = app
+		case namespace == compiler.ApplicationNamespace && k.Name == "key":
+			fact = c.p.appInfo[app].Key
+		case namespace == compiler.ApplicationNamespace && k.Name == "name":
+			fact = c.p.appInfo[app].Name
+		case k.Name == "id":
+			fact = c.p.serverInfo.ID
+		case k.Name == "name":
+			fact = c.p.serverInfo.Name
+		case k.Name == "environment":
+			fact = c.p.serverInfo.Environment
+		}
+		return fact, fact != ""
+	}
+	held := c.p.serverConstants
+	if namespace == compiler.ApplicationNamespace {
+		held = c.p.appConstants[app]
+	}
+	v, ok := held[k.Name]
+	if !ok {
+		return nil, false
+	}
+	return namespaceMember(v.Kind, v.Bool, v.Text), true
+}
+
+// namespaceMember turns a stored value back into the JSON value it is a member of the
+// namespace as. The text is canonical — the server parsed it when it was saved, the
+// compiler when the model was deployed — so a JSON member that does not decode cannot
+// occur, and would be null rather than a failed start.
+func namespaceMember(kind model.VarKind, b bool, text string) any {
+	switch kind {
+	case model.VarString:
+		return text
+	case model.VarNumber:
+		return json.Number(text)
+	case model.VarBool:
+		return b
+	case model.VarJSON:
+		dec := json.NewDecoder(strings.NewReader(text))
+		dec.UseNumber()
+		var v any
+		if dec.Decode(&v) == nil {
+			return v
+		}
+	}
+	return nil
 }
 
 // resolveCallTarget resolves the definition a call activity starts as a child,

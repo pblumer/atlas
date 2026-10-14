@@ -1,6 +1,6 @@
 # ADR-0453: An application holds its values per installation, and a constant binds to one by name
 
-- **Status:** Accepted
+- **Status:** Accepted (amended)
 - **Implementation:** Landed
 - **Date:** 2026-10-13
 - **Deciders:** Atlas maintainers
@@ -186,3 +186,29 @@ not seeded.
 - the portability rule is [ADR-0371](0371-participant-binds-a-published-interface.md)'s;
   applications are [ADR-0128](0128-process-applications.md)'s, promotion ADR-0129's, and the
   store classes ADR-0282's
+
+## Amendment (2026-10-14): an application's values are its constants, read as application.NAME
+
+[ADR-0456](0456-constant-namespaces.md) keeps the decision above —
+held per installation, pushed into the processor, bound by name, frozen into the creation
+event — and changes how it is named and read:
+
+- **Constants, not values.** What an application holds is called its constants:
+  - the Console's tab is **Constants**;
+  - the routes are `GET`/`PUT /api/v1/applications/{id}/constants` with the body
+    `{"constants": [...]}`;
+  - the MCP tool is `atlas_application_constants`;
+  - the store is `application-constants`.
+
+  No installation used the 0.12.0 names, so there are no aliases.
+- **Read under a namespace.** A constant bound to the application is no longer a root
+  variable of its own name. It is a member of the root variable `application`, a JSON
+  object, read as `application.TENANT_ID` in FEEL and `$application.TENANT_ID` in
+  PowerShell. That variable exists only in an instance of a process that declares an
+  application constant, and is then a constant itself.
+- **Names in capitals.** An application constant's name is written in capitals, as every
+  constant's is (ADR-0454, amended), and `PUT` refuses any other.
+- **Beside the installation's own.** A constant may also be held for every application,
+  read as `server.NAME`, and both namespaces carry facts Atlas fills itself
+  (`application.name`, `server.environment`). Both are that record's.
+

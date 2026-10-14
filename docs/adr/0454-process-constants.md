@@ -1,6 +1,6 @@
 # ADR-0454: Process constants are seeded with every instance and written by nothing else
 
-- **Status:** Accepted
+- **Status:** Accepted (amended)
 - **Implementation:** Landed
 - **Date:** 2026-10-13
 - **Deciders:** Atlas maintainers
@@ -209,3 +209,29 @@ as one that declares nothing searchable.
   per ADR-0098
 - the refusal for personal data is ADR-0314's; the portability rule the follow-up must
   meet is [ADR-0371](0371-participant-binds-a-published-interface.md)'s
+
+## Amendment (2026-10-14): a constant's name is written in capitals
+
+Every constant's name is written in capitals: letters A–Z, digits and underscores,
+starting with a letter (`TENANT_ID`). This covers a process constant here, and an
+application or server constant
+([ADR-0456](0456-constant-namespaces.md)).
+
+- **Why.** A reader tells a constant from a variable at a glance in every expression and
+  script. And PowerShell, which does not tell `$TenantId` from `$tenantid`, can no longer
+  hand a script one when it asked for the other.
+- **Reserved names.** `APPLICATION` and `SERVER` are reserved, because they are the
+  namespaces the installation's constants are read under.
+- **Deploy and API.** A deploy refuses any other name, and so does the API when an
+  application's or the installation's constants are saved.
+- **Reload.** A definition deployed before the rule still loads: the reload keeps the
+  constant under the name it has and reports it as `constant.name` (ADR-0177), because a
+  spelling is no reason for a server not to start.
+- **Typing.** The Modeler and the Console apply the rule while a name is typed: umlauts
+  spell out, and a space, dot or hyphen becomes an underscore.
+
+A constant bound to the application or the installation is no longer a root variable of
+its own name. It is a member of the namespace it is read under, which is then the
+variable the engine protects. A process constant is unchanged: a root variable, seeded
+first, written by nothing else.
+

@@ -269,7 +269,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0181](0181-ad-connector-mock-mode.md) | Mock mode for the Active Directory connector | Accepted | Landed |
 | [0182](0182-ad-default-offload.md) | Active Directory runs on a worker by default | Accepted | Landed |
 | [0183](0183-the-modeler-asks-where-a-kind-runs.md) | The Modeler asks the server where an authored kind runs | Accepted | Landed |
-| [0184](0184-grant-audit-log.md) | Grant audit log | Accepted | Landed |
+| [0184](0184-grant-audit-log.md) | Grant audit log | Accepted (amended) | Landed |
 | [0185](0185-live-group-membership.md) | Live group membership | Accepted | Landed |
 | [0186](0186-embed-public-forms-cross-origin.md) | Embedding a public start form cross-origin (scoped CORS) | Accepted | Landed |
 | [0187](0187-postgres-change-events.md) | Database change events — captured in the database, read on a worker, deduplicated in the engine | Proposed | Not started |
@@ -538,9 +538,10 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0450](0450-a-scope-drains-only-when-no-token-is-in-transit.md) | A scope drains only when no token is in transit into it | Accepted | Landed |
 | [0451](0451-catalogue-export.md) | A catalogue is exported as the document it is imported as | Accepted | Landed |
 | [0452](0452-modeler-shows-its-version.md) | The Modeler says which version it shows, and Deploy saves the draft | Accepted | Landed |
-| [0453](0453-application-values-per-installation.md) | An application holds its values per installation, and a constant binds to one by name | Accepted | Landed |
-| [0454](0454-process-constants.md) | Process constants are seeded with every instance and written by nothing else | Accepted | Landed |
+| [0453](0453-application-values-per-installation.md) | An application holds its values per installation, and a constant binds to one by name | Accepted (amended) | Landed |
+| [0454](0454-process-constants.md) | Process constants are seeded with every instance and written by nothing else | Accepted (amended) | Landed |
 | [0455](0455-start-variable-defaults.md) | A start variable's default is what an instance starts with when its start did not supply it | Accepted | Landed |
+| [0456](0456-constant-namespaces.md) | Constants the installation holds are read under the namespace that holds them, and the installation holds its own | Accepted | Landed |
 
 ## The two states of a record
 

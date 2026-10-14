@@ -56,7 +56,9 @@ function normVars(list) {
     const name = typeof v === "string" ? v : (v && v.name);
     if (!name) continue;
     names.add(name);
-    arr.push(typeof v === "string" ? { name, detail: "variable" } : { name, detail: v.detail || "variable" });
+    // onAccept, when a caller gives one, runs after the variable is inserted — the
+    // Modeler declares a namespace member it offered but the model did not yet read.
+    arr.push(typeof v === "string" ? { name, detail: "variable" } : { name, detail: v.detail || "variable", onAccept: v.onAccept });
   }
   return { names, arr };
 }
@@ -344,6 +346,9 @@ export function attachCodeEditor(textarea, opts = {}) {
     closePopup();
     afterEdit();
     textarea.focus();
+    if (it.src && typeof it.src.onAccept === "function") {
+      try { it.src.onAccept(); } catch { /* the insert stands either way */ }
+    }
   }
 
   function moveActive(delta) {

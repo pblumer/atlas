@@ -250,7 +250,7 @@ export function completionsFor(prefix, variables) {
     // origin label (start / script result / output mapping / task-local).
     const name = typeof v === "string" ? v : v.name;
     const detail = typeof v === "string" ? "variable" : (v.detail || "variable");
-    if (name) items.push({ label: name, kind: "variable", insert: name, detail });
+    if (name) items.push({ label: name, kind: "variable", insert: name, detail, src: v });
   }
   for (const b of FEEL_BUILTINS) {
     items.push({ label: b.name, kind: "function", insert: b.name, detail: b.sig, doc: b.doc });
@@ -321,6 +321,11 @@ export function replaceStart(before, label) {
 export const feel = {
   tokenize,
   prefix(before) {
+    // A path into a constants namespace (application.TENANT_ID, server.environment;
+    // ADR-0456) completes as one run, so typing the dot already
+    // lists the namespace's members.
+    const ns = /(?:^|[^A-Za-z0-9_.])((?:application|server)\.[A-Za-z0-9_]*)$/.exec(before);
+    if (ns) return { text: ns[1], start: before.length - ns[1].length };
     const t = prefixBefore(before);
     return { text: t, start: before.length - t.length };
   },

@@ -4,9 +4,10 @@
     <meta charset="utf-8" />
     <title>Atlas process constants modeler e2e harness</title>
     <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, to verify
-         the process's constants (atlas:constants, ADR-0454): the
+         the process's constants (atlas:constants, ADR-0454) and the namespaces the
+         installation's constants are read under (ADR-0456): the
          Implement tab edits them beside the start variables, the Variables panel and FEEL
-         completion offer them, and a model arriving with them survives a round trip —
+         completion offer them — and declare the ones the model does not read yet — and a model arriving with them survives a round trip —
          which it does not unless api/web/atlas-moddle.json declares the types, because
          bpmn-js drops an extension element it cannot parse. -->
     <link rel="stylesheet" href="/app.css" />
@@ -23,29 +24,33 @@
       const view = document.getElementById("view");
 
       const DECLARED_XML = `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_constants" targetNamespace="http://atlas/bpmn">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_constants" targetNamespace="http://atlas/bpmn">
   <bpmn:process id="ucc" name="Sammelanschluss" isExecutable="true">
     <bpmn:extensionElements>
       <atlas:startForm>
         <atlas:startVariable name="Name" type="string" required="true" />
       </atlas:startForm>
       <atlas:constants>
-        <atlas:constant name="DomainSuffix" type="string" value="contoso.ch" />
-        <atlas:constant name="MaxAgents" type="number" value="20" />
+        <atlas:constant name="DOMAIN_SUFFIX" type="string" value="contoso.ch" />
+        <atlas:constant name="MAX_AGENTS" type="number" value="20" />
       </atlas:constants>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
     <bpmn:userTask id="Activity_check" name="Prüfen"><bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing></bpmn:userTask>
-    <bpmn:endEvent id="End_1" name="Fertig"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:scriptTask id="Activity_feel" name="Rechnen"><bpmn:extensionElements><zeebe:script expression="=1" resultVariable="r"/></bpmn:extensionElements><bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing></bpmn:scriptTask>
+    <bpmn:endEvent id="End_1" name="Fertig"><bpmn:incoming>f2</bpmn:incoming></bpmn:endEvent>
     <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Activity_check"/>
-    <bpmn:sequenceFlow id="f1" sourceRef="Activity_check" targetRef="End_1"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Activity_check" targetRef="Activity_feel"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="Activity_feel" targetRef="End_1"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="ucc">
     <bpmndi:BPMNShape id="Start_1_s" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Activity_check_s" bpmnElement="Activity_check"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="End_1_s" bpmnElement="End_1"><dc:Bounds x="440" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Activity_feel_s" bpmnElement="Activity_feel"><dc:Bounds x="420" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_s" bpmnElement="End_1"><dc:Bounds x="580" y="120" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNEdge id="f0_e" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
-    <bpmndi:BPMNEdge id="f1_e" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="440" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_e" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_e" bpmnElement="f2"><di:waypoint x="520" y="138"/><di:waypoint x="580" y="138"/></bpmndi:BPMNEdge>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
@@ -62,12 +67,20 @@
         if (method === "GET" && /\/decisions/.test(url)) return [];
         if (method === "GET" && /\/forms/.test(url)) return [];
         if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        // What this installation holds for the namespaces (ADR-0456):
+        // the Variables panel and completion offer what the model does not declare yet.
+        if (method === "GET" && /\/server\/constants$/.test(url)) {
+          return { constants: [{ name: "ENTRA_TENANT_ID", type: "string", value: "t" }], required: [] };
+        }
+        if (method === "GET" && /\/applications\/app-1\/constants$/.test(url)) {
+          return { constants: [{ name: "CLIENT_ID", type: "string", value: "c" }], required: [] };
+        }
         return {};
       };
 
       window.__mount = (kind) => {
         current = kind === "plain" ? PLAIN_XML : DECLARED_XML;
-        return mountEditor(view, { api, toast: () => {}, key: 42 });
+        return mountEditor(view, { api, toast: () => {}, key: 42, projectId: "app-1" });
       };
       // Nothing selected is what shows the process itself, which is where the
       // declaration lives.

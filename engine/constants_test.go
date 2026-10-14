@@ -13,22 +13,22 @@ import (
 // was started, before its start variables, and written by nothing in the run afterwards
 // but an operator's audited correction.
 
-// tenantConstant is a string constant named TenantId with the given value, in the form
+// tenantConstant is a string constant named TENANT_ID with the given value, in the form
 // the compiler hands the engine.
 func tenantConstant(value string) compiler.Constant {
-	return compiler.Constant{Name: "TenantId", Type: "string", Value: value, Kind: expr.KindString, Text: value}
+	return compiler.Constant{Name: "TENANT_ID", Type: "string", Value: value, Kind: expr.KindString, Text: value}
 }
 
 // constantsProcess builds Start → PowerShell job script (result "result") → message catch
-// "consts.more" → message catch "consts.end" → End, declaring the constants TenantId
-// ("tenant-dev") and MaxAgents (20). The two catches keep the instance alive, so a test
+// "consts.more" → message catch "consts.end" → End, declaring the constants TENANT_ID
+// ("tenant-dev") and MAX_AGENTS (20). The two catches keep the instance alive, so a test
 // can read its variables after each write it makes.
 func constantsProcess(t *testing.T) (*compiler.CompiledProcess, int32) {
 	t.Helper()
 	b := compiler.NewBuilder(9, "consts", 1)
 	b.SetConstants([]compiler.Constant{
 		tenantConstant("tenant-dev"),
-		{Name: "MaxAgents", Type: "number", Value: "20", Kind: expr.KindNumber, Text: "20"},
+		{Name: "MAX_AGENTS", Type: "number", Value: "20", Kind: expr.KindNumber, Text: "20"},
 	})
 	start := b.AddStartEvent()
 	sj := b.AddScriptJobTask(compiler.PwshJobType, "powershell", `Write-Output 1`, "result", 3)
@@ -71,12 +71,12 @@ func TestConstantsAreSeededAndOutrankStartVariables(t *testing.T) {
 	if err := p.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	p.CreateInstance(cp.Key, strVar("TenantId", "from-the-caller"), strVar("Other", "x"))
+	p.CreateInstance(cp.Key, strVar("TENANT_ID", "from-the-caller"), strVar("Other", "x"))
 	run(t, p)
 
 	pi := onlyInstance(t, h.store)
-	wantVar(t, h, pi, "TenantId", model.VarString, "tenant-dev")
-	wantVar(t, h, pi, "MaxAgents", model.VarNumber, "20")
+	wantVar(t, h, pi, "TENANT_ID", model.VarString, "tenant-dev")
+	wantVar(t, h, pi, "MAX_AGENTS", model.VarNumber, "20")
 	wantVar(t, h, pi, "Other", model.VarString, "x")
 }
 
@@ -100,7 +100,7 @@ func TestConstantsHoldAgainstLaterWritesAndRecover(t *testing.T) {
 	pi := onlyInstance(t, h1.store)
 
 	// The worker returns its result and, as some do, a field named like the constant.
-	p1.CompleteJob(singleActivatableJob(t, h1.store, jobType), strVar("TenantId", "from-the-worker"), strVar("result", "ok"))
+	p1.CompleteJob(singleActivatableJob(t, h1.store, jobType), strVar("TENANT_ID", "from-the-worker"), strVar("result", "ok"))
 	run(t, p1)
 	if n := len(incidents(t, h1.store)); n != 0 {
 		t.Fatalf("incidents after the worker's result = %d, want 0 (a dropped write parks nothing)", n)
@@ -108,7 +108,7 @@ func TestConstantsHoldAgainstLaterWritesAndRecover(t *testing.T) {
 	if procs, els := counts(t, h1.store); procs != 1 || els != 1 {
 		t.Fatalf("after the worker's result: process=%d element=%d, want 1 and 1 (waiting at the first catch)", procs, els)
 	}
-	wantVar(t, h1, pi, "TenantId", model.VarString, "tenant-dev")
+	wantVar(t, h1, pi, "TENANT_ID", model.VarString, "tenant-dev")
 	wantVar(t, h1, pi, "result", model.VarString, "ok")
 
 	// Crash and recover: the constant is rebuilt from the log.
@@ -120,21 +120,21 @@ func TestConstantsHoldAgainstLaterWritesAndRecover(t *testing.T) {
 	if err := p2.Recover(); err != nil {
 		t.Fatalf("Recover 2: %v", err)
 	}
-	wantVar(t, h2, pi, "TenantId", model.VarString, "tenant-dev")
-	wantVar(t, h2, pi, "MaxAgents", model.VarNumber, "20")
+	wantVar(t, h2, pi, "TENANT_ID", model.VarString, "tenant-dev")
+	wantVar(t, h2, pi, "MAX_AGENTS", model.VarNumber, "20")
 
 	// An operator's correction is the one later write that goes through (ADR-0095).
-	p2.SetVariables(pi, 0, "admin", strVar("TenantId", "corrected"))
+	p2.SetVariables(pi, 0, "admin", strVar("TENANT_ID", "corrected"))
 	run(t, p2)
-	wantVar(t, h2, pi, "TenantId", model.VarString, "corrected")
+	wantVar(t, h2, pi, "TENANT_ID", model.VarString, "corrected")
 
 	// A message payload is dropped like a worker's result, and the correction stands.
-	p2.PublishMessage("consts.more", "k", strVar("TenantId", "from-a-message"), strVar("note", "n"))
+	p2.PublishMessage("consts.more", "k", strVar("TENANT_ID", "from-a-message"), strVar("note", "n"))
 	run(t, p2)
 	if procs, els := counts(t, h2.store); procs != 1 || els != 1 {
 		t.Fatalf("after the message: process=%d element=%d, want 1 and 1 (waiting at the second catch)", procs, els)
 	}
-	wantVar(t, h2, pi, "TenantId", model.VarString, "corrected")
+	wantVar(t, h2, pi, "TENANT_ID", model.VarString, "corrected")
 	wantVar(t, h2, pi, "note", model.VarString, "n")
 }
 
@@ -149,7 +149,7 @@ func TestConstantsHoldOnMessageStartsAndAcrossCallActivities(t *testing.T) {
 	cb := compiler.NewBuilder(8, "child-proc", 1)
 	cb.SetConstants([]compiler.Constant{tenantConstant("child")})
 	cs := cb.AddStartEvent()
-	ct := cb.AddScriptTask(mustCompile(t, "TenantId"), "seenByChild")
+	ct := cb.AddScriptTask(mustCompile(t, "TENANT_ID"), "seenByChild")
 	cb.Connect(cs, ct)
 	cb.Connect(ct, cb.AddEndEvent())
 	childCp, err := cb.Build()
@@ -176,11 +176,11 @@ func TestConstantsHoldOnMessageStartsAndAcrossCallActivities(t *testing.T) {
 	if err := p.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	p.PublishMessage("parent.go", "", strVar("TenantId", "from-the-payload"), strVar("x", "1"))
+	p.PublishMessage("parent.go", "", strVar("TENANT_ID", "from-the-payload"), strVar("x", "1"))
 	run(t, p)
 
 	pi := onlyInstance(t, h.store) // the child has finished; the parent waits at its catch
-	wantVar(t, h, pi, "TenantId", model.VarString, "parent")
+	wantVar(t, h, pi, "TENANT_ID", model.VarString, "parent")
 	wantVar(t, h, pi, "x", model.VarString, "1")
 	// The child read its own constant, not the value the caller passed it.
 	wantVar(t, h, pi, "seenByChild", model.VarString, "child")
@@ -196,24 +196,26 @@ func TestNoConstantsLeavesStartVariablesAlone(t *testing.T) {
 	if err := p.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	p.CreateInstance(cp.Key, strVar("TenantId", "from-the-caller"))
+	p.CreateInstance(cp.Key, strVar("TENANT_ID", "from-the-caller"))
 	run(t, p)
-	wantVar(t, h, onlyInstance(t, h.store), "TenantId", model.VarString, "from-the-caller")
+	wantVar(t, h, onlyInstance(t, h.store), "TENANT_ID", model.VarString, "from-the-caller")
 }
 
-// appBoundProcess builds Start → message catch "app.more" → End with the constants
-// TenantId (bound to the application, no fallback) and Language (bound, fallback "de-CH")
-// (ADR-0453).
+// appBoundProcess builds Start → FEEL script task (application.TENANT_ID → seen) →
+// message catch "app.more" → End with the constants TENANT_ID (bound to the application,
+// no fallback) and LANGUAGE (bound, fallback "de-CH") (ADR-0453).
 func appBoundProcess(t *testing.T) *compiler.CompiledProcess {
 	t.Helper()
 	b := compiler.NewBuilder(9, "app-bound", 1)
 	b.SetConstants([]compiler.Constant{
-		{Name: "TenantId", Type: "string", FromApplication: true},
-		{Name: "Language", Type: "string", Value: "de-CH", Kind: expr.KindString, Text: "de-CH", FromApplication: true, HasFallback: true},
+		{Name: "TENANT_ID", Type: "string", Namespace: compiler.ApplicationNamespace},
+		{Name: "LANGUAGE", Type: "string", Value: "de-CH", Kind: expr.KindString, Text: "de-CH", Namespace: compiler.ApplicationNamespace, HasFallback: true},
 	})
 	start := b.AddStartEvent()
+	read := b.AddScriptTask(mustCompile(t, "application.TENANT_ID"), "seen")
 	wait := b.AddMessageCatchEvent("app.more", mustCompile(t, `"k"`))
-	b.Connect(start, wait)
+	b.Connect(start, read)
+	b.Connect(read, wait)
 	b.Connect(wait, b.AddEndEvent())
 	cp, err := b.Build()
 	if err != nil {
@@ -222,10 +224,13 @@ func appBoundProcess(t *testing.T) *compiler.CompiledProcess {
 	return cp
 }
 
-// A bound constant takes the value its application holds on this server, frozen into the
-// instance when it is created: a later change reaches the next instance and not this one,
-// and recovery rebuilds the value from the log without the operator config being there.
-func TestApplicationValuesAreFrozenIntoTheInstance(t *testing.T) {
+// The constants bound to the application are the members of one variable, the
+// application namespace, read as application.NAME (ADR-0453, amended). Each takes the value
+// its application holds on this server, frozen into the instance when it is created: a
+// later change reaches the next instance and not this one, and recovery rebuilds the value
+// from the log without the operator config being there. A start variable naming the
+// namespace does not replace it, and one naming a member is the process's own variable.
+func TestApplicationConstantsAreFrozenIntoTheNamespace(t *testing.T) {
 	dir := t.TempDir()
 	clock := &manualClock{}
 	cp := appBoundProcess(t)
@@ -237,26 +242,27 @@ func TestApplicationValuesAreFrozenIntoTheInstance(t *testing.T) {
 		t.Fatalf("Recover 1: %v", err)
 	}
 	p1.SetDefinitionApplication(cp.Key, "ucc")
-	p1.SetApplicationValues("ucc", map[string]engine.ApplicationValue{
-		"TenantId": {Kind: model.VarString, Text: "tenant-int"},
-		"Language": {Kind: model.VarString, Text: "fr-CH"},
+	p1.SetApplicationConstants("ucc", map[string]engine.ConstantValue{
+		"TENANT_ID": {Kind: model.VarString, Text: "tenant-int"},
+		"LANGUAGE":  {Kind: model.VarString, Text: "fr-CH"},
 	})
-	p1.CreateInstance(cp.Key, strVar("TenantId", "from-the-caller"))
+	p1.CreateInstance(cp.Key, strVar("application", "from-the-caller"), strVar("TENANT_ID", "own"))
 	run(t, p1)
 	first := onlyInstance(t, h1.store)
-	wantVar(t, h1, first, "TenantId", model.VarString, "tenant-int")
-	wantVar(t, h1, first, "Language", model.VarString, "fr-CH")
+	wantVar(t, h1, first, "application", model.VarJSON, `{"LANGUAGE":"fr-CH","TENANT_ID":"tenant-int"}`)
+	wantVar(t, h1, first, "seen", model.VarString, "tenant-int")
+	wantVar(t, h1, first, "TENANT_ID", model.VarString, "own")
 
-	// The operator changes the value: the running instance keeps what it started with.
-	p1.SetApplicationValues("ucc", map[string]engine.ApplicationValue{"TenantId": {Kind: model.VarString, Text: "tenant-new"}})
+	// The operator changes the constants: the running instance keeps what it started with.
+	p1.SetApplicationConstants("ucc", map[string]engine.ConstantValue{"TENANT_ID": {Kind: model.VarString, Text: "tenant-new"}})
 	p1.PublishMessage("app.more", "k") // the first instance completes
 	run(t, p1)
 	p1.CreateInstance(cp.Key)
 	run(t, p1)
 	second := onlyInstance(t, h1.store)
-	wantVar(t, h1, second, "TenantId", model.VarString, "tenant-new")
-	// Language is no longer held by the application, so the second instance has the fallback.
-	wantVar(t, h1, second, "Language", model.VarString, "de-CH")
+	// LANGUAGE is no longer held by the application, so the second instance has the fallback.
+	wantVar(t, h1, second, "application", model.VarJSON, `{"LANGUAGE":"de-CH","TENANT_ID":"tenant-new"}`)
+	wantVar(t, h1, second, "seen", model.VarString, "tenant-new")
 
 	// Crash and recover with no operator config pushed at all: the instance's values are
 	// facts in its log.
@@ -268,14 +274,15 @@ func TestApplicationValuesAreFrozenIntoTheInstance(t *testing.T) {
 	if err := p2.Recover(); err != nil {
 		t.Fatalf("Recover 2: %v", err)
 	}
-	wantVar(t, h2, second, "TenantId", model.VarString, "tenant-new")
-	wantVar(t, h2, second, "Language", model.VarString, "de-CH")
+	wantVar(t, h2, second, "application", model.VarJSON, `{"LANGUAGE":"de-CH","TENANT_ID":"tenant-new"}`)
 }
 
 // Without a value from its application — the definition filed under none, or the
 // application holding none — a bound constant takes its fallback, and one without a
-// fallback is not seeded at all.
-func TestApplicationBoundConstantsWithoutAValue(t *testing.T) {
+// fallback is absent from the namespace, so application.NAME reads null. The namespace
+// itself is always there, so a script fails on the one member it lacks and not on the
+// object.
+func TestApplicationConstantsWithoutAValue(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
 	cp := appBoundProcess(t)
@@ -287,8 +294,86 @@ func TestApplicationBoundConstantsWithoutAValue(t *testing.T) {
 	p.CreateInstance(cp.Key)
 	run(t, p)
 	pi := onlyInstance(t, h.store)
-	wantVar(t, h, pi, "Language", model.VarString, "de-CH")
-	if got := readVar(t, h.store, pi, "TenantId"); got != nil {
-		t.Errorf("TenantId = %+v, want it absent: no value and no fallback", got)
+	wantVar(t, h, pi, "application", model.VarJSON, `{"LANGUAGE":"de-CH"}`)
+	if got := readVar(t, h.store, pi, "seen"); got == nil || got.Kind != model.VarNull {
+		t.Errorf("seen = %+v, want null: TENANT_ID has no value and no fallback", got)
 	}
+}
+
+// Moving a definition to another application is a configuration change like saving the
+// constants: the cached namespace is dropped, and the next instance reads the new
+// application's.
+func TestMovingADefinitionRebuildsItsNamespace(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp := appBoundProcess(t)
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.SetApplicationConstants("a", map[string]engine.ConstantValue{"TENANT_ID": {Kind: model.VarString, Text: "in-a"}})
+	p.SetApplicationConstants("b", map[string]engine.ConstantValue{"TENANT_ID": {Kind: model.VarString, Text: "in-b"}})
+	p.SetDefinitionApplication(cp.Key, "a")
+	p.CreateInstance(cp.Key)
+	run(t, p)
+	first := onlyInstance(t, h.store)
+	wantVar(t, h, first, "seen", model.VarString, "in-a")
+	p.PublishMessage("app.more", "k")
+	run(t, p)
+
+	p.SetDefinitionApplication(cp.Key, "b")
+	p.CreateInstance(cp.Key)
+	run(t, p)
+	wantVar(t, h, onlyInstance(t, h.store), "seen", model.VarString, "in-b")
+}
+
+// The server namespace carries the installation's constants for every application, and
+// both namespaces carry the facts the process declares from them — the node's environment,
+// the application's name — in lower case (ADR-0456). A fact not set
+// on this server falls back like a missing constant; renaming the node or the application
+// reaches the next instance.
+func TestServerConstantsAndFactsReachTheNamespaces(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	b := compiler.NewBuilder(9, "facts", 1)
+	b.SetConstants([]compiler.Constant{
+		{Name: "TENANT_ID", Type: "string", Namespace: compiler.ServerNamespace},
+		{Name: "environment", Type: "string", Namespace: compiler.ServerNamespace, Info: true},
+		{Name: "name", Type: "string", Value: "unnamed", Kind: expr.KindString, Text: "unnamed", Namespace: compiler.ServerNamespace, Info: true, HasFallback: true},
+		{Name: "name", Type: "string", Namespace: compiler.ApplicationNamespace, Info: true},
+		{Name: "id", Type: "string", Namespace: compiler.ApplicationNamespace, Info: true},
+	})
+	start := b.AddStartEvent()
+	wait := b.AddMessageCatchEvent("facts.more", mustCompile(t, `"k"`))
+	b.Connect(start, wait)
+	b.Connect(wait, b.AddEndEvent())
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.SetServerConstants(map[string]engine.ConstantValue{"TENANT_ID": {Kind: model.VarString, Text: "contoso-prod"}})
+	p.SetServerInfo(engine.ServerInfo{ID: "node-1", Environment: "PROD"})
+	p.SetDefinitionApplication(cp.Key, "app-1")
+	p.SetApplicationInfo("app-1", engine.ApplicationInfo{Name: "UCC"})
+	p.CreateInstance(cp.Key)
+	run(t, p)
+	first := onlyInstance(t, h.store)
+	wantVar(t, h, first, "server", model.VarJSON, `{"TENANT_ID":"contoso-prod","environment":"PROD","name":"unnamed"}`)
+	wantVar(t, h, first, "application", model.VarJSON, `{"id":"app-1","name":"UCC"}`)
+	p.PublishMessage("facts.more", "k")
+	run(t, p)
+
+	p.SetServerInfo(engine.ServerInfo{ID: "node-1", Name: "Zurich primary", Environment: "PROD"})
+	p.SetApplicationInfo("app-1", engine.ApplicationInfo{Name: "UCC Sammelanschlüsse"})
+	p.CreateInstance(cp.Key)
+	run(t, p)
+	second := onlyInstance(t, h.store)
+	wantVar(t, h, second, "server", model.VarJSON, `{"TENANT_ID":"contoso-prod","environment":"PROD","name":"Zurich primary"}`)
+	wantVar(t, h, second, "application", model.VarJSON, `{"id":"app-1","name":"UCC Sammelanschlüsse"}`)
 }

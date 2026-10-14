@@ -24,7 +24,7 @@ import { formFieldKeys, formFieldTypes, loadFormViewer, withLoadDeadline } from 
 // form still asks for the declared start variables the form does not bind.
 import {
   START_VAR_TYPES, typedDeployFieldHTML, readTypedDeployBody, wireStartJSONEditors,
-  uncoveredStartVariables, extraStartFieldsHTML,
+  uncoveredStartVariables, extraStartFieldsHTML, keepConstantNameInCapitals, NAMESPACE_INFO, isNamespaceInfo,
 } from "./startvars.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
@@ -965,6 +965,9 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     } catch { pendingAdopt = null; }
   }
   wireEditorVars(root, modeler, api);
+  // What this installation holds for the namespaces, for the Variables panel and
+  // completion to offer; the panel redraws when it arrives.
+  loadHeldConstants(api, projectId).then(() => root.dispatchEvent(new CustomEvent("held-constants")));
   wireProblems(root, modeler, api, projectId);
   wireResizer(root, modeler);
   wireTokenSim(root, modeler);
@@ -2254,6 +2257,21 @@ function variablesForCompletion(modeler, element) {
       if (name) byName.set(name, { name, detail: "task variable · local" });
     }
   } catch { /* best-effort */ }
+  // What the process could read from its namespaces but has not declared: offered like
+  // the rest, and declared on the process when picked, so the model keeps saying what
+  // it reads (ADR-0456).
+  try {
+    const bo = processOf(modeler, element);
+    for (const m of undeclaredMembers(bo)) {
+      if (!byName.has(m.path)) {
+        byName.set(m.path, {
+          name: m.path,
+          detail: `${m.ns} ${m.info ? "info" : "constant"} · declares it`,
+          onAccept: () => declareMember(modeler, bo, m),
+        });
+      }
+    }
+  } catch { /* best-effort */ }
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -2561,9 +2579,12 @@ function collectDiagramVariables(modeler) {
         push(v.name, "Start", "", "start variable", "Process", v.type || "");
       }
       // A constant is a variable every instance carries from its start
-      // (ADR-0454), so expressions and completion offer it like one.
+      // (ADR-0454), so expressions and completion offer it like one — a process constant
+      // by its name, one the installation holds by the path it is read under
+      // (application.NAME, server.NAME; ADR-0456).
       for (const c of readConstants(rootBo)) {
-        push(c.name, "Process", "", c.source === "application" ? "application constant" : "constant", "Process", c.type || "");
+        if (!c.source) push(c.name, "Process", "", "process constant", "Process", c.type || "");
+        else push(`${c.source}.${c.name}`, "Process", "", `${c.source} ${c.info ? "info" : "constant"}`, "Process", c.type || "");
       }
     }
   } catch { /* best-effort */ }
@@ -2740,9 +2761,24 @@ function wireEditorVars(root, modeler, api) {
     const vars = collectDiagramVariables(modeler).filter((v) =>
       !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q) ||
       (v.source || "").toLowerCase().includes(q));
+    // What the process could read from its namespaces and does not declare yet — the
+    // constants this installation holds and the facts each namespace carries — under the
+    // list, each with the one click that declares it (ADR-0456).
+    let available = [];
+    try { available = undeclaredMembers(rootProcess(modeler)).filter((m) => !q || m.path.toLowerCase().includes(q)); } catch { /* best-effort */ }
+    const availableHTML = available.length
+      ? `<div class="vars-available" id="vars-available">
+          <div class="vars-available-head">Available, not declared yet</div>
+          ${available.map((m) => `<div class="var-row var-row-available" data-avail="${esc(m.path)}">
+            <div class="var-head"><div class="var-name">${esc(m.path)}</div><span class="vtag">${esc(m.type)}</span>
+              <button type="button" class="btn neutral var-declare" data-declare="${esc(m.path)}"
+                title="Declare ${esc(m.path)} on this process, so its instances carry it">Declare</button></div>
+            <div class="var-meta">${esc(m.ns)} ${m.info ? "info" : "constant"}</div></div>`).join("")}
+        </div>`
+      : "";
     if (!vars.length) {
       list.innerHTML = `<p class="vars-empty">${q ? "No matching variables." :
-        "No variables yet. They appear as you add start variables, a linked form's fields, script or decision result variables, output mappings, and data objects."}</p>`;
+        "No variables yet. They appear as you add start variables, a linked form's fields, script or decision result variables, output mappings, and data objects."}</p>${availableHTML}`;
       return;
     }
     // Group by category so a linked form's fields read as their own section
@@ -2757,7 +2793,7 @@ function wireEditorVars(root, modeler, api) {
     const order = ["Form", "Process"];
     const rank = (c) => { const i = order.indexOf(c); return i < 0 ? order.length : i; };
     const cats = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
-    list.innerHTML = cats.length === 1
+    list.innerHTML = (cats.length === 1
       ? groups.get(cats[0]).map(rowHTML).join("")
       : cats.map((cat) => {
           const col = collapsedCats.has(cat);
@@ -2769,8 +2805,10 @@ function wireEditorVars(root, modeler, api) {
             </button>
             <div class="vars-group-body">${groups.get(cat).map(rowHTML).join("")}</div>
           </div>`;
-        }).join("");
+        }).join("")) + availableHTML;
   };
+  // The installation's constants arrive after the editor mounts; draw them when they do.
+  root.addEventListener("held-constants", render);
 
   // The toggle is a two-state button on the bar, and `aria-pressed` is the whole of that
   // state: the pressed look is drawn from the attribute (app.css `.btn.toggle`), so there
@@ -2813,6 +2851,13 @@ function wireEditorVars(root, modeler, api) {
     }).catch(() => { /* leave what is on screen */ });
   });
   list.addEventListener("click", (e) => {
+    const dec = e.target.closest(".var-declare");
+    if (dec) {
+      const bo = rootProcess(modeler);
+      const m = undeclaredMembers(bo).find((x) => x.path === dec.dataset.declare);
+      if (m) declareMember(modeler, bo, m); // element.changed redraws the list
+      return;
+    }
     // A structure opens and closes in place. Toggled on the row's own state rather
     // than by re-rendering the list, so the panel does not jump under the reader.
     const op = e.target.closest(".var-peek");
@@ -6213,10 +6258,23 @@ function timerDefOf(bo) {
 // all three; a catch or interrupting boundary fires once, so they omit the
 // recurring cycle (ADR-0051/0054). Iteration order (duration, date, cycle) is
 // the detection precedence in timerScheduleOf.
+//
+// feel says what an fx expression in that kind must yield, with an example over the
+// instance's variables — the engine accepts a first-class FEEL temporal or the text
+// the literal parser would take (ADR-0057).
 const TIMER_KINDS = {
-  duration: { prop: "timeDuration", label: "Duration", placeholder: "PT30M" },
-  date: { prop: "timeDate", label: "Date & time", placeholder: "2026-08-01T09:00:00Z" },
-  cycle: { prop: "timeCycle", label: "Cycle", placeholder: "R/PT1H  ·  0 * * * *" },
+  duration: {
+    prop: "timeDuration", label: "Duration", placeholder: "PT30M",
+    feel: `a <b>duration</b> in days and time (not months or years, whose length depends on the calendar) or its ISO-8601 text — e.g. <b>= wartezeit</b> or <b>= duration("P" + string(tage) + "D")</b>`,
+  },
+  date: {
+    prop: "timeDate", label: "Date & time", placeholder: "2026-08-01T09:00:00Z",
+    feel: `a <b>date and time</b> (or a date, read as its midnight) or its RFC 3339 text — e.g. <b>= frist</b> or <b>= date and time(termin)</b>`,
+  },
+  cycle: {
+    prop: "timeCycle", label: "Cycle", placeholder: "R/PT1H  ·  0 * * * *",
+    feel: `the text of a repeating interval or a cron expression — e.g. <b>= "R/PT" + string(stunden) + "H"</b>`,
+  },
 };
 
 // timerScheduleOf reports which kind a timer currently holds and its expression
@@ -6230,8 +6288,11 @@ function timerScheduleOf(timer) {
 }
 
 // timerFieldsHTML renders the Type picker (restricted to the kinds valid in this
-// context) and the schedule-expression input, followed by a context note.
-function timerFieldsHTML(timer, kinds, note) {
+// context) and the schedule field, followed by a context note and what an expression
+// in it must yield. The field is a value-or-expression field: the implement tab gives
+// it the fx switch, and the compiler reads an '=' body as FEEL (ADR-0055/0056).
+// constant marks a timer start, whose expression has no instance to read from.
+function timerFieldsHTML(timer, kinds, note, { constant = false } = {}) {
   const detected = timerScheduleOf(timer);
   const kind = kinds.includes(detected.kind) ? detected.kind : kinds[0];
   const meta = TIMER_KINDS[kind];
@@ -6239,12 +6300,15 @@ function timerFieldsHTML(timer, kinds, note) {
   const opts = kinds
     .map((k) => `<option value="${k}" ${k === kind ? "selected" : ""}>${TIMER_KINDS[k].label}</option>`)
     .join("");
+  const feel = constant
+    ? `Switch on <b>fx</b> for a FEEL expression. A timer start has no instance yet, so the expression may read <b>no variables</b>; the deploy evaluates it once and refuses one that does not yield a valid ${esc(meta.label.toLowerCase())}.`
+    : `Switch on <b>fx</b> for a FEEL expression, evaluated when the timer is armed against the instance's variables. It must yield ${meta.feel}. If it yields neither, no timer is set: an incident is raised on the event, and resolving it once the data is fixed arms the timer again.`;
   return `<h3>Timer</h3>
     <label class="field"><span>Type</span>
       <select id="f-timerkind">${opts}</select></label>
     <label class="field"><span>${meta.label}</span>
-      <input type="text" id="f-timerval" value="${esc(body)}" placeholder="${esc(meta.placeholder)}"/></label>
-    <p class="muted" style="font-size:12px">${note}</p>`;
+      <textarea id="f-timerval" rows="1" spellcheck="false" placeholder="${esc(meta.placeholder)}">${esc(body)}</textarea></label>
+    <p class="muted" style="font-size:12px">${note} ${feel}</p>`;
 }
 
 // messageDefOf returns an event's bpmn:MessageEventDefinition, or null.
@@ -6859,20 +6923,79 @@ function readStartVariables(bo) {
 }
 
 // readConstants returns the constants a process declares via its atlas:Constants
-// extension element: [{name, type, value}] (ADR-0454). Empty when
+// extension element: [{name, type, value, source, info}] (ADR-0454). Empty when
 // none are declared.
 //
-// source is "application" for a constant bound to its application's value on the
-// installation where an instance starts, whose value is then only a fallback
-// (ADR-0453); "" for a model constant.
+// source is "application" or "server" for a constant whose value the installation holds —
+// read as application.NAME or server.NAME, its value then only a fallback (ADR-0453,
+// ADR-0456) — and "" for a process constant. info marks a fact the
+// namespace carries (server.environment), which Atlas fills rather than an operator.
 function readConstants(bo) {
   const cs = findExt(bo, "atlas:Constants");
-  return ((cs && cs.constants) || []).map((c) => ({
-    name: c.name || "",
-    type: START_VAR_TYPES.includes(c.type) ? c.type : "string",
-    value: c.value || "",
-    source: c.source === "application" ? "application" : "",
-  }));
+  return ((cs && cs.constants) || []).map((c) => {
+    const source = c.source === "application" || c.source === "server" ? c.source : "";
+    return {
+      name: c.name || "",
+      type: START_VAR_TYPES.includes(c.type) ? c.type : "string",
+      value: c.value || "",
+      source,
+      info: !!source && isNamespaceInfo(source, c.name || ""),
+    };
+  });
+}
+
+// HELD is what this installation holds for the namespaces a model reads from — the
+// constants of the diagram's application and the installation's own, with the names
+// deployed processes already read — so the Variables panel and completion can offer what
+// a model has not declared yet, and declare it when picked (ADR-0456).
+// Loaded once per editor; best-effort, because a Modeler without it still edits.
+const HELD = { application: [], server: [] };
+
+async function loadHeldConstants(api, projectId) {
+  HELD.application = [];
+  HELD.server = [];
+  const names = (view) => {
+    const out = new Map();
+    for (const c of (view && view.constants) || []) out.set(c.name, c.type || "string");
+    for (const r of (view && view.required) || []) if (!out.has(r.name)) out.set(r.name, r.type || "string");
+    return [...out].map(([name, type]) => ({ name, type }));
+  };
+  try { HELD.server = names(await api("GET", "/api/v1/server/constants")); } catch { /* offline: offer none */ }
+  if (projectId && projectId !== "ungrouped") {
+    try {
+      HELD.application = names(await api("GET", `/api/v1/applications/${encodeURIComponent(projectId)}/constants`));
+    } catch { /* not readable here: offer none */ }
+  }
+}
+
+// undeclaredMembers lists what a process could read from its namespaces but does not
+// declare yet: the constants this installation holds, and the facts each namespace carries.
+function undeclaredMembers(bo) {
+  const declared = new Set(readConstants(bo).filter((c) => c.source).map((c) => `${c.source}.${c.name}`));
+  const out = [];
+  const add = (ns, name, type, info) => {
+    const path = `${ns}.${name}`;
+    if (!declared.has(path) && !out.some((m) => m.path === path)) out.push({ ns, name, type: type || "string", info, path });
+  };
+  for (const ns of ["application", "server"]) {
+    for (const c of HELD[ns]) add(ns, c.name, c.type, false);
+    for (const f of NAMESPACE_INFO[ns]) add(ns, f, "string", true);
+  }
+  return out;
+}
+
+// declareMember adds the declaration a picked namespace member needs — <atlas:constant
+// name source/> — to the process that reads it, so what the model reads is what it says it
+// reads. For a pool's process the participant shape carries the change.
+function declareMember(modeler, bo, m) {
+  const list = readConstants(bo).map((c) => ({ name: c.name, type: c.type, default: c.value, source: c.source }));
+  if (list.some((c) => c.source === m.ns && c.name === m.name)) return;
+  list.push({ name: m.name, type: m.type || "string", default: "", source: m.ns });
+  const rootEl = modeler.get("canvas").getRootElement();
+  if (!bo || rootEl.businessObject === bo) { writeConstants(modeler, list); return; }
+  const pool = modeler.get("elementRegistry").find((el) => el.businessObject && el.businessObject.processRef === bo);
+  if (pool) writeConstants(modeler, list, pool, bo);
+  else writeConstants(modeler, list);
 }
 
 // writeStartVariables persists the declared start variables onto the process
@@ -7015,10 +7138,10 @@ function writeConstants(modeler, list, targetEl, targetBo) {
         type: START_VAR_TYPES.includes(v.type) ? v.type : "string",
         value: v.default || "",
       };
-      // Bound to the application: the value is only its fallback, and an empty one is
-      // no fallback at all, so it is not written.
-      if (v.source === "application") {
-        props.source = "application";
+      // Held by the installation — the application's or its own: the value is only its
+      // fallback, and an empty one is no fallback at all, so it is not written.
+      if (v.source === "application" || v.source === "server") {
+        props.source = v.source;
         if (!v.default) delete props.value;
       }
       const c = moddle.create("atlas:Constant", props);
@@ -7044,7 +7167,10 @@ const CONSTANT_DECL = { list: "#cv-list", add: "#cv-add", constant: true };
 function startVarRowHTML(v, constant = false) {
   const opts = START_VAR_TYPES
     .map((t) => `<option value="${t}"${t === v.type ? " selected" : ""}>${t}</option>`).join("");
-  const bound = constant && v.source === "application";
+  const bound = constant && (v.source === "application" || v.source === "server");
+  // A fact a namespace carries (server.environment) is named by Atlas, not the author: its
+  // name, type and source are fixed, and only a fallback can be given.
+  const info = bound && isNamespaceInfo(v.source, v.name);
   const what = bound ? "Fallback value" : constant ? "Value" : "Default value";
   // A start variable's default is what an instance starts with when its start does not
   // supply the variable, on every start path (ADR-0455) — not
@@ -7054,20 +7180,23 @@ function startVarRowHTML(v, constant = false) {
   const defaultField = v.type === "json"
     ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='${bound ? "fallback (optional)" : '{"key": "value"}'}' aria-label="${what} (JSON)"${tip}>${esc(v.default)}</textarea>`
     : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="${bound ? "fallback (optional)" : constant ? "value" : "default"}" aria-label="${what}"${tip}/>`;
-  // A constant takes its value from the model, or from its application on the
-  // installation where the instance starts (ADR-0453).
+  // A constant takes its value from the process model, or from what the installation
+  // holds — for the application, or for every application — read as application.NAME or
+  // server.NAME (ADR-0456).
+  const src = constant ? (v.source || "") : "";
   const source = constant
-    ? `<select class="sv-source" aria-label="Source" title="Where the value comes from: the model, or the application's value on each installation">
-        <option value=""${bound ? "" : " selected"}>value</option>
-        <option value="application"${bound ? " selected" : ""}>application</option>
+    ? `<select class="sv-source" aria-label="Source"${info ? " disabled" : ""} title="Where the value comes from: the process model, the application's constant on each installation (application.NAME), or the installation's own (server.NAME)">
+        <option value=""${src === "" ? " selected" : ""}>process</option>
+        <option value="application"${src === "application" ? " selected" : ""}>application</option>
+        <option value="server"${src === "server" ? " selected" : ""}>server</option>
       </select>`
     : "";
   // A constant is never asked for, so "required" has nothing to mean on it.
   const required = constant ? ""
     : `<label class="sv-req" title="Required"><input type="checkbox" class="sv-required"${v.required ? " checked" : ""}/> req</label>`;
   return `<div class="sv-row${v.type === "json" ? " sv-row-json" : ""}">
-    <input type="text" class="sv-name" value="${esc(v.name)}" placeholder="${constant ? "TenantId" : "customer"}" aria-label="${constant ? "Constant name" : "Variable name"}"/>
-    <select class="sv-type" aria-label="Type">${opts}</select>
+    <input type="text" class="sv-name${constant && !info ? " sv-const-name" : ""}" value="${esc(v.name)}" placeholder="${constant ? "TENANT_ID" : "customer"}" aria-label="${constant ? "Constant name" : "Variable name"}"${info ? ` readonly title="${esc(v.source)}.${esc(v.name)} is filled by Atlas"` : ""}/>
+    <select class="sv-type" aria-label="Type"${info ? " disabled" : ""}>${opts}</select>
     ${source}
     ${defaultField}
     ${required}
@@ -7145,6 +7274,9 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn(), d
     }
     persist();
   });
+  // A constant's name is written in capitals (ADR-0454, amended): applied while it is
+  // typed, so what is saved is what the server accepts.
+  if (decl.constant) keepConstantNameInCapitals(listEl, ".sv-const-name");
   listEl.addEventListener("click", (e) => {
     const del = e.target.closest(".sv-del");
     if (del) {
@@ -7563,7 +7695,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         <h3>Constants</h3>
         <div id="cv-list">${readConstants(proc).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value, source: c.source }, true)).join("")}</div>
         <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
-        <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Set its source to <b>application</b> and it takes the application's value on each installation — DEV, INT and PROD hold their own, on the application's Values tab — with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
+        <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Its name is written in capitals (TENANT_ID). Set its source to <b>application</b> or <b>server</b> and it is read as <code>application.NAME</code> or <code>server.NAME</code>, taking what the application — or the installation, for every application — holds on each installation (the application's Constants tab, Admin → Engine → Server constants), with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
     }
     body.innerHTML = `${poolFields}
       <p class="muted" style="font-size:12px">The pool is a <b>participant</b> that executes the process below. The elements live in that process — the pool only labels who runs it.</p>
@@ -7636,7 +7768,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             <h3>Constants</h3>
             <div id="cv-list">${readConstants(rootBo).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value, source: c.source }, true)).join("")}</div>
             <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
-            <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Set its source to <b>application</b> and it takes the application's value on each installation — DEV, INT and PROD hold their own, on the application's Values tab — with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
+            <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Its name is written in capitals (TENANT_ID). Set its source to <b>application</b> or <b>server</b> and it is read as <code>application.NAME</code> or <code>server.NAME</code>, taking what the application — or the installation, for every application — holds on each installation (the application's Constants tab, Admin → Engine → Server constants), with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
         }
         body.innerHTML = `
           <h3>Process</h3>
@@ -8261,7 +8393,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date"], `The event waits, then continues (ADR-0054).
             <b>Duration</b> waits that long (<b>PT30S</b>, <b>PT5M</b>, <b>P1DT2H</b>); <b>Date &amp; time</b> waits until that instant.
-            A catch fires once, so it has no cycle. A FEEL expression is allowed in either.`);
+            A catch fires once, so it has no cycle.`);
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
         } else if (sig) {
@@ -8327,7 +8459,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               : "A non-interrupting boundary may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R/PT1H</b>) or cron (<b>0 * * * *</b>) — firing a fresh token each time.";
             html += timerFieldsHTML(timer, kinds, `The event fires relative to the activity (ADR-0054).
               <b>Duration</b> fires that long after it starts (<b>PT30S</b>, <b>PT5M</b>); <b>Date &amp; time</b> at a fixed instant.
-              ${cycleNote} A FEEL expression is allowed in any type.`);
+              ${cycleNote}`);
           } else if (msg) {
             html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
           } else if (sig) {
@@ -8372,7 +8504,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               : "A non-interrupting timer may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R3/PT1H</b>) or cron (<b>0 * * * *</b>) — firing the handler each time.";
             html += timerFieldsHTML(timer, kinds, `The event subprocess fires on this schedule while its scope runs (ADR-0082).
               <b>Duration</b> fires that long after the scope is entered; <b>Date &amp; time</b> at a fixed instant.
-              ${cycleNote} A FEEL expression is allowed in any type.`);
+              ${cycleNote}`);
           } else if (msg) {
             html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
           } else if (sig) {
@@ -8392,8 +8524,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date", "cycle"], `A timer start event fires on this schedule with no incoming token (ADR-0051).
             <b>Duration</b> and <b>Date &amp; time</b> fire once — that long after deploy, or at that instant;
-            <b>Cycle</b> recurs, either an ISO-8601 repeating interval (<b>R/PT1H</b>, <b>R3/P1D</b>) or a cron expression (<b>0 * * * *</b>).
-            A FEEL expression is allowed in any type.`);
+            <b>Cycle</b> recurs, either an ISO-8601 repeating interval (<b>R/PT1H</b>, <b>R3/P1D</b>) or a cron expression (<b>0 * * * *</b>).`, { constant: true });
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
         } else if (sig) {
@@ -10193,6 +10324,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       for (const sel of ["#f-assignee", "#f-groups", "#f-due"]) {
         attachExpressionToggle(body.querySelector(sel), { variables: feelVars, validate });
       }
+      // A timer's schedule is one too (ADR-0055/0056). A timer start has no instance to
+      // read from — its expression must be constant — so it is offered no variables.
+      const timerStart = element.businessObject.$type === "bpmn:StartEvent" && !isEventSubStart(element);
+      attachExpressionToggle(body.querySelector("#f-timerval"), { variables: timerStart ? [] : feelVars, validate });
     }
   }
 

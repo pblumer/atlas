@@ -49,7 +49,7 @@ func (s *Server) startBinding(b catalog.Binding, triggerID string, vars []model.
 			if !b.Triggered() {
 				ambiguous = untriggeredStartRefusal(d.cp)
 				if ambiguous == "" {
-					ambiguous = s.applicationValueRefusalOnLoop(d)
+					ambiguous = s.boundConstantRefusalOnLoop(d)
 				}
 			}
 		}

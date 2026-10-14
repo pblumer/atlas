@@ -279,6 +279,9 @@ func (s *Server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
 		if saveErr = s.settings.saveNode(identity); saveErr != nil {
 			return
 		}
+		// The server namespace reports the node's name and environment to the instances
+		// that read them (ADR-0456).
+		s.noteNode(identity)
 		desc, saveErr = s.describeNode()
 	})
 	switch {

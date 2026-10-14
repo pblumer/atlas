@@ -200,6 +200,13 @@ const (
 	// (ADR-0393). A deploy never raises it —
 	// there the same fault is a refusal.
 	RuleNullCall = "feel.null-call"
+
+	// RuleConstantName marks a stored definition brought back across a reload although
+	// one of its constants is not named in capitals (or takes a reserved name), which a
+	// deploy has refused since constant names were written in capitals (ADR-0454,
+	// amended). An error, reported rather than raised: the model ran under the name it
+	// has, and refusing it on a restart would take the server down for a spelling.
+	RuleConstantName = "constant.name"
 )
 
 // Problem is one structured validation finding on a compiled process, shaped for

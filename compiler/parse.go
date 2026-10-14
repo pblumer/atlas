@@ -651,7 +651,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		b.SetHistoryTtl(nanos)
 	}
 	b.SetStartVariables(startVariablesOf(proc.StartVariables))
-	consts, err := constantsOf(proc.Id, proc.Constants)
+	consts, err := constantsOf(proc.Id, proc.Constants, g)
 	if err != nil {
 		return nil, err
 	}

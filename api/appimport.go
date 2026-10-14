@@ -187,6 +187,7 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 				opErr = err
 				return
 			}
+			s.noteApplication(rec)
 			appID = id
 		}
 
