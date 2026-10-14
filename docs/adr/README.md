@@ -230,7 +230,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0142](0142-prometheus-metrics.md) | Operational metrics over a Prometheus endpoint | Accepted | Landed |
 | [0143](0143-process-documentation-export.md) | Process documentation export | Accepted | Landed |
 | [0144](0144-per-definition-history-ttl.md) | Per-definition history TTL — retention the model declares | Accepted | Landed |
-| [0145](0145-developer-view-for-code-fields.md) | A Developer View for code-bearing fields | Accepted | Landed |
+| [0145](0145-developer-view-for-code-fields.md) | A Developer View for code-bearing fields | Accepted (amended) | Landed |
 | [0146](0146-history-expiry-due-date-index.md) | History expiry as a due-date index — retention that scales with what is due | Accepted | Landed |
 | [0147](0147-splitting-the-api-server-object.md) | Splitting the api Server object, without weakening the single writer | Accepted (amended) | Landed |
 | [0148](0148-org-wide-brand-logo.md) | Org-wide brand logo | Accepted | Landed |

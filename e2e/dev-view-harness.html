@@ -87,15 +87,34 @@
           },
         },
       ];
+      // A query is answered the way instance-samples.js answers it: the hits, each
+      // naming what it matched, or no instance at all. This one understands an
+      // instance key and name=value; __searchFail makes the search throw, and
+      // __searchTruncated says the server cut it short.
+      window.__searchFail = "";
+      window.__searchTruncated = false;
+      const search = (q) => {
+        if (window.__searchFail) throw new Error(window.__searchFail);
+        const [name, value] = q.includes("=") ? q.split("=") : [null, null];
+        return window.__instances
+          .filter((r) => String(r.key) === q || (name && r.values[name] && r.values[name].value === value))
+          .map((r) => ({ ...r, match: name ? q : "" }));
+      };
       const samples = async (o = {}) => {
         window.__sampleCalls.push(o);
-        const rows = window.__instances;
-        if (!rows || !rows.length) return null;
+        const query = (o.query || "").trim();
+        const rows = query ? search(query) : window.__instances;
+        if (!rows || !rows.length) {
+          return query ? { instance: null, values: {}, instances: [], query, truncated: false } : null;
+        }
         const chosen = rows.find((r) => r.key === o.instanceKey) || rows[0];
+        const meta = ({ values, match, ...m }) => (match ? { ...m, match } : m);
         return {
-          instance: { key: chosen.key, state: chosen.state, version: chosen.version, createdAt: chosen.createdAt },
+          instance: meta(chosen),
           values: chosen.values,
-          instances: rows.map(({ values, ...meta }) => meta),
+          instances: rows.map(meta),
+          query,
+          truncated: !!(query && window.__searchTruncated),
         };
       };
 

@@ -349,7 +349,92 @@ test("the instance the values come from can be picked", async ({ page }) => {
   // Reload keeps the picked instance rather than jumping back to the newest.
   await page.locator(".dev-sample-reload").click();
   await expect(page.locator(".dev-sample-pick")).toHaveValue("4088");
-  expect(await page.evaluate(() => window.__sampleCalls.at(-1))).toEqual({ force: true, instanceKey: 4088 });
+  expect(await page.evaluate(() => window.__sampleCalls.at(-1))).toEqual({ force: true, instanceKey: 4088, query: "" });
+});
+
+test("an instance can be found by a search, and the sample follows it", async ({ page }) => {
+  await openFeel(page);
+  await page.locator(".dev-test-toggle").click();
+  const row = (name) => page.locator(".dev-pane-vars .dev-item", { hasText: name });
+
+  // The same syntax as the Operations search: here name=value.
+  await page.locator(".dev-sample-search").fill("orderId=A-2025-0007");
+  await page.locator(".dev-sample-search").press("Enter");
+  await expect(page.locator(".dev-sample-note")).toHaveText("1 instance matches.");
+  // The picker offers the hits, each naming what it matched.
+  await expect(page.locator(".dev-sample-pick option")).toHaveCount(0);
+  await expect(page.locator(".dev-sample-strip")).toContainText("4088 · completed · v2 · orderId=A-2025-0007");
+  await expect(row("amount").locator(".dev-item-value")).toHaveText("= 12");
+  // An untouched Test sample follows the instance, as it does on a pick.
+  expect(JSON.parse(await page.evaluate(() => document.querySelector(".dev-run-vars").value)))
+    .toEqual({ amount: 12, orderId: "A-2025-0007" });
+  expect(await page.evaluate(() => window.__sampleCalls.at(-1))).toEqual({ force: false, instanceKey: undefined, query: "orderId=A-2025-0007" });
+
+  // Reload keeps the search and the hit.
+  await page.locator(".dev-sample-reload").click();
+  await expect(page.locator(".dev-sample-note")).toHaveText("1 instance matches.");
+  expect(await page.evaluate(() => window.__sampleCalls.at(-1))).toEqual({ force: true, instanceKey: 4088, query: "orderId=A-2025-0007" });
+
+  // Emptying the field goes back to the recent instances.
+  await page.locator(".dev-sample-search").fill("");
+  await expect(page.locator(".dev-sample-pick option")).toHaveCount(2);
+  await expect(page.locator(".dev-sample-note")).toBeHidden();
+  expect((await page.evaluate(() => window.__sampleCalls.at(-1))).query).toBe("");
+});
+
+test("several hits are offered in the picker, and picking one keeps the search", async ({ page }) => {
+  await page.evaluate(() => {
+    for (const r of window.__instances) r.values.region = { value: "EU", kind: "string" };
+  });
+  await openFeel(page);
+  await page.locator(".dev-sample-search").fill("region=EU");
+  await page.locator(".dev-sample-search").press("Enter");
+  await expect(page.locator(".dev-sample-note")).toHaveText("2 instances match.");
+  await expect(page.locator(".dev-sample-pick option")).toHaveText([
+    "4711 · active · v3 · region=EU", "4088 · completed · v2 · region=EU",
+  ]);
+  await page.locator(".dev-sample-pick").selectOption("4088");
+  await expect(page.locator(".dev-sample-pick")).toHaveValue("4088");
+  expect(await page.evaluate(() => window.__sampleCalls.at(-1))).toEqual({ force: false, instanceKey: 4088, query: "region=EU" });
+  await expect(page.locator(".dev-sample-search")).toHaveValue("region=EU");
+});
+
+test("a search that finds nothing, or fails, keeps the instance on screen", async ({ page }) => {
+  await openFeel(page);
+  const row = (name) => page.locator(".dev-pane-vars .dev-item", { hasText: name });
+
+  await page.locator(".dev-sample-search").fill("orderId=nobody");
+  await page.locator(".dev-sample-search").press("Enter");
+  await expect(page.locator(".dev-sample-note")).toHaveText("No instance of this process matches “orderId=nobody”.");
+  await expect(page.locator(".dev-sample-pick")).toHaveValue("4711");
+  await expect(row("amount").locator(".dev-item-value")).toHaveText("= 1250.5");
+
+  await page.evaluate(() => { window.__searchFail = "search instances: forbidden"; });
+  await page.locator(".dev-sample-search").press("Enter");
+  await expect(page.locator(".dev-sample-note")).toHaveText("Search failed: search instances: forbidden");
+  await expect(page.locator(".dev-sample-pick")).toHaveValue("4711");
+});
+
+test("a search the server cut short says it shows the newest matches", async ({ page }) => {
+  await page.evaluate(() => { window.__searchTruncated = true; });
+  await openFeel(page);
+  await page.locator(".dev-sample-search").fill("4088");
+  await page.locator(".dev-sample-search").press("Enter");
+  await expect(page.locator(".dev-sample-note")).toHaveText("1 instance matches — more do, only the newest are shown. Narrow the search.");
+});
+
+test("the search field survives a re-render, and only shows with an instance to search", async ({ page }) => {
+  await openFeel(page);
+  await page.locator(".dev-sample-search").fill("half typed");
+  // The variable filter re-renders the pane; what was typed in the search stays.
+  await page.locator(".dev-filter").fill("amount");
+  await expect(page.locator(".dev-sample-search")).toHaveValue("half typed");
+
+  // A process that never ran has nothing to search.
+  await page.evaluate(() => { window.__instances = []; });
+  await page.locator(".dev-sample-reload").click();
+  await expect(page.locator(".dev-sample-strip")).toContainText("No instance to read values from yet");
+  await expect(page.locator(".dev-sample-search")).toBeHidden();
 });
 
 test("a sample the author edited survives switching instances", async ({ page }) => {

@@ -12,6 +12,18 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The Developer View finds the instance to read values from.** A search field under
+  "Values from instance" takes what the Operations search takes: an instance key,
+  `name=value`, or a term with `*` and `?`. It searches every version of the process and
+  offers the hits in the picker, each labelled with the variable it matched. The values
+  of the hit are read whole before they are shown. A search that matches nothing or
+  fails leaves the instance on screen and says so. The picker itself now lists the
+  newest instances of every deployed version, running ones first, not only those of the
+  newest version that has any
+  ([ADR-0145](docs/adr/0145-developer-view-for-code-fields.md)).
+
 ### Fixed
 
 - **"From instance" in the Developer View says what it did.** The Test panel's sample is
@@ -21,12 +33,12 @@ _Changed_ / _Removed_ for each version.
   result that belonged to the replaced sample. The button is also withdrawn when a
   reload finds no instance or fails, rather than replacing the author's sample with an
   empty object.
-- **The Developer View shows the value of a namespaced constant.** The Variables pane
-  lists a constant by its path, `application.TENANT_ID`, while the instance holds the
-  namespace as one object, `application`, so the row looked up a variable of the whole
-  name and showed no value. A dotted name the instance does not hold as such is now read
-  as a path into that object, through any depth, and a path the object does not hold
-  still shows nothing rather than a wrong value
+- **The Developer View and the Variables panel show the value of a namespaced
+  constant.** Both list a constant by its path, `application.TENANT_ID`, while the
+  instance holds the namespace as one object, `application`, so the row looked up a
+  variable of the whole name and showed no value. A dotted name the instance does not
+  hold as such is now read as a path into that object, through any depth, and a path the
+  object does not hold still shows nothing rather than a wrong value
   ([ADR-0456](docs/adr/0456-constant-namespaces.md)).
 
 ## [0.13.0] — 2026-10-14
