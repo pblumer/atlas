@@ -132,8 +132,14 @@ func TestGapsReportsAMissingWorkerRealization(t *testing.T) {
 	caps := []Capability{{Key: "notify", Name: "Notify", State: StateActive,
 		Realizations: []Realization{{Kind: RealizationWorker, WorkerRef: "mail-service-desk"}}}}
 	rep := Gaps(caps, nil, Landscape{Workers: []Worker{{Ref: "mail-other", CanView: true}}}, testNow, 12)
-	if !has(rep, FindingRealizationMissing) {
+	fs := findingsOf(rep, FindingRealizationMissing)
+	if len(fs) != 1 {
 		t.Fatalf("findings = %+v, want the unknown worker reported", rep.Findings)
+	}
+	// The Worker is a coordinate, not only a word in the English detail: the Console
+	// says which one is missing in its own language (ADR-0267).
+	if fs[0].WorkerRef != "mail-service-desk" || fs[0].ProcessID != "" {
+		t.Errorf("finding = %+v, want it to name the Worker it could not find", fs[0])
 	}
 }
 
