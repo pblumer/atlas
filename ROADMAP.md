@@ -1868,6 +1868,12 @@ dataset of up to 50 000 cases":
   compares it with a deployed version, ignoring the diagram. Deploy from a draft or a new diagram
   saves it first, so the draft stays what runs; a version opened read-only is deployed without
   touching the draft, and the Deploy panel says so.
+- ✅ **A model's source, in place** ([ADR-0457](docs/adr/0457-modeler-xml-source.md)):
+  **XML source** in the process and decision editors' `⋯` menu shows the BPMN or DMN document as
+  the canvas holds it, in the Modeler's code editor, and **Apply** rebuilds the canvas from a
+  corrected one. A malformed document is refused with its line, an unreadable one leaves the canvas
+  as it was, and an applied correction counts as an unsaved edit for leaving, saving and the live
+  session. The form editor's JSON schema tab is labelled **Source**.
 
 ---
 

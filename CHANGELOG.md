@@ -14,6 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Modeler shows a model's source, and takes a correction back.** The process and
+  decision editors carry **XML source** in their `⋯` menu, beside Export XML
+  ([ADR-0457](docs/adr/0457-modeler-xml-source.md)). It opens the
+  BPMN or DMN document as the canvas holds it now, saved or not, in the Modeler's code
+  editor; **Apply** (Ctrl+Enter) rebuilds the diagram or decision from the text. A
+  document that is not well-formed XML is refused with the line the parser stopped on,
+  marked while you type; one the modeler cannot read leaves the canvas as it was, and an
+  import with warnings keeps the dialog open on them. An applied correction is an
+  unsaved edit like any other: leaving a deployment asks first, Save writes it, and a
+  collaborator's draft no longer arrives over it in a live session. It starts the undo
+  history afresh, and a DMN document of another version than the one the page opened is
+  refused by name. The form editor has always had its JSON schema as a tab; the tab now
+  says **Source**.
+
 - **The audit log records every change to the constants an application or the installation
   holds.** A save under an application's **Constants** tab or **Admin → Engine → Server
   constants** that changes something writes one event: who saved it, when, and each name
@@ -102,6 +116,25 @@ _Changed_ / _Removed_ for each version.
 - **The Entra example reads `server.ENTRA_TENANT_ID`, `application.ENTRA_CLIENT_ID` and
   `application.ENTRA_CERTIFICATE_SUBJECT`**: the tenant once per installation, the app
   registration per application.
+
+### Fixed
+
+- **An auto-layout is an unsaved edit the Modeler protects.** Auto-layout replaces the
+  diagram or decision with the server's re-flowed document by an import, which empties
+  the undo stack and fires no edit events. So after one, leaving a deployed process for
+  its called process did not ask, a collaborator's draft could be pulled over the new
+  layout in a live session, and in the process editor a document bpmn-js could not draw
+  left an empty canvas. It now goes through the same import as the XML source view's Apply: the
+  layout counts as unsaved work, the session defers a peer's draft until it is saved,
+  and a failed import puts the diagram back
+  ([ADR-0457](docs/adr/0457-modeler-xml-source.md)).
+- **The Playground notices a diagram that was replaced, not only edited.** Its hint that
+  the canvas no longer matches the running sandbox listened for element edits only, so an
+  applied XML source, an auto-layout or a collaborator's draft arriving in a live session
+  said nothing — and each wiped the run's markers off the diagram. The run is now painted
+  again onto the new shapes, and the hint appears when the canvas differs from what the
+  sandbox started with; a diagram put back after a refused import is not reported as
+  changed ([ADR-0215](docs/adr/0215-modeler-playground.md)).
 
 ## [0.12.0] — 2026-10-13
 
