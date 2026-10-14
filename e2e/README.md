@@ -56,7 +56,9 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   starting a sandbox sends the diagram *on screen* rather than a stored copy; a job waiting
   for a person becomes a Complete button, and completing it repaints the run onto the canvas
   with the runtime view's own markers; malformed start variables are reported instead of
-  posted; editing the diagram says the run no longer matches it; and leaving the editor
+  posted; editing the diagram says the run no longer matches it, and so do an applied XML source and
+  an auto-layout, which replace the canvas by an import and have the run painted back onto it, while a
+  refused source that the editor puts back is not reported as a change; and leaving the editor
   releases the server-side sandbox rather than leaving it to its TTL.
 
   And the **batch half**: the pool setup is read off the diagram (a row per task the

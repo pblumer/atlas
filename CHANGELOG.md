@@ -123,6 +123,13 @@ _Changed_ / _Removed_ for each version.
   layout counts as unsaved work, the session defers a peer's draft until it is saved,
   and a failed import puts the diagram back
   ([ADR-draft-modeler-xml-source](docs/adr/draft-modeler-xml-source.md)).
+- **The Playground notices a diagram that was replaced, not only edited.** Its hint that
+  the canvas no longer matches the running sandbox listened for element edits only, so an
+  applied XML source, an auto-layout or a collaborator's draft arriving in a live session
+  said nothing — and each wiped the run's markers off the diagram. The run is now painted
+  again onto the new shapes, and the hint appears when the canvas differs from what the
+  sandbox started with; a diagram put back after a refused import is not reported as
+  changed ([ADR-0215](docs/adr/0215-modeler-playground.md)).
 
 ## [0.12.0] — 2026-10-13
 

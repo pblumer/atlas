@@ -96,11 +96,18 @@ from:
   Ctrl+Z, and the canvas edits made before it cannot be either. The author can close
   without saving, or apply the earlier text again; the dialog states the cost rather
   than hiding it. A change of DMN version cannot be made here at all.
-- **Follow-ups / risks to watch:** The Playground's "the diagram changed" hint
-  ([ADR-0215](0215-modeler-playground.md)) listens for element edits and does not appear
-  when a source is applied, or an auto-layout run, under a running sandbox. A live
-  session's own re-import of a peer's saved draft is deliberately *not* marked as an
-  edit: it is what the server already holds.
+- **The Playground hears an import too.** Its "the diagram changed" hint
+  ([ADR-0215](0215-modeler-playground.md)) listened for element edits only, and an import
+  also took the run's markers off the shapes it replaced. It now listens for every
+  import — an applied source, an auto-layout, a collaborator's draft, the editor putting
+  a refused one back — repaints the run onto the new shapes, and gives the hint when
+  the canvas no longer serialises to the document the sandbox started from, so a
+  diagram that was put back is not reported as changed.
+- **Follow-ups / risks to watch:** A live session's own re-import of a peer's saved
+  draft is deliberately *not* marked as a local edit: it is what the server already
+  holds. A sandbox opened from a saved scenario is compared with the scenario's
+  document, which may be serialised differently from the canvas; there the hint errs
+  towards appearing.
 
 ### As built
 

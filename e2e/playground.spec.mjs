@@ -125,6 +125,63 @@ test("editing the diagram says the run no longer matches it", async ({ page }) =
   expect(page.__errors).toEqual([]);
 });
 
+// The canvas can also be replaced whole: an applied XML source and an auto-layout
+// both import a document rather than edit an element, and an import fires none of
+// the element events the hint above listens to — and wipes the run's markers off the
+// shapes it replaces. So both are asked of each kind of import.
+
+async function startCase(page) {
+  await startSandbox(page);
+  await page.locator("#pg-startvars").fill('{"amount": 12400}');
+  await page.locator("#pg-case").click();
+  await expect(page.locator('.djs-element[data-element-id="review"].atlas-active')).toHaveCount(1);
+  await expect(page.locator(".token-badge")).toHaveCount(2);
+}
+
+async function applySource(page, edit) {
+  await page.locator("#bar-more").click();
+  await page.locator("#bar-menu #xmlsource").click();
+  const ta = page.locator(".xml-ta");
+  await ta.fill(edit(await ta.inputValue()));
+  await page.locator(".xml-modal [data-apply]").click();
+}
+
+test("an applied XML source says the run no longer matches it, and the run stays drawn", async ({ page }) => {
+  await startCase(page);
+  await applySource(page, (xml) => xml.replace('id="review" name="', 'id="review" name="Doppelt '));
+  await expect(page.locator(".xml-modal")).toHaveCount(0);
+  await expect(page.locator("#pg-hint")).toContainText("diagram changed");
+  // The import replaced every shape; the run is painted onto the new ones.
+  await expect(page.locator('.djs-element[data-element-id="review"].atlas-active')).toHaveCount(1);
+  await expect(page.locator(".token-badge")).toHaveCount(2);
+  expect(page.__errors).toEqual([]);
+});
+
+test("an auto-layout says the run no longer matches it, and the run stays drawn", async ({ page }) => {
+  await startCase(page);
+  await page.locator("#bar-more").click();
+  await page.locator("#bar-menu #autolayout").click();
+  await expect(page.locator("#pg-hint")).toContainText("diagram changed");
+  await expect(page.locator('.djs-element[data-element-id="review"].atlas-active')).toHaveCount(1);
+  await expect(page.locator(".token-badge")).toHaveCount(2);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a refused source puts the diagram back without claiming it changed", async ({ page }) => {
+  await startCase(page);
+  const before = await page.locator("#pg-hint").textContent();
+  // BPMN with nothing to draw: bpmn-js clears the canvas before refusing it, and the
+  // editor imports the diagram back — an import, but of what the sandbox is running.
+  await applySource(page, () => '<?xml version="1.0"?>\n<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Empty" targetNamespace="http://atlas/bpmn"></bpmn:definitions>');
+  await expect(page.locator(".xml-modal .xml-status")).toContainText("unchanged");
+  await expect(page.locator('.djs-element[data-element-id="review"].atlas-active')).toHaveCount(1);
+  await expect(page.locator(".token-badge")).toHaveCount(2);
+  await page.waitForTimeout(300);
+  await expect(page.locator("#pg-hint")).not.toContainText("diagram changed");
+  expect(await page.locator("#pg-hint").textContent()).toBe(before);
+  expect(page.__errors).toEqual([]);
+});
+
 test("leaving the editor releases the sandbox", async ({ page }) => {
   await startSandbox(page);
   await page.evaluate(() => window.__leave());

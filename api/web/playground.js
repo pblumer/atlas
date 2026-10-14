@@ -402,7 +402,9 @@ export function attachPlayground(root, { api, toast, modeler }) {
       stubs: stubPolicy(),
     };
     const s = await api("POST", "/api/v1/playground/sessions", state.openRequest);
-    state.session = { id: s.id, processId: s.processId, seed: s.seed, stubLabel };
+    // xml is what this sandbox runs, so an import can be told apart from a change
+    // (onImport below): a diagram put back is not a diagram that changed.
+    state.session = { id: s.id, processId: s.processId, seed: s.seed, stubLabel, xml };
     state.simTime = s.simTime;
     state.caseKey = "";
     state.result = null;
@@ -829,7 +831,10 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const sc = await api("GET", `/api/v1/playground/scenarios/${encodeURIComponent(id)}`);
     if (state.session) await stop();
     const s = await api("POST", "/api/v1/playground/sessions", sc.spec.open);
-    state.session = { id: s.id, processId: s.processId, seed: s.seed, stubLabel: "from the scenario" };
+    state.session = {
+      id: s.id, processId: s.processId, seed: s.seed, stubLabel: "from the scenario",
+      xml: (sc.spec.open && sc.spec.open.xml) || "",
+    };
     state.simTime = s.simTime;
     state.mode = "batch";
     state.scenarioId = sc.id;
@@ -2239,7 +2244,27 @@ export function attachPlayground(root, { api, toast, modeler }) {
   };
   modeler.on("elements.changed", onEdit);
 
+  // An import replaces the canvas whole: an applied XML source, an auto-layout, a
+  // collaborator's draft pulled in by the live session, or the editor putting the
+  // diagram back after one of those was refused. None of them fires elements.changed,
+  // and every one takes the run's markers off the shapes it replaces. So the run is
+  // painted again onto the new shapes, and the hint is given when what is on the
+  // canvas is no longer what the sandbox runs — which a diagram put back is not.
+  let shown = false; // the Playground tab is the active one (setActive)
+  const onImport = async (e) => {
+    if (e && e.error) return; // a refused import; the one that follows puts it back
+    if (shown) drawCanvas();
+    const session = state.session;
+    if (!session) return;
+    let now = "";
+    try { ({ xml: now } = await modeler.saveXML({ format: true })); } catch { /* cannot tell: say so */ }
+    if (state.session !== session) return; // the sandbox went away while asking
+    if (!now || now !== session.xml) onEdit();
+  };
+  modeler.on("import.done", onImport);
+
   function setActive(on) {
+    shown = on;
     bar.hidden = !on;
     panel.hidden = !on;
     setupPanel.hidden = !on;
@@ -2266,6 +2291,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     destroy() {
       stopPolling();
       modeler.off?.("elements.changed", onEdit);
+      modeler.off?.("import.done", onImport);
       if (state.session) {
         const id = state.session.id;
         state.session = null;
