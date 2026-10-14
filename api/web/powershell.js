@@ -266,7 +266,9 @@ function psPrefix(before) {
   if (m) return { text: m[0], start: before.length - m[0].length, mode: "env" };
   // A bare `$` (no name yet) already means "a variable" — offer them all so
   // Ctrl+Space right after the sigil lists the in-scope variables.
-  m = /\$[A-Za-z_]*$/.exec(before);
+  // A path into a constants namespace ($application.TENANT_ID) is one variable run too
+  // (ADR-draft-constant-namespaces).
+  m = /\$(?:(?:application|server)\.[A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*|)$/.exec(before);
   if (m) return { text: m[0], start: before.length - m[0].length, mode: "var" };
   m = /-[A-Za-z]*$/.exec(before);
   if (m) return { text: m[0], start: before.length - m[0].length, mode: "op" };
@@ -310,7 +312,7 @@ export const powershell = {
       const rest = p.text.slice(1);
       const items = (ctx.variables || [])
         .filter(varName)
-        .map((v) => ({ label: "$" + varName(v), kind: "variable", insert: "$" + varName(v), detail: varDetail(v, "instance variable") }));
+        .map((v) => ({ label: "$" + varName(v), kind: "variable", insert: "$" + varName(v), detail: varDetail(v, "instance variable"), src: v }));
       return rankByPrefix(items, rest, (it) => it.label.slice(1));
     }
     if (p.mode === "op") {
@@ -401,13 +403,17 @@ export function tokenizeClike(src, kind) {
 
 function clikeModule(kind) {
   const keywords = CLIKE_KEYWORDS[kind] || [];
+  // A namespace member is a key of an object: JavaScript reads it with a dot, Python —
+  // where the object arrives as a dict — with brackets (ADR-draft-constant-namespaces).
+  const spell = (name) => (kind === "python" && /^(application|server)\./.test(name)
+    ? name.replace(/^(\w+)\.(.+)$/, '$1["$2"]') : name);
   return {
     tokenize: (src) => tokenizeClike(src, kind),
     completions(prefix, ctx) {
       const items = [
         ...(ctx.variables || [])
           .filter(varName)
-          .map((v) => ({ label: varName(v), kind: "variable", insert: varName(v), detail: varDetail(v, "instance variable") })),
+          .map((v) => ({ label: spell(varName(v)), kind: "variable", insert: spell(varName(v)), detail: varDetail(v, "instance variable"), src: v })),
         ...keywords.map((k) => ({ label: k, kind: "keyword", insert: k, detail: "keyword" })),
       ];
       return rankByPrefix(items, prefix, (it) => it.label);

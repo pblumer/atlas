@@ -119,7 +119,7 @@ func (s *Server) startInstance(w http.ResponseWriter, r *http.Request, key uint6
 		if ambiguous = untriggeredStartRefusal(d.cp); ambiguous != "" {
 			return
 		}
-		if ambiguous = s.applicationValueRefusalOnLoop(d); ambiguous != "" {
+		if ambiguous = s.boundConstantRefusalOnLoop(d); ambiguous != "" {
 			return
 		}
 		processID = d.ProcessID

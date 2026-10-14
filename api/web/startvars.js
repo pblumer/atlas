@@ -20,6 +20,31 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 // what the typed fields below coerce to.
 export const START_VAR_TYPES = ["string", "number", "boolean", "json"];
 
+// constantNameOf is a constant's name as it may be written: in capitals — letters A–Z,
+// digits and underscores — so a reader tells a constant from a variable at a glance
+// (ADR-0454, amended). The fields where a constant is named apply it while typing: umlauts
+// spell out (Ä → AE), a space, dot or hyphen becomes an underscore, and anything else is
+// dropped. The server applies the same rule and refuses what still breaks it (a leading
+// digit, a reserved name).
+export function constantNameOf(raw) {
+  return String(raw || "").toUpperCase()
+    .replace(/Ä/g, "AE").replace(/Ö/g, "OE").replace(/Ü/g, "UE")
+    .replace(/[\s.\-]+/g, "_")
+    .replace(/[^A-Z0-9_]/g, "");
+}
+
+// NAMESPACE_INFO are the facts a namespace carries besides its constants, in lower case
+// so they never share a name with one (ADR-draft-constant-namespaces). The compiler's
+// namespaceInfo is the same list.
+export const NAMESPACE_INFO = {
+  application: ["id", "key", "name"],
+  server: ["id", "name", "environment"],
+};
+
+export function isNamespaceInfo(namespace, name) {
+  return (NAMESPACE_INFO[namespace] || []).includes(name);
+}
+
 // typedDeployFieldHTML renders one typed input for a declared start variable,
 // prefilled with its default. A boolean is a true/false/— select; a number an
 // input[type=number]; a string a text input; a json a textarea upgraded to a

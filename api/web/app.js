@@ -44,7 +44,7 @@ import { runImport } from "./infomodel-import.js";
 import { loadFormViewer } from "./formviewer.js";
 // A start form does not replace the start variables declared on the process: the ones
 // it does not ask for are asked beneath it, with the Modeler's typed fields.
-import { uncoveredStartVariables, extraStartFieldsHTML, wireStartJSONEditors, readTypedDeployBody } from "./startvars.js";
+import { uncoveredStartVariables, extraStartFieldsHTML, wireStartJSONEditors, readTypedDeployBody, constantNameOf } from "./startvars.js";
 import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML } from "./secret-shapes.js";
 // Giving an AI assistant access, as a screen (ADR-0200). Its own module because it
 // is a self-contained page and this file is long enough; it takes its dependencies
@@ -1631,6 +1631,14 @@ async function viewConsoleEngine() {
       for machines, and changing the name never changes the id.</p>
       <div id="node-info" class="muted">loading…</div>
     </div>`;
+  // The installation's constants, read by a process as server.NAME
+  // (ADR-draft-constant-namespaces) — beside the node identity, whose name and environment
+  // a process can read as server.name and server.environment.
+  view.innerHTML += `
+    <div class="card" id="server-constants-card" style="margin-top:14px">
+      <h2>Server constants</h2>
+      <div id="server-constants"><p class="muted">loading…</p></div>
+    </div>`;
   view.innerHTML += `
     <div class="card" id="build-card" style="margin-top:14px">
       <h2>Build</h2>
@@ -1650,6 +1658,7 @@ async function viewConsoleEngine() {
     document.getElementById("build-info").innerHTML = buildInfoHTML(info);
     mountNodeCard(node);
   } catch (e) { toast(e.message, "err"); }
+  renderServerConstants(document.getElementById("server-constants"));
 }
 
 // nodeInfoHTML renders the node descriptor. The id is shown in full and
@@ -1686,8 +1695,14 @@ function mountNodeCard(node) {
   const slot = document.getElementById("node-info");
   if (!slot) return;
   const editable = mayUse("admin");
+  // The form gets a heading of its own: under the descriptor's table it read as more of
+  // the table, and was missed. A process reads the name and the environment as server.name
+  // and server.environment when its model declares them (ADR-draft-constant-namespaces).
   slot.innerHTML = nodeInfoHTML(node) + (editable ? `
-    <form id="node-form" class="row" style="gap:10px; margin-top:12px; flex-wrap:wrap; align-items:flex-end">
+    <h3 id="node-form-head" style="margin:16px 0 4px">Name this node</h3>
+    <p class="muted" style="margin:0 0 4px; font-size:12px">For people, and for processes that read
+      <code>server.name</code> and <code>server.environment</code>. Changing them never changes the runtime id.</p>
+    <form id="node-form" class="row" style="gap:10px; margin-top:8px; flex-wrap:wrap; align-items:flex-end">
       <label class="field" style="margin:0"><span>Name</span>
         <input id="node-name" type="text" maxlength="200" placeholder="e.g. Zurich primary"
           value="${esc(node.name || "")}" /></label>
@@ -3559,7 +3574,7 @@ async function viewProjectDetail(id) {
       ${ungrouped ? "" : `<div class="tabs" id="pd-tabs">
         <button data-pane="artifacts" class="active" title="Show this application’s design-time artifacts">Artifacts</button>
         <button data-pane="deployments" title="Show what this application currently has deployed">Deployments</button>
-        <button data-pane="values" title="The values this application holds on this installation, which its constants bound to the application take">Values</button>
+        <button data-pane="constants" title="The constants this application holds on this installation, which its processes read as application.NAME">Constants</button>
       </div>`}
       <div id="pane-artifacts">
         <div class="card" style="padding:0">
@@ -3576,8 +3591,8 @@ async function viewProjectDetail(id) {
         <p class="muted" style="padding:2px 2px 12px">What this application currently has deployed on this server.</p>
         <div id="pd-deployments"><p class="muted" style="padding:14px 2px">Loading…</p></div>
       </div>
-      <div id="pane-values" hidden>
-        <div id="pd-values"><p class="muted" style="padding:14px 2px">Loading…</p></div>
+      <div id="pane-constants" hidden>
+        <div id="pd-constants"><p class="muted" style="padding:14px 2px">Loading…</p></div>
       </div>`}`;
 
     // Tabs: Artifacts (design-time) and Deployments (what's live for this
@@ -3585,21 +3600,21 @@ async function viewProjectDetail(id) {
     const tabs = document.getElementById("pd-tabs");
     if (tabs) {
       let loadedDeployments = false;
-      let loadedValues = false;
+      let loadedConstants = false;
       tabs.addEventListener("click", (e) => {
         const b = e.target.closest("button[data-pane]");
         if (!b) return;
         for (const t of tabs.querySelectorAll("button")) t.classList.toggle("active", t === b);
         document.getElementById("pane-artifacts").hidden = b.dataset.pane !== "artifacts";
         document.getElementById("pane-deployments").hidden = b.dataset.pane !== "deployments";
-        document.getElementById("pane-values").hidden = b.dataset.pane !== "values";
+        document.getElementById("pane-constants").hidden = b.dataset.pane !== "constants";
         if (b.dataset.pane === "deployments" && !loadedDeployments) {
           loadedDeployments = true;
           renderAppDeployments(id);
         }
-        if (b.dataset.pane === "values" && !loadedValues) {
-          loadedValues = true;
-          renderAppValues(id);
+        if (b.dataset.pane === "constants" && !loadedConstants) {
+          loadedConstants = true;
+          renderAppConstants(id);
         }
       });
     }
@@ -3633,104 +3648,144 @@ async function viewProjectDetail(id) {
   await render();
 }
 
-// APP_VALUE_TYPES are the types an application value takes — the four a constant takes.
-const APP_VALUE_TYPES = ["string", "number", "boolean", "json"];
+// HELD_CONSTANT_TYPES are the types a constant the installation holds takes — the four a
+// constant takes.
+const HELD_CONSTANT_TYPES = ["string", "number", "boolean", "json"];
 
-// renderAppValues fills the Values tab: what this application holds on *this*
-// installation, and what its deployed processes' constants bound to the application
-// require of it (ADR-0453). DEV, INT and PROD each
-// hold their own; the BPMN is the same on all three and only says which value it needs.
+// renderAppConstants fills an application's Constants tab: what it holds on *this*
+// installation, read by its processes as application.NAME (ADR-0453). DEV, INT and PROD
+// each hold their own; the BPMN is the same on all three and only declares what it reads.
+function renderAppConstants(id) {
+  return renderHeldConstants(document.getElementById("pd-constants"), {
+    url: `/api/v1/applications/${encodeURIComponent(id)}/constants`,
+    prefix: "ac",
+    ns: "application",
+    intro: `The constants this application holds on <b>this installation</b>, which its processes read as
+      <code>application.NAME</code>. DEV, INT and PROD each hold their own: an instance takes the one held here
+      when it starts, and a running instance keeps the one it started with.`,
+    none: "No deployed process of this application reads a constant from it.",
+  });
+}
+
+// renderServerConstants fills the Server constants section of Admin → Engine: what this
+// installation holds for every application, read as server.NAME
+// (ADR-draft-constant-namespaces).
+function renderServerConstants(host) {
+  return renderHeldConstants(host, {
+    url: "/api/v1/server/constants",
+    prefix: "sc",
+    ns: "server",
+    intro: `The constants this installation holds for <b>every application</b>, which a process reads as
+      <code>server.NAME</code> — a tenant, an endpoint, anything that differs between DEV, INT and PROD and not
+      between applications. An instance takes the one held here when it starts.`,
+    none: "No deployed process reads a server constant.",
+  });
+}
+
+// renderHeldConstants draws one Constants page — an application's or the installation's:
+// what the deployed processes require, with how this installation answers each, and the
+// constants held here, editable by an administrator.
 //
 // A name a process requires and the installation does not hold is offered as an empty
 // row, so setting it is typing a value rather than retyping a name. An empty value is
 // "not set": the row is left out of the save rather than storing an empty string, which
-// would read as set while meaning nothing.
-async function renderAppValues(id) {
-  const host = document.getElementById("pd-values");
+// would read as set while meaning nothing. A name is written in capitals (ADR-0454,
+// amended), applied while it is typed.
+async function renderHeldConstants(host, o) {
   if (!host) return;
+  const p = o.prefix;
   let view;
-  try { view = await api("GET", `/api/v1/applications/${encodeURIComponent(id)}/values`); }
+  try { view = await api("GET", o.url); }
   catch (e) { host.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
+  view = { ...(view || {}), constants: (view && view.constants) || [], required: (view && view.required) || [] };
 
-  // Changing a value changes what every new instance of the application starts with,
-  // so the server keeps it to administrators (as it does a call override, ADR-0105);
-  // the page says so rather than offering a Save that comes back 403.
+  // Changing a constant changes what every new instance reading it starts with, so the
+  // server keeps it to administrators (as it does a call override, ADR-0105); the page
+  // says so rather than offering a Save that comes back 403.
   const canEdit = mayUse("admin");
   const dis = canEdit ? "" : " disabled";
   const states = {
     set: `<span class="pill ok" title="This installation holds it">set</span>`,
     missing: `<span class="pill err" title="Instances start without it, and a start from the Modeler, the Tasks app, a public link or the API is refused">missing</span>`,
-    fallback: `<span class="pill warn" title="Not held here; every process that binds it declares a fallback, which instances get">fallback</span>`,
+    fallback: `<span class="pill warn" title="Not held here; every process that reads it declares a fallback, which instances get">fallback</span>`,
     "type-mismatch": `<span class="pill warn" title="Held here with another type than a process declares; instances get the type held here">type differs</span>`,
   };
   const reqRows = view.required.map((r) => `<tr data-req="${esc(r.name)}">
-      <td><b>${esc(r.name)}</b></td>
+      <td><b>${esc(r.name)}</b> <span class="muted">${esc(o.ns)}.${esc(r.name)}</span></td>
       <td><span class="chip">${esc(r.type)}</span></td>
       <td class="muted">${r.processes.map(esc).join(", ")}</td>
       <td>${states[r.state] || esc(r.state)}</td>
     </tr>`).join("");
 
-  const rows = view.values.map((v) => ({ ...v }));
+  const rows = view.constants.map((v) => ({ ...v }));
   for (const r of view.required) {
     if (!rows.some((v) => v.name === r.name)) rows.push({ name: r.name, type: r.type, value: "" });
   }
-  const typeOpts = (t) => APP_VALUE_TYPES
+  const typeOpts = (t) => HELD_CONSTANT_TYPES
     .map((x) => `<option value="${x}"${x === t ? " selected" : ""}>${x}</option>`).join("");
-  const rowHTML = (v) => `<tr class="av-row">
-      <td><input type="text" class="av-name" value="${esc(v.name)}" placeholder="TenantId" aria-label="Name"${dis}/></td>
-      <td><select class="av-type" aria-label="Type"${dis}>${typeOpts(v.type || "string")}</select></td>
-      <td><input type="text" class="av-value" value="${esc(v.value)}" placeholder="not set" aria-label="Value"${dis}/></td>
-      <td>${canEdit ? `<button type="button" class="icon-btn av-del" title="Remove this value" aria-label="Remove">✕</button>` : ""}</td>
+  const rowHTML = (v) => `<tr class="hc-row">
+      <td><input type="text" class="hc-name" value="${esc(v.name)}" placeholder="TENANT_ID" aria-label="Name"${dis}/></td>
+      <td><select class="hc-type" aria-label="Type"${dis}>${typeOpts(v.type || "string")}</select></td>
+      <td><input type="text" class="hc-value" value="${esc(v.value)}" placeholder="not set" aria-label="Value"${dis}/></td>
+      <td>${canEdit ? `<button type="button" class="icon-btn hc-del" title="Remove this constant" aria-label="Remove">✕</button>` : ""}</td>
     </tr>`;
 
   host.innerHTML = `
-    <p class="muted" style="padding:2px 2px 12px">The values this application holds on <b>this installation</b>.
-      DEV, INT and PROD each hold their own: a constant bound to the application takes the one held here when an
-      instance starts, and a running instance keeps the one it started with.</p>
+    <p class="muted" style="padding:2px 2px 12px">${o.intro}</p>
     <h3 style="margin:6px 0">Required by the deployed processes</h3>
-    ${view.required.length ? `<div class="card" style="padding:0"><table id="av-required">
+    ${view.required.length ? `<div class="card" style="padding:0"><table id="${p}-required">
         <thead><tr><th>Name</th><th>Type</th><th>Processes</th><th>Here</th></tr></thead>
         <tbody>${reqRows}</tbody></table></div>`
-      : `<p class="muted">No deployed process of this application binds a constant to it.</p>`}
-    <h3 style="margin:16px 0 6px">Values on this installation</h3>
-    <div class="card" style="padding:0"><table id="av-table">
+      : `<p class="muted">${esc(o.none)}</p>`}
+    <h3 style="margin:16px 0 6px">${o.ns === "server" ? "Server" : "Application"} constants on this installation</h3>
+    <div class="card" style="padding:0"><table id="${p}-table">
       <thead><tr><th>Name</th><th>Type</th><th>Value</th><th></th></tr></thead>
-      <tbody id="av-rows">${rows.map(rowHTML).join("")}</tbody></table></div>
+      <tbody id="${p}-rows">${rows.map(rowHTML).join("")}</tbody></table></div>
     ${canEdit
       ? `<div class="row" style="margin-top:10px">
-          <button type="button" class="btn neutral" id="av-add" title="Add a value">+ Add value</button>
-          <button type="button" class="btn" id="av-save" title="Save the values on this installation">Save</button>
-          <span class="err" id="av-err"></span></div>`
+          <button type="button" class="btn neutral" id="${p}-add" title="Add a constant">+ Add constant</button>
+          <button type="button" class="btn" id="${p}-save" title="Save the constants on this installation">Save</button>
+          <span class="err" id="${p}-err"></span></div>`
       : `<p class="muted" style="margin-top:8px">Only an administrator can change them.</p>`}
     ${view.updatedAt ? `<p class="muted" style="font-size:12px">Last changed ${esc(fmtTime(view.updatedAt))}${
-      view.updatedBy ? ` by ${esc(view.updatedBy)}` : ""}</p>` : ""}`;
+      view.updatedBy ? ` by ${esc(view.updatedByName || view.updatedBy)}` : ""}</p>` : ""}`;
   if (!canEdit) return;
 
-  const tbody = host.querySelector("#av-rows");
+  const tbody = host.querySelector(`#${p}-rows`);
   tbody.addEventListener("click", (e) => {
-    const del = e.target.closest(".av-del");
+    const del = e.target.closest(".hc-del");
     if (del) del.closest("tr").remove();
   });
-  host.querySelector("#av-add").addEventListener("click", () => {
-    tbody.insertAdjacentHTML("beforeend", rowHTML({ name: "", type: "string", value: "" }));
-    tbody.querySelector("tr:last-child .av-name").focus();
+  tbody.addEventListener("input", (e) => {
+    const el = e.target.closest(".hc-name");
+    if (!el) return;
+    const fixed = constantNameOf(el.value);
+    if (fixed !== el.value) {
+      const at = el.selectionStart + (fixed.length - el.value.length);
+      el.value = fixed;
+      try { el.setSelectionRange(Math.max(0, at), Math.max(0, at)); } catch { /* not focused */ }
+    }
   });
-  host.querySelector("#av-save").addEventListener("click", async (e) => {
+  host.querySelector(`#${p}-add`).addEventListener("click", () => {
+    tbody.insertAdjacentHTML("beforeend", rowHTML({ name: "", type: "string", value: "" }));
+    tbody.querySelector("tr:last-child .hc-name").focus();
+  });
+  host.querySelector(`#${p}-save`).addEventListener("click", async (e) => {
     const btn = e.currentTarget;
-    const values = [...tbody.querySelectorAll(".av-row")]
+    const constants = [...tbody.querySelectorAll(".hc-row")]
       .map((tr) => ({
-        name: tr.querySelector(".av-name").value.trim(),
-        type: tr.querySelector(".av-type").value,
-        value: tr.querySelector(".av-value").value,
+        name: tr.querySelector(".hc-name").value.trim(),
+        type: tr.querySelector(".hc-type").value,
+        value: tr.querySelector(".hc-value").value,
       }))
       .filter((v) => v.name !== "" && v.value !== "");
     btn.disabled = true;
     try {
-      await api("PUT", `/api/v1/applications/${encodeURIComponent(id)}/values`, { values });
-      toast("Values saved for this installation", "ok");
-      await renderAppValues(id);
+      await api("PUT", o.url, { constants });
+      toast("Constants saved for this installation", "ok");
+      await renderHeldConstants(host, o);
     } catch (err) {
-      const errEl = host.querySelector("#av-err");
+      const errEl = host.querySelector(`#${p}-err`);
       if (errEl) errEl.textContent = err.message;
       btn.disabled = false;
     }

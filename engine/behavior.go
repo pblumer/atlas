@@ -238,29 +238,36 @@ func activateInstance(c *ProcessingContext, piKey uint64, seed instanceSeed) {
 	// values were canonicalised at deploy, so this parses nothing (I5) and replays the
 	// events it writes (I6).
 	//
-	// A constant bound to its application takes the value the application holds on this
-	// server, read from the operator config the processor carries and frozen into the event
-	// like any other (ADR-0453); without one it takes
-	// its fallback, and without a fallback it is not seeded — the deploy warned, and an API
-	// start was refused before it got here.
+	// The constants whose values the installation holds are not variables of their own:
+	// they are the members of a namespace, read as application.NAME or server.NAME
+	// (ADR-draft-constant-namespaces), beside the facts the process declares from it. Each
+	// takes the value held on this server, else its fallback, else it is absent; the object
+	// is built once per definition and configuration and frozen into the event like any
+	// other value. A start without a value a person could have supplied was refused before
+	// it got here.
 	consts := cp.Constants()
 	for i := range consts {
 		k := &consts[i]
-		v := model.VariableValue{
+		if k.Bound() {
+			continue
+		}
+		c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
 			ScopeKey: piKey,
 			Name:     k.Name,
 			Kind:     toVarKind(k.Kind),
 			Bool:     k.Bool,
 			Text:     k.Text,
+		})
+	}
+	for _, ns := range [...]string{compiler.ApplicationNamespace, compiler.ServerNamespace} {
+		if cp.Binds(ns) {
+			c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+				ScopeKey: piKey,
+				Name:     ns,
+				Kind:     model.VarJSON,
+				Text:     c.namespaceValue(defKey, cp, ns),
+			})
 		}
-		if k.FromApplication {
-			if av, ok := c.applicationValue(defKey, k.Name); ok {
-				v.Kind, v.Bool, v.Text = av.Kind, av.Bool, av.Text
-			} else if !k.HasFallback {
-				continue
-			}
-		}
-		c.AppendVariableEvent(model.IntentVariableCreated, v)
 	}
 
 	// Seed the instance's start variables under its scope before any element runs.

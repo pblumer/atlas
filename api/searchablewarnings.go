@@ -124,12 +124,23 @@ func (s *searchableScan) read(t xml.StartElement) {
 			s.startVars[name] = typ
 		}
 	case "constant": // <atlas:constant name="…"/>: every instance carries it from its start
+		// — as a root variable of its own, or, when the installation holds its value, as a
+		// member of the namespace it is read under, which is then the root variable written
+		// (ADR-draft-constant-namespaces).
+		var name, source string
 		for _, a := range t.Attr {
-			if a.Name.Local == "name" {
-				if name := strings.TrimSpace(a.Value); name != "" {
-					s.writers[name] = true
-				}
+			switch a.Name.Local {
+			case "name":
+				name = strings.TrimSpace(a.Value)
+			case "source":
+				source = strings.TrimSpace(a.Value)
 			}
+		}
+		if source == "application" || source == "server" {
+			name = source
+		}
+		if name != "" {
+			s.writers[name] = true
 		}
 	case "output": // <zeebe:output source="…" target="…"/>
 		for _, a := range t.Attr {

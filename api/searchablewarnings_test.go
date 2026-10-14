@@ -49,11 +49,11 @@ func TestSearchableDeclarationWarnings(t *testing.T) {
 		},
 		{
 			name: "so does a constant, which every instance carries from its start",
-			xml: head + `<process id="identitaet" atlas:searchable="identityId,tenant">
+			xml: head + `<process id="identitaet" atlas:searchable="identityId,TENANT">
 			  <extensionElements><atlas:startForm>
 			    <atlas:startVariable name="identityId" type="string"/>
 			  </atlas:startForm>
-			  <atlas:constants><atlas:constant name="tenant" value="t-1"/></atlas:constants></extensionElements>
+			  <atlas:constants><atlas:constant name="TENANT" value="t-1"/></atlas:constants></extensionElements>
 			</process></definitions>`,
 		},
 		{

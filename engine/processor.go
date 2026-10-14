@@ -89,15 +89,28 @@ type Processor struct {
 	inactive map[uint64]bool
 
 	// defApplication names the application each deployed definition is filed under on
-	// this server, and appValues the values each application holds here
-	// (ADR-0453). A constant bound to its
-	// application is resolved from them when an instance is created. Like callOverrides
-	// they are operator config: the server layer pushes them, from its deployment registry
-	// and a sidecar, at startup and on every change, and they are owned by this run-loop
-	// goroutine (I3). The value read is frozen into the instance's VariableCreated event,
-	// so replay never consults them and they need not live in the log (I6).
-	defApplication map[uint64]string
-	appValues      map[string]map[string]ApplicationValue
+	// this server, appConstants the constants each application holds here (ADR-0453),
+	// serverConstants the ones this installation holds for every application, and
+	// serverInfo and appInfo the facts the namespaces carry besides
+	// (ADR-draft-constant-namespaces). A bound constant is resolved from them when an
+	// instance is created. Like callOverrides they are operator config: the server layer
+	// pushes them, from its deployment registry and sidecars, at startup and on every
+	// change, and they are owned by this run-loop goroutine (I3). The value read is frozen
+	// into the instance's VariableCreated event, so replay never consults them and they
+	// need not live in the log (I6).
+	//
+	// appNamespace and serverNamespace cache, per definition, the namespace an instance of
+	// it starts with — the JSON object of its declared members' values. Each is built the
+	// first time an instance of the definition is created after the config changed, and
+	// read by every creation after that, so a start allocates nothing for it (I1). Every
+	// change to the config drops the entries it can affect.
+	defApplication  map[uint64]string
+	appConstants    map[string]map[string]ConstantValue
+	appInfo         map[string]ApplicationInfo
+	serverConstants map[string]ConstantValue
+	serverInfo      ServerInfo
+	appNamespace    map[uint64]string
+	serverNamespace map[uint64]string
 
 	jobNotifier func(jobType int32)
 
@@ -203,8 +216,11 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 		latestProcess: map[string]uint64{},
 		callOverrides: map[string]CallTargetOverride{},
 
-		defApplication: map[uint64]string{},
-		appValues:      map[string]map[string]ApplicationValue{},
+		defApplication:  map[uint64]string{},
+		appConstants:    map[string]map[string]ConstantValue{},
+		appInfo:         map[string]ApplicationInfo{},
+		appNamespace:    map[uint64]string{},
+		serverNamespace: map[uint64]string{},
 	}
 	p.registerHandlers()
 	p.registerBehaviors()
@@ -324,21 +340,40 @@ func (p *Processor) Undeploy(defKey uint64) {
 	// going away.
 	delete(p.inactive, defKey)
 	delete(p.defApplication, defKey)
+	delete(p.appNamespace, defKey)
+	delete(p.serverNamespace, defKey)
 }
 
-// ApplicationValue is one value an application holds on this installation, in the
-// canonical form a variable is stored in (ADR-0453).
-// The server layer parses it when it is saved, so the engine seeds it without parsing (I5).
-type ApplicationValue struct {
+// ConstantValue is the value of one constant the installation holds — for an application
+// or for every application — in the canonical form a variable is stored in (ADR-0453,
+// ADR-draft-constant-namespaces). The server layer parses it when it is saved, so the
+// engine seeds it without parsing (I5).
+type ConstantValue struct {
 	Kind model.VarKind
 	Bool bool
 	Text string
+}
+
+// ServerInfo is what the server namespace says about the installation an instance starts
+// on: its node identity (ADR-0189 §6). Empty fields are facts not set here.
+type ServerInfo struct {
+	ID          string
+	Name        string
+	Environment string
+}
+
+// ApplicationInfo is what the application namespace says about the application a
+// definition is filed under, besides its constants.
+type ApplicationInfo struct {
+	Key  string // the portable application key (ADR-0134), the same on every installation
+	Name string
 }
 
 // SetDefinitionApplication records which application a deployed definition is filed
 // under on this server; "" means none. Run-loop goroutine only: the server layer calls it
 // at startup, on deploy, and when a definition moves between applications.
 func (p *Processor) SetDefinitionApplication(defKey uint64, applicationID string) {
+	delete(p.appNamespace, defKey)
 	if applicationID == "" {
 		delete(p.defApplication, defKey)
 		return
@@ -346,29 +381,66 @@ func (p *Processor) SetDefinitionApplication(defKey uint64, applicationID string
 	p.defApplication[defKey] = applicationID
 }
 
-// HasApplicationValue reports whether the application a definition is filed under holds
-// name on this server — what an instance created now would be seeded with. Run-loop
+// HasApplicationConstant reports whether the application a definition is filed under
+// holds name on this server — what an instance created now would be seeded with. Run-loop
 // goroutine only; the server layer asks it before it lets a person start a definition
 // whose bound constant has no fallback.
-func (p *Processor) HasApplicationValue(defKey uint64, name string) bool {
+func (p *Processor) HasApplicationConstant(defKey uint64, name string) bool {
 	app, ok := p.defApplication[defKey]
 	if !ok {
 		return false
 	}
-	_, ok = p.appValues[app][name]
+	_, ok = p.appConstants[app][name]
 	return ok
 }
 
-// SetApplicationValues replaces the values an application holds on this server; nil or
-// empty removes them. The map is the processor's from here on — the caller must not
+// HasServerConstant reports whether this installation holds the server constant name.
+// Run-loop goroutine only, for the same refusal.
+func (p *Processor) HasServerConstant(name string) bool {
+	_, ok := p.serverConstants[name]
+	return ok
+}
+
+// SetApplicationConstants replaces the constants an application holds on this server; nil
+// or empty removes them. The map is the processor's from here on — the caller must not
 // modify it. Run-loop goroutine only: the server layer calls it at startup, when the
-// values are saved, and when the application is deleted.
-func (p *Processor) SetApplicationValues(applicationID string, values map[string]ApplicationValue) {
-	if len(values) == 0 {
-		delete(p.appValues, applicationID)
+// constants are saved, and when the application is deleted. Every cached application
+// namespace is dropped: the change is an operator's, rare, and the next start of each
+// definition rebuilds its own.
+func (p *Processor) SetApplicationConstants(applicationID string, constants map[string]ConstantValue) {
+	clear(p.appNamespace)
+	if len(constants) == 0 {
+		delete(p.appConstants, applicationID)
 		return
 	}
-	p.appValues[applicationID] = values
+	p.appConstants[applicationID] = constants
+}
+
+// SetApplicationInfo records what the application namespace says about an application;
+// the zero value removes it. Run-loop goroutine only: at startup, and when an application
+// is created, renamed or deleted.
+func (p *Processor) SetApplicationInfo(applicationID string, info ApplicationInfo) {
+	clear(p.appNamespace)
+	if info == (ApplicationInfo{}) {
+		delete(p.appInfo, applicationID)
+		return
+	}
+	p.appInfo[applicationID] = info
+}
+
+// SetServerConstants replaces the constants this installation holds for every
+// application; nil or empty removes them. Ownership and goroutine as for
+// SetApplicationConstants.
+func (p *Processor) SetServerConstants(constants map[string]ConstantValue) {
+	clear(p.serverNamespace)
+	p.serverConstants = constants
+}
+
+// SetServerInfo records the node identity the server namespace reports. Run-loop
+// goroutine only: at startup and when an operator names the node.
+func (p *Processor) SetServerInfo(info ServerInfo) {
+	clear(p.serverNamespace)
+	p.serverInfo = info
 }
 
 // messageStartRef points a starting message at the definition it instantiates

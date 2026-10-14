@@ -161,6 +161,18 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: jsonBody("Node identity", schemaObj(map[string]any{
 				"name": tString(), "environment": tString(), "labels": tObject(),
 			})), resp: jsonBody("Node descriptor", tObject())}},
+		// The constants this installation holds for every application, read by a process
+		// as server.NAME (ADR-draft-constant-namespaces). Read like an application's — the
+		// Modeler offers them while a model is written — and replaced by an administrator.
+		{"GET", "/api/v1/server/constants", s.handleGetServerConstants, apiOp{
+			summary: "The constants this installation holds for every application — read by a process as server.NAME — and what the deployed processes require of them, each with its state: set, missing, covered by a fallback, or held with another type (ADR-draft-constant-namespaces)",
+			tag:     "System", role: roleAny,
+			resp: jsonBody("Constants and requirements", tObject())}},
+		{"PUT", "/api/v1/server/constants", s.handlePutServerConstants, apiOp{
+			summary: "Replace the constants this installation holds for every application; each is {name, type, value}, the name in capitals (TENANT_ID) and the type string, number, boolean or json. Instances started afterwards take them; running ones keep theirs (ADR-draft-constant-namespaces)",
+			tag:     "System", role: RoleAdmin,
+			req:  jsonBody("Constants", schemaObj(map[string]any{"constants": tArray()}, "constants")),
+			resp: jsonBody("Constants and requirements", tObject())}},
 		// The release notes the Console's landing page shows: CHANGELOG.md as this
 		// binary was built from it (ADR-0444). Behind
 		// the login like the page that reads them; /api/v1/info already tells a visitor
@@ -1386,13 +1398,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "An application's release history, newest first (ADR-0128)", tag: "Applications", role: roleAny, resp: jsonBody("Releases", tArray())}},
 		{"GET", "/api/v1/applications/{id}/audit", s.handleListProjectAudit, apiOp{
 			summary: "An application's access-control history — shares, revokes, visibility flips, and ownership transfers, newest first; owner-only (ADR-0071)", tag: "Applications", role: RoleModeler, resp: jsonBody("Grant audit events", tArray())}},
-		{"GET", "/api/v1/applications/{id}/values", s.handleGetApplicationValues, apiOp{
-			summary: "The values an application holds on this installation, and what its deployed processes' constants bound to the application require of them, each with its state: set, missing, covered by a fallback, or held with another type (ADR-0453)", tag: "Applications", role: roleAny,
-			resp: jsonBody("Values and requirements", tObject())}},
-		{"PUT", "/api/v1/applications/{id}/values", s.handlePutApplicationValues, apiOp{
-			summary: "Replace the values an application holds on this installation; each is {name, type, value} with type string, number, boolean or json. Instances started afterwards take them; running ones keep theirs (ADR-0453)", tag: "Applications", role: RoleAdmin,
-			req:  jsonBody("Values", schemaObj(map[string]any{"values": tArray()}, "values")),
-			resp: jsonBody("Values and requirements", tObject())}},
+		{"GET", "/api/v1/applications/{id}/constants", s.handleGetApplicationConstants, apiOp{
+			summary: "The constants an application holds on this installation — read by its processes as application.NAME — and what its deployed processes require of them, each with its state: set, missing, covered by a fallback, or held with another type (ADR-0453)", tag: "Applications", role: roleAny,
+			resp: jsonBody("Constants and requirements", tObject())}},
+		{"PUT", "/api/v1/applications/{id}/constants", s.handlePutApplicationConstants, apiOp{
+			summary: "Replace the constants an application holds on this installation; each is {name, type, value}, the name in capitals (TENANT_ID) and the type string, number, boolean or json. Instances started afterwards take them; running ones keep theirs (ADR-0453)", tag: "Applications", role: RoleAdmin,
+			req:  jsonBody("Constants", schemaObj(map[string]any{"constants": tArray()}, "constants")),
+			resp: jsonBody("Constants and requirements", tObject())}},
 		{"GET", "/api/v1/applications/{id}/deployments", s.handleApplicationDeployments, apiOp{
 			summary: "What this application currently has deployed on this server, with per-definition instance counts (ADR-0128)", tag: "Applications", role: roleAny, resp: jsonBody("Application deployments", tObject())}},
 
