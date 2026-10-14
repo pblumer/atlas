@@ -67,6 +67,10 @@ test("an administrator names the node without changing its id", async ({ page })
 
   await expect(page.locator("#node-card")).toContainText("Geneva standby");
   expect(puts).toEqual([{ name: "Geneva standby", environment: "staging" }]);
+  // The form has a heading of its own, so it does not read as more of the table above it,
+  // and says that processes can read the name and the environment.
+  await expect(page.locator("#node-form-head")).toHaveText("Name this node");
+  await expect(page.locator("#node-card")).toContainText("server.environment");
   // The id is not in the request at all: a stable id a form could change is not
   // stable, and every correlation made against the old one would point at nothing.
   expect(puts[0]).not.toHaveProperty("id");

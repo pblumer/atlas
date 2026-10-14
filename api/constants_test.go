@@ -16,8 +16,8 @@ const constantsBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524
   <process id="ucc" isExecutable="true" name="Sammelanschluss">
     <extensionElements>
       <atlas:constants>
-        <atlas:constant name="DomainSuffix" type="string" value="contoso.ch"/>
-        <atlas:constant name="MaxAgents" type="number" value="20"/>
+        <atlas:constant name="DOMAIN_SUFFIX" type="string" value="contoso.ch"/>
+        <atlas:constant name="MAX_AGENTS" type="number" value="20"/>
       </atlas:constants>
     </extensionElements>
     <startEvent id="s"/>
@@ -52,12 +52,12 @@ func TestConstantsAreListedAndSeededThroughTheAPI(t *testing.T) {
 	if err := json.Unmarshal(body, &procs); err != nil {
 		t.Fatalf("decode processes: %v (%s)", err, body)
 	}
-	const wantConstants = `[{"name":"DomainSuffix","type":"string","value":"contoso.ch"},{"name":"MaxAgents","type":"number","value":"20"}]`
+	const wantConstants = `[{"name":"DOMAIN_SUFFIX","type":"string","value":"contoso.ch"},{"name":"MAX_AGENTS","type":"number","value":"20"}]`
 	if len(procs) != 1 || string(procs[0]["constants"]) != wantConstants {
 		t.Fatalf("listed constants = %s, want %s", procs[0]["constants"], wantConstants)
 	}
 
-	start := `{"variables":{"DomainSuffix":"from-the-caller","Other":"x"}}`
+	start := `{"variables":{"DOMAIN_SUFFIX":"from-the-caller","Other":"x"}}`
 	code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key), start, "application/json")
 	if code != http.StatusOK {
 		t.Fatalf("create instance: status=%d body=%s", code, body)
@@ -79,11 +79,11 @@ func TestConstantsAreListedAndSeededThroughTheAPI(t *testing.T) {
 	if err := dec.Decode(&vars); err != nil {
 		t.Fatalf("decode variables: %v (%s)", err, body)
 	}
-	if got := vars["DomainSuffix"]; got != "contoso.ch" {
-		t.Errorf("DomainSuffix = %v, want the constant contoso.ch", got)
+	if got := vars["DOMAIN_SUFFIX"]; got != "contoso.ch" {
+		t.Errorf("DOMAIN_SUFFIX = %v, want the constant contoso.ch", got)
 	}
-	if got, ok := vars["MaxAgents"].(json.Number); !ok || got.String() != "20" {
-		t.Errorf("MaxAgents = %v (%T), want number 20", vars["MaxAgents"], vars["MaxAgents"])
+	if got, ok := vars["MAX_AGENTS"].(json.Number); !ok || got.String() != "20" {
+		t.Errorf("MAX_AGENTS = %v (%T), want number 20", vars["MAX_AGENTS"], vars["MAX_AGENTS"])
 	}
 	if got := vars["Other"]; got != "x" {
 		t.Errorf("Other = %v, want x", got)
@@ -95,9 +95,9 @@ func TestADeploymentThatWritesAConstantIsRefused(t *testing.T) {
 	ts := newTestServer(t)
 	model := strings.Replace(constantsBPMN, `<userTask id="u" name="Prüfen"/>`,
 		`<scriptTask id="u"><extensionElements xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
-        <zeebe:script expression="=&quot;other.ch&quot;" resultVariable="DomainSuffix"/></extensionElements></scriptTask>`, 1)
+        <zeebe:script expression="=&quot;other.ch&quot;" resultVariable="DOMAIN_SUFFIX"/></extensionElements></scriptTask>`, 1)
 	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", model, "application/xml")
-	if code == http.StatusOK || !strings.Contains(string(body), `writes \"DomainSuffix\"`) {
-		t.Fatalf("deploy: status=%d body=%s, want a refusal naming DomainSuffix", code, body)
+	if code == http.StatusOK || !strings.Contains(string(body), `writes \"DOMAIN_SUFFIX\"`) {
+		t.Fatalf("deploy: status=%d body=%s, want a refusal naming DOMAIN_SUFFIX", code, body)
 	}
 }

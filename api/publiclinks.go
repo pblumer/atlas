@@ -376,8 +376,8 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// A value this installation does not hold yet: the visitor reads only that the
-		// process cannot start, the operator reads why on the application's Values tab.
-		if ambiguous = s.applicationValueRefusalOnLoop(d); ambiguous != "" {
+		// process cannot start, the operator reads why on the application's Constants tab or Admin → Engine → Server constants.
+		if ambiguous = s.boundConstantRefusalOnLoop(d); ambiguous != "" {
 			return
 		}
 		// A redeploy may have added a public wizard with no timeout since the link was

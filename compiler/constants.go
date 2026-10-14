@@ -16,7 +16,12 @@ import (
 // parsed here once into the canonical form any other variable takes, and written by the
 // engine as an ordinary process-scope variable when it creates an instance — on every
 // start path, before the start variables. Afterwards nothing in the run can replace it;
-// only an operator's audited correction does.
+// only an operator's audited correction does. Its name is written in capitals
+// (ValidConstantName). A constant whose value the installation holds is not a variable of
+// its own: it is a member of a namespace — application.NAME for the application's
+// constants, server.NAME for the installation's (ADR-draft-constant-namespaces) — and the
+// same namespaces carry a few facts Atlas itself knows, in lower case: application.name,
+// server.environment.
 //
 // The deploy is the place a constant is checked, because a constant is new: unlike the
 // start-variable declaration, which had always been accepted as written, no stored model
@@ -29,17 +34,82 @@ type xmlConstant struct {
 	Type  string `xml:"type,attr"`
 	Value string `xml:"value,attr"`
 	// Source is where the value comes from: the model ("" or "model", the value
-	// attribute) or the application the process is filed under on the installation
-	// where an instance starts ("application", ADR-0453),
-	// in which case Value is an optional fallback.
+	// attribute), the application the process is filed under on the installation where an
+	// instance starts ("application", ADR-0453), or that installation itself ("server",
+	// ADR-draft-constant-namespaces). For the last two Value is an optional fallback.
 	Source string `xml:"source,attr"`
 }
 
-// Constant sources (ADR-0453).
+// Constant sources (ADR-0453, ADR-draft-constant-namespaces).
 const (
 	ConstantSourceModel       = "model"
 	ConstantSourceApplication = "application"
+	ConstantSourceServer      = "server"
 )
+
+// ApplicationNamespace and ServerNamespace are the variables an instance holds the
+// constants in whose values the installation holds (ADR-draft-constant-namespaces): one
+// object each, so a model reads application.TENANT_ID or server.ENVIRONMENT_URL in FEEL
+// and $application.TENANT_ID in PowerShell, and the source of every value is in the name
+// it is read by. A namespace exists only in an instance of a process that declares one of
+// its members, and is then a constant itself — nothing in the run may replace it.
+const (
+	ApplicationNamespace = "application"
+	ServerNamespace      = "server"
+)
+
+// namespaceInfo are the members of each namespace Atlas fills itself rather than an
+// operator: facts about the application and the installation an instance starts on. They
+// are written in lower case, which no constant can be, so a fact and a constant never share
+// a name. A model declares the ones it reads like a constant (<atlas:constant
+// name="environment" source="server"/>), so a namespace still carries only what its model
+// asks for.
+var namespaceInfo = map[string][]string{
+	ApplicationNamespace: {"id", "key", "name"},
+	ServerNamespace:      {"id", "name", "environment"},
+}
+
+// InfoFields lists the facts a namespace carries besides its constants, in a stable order.
+func InfoFields(namespace string) []string { return namespaceInfo[namespace] }
+
+func isInfoField(namespace, name string) bool {
+	for _, f := range namespaceInfo[namespace] {
+		if f == name {
+			return true
+		}
+	}
+	return false
+}
+
+// reservedConstantNames are the names a constant may not take, because they are the
+// namespaces constants are read under. Compared after upper-casing, the only form
+// a constant name has: PowerShell does not tell $APPLICATION from $application, so a
+// constant named APPLICATION would silently shadow the namespace in every script.
+var reservedConstantNames = map[string]bool{"APPLICATION": true, "SERVER": true}
+
+// ValidConstantName says why name cannot name a constant, or nil. A constant's name is
+// written in capitals — letters A–Z, digits and underscores, starting with a letter, such
+// as TENANT_ID (ADR-0454, amended) — so a reader tells a constant from a variable at a
+// glance in every expression and script, and the API applies the same rule to an
+// application's constants so the two names a binding joins can never differ in case.
+func ValidConstantName(name string) error {
+	if name == "" {
+		return fmt.Errorf("a constant has no name")
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		switch {
+		case c >= 'A' && c <= 'Z':
+		case i > 0 && (c >= '0' && c <= '9' || c == '_'):
+		default:
+			return fmt.Errorf("constant %q: a constant's name is written in capitals — letters A–Z, digits and underscores, starting with a letter, such as TENANT_ID", name)
+		}
+	}
+	if reservedConstantNames[name] {
+		return fmt.Errorf("constant %q: the name is reserved for a namespace constants are read under (application.NAME, server.NAME)", name)
+	}
+	return nil
+}
 
 // Constant is one process constant as the engine seeds it: its name, the type and value
 // the model declares, and that value in the canonical (kind, bool, text) form a variable
@@ -56,49 +126,79 @@ type Constant struct {
 	Bool  bool
 	Text  string
 
-	FromApplication bool // the value is the application's, per installation
-	HasFallback     bool // a bound constant declares a value to use when the application holds none
+	// Namespace is where the value comes from and is read: "" for a process constant,
+	// which is a root variable of its own, ApplicationNamespace or ServerNamespace for one
+	// the installation holds, which is a member of that namespace (Bound).
+	Namespace string
+	// Info marks a member Atlas fills itself — application.name, server.environment —
+	// rather than one an operator holds.
+	Info        bool
+	HasFallback bool // a bound constant declares a value to use when the installation holds none
 }
+
+// Bound reports whether the constant's value comes from the installation rather than the
+// model.
+func (k *Constant) Bound() bool { return k.Namespace != "" }
 
 // constantsOf reads a process's constant declarations, refusing any the engine could not
 // seed as written: a nameless one, a name declared twice, a type outside the four a start
 // variable takes, or a value that is not a literal of its type.
-func constantsOf(procID string, decl []xmlConstant) ([]Constant, error) {
+//
+// A name not written in capitals is refused through the deploy gate g: a deploy refuses
+// it, while a reload of a definition deployed before the rule keeps the constant under the
+// name it has and reports it — a spelling is no reason for a server not to start.
+func constantsOf(procID string, decl []xmlConstant, g *feelGate) ([]Constant, error) {
 	var out []Constant
 	seen := map[string]bool{}
 	for _, d := range decl {
 		name := strings.TrimSpace(d.Name)
-		if name == "" {
-			return nil, fmt.Errorf("compiler: process %q: a constant has no name", procID)
-		}
-		if seen[name] {
-			return nil, fmt.Errorf("compiler: process %q: constant %q is declared twice", procID, name)
-		}
-		seen[name] = true
-		typ := strings.TrimSpace(d.Type)
-		if typ == "" {
-			typ = "string"
-		}
-		k := Constant{Name: name, Type: typ, Value: d.Value}
+		k := Constant{Name: name, Value: d.Value}
 		switch src := strings.TrimSpace(d.Source); src {
 		case "", ConstantSourceModel:
 		case ConstantSourceApplication:
-			k.FromApplication = true
+			k.Namespace = ApplicationNamespace
+		case ConstantSourceServer:
+			k.Namespace = ServerNamespace
 		default:
-			return nil, fmt.Errorf("compiler: process %q: constant %q: source %q is not one of model, application", procID, name, src)
+			return nil, fmt.Errorf("compiler: process %q: constant %q: source %q is not one of model, application, server", procID, name, src)
+		}
+		k.Info = k.Bound() && isInfoField(k.Namespace, name)
+		if !k.Info && name == "" {
+			return nil, fmt.Errorf("compiler: process %q: a constant has no name", procID)
+		}
+		if !k.Info {
+			if err := ValidConstantName(name); err != nil {
+				if !g.tolerate {
+					return nil, fmt.Errorf("compiler: process %q: %w (ADR-0454)", procID, err)
+				}
+				g.found = append(g.found, Problem{Severity: SeverityError, Rule: RuleConstantName,
+					Message: fmt.Sprintf("process %q: %s", procID, err)})
+			}
+		}
+		key := k.Namespace + "." + name
+		if seen[key] {
+			return nil, fmt.Errorf("compiler: process %q: constant %q is declared twice", procID, name)
+		}
+		seen[key] = true
+		k.Type = strings.TrimSpace(d.Type)
+		if k.Type == "" {
+			k.Type = "string"
+		}
+		if k.Info && k.Type != "string" {
+			return nil, fmt.Errorf("compiler: process %q: %s.%s is text Atlas fills in; declare it with type string", procID, k.Namespace, name)
 		}
 		// A bound constant's value is optional — it is the fallback — so an empty one
 		// means "none". A model constant's empty value is the empty string it says.
-		if k.FromApplication && strings.TrimSpace(d.Value) == "" {
+		if k.Bound() && strings.TrimSpace(d.Value) == "" {
 			out = append(out, k)
 			continue
 		}
 		var err error
-		k.Kind, k.Bool, k.Text, err = ParseConstantValue(typ, d.Value)
+		k.Kind, k.Bool, k.Text, err = ParseConstantValue(k.Type, d.Value)
 		if err != nil {
 			return nil, fmt.Errorf("compiler: process %q: constant %q: %w", procID, name, err)
 		}
-		k.HasFallback = k.FromApplication
+		k.HasFallback = k.Bound()
 		out = append(out, k)
 	}
 	return out, nil
@@ -177,19 +277,38 @@ func (p *CompiledProcess) Constants() []Constant { return p.constants }
 // length check rather than a lookup — the same shape as HasSearchableVariables.
 func (p *CompiledProcess) HasConstants() bool { return len(p.constantSet) > 0 }
 
-// IsConstant reports whether name is one of the process's constants.
+// IsConstant reports whether name is a variable the process's constants occupy in an
+// instance root: a process constant's own name, or a namespace when the process declares
+// one of its members. A bound constant's own name is not one — it is a member of the
+// namespace, and a variable of that name is the process's to write.
 func (p *CompiledProcess) IsConstant(name string) bool {
 	_, ok := p.constantSet[name]
 	return ok
 }
 
-// constantSetOf indexes the constants by name.
+// Binds reports whether the process declares a member of namespace, and so whether its
+// instances carry that namespace. A scan of a handful of declarations — no allocation (I1).
+func (p *CompiledProcess) Binds(namespace string) bool {
+	for i := range p.constants {
+		if p.constants[i].Namespace == namespace {
+			return true
+		}
+	}
+	return false
+}
+
+// constantSetOf indexes the root variables the constants occupy: each process constant by
+// name, and each namespace once when any of its members is declared.
 func constantSetOf(cs []Constant) map[string]struct{} {
 	if len(cs) == 0 {
 		return nil
 	}
 	set := make(map[string]struct{}, len(cs))
 	for _, c := range cs {
+		if c.Bound() {
+			set[c.Namespace] = struct{}{}
+			continue
+		}
 		set[c.Name] = struct{}{}
 	}
 	return set
@@ -215,6 +334,9 @@ func (p *CompiledProcess) refuseConstantConflicts() error {
 		return nil
 	}
 	for _, sv := range p.startVars {
+		if (sv.Name == ApplicationNamespace || sv.Name == ServerNamespace) && p.IsConstant(sv.Name) {
+			return fmt.Errorf("compiler: %q is declared as a start variable, but it is the namespace this process's %s constants are read under; name the start variable differently (ADR-draft-constant-namespaces)", sv.Name, sv.Name)
+		}
 		if p.IsConstant(sv.Name) {
 			return fmt.Errorf("compiler: %q is declared both as a start variable and as a constant — a start variable is asked for when an instance starts, a constant is fixed by the model; declare it as one or the other (ADR-0454)", sv.Name)
 		}
@@ -230,6 +352,9 @@ func (p *CompiledProcess) refuseConstantConflicts() error {
 	refuse := func(kind, name string) error {
 		if name == "" || !p.IsConstant(name) {
 			return nil
+		}
+		if name == ApplicationNamespace || name == ServerNamespace {
+			return fmt.Errorf("compiler: %s writes %q, the namespace this process's %s constants are read under — it is set when an instance starts and nothing in the run may replace it; write the value under another name (ADR-draft-constant-namespaces)", kind, name, name)
 		}
 		return fmt.Errorf("compiler: %s writes %q, which the process declares as a constant — a constant is set when an instance starts and nothing in the run may replace it; write the value under another name (ADR-0454)", kind, name)
 	}

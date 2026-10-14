@@ -171,10 +171,12 @@ type constantResp struct {
 	Name  string `json:"name"`
 	Type  string `json:"type"`
 	Value string `json:"value"`
-	// Source is "application" for a constant bound to its application's value on this
-	// installation, whose Value is then only the fallback
-	// (ADR-0453); absent for a model constant.
+	// Source is "application" or "server" for a constant whose value the installation
+	// holds — read as application.NAME or server.NAME, its Value then only the fallback
+	// (ADR-0453, ADR-draft-constant-namespaces); absent for a process constant.
 	Source string `json:"source,omitempty"`
+	// Info marks a fact Atlas fills itself, such as server.environment.
+	Info bool `json:"info,omitempty"`
 }
 
 // constantsOf is a definition's constants in their response shape, nil when it declares
@@ -186,10 +188,7 @@ func constantsOf(cp *compiler.CompiledProcess) []constantResp {
 	}
 	out := make([]constantResp, len(decl))
 	for i, c := range decl {
-		out[i] = constantResp{Name: c.Name, Type: c.Type, Value: c.Value}
-		if c.FromApplication {
-			out[i].Source = compiler.ConstantSourceApplication
-		}
+		out[i] = constantResp{Name: c.Name, Type: c.Type, Value: c.Value, Source: c.Namespace, Info: c.Info}
 	}
 	return out
 }
