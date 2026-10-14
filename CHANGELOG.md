@@ -12,6 +12,52 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-10-14
+
+**A constant says where its value comes from.** A constant the installation holds is read
+under the namespace that holds it: an application's as `application.NAME`, where 0.12.0
+made it a variable of its own name, and the installation's new constants for every
+application as `server.NAME`. Both namespaces carry facts Atlas fills itself, such as
+`server.environment` and `application.name`, and every constant is named in capitals
+([ADR-0456](docs/adr/0456-constant-namespaces.md)). The audit log records every change to
+the constants an application or the installation holds. The business architecture — the
+capability register, its value streams and the gap report — has a screen under Panorama.
+In the Modeler, a timer's schedule can be a FEEL expression, and the XML source of a
+process or decision can be read and corrected in place
+([ADR-0457](docs/adr/0457-modeler-xml-source.md)); an auto-layout is now an unsaved edit
+the Modeler protects.
+
+**Read this before upgrading from 0.12.0.** These act on an existing installation:
+
+- A constant bound to its application is read as `application.NAME`, no longer as a
+  variable of its own name. A model 0.12.0 deployed that reads one as `TenantId` or
+  `$TenantId` finds nothing there in an instance started after the upgrade. Rename the
+  constant in capitals, read it as `application.TENANT_ID`, and deploy the model again.
+  An instance already running keeps the variables it started with.
+- The values saved under 0.12.0's **Values** tab or `PUT /api/v1/applications/{id}/values`
+  are not carried over. 0.13.0 reads and backs up `application-constants` and leaves the
+  `application-values` directory unread, so set them again under the application's
+  **Constants** tab. The `…/values` routes and the MCP tool `atlas_application_values`
+  are gone without an alias. Until a value is set, a start from the Console, the Tasks
+  app, a public link, a CSV upload or the API of a process whose bound constant has no
+  fallback is refused with `409`, as in 0.12.0.
+- A constant not named in capitals no longer deploys. A stored definition with one still
+  loads, and the start logs it as `constant.name`. An application cannot hold such a name,
+  so a bound one gets its fallback or nothing until the model is deployed again in
+  capitals.
+- A stored definition with a variable called `application` beside a bound constant, or with
+  a bound constant named `id`, `key` or `name`, still loads, and the start logs it as
+  `constant.conflict`. Its instances keep the namespace and drop the write that would
+  replace it, and a bound constant named after a fact reads the fact.
+- Going back to 0.12.0 is not claimed. 0.12.0 refuses a constant with `source="server"` on
+  its restart as well as on a deploy, so a data directory holding a model deployed with a
+  server constant does not start under 0.12.0. Take a backup before upgrading.
+- 0.13.0 reads the data directory 0.12.0 wrote: nothing under the log, the state or the
+  record format changed, and no system process changed, so the first start deploys nothing
+  new. The Entra example in the examples catalogue reads `server.ENTRA_TENANT_ID`,
+  `application.ENTRA_CLIENT_ID` and `application.ENTRA_CERTIFICATE_SUBJECT`. A copy
+  imported under 0.12.0 is unchanged and falls under the first item.
+
 ### Added
 
 - **The Modeler shows a model's source, and takes a correction back.** The process and
@@ -14679,7 +14725,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/pblumer/atlas/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/pblumer/atlas/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/pblumer/atlas/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/pblumer/atlas/compare/v0.9.2...v0.10.0
