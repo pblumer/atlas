@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A timer's schedule can be a FEEL expression in the Modeler.** The Duration, Date &
+  time and Cycle field of a timer start, intermediate catch, boundary and event-subprocess
+  start carries the fx switch the other value-or-expression fields have: switched on, the
+  field becomes a FEEL editor with completion and live validation, and the value is stored
+  `=`-prefixed, which is how the engine has read a timer expression since
+  [ADR-0055](docs/adr/0055-feel-expression-timer-schedules.md). Until now the field was
+  plain text, and the only way to an expression was to know to type the `=`. The note under
+  the field says what the expression must yield, that one yielding nothing usable raises an
+  incident when the timer is armed, and that a timer start's expression may read no
+  variables.
 - **A process reads the installation's constants as `server.NAME`, and facts it knows
   without anybody typing them.** Beside an application's constants, an installation now
   holds constants for every application — a tenant, an endpoint — set under **Admin →
