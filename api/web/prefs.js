@@ -1,5 +1,5 @@
 // How this person reads the console: number format, time zone, interface
-// language (ADR-draft-display-preferences-per-user).
+// language (ADR-0459).
 //
 // One module owns the answer, because three different screens ask it and a
 // formatter that kept its own copy would print one fact two ways. The store is

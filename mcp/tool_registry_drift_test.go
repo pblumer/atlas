@@ -605,7 +605,7 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/directory-sync": "account provisioning stays behind its own scoped credential, not an assistant's tool call",
 
 	// How one person reads the console — number format, time zone, language
-	// (ADR-draft-display-preferences-per-user). Omitted because the thing it
+	// (ADR-0459). Omitted because the thing it
 	// configures is a screen, and an assistant has none: nothing a tool call could
 	// do with this would change an answer it gives. The write half is the one worth
 	// stating, because an MCP credential acts *as* a person: a tool that could set

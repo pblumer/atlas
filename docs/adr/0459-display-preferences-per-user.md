@@ -1,4 +1,4 @@
-# ADR-DRAFT: How a person reads — number format, time zone and language, per user
+# ADR-0459: How a person reads — number format, time zone and language, per user
 
 - **Status:** Proposed
 - **Implementation:** Not started

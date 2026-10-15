@@ -7040,7 +7040,7 @@ button.im-problem:hover { background: var(--accent-soft); }
 
 /* ---------- Display settings (#/console/settings) ----------
    How this person reads: number format, time zone, language
-   (ADR-draft-display-preferences-per-user). The screen is mostly one list of
+   (ADR-0459). The screen is mostly one list of
    options, each carrying its own sample — the sample is what somebody is really
    choosing, so it is given the same weight as the name beside it. */
 .ds-preview {

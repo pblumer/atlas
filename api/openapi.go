@@ -601,7 +601,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("The deleted folder's id", tObject())}},
 
 		// How one person reads the console: number format, time zone, language
-		// (ADR-draft-display-preferences-per-user). Both verbs act on the signed-in
+		// (ADR-0459). Both verbs act on the signed-in
 		// identity and on no other — there is no listing and no path parameter, so
 		// one person's settings are not addressable by anybody else.
 		{"GET", "/api/v1/me/preferences", s.userPrefs.HandleGet, apiOp{

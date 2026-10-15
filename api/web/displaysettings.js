@@ -1,4 +1,4 @@
-// The Console screen where a person says how they read (ADR-draft-display-preferences-per-user).
+// The Console screen where a person says how they read (ADR-0459).
 //
 // Three settings, three different questions — how a number is written, which
 // instant a timestamp means, which words the translated screens use — and one

@@ -1,6 +1,6 @@
 // Package userprefs stores how one person reads the console: how a number is
 // written, which instant a timestamp means, and which words the translated
-// screens use (ADR-draft-display-preferences-per-user).
+// screens use (ADR-0459).
 //
 // It is per user rather than per browser because of the time zone. A language is
 // how somebody reads at one desk, and ADR-0267 kept it in the browser for that

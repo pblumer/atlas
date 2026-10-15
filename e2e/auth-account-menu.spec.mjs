@@ -58,7 +58,7 @@ test("a server with no login still says single-user mode", async ({ page }) => {
   // The label is asserted rather than the menu's whole text: single-user mode also
   // carries the Display entry, because there is a console to configure there even
   // though there is no account to keep the setting with
-  // (ADR-draft-display-preferences-per-user).
+  // (ADR-0459).
   expect(await menuLabel(page)).toBe("Single-user mode");
   expect(await menuText(page)).toContain("Display settings");
   expect(await avatarTitle(page)).toBe("Single-user mode");

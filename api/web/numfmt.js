@@ -29,7 +29,7 @@
 // and no test could pin what a badge prints.
 //
 // What a person may choose instead is a region, from a fixed list
-// (ADR-draft-display-preferences-per-user). Each one is a row in the table below — two
+// (ADR-0459). Each one is a row in the table below — two
 // characters, no locale data — so the preview on the settings screen promises exactly
 // what the badge will show, and the default is still the neutral one: an instance where
 // nobody opens that screen keeps the behaviour it has.

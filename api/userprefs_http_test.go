@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// The display preferences over the real server (ADR-draft-display-preferences-per-user):
+// The display preferences over the real server (ADR-0459):
 // the route is wired, the identity comes from the session, and an instance with no
 // logins answers that there is no such resource rather than inventing a shared one.
 

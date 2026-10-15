@@ -1,4 +1,4 @@
-// How the console prints an instant (ADR-draft-display-preferences-per-user).
+// How the console prints an instant (ADR-0459).
 //
 // Before this module there were forty-three `toLocaleString()` calls with no
 // arguments, and that is not a decision — it is a default. Each one rendered in

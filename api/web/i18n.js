@@ -333,7 +333,7 @@ const CATALOGS = {
     "ba.streams.stageNone": "keine Capability",
     "ba.streams.notFound": "Diesen Wertstrom gibt es nicht (mehr).",
 
-    // Die Darstellungs-Einstellungen (ADR-draft-display-preferences-per-user). Dieser
+    // Die Darstellungs-Einstellungen (ADR-0459). Dieser
     // Screen läuft durch den Katalog, weil er der Ort ist, an dem die Sprache gewählt
     // wird: ein Sprachschalter auf einem Screen, der der Wahl selbst nicht folgt,
     // widerlegt sich beim ersten Klick.

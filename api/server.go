@@ -351,7 +351,7 @@ type Server struct {
 	// taskFolders serves the Tasks app's saved filters (ADR-0268).
 	taskFolders *taskfolder.Service
 	// userPrefs serves how one person reads the console — number format, time
-	// zone, language (ADR-draft-display-preferences-per-user).
+	// zone, language (ADR-0459).
 	userPrefs *userprefs.Service
 	// formGen writes a form from a description and from the process it belongs to
 	// (ADR-0260). It is the one area service that holds no run

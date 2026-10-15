@@ -10,7 +10,7 @@ import (
 )
 
 // Every instant the console prints goes through web/datefmt.js
-// (ADR-draft-display-preferences-per-user), and this is what keeps the
+// (ADR-0459), and this is what keeps the
 // forty-fourth call site from quietly going back to the browser's own clock.
 //
 // The failure it guards is invisible in review and invisible on screen: a bare

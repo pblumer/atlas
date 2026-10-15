@@ -1,5 +1,5 @@
 // End-to-end coverage for the Display screen and the two formatters behind it
-// (ADR-draft-display-preferences-per-user).
+// (ADR-0459).
 //
 // The screen's whole claim is that the sample beside an option is what the console
 // will actually print. So the tests assert the sample text itself — and assert it

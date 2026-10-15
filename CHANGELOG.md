@@ -42,7 +42,7 @@ _Changed_ / _Removed_ for each version.
   server changes nothing, and an instance with authentication off — where there is no
   identity to own a preference — keeps it in the browser and says so. **Nothing moves
   until somebody chooses:** an unset record is exactly today's behaviour, so upgrading
-  changes no pixel (ADR-draft-display-preferences-per-user).
+  changes no pixel (ADR-0459).
 
 - **The Developer View finds the instance to read values from.** A search field under
   "Values from instance" takes what the Operations search takes: an instance key,

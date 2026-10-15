@@ -699,7 +699,7 @@ const TOPNAV = {
     { name: "Audit log", route: "#/console/audit", role: "admin" },
     // How this person reads: number format, time zone, language. Role "any",
     // because it configures the reader rather than the server
-    // (ADR-draft-display-preferences-per-user).
+    // (ADR-0459).
     { name: "Display", route: "#/console/settings", role: "any" },
   ],
   modeler: [
