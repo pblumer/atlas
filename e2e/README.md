@@ -106,7 +106,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   following its boxes as they are typed in without moving the caret out of them,
   naming a dataset the run cannot use by the generator's own rules, distinguishing
   "not filled in" from "wrong", and disabling Run while the first two are unsatisfied;
-  and stopping a batch leaves what it did readable.
+  the strip **counts what is worth looking at over the whole run** beside the page
+  it is showing — distinct cases rather than a sum over the rules, a floor when the
+  server's sample of a rule's offenders was cut, and incidents counted as incidents
+  rather than as cases; and stopping a batch leaves what it did readable.
 
   And the **scenario half**: the checkboxes an author ticks become the expectations a
   build exits on, resolved against the run that happened rather than the dataset in

@@ -416,6 +416,41 @@ to the **largest value in it**, so a length means something against the rows bes
 how full a pool was rather than which of them was fullest, and a bar that filled at
 the busiest would read as saturated at forty percent.
 
+### How many of them are worth looking at
+
+The results strip marks the rows a rule caught and the rows carrying an incident,
+and said nothing about how many there were. On a page of fifty out of five hundred
+that is a question the marks cannot answer: a reader who sees none on this page
+cannot tell whether the run was clean or whether the four that broke a rule are on
+page six.
+
+The count sits beside the page count, and it is **over the run rather than over the
+page**. That is the question the line is asked — whether there is anything here to
+page towards at all — and a count of what is on screen would read as the run's
+total next to "1–50 of 300 cases".
+
+Three numbers, each counted as the run actually knows it:
+
+- **Cases a rule caught** are counted as *distinct cases*, not as a sum over the
+  rules, so a case that broke two is counted once. They come from the same set the
+  rows are marked from, so the number and the ✗ beside a row cannot disagree.
+  The server sends a bounded sample of each rule's offenders, so when a sample was
+  cut the count is a floor and says so: `at least 100 broke a rule`.
+- **Unfinished cases** are the report's own `cases − completed`.
+- **Incidents** are counted as incidents, not as cases: a case can carry several,
+  and the run knows the one number and not the other. Saying "2 incidents" where
+  the data supports only that is worth more than a case count that would be a guess.
+
+A run with none of the three says `nothing flagged` rather than going blank. The
+positive statement is the one somebody came to the strip for, and an empty space
+would be indistinguishable from a count that had not loaded.
+
+Writing it turned up an inconsistency in the e2e harness rather than in the panel:
+its report said three of three cases finished with no incidents while its result
+rows had the third parked behind one — two descriptions of the same run that
+disagreed. The counter is exactly what makes that visible, so the fixture now says
+what its own rows say.
+
 ### From a screen somebody reads to a check something runs
 
 A report answers "how did that go?" and needs a person to judge it. Two things

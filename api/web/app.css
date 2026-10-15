@@ -5613,6 +5613,12 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
   display: flex; align-items: center; gap: 8px; flex: none;
   padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px;
 }
+/* How many cases in the whole run are worth looking at, beside the page the strip
+   is showing. It sits with the count rather than in the analysis column because it
+   is the question this strip is asked: is there anything here to page towards? The
+   mark and the colour are both redundant — the sentence says it. */
+.pg-dev { color: var(--muted); }
+.pg-dev.bad { color: var(--danger); }
 .pg-results-scroll { overflow: auto; min-height: 0; }
 .pg-cases { min-width: 100%; }
 .pg-cases th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
