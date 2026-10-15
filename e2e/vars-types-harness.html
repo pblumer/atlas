@@ -32,6 +32,8 @@
       //               so the catalog declares an array without anything having run;
       //   geschrieben — a FEEL script's result, which is whatever the expression yields.
       //               Nothing declares it, and the panel must say nothing rather than guess.
+      //   application.TENANT_ID — a constant the application holds, read by its path
+      //               (ADR-0456) while the instance holds the namespace as one object.
       const XML = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_vars" targetNamespace="http://atlas/bpmn">
   <bpmn:process id="proc-vars" name="Variablen" isExecutable="true">
@@ -39,6 +41,9 @@
       <atlas:startForm>
         <atlas:startVariable name="kundennr" type="number" />
       </atlas:startForm>
+      <atlas:constants>
+        <atlas:constant name="TENANT_ID" type="string" source="application" />
+      </atlas:constants>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
     <bpmn:serviceTask id="lesen" name="Kunden lesen">
@@ -79,6 +84,7 @@
         variables: [
           { name: "kundennr", value: "42", kind: "number" },
           { name: "geschrieben", value: "2", kind: "number" },
+          { name: "application", value: '{"TENANT_ID":"1223455JHR"}', kind: "json" },
           {
             name: "kunden", kind: "json",
             value: '[{"kundennr":1,"nachname":"Meier"},{"kundennr":2,"nachname":"Keller"}]',
