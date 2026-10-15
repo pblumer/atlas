@@ -24,7 +24,55 @@ _Changed_ / _Removed_ for each version.
   newest version that has any
   ([ADR-0145](docs/adr/0145-developer-view-for-code-fields.md)).
 
+### Changed
+
+- **A PowerShell script runs unchanged in Atlas and at a prompt.** A script written for
+  PowerShell on its own declares its inputs in a `param()` block, logs with
+  `Write-Host` and may end with `exit 0`. In Atlas each of those failed, two of them
+  silently ([ADR-draft-powershell-param-block](docs/adr/draft-powershell-param-block.md)).
+
+  - **`param()` is now bound by name.** Nothing used to bind the block, so its
+    parameters shadowed the instance variables: a mandatory one failed as missing, and
+    any other ran on its default or an empty string while the task completed. The
+    bootstrap now passes each declared parameter the variable of the same name, matched
+    without regard to case as PowerShell matches parameters. Types, `Mandatory` and
+    validation attributes then act as PowerShell's binder makes them act. A namespace
+    is declared as `[hashtable]$application`, and at a prompt the same script takes
+    `-application @{ TENANT_ID = '…' }`. Every variable is still set as a variable as
+    well, so a script without a block is unchanged.
+  - **Behaviour change:** a parameter whose name matches an instance variable now
+    receives that variable's value. Before, its default always won.
+  - **Logs no longer break the result.** PowerShell writes `Write-Host`, warnings,
+    verbose and information messages to stdout, the channel the result is read from as
+    JSON, so a script that logged failed with "decode output". Only the output stream
+    is the result now. The other streams go to stderr, prefixed as at a prompt, and a
+    failure quotes them, so you see what the script did before it failed.
+  - **`exit` keeps the output.** The result is written in a `finally` block, so
+    `exit 0` after output returns that output, and a non-zero exit fails the run with
+    its code.
+
+  The result keeps the shape it had before for every form a test pins against the real
+  interpreter. The Modeler's script help states the contract and shows a `param()`
+  example. The help no longer claims that secrets arrive as `$env:NAME`: a script gets
+  only PATH, HOME, temp and locale.
+
 ### Fixed
+
+- **A failing PowerShell script reports its error as plain text.** PowerShell 7 colours
+  its error view with terminal escape sequences even when stderr is a pipe, and Atlas
+  quoted that stderr verbatim. The Modeler's Test run, an incident and the API all show
+  text, so a parse error arrived as `⌧[31;1m⌧[36;1mLine |⌧[0m` on every line, with the
+  message buried between the codes.
+
+  Two changes, because PowerShell versions differ. The bootstrap now sets
+  `$PSStyle.OutputRendering = 'PlainText'` before it runs the source — it has to be the
+  bootstrap, since an error in a script that does not parse is written before any line
+  of the script could ask for it. PowerShell 7.6 honours that; 7.4 and 7.5 ignore it for
+  the error view (and ignore `NO_COLOR` too). So the script worker also strips the
+  escape sequences from an interpreter's stderr before quoting it, for every language,
+  and drops a sequence the 32 KB stderr budget cut off rather than leaving its
+  parameter bytes in the message. The script's result is unaffected: `ConvertTo-Json`
+  escapes ESC, so a result string that carries one keeps it.
 
 - **A form that will not submit now says which field is missing.** Every screen that
   renders a form — completing a task, *Tasks › Start a process*, and the start-values

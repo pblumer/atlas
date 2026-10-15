@@ -6895,6 +6895,17 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             responsibility – validate inputs, keep credentials out of the script text, and treat the machine the
             worker runs on as a production system. Reach for it when no specialised type exists; not because it is
             quicker to write.</p>
+          <p class="lead" data-l="de"><b>PowerShell:</b> Jede Instanzvariable ist eine Variable (<code>$Name</code>).
+            Ein <code>param()</code>-Block wird über die Namen gebunden, ohne Rücksicht auf Gross- und
+            Kleinschreibung; einen Namensraum deklariert man als <code>[hashtable]$application</code>. So läuft
+            dasselbe Skript unverändert auch von Hand: <code>./konto.ps1 -Name Test -application @{ TENANT_ID = '…' }</code>.
+            Das Ergebnis ist der Ausgabestrom. <code>Write-Host</code>, Warnungen und Verbose-Meldungen sind
+            Protokoll und stehen bei einem Fehler in der Meldung.</p>
+          <p class="lead" data-l="en"><b>PowerShell:</b> every instance variable is a variable (<code>$Name</code>). A
+            <code>param()</code> block is bound by name, without regard to case; a namespace is declared as
+            <code>[hashtable]$application</code>. The same script then runs unchanged by hand too:
+            <code>./account.ps1 -Name Test -application @{ TENANT_ID = '…' }</code>. The result is the output stream.
+            <code>Write-Host</code>, warnings and verbose messages are a log, and a failure quotes them.</p>
           <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
         </div>
         <div class="card" id="runbook-ldap">
