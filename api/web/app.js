@@ -1116,6 +1116,9 @@ function handbookHelp(path) {
   // The two Console screens whose chapter is not the Console's own: connecting an
   // assistant and reading the grant history are both access control, and that is
   // where the accounts chapter puts them.
+  // Before the "#/console" catch-all below, like every other console screen with a
+  // chapter of its own: how a person reads the console is not a quick-start topic.
+  if (path.startsWith("#/console/settings")) return H("darstellung", "Display settings");
   if (path.startsWith("#/console/ai-access")) return H("konten", "Connecting an AI assistant");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
   if (path.startsWith("#/console/events")) return H("ereignisse", "Events");

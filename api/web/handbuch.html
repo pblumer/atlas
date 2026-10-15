@@ -387,6 +387,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <a href="#tls"><span data-l="de">TLS &amp; Zertifikate</span><span data-l="en">TLS &amp; certificates</span></a>
     <a href="#weiterentwickeln"><span data-l="de">Weiterentwickeln</span><span data-l="en">Evolve</span></a>
     <a href="#konten"><span data-l="de">Konten, Rollen &amp; Anmeldung</span><span data-l="en">Accounts, roles &amp; sign-in</span></a>
+    <a href="#darstellung"><span data-l="de">Darstellung</span><span data-l="en">Display</span></a>
     <h4 data-l="de">Landschaft &amp; Daten</h4><h4 data-l="en">Landscape &amp; data</h4>
     <a href="#panorama"><span data-l="de">Panorama</span><span data-l="en">Panorama</span></a>
     <a href="#infomodell"><span data-l="de">Informationsmodell</span><span data-l="en">Information model</span></a>
@@ -9359,6 +9360,119 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         <li data-l="en"><b>With authentication off, nothing is recorded</b> &ndash; with no principal there is no
           actor and no grant to audit.</li>
       </ul>
+    </section>
+
+    <!-- ==================== DARSTELLUNG ==================== -->
+    <section id="darstellung">
+      <h2 data-l="de">Darstellung: Zahlen, Zeitzone, Sprache</h2><h2 data-l="en">Display: numbers, time zone, language</h2>
+      <p class="lead" data-l="de">Wie <b>Sie</b> die Console lesen. Drei Einstellungen unter
+        <a class="applink" href="/#/console/settings">Console&nbsp;→&nbsp;Display</a> (oder im Kontomenü oben
+        rechts): wie eine Zahl geschrieben wird, auf welcher Uhr ein Zeitstempel steht und in welcher Sprache die
+        übersetzten Screens erscheinen. Sie gelten für Sie und für niemanden sonst, und sie ändern nichts an den
+        gespeicherten Daten – nur daran, wie sie Ihnen gezeigt werden.</p>
+      <p class="lead" data-l="en">How <b>you</b> read the Console. Three settings under
+        <a class="applink" href="/#/console/settings">Console&nbsp;→&nbsp;Display</a> (or in the account menu at
+        the top right): how a number is written, which clock a timestamp is on, and which language the translated
+        screens use. They apply to you and to nobody else, and they change nothing about the stored data – only
+        how it is shown to you.</p>
+      <p data-l="de">Jede Option trägt ihr eigenes Muster, denn das ist, was Sie tatsächlich wählen: «Schweiz»
+        sagt niemandem, was ein Badge druckt, <code>25'864.5</code> sagt es genau. Die Vorschau oben auf dem
+        Screen folgt Ihrer Wahl, <i>bevor</i> Sie speichern – Sie können eine Option ansehen und wieder
+        verwerfen.</p>
+      <p data-l="en">Every option carries its own sample, because that is what you are really choosing:
+        "Switzerland" tells nobody what a badge will print, <code>25'864.5</code> tells them exactly. The preview
+        at the top of the screen follows your choice <i>before</i> you save – so you can look at an option and
+        then decline it.</p>
+
+      <h3 data-l="de">Zahlen und Daten</h3><h3 data-l="en">Numbers and dates</h3>
+      <p data-l="de">Ein Tausendertrennzeichen wird je nach Land anders gelesen: <code>25.864</code> ist für die
+        einen fünfundzwanzigtausend und für die anderen fünfundzwanzig Komma acht. Die Voreinstellung ist deshalb
+        ein schmales Leerzeichen – das liest kein Land als Dezimaltrennzeichen, und ein Screenshot bedeutet
+        überall dasselbe. Wer es anders will, wählt eine der vier Regionen; wer nichts wählt, behält die
+        Voreinstellung.</p>
+      <p data-l="en">A thousands separator is read differently in different places: <code>25.864</code> is
+        twenty-five thousand to one reader and twenty-five point eight to the next. The default is therefore a
+        narrow space – no country reads it as a decimal point, and a screenshot means the same thing everywhere.
+        Anybody who wants it otherwise picks one of the four regions; anybody who picks nothing keeps the
+        default.</p>
+      <table>
+        <thead><tr>
+          <th data-l="de">Region</th><th data-l="en">Region</th>
+          <th data-l="de">Zahl</th><th data-l="en">Number</th>
+          <th data-l="de">Datum und Zeit</th><th data-l="en">Date and time</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><b data-l="de">International (SI)</b><b data-l="en">International (SI)</b><br>
+            <span class="muted" data-l="de">die Voreinstellung</span><span class="muted" data-l="en">the default</span></td>
+            <td><code>25&#8239;864.5</code></td><td><code>2026-10-15 17:18:29</code></td></tr>
+          <tr><td><b data-l="de">Schweiz</b><b data-l="en">Switzerland</b></td>
+            <td><code>25'864.5</code></td><td><code>15.10.2026 17:18:29</code></td></tr>
+          <tr><td><b data-l="de">Deutschland, Österreich</b><b data-l="en">Germany, Austria</b></td>
+            <td><code>25.864,5</code></td><td><code>15.10.2026 17:18:29</code></td></tr>
+          <tr><td><b data-l="de">USA, Grossbritannien</b><b data-l="en">United States, United Kingdom</b></td>
+            <td><code>25,864.5</code></td><td><code>10/15/2026 5:18:29 PM</code></td></tr>
+        </tbody>
+      </table>
+      <p data-l="de">Es ist bewusst eine feste Liste und keine Locale-Auswahl: so verspricht das Muster neben der
+        Option genau das, was später auf dem Diagramm steht, statt das, was die Spracheinstellung des Browsers
+        daraus macht.</p>
+      <p data-l="en">It is deliberately a fixed list rather than a locale picker: that is what lets the sample
+        beside an option promise exactly what will later stand on the diagram, instead of whatever the browser's
+        own locale data makes of it.</p>
+
+      <h3 data-l="de">Zeitzone – die Einstellung, die nicht kosmetisch ist</h3><h3 data-l="en">Time zone – the setting that is not cosmetic</h3>
+      <p data-l="de">Jeder Zeitstempel in der Console wird auf dieser Uhr gezeigt. Bleibt es bei «dieses Gerät»,
+        liest sich derselbe Moment auf Ihrem Laptop anders als auf dem einer Kollegin und anders als im Log des
+        Servers – und nichts auf dem Bildschirm sagt, welche Uhr gerade gilt. Genau so wird ein Incident eine
+        Stunde zu spät bearbeitet. Stellen Sie die Zone einmal ein, und die Console zeigt überall dieselbe.</p>
+      <p data-l="en">Every timestamp in the Console is shown on this clock. Left on "this device", the same
+        instant reads as one time on your laptop, another on a colleague's, and another again in the server's
+        log – and nothing on screen says which clock is in force. That is exactly how an incident gets worked an
+        hour late. Set the zone once, and the Console shows the same one everywhere.</p>
+      <ul>
+        <li data-l="de"><b>UTC steht zuoberst</b> &ndash; es ist das, worin die Logs und der Ereignis-Feed
+          geschrieben sind. Wer einen Server-Log neben die Console legt, will diese Zone.</li>
+        <li data-l="en"><b>UTC is at the top</b> &ndash; it is what the logs and the event feed are written in.
+          Anybody holding a server log beside the Console wants that zone.</li>
+        <li data-l="de"><b>Die Zone ändert nur die Anzeige.</b> Gespeichert bleibt ein Zeitpunkt, was er ist; die
+          API antwortet unverändert in Unix-Nanosekunden beziehungsweise ISO-Zeit.</li>
+        <li data-l="en"><b>The zone changes the display only.</b> An instant stays what it is in storage, and the
+          API answers unchanged, in unix nanoseconds or ISO time.</li>
+        <li data-l="de"><b>Exporte tragen die Einstellung dessen, der sie erzeugt hat</b> &ndash; die
+          Prozess- und Entscheidungsdokumentation etwa stempelt «Erstellt» in Ihrer Zone und Ihrem Format.</li>
+        <li data-l="en"><b>Exports carry the setting of whoever made them</b> &ndash; the process and decision
+          documentation, for instance, stamps "Created" in your zone and your format.</li>
+      </ul>
+
+      <h3 data-l="de">Sprache</h3><h3 data-l="en">Language</h3>
+      <p data-l="de">Die Tasks-App und die bisher übersetzten Screens folgen dieser Einstellung; der Rest der
+        Console ist weiterhin Englisch. Das ist der ehrliche Stand der Übersetzung und kein Fehler: übersetzt wird
+        Screen für Screen, und ein halb übersetzter Screen wäre schlechter als ein unübersetzter. Nach dem
+        Speichern lädt die Console einmal neu, damit die Sprache überall gleichzeitig greift.</p>
+      <p data-l="en">The Tasks app and the screens translated so far follow this setting; the rest of the Console
+        is still English. That is the honest state of the translation rather than a fault: translation happens
+        screen by screen, and a half-translated screen would be worse than an untranslated one. After saving, the
+        Console reloads once so the language takes effect everywhere at the same moment.</p>
+
+      <h3 data-l="de">Wo die Einstellung liegt</h3><h3 data-l="en">Where the setting is kept</h3>
+      <p data-l="de">Bei Ihrem Konto, auf dem Server – sie folgt Ihnen also in jeden Browser, in dem Sie sich
+        anmelden. Das ist der Zeitzone geschuldet: eine Sprache ist, wie jemand an einem Schreibtisch liest, eine
+        Zeitzone ist, wo jemand <i>ist</i>, und wer Tasks am Laptop beantwortet und eine hängende Instanz am
+        Tablet anschaut, hat eine davon und zwei Browser. Der Browser behält zusätzlich eine Kopie: der erste
+        Bildaufbau ist damit sofort richtig, und ein Server, der gerade nicht antwortet, ändert nichts an dem, was
+        Sie sehen. Auf einer Installation <b>ohne Anmeldung</b> gibt es kein Konto, bei dem etwas liegen könnte –
+        dort bleibt die Einstellung in diesem Browser, und der Screen sagt es.</p>
+      <p data-l="en">With your account, on the server – so it follows you to any browser you sign in from. The
+        time zone is the reason: a language is how somebody reads at one desk, a time zone is where somebody
+        <i>is</i>, and a person who answers tasks on a laptop and checks a stuck instance on a tablet has one of
+        those and two browsers. The browser keeps a copy as well: the first paint is then already right, and a
+        server that does not answer right now changes nothing about what you see. On an installation
+        <b>without sign-in</b> there is no account to keep anything with – there the setting stays in that
+        browser, and the screen says so.</p>
+      <p class="muted" data-l="de">Wer nichts einstellt, bekommt genau das Verhalten von vorher: das neutrale
+        Leerzeichen, die Uhr des Geräts, die voreingestellte Sprache. Ein Update ändert kein Pixel.</p>
+      <p class="muted" data-l="en">Anybody who sets nothing gets exactly the behaviour from before: the neutral
+        space, the device's clock, the default language. An upgrade changes no pixel.</p>
     </section>
 
     <!-- ==================== PANORAMA ==================== -->
