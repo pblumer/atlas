@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas display-settings e2e harness</title>
+    <!-- Drives the *real* api/web/displaysettings.js against a mock preferences
+         endpoint, in the two states a server can be in: one with accounts, where a
+         setting is stored for a person, and one with authentication off, where the
+         endpoint answers 404 and the browser copy is the whole store.
+
+         It also exposes the two formatters directly, because what this screen
+         promises is that the sample beside an option is exactly what the console
+         will print — and that is a claim about numfmt.js and datefmt.js, which a
+         test should be able to make without going through the screen. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>html, body { margin: 0; background: #fff; } :root { --topbar-h: 0px; }</style>
+  </head>
+  <body>
+    <div id="view" style="padding:16px"></div>
+    <script type="module">
+      import { renderDisplaySettings } from "/displaysettings.js";
+      import { fmtCount } from "/numfmt.js";
+      import { fmtDateTime, fmtDate, fmtTime, zoneName } from "/datefmt.js";
+      import { prefs } from "/prefs.js";
+
+      // The server's record, and what it has been asked to store. A test reads both.
+      window.__stored = { userId: "usr_1", region: "", timeZone: "", language: "" };
+      window.__puts = [];
+      // "account" serves the record; "anonymous" answers 404, which is an instance
+      // with no sign-in; "offline" fails the way an unreachable server does.
+      window.__mode = "account";
+
+      const fail = (status, message) => {
+        const err = new Error(message);
+        err.status = status;
+        return err;
+      };
+
+      const api = async (method, path, body) => {
+        if (!path.endsWith("/me/preferences")) return {};
+        if (window.__mode === "anonymous") throw fail(404, "no signed-in identity on this instance");
+        if (window.__mode === "offline") throw fail(0, "Failed to fetch");
+        if (method === "GET") return { ...window.__stored };
+        window.__puts.push({ ...body });
+        window.__stored = { userId: "usr_1", ...body };
+        return { ...window.__stored };
+      };
+
+      window.__render = async () => {
+        await renderDisplaySettings(document.getElementById("view"), { api, toast: () => {} });
+      };
+      // Each test starts from a console nobody has configured: the mirror is what
+      // the formatters read, so a leftover record would be a test reading another
+      // test's choice.
+      window.__reset = () => { try { localStorage.removeItem("atlas.prefs"); } catch {} };
+      window.__prefs = prefs;
+      window.__fmt = { fmtCount, fmtDateTime, fmtDate, fmtTime, zoneName };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

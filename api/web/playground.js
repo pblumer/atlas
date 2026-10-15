@@ -999,7 +999,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
         drawn.overlays.push(overlays.add(id, "pg-visits", {
           position: { bottom: 4, right: 4 },
           html: `<div class="token-badges"><div class="token-badge history"
-            title="step ${at.map(fmtCount).join(", ")} of this case">${at.map(fmtCount).join(", ")}</div></div>`,
+            title="step ${at.map((n) => fmtCount(n)).join(", ")} of this case">${at.map((n) => fmtCount(n)).join(", ")}</div></div>`,
         }));
       } catch { /* shape without graphics */ }
     }

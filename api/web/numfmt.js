@@ -24,12 +24,41 @@
 // inside its pill would cost more than the grouping ever bought.
 //
 // Deliberately not `toLocaleString()`: the browser's locale would make the separator a
-// property of whoever is looking, so the same screenshot in a ticket would say something
-// different to the person who received it.
+// property of *whoever is looking* rather than of what this person chose, so the same
+// screenshot in a ticket would say something different to the person who received it,
+// and no test could pin what a badge prints.
+//
+// What a person may choose instead is a region, from a fixed list
+// (ADR-draft-display-preferences-per-user). Each one is a row in the table below — two
+// characters, no locale data — so the preview on the settings screen promises exactly
+// what the badge will show, and the default is still the neutral one: an instance where
+// nobody opens that screen keeps the behaviour it has.
 
-// GROUP_SEP is the thousands separator, in one place: switching the whole UI to the
-// Swiss apostrophe ("25'864") is this constant, and nothing else.
-export const GROUP_SEP = "\u202F"; // NARROW NO-BREAK SPACE
+import { region } from "./prefs.js";
+
+// REGIONS is how each offered region writes a number. Adding a fifth is a row here and
+// an entry in the server's list (api/userprefs), and nothing else.
+export const REGIONS = {
+  international: { group: "\u202F", decimal: "." }, // 25 864.50 — ISO 31-0 / SI
+  ch: { group: "'", decimal: "." },                  // 25'864.50 — the Swiss apostrophe
+  de: { group: ".", decimal: "," },                  // 25.864,50
+  us: { group: ",", decimal: "." },                  // 25,864.50
+};
+
+// GROUP_SEP is the default thousands separator: the narrow no-break space, which is
+// what a console nobody has configured prints.
+export const GROUP_SEP = REGIONS.international.group;
+
+// marks are the two characters a region writes with: the active one, or the id a caller
+// names. The override exists for the settings screen, which has to show what a region
+// would print *before* anybody commits to it — a preview that changed the console around
+// it would be a setting applied, not a preview.
+//
+// An unknown id — a record from a newer version, a hand-edited browser copy — falls back
+// to the neutral default rather than throwing inside a render path.
+function marks(regionId) {
+  return REGIONS[regionId || region()] || REGIONS.international;
+}
 
 // fmtCount renders a count with its thousands grouped. Anything under a thousand comes
 // back untouched — a separator on "999" is noise in a pill that small.
@@ -37,14 +66,17 @@ export const GROUP_SEP = "\u202F"; // NARROW NO-BREAK SPACE
 // It is total on purpose, because it sits in render paths that must not throw over a
 // field a server left out: a value that is not a number at all is passed through as it
 // came, so a badge shows "—" or an empty slot rather than "NaN".
-export function fmtCount(value) {
+export function fmtCount(value, opts) {
   if (value == null || value === "") return "";
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return String(value);
+  // Guarded rather than destructured: this is handed to `map` in places, where the
+  // second argument is an index rather than options.
+  const { group, decimal } = marks(opts && typeof opts === "object" ? opts.region : "");
   const [whole, frac] = Math.abs(n).toString().split(".");
   // Group from the right: the leading group is whatever is left over (1|234|567).
-  const grouped = whole.replace(/\B(?=(\d{3})+$)/g, GROUP_SEP);
-  return (n < 0 ? "-" : "") + grouped + (frac ? `.${frac}` : "");
+  const grouped = whole.replace(/\B(?=(\d{3})+$)/g, group);
+  return (n < 0 ? "-" : "") + grouped + (frac ? decimal + frac : "");
 }
 
 // spanText renders a length of time in the coarsest unit that still says it.

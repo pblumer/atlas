@@ -39,6 +39,7 @@ import { dmnSurface } from "./dmn-collab.js";
 import { informationRequirementFindings, knowledgeModelFindings } from "./dmn-warnings.js";
 // The decision as text, corrected in place — the BPMN editor's "XML source", shared.
 import { openXmlSource, closeXmlSource } from "./xml-source.js";
+import { fmtDateTime } from "./datefmt.js";
 import {
   addInputColumn, columnsFedBy, columnsNamed, columnTypeIn, nameOf, namesGivenTo,
   providedNames, removeInputColumn, renameInputColumn, tableOf,
@@ -1886,7 +1887,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
       return;
     }
     docHistory.innerHTML = versions.map((v) => {
-      const when = v.createdAt ? new Date(v.createdAt * 1000).toLocaleString() : "";
+      const when = v.createdAt ? fmtDateTime(v.createdAt * 1000) : "";
       const by = v.createdBy ? " · " + esc(v.createdBy) : "";
       const note = v.note ? `<div class="doc-note">${esc(v.note)}</div>` : "";
       const share = v.shareUrl

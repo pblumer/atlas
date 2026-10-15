@@ -10,6 +10,7 @@
 // of string that must be inert. renderMarkdown escapes before it parses.
 import { renderMarkdown } from "./markdown.js";
 import { loadCanvasBundle } from "./canvas-bundle.js";
+import { fmtDateTime, fmtTime } from "./datefmt.js";
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -138,7 +139,7 @@ function liveHTML(item, observations) {
   const unwatched = (observations.unavailable || []).map((u) => esc(STATE_TEXT[u.state] || u.state));
   return `<section class="psec"><h3>Live</h3>${rows}
     ${unwatched.length ? `<p class="muted panorama-unwatched">Not watched here: ${unwatched.join(", ")}.</p>` : ""}
-    <p class="muted">Read at ${esc(new Date((observations.observedAt || 0) * 1000).toLocaleTimeString())};
+    <p class="muted">Read at ${esc(fmtTime((observations.observedAt || 0) * 1000))};
     nothing here is stored on the model.</p></section>`;
 }
 
@@ -197,7 +198,7 @@ function sinceHTML(o) {
   if (!o.changedAt) return "";
   const when = new Date(o.changedAt * 1000);
   const was = o.previousState ? ` (was ${esc(STATE_TEXT[o.previousState] || o.previousState)})` : "";
-  return `<p class="panorama-obs-since muted">Changed ${esc(when.toLocaleString())}${was}</p>`;
+  return `<p class="panorama-obs-since muted">Changed ${esc(fmtDateTime(when))}${was}</p>`;
 }
 
 // maxDriftRows bounds what one panel renders. The journal is already bounded on the
@@ -236,7 +237,7 @@ function driftHTML(drift, item) {
     `<li><b>${esc(l.limit)}</b> — ${esc(l.reason)}</li>`).join("");
   const entries = mine.slice(0, maxDriftRows).map((e) => `
     <li class="panorama-drift-entry">
-      <span class="muted">${esc(new Date(e.at * 1000).toLocaleString())}</span>
+      <span class="muted">${esc(fmtDateTime(e.at * 1000))}</span>
       <code>${esc(e.value)}</code>
       <span>${esc(STATE_TEXT[e.from] || e.from)} → <b>${esc(STATE_TEXT[e.to] || e.to)}</b></span>
       ${e.reason ? `<p class="muted">${esc(e.reason)}</p>` : ""}
@@ -247,7 +248,7 @@ function driftHTML(drift, item) {
          ${mine.length > maxDriftRows ? `<p class="muted">${mine.length - maxDriftRows} older change(s) for this element are not shown.</p>` : ""}`
       : `<p class="muted">Nothing has been seen to change about this element.</p>`}
     ${elsewhere ? `<p class="muted">${elsewhere} other recorded change(s) in this model.</p>` : ""}
-    ${drift.since ? `<p class="muted">Recorded since ${esc(new Date(drift.since * 1000).toLocaleString())}.</p>` : ""}
+    ${drift.since ? `<p class="muted">Recorded since ${esc(fmtDateTime(drift.since * 1000))}.</p>` : ""}
     ${drift.truncated ? `<p class="muted">Older changes were dropped to stay inside the journal's bound.</p>` : ""}
     <details class="panorama-drift-limits"><summary>What this history cannot see</summary>
       <ul>${limits}</ul></details>
@@ -292,7 +293,7 @@ function sparkHTML(measure) {
     // A zero bucket keeps a hairline rather than vanishing: an empty interval is a
     // reading, and a gap where one should be reads as missing data.
     const height = peak > 0 ? Math.max(2, Math.round((value / peak) * 100)) : 2;
-    const when = new Date((b.at || 0) * 1000).toLocaleString();
+    const when = fmtDateTime((b.at || 0) * 1000);
     return `<span class="panorama-spark-bar" style="height:${height}%" title="${esc(when)}: ${esc(String(value))}"></span>`;
   }).join("");
   return `<div class="panorama-spark" role="img"
@@ -355,7 +356,7 @@ function contextHTML(ctx, loading) {
     ${rows || `<p class="muted">This element binds nothing, so there is nothing to ask about.</p>`}
     ${ctx.truncated ? `<p class="muted">Some answers were dropped to keep this bounded.</p>` : ""}
     <p class="muted">Window ${esc(window.window || "")}, read at
-      ${esc(new Date((ctx.observedAt || 0) * 1000).toLocaleTimeString())}. Nothing here is stored.</p>
+      ${esc(fmtTime((ctx.observedAt || 0) * 1000))}. Nothing here is stored.</p>
     <details class="panorama-ctx-limits"><summary>What this history cannot do</summary>
       <ul>${limits}</ul></details>
   </section>`;

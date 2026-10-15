@@ -7031,3 +7031,25 @@ button.im-problem:hover { background: var(--accent-soft); }
 .ba-confirm { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
 .ba-confirm input { flex: 1 1 220px; min-width: 0; }
 .ba-scope { margin: 10px 2px 0; font-size: 12px; color: var(--muted); max-width: 90ch; line-height: 1.5; }
+
+/* ---------- Display settings (#/console/settings) ----------
+   How this person reads: number format, time zone, language
+   (ADR-draft-display-preferences-per-user). The screen is mostly one list of
+   options, each carrying its own sample — the sample is what somebody is really
+   choosing, so it is given the same weight as the name beside it. */
+.ds-preview {
+  margin-top: 14px; padding: 12px 14px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg);
+}
+.ds-preview h2 { margin: 0 0 10px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.ds-label { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.ds-options { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.ds-option {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+}
+.ds-option:hover { background: var(--bg); }
+/* The sample is monospaced because the thing being compared between two rows is
+   where the separators fall, and a proportional font moves them. */
+.ds-option-sample { font-family: ui-monospace, monospace; font-size: 13px; color: var(--muted); }
+.ds-option input:checked ~ .ds-option-name { font-weight: 600; }

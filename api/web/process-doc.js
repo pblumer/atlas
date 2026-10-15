@@ -10,6 +10,7 @@
 import { PdfDocument, bytesToBase64 } from "./pdf.js";
 import { collectDecisionDocumentation, renderDecisionBody } from "./decision-doc.js";
 import { svgToJpeg, wantsLandscape } from "./doc-graphics.js";
+import { fmtDateTime } from "./datefmt.js";
 
 // Re-exported because they were this module's own until the decision document
 // started sharing them, and every caller — the editor, the harness — already names
@@ -429,7 +430,7 @@ export function buildDocumentationPdf(spec) {
   if (collection.processName) doc.keyValue("Name", collection.processName);
   if (version) doc.keyValue("Documentation version", "v" + version);
   if (deploymentVersion) doc.keyValue("Deployed version", "v" + deploymentVersion);
-  doc.keyValue("Created", createdAt || new Date().toLocaleString());
+  doc.keyValue("Created", createdAt || fmtDateTime(Date.now()));
   if (createdBy) doc.keyValue("Created by", createdBy);
   doc.keyValue("Elements documented", String(collection.elements.length));
   if (note) doc.keyValue("Note", note);
@@ -507,7 +508,7 @@ export async function exportDocumentation({ modeler, api, title, note, createdBy
 
   const bytes = buildDocumentationPdf({
     collection, diagram, title, note, createdBy, decisions,
-    createdAt: new Date().toLocaleString(),
+    createdAt: fmtDateTime(Date.now()),
   });
 
   return api("POST", `/api/v1/processes/${encodeURIComponent(collection.processId)}/documentation`, {

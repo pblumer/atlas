@@ -18,6 +18,7 @@
 // stores neither.
 
 import { enhanceTable } from "./table.js";
+import { fmtDateTime } from "./datefmt.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c]));
@@ -76,7 +77,7 @@ function usedCell(u) {
 }
 
 // Unix seconds, like every other timestamp the API hands the console.
-const fmtTime = (unix) => (unix ? new Date(unix * 1000).toLocaleString() : "—");
+const fmtTime = (unix) => (unix ? fmtDateTime(unix * 1000) : "—");
 
 // ---------- the list ----------
 

@@ -205,7 +205,7 @@ func TestServerNewRefusesARecordItCannotLoad(t *testing.T) {
 var serverStoreDirsUnlisted = []string{
 	"catalog", "orders", "task-folders", "capabilities", "value-streams", "favourites",
 	"directory-sync", "inventory-loads", "discrepancies", "recertification-campaigns",
-	"recertification-rows",
+	"recertification-rows", "user-preferences",
 }
 
 // TestServerNewRefusesTheStoresTheFirstListMissed is TestNewRefusesToStartOnAStoreItCannotOpen

@@ -34,6 +34,7 @@
 import { attachCodeEditor } from "./code-editor.js";
 import { devLang, snippetsFor } from "./dev-lang.js";
 import { sampleFor } from "./instance-samples.js";
+import { fmtDateTime } from "./datefmt.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -468,7 +469,7 @@ export function openDevView(field, opts = {}) {
     sampleLine.innerHTML = sampleLineHTML();
     const ready = samples.state === "ready";
     sampleStrip.classList.toggle("ready", ready);
-    sampleStrip.title = ready && samples.instance.createdAt ? new Date(samples.instance.createdAt).toLocaleString() : "";
+    sampleStrip.title = ready && samples.instance.createdAt ? fmtDateTime(samples.instance.createdAt) : "";
     // Searching needs an instance to have been found once; a process that never ran
     // has nothing to search, and the strip already says so.
     findForm.hidden = !(samples.instance || samples.query);

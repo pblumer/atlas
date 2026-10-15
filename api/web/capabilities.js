@@ -22,7 +22,8 @@
 //     never taken from the report's English detail.
 
 import { enhanceTable } from "./table.js";
-import { t, plural, locale } from "./i18n.js";
+import { t, plural } from "./i18n.js";
+import { fmtDate as fmtDateHuman } from "./datefmt.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c]));
@@ -38,7 +39,7 @@ export const valueStreamHref = (key) => `#/panorama/value-streams/${enc(key)}`;
 
 // Dates follow the catalogue's language rather than the browser's, so a German screen
 // does not carry an American date because of a setting nobody made (ADR-0267).
-const fmtDate = (unix) => (unix ? new Date(unix * 1000).toLocaleDateString(locale()) : "");
+const fmtDate = (unix) => (unix ? fmtDateHuman(unix * 1000) : "");
 const code = (s) => `<code>${esc(s)}</code>`;
 const stateLabel = (s) => t(`ba.state.${s}`);
 const tagChips = (tags) => (tags || []).map((g) => `<span class="chip ba-tag">${esc(g)}</span>`).join(" ");

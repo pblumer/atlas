@@ -67,6 +67,7 @@ import { fmtCount } from "./numfmt.js";
 // where that question is asked (ADR-0289), so the answer
 // is rendered beside the fields rather than left in another tab.
 import { workerTypeDocHTML } from "./workertypedocs.js";
+import { fmtDateTime, fmtTime } from "./datefmt.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -517,7 +518,7 @@ const decMiniTable = (tt, n) => renderTraceTable(tt, n);
 // hoverable — data-dec indexes the caller's evaluation list so a shared popover can
 // look the trace back up. Shared by the replay Decisions tab and the live view.
 function decCard(d, i) {
-  const when = d.at ? new Date(d.at / 1e6).toLocaleString() : "";
+  const when = d.at ? fmtDateTime(d.at / 1e6) : "";
   const inEntries = Object.entries(decVal(d.inputs, {}) || {});
   const outEntries = Object.entries(decVal(d.outputs, {}) || {});
   const pills = inEntries.length
@@ -10724,7 +10725,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       return;
     }
     docHistory.innerHTML = versions.map((v) => {
-      const when = v.createdAt ? new Date(v.createdAt * 1000).toLocaleString() : "";
+      const when = v.createdAt ? fmtDateTime(v.createdAt * 1000) : "";
       const by = v.createdBy ? " · " + esc(v.createdBy) : "";
       const note = v.note ? `<div class="doc-note">${esc(v.note)}</div>` : "";
       const share = v.shareUrl
@@ -11244,7 +11245,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         frozenNote = ` <span class="pill${frozen.behind ? " warn" : ""} frozen-mark" title="${esc(frozen.title)}">${esc(frozen.label)}</span>`;
       }
       if (here.diagramUpdatedAt) {
-        const when = new Date(here.diagramUpdatedAt * 1000).toLocaleString();
+        const when = fmtDateTime(here.diagramUpdatedAt * 1000);
         layoutNote = `<span class="muted live-layout-note" title="Only the drawing was changed — the process, its version and its instances are the deployed ones${
           here.diagramUpdatedBy ? `, adjusted by ${esc(here.diagramUpdatedByName || here.diagramUpdatedBy)}` : ""}">layout adjusted ${esc(when)}</span>`;
       }
@@ -11703,7 +11704,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         return `<span class="chip">${esc(v.name)}=${esc(v.value)}</span>`;
       }).join(" ");
   // completedAt is unix nanoseconds; Date wants milliseconds.
-  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "";
+  const fmtNano = (ns) => ns ? fmtDateTime(ns / 1e6) : "";
 
   // fmtDuration renders a nanosecond span as a short human duration (the age of
   // a running instance, or how long a finished one took).
@@ -12830,7 +12831,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
   let animToken = 0; // bumped to supersede an in-flight animation
 
   const speed = () => Number(speedSel.value) || 1;
-  const fmtClock = (ns) => (ns ? new Date(ns / 1e6).toLocaleTimeString() : "");
+  const fmtClock = (ns) => (ns ? fmtTime(ns / 1e6) : "");
 
   function receiverLabel(f) {
     const el = registry.get(f.receiverElementId);
@@ -13411,7 +13412,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const speed = () => Number(speedSel.value) || 1;
   const tokenColors = ["#0072b2", "#d55e00", "#009e73", "#cc79a7", "#e69f00", "#56b4e9"];
   const tokenColor = (id) => tokenColors[Number(BigInt(String(id || 0)) % BigInt(tokenColors.length))];
-  const fmtClock = (ns) => (ns ? new Date(ns / 1e6).toLocaleTimeString() : "");
+  const fmtClock = (ns) => (ns ? fmtTime(ns / 1e6) : "");
   const fmtDateTime = (ns) => {
     if (!ns) return "—";
     const d = new Date(ns / 1e6);

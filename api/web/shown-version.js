@@ -20,10 +20,12 @@
 // a browser test drives them without an editor around them — the split
 // frozen-decisions.js already makes.
 
+import { fmtDateTime } from "./datefmt.js";
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const when = (sec) => (sec ? new Date(sec * 1000).toLocaleString() : "");
+const when = (sec) => (sec ? fmtDateTime(sec * 1000) : "");
 
 // stamp is "when · who", or what to say when neither is known. A draft saved before
 // "last saved by" was recorded, or on a server without accounts, has a time and no
