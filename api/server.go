@@ -377,6 +377,11 @@ type Server struct {
 	// isolated as a per-area service under ADR-0147.
 	panorama  *panorama.Service
 	infomodel *infomodel.Service
+	// panoramaModels and infomodelModels are the stores behind those two services,
+	// held so a favourite diagram resolves on the run loop without going back through
+	// a service that would re-enter it (ADR-draft-diagram-shortcuts).
+	panoramaModels  *panorama.Store
+	infomodelModels *infomodel.Store
 	// capabilities is the business-architecture registry: the business capabilities
 	// an organisation must be able to perform and the value streams whose stages they
 	// perform (ADR-0305). Design-time, and a
@@ -428,6 +433,9 @@ type Server struct {
 	vaultEnabled     bool                      // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
 	users            *userStore                // durable sidecar for user accounts (ADR-0044)
 	groups           *groupStore               // durable sidecar for user groups (ADR-0180)
+	// diagramShortcuts is one record per account of the diagrams it marked and the
+	// ones it opened last (ADR-draft-diagram-shortcuts).
+	diagramShortcuts *diagramShortcutStore
 
 	// sessions holds live login sessions in memory. Unlike the sidecar stores it
 	// is touched from concurrent handler goroutines, so it guards itself with a
@@ -1435,6 +1443,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	diagramShortcuts, err := newDiagramShortcutStore(filepath.Join(dataDir, "diagram-shortcuts"))
+	if err != nil {
+		return nil, err
+	}
 	favourites, err := newFavouriteStore(filepath.Join(dataDir, "favourites"))
 	if err != nil {
 		return nil, err
@@ -1588,6 +1600,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		appVersions:       map[string]int32{},
 		dmnrefs:           dmnrefs,
 		favourites:        favourites,
+		diagramShortcuts:  diagramShortcuts,
+		panoramaModels:    panoramaStore,
+		infomodelModels:   infomodelStore,
 		dmnDrafts:         dmnDrafts,
 		connectors:        connectors,
 		callOverrides:     callOverrides,

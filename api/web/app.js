@@ -50,6 +50,9 @@ import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML 
 // is a self-contained page and this file is long enough; it takes its dependencies
 // as arguments so the import stays one-directional, like every other module here.
 import { viewAIAccess } from "./aiaccess.js";
+// Favourite and recent diagrams (ADR-draft-diagram-shortcuts): the top-bar menu and the
+// star beside a diagram in the lists. Its own module for the reason aiaccess.js is.
+import { installDiagramShortcuts, setShortcutsEnabled, starButton, noteDiagramOpened } from "./diagram-shortcuts.js";
 import { renderKeyFeatures, paintKeyFeatures } from "./key-features.js";
 
 const view = document.getElementById("view");
@@ -1007,6 +1010,8 @@ function initShell() {
 
   // Global "jump to a process" search: the topbar icon, Ctrl/⌘-K anywhere, and "/"
   // when not already typing in a field.
+  installDiagramShortcuts({ api, esc, toast });
+
   const searchBtn = document.getElementById("global-search");
   if (searchBtn) searchBtn.addEventListener("click", openSearchPalette);
   document.addEventListener("keydown", (e) => {
@@ -3329,7 +3334,7 @@ async function viewModelerHome() {
       ? "Resume automatic starts (timer/message/signal start events)"
       : "Pause automatic starts: keep it deployed but stop new instances from starting on their own";
     return `<tr>
-      <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(label)}</b></a>${badge}${sub}</td>
+      <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(label)}</b></a>${starButton("process", g.processId)}${badge}${sub}</td>
       <td>v${g.latest.version}${older}</td>
       <td class="muted">${esc(fmtTime(g.latest.deployedAt))}</td>
       <td style="text-align:right; white-space:nowrap">
@@ -3474,9 +3479,11 @@ async function viewProjectDetail(id) {
       ],
     }];
 
-    const nameCell = (chip, title, sub, href) => {
+    // star is the favourite mark for a stored diagram (diagram-shortcuts.js), empty for
+    // a row that is not one.
+    const nameCell = (chip, title, sub, href, star = "") => {
       const link = href ? `<a href="${href}"><b>${esc(title)}</b></a>` : `<b>${esc(title)}</b>`;
-      return `<td><div class="artifact-name"><span class="chip">${chip}</span>${link}</div>` +
+      return `<td><div class="artifact-name"><span class="chip">${chip}</span>${link}${star}</div>` +
         `<div class="muted" style="font-size:12px; padding-left:26px">${sub}</div></td>`;
     };
 
@@ -3489,7 +3496,7 @@ async function viewProjectDetail(id) {
         { label: "Delete", icon: "🗑", act: "deldraft", data: { key: d.processId }, danger: true },
       );
       return `<tr>
-        ${nameCell("BPMN", d.name || d.processId, esc(d.processId), href)}
+        ${nameCell("BPMN", d.name || d.processId, esc(d.processId), href, starButton("process", d.processId))}
         <td class="muted">Diagram</td>
         <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
@@ -3508,7 +3515,7 @@ async function viewProjectDetail(id) {
       // what a publish would ship is the model, not that work.
       const mark = draftFor.has(r.id) ? `<span class="chip draft-chip">Draft</span> ` : "";
       return `<tr>
-        ${nameCell("DMN", r.name, `${mark}temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href)}
+        ${nameCell("DMN", r.name, `${mark}temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href, starButton("decision", r.id))}
         <td class="muted">Decision ref</td>
         <td class="muted" data-sort="${r.createdAt || 0}">${esc(fmtTime(r.createdAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
@@ -3524,7 +3531,7 @@ async function viewProjectDetail(id) {
         { label: "Delete", icon: "🗑", act: "deldecdraft", data: { id: d.id }, danger: true },
       );
       return `<tr>
-        ${nameCell("DMN", d.name || "Decision", `<span class="chip draft-chip">Draft</span> not in the model yet — a publish does not carry it`, href)}
+        ${nameCell("DMN", d.name || "Decision", `<span class="chip draft-chip">Draft</span> not in the model yet — a publish does not carry it`, href, starButton("decision", d.id))}
         <td class="muted">Decision</td>
         <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
@@ -10015,7 +10022,7 @@ async function viewInfoModels() {
     );
     return `<tr data-name="${esc(`${m.name} ${app ? app.name : ""}`.toLowerCase())}">
       <td><div class="artifact-name"><span class="chip">UML</span>
-        <a href="#/data/m/${encodeURIComponent(m.id)}"><b>${esc(m.name)}</b></a></div>
+        <a href="#/data/m/${encodeURIComponent(m.id)}"><b>${esc(m.name)}</b></a>${starButton("infomodel", m.id)}</div>
         ${m.documentation ? `<div class="muted" style="font-size:12px; padding-left:54px">${esc(markdownToPlain(m.documentation))}</div>` : ""}</td>
       <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}
         <a class="dm-link" href="#/data/derived/${encodeURIComponent(app.id)}"
@@ -10435,7 +10442,7 @@ async function viewPanoramaModels() {
     );
     return `<tr data-name="${esc(`${model.name} ${app ? app.name : ""}`.toLowerCase())}">
       <td><div class="artifact-name"><span class="chip">ARCHI</span>
-        <a href="#/panorama/models/${encodeURIComponent(model.id)}"><b>${esc(model.name)}</b></a></div>
+        <a href="#/panorama/models/${encodeURIComponent(model.id)}"><b>${esc(model.name)}</b></a>${starButton("panorama", model.id)}</div>
         <div class="muted" style="font-size:12px; padding-left:54px">${esc(model.id)}</div></td>
       <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}` : `<span class="muted">Missing application</span>`}</td>
       <td><span class="chip">ArchiMate 3.2</span></td>
@@ -10997,6 +11004,9 @@ async function route() {
   if (!FEATURES.loaded) await loadFeatures(); // before the menus are painted from it
   setChrome(appId, path);
   setTitle(routeTitle(path));
+  // A mark and a visit belong to an account, so both wait for somebody signed in.
+  setShortcutsEnabled(!!AUTH.user);
+  noteDiagramOpened(path);
   updateAccount();
   window.scrollTo(0, 0);
 

@@ -36,6 +36,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   window picked and sends a confirmation with who was asked and what was found; a value
   stream flags a stage naming a capability the map does not have; and English is the same
   screen in other words.
+- **`diagram-shortcuts.spec.mjs`** ([ADR-draft-diagram-shortcuts](../docs/adr/draft-diagram-shortcuts.md)):
+  favourite and recent diagrams against a stubbed API — a star in a list sends one diagram and
+  adopts the list the server answers, the top-bar menu lists it and stays open when a star
+  inside it is pressed, opening a canvas reports a visit by the id its route names (by
+  deployment key for a deployed version, and not at all for a route that opens nothing
+  stored), every diagram row of an application's list — process, decision reference and
+  decision draft — carries its star beside a working link, and with nobody signed in neither
+  the stars nor the menu are drawn.
 - **`feel-assistant.spec.mjs`** ([ADR-0445](../docs/adr/0445-feel-assistant.md)):
   the **FEEL assistant** against a stubbed API — Ctrl+Shift+E opens and closes it from anywhere;
   a message sends the whole conversation, the model's earlier turn as the reply it came with and

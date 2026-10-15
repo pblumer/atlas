@@ -12,6 +12,33 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **Diagrams can be marked as favourites, and the Console remembers the ones opened last.**
+  A star beside a diagram's name — in an application's list in the Modeler, the deployed
+  processes on the Modeler's home, the information models under *Data* and the architecture
+  models under *Panorama* — marks it, and the new star in the top bar opens a menu with two
+  lists: **Favourites** and **Recently opened**, the last fifteen diagrams, newest first. Each
+  entry opens the diagram, and its star marks or clears it without leaving the menu.
+
+  Both lists belong to the account, not to the browser: they are stored on the server under
+  the signed-in person and follow them to another machine. Nobody can read anybody else's,
+  and with nobody signed in neither the stars nor the menu are drawn.
+
+  **A mark grants nothing.** It stores a kind and an id, as the shop's product favourites do
+  (ADR-0348), and each entry is resolved against the diagram's own scope on every read. A
+  favourite that can no longer be opened — deleted, or in an application whose share was
+  withdrawn — is listed as *No longer available*, without its name, so it can still be
+  cleared; a recent entry that can no longer be opened drops out. A process is marked by its
+  process id rather than a deployment, so a star survives the next deploy, and it opens the
+  draft when there is one the person may see and the newest deployed version otherwise.
+
+  New routes: `GET /api/v1/diagram-shortcuts`, `PUT`/`DELETE
+  /api/v1/diagram-shortcuts/favourites/{kind}/{id}` and `POST
+  /api/v1/diagram-shortcuts/recent`. The new store `diagram-shortcuts` travels with a
+  whole-instance snapshot, and `ATLAS_LIMIT_DIAGRAM_FAVOURITES` (default 100) bounds how many
+  diagrams one account may mark.
+
 ### Fixed
 
 - **A form that will not submit now says which field is missing.** Every screen that

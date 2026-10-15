@@ -332,6 +332,16 @@ const CATALOGS = {
     "ba.streams.back": "← Wertströme",
     "ba.streams.stageNone": "keine Capability",
     "ba.streams.notFound": "Diesen Wertstrom gibt es nicht (mehr).",
+    "shortcuts.title": "Favoriten und zuletzt verwendete Diagramme",
+    "shortcuts.favourites": "Favoriten",
+    "shortcuts.recent": "Zuletzt verwendet",
+    "shortcuts.mark": "Als Favorit markieren",
+    "shortcuts.unmark": "Favorit entfernen",
+    "shortcuts.emptyFavourites": "Noch keine Favoriten. ☆ neben einem Diagramm markiert es.",
+    "shortcuts.emptyRecent": "Noch keine Diagramme geöffnet.",
+    "shortcuts.unavailable": "Nicht mehr verfügbar",
+    "shortcuts.deployed": "bereitgestellt",
+    "shortcuts.failed": "Favorit nicht gespeichert: {reason}",
   },
 
   // English is here to prove the mechanism carries a second language rather than
@@ -633,6 +643,16 @@ const CATALOGS = {
     "ba.streams.back": "← Value streams",
     "ba.streams.stageNone": "no capability",
     "ba.streams.notFound": "This value stream does not exist (any more).",
+    "shortcuts.title": "Favourite and recent diagrams",
+    "shortcuts.favourites": "Favourites",
+    "shortcuts.recent": "Recently opened",
+    "shortcuts.mark": "Mark as favourite",
+    "shortcuts.unmark": "Remove favourite",
+    "shortcuts.emptyFavourites": "No favourites yet. ☆ beside a diagram marks it.",
+    "shortcuts.emptyRecent": "No diagrams opened yet.",
+    "shortcuts.unavailable": "No longer available",
+    "shortcuts.deployed": "deployed",
+    "shortcuts.failed": "Favourite not saved: {reason}",
   },
 };
 

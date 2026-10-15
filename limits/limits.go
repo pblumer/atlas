@@ -294,6 +294,12 @@ type Limits struct {
 	// star.
 	Favourites int32
 
+	// DiagramFavourites is how many diagrams one account may mark as favourites
+	// across the Console (ADR-draft-diagram-shortcuts). The same judgement as
+	// Favourites, kept apart from it because a product list and a diagram list are
+	// different people's shortcuts and tuning one should not move the other.
+	DiagramFavourites int32
+
 	// OrderLineAnswers is how many configuration answers one order line may carry
 	// (ADR-0358) — the fields of
 	// the form its product declares. Small, because a form somebody fills in while
@@ -372,6 +378,7 @@ func Default() Limits {
 		ConflictReport:        500,
 		HistoryReport:         2000,
 		Favourites:            100,
+		DiagramFavourites:     100,
 		OrderLineAnswers:      50,
 	}
 }

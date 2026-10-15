@@ -7022,3 +7022,21 @@ button.im-problem:hover { background: var(--accent-soft); }
 .ba-confirm { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
 .ba-confirm input { flex: 1 1 220px; min-width: 0; }
 .ba-scope { margin: 10px 2px 0; font-size: 12px; color: var(--muted); max-width: 90ch; line-height: 1.5; }
+
+/* Favourite and recent diagrams (diagram-shortcuts.js). The star sits beside a
+   diagram's name in a list and in the top-bar menu; it is a toggle, so it reads as
+   text rather than as a button until it is pointed at or on. */
+.dg-star {
+  background: none; border: 0; padding: 0 4px; cursor: pointer; font-size: 15px; line-height: 1;
+  color: var(--muted); opacity: .55;
+}
+.dg-star:hover, .dg-star:focus-visible { opacity: 1; color: var(--warn); }
+.dg-star.on { opacity: 1; color: var(--warn); }
+.dropdown-menu .dg-star { width: auto; flex: 0 0 auto; padding: 6px 8px; }
+.dg-menu { min-width: 300px; max-width: 420px; max-height: 70vh; overflow-y: auto; }
+.dg-row { display: flex; align-items: center; }
+.dropdown-menu .dg-row a { flex: 1 1 auto; min-width: 0; }
+.dg-row .dg-name { overflow: hidden; text-overflow: ellipsis; }
+.dg-row .dg-sub { font-size: 12px; }
+.dg-row.dg-gone { padding: 0 0 0 10px; gap: 9px; }
+.dg-chip { font-size: 10px; flex: 0 0 auto; }
