@@ -662,6 +662,11 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/shop/favourites":             "a bookmark list is a navigation aid for a person at a screen, which an assistant does not need",
 	"PUT /api/v1/shop/favourites/{itemId}":    "marking somebody's portal on their behalf sets a preference they did not choose and cannot easily attribute",
 	"DELETE /api/v1/shop/favourites/{itemId}": "as above, and unmarking is the half somebody would notice only by missing it",
+	// Favourite and recent diagrams (ADR-draft-diagram-shortcuts), for the shop favourites' reasons.
+	"GET /api/v1/diagram-shortcuts":                           "a person's own shortcuts into the Console, a navigation aid for somebody at a screen that an assistant does not need",
+	"PUT /api/v1/diagram-shortcuts/favourites/{kind}/{id}":    "marking a diagram on somebody's behalf sets a preference they did not choose",
+	"DELETE /api/v1/diagram-shortcuts/favourites/{kind}/{id}": "as above, and unmarking is the half somebody would notice only by missing it",
+	"POST /api/v1/diagram-shortcuts/recent":                   "the Console reports a canvas it opened; an assistant reading a model has opened nothing a person would want listed",
 
 	// Access history (ADR-0346). Omitted, and the reason is
 	// not the inventory's.
