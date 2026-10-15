@@ -416,7 +416,7 @@ func parseOutput(out []byte) (any, error) {
 //
 // A script that declares a param() block gets each declared parameter bound from
 // the instance variable of that name, matched without regard to case as PowerShell
-// matches parameters (ADR-draft-powershell-param-block). Without the binding the
+// matches parameters (ADR-0458). Without the binding the
 // block declared locals that shadowed the variables: a mandatory parameter failed
 // as missing, and any other ran on its default — empty, silently. Only declared
 // names are passed, because an advanced script refuses a parameter it does not

@@ -543,6 +543,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0455](0455-start-variable-defaults.md) | A start variable's default is what an instance starts with when its start did not supply it | Accepted | Landed |
 | [0456](0456-constant-namespaces.md) | Constants the installation holds are read under the namespace that holds them, and the installation holds its own | Accepted | Landed |
 | [0457](0457-modeler-xml-source.md) | The Modeler shows a model's source and applies a correction to it | Accepted | Landed |
+| [0458](0458-powershell-param-block.md) | A PowerShell script runs unchanged in Atlas and at a prompt | Accepted | Landed |
 
 ## The two states of a record
 

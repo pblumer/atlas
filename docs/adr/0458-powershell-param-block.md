@@ -1,4 +1,4 @@
-# ADR-DRAFT: A PowerShell script runs unchanged in Atlas and at a prompt
+# ADR-0458: A PowerShell script runs unchanged in Atlas and at a prompt
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -29,7 +29,7 @@ _Changed_ / _Removed_ for each version.
 - **A PowerShell script runs unchanged in Atlas and at a prompt.** A script written for
   PowerShell on its own declares its inputs in a `param()` block, logs with
   `Write-Host` and may end with `exit 0`. In Atlas each of those failed, two of them
-  silently ([ADR-draft-powershell-param-block](docs/adr/draft-powershell-param-block.md)).
+  silently ([ADR-0458](docs/adr/0458-powershell-param-block.md)).
 
   - **`param()` is now bound by name.** Nothing used to bind the block, so its
     parameters shadowed the instance variables: a mandatory one failed as missing, and
