@@ -52,6 +52,7 @@ import (
 	"github.com/pblumer/atlas/api/panorama"
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/api/taskfolder"
+	"github.com/pblumer/atlas/api/userprefs"
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
@@ -349,6 +350,9 @@ type Server struct {
 	orderStore   *order.Store
 	// taskFolders serves the Tasks app's saved filters (ADR-0268).
 	taskFolders *taskfolder.Service
+	// userPrefs serves how one person reads the console — number format, time
+	// zone, language (ADR-draft-display-preferences-per-user).
+	userPrefs *userprefs.Service
 	// formGen writes a form from a description and from the process it belongs to
 	// (ADR-0260). It is the one area service that holds no run
 	// loop, because it owns no state: it stores nothing, and the three closures in
@@ -1387,6 +1391,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	userPrefsStore, err := userprefs.NewStore(filepath.Join(dataDir, "user-preferences"))
+	if err != nil {
+		return nil, err
+	}
 	panoramaStore, err := panorama.NewStore(filepath.Join(dataDir, "panorama-models"))
 	if err != nil {
 		return nil, err
@@ -1808,6 +1816,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.countTaskFolders,
 		taskfolder.NewID,
 	)
+	// Display preferences need nothing from the engine — they are stored and read
+	// back — so the loop is their whole collaborator: it is what serializes two
+	// tabs saving the same record.
+	s.userPrefs = userprefs.New(s.runLoop, userPrefsStore)
 	// Panorama reuses the process-application scope rather than inventing an ACL.
 	// The resolver is called only from the service's run-loop turn, so reading the
 	// project store here keeps both authorization and model persistence under the

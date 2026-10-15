@@ -25,11 +25,13 @@
 // **Undecided is shown as a number, not as a remainder.** A progress bar invites
 // the reader to treat what is left as work in hand. "41 unanswered" is the finding.
 
+import { fmtDateTime } from "./datefmt.js";
+
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const fmtWhen = (unixSeconds) =>
-  unixSeconds ? new Date(unixSeconds * 1000).toLocaleString() : "—";
+  unixSeconds ? fmtDateTime(unixSeconds * 1000) : "—";
 
 // heldSince renders a nanosecond hold start as something a person can weigh. A
 // right held for four years and one granted last Tuesday are the same row without

@@ -24,11 +24,12 @@
 // people will ever do that.
 
 import { copyText } from "./clipboard.js";
+import { fmtDateTime } from "./datefmt.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const fmtTime = (unix) => unix ? new Date(unix * 1000).toLocaleString() : "—";
+const fmtTime = (unix) => unix ? fmtDateTime(unix * 1000) : "—";
 
 // KNOWN are the applications whose redirect URI we can fill in without asking.
 //

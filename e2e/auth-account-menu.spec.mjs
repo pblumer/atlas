@@ -30,6 +30,9 @@ async function stubAPI(page, me) {
 }
 
 const menuText = (page) => page.evaluate(() => window.__acctMenu?.textContent ?? "");
+// The menu's own label — the line that says who, or says why there is no who. The
+// menu may carry entries beside it, so the two are read apart.
+const menuLabel = (page) => page.evaluate(() => window.__acctMenu?.querySelector(".mlabel")?.textContent ?? "");
 const avatarTitle = (page) => page.locator(".topbar .avatar").getAttribute("title");
 
 test("an enforced login is not called single-user mode", async ({ page }) => {
@@ -39,6 +42,8 @@ test("an enforced login is not called single-user mode", async ({ page }) => {
   await page.goto("/index.html");
 
   await expect(page.locator("#login-form")).toBeVisible();
+  // Nothing but the label: the login screen has no console behind it yet, so the
+  // menu offers nothing to go to.
   expect(await menuText(page)).toBe("Not signed in");
   expect(await avatarTitle(page)).toBe("Account");
 });
@@ -50,7 +55,12 @@ test("a server with no login still says single-user mode", async ({ page }) => {
   await page.goto("/index.html");
 
   await expect(page.locator("#login-form")).toHaveCount(0);
-  expect(await menuText(page)).toBe("Single-user mode");
+  // The label is asserted rather than the menu's whole text: single-user mode also
+  // carries the Display entry, because there is a console to configure there even
+  // though there is no account to keep the setting with
+  // (ADR-draft-display-preferences-per-user).
+  expect(await menuLabel(page)).toBe("Single-user mode");
+  expect(await menuText(page)).toContain("Display settings");
   expect(await avatarTitle(page)).toBe("Single-user mode");
 });
 

@@ -14,6 +14,36 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A Display screen: how *you* read the console, kept with your account.** Three
+  settings in one place (**Console › Display**, and in the account menu): how a number
+  is written, which clock a timestamp is on, and which language the translated screens
+  use. Each option carries a sample of what it will actually print, because "Switzerland"
+  tells nobody what a badge will show and `25'864.5` tells them exactly.
+
+  The one that is not cosmetic is the **time zone**. Until now every timestamp in the
+  console was rendered in whatever zone the browser happened to be in — forty-three
+  `toLocaleString()` calls with no arguments, which is a default rather than a decision.
+  A server running UTC, an operator in Zurich and a colleague in Boston read the same
+  incident timestamp as three different wall clocks, and nothing on screen said which.
+  All of them now go through one formatter, on the chosen clock, and the screen names
+  the zone it is showing. The list starts with UTC — the browser's own zone list leaves
+  it out, and UTC is what the logs and the exported event stream are written in.
+
+  The number format is a **fixed list of four** — International `25 864.5`, Switzerland
+  `25'864.5`, Germany/Austria `25.864,5`, USA/UK `25,864.5` — rather than a locale
+  picker, so the preview can promise exactly what a badge will print and a test can pin
+  it. The **language** picker finally exposes the catalogue
+  ([ADR-0267](docs/adr/0267-console-speaks-german-first.md) put one behind `?lang=` and
+  listed this as its own follow-up); it says plainly that only the translated screens
+  follow it.
+
+  The record is **per user, on the server** (`GET`/`PUT /api/v1/me/preferences`), with
+  the browser copy kept as a mirror so the first paint is already right, an unreachable
+  server changes nothing, and an instance with authentication off — where there is no
+  identity to own a preference — keeps it in the browser and says so. **Nothing moves
+  until somebody chooses:** an unset record is exactly today's behaviour, so upgrading
+  changes no pixel (ADR-draft-display-preferences-per-user).
+
 - **The Developer View finds the instance to read values from.** A search field under
   "Values from instance" takes what the Operations search takes: an instance key,
   `name=value`, or a term with `*` and `?`. It searches every version of the process and

@@ -26,11 +26,12 @@
 // what replaced the window.prompt pickers elsewhere, and it is covered by an
 // end-to-end test against exactly the list length a prompt could not show.
 import { openPickModal } from "./pickmodal.js";
+import { fmtDateTime } from "./datefmt.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const fmtTime = (unix) => unix ? new Date(unix * 1000).toLocaleString() : "—";
+const fmtTime = (unix) => unix ? fmtDateTime(unix * 1000) : "—";
 
 // refusalCard is a refused publish as the page shows it, whichever button asked:
 // Publish below the release list, or Save & Publish in the product form.

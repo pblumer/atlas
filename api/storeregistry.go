@@ -125,6 +125,7 @@ var persistentStores = []storeEntry{
 	{name: "application-constants", class: classInstance, why: "the constants each application holds on this installation — the tenant, app id or suffix its processes read as application.NAME here, which differ between DEV, INT and PROD and so never travel with an export (ADR-0453)"},
 	{name: "server-constants", class: classInstance, why: "the constants this installation holds for every application, read as server.NAME — like an application's, they differ between DEV, INT and PROD and never travel with an export (ADR-0456)"},
 	{name: "task-folders", class: classInstance, why: "the saved task views people work out of, and who each is shared with"},
+	{name: "user-preferences", class: classInstance, why: "how each person reads this console — number format, time zone, interface language. Small, and not rebuildable from anything else: losing it puts every timestamp back on whatever clock each browser happens to be in, silently and for everybody at once"},
 
 	// --- identity ----------------------------------------------------------
 	{name: "users", class: classIdentity, why: "accounts and their roles"},

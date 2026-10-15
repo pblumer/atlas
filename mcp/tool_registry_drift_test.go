@@ -604,6 +604,17 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/directory-sync":  "account provisioning stays behind its own scoped credential, not an assistant's tool call",
 	"POST /api/v1/directory-sync": "account provisioning stays behind its own scoped credential, not an assistant's tool call",
 
+	// How one person reads the console — number format, time zone, language
+	// (ADR-draft-display-preferences-per-user). Omitted because the thing it
+	// configures is a screen, and an assistant has none: nothing a tool call could
+	// do with this would change an answer it gives. The write half is the one worth
+	// stating, because an MCP credential acts *as* a person: a tool that could set
+	// it would let an assistant reformat somebody's console as a step of whatever it
+	// was asked to do next, with the change showing up on their screen and nowhere
+	// in what they asked for.
+	"GET /api/v1/me/preferences": "it configures a screen, and an assistant has none",
+	"PUT /api/v1/me/preferences": "an assistant acting as a person must not silently reformat that person's console",
+
 	// The commissioning load (ADR-0333). The write half
 	// is omitted for a reason of its own rather than by analogy with the pair above:
 	// the load's entire safeguard is that several thousand permanent records are
