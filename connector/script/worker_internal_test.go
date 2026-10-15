@@ -372,6 +372,114 @@ func TestExecCommandSurfacesStderr(t *testing.T) {
 	}
 }
 
+// TestExecCommandStripsTerminalEscapes: an interpreter that colours its diagnostics
+// must not hand those colour codes to the person reading the error. PowerShell 7
+// does exactly that even when stderr is a pipe, and the Modeler, the incident view
+// and the API all show the message as text, where ESC is an unprintable box and
+// "[31;1m" is noise between every line.
+func TestExecCommandStripsTerminalEscapes(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh not available")
+	}
+	_, err := execCommand(context.Background(), "sh",
+		[]string{"-c", `printf '\033[31;1mLine |\033[0m\n\033[31;1m\033[36;1m   4 | \033[0mboom\033[0m\n' 1>&2; exit 3`},
+		nil, defaultMaxOutput)
+	if err == nil {
+		t.Fatal("execCommand of a failing command succeeded, want an error")
+	}
+	if strings.ContainsRune(err.Error(), 0x1b) {
+		t.Errorf("error = %q, want no terminal escape sequences", err)
+	}
+	if !strings.Contains(err.Error(), "Line |\n   4 | boom") {
+		t.Errorf("error = %q, want the diagnostic text kept line for line", err)
+	}
+}
+
+// TestExecCommandOmitsStderrOfOnlyEscapes: a stderr that held nothing but colour
+// resets says nothing, and must not leave a dangling ": " behind the exit status.
+func TestExecCommandOmitsStderrOfOnlyEscapes(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh not available")
+	}
+	_, err := execCommand(context.Background(), "sh", []string{"-c", `printf '\033[0m\n' 1>&2; exit 3`}, nil, defaultMaxOutput)
+	if err == nil {
+		t.Fatal("execCommand of a failing command succeeded, want an error")
+	}
+	if got := err.Error(); got != "exit status 3" {
+		t.Errorf("error = %q, want the bare exit status", got)
+	}
+}
+
+// TestStripTerminalEscapes covers the sequences an interpreter's diagnostics carry:
+// SGR colours (what PowerShell writes), the rest of the CSI family, OSC strings such
+// as a window title or a hyperlink, short escapes, and a sequence cut off by the
+// stderr budget, which must not leak its parameter bytes into the message.
+func TestStripTerminalEscapes(t *testing.T) {
+	tests := []struct {
+		name, in, want string
+	}{
+		{"plain text is untouched", "Missing ')' in function parameter list.", "Missing ')' in function parameter list."},
+		{"non-ASCII text is untouched", "Grüsse aus Zürich – ÄÖÜ", "Grüsse aus Zürich – ÄÖÜ"},
+		{"SGR colours", "\x1b[31;1mParentContainsErrorRecordException: \x1b[0m", "ParentContainsErrorRecordException: "},
+		{"stacked SGR as PowerShell writes them",
+			"\x1b[31;1m\x1b[36;1m\x1b[36;1m\x1b[0m\x1b[36;1m\x1b[0m\x1b[36;1m     | \x1b[31;1m ~~~\x1b[0m",
+			"     |  ~~~"},
+		{"other CSI: cursor and erase", "a\x1b[2Kb\x1b[1;5Hc\x1b[?25ld", "abcd"},
+		{"OSC ended by BEL", "\x1b]0;window title\x07text", "text"},
+		{"OSC ended by ST", "\x1b]8;;https://example.org\x1b\\link\x1b]8;;\x1b\\", "link"},
+		{"charset designation", "\x1b(Btext", "text"},
+		{"two-byte escape", "\x1bctext\x1b7", "text"},
+		{"CSI cut off at the end", "boom\x1b[31;", "boom"},
+		{"OSC cut off at the end", "boom\x1b]0;tit", "boom"},
+		{"lone ESC at the end", "boom\x1b", "boom"},
+		{"malformed CSI keeps the line break", "a\x1b[31\nb", "a\nb"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := stripTerminalEscapes(tt.in); got != tt.want {
+				t.Errorf("stripTerminalEscapes(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestPowerShellBootstrapRendersPlainText: the bootstrap asks PowerShell for plain
+// text before it runs anything, so an error PowerShell formats itself — a parse
+// error never reaches the author's code, which could not ask for it — comes back
+// without colour codes. PowerShell 7.6 honours it; 7.2 to 7.5 ignore it for the
+// error view, which is why execCommand strips the codes as well. The guard keeps
+// a PowerShell without $PSStyle (before 7.2) from failing on the assignment.
+func TestPowerShellBootstrapRendersPlainText(t *testing.T) {
+	const want = "if ($PSStyle) { $PSStyle.OutputRendering = 'PlainText' }"
+	if !strings.Contains(PowerShell.Wrap, want) {
+		t.Errorf("PowerShell bootstrap does not contain %q:\n%s", want, PowerShell.Wrap)
+	}
+	if strings.Index(PowerShell.Wrap, want) > strings.Index(PowerShell.Wrap, srcEnv) {
+		t.Error("PowerShell bootstrap asks for plain text only after it runs the author's source")
+	}
+}
+
+// TestPowerShellErrorArrivesAsPlainText runs the real interpreter, when there is
+// one, on the script that started this: a param() block naming a namespace member,
+// which PowerShell refuses to parse. The error must name the parse error and carry
+// no terminal escape sequence, whichever PowerShell 7 version is installed.
+func TestPowerShellErrorArrivesAsPlainText(t *testing.T) {
+	if _, err := exec.LookPath("pwsh"); err != nil {
+		t.Skip("pwsh not available")
+	}
+	src := "param(\n    [Parameter(Mandatory = $true)][string]$application.CLIENT_ID\n)\n"
+	_, err := New(PowerShell).Run(context.Background(), src, map[string]any{"Name": "x"})
+	if err == nil {
+		t.Fatal("Run of an unparsable script succeeded, want an error")
+	}
+	if strings.ContainsRune(err.Error(), 0x1b) {
+		t.Errorf("error = %q, want no terminal escape sequences", err)
+	}
+	if !strings.Contains(err.Error(), "Missing ')' in function parameter list.") {
+		t.Errorf("error = %q, want it to name the parse error", err)
+	}
+}
+
 // TestDefaultRunner: the default runner is the real os/exec seam (non-nil).
 func TestDefaultRunner(t *testing.T) {
 	if New(PowerShell).runner() == nil {

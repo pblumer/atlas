@@ -14,6 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A failing PowerShell script reports its error as plain text.** PowerShell 7 colours
+  its error view with terminal escape sequences even when stderr is a pipe, and Atlas
+  quoted that stderr verbatim. The Modeler's Test run, an incident and the API all show
+  text, so a parse error arrived as `⌧[31;1m⌧[36;1mLine |⌧[0m` on every line, with the
+  message buried between the codes.
+
+  Two changes, because PowerShell versions differ. The bootstrap now sets
+  `$PSStyle.OutputRendering = 'PlainText'` before it runs the source — it has to be the
+  bootstrap, since an error in a script that does not parse is written before any line
+  of the script could ask for it. PowerShell 7.6 honours that; 7.4 and 7.5 ignore it for
+  the error view (and ignore `NO_COLOR` too). So the script worker also strips the
+  escape sequences from an interpreter's stderr before quoting it, for every language,
+  and drops a sequence the 32 KB stderr budget cut off rather than leaving its
+  parameter bytes in the message. The script's result is unaffected: `ConvertTo-Json`
+  escapes ESC, so a result string that carries one keeps it.
+
 - **A form that will not submit now says which field is missing.** Every screen that
   renders a form — completing a task, *Tasks › Start a process*, and the start-values
   dialog the Modeler's *Deploy & run* shares with the Live view's *Start instance* —
