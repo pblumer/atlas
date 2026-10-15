@@ -26,6 +26,39 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A form that will not submit now says which field is missing.** Every screen that
+  renders a form — completing a task, *Tasks › Start a process*, and the start-values
+  dialog the Modeler's *Deploy & run* shares with the Live view's *Start instance* —
+  answered a failed validation with "Please fix the highlighted fields", a sentence that
+  assumes you can see the highlighting.
+
+  In the inbox you could not. The task form stays mounted while the Process tab is
+  showing, deliberately, so *Complete* has the form's data whichever tab you are on; the
+  consequence nobody had looked at is that pressing *Complete* from there validated a
+  form you were not looking at. Nothing on your screen was highlighted. The fields were
+  on the other tab, and there was no way to find that out short of guessing to click
+  *Form*. Everywhere else nothing was hidden — but "highlighted" still sent you hunting
+  through a form for a colour instead of telling you what was missing.
+
+  All of them now name the fields the way the form labels them — *Bitte noch prüfen:
+  IBAN* — and scroll to the first one; completing a task additionally brings the Form tab
+  forward before it complains about the form. The names come from the form's own field
+  registry, which is the table form-js keyed the errors by, so a field's label is what
+  you read rather than the variable key or the editor's `Field_1a2b3c` id. A blank form
+  refuses everything it has, so the list is deduplicated, cut at four, and finished with
+  a count: *… und 2 weitere Felder.*
+
+  `formRefusalNames()` and `scrollToFirstInvalidField()` live in `formviewer.js`, beside
+  the viewer every one of those screens already loads. The sentence around the names does
+  not: the console is German-first where it has been translated and English everywhere
+  else (ADR-0267), so the Tasks app reads it out of the catalogue and the Modeler writes
+  its own — a German sentence in an English dialog is the half-translated screen that ADR
+  exists to prevent. The tab strip's switch is a function now (`showDetailTab`) instead
+  of a closure inside its click handler, which is what let the refusal use it.
+
+  `e2e/form-refusal.spec.mjs` holds the two Tasks screens — the tab switch, the named
+  field, the blank-form cut, and a filled form that is not refused on each — and
+  `e2e/deploy-start-form.spec.mjs` holds the shared dialog's.
 - **"From instance" in the Developer View says what it did.** The Test panel's sample is
   filled from the instance as soon as its values arrive, so the button usually found
   nothing to change and a click had no visible effect. It now reports that the sample
