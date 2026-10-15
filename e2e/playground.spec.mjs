@@ -339,9 +339,12 @@ test("a run is judged, and the verdict names what it missed", async ({ page }) =
   await expect(page.locator(".pg-verdict")).toHaveText("failed");
   await expect(page.locator(".pg-verdict")).toHaveClass(/bad/);
   // Scoped to the verdict's own table: a case parked behind an incident is marked
-  // the same way down in the results strip.
-  await expect(page.locator(".pg-checks tr.pg-bad")).toContainText("queue at clerks");
-  await expect(page.locator(".pg-checks tr.pg-bad")).toContainText("at most 5");
+  // the same way down in the results strip. The parked case breaks three of the
+  // four checks, and each failure is marked on its own row.
+  const missed = page.locator(".pg-checks tr.pg-bad");
+  await expect(missed).toHaveCount(3);
+  await expect(missed.nth(2)).toContainText("queue at clerks");
+  await expect(missed.nth(2)).toContainText("at most 5");
   expect(page.__errors).toEqual([]);
 });
 
@@ -928,5 +931,31 @@ test("a dataset the run cannot use is named, and Run stops offering to run it", 
   await page.locator("#pg-gen-count").fill("");
   await expect(note).toHaveText("how many cases?");
   await expect(page.locator("#pg-batch")).toBeDisabled();
+  expect(page.__errors).toEqual([]);
+});
+
+test("the results strip counts what is worth looking at, over the whole run", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator("#pg-batch").click();
+  await expect(page.locator("#pg-results")).toBeVisible();
+  const flagged = page.locator(".pg-dev");
+
+  // The count is of the run, not of the page the strip is showing: that is the
+  // question this line is asked — whether there is anything to page towards.
+  // Incidents are counted as incidents rather than as cases, because a case can
+  // carry several and the run knows the one number and not the other.
+  await expect(flagged).toContainText("1 unfinished");
+  await expect(flagged).toContainText("1 incident");
+  await expect(flagged).toHaveClass(/bad/);
+  await expect(page.locator(".pg-results-head")).toContainText("1–3 of 3 cases");
+
+  // A rule's offenders join it, counted as distinct cases from the same set the
+  // rows are marked from — so the number and the ✗ beside case 3 cannot disagree.
+  await page.locator("#pg-rule-add").click();
+  await page.locator('.pg-rule [data-rule="when"]').fill("betrag < 1000");
+  await page.locator('.pg-rule [data-rule="then"]').fill('end = "done"');
+  await page.locator("#pg-batch").click();
+  await expect(flagged).toContainText("1 broke a rule");
+  await expect(page.locator(".pg-cases tbody tr").nth(2)).toContainText("✗");
   expect(page.__errors).toEqual([]);
 });
