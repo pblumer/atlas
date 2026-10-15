@@ -76,6 +76,15 @@ test("the last run's values are shown, and the panel says which run", async ({ p
   expect(page.__errors).toEqual([]);
 });
 
+test("a namespaced constant shows the value its namespace object holds", async ({ page }) => {
+  await open(page);
+  // The row is the path the model reads; the run holds the namespace as one object.
+  // Looking up a variable of the whole name found nothing and showed no value.
+  await expect(row(page, "application.TENANT_ID").locator(".var-val")).toContainText("1223455JHR");
+  expect(await badge(page, "application.TENANT_ID")).toBe("string");
+  expect(page.__errors).toEqual([]);
+});
+
 test("an observed value's type wins over the declaration, and names both", async ({ page }) => {
   await open(page);
   // The script's result had no badge at all a moment ago; the run gives it one.

@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas instance samples e2e harness</title>
+    <!-- Drives the real api/web/instance-samples.js against a mock `api` standing in
+         for GET /processes, /instances?process= and /instances/search, so the test can
+         prove which requests a lookup makes and what it makes of the answers. -->
+  </head>
+  <body>
+    <script type="module">
+      import { lookupSamples, sampleFor, MAX_SAMPLE_INSTANCES } from "/instance-samples.js";
+
+      // __db is what the mock server holds; a test replaces parts of it before its
+      // first lookup. __fail names request paths (by prefix) that answer with an error.
+      window.__calls = [];
+      window.__fail = [];
+      window.__db = {
+        processes: [],
+        lists: {}, // defKey -> items of GET /instances?process=
+        search: () => ({ items: [], truncated: false }), // (defKey, q) -> page
+      };
+
+      const api = async (method, path) => {
+        window.__calls.push(path);
+        if (window.__fail.some((p) => path.startsWith(p))) throw new Error("boom: " + path);
+        const url = new URL(path, "http://x");
+        if (url.pathname === "/api/v1/processes") return window.__db.processes;
+        if (url.pathname === "/api/v1/instances") {
+          const def = Number(url.searchParams.get("process"));
+          return { items: window.__db.lists[def] || [], truncated: false };
+        }
+        if (url.pathname === "/api/v1/instances/search") {
+          return window.__db.search(Number(url.searchParams.get("process")), url.searchParams.get("q"));
+        }
+        throw new Error("unexpected request " + path);
+      };
+
+      window.__lookup = (processId, opts) => lookupSamples(api, processId, opts);
+      window.__sampleFor = sampleFor;
+      window.__max = MAX_SAMPLE_INSTANCES;
+      window.__ready = true;
+    </script>
+  </body>
+</html>
