@@ -343,19 +343,19 @@ function feelReference() {
 // single thing a developer most needs when they first open a script field.
 const SCRIPT_CONTRACT = {
   powershell: {
-    read: "Every instance variable is a PowerShell variable: <code>$Vorname</code>.",
-    write: "The <b>output stream</b> becomes the result variable — <code>Write-Output</code> or a bare expression.",
-    env: "Secrets and configuration arrive as <code>$env:NAME</code>.",
+    read: "Every instance variable is a PowerShell variable: <code>$Vorname</code>. A <code>param()</code> block is bound by name, so the same script also runs on its own: <code>param([string]$Vorname, [hashtable]$application)</code>.",
+    write: "The <b>output stream</b> becomes the result variable — <code>Write-Output</code> or a bare expression. <code>Write-Host</code>, warnings and verbose messages are logs, shown with a failure.",
+    env: "The script gets no worker credentials and no deployment variables — only PATH, HOME, temp and locale. Pass values as variables or constants.",
   },
   python: {
     read: "Every instance variable is a module-level name: <code>Vorname</code>.",
     write: "Assign to <code>result</code>; that value becomes the result variable.",
-    env: "Secrets and configuration arrive via <code>os.environ[\"NAME\"]</code>.",
+    env: "The script gets no worker credentials and no deployment variables — only PATH, HOME, temp and locale. Pass values as variables or constants.",
   },
   javascript: {
     read: "Every instance variable is a global: <code>Vorname</code>.",
     write: "Assign to <code>result</code>; that value becomes the result variable.",
-    env: "Secrets and configuration arrive via <code>process.env.NAME</code>.",
+    env: "The script gets no worker credentials and no deployment variables — only PATH, HOME, temp and locale. Pass values as variables or constants.",
   },
 };
 
@@ -426,6 +426,7 @@ const SNIPPETS = {
     { title: "Return an object", doc: "A hashtable becomes a JSON object variable.", code: '[pscustomobject]@{\n  Name  = $Vorname\n  Total = $Betrag * 1.081\n}' },
     { title: "Call a REST API", doc: "GET a JSON endpoint and return the parsed body.", code: '$r = Invoke-RestMethod -Uri "https://api.example.com/orders/$OrderId" -Method Get\nWrite-Output $r' },
     { title: "Guard a missing variable", doc: "Fail the job with a clear message.", code: 'if (-not $OrderId) { throw "OrderId is missing" }\nWrite-Output $OrderId' },
+    { title: "Declare parameters", doc: "Bound from the variables of the same names — the script runs unchanged outside Atlas too.", code: 'param(\n  [Parameter(Mandatory)][string]$Vorname,\n  [Parameter(Mandatory)][hashtable]$application,\n  [string]$Sprache = "de-CH"\n)\nWrite-Host "Konto für $Vorname"\n"$Vorname ($Sprache) in Tenant $($application.TENANT_ID)"' },
   ],
   python: [
     { title: "Return a string", doc: "Assign to result.", code: 'result = f"Hallo {Vorname}"' },

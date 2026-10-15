@@ -413,12 +413,50 @@ func parseOutput(out []byte) (any, error) {
 // formats when the source does not even parse is written before any line of it
 // could ask. The result is unaffected: ConvertTo-Json escapes ESC. PowerShell
 // before 7.2 has no $PSStyle, hence the guard.
+//
+// A script that declares a param() block gets each declared parameter bound from
+// the instance variable of that name, matched without regard to case as PowerShell
+// matches parameters (ADR-draft-powershell-param-block). Without the binding the
+// block declared locals that shadowed the variables: a mandatory parameter failed
+// as missing, and any other ran on its default — empty, silently. Only declared
+// names are passed, because an advanced script refuses a parameter it does not
+// declare, and a variable is never passed for a parameter it merely resembles.
+//
+// Only the output stream is the result. PowerShell writes Write-Host, warnings,
+// verbose and debug messages to stdout as well, where they broke the JSON the
+// result is read from; the bootstrap merges those streams into the pipeline and
+// writes them to stderr, which a failure quotes. Each output object is collected
+// as it was written, so the result keeps the shape the plain assignment gave it.
+// The result is written in a finally block because a script's exit ends the
+// interpreter, not only the script: exit 0 after output still returns that output,
+// as it does at a prompt, and a non-zero exit keeps its code.
 const powershellBootstrap = `$ErrorActionPreference = 'Stop'
 if ($PSStyle) { $PSStyle.OutputRendering = 'PlainText' }
 $__atlas = if ($env:ATLAS_VARS) { $env:ATLAS_VARS | ConvertFrom-Json -AsHashtable } else { @{} }
 foreach ($__k in $__atlas.Keys) { Set-Variable -Name $__k -Value $__atlas[$__k] }
-$__result = & ([ScriptBlock]::Create($env:ATLAS_SCRIPT))
-if ($null -eq $__result) { '' } else { $__result | ConvertTo-Json -Compress -Depth 64 }`
+$__script = [ScriptBlock]::Create($env:ATLAS_SCRIPT)
+$__bound = @{}
+if ($__script.Ast.ParamBlock) {
+    $__names = @{}
+    foreach ($__k in $__atlas.Keys) { $__names[$__k] = $__k }
+    foreach ($__p in $__script.Ast.ParamBlock.Parameters) {
+        $__n = $__p.Name.VariablePath.UserPath
+        if ($__names.ContainsKey($__n)) { $__bound[$__n] = $__atlas[$__names[$__n]] }
+    }
+}
+$__out = [System.Collections.Generic.List[object]]::new()
+try {
+    & $__script @__bound 3>&1 4>&1 5>&1 6>&1 | ForEach-Object {
+        if ($_ -is [System.Management.Automation.WarningRecord]) { [Console]::Error.WriteLine('WARNING: ' + $_.Message) }
+        elseif ($_ -is [System.Management.Automation.VerboseRecord]) { [Console]::Error.WriteLine('VERBOSE: ' + $_.Message) }
+        elseif ($_ -is [System.Management.Automation.DebugRecord]) { [Console]::Error.WriteLine('DEBUG: ' + $_.Message) }
+        elseif ($_ -is [System.Management.Automation.InformationRecord]) { [Console]::Error.WriteLine([string]$_.MessageData) }
+        else { $__out.Add($_) }
+    }
+} finally {
+    $__result = if ($__out.Count -eq 1) { $__out[0] } elseif ($__out.Count) { $__out.ToArray() }
+    if ($null -eq $__result) { '' } else { $__result | ConvertTo-Json -Compress -Depth 64 }
+}`
 
 // pythonBootstrap exposes the instance's variables as globals, runs the author's
 // source, and emits the value the script assigned to `result` as JSON (empty when
