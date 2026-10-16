@@ -468,7 +468,7 @@ func TestPowerShellErrorArrivesAsPlainText(t *testing.T) {
 		t.Skip("pwsh not available")
 	}
 	src := "param(\n    [Parameter(Mandatory = $true)][string]$application.CLIENT_ID\n)\n"
-	_, err := New(PowerShell).Run(context.Background(), src, map[string]any{"Name": "x"})
+	_, err := realExec(PowerShell).Run(context.Background(), src, map[string]any{"Name": "x"})
 	if err == nil {
 		t.Fatal("Run of an unparsable script succeeded, want an error")
 	}

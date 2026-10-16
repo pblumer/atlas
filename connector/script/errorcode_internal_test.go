@@ -67,7 +67,7 @@ func runCoded(t *testing.T, lang Lang, src string, caught ...string) error {
 	if _, err := exec.LookPath(lang.Bin); err != nil {
 		t.Skipf("%s not available", lang.Bin)
 	}
-	_, err := Run(context.Background(), Job{Source: src, ErrorCodes: caught}, New(lang))
+	_, err := Run(context.Background(), Job{Source: src, ErrorCodes: caught}, realExec(lang))
 	if err == nil {
 		t.Fatal("Run of a failing script succeeded, want an error")
 	}

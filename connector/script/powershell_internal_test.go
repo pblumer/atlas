@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 )
 
 // These tests run the real PowerShell on the production bootstrap, because what
@@ -14,13 +15,23 @@ import (
 // not installed; GitHub's ubuntu-latest and windows-latest images carry it, so CI
 // runs them on both.
 
+// realInterpreterTimeout bounds one run of a real interpreter in these tests. They pin
+// behaviour, not speed, and the production default (30s) is too tight for a test: the
+// first pwsh a test binary starts on a loaded Windows runner — scanned, JIT-compiled,
+// beside the api package's tests — has taken longer than that, and failed a test whose
+// every later run took about a second.
+const realInterpreterTimeout = 3 * time.Minute
+
+// realExec runs lang through its real interpreter with the test budget above.
+func realExec(lang Lang) *CmdExec { return &CmdExec{Lang: lang, Timeout: realInterpreterTimeout} }
+
 // runPowerShell runs src with vars through the real interpreter and the bootstrap.
 func runPowerShell(t *testing.T, src string, vars map[string]any) (any, error) {
 	t.Helper()
 	if _, err := exec.LookPath("pwsh"); err != nil {
 		t.Skip("pwsh not available")
 	}
-	return New(PowerShell).Run(context.Background(), src, vars)
+	return realExec(PowerShell).Run(context.Background(), src, vars)
 }
 
 // resultJSON renders a script result as compact JSON so a test can state the shape
