@@ -1326,6 +1326,11 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   background: transparent; color: transparent; caret-color: var(--text);
   resize: vertical; outline: none; overflow: auto;
 }
+/* A selection keeps the text area's text transparent. Without this rule the browser
+   paints selected text in its own selection colour (Chromium on Windows and Linux
+   does), so the plain text appears on top of the coloured copy below it. The tint
+   is translucent, so the coloured text reads through it. */
+.code-editor .ce-input::selection { color: transparent; background: rgba(11, 92, 255, 0.22); }
 .code-editor .ce-highlight {
   position: absolute; inset: 0; z-index: 0; pointer-events: none;
   overflow: hidden; color: var(--text);

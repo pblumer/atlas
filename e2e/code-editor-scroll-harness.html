@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas code-editor scroll e2e harness</title>
+    <!-- Attaches the real api/web/code-editor.js to a script field whose text is longer
+         and wider than the box, so both of the text area's scrollbars show. The test
+         proves the coloured backdrop and the gutter stay on the text area's lines at
+         every scroll position, the last one included, and that a selection does not
+         paint the text area's own (transparent) text over the backdrop. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      body { margin: 24px; background: #fff; }
+      .fld { width: 420px; }
+      .fld textarea { height: 160px; }
+      .fld.wrap textarea { height: 120px; }
+    </style>
+  </head>
+  <body>
+    <div class="fld" id="nowrap-fld"><textarea id="script"></textarea></div>
+    <div class="fld wrap" id="wrap-fld"><textarea id="wrapped"></textarea></div>
+    <script type="module">
+      import { attachCodeEditor } from "/code-editor.js";
+      import { powershell } from "/powershell.js";
+
+      // Forty lines, every fourth one far wider than the box.
+      const lines = [];
+      for (let i = 1; i <= 40; i++) {
+        lines.push(i % 4 === 0
+          ? `$Line${i} = Resolve-TeamsIdentities -Identities $AuthorizedUsers -Label 'AuthorizedUser' # ${"x".repeat(40)}`
+          : `$Line${i} = ${i}`);
+      }
+      const script = document.getElementById("script");
+      script.value = lines.join("\n");
+      attachCodeEditor(script, { lang: powershell, gutter: true, wrap: false });
+
+      // A wrapping field: only the vertical scrollbar shows, and it narrows the lines
+      // the text area wraps at.
+      const wrapped = document.getElementById("wrapped");
+      wrapped.value = lines.slice(0, 16).join("\n");
+      attachCodeEditor(wrapped, { lang: powershell, gutter: false, wrap: true });
+
+      window.__ready = true;
+    </script>
+  </body>
+</html>
