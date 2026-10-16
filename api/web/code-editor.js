@@ -259,6 +259,29 @@ export function attachCodeEditor(textarea, opts = {}) {
     }).join("");
   }
 
+  // fitBackdrop shrinks the layers behind the text area to its viewport: its box less
+  // the scrollbars it shows (the shared CSS gives it no border). A backdrop that also
+  // spans the scrollbars is a scrollbar taller and wider than the text it mirrors, so
+  // it cannot scroll as far: from the last scrollbar-height of a long script on, the
+  // colours and the line numbers stop short of the text area's lines, and a selection
+  // is drawn up to a scrollbar-height above the text it selects. A wrapping backdrop
+  // also broke its lines wider than the text area did. Overlay scrollbars take no
+  // room, so this changes nothing where they are used. A virtual editor moves its
+  // backdrop by the text area's scroll offsets rather than scrolling it, and needs
+  // none of this.
+  let fitW = 0;
+  let fitH = 0;
+  function fitBackdrop() {
+    if (virtual) return;
+    const w = Math.max(0, textarea.offsetWidth - textarea.clientWidth);
+    const h = Math.max(0, textarea.offsetHeight - textarea.clientHeight);
+    if (w === fitW && h === fitH) return; // most keystrokes: no style write, no relayout
+    fitW = w;
+    fitH = h;
+    pre.style.right = markLayer.style.right = w ? w + "px" : "";
+    pre.style.bottom = markLayer.style.bottom = gutter.style.bottom = h ? h + "px" : "";
+  }
+
   function renderHighlight() {
     // A trailing newline is not rendered by <pre> unless followed by content;
     // a zero-width space keeps the last line's height and the caret aligned.
@@ -274,6 +297,8 @@ export function attachCodeEditor(textarea, opts = {}) {
     const lp = lockLen();
     const head = lp ? `<span class="ce-locked">${escapeHTML(v.slice(0, lp))}</span>` : "";
     code.innerHTML = head + highlightTokens(lang.tokenize(v.slice(lp)), varNames) + "​";
+    // An edit can add or remove a scrollbar (a line past the box's width or height).
+    fitBackdrop();
     pre.scrollTop = textarea.scrollTop;
     pre.scrollLeft = textarea.scrollLeft;
     renderGutter();
@@ -628,8 +653,15 @@ export function attachCodeEditor(textarea, opts = {}) {
   }
 
   // A virtual editor draws for the height it has, so a resize (the window, the
-  // dialog) re-draws the window rather than leaving the new space blank.
-  const resizeObs = virtual && typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => renderWindow()) : null;
+  // dialog) re-draws the window rather than leaving the new space blank. Any other
+  // editor re-fits its backdrop, because a resize can add or remove a scrollbar
+  // without an edit — dragging the field's grip, or the dialog's edge.
+  const onResize = () => {
+    if (virtual) { renderWindow(); return; }
+    fitBackdrop();
+    onScroll();
+  };
+  const resizeObs = typeof ResizeObserver !== "undefined" ? new ResizeObserver(onResize) : null;
   if (resizeObs) resizeObs.observe(textarea);
 
   renderHighlight();

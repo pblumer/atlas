@@ -164,8 +164,27 @@ export function attachJSONEditor(textarea, opts = {}) {
   let destroyed = false;
   let validateTimer = null;
 
+  // fitBackdrop shrinks the backdrop to the text area's viewport, its box less the
+  // scrollbars it shows, as code-editor.js does for the same two layers. A backdrop
+  // that also spans the vertical scrollbar wraps its lines wider than the text area
+  // does, and from the first line that wraps differently on, the colours no longer
+  // lie under the text, the caret or a selection.
+  let fitW = 0;
+  let fitH = 0;
+  function fitBackdrop() {
+    const w = Math.max(0, textarea.offsetWidth - textarea.clientWidth);
+    const h = Math.max(0, textarea.offsetHeight - textarea.clientHeight);
+    if (w === fitW && h === fitH) return; // most keystrokes: no style write, no relayout
+    fitW = w;
+    fitH = h;
+    pre.style.right = w ? w + "px" : "";
+    pre.style.bottom = h ? h + "px" : "";
+  }
+
   function renderHighlight() {
     code.innerHTML = highlightJSON(textarea.value) + "​";
+    // An edit can add or remove a scrollbar (a value past the box's height).
+    fitBackdrop();
     pre.scrollTop = textarea.scrollTop;
     pre.scrollLeft = textarea.scrollLeft;
   }
@@ -306,6 +325,13 @@ export function attachJSONEditor(textarea, opts = {}) {
   textarea.addEventListener("keydown", onKeydown);
   toolbar.querySelector(".json-fmt").addEventListener("click", format);
 
+  // A resize can add or remove a scrollbar without an edit: a compact field growing
+  // on focus, the field's grip, the modal's height.
+  const resizeObs = typeof ResizeObserver !== "undefined"
+    ? new ResizeObserver(() => { fitBackdrop(); onScroll(); })
+    : null;
+  if (resizeObs) resizeObs.observe(textarea);
+
   // Expand-to-modal: edit the value in a full-size JSON editor (a non-compact one,
   // so it carries no further expand button), writing back on Apply. The overlay is
   // tracked so destroying this editor (e.g. a removed row) tears it down too.
@@ -371,6 +397,7 @@ export function attachJSONEditor(textarea, opts = {}) {
     destroy() {
       destroyed = true;
       clearTimeout(validateTimer);
+      if (resizeObs) resizeObs.disconnect();
       textarea.removeEventListener("input", onInput);
       textarea.removeEventListener("scroll", onScroll);
       textarea.removeEventListener("keydown", onKeydown);
