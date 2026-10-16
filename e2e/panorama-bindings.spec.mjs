@@ -1,5 +1,24 @@
 import { test, expect } from "@playwright/test";
 
+// A window wide enough that the canvas controls are not standing on the diagram.
+//
+// The tool strip is positioned against the stage's top-right corner (app.css,
+// `.panorama-tools`), and a floating control covers whatever is under it — the
+// stylesheet says so, and says both corners were tried. At the suite's default
+// 900x520 the stage is narrow enough that the strip comes down on `n-bp`, the
+// right-hand node in this fixture: the node spans x441..600, the strip starts at
+// x495, and the node's centre — the point a plain `.click()` aims at — lands on
+// whichever button is at that height. Every test here that selects `n-bp` then
+// fails on an intercepted click, while the ones selecting `n-app` pass; a margin
+// of 25px decides it, which is why the same tests are green on one machine and
+// red on another.
+//
+// So the width is stated rather than inherited. It is not a workaround for a
+// defect: a Panorama model is read in a window at least this wide, the strip
+// keeps 150px of clear air from the node here, and what these tests are about is
+// the bindings panel, not what a canvas does when it runs out of room.
+test.use({ viewport: { width: 1280, height: 720 } });
+
 // Atlas bindings in the Panorama model viewer (ADR-0189 §4). The document stores an
 // opaque id; every name on screen comes from the server, so the panel can never show
 // a stale copy of one.
