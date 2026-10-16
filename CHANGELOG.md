@@ -12,6 +12,45 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-10-16
+
+**The Console keeps what is yours with your account.** Diagrams can be marked as
+favourites, and a star in the top bar lists them beside the ones opened last
+([ADR-0460](docs/adr/0460-diagram-shortcuts.md)). A Display screen sets how a number is
+written, which time zone a timestamp is shown in, and which language the translated screens
+use ([ADR-0459](docs/adr/0459-display-preferences-per-user.md)). Both are stored per
+account on the server, and neither changes anything until somebody chooses. A PowerShell
+script runs unchanged in atlas and at a prompt: its `param()` block is bound by name, its
+logs no longer break the result, and its errors arrive as plain text
+([ADR-0458](docs/adr/0458-powershell-param-block.md)). The Developer View finds the
+instance to read sample values from across every version, the Playground counts the cases
+worth looking at, and a form that will not submit names the fields it is missing.
+
+**Read this before upgrading from 0.13.0.** These act on an existing installation:
+
+- A PowerShell script with a `param()` block now receives, for each declared parameter,
+  the instance variable of the same name, matched without regard to case. Under 0.13.0
+  nothing bound the block: a parameter ran on its default or an empty string, and a
+  `Mandatory` one failed as missing. A deployed script that relied on its default while
+  the instance holds a variable of that name now runs on the variable's value, so look
+  at the scripts that declare a `param()` block before upgrading. A script without one is
+  unchanged.
+- A PowerShell script that logs with `Write-Host`, a warning, verbose or information
+  message no longer fails with "decode output": only its output stream is the result.
+  The logs of a successful run are discarded, and a failure quotes them.
+- Two new stores, `user-preferences` and `diagram-shortcuts`, start empty and travel with
+  a whole-instance snapshot, not with the portable design-time backup. Nothing on screen
+  changes until a person chooses a display setting or marks a diagram. With
+  authentication off, the display settings stay in the browser and no star is drawn.
+- Six new routes serve the signed-in person's own record and nobody else's. None is
+  offered as an MCP tool, so the tool count is unchanged. `ATLAS_LIMIT_DIAGRAM_FAVOURITES`
+  (default 100) bounds how many diagrams one account may mark.
+- 0.14.0 reads the data directory 0.13.0 wrote: nothing under the log, the state or the
+  record format changed, and no system process changed, so the first start deploys
+  nothing new. Going back to 0.13.0 starts on the same directory. 0.13.0 does not read
+  the two new stores, so the marks and display settings are absent there, and a snapshot
+  taken under 0.13.0 does not carry them.
+
 ### Added
 
 - **Diagrams can be marked as favourites, and the Console remembers the ones opened last.**
@@ -68,6 +107,14 @@ _Changed_ / _Removed_ for each version.
   identity to own a preference — keeps it in the browser and says so. **Nothing moves
   until somebody chooses:** an unset record is exactly today's behaviour, so upgrading
   changes no pixel (ADR-0459).
+
+- **The Playground's results strip says how many cases are worth looking at.** Beside the
+  page count it counts over the whole run, not over the page: the cases a rule caught,
+  each counted once however many rules it broke, the cases that never finished, and the
+  incidents. The server sends a bounded sample of a rule's offenders, so when a sample
+  was cut the count reads as a floor, `at least 100 broke a rule`. A run with none of the
+  three says `nothing flagged`
+  ([ADR-0215](docs/adr/0215-modeler-playground.md)).
 
 - **The Developer View finds the instance to read values from.** A search field under
   "Values from instance" takes what the Operations search takes: an instance key,
@@ -14890,7 +14937,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/pblumer/atlas/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/pblumer/atlas/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/pblumer/atlas/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/pblumer/atlas/compare/v0.10.0...v0.11.0
