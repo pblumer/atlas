@@ -667,7 +667,7 @@ Making processes wait, react, and time out.
   broadcast (ADR-0089). An error end event (or a worker ending its job with a code over
   `POST /jobs/{key}/error`, the Go worker's `BPMNError`, a script task whose error carries a code
   the process catches — PowerShell's ErrorId, a Python or JavaScript error's `code`
-  ([ADR-draft-script-bpmn-errors](docs/adr/draft-script-bpmn-errors.md)) — or an operator by hand with a reason
+  ([ADR-0461](docs/adr/0461-script-bpmn-errors.md)) — or an operator by hand with a reason
   through the same route or `atlas_throw_job_error`) throws; it walks up the live scope chain to the first error boundary or
   error event subprocess whose code matches (a code-less catch is a catch-all), always
   interrupting: the caught scope is torn down and the handler's recovery flow runs. Uncaught,

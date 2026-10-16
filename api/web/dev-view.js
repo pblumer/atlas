@@ -940,7 +940,7 @@ export function openDevView(field, opts = {}) {
         } else {
           setOut("err", `✗ ${ms} ms`);
           // A script that gave its error a code is told which one, since a test run has
-          // no process to ask whether a boundary catches it (ADR-draft-script-bpmn-errors).
+          // no process to ask whether a boundary catches it (ADR-0461).
           const coded = r && r.errorCode
             ? `Error code ${r.errorCode} — in a running instance, an error boundary or error event subprocess catching ${r.errorCode} takes over; without one this fails the task.\n\n`
             : "";

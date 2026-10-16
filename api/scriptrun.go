@@ -23,7 +23,7 @@ type runScriptResp struct {
 	OK     bool   `json:"ok"`
 	Result any    `json:"result,omitempty"`
 	Error  string `json:"error,omitempty"`
-	// ErrorCode is the code the script gave its error (ADR-draft-script-bpmn-errors). A
+	// ErrorCode is the code the script gave its error (ADR-0461). A
 	// test run has no process to ask which codes it catches, so it cannot say whether
 	// this would be a BPMN error; it says which code a boundary would have to catch.
 	ErrorCode string `json:"errorCode,omitempty"`

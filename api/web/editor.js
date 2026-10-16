@@ -2999,7 +2999,7 @@ function enhanceScript(body, modeler, api, variables) {
         setOut("err", `✗ ${ms} ms`);
         const msg = cleanScriptError((r && r.error) || "run failed");
         // Which code the script raised, since a test run cannot know whether the process
-        // catches it (ADR-draft-script-bpmn-errors).
+        // catches it (ADR-0461).
         const coded = r && r.errorCode
           ? `Error code ${r.errorCode} — in a running instance, an error boundary or error event subprocess catching ${r.errorCode} takes over; without one this fails the task.\n\n`
           : "";

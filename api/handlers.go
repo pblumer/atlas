@@ -6682,7 +6682,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		}
 		// The codes the process catches travel too: a worker has no compiled process to
 		// ask, and they are what makes a script's coded failure a BPMN error rather than
-		// a failure (ADR-draft-script-bpmn-errors).
+		// a failure (ADR-0461).
 		return &connectorPayload{Kind: "script", Fields: map[string]any{
 			"source": j.Source, "input": j.Input, "resultVariable": j.Result,
 			"errorCodes": j.ErrorCodes,

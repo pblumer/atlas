@@ -38,7 +38,7 @@ type Job struct {
 	Result string `json:"resultVariable,omitempty"`
 	// ErrorCodes are the codes an error boundary or error event subprocess of the
 	// task's process catches. A script that fails with one of them threw a BPMN error;
-	// any other failure is a failure (ADR-draft-script-bpmn-errors). They travel with
+	// any other failure is a failure (ADR-0461). They travel with
 	// the job because a worker has no compiled process to ask.
 	ErrorCodes []string `json:"errorCodes,omitempty"`
 }

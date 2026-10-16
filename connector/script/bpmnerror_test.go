@@ -61,7 +61,7 @@ func incidentCount(t *testing.T, s *state.Store) int {
 // TestAScriptsCaughtCodeTakesTheErrorBoundary is the case this exists for: a script
 // fails with a code an error boundary on its task catches, and the instance takes the
 // boundary's path — once, with no retry spent and no incident raised
-// (ADR-draft-script-bpmn-errors).
+// (ADR-0461).
 func TestAScriptsCaughtCodeTakesTheErrorBoundary(t *testing.T) {
 	cp, jobType := scriptBoundaryProcess(t, "UPN_EXISTS")
 	fx := &fakeExec{err: &script.CodedError{Code: "UPN_EXISTS", Message: "taken", Err: errors.New("powershell: exit status 1")}}

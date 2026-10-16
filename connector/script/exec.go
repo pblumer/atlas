@@ -235,7 +235,7 @@ func (e *CmdExec) Run(ctx context.Context, source string, input map[string]any) 
 // code property of a JavaScript error. It reads as the interpreter's own failure, so
 // an incident shows what it showed before. Whether the code makes the failure a BPMN
 // error is [Run]'s decision, because only the codes the task's process catches do
-// (ADR-draft-script-bpmn-errors).
+// (ADR-0461).
 type CodedError struct {
 	Code    string // the code, trimmed; never empty
 	Message string // the error's own message, without the interpreter's framing
@@ -481,7 +481,7 @@ func parseOutput(out []byte) (any, error) {
 // A terminating error is reported before it is rethrown: its ErrorId — what
 // Write-Error -ErrorId sets, and the text of a bare throw — on stdout, which a failed
 // run has no other use for. Atlas throws it as a BPMN error when the task's process
-// catches that code (ADR-draft-script-bpmn-errors); the error itself goes on to be
+// catches that code (ADR-0461); the error itself goes on to be
 // rendered and to fail the run exactly as before. An ErrorId raised in a function
 // carries the function's name after a comma, which is not part of the code. exit is
 // not an error and is not caught, so it still reaches the finally block.
@@ -527,7 +527,7 @@ try {
 //
 // An exception with a code attribute — a string, or an integer such as an HTTP
 // status — has that code reported on stdout before it propagates, as the PowerShell
-// bootstrap reports an ErrorId (ADR-draft-script-bpmn-errors). Only Exception is
+// bootstrap reports an ErrorId (ADR-0461). Only Exception is
 // caught: SystemExit carries a code too, the exit status, and sys.exit is how a
 // script ends rather than an error it raises.
 const pythonBootstrap = `import json, os, sys
@@ -549,7 +549,7 @@ sys.stdout.write('' if _r is None else json.dumps(_r))`
 // assigned to `result` as JSON (empty when unset/undefined/null).
 //
 // An error with a code property — the convention Node's own errors follow — has that
-// code reported on stdout before it is rethrown (ADR-draft-script-bpmn-errors). The
+// code reported on stdout before it is rethrown (ADR-0461). The
 // report is written synchronously: an uncaught error ends the process, and an
 // asynchronous write to a pipe could be lost with it.
 const javascriptBootstrap = `const vars = JSON.parse(process.env.ATLAS_VARS || '{}');

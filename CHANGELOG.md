@@ -20,7 +20,7 @@ _Changed_ / _Removed_ for each version.
   boundary was drawn for included. Now a script gives its error a code in its own
   language's idiom, and when the task's process catches that code, the instance takes the
   boundary's path at once, with no retry spent
-  ([ADR-draft-script-bpmn-errors](docs/adr/draft-script-bpmn-errors.md)).
+  ([ADR-0461](docs/adr/0461-script-bpmn-errors.md)).
 
   - **PowerShell:** the error's ErrorId — `Write-Error -Message $msg -ErrorId 'UPN_EXISTS'`,
     or a bare `throw 'UPN_EXISTS'`.

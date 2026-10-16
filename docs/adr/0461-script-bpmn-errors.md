@@ -1,4 +1,4 @@
-# ADR-DRAFT: A script throws a BPMN error by giving its error a code the process catches
+# ADR-0461: A script throws a BPMN error by giving its error a code the process catches
 
 - **Status:** Accepted
 - **Implementation:** Landed

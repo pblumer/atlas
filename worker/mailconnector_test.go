@@ -541,7 +541,7 @@ const scriptErrorModel = `<?xml version="1.0" encoding="UTF-8"?>
 // TestWorkerThrowsAnOffloadedScriptsCaughtCode: the codes the process catches travel
 // with the leased job, so a worker on another machine makes the same decision the
 // in-process handler makes and throws the BPMN error instead of failing the job
-// (ADR-draft-script-bpmn-errors). One poll is enough: a failure would have left the
+// (ADR-0461). One poll is enough: a failure would have left the
 // instance running on a retry.
 func TestWorkerThrowsAnOffloadedScriptsCaughtCode(t *testing.T) {
 	if _, err := lookPath("node"); err != nil {

@@ -147,7 +147,7 @@ func (f failingExec) Run(context.Context, string, map[string]any) (any, error) {
 // TestRunScriptShowsTheErrorCode: a test run has no process to ask which codes it
 // catches, so it cannot say "BPMN error". It says which code the script raised, beside
 // the failure as the interpreter reported it, so an author sees what a boundary
-// catching that code would take (ADR-draft-script-bpmn-errors).
+// catching that code would take (ADR-0461).
 func TestRunScriptShowsTheErrorCode(t *testing.T) {
 	coded := &script.CodedError{Code: "UPN_EXISTS", Message: "taken", Err: errors.New("script: run powershell: exit status 1: taken")}
 	_, x := newSystemServer(t, WithScriptWorker(compiler.PwshJobTypeIndex, failingExec{err: coded}))

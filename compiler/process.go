@@ -2128,7 +2128,7 @@ func (p *CompiledProcess) NodeConnectorRef(id int32) (ConnectorRef, bool) {
 // CaughtErrorCodes is every error code an error boundary or error event subprocess in
 // this process catches, sorted, with no duplicates. A code-less catch-all is not in it:
 // it catches every code but names none. It is what decides whether a script that fails
-// with a code threw a BPMN error or simply failed (ADR-draft-script-bpmn-errors). The
+// with a code threw a BPMN error or simply failed (ADR-0461). The
 // slice is shared; a caller must not modify it.
 func (p *CompiledProcess) CaughtErrorCodes() []string { return p.caughtErrorCodes }
 

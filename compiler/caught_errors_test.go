@@ -6,7 +6,7 @@ import (
 )
 
 // TestCaughtErrorCodes: the codes a process catches are what decides whether a script
-// that fails with a code has thrown a BPMN error or merely failed (ADR-draft-script-bpmn-errors).
+// that fails with a code has thrown a BPMN error or merely failed (ADR-0461).
 // An error boundary and an error event subprocess catch their code; a code-less
 // catch-all catches every thrown code but names none, so it adds nothing — otherwise
 // any failure that happened to carry an identifier would skip its retries. Codes a
