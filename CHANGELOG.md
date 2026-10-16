@@ -14,14 +14,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
-- **A selection in a code field lies on the text it selects.** The script, FEEL and
-  Developer View editors draw a transparent text area over a coloured copy of the text
-  and a line-number gutter. The copy and the gutter also spanned the text area's
+- **A selection in a code field lies on the text it selects.** The script, FEEL, JSON
+  and Developer View editors draw a transparent text area over a coloured copy of the
+  text and a line-number gutter. The copy and the gutter also spanned the text area's
   scrollbars, so where scrollbars take room, as on Windows, they could not scroll as
   far: from the last scrollbar-height of a long script on, the colours and the line
   numbers stopped short of the text, and a selection was drawn about a line above the
   text it selected. A wrapping field such as FEEL also broke its coloured lines at a
-  different width once its vertical scrollbar showed. The browser also painted the
+  different width once its vertical scrollbar showed, and a compact JSON field broke
+  them under its toolbar buttons, 46px later than the text. The browser also painted the
   selected text itself in its selection colour, so a selection showed a second, plain
   copy of the text on top of the coloured one. Both layers now cover only the text area's
   viewport, re-fitted when an edit or a resize adds or removes a scrollbar, and a

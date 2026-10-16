@@ -1503,6 +1503,9 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   position: relative; z-index: 1; display: block; width: 100%; resize: vertical;
   color: transparent; caret-color: var(--text); outline: none; -webkit-text-fill-color: transparent;
 }
+/* As in the code editor: a selection keeps the text area's text transparent, under a
+   tint the coloured text reads through. */
+.json-editor .json-input::selection { color: transparent; -webkit-text-fill-color: transparent; background: rgba(11, 92, 255, 0.22); }
 .json-editor .json-highlight {
   position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 0;
 }
@@ -1514,7 +1517,11 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 /* Compact mode: a tidy one-liner when empty/unfocused, growing to a comfortable,
    vertically resizable box once it holds (or gains) content — so a nested array is
    actually editable inline, with the ⤢ button for the full modal beyond that. */
-.json-editor.compact .json-input { resize: none; min-height: 34px; height: 34px; transition: height 0.15s; padding-right: 56px; }
+.json-editor.compact .json-input { resize: none; min-height: 34px; height: 34px; transition: height 0.15s; }
+/* Both layers reserve the toolbar's room: on the text area alone, the coloured copy
+   broke its lines 46px later than the text did, under the buttons. */
+.json-editor.compact .json-input,
+.json-editor.compact .json-highlight { padding-right: 56px; }
 .json-editor.compact.expanded .json-input { height: auto; min-height: 108px; resize: vertical; }
 
 /* Toolbar floats in the top-right corner (a row, so the format + expand buttons sit
