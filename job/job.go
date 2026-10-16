@@ -83,6 +83,9 @@ type Engine interface {
 	CompleteJobWithToolCalls(jobKey uint64, toolCalls []model.ToolCall, outputs ...model.VariableValue)
 	CompleteJobWithOutcome(jobKey uint64, outcome model.ActionOutcomeValue, outputs ...model.VariableValue)
 	FailJob(jobKey uint64, retries int32, message string, backoff int64)
+	// ThrowJobErrorWithMessage ends a job in a BPMN error a handler returned as a
+	// [BPMNError] (ADR-0089).
+	ThrowJobErrorWithMessage(jobKey uint64, errorCode, message string)
 }
 
 // Outcome is what one job's handler produced: the job, what it completed with,
@@ -530,6 +533,17 @@ func (r *Runner) Submit(outcomes []Outcome) {
 		// The gate hears the outcome before the command that records it, while the job
 		// is still readable: finding which target a job belongs to is a read of the job
 		// and its element instance, and CompleteJob removes the job.
+		//
+		// A BPMN error is an answer, not a failure: whatever the job talked to did its
+		// part, so the gate hears a success, and the model's catch rather than a retry
+		// decides where the instance goes.
+		if be, ok := thrownError(o.Err); ok {
+			if r.gate != nil {
+				r.gate.Succeeded(o.Job.Type, o.Job.Key)
+			}
+			r.engine.ThrowJobErrorWithMessage(o.Job.Key, be.Code, be.Message)
+			continue
+		}
 		if o.Err != nil {
 			if r.gate != nil {
 				r.gate.Failed(o.Job.Type, o.Job.Key, o.Err.Error())

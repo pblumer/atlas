@@ -939,7 +939,12 @@ export function openDevView(field, opts = {}) {
           setDetail("ok", "→ " + shown + (r.kind ? `   (${r.kind})` : ""));
         } else {
           setOut("err", `✗ ${ms} ms`);
-          setDetail("err", (r && r.error) || "run failed");
+          // A script that gave its error a code is told which one, since a test run has
+          // no process to ask whether a boundary catches it (ADR-draft-script-bpmn-errors).
+          const coded = r && r.errorCode
+            ? `Error code ${r.errorCode} — in a running instance, an error boundary or error event subprocess catching ${r.errorCode} takes over; without one this fails the task.\n\n`
+            : "";
+          setDetail("err", coded + ((r && r.error) || "run failed"));
         }
       } catch (err) {
         setOut("err", "✗");

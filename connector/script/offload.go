@@ -2,9 +2,12 @@ package script
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/state"
 )
 
@@ -33,6 +36,11 @@ type Job struct {
 	// Result names the process variable the script's output is written to; empty
 	// means the task writes nothing back.
 	Result string `json:"resultVariable,omitempty"`
+	// ErrorCodes are the codes an error boundary or error event subprocess of the
+	// task's process catches. A script that fails with one of them threw a BPMN error;
+	// any other failure is a failure (ADR-draft-script-bpmn-errors). They travel with
+	// the job because a worker has no compiled process to ask.
+	ErrorCodes []string `json:"errorCodes,omitempty"`
 }
 
 // Result is what running a Job produces.
@@ -53,9 +61,10 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		return Job{}, fmt.Errorf("script: read variables for element %d: %w", elementInstanceKey, err)
 	}
 	return Job{
-		Source: cp.Intern(detail.Source),
-		Input:  input,
-		Result: cp.Intern(detail.ResultVar),
+		Source:     cp.Intern(detail.Source),
+		Input:      input,
+		Result:     cp.Intern(detail.ResultVar),
+		ErrorCodes: cp.CaughtErrorCodes(),
 	}, nil
 }
 
@@ -65,6 +74,13 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 func Run(ctx context.Context, j Job, exec Exec) (Result, error) {
 	out, err := exec.Run(ctx, j.Source, j.Input)
 	if err != nil {
+		// A code the process catches makes the failure an answer the model has a path
+		// for. Any other code is only an identifier on an error, and the failure keeps
+		// the retries a transient fault is owed.
+		var coded *CodedError
+		if errors.As(err, &coded) && slices.Contains(j.ErrorCodes, coded.Code) {
+			return Result{}, &job.BPMNError{Code: coded.Code, Message: coded.Message}
+		}
 		return Result{}, fmt.Errorf("script: %w", err)
 	}
 	return Result{ResultVariable: j.Result, Output: out}, nil

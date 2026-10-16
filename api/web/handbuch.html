@@ -1659,7 +1659,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de">Ein Worker kann einen <b>BPMN-Fehler</b> mit Code <code>DECLINED</code> werfen; das passende <code>errorEventDefinition</code> am Rand der Aufgabe fängt ihn und lenkt auf einen Fehlerpfad. Das ist erwartbares Verhalten – kein Incident.</span><span data-l="en">A worker can throw a <b>BPMN error</b> with code <code>DECLINED</code>; the matching <code>errorEventDefinition</code> on the task's edge catches it and diverts to an error path. That's expected behaviour – not an incident.</span></p>
+        <p class="rz-how"><span data-l="de">Ein Worker kann einen <b>BPMN-Fehler</b> mit Code <code>DECLINED</code> werfen; das passende <code>errorEventDefinition</code> am Rand der Aufgabe fängt ihn und lenkt auf einen Fehlerpfad. Das ist erwartbares Verhalten – kein Incident. Ein Skript-Task wirft ihn, indem er seinem Fehler einen Code gibt, den der Prozess fängt (siehe <a href="#runbook-script">Skript</a>).</span><span data-l="en">A worker can throw a <b>BPMN error</b> with code <code>DECLINED</code>; the matching <code>errorEventDefinition</code> on the task's edge catches it and diverts to an error path. That's expected behaviour – not an incident. A script task throws one by giving its error a code the process catches (see <a href="#runbook-script">Script</a>).</span></p>
       </div>
       <div class="recipe" id="rz-escalation" data-proc="recipe-escalation">
         <h4><span class="rz-emoji" aria-hidden="true">📣</span>
@@ -6907,6 +6907,18 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             <code>[hashtable]$application</code>. The same script then runs unchanged by hand too:
             <code>./account.ps1 -Name Test -application @{ TENANT_ID = '…' }</code>. The result is the output stream.
             <code>Write-Host</code>, warnings and verbose messages are a log, and a failure quotes them.</p>
+          <p class="lead" data-l="de"><b>BPMN-Fehler aus einem Skript:</b> Gib dem Fehler einen Code, den der Prozess
+            fängt – in PowerShell die ErrorId (<code>Write-Error -Message $msg -ErrorId 'UPN_EXISTS'</code>), in Python
+            das Attribut <code>code</code> der Exception, in JavaScript die Eigenschaft <code>code</code> des Errors.
+            Fängt eine Error-Boundary oder ein Error-Event-Subprozess dieses Prozesses genau diesen Code, nimmt die
+            Instanz sofort deren Pfad, ohne Wiederholung. Jeder andere Fehler bleibt ein Fehler: drei Versuche, dann ein
+            Incident. Von Hand ausgeführt ist es ein gewöhnlicher Fehler, das Skript läuft also unverändert.</p>
+          <p class="lead" data-l="en"><b>BPMN errors from a script:</b> give the error a code the process catches – in
+            PowerShell its ErrorId (<code>Write-Error -Message $msg -ErrorId 'UPN_EXISTS'</code>), in Python the
+            exception's <code>code</code> attribute, in JavaScript the error's <code>code</code> property. When an error
+            boundary or error event subprocess of the process catches exactly that code, the instance takes its path at
+            once, with no retry. Any other error stays an error: three attempts, then an incident. Run by hand it is an
+            ordinary error, so the script runs unchanged.</p>
           <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
         </div>
         <div class="card" id="runbook-ldap">

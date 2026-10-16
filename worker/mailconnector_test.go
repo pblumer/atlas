@@ -514,6 +514,58 @@ const scriptConnectorModel = `<?xml version="1.0" encoding="UTF-8"?>
   </bpmn:process>
 </bpmn:definitions>`
 
+// scriptErrorModel is a script task that fails with a code its error boundary catches.
+// The script only ever throws, so the instance can finish only by the boundary's path.
+const scriptErrorModel = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
+  <bpmn:error id="Error_Upn" name="userPrincipalName already exists" errorCode="UPN_EXISTS"/>
+  <bpmn:process id="accounts" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:scriptTask id="t">
+      <bpmn:extensionElements>
+        <atlas:jobScript language="javascript" resultVariable="created">throw Object.assign(new Error('An object with the same userPrincipalName already exists.'), { code: 'UPN_EXISTS' });</atlas:jobScript>
+      </bpmn:extensionElements>
+    </bpmn:scriptTask>
+    <bpmn:boundaryEvent id="b" attachedToRef="t">
+      <bpmn:errorEventDefinition errorRef="Error_Upn"/>
+    </bpmn:boundaryEvent>
+    <bpmn:endEvent id="e"/>
+    <bpmn:endEvent id="taken"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="b" targetRef="taken"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
+// TestWorkerThrowsAnOffloadedScriptsCaughtCode: the codes the process catches travel
+// with the leased job, so a worker on another machine makes the same decision the
+// in-process handler makes and throws the BPMN error instead of failing the job
+// (ADR-draft-script-bpmn-errors). One poll is enough: a failure would have left the
+// instance running on a retry.
+func TestWorkerThrowsAnOffloadedScriptsCaughtCode(t *testing.T) {
+	if _, err := lookPath("node"); err != nil {
+		t.Skip("no node on this machine")
+	}
+	ts := liveAtlasWith(t, scriptErrorModel, `{}`, api.WithOffloadedConnectorKinds([]string{"script"}))
+	built, err := worker.BuiltinConnectors(nil, "script")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	w := worker.New(worker.Options{
+		Server: ts.URL, ID: "scripts-1", Handlers: built.Handlers,
+		Wait: 100 * time.Millisecond,
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := w.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if running := runningInstances(t, ts); running != 0 {
+		t.Errorf("%d instances still running, want 0 — the boundary did not take the instance", running)
+	}
+}
+
 func restConnectorModel(url string) string {
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"

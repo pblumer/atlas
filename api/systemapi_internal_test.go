@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"path/filepath"
 	"runtime/debug"
@@ -9,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
@@ -133,6 +136,36 @@ func TestRunScript(t *testing.T) {
 	_ = json.Unmarshal(body, &resp)
 	if resp.OK || !strings.Contains(resp.Error, "empty") {
 		t.Fatalf("empty script resp = %+v, want empty-script error", resp)
+	}
+}
+
+// failingExec fails every run with err, as an interpreter that exits non-zero does.
+type failingExec struct{ err error }
+
+func (f failingExec) Run(context.Context, string, map[string]any) (any, error) { return nil, f.err }
+
+// TestRunScriptShowsTheErrorCode: a test run has no process to ask which codes it
+// catches, so it cannot say "BPMN error". It says which code the script raised, beside
+// the failure as the interpreter reported it, so an author sees what a boundary
+// catching that code would take (ADR-draft-script-bpmn-errors).
+func TestRunScriptShowsTheErrorCode(t *testing.T) {
+	coded := &script.CodedError{Code: "UPN_EXISTS", Message: "taken", Err: errors.New("script: run powershell: exit status 1: taken")}
+	_, x := newSystemServer(t, WithScriptWorker(compiler.PwshJobTypeIndex, failingExec{err: coded}))
+	_, body := x.do(http.MethodPost, "/api/v1/scripts/run", `{"language":"powershell","source":"x"}`)
+	var resp runScriptResp
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if resp.OK || resp.ErrorCode != "UPN_EXISTS" || resp.Error != coded.Error() {
+		t.Errorf("resp = %+v, want ok:false, the failure, and errorCode UPN_EXISTS", resp)
+	}
+
+	_, x = newSystemServer(t, WithScriptWorker(compiler.PwshJobTypeIndex, failingExec{err: errors.New("exit status 1")}))
+	_, body = x.do(http.MethodPost, "/api/v1/scripts/run", `{"language":"powershell","source":"x"}`)
+	resp = runScriptResp{}
+	_ = json.Unmarshal(body, &resp)
+	if resp.ErrorCode != "" || strings.Contains(string(body), "errorCode") {
+		t.Errorf("resp = %s, want no errorCode for a failure without one", body)
 	}
 }
 

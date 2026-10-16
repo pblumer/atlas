@@ -221,9 +221,56 @@ func (e *CmdExec) Run(ctx context.Context, source string, input map[string]any) 
 		if ctx.Err() == context.DeadlineExceeded {
 			return nil, fmt.Errorf("script: %s timed out after %s", e.Lang.Name, e.timeout())
 		}
-		return nil, fmt.Errorf("script: run %s: %w", e.Lang.Name, err)
+		failure := fmt.Errorf("script: run %s: %w", e.Lang.Name, err)
+		if code, message, ok := parseErrorReport(out); ok {
+			return nil, &CodedError{Code: code, Message: message, Err: failure}
+		}
+		return nil, failure
 	}
 	return parseOutput(out)
+}
+
+// CodedError is a script failure that carries the code the script gave its error:
+// the ErrorId of a PowerShell error, the code attribute of a Python exception, the
+// code property of a JavaScript error. It reads as the interpreter's own failure, so
+// an incident shows what it showed before. Whether the code makes the failure a BPMN
+// error is [Run]'s decision, because only the codes the task's process catches do
+// (ADR-draft-script-bpmn-errors).
+type CodedError struct {
+	Code    string // the code, trimmed; never empty
+	Message string // the error's own message, without the interpreter's framing
+	Err     error  // the failure as the interpreter reported it
+}
+
+func (e *CodedError) Error() string { return e.Err.Error() }
+func (e *CodedError) Unwrap() error { return e.Err }
+
+// errorReportKey opens the report a bootstrap writes to stdout when the script fails
+// with an error that has a code. stdout is free for it: a failed run has no result.
+const errorReportKey = `{"atlasError":`
+
+// parseErrorReport reads the code and message a failing bootstrap reported. The last
+// report wins and anything before it is ignored, since a script may have written to
+// stdout itself before it failed. A report without a code is no report.
+func parseErrorReport(out []byte) (code, message string, ok bool) {
+	i := bytes.LastIndex(out, []byte(errorReportKey))
+	if i < 0 {
+		return "", "", false
+	}
+	var r struct {
+		AtlasError *struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"atlasError"`
+	}
+	if err := json.NewDecoder(bytes.NewReader(out[i:])).Decode(&r); err != nil || r.AtlasError == nil {
+		return "", "", false
+	}
+	code = strings.TrimSpace(r.AtlasError.Code)
+	if code == "" {
+		return "", "", false
+	}
+	return code, r.AtlasError.Message, true
 }
 
 // interpreterEnvironment creates a new environment instead of filtering a copy of
@@ -430,6 +477,14 @@ func parseOutput(out []byte) (any, error) {
 // The result is written in a finally block because a script's exit ends the
 // interpreter, not only the script: exit 0 after output still returns that output,
 // as it does at a prompt, and a non-zero exit keeps its code.
+//
+// A terminating error is reported before it is rethrown: its ErrorId — what
+// Write-Error -ErrorId sets, and the text of a bare throw — on stdout, which a failed
+// run has no other use for. Atlas throws it as a BPMN error when the task's process
+// catches that code (ADR-draft-script-bpmn-errors); the error itself goes on to be
+// rendered and to fail the run exactly as before. An ErrorId raised in a function
+// carries the function's name after a comma, which is not part of the code. exit is
+// not an error and is not caught, so it still reaches the finally block.
 const powershellBootstrap = `$ErrorActionPreference = 'Stop'
 if ($PSStyle) { $PSStyle.OutputRendering = 'PlainText' }
 $__atlas = if ($env:ATLAS_VARS) { $env:ATLAS_VARS | ConvertFrom-Json -AsHashtable } else { @{} }
@@ -445,6 +500,7 @@ if ($__script.Ast.ParamBlock) {
     }
 }
 $__out = [System.Collections.Generic.List[object]]::new()
+$__thrown = $false
 try {
     & $__script @__bound 3>&1 4>&1 5>&1 6>&1 | ForEach-Object {
         if ($_ -is [System.Management.Automation.WarningRecord]) { [Console]::Error.WriteLine('WARNING: ' + $_.Message) }
@@ -453,26 +509,58 @@ try {
         elseif ($_ -is [System.Management.Automation.InformationRecord]) { [Console]::Error.WriteLine([string]$_.MessageData) }
         else { $__out.Add($_) }
     }
+} catch {
+    $__thrown = $true
+    $__code = ([string]$_.FullyQualifiedErrorId).Split(',')[0].Trim()
+    if ($__code) { [Console]::Out.Write((ConvertTo-Json -Compress -InputObject @{ atlasError = @{ code = $__code; message = $_.Exception.Message } })) }
+    throw
 } finally {
-    $__result = if ($__out.Count -eq 1) { $__out[0] } elseif ($__out.Count) { $__out.ToArray() }
-    if ($null -eq $__result) { '' } else { $__result | ConvertTo-Json -Compress -Depth 64 }
+    if (-not $__thrown) {
+        $__result = if ($__out.Count -eq 1) { $__out[0] } elseif ($__out.Count) { $__out.ToArray() }
+        if ($null -eq $__result) { '' } else { $__result | ConvertTo-Json -Compress -Depth 64 }
+    }
 }`
 
 // pythonBootstrap exposes the instance's variables as globals, runs the author's
 // source, and emits the value the script assigned to `result` as JSON (empty when
 // unset/None).
+//
+// An exception with a code attribute — a string, or an integer such as an HTTP
+// status — has that code reported on stdout before it propagates, as the PowerShell
+// bootstrap reports an ErrorId (ADR-draft-script-bpmn-errors). Only Exception is
+// caught: SystemExit carries a code too, the exit status, and sys.exit is how a
+// script ends rather than an error it raises.
 const pythonBootstrap = `import json, os, sys
 _vars = json.loads(os.environ.get('ATLAS_VARS') or '{}')
 _ns = dict(_vars)
-exec(os.environ.get('ATLAS_SCRIPT') or '', _ns)
+try:
+    exec(os.environ.get('ATLAS_SCRIPT') or '', _ns)
+except Exception as _e:
+    _c = getattr(_e, 'code', None)
+    if isinstance(_c, (str, int)) and not isinstance(_c, bool) and str(_c).strip():
+        sys.stdout.write(json.dumps({'atlasError': {'code': str(_c).strip(), 'message': str(_e)}}, separators=(',', ':')))
+        sys.stdout.flush()
+    raise
 _r = _ns.get('result')
 sys.stdout.write('' if _r is None else json.dumps(_r))`
 
 // javascriptBootstrap exposes the instance's variables as arguments (so each is in
 // scope by name), runs the author's source, and emits the value the script
 // assigned to `result` as JSON (empty when unset/undefined/null).
+//
+// An error with a code property — the convention Node's own errors follow — has that
+// code reported on stdout before it is rethrown (ADR-draft-script-bpmn-errors). The
+// report is written synchronously: an uncaught error ends the process, and an
+// asynchronous write to a pipe could be lost with it.
 const javascriptBootstrap = `const vars = JSON.parse(process.env.ATLAS_VARS || '{}');
 const src = process.env.ATLAS_SCRIPT || '';
 const fn = new Function(...Object.keys(vars), src + '\n; return typeof result !== "undefined" ? result : undefined;');
-const r = fn(...Object.values(vars));
+let r;
+try {
+  r = fn(...Object.values(vars));
+} catch (e) {
+  const c = e != null && (typeof e.code === 'string' || typeof e.code === 'number') ? String(e.code).trim() : '';
+  if (c) require('fs').writeSync(1, JSON.stringify({ atlasError: { code: c, message: String(e.message !== undefined ? e.message : e) } }));
+  throw e;
+}
 process.stdout.write(r === undefined || r === null ? '' : JSON.stringify(r));`

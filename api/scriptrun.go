@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -22,6 +23,10 @@ type runScriptResp struct {
 	OK     bool   `json:"ok"`
 	Result any    `json:"result,omitempty"`
 	Error  string `json:"error,omitempty"`
+	// ErrorCode is the code the script gave its error (ADR-draft-script-bpmn-errors). A
+	// test run has no process to ask which codes it catches, so it cannot say whether
+	// this would be a BPMN error; it says which code a boundary would have to catch.
+	ErrorCode string `json:"errorCode,omitempty"`
 }
 
 // handleRunScript runs a polyglot script task (PowerShell/Python/JavaScript)
@@ -60,7 +65,12 @@ func (s *Server) handleRunScript(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := exec.Run(r.Context(), req.Source, req.Variables)
 	if err != nil {
-		httpapi.JSON(w, http.StatusOK, runScriptResp{Error: err.Error()})
+		resp := runScriptResp{Error: err.Error()}
+		var coded *script.CodedError
+		if errors.As(err, &coded) {
+			resp.ErrorCode = coded.Code
+		}
+		httpapi.JSON(w, http.StatusOK, resp)
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, runScriptResp{OK: true, Result: result})

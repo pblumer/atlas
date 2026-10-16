@@ -6680,8 +6680,12 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		if err != nil {
 			return nil
 		}
+		// The codes the process catches travel too: a worker has no compiled process to
+		// ask, and they are what makes a script's coded failure a BPMN error rather than
+		// a failure (ADR-draft-script-bpmn-errors).
 		return &connectorPayload{Kind: "script", Fields: map[string]any{
 			"source": j.Source, "input": j.Input, "resultVariable": j.Result,
+			"errorCodes": j.ErrorCodes,
 		}}
 	}
 	// An agent-driven ad-hoc subprocess is its own node type as well, and its round job

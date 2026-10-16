@@ -1453,21 +1453,25 @@ type CompiledProcess struct {
 	// inclusive join, which is the common case.
 	joinReach map[int32]NodeSet
 
-	outgoingFlows      []int32 // shared topology: flow ids grouped by source node
-	boundaryEvents     []int32 // shared topology: boundary-event node ids grouped by host node
-	scopeStarts        []int32 // shared topology: nested start-event node ids grouped by subprocess node
-	serviceTasks       []ServiceTaskDetail
-	scriptTasks        []ScriptTaskDetail
-	callActivities     []CallActivityDetail
-	multiInstances     []MultiInstanceDetail
-	scriptJobTasks     []ScriptJobTaskDetail
-	businessRuleTasks  []BusinessRuleTaskDetail
-	timerCatches       []TimerCatchDetail
-	connectorTasks     []ConnectorTaskDetail
-	mockupTasks        []MockupTaskDetail
-	userTasks          []UserTaskDetail
-	boundaryEventDets  []BoundaryEventDetail
-	eventSubProcesses  []EventSubProcessDetail
+	outgoingFlows     []int32 // shared topology: flow ids grouped by source node
+	boundaryEvents    []int32 // shared topology: boundary-event node ids grouped by host node
+	scopeStarts       []int32 // shared topology: nested start-event node ids grouped by subprocess node
+	serviceTasks      []ServiceTaskDetail
+	scriptTasks       []ScriptTaskDetail
+	callActivities    []CallActivityDetail
+	multiInstances    []MultiInstanceDetail
+	scriptJobTasks    []ScriptJobTaskDetail
+	businessRuleTasks []BusinessRuleTaskDetail
+	timerCatches      []TimerCatchDetail
+	connectorTasks    []ConnectorTaskDetail
+	mockupTasks       []MockupTaskDetail
+	userTasks         []UserTaskDetail
+	boundaryEventDets []BoundaryEventDetail
+	eventSubProcesses []EventSubProcessDetail
+	// caughtErrorCodes is every error code an error boundary or error event subprocess
+	// in this process catches, sorted and without duplicates — computed once in Build
+	// so a script job's lease reads it rather than walking the details (I5).
+	caughtErrorCodes   []string
 	eventSubs          []int32 // shared topology: event-subprocess handler node ids grouped by parent scope node
 	rootEventSubs      []int32 // event-subprocess handler node ids whose parent scope is the process root
 	messageCatches     []MessageDetail
@@ -2121,6 +2125,41 @@ func (p *CompiledProcess) NodeConnectorRef(id int32) (ConnectorRef, bool) {
 // receive an inbound event needs (ADR-0205). Computed by scanning the detail
 // tables, so it belongs off the hot path — a deploy-time or console question, never
 // a per-message one.
+// CaughtErrorCodes is every error code an error boundary or error event subprocess in
+// this process catches, sorted, with no duplicates. A code-less catch-all is not in it:
+// it catches every code but names none. It is what decides whether a script that fails
+// with a code threw a BPMN error or simply failed (ADR-draft-script-bpmn-errors). The
+// slice is shared; a caller must not modify it.
+func (p *CompiledProcess) CaughtErrorCodes() []string { return p.caughtErrorCodes }
+
+// CatchesErrorCode reports whether code is one of [CompiledProcess.CaughtErrorCodes].
+func (p *CompiledProcess) CatchesErrorCode(code string) bool {
+	i := sort.SearchStrings(p.caughtErrorCodes, code)
+	return code != "" && i < len(p.caughtErrorCodes) && p.caughtErrorCodes[i] == code
+}
+
+// caughtErrorCodes collects the codes the error catches among boundaries and event
+// subprocesses name, for [CompiledProcess.CaughtErrorCodes].
+func caughtErrorCodes(boundaries []BoundaryEventDetail, eventSubs []EventSubProcessDetail) []string {
+	seen := map[string]bool{}
+	for _, d := range boundaries {
+		if d.Kind == BoundaryError && d.ErrorCode != "" {
+			seen[d.ErrorCode] = true
+		}
+	}
+	for _, d := range eventSubs {
+		if d.Kind == BoundaryError && d.ErrorCode != "" {
+			seen[d.ErrorCode] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for code := range seen {
+		out = append(out, code)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (p *CompiledProcess) ReceivableMessageNames() []string {
 	seen := map[string]bool{}
 	add := func(name string) {
