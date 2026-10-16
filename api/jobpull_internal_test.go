@@ -45,7 +45,9 @@ func pull(t *testing.T, srv *Server, body string) (int, pullResp) {
 }
 
 // testClock is a settable clock, so a test can elapse a worker's lease deliberately
-// instead of depending on wall time.
+// instead of depending on wall time. The engine reads it on the server's loop, the
+// timer scheduler's tick among others, so a test moves it inside srv.do, never from
+// its own goroutine.
 type testClock struct{ t int64 }
 
 func (c *testClock) Now() int64 { return c.t }
@@ -384,8 +386,8 @@ func TestWorkerCompletionRequiresItsLeaseToken(t *testing.T) {
 // engine entry point, and no dependence on wall time.
 func expireLease(t *testing.T, srv *Server, clk *testClock) {
 	t.Helper()
-	clk.t += int64(2 * maxJobLease)
 	srv.do(func() {
+		clk.t += int64(2 * maxJobLease)
 		if err := srv.proc.TickTimers(); err != nil {
 			t.Fatalf("TickTimers: %v", err)
 		}
