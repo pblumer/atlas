@@ -33,6 +33,8 @@
 
 import { attachCodeEditor } from "./code-editor.js";
 import { devLang, snippetsFor } from "./dev-lang.js";
+import { sampleFor } from "./instance-samples.js";
+import { fmtDateTime } from "./datefmt.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -219,9 +221,10 @@ function sampleJSON(values) {
 }
 
 // instanceLabel names one instance in the picker: its key, whether it is still
-// running, and which version of the process it runs.
+// running, which version of the process it runs, and — for a search hit — what it
+// matched, which is what tells two hits apart.
 function instanceLabel(i) {
-  return `${i.key}${i.state ? " · " + i.state : ""}${i.version ? " · v" + i.version : ""}`;
+  return `${i.key}${i.state ? " · " + i.state : ""}${i.version ? " · v" + i.version : ""}${i.match ? " · " + i.match : ""}`;
 }
 
 // matches is the pane filter: a case-insensitive substring over the visible text.
@@ -234,10 +237,13 @@ const matches = (q, ...fields) => !q || fields.some((f) => String(f || "").toLow
 //   validate   (src) -> Promise<{ ok, error }>   live validation, as inline
 //   evaluate   (src, vars) -> Promise<{ ok, result, error }>   the Test panel (FEEL)
 //   run        (src, vars) -> Promise<{ ok, result, error }>   the Test panel (script)
-//   samples    ({ force, instanceKey }) -> Promise<{ instance, values, instances }
-//              | null>   live values for the variables, read from a real instance of
-//              this process; `instances` is what the picker offers, `instanceKey`
-//              asks for one of them, `force` bypasses the caller's cache
+//   samples    ({ force, instanceKey, query }) -> Promise<{ instance, values,
+//              instances, query, truncated } | null>   live values for the variables,
+//              read from a real instance of this process; `instances` is what the
+//              picker offers, `instanceKey` asks for one of them, `force` bypasses the
+//              caller's cache, `query` searches the instances instead of listing the
+//              recent ones (a hit may name what it `match`ed). null: the process has
+//              no instance; a query that finds none answers with `instance: null`.
 //   lockPrefix (value) -> protected leading length (the fx '=' marker)
 //   onApply    (value) -> void, after the field has been written
 // Returns a handle { close, apply, el } or null when the field isn't a code field.
@@ -333,24 +339,74 @@ export function openDevView(field, opts = {}) {
   const filter = q(".dev-filter");
   let selectedItem = null; // the reference item the Help pane is showing
 
+  // The Variables pane is the sample strip above the variable list. The strip is
+  // built once and only its parts are redrawn, so the instance search keeps what the
+  // author is typing (and the focus) while the list under it re-renders.
+  paneVars.innerHTML = `
+    <div class="dev-sample-strip"${opts.samples ? "" : " hidden"}>
+      <div class="dev-sample-line"></div>
+      <form class="dev-sample-find" hidden>
+        <input type="search" class="dev-sample-search" spellcheck="false" autocomplete="off"
+          placeholder="Find an instance: key, name=value or a term"
+          aria-label="Find an instance of this process to read values from"
+          title="Search this process's instances in every version: an instance key, name=value (Test=Versuch 2), or a term with * and ?. Press Enter." />
+      </form>
+      <div class="dev-sample-note" aria-live="polite" hidden></div>
+    </div>
+    <div class="dev-vars-list"></div>`;
+  const sampleStrip = paneVars.querySelector(".dev-sample-strip");
+  const sampleLine = paneVars.querySelector(".dev-sample-line");
+  const findForm = paneVars.querySelector(".dev-sample-find");
+  const findInput = paneVars.querySelector(".dev-sample-search");
+  const sampleNote = paneVars.querySelector(".dev-sample-note");
+  const varsList = paneVars.querySelector(".dev-vars-list");
+
   // Live sample values. `state` drives the strip at the top of the Variables pane:
   // idle (never asked) → loading → ready (an instance was found) / none (the process
   // has no instance yet, or isn't deployed) / error. Loading is lazy and best-effort:
-  // the modal is fully usable before, during and after a failed load.
+  // the modal is fully usable before, during and after a failed load. `query` is the
+  // search whose hits the picker offers ("" for the recent instances), `note` what
+  // the last search came to.
   let lastFilled = null; // the Test sample we put in the box, so we know it is ours
-  let samples = { state: opts.samples ? "loading" : "idle", instance: null, values: {}, instances: [] };
+  let samples = { state: opts.samples ? "loading" : "idle", instance: null, values: {}, instances: [], query: "", truncated: false, note: "" };
 
+  // loadSamples asks for the values again. A request without `query` keeps the
+  // current one, so a pick or a reload stays inside the search it was made in.
   async function loadSamples(req = {}) {
     if (!opts.samples) return;
-    samples = { ...samples, state: "loading" };
+    const query = req.query !== undefined ? String(req.query).trim() : samples.query;
+    const before = samples;
+    samples = { ...samples, state: "loading", note: "" };
     if (tab === "vars") renderVars();
     let got = null;
-    try { got = await opts.samples({ force: !!req.force, instanceKey: req.instanceKey }); }
-    catch { samples = { state: "error", instance: null, values: {}, instances: [] }; if (tab === "vars") renderVars(); return; }
+    try { got = await opts.samples({ force: !!req.force, instanceKey: req.instanceKey, query }); }
+    catch (err) {
+      if (!document.contains(overlay)) return;
+      // A failed search is not a failed modal: the instance on screen stays, and the
+      // note says why the search did not answer.
+      samples = query
+        ? { ...before, note: "Search failed: " + ((err && err.message) || String(err)) }
+        : { state: "error", instance: null, values: {}, instances: [], query: "", truncated: false, note: "" };
+      syncFill();
+      if (tab === "vars") renderVars();
+      return;
+    }
     if (!document.contains(overlay)) return; // closed while we were waiting
+    if (query && !(got && got.instance)) {
+      // Nothing matched. Replacing the instance on screen with nothing would cost
+      // the author the sample they were working with, for a typo.
+      samples = { ...before, note: `No instance of this process matches “${query}”.` };
+      syncFill();
+      if (tab === "vars") renderVars();
+      return;
+    }
     samples = got && got.instance
-      ? { state: "ready", instance: got.instance, values: got.values || {}, instances: got.instances || [got.instance] }
-      : { state: "none", instance: null, values: {}, instances: [] };
+      ? {
+          state: "ready", instance: got.instance, values: got.values || {}, instances: got.instances || [got.instance],
+          query, truncated: !!got.truncated, note: query ? matchNote(got) : "",
+        }
+      : { state: "none", instance: null, values: {}, instances: [], query: "", truncated: false, note: "" };
+    syncFill();
     if (tab === "vars") renderVars();
     // An empty Test box is filled with the real instance's variables — the sample a
     // developer would otherwise type by hand, only correct. A box the author has
@@ -365,21 +421,33 @@ export function openDevView(field, opts = {}) {
         lastFilled = JSON.stringify(sampleJSON(samples.values), null, 2);
         box.value = lastFilled;
       }
-      const fill = q(".dev-run-fill");
-      if (fill) fill.hidden = false;
     }
   }
 
-  // sampleStripHTML is the Variables pane's header: which instance the values come
+  // syncFill offers "From instance" only while there is an instance to fill from. A
+  // reload that finds none, or fails, would otherwise leave a button behind that
+  // replaces the author's sample with an empty object.
+  function syncFill() {
+    const fill = canTest && q(".dev-run-fill");
+    if (fill) fill.hidden = samples.state !== "ready";
+  }
+
+  // matchNote says what a search came to. The server cuts a search short, and so does
+  // the picker; when either did, the author is told that the hits are the newest
+  // ones and not all of them, or "the instance is not there" is the wrong conclusion.
+  function matchNote(got) {
+    const n = (got.instances || []).length;
+    const found = n === 1 ? "1 instance matches" : `${n} instances match`;
+    return got.truncated ? `${found} — more do, only the newest are shown. Narrow the search.` : `${found}.`;
+  }
+
+  // sampleLineHTML is the Variables pane's header line: which instance the values come
   // from, and a way to ask again once the process has run.
-  function sampleStripHTML() {
-    if (!opts.samples) return "";
+  function sampleLineHTML() {
     const reload = `<button type="button" class="linklike dev-sample-reload" title="Read the latest values from a live instance">Reload</button>`;
-    if (samples.state === "loading") return `<div class="dev-sample-strip">Reading a live instance…</div>`;
-    if (samples.state === "error") return `<div class="dev-sample-strip">Live values unavailable · ${reload}</div>`;
-    if (samples.state === "none") {
-      return `<div class="dev-sample-strip">No instance to read values from yet — deploy and run the process once · ${reload}</div>`;
-    }
+    if (samples.state === "loading") return "Reading a live instance…";
+    if (samples.state === "error") return `Live values unavailable · ${reload}`;
+    if (samples.state === "none") return `No instance to read values from yet — deploy and run the process once · ${reload}`;
     if (samples.state === "ready") {
       const i = samples.instance;
       const list = samples.instances.length ? samples.instances : [i];
@@ -391,18 +459,30 @@ export function openDevView(field, opts = {}) {
             list.map((r) => `<option value="${esc(String(r.key))}"${r.key === i.key ? " selected" : ""}>${esc(instanceLabel(r))}</option>`).join("")
           }</select>`
         : `<b>${esc(instanceLabel(i))}</b>`;
-      const when = i.createdAt ? new Date(i.createdAt).toLocaleString() : "";
-      return `<div class="dev-sample-strip ready" title="${esc(when)}">Values from instance ${picker} · ${reload}</div>`;
+      return `Values from instance ${picker} · ${reload}`;
     }
     return "";
+  }
+
+  function renderSampleStrip() {
+    if (!opts.samples) return;
+    sampleLine.innerHTML = sampleLineHTML();
+    const ready = samples.state === "ready";
+    sampleStrip.classList.toggle("ready", ready);
+    sampleStrip.title = ready && samples.instance.createdAt ? fmtDateTime(samples.instance.createdAt) : "";
+    // Searching needs an instance to have been found once; a process that never ran
+    // has nothing to search, and the strip already says so.
+    findForm.hidden = !(samples.instance || samples.query);
+    sampleNote.textContent = samples.note || "";
+    sampleNote.hidden = !samples.note;
   }
 
   function renderVars() {
     const query = filter.value.trim().toLowerCase();
     const sections = groupVariables(opts.variables);
-    const strip = sampleStripHTML();
+    renderSampleStrip();
     if (!sections.length) {
-      paneVars.innerHTML = strip + `<p class="dev-empty">No variables are known for this element yet. They appear as the model declares them — start variables, form fields, script and decision results, output mappings.</p>`;
+      varsList.innerHTML = `<p class="dev-empty">No variables are known for this element yet. They appear as the model declares them — start variables, form fields, script and decision results, output mappings.</p>`;
       return;
     }
     let html = "";
@@ -411,7 +491,7 @@ export function openDevView(field, opts = {}) {
       if (!rows.length) continue;
       html += `<div class="dev-group"><h4 title="${esc(s.hint)}">${esc(s.title)}</h4>`;
       for (const v of rows) {
-        const sample = samples.values[v.name];
+        const sample = sampleFor(samples.values, v.name);
         const shown = sampleText(sample);
         html += `<button type="button" class="dev-item${shown ? " stacked" : ""}" draggable="true" data-insert="${esc(varInsert(lang.id, v.name))}" title="Insert this variable (or drag it into the code)">
           <span class="dev-item-head">
@@ -421,7 +501,7 @@ export function openDevView(field, opts = {}) {
       }
       html += `</div>`;
     }
-    paneVars.innerHTML = strip + (html || `<p class="dev-empty">No variable matches the filter.</p>`);
+    varsList.innerHTML = html || `<p class="dev-empty">No variable matches the filter.</p>`;
   }
 
   function renderFns() {
@@ -766,6 +846,18 @@ export function openDevView(field, opts = {}) {
     if (pick) loadSamples({ instanceKey: Number(pick.value) });
   });
 
+  // The instance search runs on Enter, not per keystroke: each search is a request
+  // per version of the process, and a half-typed name=value matches nothing useful.
+  // Emptying the field (typing it away, or the field's own clear button) goes back
+  // to the recent instances.
+  findForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    loadSamples({ query: findInput.value });
+  });
+  findInput.addEventListener("input", () => {
+    if (!findInput.value.trim() && samples.query) loadSamples({ query: "" });
+  });
+
   filter.addEventListener("input", () => renderers[tab]());
 
   const dirtyEl = q(".dev-dirty");
@@ -806,9 +898,24 @@ export function openDevView(field, opts = {}) {
     };
     const fillBtn = q(".dev-run-fill");
     fillBtn.title = "Replace the sample with this instance's actual variables";
+    // The box is prefilled from the instance as soon as the values arrive, so the
+    // first click usually finds nothing to change. It says so: a click with no
+    // visible effect reads as a broken button.
     fillBtn.addEventListener("click", () => {
-      lastFilled = JSON.stringify(sampleJSON(samples.values), null, 2);
-      q(".dev-run-vars").value = lastFilled;
+      const box = q(".dev-run-vars");
+      const sample = sampleJSON(samples.values);
+      const text = JSON.stringify(sample, null, 2);
+      const key = samples.instance ? samples.instance.key : "";
+      lastFilled = text;
+      if (box.value === text) {
+        setOut("", `The sample already holds the values of instance ${key}.`);
+        return;
+      }
+      box.value = text;
+      const n = Object.keys(sample).length;
+      setOut("", `Filled from instance ${key} · ${n} variable${n === 1 ? "" : "s"}.`);
+      // A result shown now would belong to the sample just replaced.
+      setDetail("", "");
     });
     q(".dev-run-btn").addEventListener("click", async () => {
       let vars = {};

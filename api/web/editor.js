@@ -9,6 +9,7 @@ import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
 import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } from "./entra-attrmask.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
+import { lookupSamples, sampleFor } from "./instance-samples.js";
 import { devLang } from "./dev-lang.js";
 // The decision editor is a page of its own (ADR-0320),
 // so this module navigates to it rather than opening it. Nothing of dmn-js is loaded
@@ -66,6 +67,7 @@ import { fmtCount } from "./numfmt.js";
 // where that question is asked (ADR-0289), so the answer
 // is rendered beside the fields rather than left in another tab.
 import { workerTypeDocHTML } from "./workertypedocs.js";
+import { fmtDateTime, fmtTime } from "./datefmt.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -516,7 +518,7 @@ const decMiniTable = (tt, n) => renderTraceTable(tt, n);
 // hoverable — data-dec indexes the caller's evaluation list so a shared popover can
 // look the trace back up. Shared by the replay Decisions tab and the live view.
 function decCard(d, i) {
-  const when = d.at ? new Date(d.at / 1e6).toLocaleString() : "";
+  const when = d.at ? fmtDateTime(d.at / 1e6) : "";
   const inEntries = Object.entries(decVal(d.inputs, {}) || {});
   const outEntries = Object.entries(decVal(d.outputs, {}) || {});
   const pills = inEntries.length
@@ -2322,83 +2324,15 @@ function devVariables(modeler, element) {
   return out;
 }
 
-// sampleCache memoizes the live-values lookup per process id for this editing
-// session: opening the Developer View on ten fields of one diagram is one pair of
-// requests, not ten, and switching between the instances in the picker costs
-// nothing at all. The Reload button passes force:true to bypass it, which is how an
-// author picks up an instance they started while the Modeler was open.
-const sampleCache = new Map(); // processId -> Promise<instanceSample[]>
-
-// How many instances the picker offers. Enough to find the one that took the branch
-// being written about, few enough that the <select> stays usable.
-const MAX_SAMPLE_INSTANCES = 50;
-
-// instanceSamples reads the values the diagram's variables actually hold, from a
-// real instance of this very process. `opts.instanceKey` picks one of the offered
-// instances (default: the most relevant one — a running instance first, else the
-// newest finished one); `opts.force` re-reads from the server.
+// instanceSamples reads the values the diagram's variables actually hold, from the
+// instances of this very process in any of its versions (instance-samples.js, which
+// also remembers them for the session). `opts.instanceKey` picks one of the offered
+// instances, `opts.query` searches for them, `opts.force` re-reads from the server.
 // Returns null when the process was never deployed or has never run — the modal
 // treats that as "no samples", not as an error.
-async function instanceSamples(modeler, api, opts = {}) {
+function instanceSamples(modeler, api, opts = {}) {
   const bo = rootProcess(modeler);
-  const processId = bo && bo.id;
-  if (!processId || !api) return null;
-  if (opts.force) sampleCache.delete(processId);
-  if (!sampleCache.has(processId)) sampleCache.set(processId, fetchSamples(api, processId));
-
-  let rows;
-  try { rows = await sampleCache.get(processId); }
-  catch (e) { sampleCache.delete(processId); throw e; }
-  if (!rows || !rows.length) return null;
-
-  const chosen = rows.find((r) => r.key === opts.instanceKey) || rows[0];
-  return {
-    instance: { key: chosen.key, state: chosen.state, version: chosen.version, createdAt: chosen.createdAt },
-    values: chosen.values,
-    // The picker only needs each instance's identity; the values ride along in the
-    // cache so switching is a re-render, not a fetch.
-    instances: rows.map((r) => ({ key: r.key, state: r.state, version: r.version, createdAt: r.createdAt })),
-  };
-}
-
-// fetchSamples resolves the diagram's process id to deployed versions and reads one
-// version's instances. GET /instances?process= already returns each instance's
-// root-scope variables, so this is two requests and no per-variable round trip.
-// The newest version is preferred, but a version deployed a minute ago has no
-// instances yet — then its predecessor's values still describe the same variables,
-// so the walk continues rather than reporting nothing.
-//
-// What comes back is a page of that version's instances, and a page is all this wants:
-// the result is a *sample* of what the variables look like, cut to
-// MAX_SAMPLE_INSTANCES rows below, and nothing here counts it or reports a total. The
-// listing is newest-first within a definition, so the sample is of recent instances
-// rather than of whichever ones the cap happened to reach
-// (ADR-0365).
-async function fetchSamples(api, processId) {
-  const procs = await api("GET", "/api/v1/processes");
-  const versions = (procs || [])
-    .filter((p) => p.processId === processId)
-    .sort((a, b) => b.version - a.version);
-
-  for (const v of versions) {
-    let rows;
-    try { rows = await api("GET", "/api/v1/instances?process=" + encodeURIComponent(v.key)); }
-    catch { return []; }
-    const found = ((rows && rows.items) || [])
-      .filter((r) => r.processDefKey === v.key)
-      // Running instances first (their values are the live ones), then newest first.
-      .sort((a, b) => (a.state === b.state ? b.key - a.key : a.state === "active" ? -1 : 1))
-      .slice(0, MAX_SAMPLE_INSTANCES)
-      .map((r) => {
-        const values = {};
-        for (const vv of r.variables || []) {
-          if (vv && vv.name) values[vv.name] = { value: vv.value, kind: vv.kind };
-        }
-        return { key: r.key, state: r.state, version: r.version, createdAt: r.createdAt, values };
-      });
-    if (found.length) return found;
-  }
-  return [];
+  return lookupSamples(api, bo && bo.id, opts);
 }
 
 // devViewContext answers "what does the Developer View need to know" at the moment
@@ -2671,7 +2605,7 @@ function wireEditorVars(root, modeler, api) {
   // promises. Both are labelled in the badge's tooltip, so a declaration the run
   // contradicts is visible rather than quietly overwritten.
   const typeOf = (v) => {
-    const s = sampleValues && sampleValues[v.name];
+    const s = sampleFor(sampleValues, v.name);
     if (s) return { type: s.kind === "json" ? jsonTypeLabel(s.value) : s.kind, observed: true };
     return { type: v.type || "", observed: false };
   };
@@ -2704,7 +2638,7 @@ function wireEditorVars(root, modeler, api) {
     // it is what an author is looking at it for, and at design time it is the only way
     // to see one at all: a name tells you a worker writes `kunden`, not that a row
     // carries `kundennr` and not `id`.
-    const s = sampleValues && sampleValues[v.name];
+    const s = sampleFor(sampleValues, v.name);
     let valHTML = "";
     let structHTML = "";
     if (s && isComplexVar(s)) {
@@ -10791,7 +10725,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       return;
     }
     docHistory.innerHTML = versions.map((v) => {
-      const when = v.createdAt ? new Date(v.createdAt * 1000).toLocaleString() : "";
+      const when = v.createdAt ? fmtDateTime(v.createdAt * 1000) : "";
       const by = v.createdBy ? " · " + esc(v.createdBy) : "";
       const note = v.note ? `<div class="doc-note">${esc(v.note)}</div>` : "";
       const share = v.shareUrl
@@ -11311,7 +11245,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         frozenNote = ` <span class="pill${frozen.behind ? " warn" : ""} frozen-mark" title="${esc(frozen.title)}">${esc(frozen.label)}</span>`;
       }
       if (here.diagramUpdatedAt) {
-        const when = new Date(here.diagramUpdatedAt * 1000).toLocaleString();
+        const when = fmtDateTime(here.diagramUpdatedAt * 1000);
         layoutNote = `<span class="muted live-layout-note" title="Only the drawing was changed — the process, its version and its instances are the deployed ones${
           here.diagramUpdatedBy ? `, adjusted by ${esc(here.diagramUpdatedByName || here.diagramUpdatedBy)}` : ""}">layout adjusted ${esc(when)}</span>`;
       }
@@ -11770,7 +11704,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         return `<span class="chip">${esc(v.name)}=${esc(v.value)}</span>`;
       }).join(" ");
   // completedAt is unix nanoseconds; Date wants milliseconds.
-  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "";
+  const fmtNano = (ns) => ns ? fmtDateTime(ns / 1e6) : "";
 
   // fmtDuration renders a nanosecond span as a short human duration (the age of
   // a running instance, or how long a finished one took).
@@ -12897,7 +12831,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
   let animToken = 0; // bumped to supersede an in-flight animation
 
   const speed = () => Number(speedSel.value) || 1;
-  const fmtClock = (ns) => (ns ? new Date(ns / 1e6).toLocaleTimeString() : "");
+  const fmtClock = (ns) => (ns ? fmtTime(ns / 1e6) : "");
 
   function receiverLabel(f) {
     const el = registry.get(f.receiverElementId);
@@ -13478,7 +13412,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const speed = () => Number(speedSel.value) || 1;
   const tokenColors = ["#0072b2", "#d55e00", "#009e73", "#cc79a7", "#e69f00", "#56b4e9"];
   const tokenColor = (id) => tokenColors[Number(BigInt(String(id || 0)) % BigInt(tokenColors.length))];
-  const fmtClock = (ns) => (ns ? new Date(ns / 1e6).toLocaleTimeString() : "");
+  const fmtClock = (ns) => (ns ? fmtTime(ns / 1e6) : "");
   const fmtDateTime = (ns) => {
     if (!ns) return "—";
     const d = new Date(ns / 1e6);

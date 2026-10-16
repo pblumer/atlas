@@ -600,6 +600,18 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Delete a task folder (owner only)", tag: "Task folders", role: RoleUser,
 			resp: jsonBody("The deleted folder's id", tObject())}},
 
+		// How one person reads the console: number format, time zone, language
+		// (ADR-0459). Both verbs act on the signed-in
+		// identity and on no other — there is no listing and no path parameter, so
+		// one person's settings are not addressable by anybody else.
+		{"GET", "/api/v1/me/preferences", s.userPrefs.HandleGet, apiOp{
+			summary: "The signed-in person's display preferences: region (number and date format), time zone and interface language. Unset fields are the defaults — nothing stored answers 200 with all three empty. On an instance without authentication there is no such resource and the answer is 404, which the console reads as \"keep these in the browser\"", tag: "Preferences", role: RoleUser,
+			resp: jsonBody("Display preferences", schemaObj(map[string]any{"userId": tString(), "region": tString(), "timeZone": tString(), "language": tString(), "updatedAt": tInteger()}))}},
+		{"PUT", "/api/v1/me/preferences", s.userPrefs.HandleSave, apiOp{
+			summary: "Rewrite the signed-in person's display preferences. The whole record is written, so a field sent empty is a field cleared back to the default — which is how the screen's reset works. A region outside the offered list, a language with no catalogue, or a time zone the IANA database does not know is refused rather than stored, because the browser is what formats with it", tag: "Preferences", role: RoleUser,
+			req:  jsonBody("Region, time zone and language", schemaObj(map[string]any{"region": tString(), "timeZone": tString(), "language": tString()})),
+			resp: jsonBody("The stored preferences", tObject())}},
+
 		{"POST", "/api/v1/drafts", s.handleSaveDraft, apiOp{
 			summary: "Save a diagram draft, keyed by its process id. ?from=<draft id> names the draft being edited (empty for a never-saved diagram): a changed process id then renames the draft instead of leaving a second copy behind, and a save onto an id another draft already holds is refused with 409 (ADR-0222). Omit ?from= for the plain upsert-by-id an import or an agent wants", tag: "Drafts", role: RoleModeler, req: jsonBody("Draft", tObject()), resp: jsonBody("Saved draft", tObject())}},
 		{"GET", "/api/v1/diagram-shortcuts", s.handleListDiagramShortcuts, apiOp{

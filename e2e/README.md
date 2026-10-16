@@ -54,6 +54,18 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   change event, keeping an fx field's `=`; a focused dmn-js output cell gets a spark and Apply types
   into it, while an input cell (a unary test) is not written to; and without an AI Worker the chat
   is absent and the rest still works.
+- **`instance-samples.spec.mjs`** ([ADR-0145](../docs/adr/0145-developer-view-for-code-fields.md),
+  amended): the **live values** the Developer View and the Variables panel show, against a
+  mock API — the picker lists the newest instances of every version of the process, running
+  ones first, at one page request per version and once per session until a forced reload; a
+  version that cannot be read leaves the others offered; a search asks every version, a hit
+  from a content search is read whole by its key before its values are shown, an
+  instance-key hit needs no second read, an archived hit is skipped, and a search the server
+  or the picker cut short says so; a failed search is an error rather than "no match"; and a
+  dotted name such as `application.TENANT_ID` is read as a path into its JSON variable.
+  `dev-view.spec.mjs` drives the search field itself: Enter searches, a pick stays inside the
+  search, a search that finds nothing or fails keeps the instance on screen, and emptying the
+  field returns to the recent instances.
 - **`token-simulation.spec.mjs`** — message semantics across two pools (ADR-0101): a thrown
   message **delivers to a waiting catch** (both pools complete), a message with **nothing
   waiting is not buffered** (the later catch still parks), and a parked catch **still fires
@@ -102,7 +114,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   following its boxes as they are typed in without moving the caret out of them,
   naming a dataset the run cannot use by the generator's own rules, distinguishing
   "not filled in" from "wrong", and disabling Run while the first two are unsatisfied;
-  and stopping a batch leaves what it did readable.
+  the strip **counts what is worth looking at over the whole run** beside the page
+  it is showing — distinct cases rather than a sum over the rules, a floor when the
+  server's sample of a rule's offenders was cut, and incidents counted as incidents
+  rather than as cases; and stopping a batch leaves what it did readable.
 
   And the **scenario half**: the checkboxes an author ticks become the expectations a
   build exits on, resolved against the run that happened rather than the dataset in

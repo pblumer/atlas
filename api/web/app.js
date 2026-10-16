@@ -54,6 +54,9 @@ import { viewAIAccess } from "./aiaccess.js";
 // star beside a diagram in the lists. Its own module for the reason aiaccess.js is.
 import { installDiagramShortcuts, setShortcutsEnabled, starButton, noteDiagramOpened } from "./diagram-shortcuts.js";
 import { renderKeyFeatures, paintKeyFeatures } from "./key-features.js";
+import { fmtDateTime } from "./datefmt.js";
+import { prefs, loadPrefs } from "./prefs.js";
+import { renderDisplaySettings } from "./displaysettings.js";
 
 const view = document.getElementById("view");
 
@@ -143,7 +146,7 @@ export function toast(msg, kind) {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const fmtTime = (unix) => unix ? new Date(unix * 1000).toLocaleString() : "—";
+const fmtTime = (unix) => unix ? fmtDateTime(unix * 1000) : "—";
 
 // ---------- Auth ----------
 // AUTH mirrors GET /api/v1/auth/me: whether login is enforced and, if so, who is
@@ -233,6 +236,7 @@ function updateAccount() {
     btn.title = label;
     if (menu) menu.innerHTML =
       `<div class="mlabel">Signed in as <b>${esc(AUTH.user.username)}</b></div>` +
+      `<a href="#/console/settings" title="Number format, time zone and language — yours, not this server's">Display settings</a>` +
       `<button type="button" data-act="logout" title="Sign out of atlas">Log out</button>`;
   } else {
     // Nobody is signed in — which is two different things. With enforcement off the
@@ -243,7 +247,12 @@ function updateAccount() {
     const label = AUTH.enabled ? "Not signed in" : "Single-user mode";
     btn.textContent = "A";
     btn.title = AUTH.enabled ? "Account" : "Single-user mode";
-    if (menu) menu.innerHTML = `<div class="mlabel">${label}</div>`;
+    // Single-user mode has a console to configure and nobody to store a preference
+    // for, so the entry stays and the setting lives in this browser. The login
+    // screen has neither: an entry there would point into a console the viewer
+    // cannot reach yet.
+    if (menu) menu.innerHTML = `<div class="mlabel">${label}</div>` +
+      (AUTH.enabled ? "" : `<a href="#/console/settings" title="Number format, time zone and language">Display settings</a>`);
   }
 }
 
@@ -691,6 +700,10 @@ const TOPNAV = {
     { name: "Events", route: "#/console/events", role: "modeler" },
     { name: "AI access", route: "#/console/ai-access", role: "any" },
     { name: "Audit log", route: "#/console/audit", role: "admin" },
+    // How this person reads: number format, time zone, language. Role "any",
+    // because it configures the reader rather than the server
+    // (ADR-0459).
+    { name: "Display", route: "#/console/settings", role: "any" },
   ],
   modeler: [
     { name: "Home", route: "#/modeler", role: "modeler" },
@@ -1108,6 +1121,9 @@ function handbookHelp(path) {
   // The two Console screens whose chapter is not the Console's own: connecting an
   // assistant and reading the grant history are both access control, and that is
   // where the accounts chapter puts them.
+  // Before the "#/console" catch-all below, like every other console screen with a
+  // chapter of its own: how a person reads the console is not a quick-start topic.
+  if (path.startsWith("#/console/settings")) return H("darstellung", "Display settings");
   if (path.startsWith("#/console/ai-access")) return H("konten", "Connecting an AI assistant");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
   if (path.startsWith("#/console/events")) return H("ereignisse", "Events");
@@ -5237,8 +5253,8 @@ async function toggleFeedSubs(row, workerId) {
     }
     if (s.hold) {
       return `<span class="pill err" title="${esc(s.hold.lastError)}"><span class="dot"></span>held</span>`
-        + ` <span class="muted">failing since ${esc(new Date(s.hold.failingSince).toLocaleString())},`
-        + ` next attempt ${esc(new Date(s.hold.retryAt).toLocaleString())}: ${esc(s.hold.lastError)}</span>`;
+        + ` <span class="muted">failing since ${esc(fmtDateTime(s.hold.failingSince))},`
+        + ` next attempt ${esc(fmtDateTime(s.hold.retryAt))}: ${esc(s.hold.lastError)}</span>`;
     }
     return '<span class="pill ok"><span class="dot"></span>on</span>'
       + ` <span class="muted">${s.deliveredAt ? "last delivered " + esc(fmtTime(s.deliveredAt)) : "nothing delivered yet"}</span>`;
@@ -6049,11 +6065,7 @@ async function viewInstances() {
   let incTruncated = false;
   // Short and fixed-width-ish (dd.mm.yyyy hh:mm): an overview column wants the day and
   // the time, not seconds, and it must not wrap onto a second line. completedAt is ns.
-  const fmtNano = (ns) => ns
-    ? new Date(ns / 1e6).toLocaleString(undefined, {
-      day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
-    })
-    : "—";
+  const fmtNano = (ns) => (ns ? fmtDateTime(ns / 1e6, { seconds: false }) : "—");
 
   // loadIncidents counts the server's unresolved incidents per definition, once per
   // refresh, off the incident *summary* rather than off the list
@@ -6394,7 +6406,7 @@ async function viewDecisions() {
     </div>`;
   const tbody = document.getElementById("rows");
   // lastEvaluatedAt is unix nanoseconds; Date wants milliseconds.
-  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
+  const fmtNano = (ns) => ns ? fmtDateTime(ns / 1e6) : "—";
 
   const load = async () => {
     try {
@@ -6970,7 +6982,7 @@ async function viewWorkers() {
     if (secs < 60) return `${secs}s ago`;
     if (secs < 3600) return `${Math.round(secs / 60)}m ago`;
     if (secs < 86400) return `${Math.round(secs / 3600)}h ago`;
-    return new Date(ns / 1e6).toLocaleString();
+    return fmtDateTime(ns / 1e6);
   };
   // When the engine will next try a held target. "Now" rather than a negative age: a
   // probe that is due goes out on the next round, and a row reading "-3s ago" would make
@@ -7484,7 +7496,7 @@ async function viewBufferedMessages() {
   const total = document.getElementById("bm-total");
   const nameIn = document.getElementById("bm-name");
   const keyIn = document.getElementById("bm-key");
-  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
+  const fmtNano = (ns) => ns ? fmtDateTime(ns / 1e6) : "—";
   const payload = (vars) => (vars || []).map((v) => `${esc(v.name)} = ${esc(String(v.value).slice(0, 80))}`).join("<br>") || '<span class="muted">none</span>';
   const row = (m) => `<tr>
       <td><b>${esc(m.name)}</b>${m.expired ? ' <span class="pill warn" title="Past its time: nothing receives it now, and the next sweep drops it">expired</span>' : ""}</td>
@@ -7554,7 +7566,7 @@ async function viewMailOutbox() {
     outbox is memory only: it holds the newest messages and empties on restart.</p>
     <div class="card" id="ob-list"><p class="empty">Loading…</p></div>`;
   const list = document.getElementById("ob-list");
-  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
+  const fmtNano = (ns) => ns ? fmtDateTime(ns / 1e6) : "—";
   const addrs = (a) => (a || []).join(", ");
 
   const load = async () => {
@@ -7642,7 +7654,7 @@ async function viewADMockDirectory() {
     start from the seed again.</p>
     <div id="admockdir-list"><p class="empty">Loading…</p></div>`;
   const list = document.getElementById("admockdir-list");
-  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
+  const fmtNano = (ns) => ns ? fmtDateTime(ns / 1e6) : "—";
 
   // splitDN breaks a DN into its RDNs, honouring the backslash escape — "cn=Meier\,
   // Ada,ou=users" is two components and not three, and a tree that got that wrong
@@ -7854,7 +7866,7 @@ async function viewSQLMockJournal() {
     later <code>SELECT</code> returns. A worker restart empties its journal.</p>
     <div id="sqlmock-list"><p class="empty">Loading…</p></div>`;
   const list = document.getElementById("sqlmock-list");
-  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
+  const fmtNano = (ns) => ns ? fmtDateTime(ns / 1e6) : "—";
 
   // A bound value, as it goes to the driver. Rendered as JSON so a string "7" and the
   // number 7 are distinguishable — which is the whole question when a lookup found
@@ -8013,7 +8025,7 @@ async function viewDecisionDetail(id) {
     <div class="dec-pop" id="dec-pop" hidden></div>`;
   const tbody = document.getElementById("rows");
   const pop = document.getElementById("dec-pop");
-  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
+  const fmtNano = (ns) => ns ? fmtDateTime(ns / 1e6) : "—";
   // The rule matrix is drawn by dmn-trace.js, the one renderer the decision
   // editor's Test panel also uses, so a trace reads the same in both places.
   const tablesOf = (r) => traceTablesOf(r && r.trace);
@@ -8200,7 +8212,7 @@ function taskOrder(a, b) {
 // searches, so "28.9." finds the tasks opened that day.
 function openedLabel(t) {
   if (!t || !t.createdAt) return "";
-  return new Date(t.createdAt).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+  return fmtDateTime(t.createdAt, { seconds: false });
 }
 
 // dueInfo turns a task's Unix-ms due date into a short relative label and an
@@ -8216,7 +8228,7 @@ function dueInfo(t) {
   else if (mins < 60 * 24) rel = `${Math.round(mins / 60)} h`;
   else rel = `${Math.round(mins / (60 * 24))} d`;
   const label = overdue ? `Overdue by ${rel}` : `Due in ${rel}`;
-  const abs = new Date(t.dueDate).toLocaleString();
+  const abs = fmtDateTime(t.dueDate);
   return { overdue, label, rel, abs };
 }
 
@@ -8588,7 +8600,7 @@ async function viewTasks(preselectKey) {
         // When the task was opened, on the row, so a queue can be read by age without
         // opening each task. Absent for a task the server has no time for.
         const opened = t.createdAt
-          ? `<span class="tasks-item-opened" title="${esc(tr("tasks.opened") + " " + new Date(t.createdAt).toLocaleString())}">${esc(openedLabel(t))}</span>`
+          ? `<span class="tasks-item-opened" title="${esc(tr("tasks.opened") + " " + fmtDateTime(t.createdAt))}">${esc(openedLabel(t))}</span>`
           : "";
         // A row that decides an order says so, and says where it is decided.
         //
@@ -9384,7 +9396,7 @@ async function viewTasks(preselectKey) {
         ${row("Candidate groups", esc(t.candidateGroups || "—"))}
         ${t.lane ? row("Lane", esc((t.lanePath && t.lanePath.length > 1 ? t.lanePath : [t.lane]).join(" › "))) : ""}
         ${row("Priority", `${taskPriority(t)}${taskPriority(t) >= 70 ? ' <span class="prio-dot" title="High priority"></span>' : ""}`)}
-        ${row(tr("tasks.opened"), t.createdAt ? esc(new Date(t.createdAt).toLocaleString()) : "—")}
+        ${row(tr("tasks.opened"), t.createdAt ? esc(fmtDateTime(t.createdAt)) : "—")}
         ${row("Due", (() => { const d = dueInfo(t); return d ? `<span class="${d.overdue ? "due-text overdue" : "due-text"}" title="${esc(d.abs)}">${esc(d.label)} · ${esc(d.abs)}</span>` : "—"; })())}
         ${row("Instance", `<span class="chip">${t.processInstanceKey}</span>`)}
         ${row("Task key", `<span class="chip">${t.key}</span>`)}
@@ -11023,6 +11035,7 @@ async function route() {
       return await viewAIAccess({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
+    if (path === "#/console/settings") return await renderDisplaySettings(view, { api, toast });
     if (path === "#/console/events") {
       const gen = navGen;
       const { viewEvents } = await import("./events.js");
@@ -11211,6 +11224,20 @@ function enhanceViewTables() {
 initShell();
 window.addEventListener("hashchange", route);
 loadAuth().then(route);
+// Reconcile this person's display preferences with the server. Not awaited before
+// the first render: every formatter reads the browser's mirror synchronously, so
+// the first paint is already in the right format, and an unreachable server must
+// not hold the console back. A re-render follows only when the server's answer is
+// different from what this browser remembered — a first sign-in here, or a change
+// made somewhere else.
+const prefsAtBoot = prefs(); // what this browser remembered, before the server answers
+loadPrefs(api).then(() => {
+  const now = prefs();
+  const same = now.region === prefsAtBoot.region
+    && now.timeZone === prefsAtBoot.timeZone
+    && now.language === prefsAtBoot.language;
+  if (!same) route();
+});
 // Reconcile the org-wide brand colour with the server. The inline bootstrap in
 // index.html has already applied the cached palette (no flash); this confirms or
 // updates it once the network responds, and is the first paint of the accent for a

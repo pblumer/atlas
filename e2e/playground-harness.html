@@ -86,7 +86,9 @@
           : { state: "finished", occurrences: 9, cases: 3, completed: 3, simTime: "2026-03-05T11:00:00Z" };
       };
       const REPORT = {
-        cases: 3, completed: 3, incidents: 0, maxInFlight: 3,
+        // These are the three cases makeCases builds below, so the summary and the
+        // rows tell one story: the third is still parked behind its incident.
+        cases: 3, completed: 2, incidents: 1, maxInFlight: 3,
         simStart: "2026-03-05T08:00:00Z", simEnd: "2026-03-05T11:00:00Z",
         duration: { count: 3, minMillis: 3600000, p50Millis: 7200000, p90Millis: 10800000,
                     maxMillis: 10800000, meanMillis: 7200000 },
@@ -133,8 +135,9 @@
         baselineAt: 1,
       };
       const VERDICT = { passed: false, checks: [
-        { name: "cases completed", want: "at least 3", got: "3 of 3", passed: true },
-        { name: "incidents", want: "at most 0", got: "0", passed: true },
+        { name: "cases completed", want: "at least 3", got: "2 of 3", passed: false },
+        { name: "incidents", want: "at most 0", got: "1", passed: false },
+        { name: "p90 duration", want: "at most 4h", got: "3h", passed: true },
         { name: "queue at clerks", want: "at most 5", got: "9", passed: false },
       ], rules: [] };
 

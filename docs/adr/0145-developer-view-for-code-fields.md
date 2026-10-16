@@ -1,6 +1,6 @@
 # ADR-0145: A Developer View for code-bearing fields
 
-- **Status:** Accepted
+- **Status:** Accepted (amended)
 - **Implementation:** Landed
 - **Date:** 2026-08-18
 - **Deciders:** Atlas maintainers
@@ -173,3 +173,53 @@ Bad / accepted:
 
 Design-time UI only. No allocation path, no WAL, no state, no `applyToState`, no
 partition. Invariants I1–I6 are untouched.
+
+## Amendment (2026-10-14): the live values come from any version, and can be searched for
+
+The decision above read the live values from the newest deployed version that has any
+instance, and offered up to fifty of its instances in a picker. Two things made that
+the wrong sample for exactly the case the picker exists for, finding the instance that
+took the branch being written about:
+
+- **An instance of an older version was out of reach.** Once the newest version had run
+  once, every earlier instance disappeared from the picker, although its variables are
+  usually the ones being written about.
+- **A key, a state and a version do not find an instance.** Among fifty rows that
+  differ only in a fifteen-digit key, the one with `Test=Versuch 2` is found by trying
+  them one by one.
+
+So the lookup changes in three ways:
+
+- **Every version.** The picker lists the newest instances of every deployed version of
+  the root process id, running ones first, then by start time, cut to fifty. Each version
+  is its own page request (`GET /instances?process=<key>&limit=50`), at most four at a
+  time, because the listing reads a definition's own index and has no cross-version form.
+  The result is still memoized per process id for the session and refreshed by Reload.
+- **A search.** A field under the picker takes what the Operations search takes: an
+  instance key, `name=value`, or a term with `*` and `?`. It runs on Enter, as
+  `GET /instances/search?process=<key>&q=` for every version, scoped so that each
+  search reads that definition's indexes (and the value index for a name the version
+  declares searchable) rather than every instance on the server. The hits replace the
+  picker's list, each labelled with the variable it matched. A search the server or the
+  picker cut short says so. Emptying the field returns to the recent instances.
+- **A hit is read whole.** A content search answers each instance with only the
+  variables that matched, so the hit the author picks is read again by its key (a point
+  read, scoped to its version) before its values are shown. Values shown beside the
+  names are never a partial set presented as the whole one.
+
+A search that matches nothing, or fails, leaves the instance on screen and says so in a
+note under the field. Losing the sample being worked with to a typo would be worse than
+the search not answering. An archived hit, one history retention already removed
+(ADR-0115), is skipped, because there is nothing left on this server to read its values
+from.
+
+The lookup moved out of `editor.js` into `instance-samples.js`, a function of what the
+server answers, so it is tested against a mock API (`e2e/instance-samples.spec.mjs`).
+The same module reads a dotted name in the Variables pane and the Variables panel as a
+path into a JSON variable. A constant is listed as `application.TENANT_ID` while the
+instance holds the namespace as one object (ADR-0456).
+
+Accepted cost: a search asks every version, so on a process with many versions it is
+as many requests, and a bare number that is not an instance key of a version makes
+that version walk its instances, as the same search in the Operations view does. The
+search runs only when asked for, and never per keystroke.

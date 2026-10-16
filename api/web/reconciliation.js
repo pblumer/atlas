@@ -29,11 +29,13 @@
 // and storing a sentence on every record to avoid writing two here would be paying
 // per row for prose.
 
+import { fmtDateTime } from "./datefmt.js";
+
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const fmtWhen = (unixSeconds) =>
-  unixSeconds ? new Date(unixSeconds * 1000).toLocaleString() : "—";
+  unixSeconds ? fmtDateTime(unixSeconds * 1000) : "—";
 
 // sinceWhen says how long a disagreement has stood, which is the thing a list of
 // findings is otherwise bad at conveying: "three weeks" and "since this morning"

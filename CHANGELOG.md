@@ -39,7 +39,95 @@ _Changed_ / _Removed_ for each version.
   whole-instance snapshot, and `ATLAS_LIMIT_DIAGRAM_FAVOURITES` (default 100) bounds how many
   diagrams one account may mark.
 
+- **A Display screen: how *you* read the console, kept with your account.** Three
+  settings in one place (**Console › Display**, and in the account menu): how a number
+  is written, which clock a timestamp is on, and which language the translated screens
+  use. Each option carries a sample of what it will actually print, because "Switzerland"
+  tells nobody what a badge will show and `25'864.5` tells them exactly.
+
+  The one that is not cosmetic is the **time zone**. Until now every timestamp in the
+  console was rendered in whatever zone the browser happened to be in — forty-three
+  `toLocaleString()` calls with no arguments, which is a default rather than a decision.
+  A server running UTC, an operator in Zurich and a colleague in Boston read the same
+  incident timestamp as three different wall clocks, and nothing on screen said which.
+  All of them now go through one formatter, on the chosen clock, and the screen names
+  the zone it is showing. The list starts with UTC — the browser's own zone list leaves
+  it out, and UTC is what the logs and the exported event stream are written in.
+
+  The number format is a **fixed list of four** — International `25 864.5`, Switzerland
+  `25'864.5`, Germany/Austria `25.864,5`, USA/UK `25,864.5` — rather than a locale
+  picker, so the preview can promise exactly what a badge will print and a test can pin
+  it. The **language** picker finally exposes the catalogue
+  ([ADR-0267](docs/adr/0267-console-speaks-german-first.md) put one behind `?lang=` and
+  listed this as its own follow-up); it says plainly that only the translated screens
+  follow it.
+
+  The record is **per user, on the server** (`GET`/`PUT /api/v1/me/preferences`), with
+  the browser copy kept as a mirror so the first paint is already right, an unreachable
+  server changes nothing, and an instance with authentication off — where there is no
+  identity to own a preference — keeps it in the browser and says so. **Nothing moves
+  until somebody chooses:** an unset record is exactly today's behaviour, so upgrading
+  changes no pixel (ADR-0459).
+
+- **The Developer View finds the instance to read values from.** A search field under
+  "Values from instance" takes what the Operations search takes: an instance key,
+  `name=value`, or a term with `*` and `?`. It searches every version of the process and
+  offers the hits in the picker, each labelled with the variable it matched. The values
+  of the hit are read whole before they are shown. A search that matches nothing or
+  fails leaves the instance on screen and says so. The picker itself now lists the
+  newest instances of every deployed version, running ones first, not only those of the
+  newest version that has any
+  ([ADR-0145](docs/adr/0145-developer-view-for-code-fields.md)).
+
+### Changed
+
+- **A PowerShell script runs unchanged in Atlas and at a prompt.** A script written for
+  PowerShell on its own declares its inputs in a `param()` block, logs with
+  `Write-Host` and may end with `exit 0`. In Atlas each of those failed, two of them
+  silently ([ADR-0458](docs/adr/0458-powershell-param-block.md)).
+
+  - **`param()` is now bound by name.** Nothing used to bind the block, so its
+    parameters shadowed the instance variables: a mandatory one failed as missing, and
+    any other ran on its default or an empty string while the task completed. The
+    bootstrap now passes each declared parameter the variable of the same name, matched
+    without regard to case as PowerShell matches parameters. Types, `Mandatory` and
+    validation attributes then act as PowerShell's binder makes them act. A namespace
+    is declared as `[hashtable]$application`, and at a prompt the same script takes
+    `-application @{ TENANT_ID = '…' }`. Every variable is still set as a variable as
+    well, so a script without a block is unchanged.
+  - **Behaviour change:** a parameter whose name matches an instance variable now
+    receives that variable's value. Before, its default always won.
+  - **Logs no longer break the result.** PowerShell writes `Write-Host`, warnings,
+    verbose and information messages to stdout, the channel the result is read from as
+    JSON, so a script that logged failed with "decode output". Only the output stream
+    is the result now. The other streams go to stderr, prefixed as at a prompt, and a
+    failure quotes them, so you see what the script did before it failed.
+  - **`exit` keeps the output.** The result is written in a `finally` block, so
+    `exit 0` after output returns that output, and a non-zero exit fails the run with
+    its code.
+
+  The result keeps the shape it had before for every form a test pins against the real
+  interpreter. The Modeler's script help states the contract and shows a `param()`
+  example. The help no longer claims that secrets arrive as `$env:NAME`: a script gets
+  only PATH, HOME, temp and locale.
+
 ### Fixed
+
+- **A failing PowerShell script reports its error as plain text.** PowerShell 7 colours
+  its error view with terminal escape sequences even when stderr is a pipe, and Atlas
+  quoted that stderr verbatim. The Modeler's Test run, an incident and the API all show
+  text, so a parse error arrived as `⌧[31;1m⌧[36;1mLine |⌧[0m` on every line, with the
+  message buried between the codes.
+
+  Two changes, because PowerShell versions differ. The bootstrap now sets
+  `$PSStyle.OutputRendering = 'PlainText'` before it runs the source — it has to be the
+  bootstrap, since an error in a script that does not parse is written before any line
+  of the script could ask for it. PowerShell 7.6 honours that; 7.4 and 7.5 ignore it for
+  the error view (and ignore `NO_COLOR` too). So the script worker also strips the
+  escape sequences from an interpreter's stderr before quoting it, for every language,
+  and drops a sequence the 32 KB stderr budget cut off rather than leaving its
+  parameter bytes in the message. The script's result is unaffected: `ConvertTo-Json`
+  escapes ESC, so a result string that carries one keeps it.
 
 - **A form that will not submit now says which field is missing.** Every screen that
   renders a form — completing a task, *Tasks › Start a process*, and the start-values
@@ -74,6 +162,20 @@ _Changed_ / _Removed_ for each version.
   `e2e/form-refusal.spec.mjs` holds the two Tasks screens — the tab switch, the named
   field, the blank-form cut, and a filled form that is not refused on each — and
   `e2e/deploy-start-form.spec.mjs` holds the shared dialog's.
+- **"From instance" in the Developer View says what it did.** The Test panel's sample is
+  filled from the instance as soon as its values arrive, so the button usually found
+  nothing to change and a click had no visible effect. It now reports that the sample
+  already holds the instance's values, or that it filled them and how many, and clears a
+  result that belonged to the replaced sample. The button is also withdrawn when a
+  reload finds no instance or fails, rather than replacing the author's sample with an
+  empty object.
+- **The Developer View and the Variables panel show the value of a namespaced
+  constant.** Both list a constant by its path, `application.TENANT_ID`, while the
+  instance holds the namespace as one object, `application`, so the row looked up a
+  variable of the whole name and showed no value. A dotted name the instance does not
+  hold as such is now read as a path into that object, through any depth, and a path the
+  object does not hold still shows nothing rather than a wrong value
+  ([ADR-0456](docs/adr/0456-constant-namespaces.md)).
 
 ## [0.13.0] — 2026-10-14
 

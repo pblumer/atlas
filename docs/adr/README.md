@@ -230,7 +230,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0142](0142-prometheus-metrics.md) | Operational metrics over a Prometheus endpoint | Accepted | Landed |
 | [0143](0143-process-documentation-export.md) | Process documentation export | Accepted | Landed |
 | [0144](0144-per-definition-history-ttl.md) | Per-definition history TTL — retention the model declares | Accepted | Landed |
-| [0145](0145-developer-view-for-code-fields.md) | A Developer View for code-bearing fields | Accepted | Landed |
+| [0145](0145-developer-view-for-code-fields.md) | A Developer View for code-bearing fields | Accepted (amended) | Landed |
 | [0146](0146-history-expiry-due-date-index.md) | History expiry as a due-date index — retention that scales with what is due | Accepted | Landed |
 | [0147](0147-splitting-the-api-server-object.md) | Splitting the api Server object, without weakening the single writer | Accepted (amended) | Landed |
 | [0148](0148-org-wide-brand-logo.md) | Org-wide brand logo | Accepted | Landed |
@@ -543,6 +543,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0455](0455-start-variable-defaults.md) | A start variable's default is what an instance starts with when its start did not supply it | Accepted | Landed |
 | [0456](0456-constant-namespaces.md) | Constants the installation holds are read under the namespace that holds them, and the installation holds its own | Accepted | Landed |
 | [0457](0457-modeler-xml-source.md) | The Modeler shows a model's source and applies a correction to it | Accepted | Landed |
+| [0458](0458-powershell-param-block.md) | A PowerShell script runs unchanged in Atlas and at a prompt | Accepted | Landed |
+| [0459](0459-display-preferences-per-user.md) | How a person reads — number format, time zone and language, per user | Proposed | Not started |
 
 ## The two states of a record
 

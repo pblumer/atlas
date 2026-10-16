@@ -15,6 +15,7 @@
 
 import { PdfDocument, bytesToBase64 } from "./pdf.js";
 import { svgToJpeg, wantsLandscape } from "./doc-graphics.js";
+import { fmtDateTime } from "./datefmt.js";
 
 const GREY = [0.42, 0.42, 0.42];
 
@@ -212,7 +213,7 @@ export function buildDecisionDocumentationPdf(spec) {
   if (modelRef) doc.keyValue("Model handle", modelRef + ".dmn");
   doc.keyValue("Decision ID", collection.decisionId || "—");
   if (version) doc.keyValue("Documentation version", "v" + version);
-  doc.keyValue("Created", createdAt || new Date().toLocaleString());
+  doc.keyValue("Created", createdAt || fmtDateTime(Date.now()));
   if (createdBy) doc.keyValue("Created by", createdBy);
   doc.keyValue("Decisions documented", String(collection.decisions.length));
   if (note) doc.keyValue("Note", note);
@@ -274,7 +275,7 @@ export async function exportDecisionDocumentation({ modeler, api, xml, title, no
 
   const bytes = buildDecisionDocumentationPdf({
     collection, diagram, title, note, createdBy, modelRef,
-    createdAt: new Date().toLocaleString(),
+    createdAt: fmtDateTime(Date.now()),
   });
 
   return api("POST", `/api/v1/decisions/${encodeURIComponent(collection.decisionId)}/documentation`, {

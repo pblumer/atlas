@@ -999,7 +999,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
         drawn.overlays.push(overlays.add(id, "pg-visits", {
           position: { bottom: 4, right: 4 },
           html: `<div class="token-badges"><div class="token-badge history"
-            title="step ${at.map(fmtCount).join(", ")} of this case">${at.map(fmtCount).join(", ")}</div></div>`,
+            title="step ${at.map((n) => fmtCount(n)).join(", ")} of this case">${at.map((n) => fmtCount(n)).join(", ")}</div></div>`,
         }));
       } catch { /* shape without graphics */ }
     }
@@ -1322,6 +1322,34 @@ export function attachPlayground(root, { api, toast, modeler }) {
     for (const r of (state.verdict && state.verdict.rules) || []) {
       for (const i of r.examples || []) out.add(i);
     }
+    return out;
+  }
+
+  // deviations are the cases worth looking at, counted over the whole run: the ones
+  // a rule caught, the ones that never finished, and the incidents.
+  //
+  // Over the run rather than over the page, because that is the question somebody
+  // asks of this line — whether there is anything here to page towards at all. A
+  // count of what is on screen would answer a question nobody has, and would read as
+  // the run's total next to "1–50 of 300".
+  //
+  // The rule count is distinct cases rather than a sum over the rules, so a case
+  // that broke two is counted once; it comes from the same set the rows are marked
+  // from, so the number and the marks cannot disagree. The server samples a rule's
+  // offenders, so when a sample was cut the number is a floor and says so. Incidents
+  // are counted as incidents, not as cases: a case can carry several, and the run
+  // knows the one number and not the other.
+  function deviations() {
+    const rep = state.report || {};
+    const rules = (state.verdict && state.verdict.rules) || [];
+    const broke = violatingCases();
+    const out = [];
+    if (broke.size) {
+      out.push(`${rules.some((r) => r.truncated) ? "at least " : ""}${broke.size} broke a rule`);
+    }
+    const unfinished = Math.max(0, (rep.cases || 0) - (rep.completed || 0));
+    if (unfinished) out.push(`${unfinished} unfinished`);
+    if (rep.incidents) out.push(`${rep.incidents} incident${rep.incidents === 1 ? "" : "s"}`);
     return out;
   }
 
@@ -1834,10 +1862,13 @@ export function attachPlayground(root, { api, toast, modeler }) {
     // the longest — and a column scaled to a case on page nine would draw all fifty
     // of them as short.
     const slowest = Math.max(0, ...rows.map((r) => (r.ended ? r.durationMillis || 0 : 0)));
+    const flagged = deviations();
     return `
       <div class="pg-results-head">
         <b>Results</b>
         <span class="muted">${shown ? `${offset + 1}\u2013${offset + shown} of ${total} cases` : "no cases"}</span>
+        <span class="pg-dev${flagged.length ? " bad" : ""}">${
+          flagged.length ? `&#10007; ${esc(flagged.join(" \u00b7 "))}` : "nothing flagged"}</span>
         <span style="flex:1"></span>
         <button class="btn neutral small" id="pg-page-prev"${offset > 0 ? "" : " disabled"}>Previous</button>
         <button class="btn neutral small" id="pg-page-next"${offset + shown < total ? "" : " disabled"}>Next</button>

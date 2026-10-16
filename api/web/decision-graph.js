@@ -27,6 +27,7 @@
 //     the engine can do — rather than rendered as an absence of rules.
 
 import { renderTraceTable, tablesOf as traceTablesOf, fmtVal as traceValue } from "./dmn-trace.js";
+import { fmtDateTime } from "./datefmt.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -382,7 +383,7 @@ export async function openDecisionGraph({ api, instanceKey, at, decisionId = "",
   if (!openOverlay || openOverlay.el !== el) return; // closed while it loaded
 
   const vals = caseValues(view);
-  const when = view.at ? new Date(view.at / 1e6).toLocaleString() : "";
+  const when = view.at ? fmtDateTime(view.at / 1e6) : "";
   const sub = [
     view.modelName ? `model <b>${esc(view.modelName)}</b>` : "",
     view.service ? `<span class="drg-tag">decision service</span>` : "",

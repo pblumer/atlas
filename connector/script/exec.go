@@ -282,11 +282,78 @@ func execCommand(ctx context.Context, name string, args, env []string, max int64
 	}
 	var ee *exec.ExitError
 	if errors.As(err, &ee) {
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+		if msg := strings.TrimSpace(stripTerminalEscapes(stderr.String())); msg != "" {
 			return stdout.Bytes(), fmt.Errorf("%w: %s", err, msg)
 		}
 	}
 	return stdout.Bytes(), err
+}
+
+// stripTerminalEscapes removes the terminal control sequences an interpreter colours
+// its diagnostics with. PowerShell 7 writes them even when stderr is a pipe (7.6
+// stops once the bootstrap asks for plain text, 7.2 to 7.5 do not), and every place
+// the message is read — the Modeler's Test run, an incident, the API — shows text,
+// where ESC is an unprintable box and "[31;1m" is noise between every line. It
+// knows the sequence shapes of ECMA-48: CSI (colours, cursor moves), the string
+// controls ended by BEL or ST (OSC window titles and hyperlinks), and the short
+// escapes. A sequence the stderr budget cut off is dropped to the end, so its
+// parameter bytes do not leak into the message.
+func stripTerminalEscapes(s string) string {
+	if strings.IndexByte(s, 0x1b) < 0 {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if s[i] != 0x1b {
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+		i = skipEscape(s, i+1)
+	}
+	return b.String()
+}
+
+// skipEscape returns the index just past the escape sequence whose ESC precedes
+// s[i]. A byte that cannot continue the sequence is not consumed, so a malformed
+// sequence costs only its own bytes and never the text after it.
+func skipEscape(s string, i int) int {
+	if i >= len(s) {
+		return i
+	}
+	switch c := s[i]; {
+	case c == '[': // CSI: parameter and intermediate bytes, then one final byte
+		i++
+		for i < len(s) && s[i] >= 0x20 && s[i] <= 0x3f {
+			i++
+		}
+		if i < len(s) && s[i] >= 0x40 && s[i] <= 0x7e {
+			i++
+		}
+		return i
+	case c == ']' || c == 'P' || c == 'X' || c == '^' || c == '_': // OSC, DCS, SOS, PM, APC
+		for i++; i < len(s); i++ {
+			if s[i] == 0x07 {
+				return i + 1
+			}
+			if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '\\' {
+				return i + 2
+			}
+		}
+		return i
+	case c >= 0x20 && c <= 0x2f: // intermediate bytes, e.g. ESC ( B, then one final byte
+		for i < len(s) && s[i] >= 0x20 && s[i] <= 0x2f {
+			i++
+		}
+		if i < len(s) && s[i] >= 0x30 && s[i] <= 0x7e {
+			i++
+		}
+		return i
+	case c >= 0x30 && c <= 0x7e: // a two-byte escape such as ESC c or ESC 7
+		return i + 1
+	}
+	return i
 }
 
 // capped is a buffer that stops growing at max and remembers that it did.
@@ -341,11 +408,55 @@ func parseOutput(out []byte) (any, error) {
 // powershellBootstrap runs the author's source (from srcEnv) with the instance's
 // variables (from varsEnv) exposed as $name, and emits the script's output stream
 // as compact JSON. Stop-on-error makes a failing script a non-zero exit.
+//
+// PlainText is asked for before the source runs, because the error PowerShell
+// formats when the source does not even parse is written before any line of it
+// could ask. The result is unaffected: ConvertTo-Json escapes ESC. PowerShell
+// before 7.2 has no $PSStyle, hence the guard.
+//
+// A script that declares a param() block gets each declared parameter bound from
+// the instance variable of that name, matched without regard to case as PowerShell
+// matches parameters (ADR-0458). Without the binding the
+// block declared locals that shadowed the variables: a mandatory parameter failed
+// as missing, and any other ran on its default — empty, silently. Only declared
+// names are passed, because an advanced script refuses a parameter it does not
+// declare, and a variable is never passed for a parameter it merely resembles.
+//
+// Only the output stream is the result. PowerShell writes Write-Host, warnings,
+// verbose and debug messages to stdout as well, where they broke the JSON the
+// result is read from; the bootstrap merges those streams into the pipeline and
+// writes them to stderr, which a failure quotes. Each output object is collected
+// as it was written, so the result keeps the shape the plain assignment gave it.
+// The result is written in a finally block because a script's exit ends the
+// interpreter, not only the script: exit 0 after output still returns that output,
+// as it does at a prompt, and a non-zero exit keeps its code.
 const powershellBootstrap = `$ErrorActionPreference = 'Stop'
+if ($PSStyle) { $PSStyle.OutputRendering = 'PlainText' }
 $__atlas = if ($env:ATLAS_VARS) { $env:ATLAS_VARS | ConvertFrom-Json -AsHashtable } else { @{} }
 foreach ($__k in $__atlas.Keys) { Set-Variable -Name $__k -Value $__atlas[$__k] }
-$__result = & ([ScriptBlock]::Create($env:ATLAS_SCRIPT))
-if ($null -eq $__result) { '' } else { $__result | ConvertTo-Json -Compress -Depth 64 }`
+$__script = [ScriptBlock]::Create($env:ATLAS_SCRIPT)
+$__bound = @{}
+if ($__script.Ast.ParamBlock) {
+    $__names = @{}
+    foreach ($__k in $__atlas.Keys) { $__names[$__k] = $__k }
+    foreach ($__p in $__script.Ast.ParamBlock.Parameters) {
+        $__n = $__p.Name.VariablePath.UserPath
+        if ($__names.ContainsKey($__n)) { $__bound[$__n] = $__atlas[$__names[$__n]] }
+    }
+}
+$__out = [System.Collections.Generic.List[object]]::new()
+try {
+    & $__script @__bound 3>&1 4>&1 5>&1 6>&1 | ForEach-Object {
+        if ($_ -is [System.Management.Automation.WarningRecord]) { [Console]::Error.WriteLine('WARNING: ' + $_.Message) }
+        elseif ($_ -is [System.Management.Automation.VerboseRecord]) { [Console]::Error.WriteLine('VERBOSE: ' + $_.Message) }
+        elseif ($_ -is [System.Management.Automation.DebugRecord]) { [Console]::Error.WriteLine('DEBUG: ' + $_.Message) }
+        elseif ($_ -is [System.Management.Automation.InformationRecord]) { [Console]::Error.WriteLine([string]$_.MessageData) }
+        else { $__out.Add($_) }
+    }
+} finally {
+    $__result = if ($__out.Count -eq 1) { $__out[0] } elseif ($__out.Count) { $__out.ToArray() }
+    if ($null -eq $__result) { '' } else { $__result | ConvertTo-Json -Compress -Depth 64 }
+}`
 
 // pythonBootstrap exposes the instance's variables as globals, runs the author's
 // source, and emits the value the script assigned to `result` as JSON (empty when

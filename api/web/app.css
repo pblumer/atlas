@@ -4046,6 +4046,15 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
   background: var(--surface); padding: 1px 4px; max-width: 190px;
 }
 .dev-sample-pick:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+/* The instance search under it, and what the last search came to. */
+.dev-sample-find { margin: 5px 0 0; }
+.dev-sample-search {
+  width: 100%; box-sizing: border-box; padding: 3px 6px;
+  font: 11px/1.4 ui-monospace, monospace; color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: 5px; background: var(--surface);
+}
+.dev-sample-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.dev-sample-note { margin-top: 4px; }
 /* A reference row: the row itself opens the help page, the "+" inserts the call. */
 .dev-row { display: flex; align-items: center; gap: 2px; }
 .dev-row .dev-item { flex: 1 1 auto; min-width: 0; }
@@ -5604,6 +5613,12 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
   display: flex; align-items: center; gap: 8px; flex: none;
   padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px;
 }
+/* How many cases in the whole run are worth looking at, beside the page the strip
+   is showing. It sits with the count rather than in the analysis column because it
+   is the question this strip is asked: is there anything here to page towards? The
+   mark and the colour are both redundant — the sentence says it. */
+.pg-dev { color: var(--muted); }
+.pg-dev.bad { color: var(--danger); }
 .pg-results-scroll { overflow: auto; min-height: 0; }
 .pg-cases { min-width: 100%; }
 .pg-cases th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
@@ -7040,3 +7055,25 @@ button.im-problem:hover { background: var(--accent-soft); }
 .dg-row .dg-sub { font-size: 12px; }
 .dg-row.dg-gone { padding: 0 0 0 10px; gap: 9px; }
 .dg-chip { font-size: 10px; flex: 0 0 auto; }
+
+/* ---------- Display settings (#/console/settings) ----------
+   How this person reads: number format, time zone, language
+   (ADR-0459). The screen is mostly one list of
+   options, each carrying its own sample — the sample is what somebody is really
+   choosing, so it is given the same weight as the name beside it. */
+.ds-preview {
+  margin-top: 14px; padding: 12px 14px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg);
+}
+.ds-preview h2 { margin: 0 0 10px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.ds-label { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.ds-options { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.ds-option {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+}
+.ds-option:hover { background: var(--bg); }
+/* The sample is monospaced because the thing being compared between two rows is
+   where the separators fall, and a proportional font moves them. */
+.ds-option-sample { font-family: ui-monospace, monospace; font-size: 13px; color: var(--muted); }
+.ds-option input:checked ~ .ds-option-name { font-weight: 600; }

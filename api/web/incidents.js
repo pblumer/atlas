@@ -11,6 +11,7 @@
 
 import { editWorkerFlow, createWorkerFlow } from "./workerdialog.js";
 import { loadFormViewer, formFieldKeys } from "./formviewer.js";
+import { fmtDateTime } from "./datefmt.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -47,7 +48,7 @@ const resolveNotes = {
 
 // fmtRaised renders an incident's raisedAt (unix nanoseconds, frozen into the
 // event) as a local timestamp.
-export const fmtRaised = (ns) => (ns ? new Date(ns / 1e6).toLocaleString() : "—");
+export const fmtRaised = (ns) => (ns ? fmtDateTime(ns / 1e6) : "—");
 
 // incidentWorkerChip names the worker the parked task resolves through, when it has
 // one. An operator reading "no worker registered as X" has to know *which* integration
