@@ -11,7 +11,7 @@ import (
 	"github.com/pblumer/atlas/api/sidecar"
 )
 
-// The diagrams somebody marked, and the ones they opened last (ADR-draft-diagram-shortcuts).
+// The diagrams somebody marked, and the ones they opened last (ADR-0460).
 //
 // The shop's favourites (ADR-0348) settled what a mark is, and this file takes that
 // answer over unchanged for the diagrams of every Console area: a mark stores a kind and

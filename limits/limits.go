@@ -295,7 +295,7 @@ type Limits struct {
 	Favourites int32
 
 	// DiagramFavourites is how many diagrams one account may mark as favourites
-	// across the Console (ADR-draft-diagram-shortcuts). The same judgement as
+	// across the Console (ADR-0460). The same judgement as
 	// Favourites, kept apart from it because a product list and a diagram list are
 	// different people's shortcuts and tuning one should not move the other.
 	DiagramFavourites int32

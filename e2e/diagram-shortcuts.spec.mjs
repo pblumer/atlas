@@ -1,4 +1,4 @@
-// Favourite and recent diagrams in the Console (ADR-draft-diagram-shortcuts).
+// Favourite and recent diagrams in the Console (ADR-0460).
 //
 // The server decides what a mark resolves to; what the browser owes is the rest:
 // the star is offered only to somebody signed in, pressing it sends one diagram and

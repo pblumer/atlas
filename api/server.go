@@ -383,7 +383,7 @@ type Server struct {
 	infomodel *infomodel.Service
 	// panoramaModels and infomodelModels are the stores behind those two services,
 	// held so a favourite diagram resolves on the run loop without going back through
-	// a service that would re-enter it (ADR-draft-diagram-shortcuts).
+	// a service that would re-enter it (ADR-0460).
 	panoramaModels  *panorama.Store
 	infomodelModels *infomodel.Store
 	// capabilities is the business-architecture registry: the business capabilities
@@ -438,7 +438,7 @@ type Server struct {
 	users            *userStore                // durable sidecar for user accounts (ADR-0044)
 	groups           *groupStore               // durable sidecar for user groups (ADR-0180)
 	// diagramShortcuts is one record per account of the diagrams it marked and the
-	// ones it opened last (ADR-draft-diagram-shortcuts).
+	// ones it opened last (ADR-0460).
 	diagramShortcuts *diagramShortcutStore
 
 	// sessions holds live login sessions in memory. Unlike the sidecar stores it

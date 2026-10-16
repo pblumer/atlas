@@ -50,7 +50,7 @@ import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML 
 // is a self-contained page and this file is long enough; it takes its dependencies
 // as arguments so the import stays one-directional, like every other module here.
 import { viewAIAccess } from "./aiaccess.js";
-// Favourite and recent diagrams (ADR-draft-diagram-shortcuts): the top-bar menu and the
+// Favourite and recent diagrams (ADR-0460): the top-bar menu and the
 // star beside a diagram in the lists. Its own module for the reason aiaccess.js is.
 import { installDiagramShortcuts, setShortcutsEnabled, starButton, noteDiagramOpened } from "./diagram-shortcuts.js";
 import { renderKeyFeatures, paintKeyFeatures } from "./key-features.js";

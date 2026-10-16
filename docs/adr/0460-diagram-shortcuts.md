@@ -1,4 +1,4 @@
-# ADR-DRAFT: Favourite and recent diagrams are one record per account, resolved at read time
+# ADR-0460: Favourite and recent diagrams are one record per account, resolved at read time
 
 - **Status:** Accepted
 - **Implementation:** Landed

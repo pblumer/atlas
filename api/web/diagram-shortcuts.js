@@ -1,5 +1,5 @@
 // Favourite and recent diagrams, across the Modeler, Data and Panorama
-// (ADR-draft-diagram-shortcuts).
+// (ADR-0460).
 //
 // Two things live here: the star a list row or the menu draws next to a diagram, and
 // the top-bar menu that lists the stars and the diagrams opened last. Both read the

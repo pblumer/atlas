@@ -36,7 +36,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   window picked and sends a confirmation with who was asked and what was found; a value
   stream flags a stage naming a capability the map does not have; and English is the same
   screen in other words.
-- **`diagram-shortcuts.spec.mjs`** ([ADR-draft-diagram-shortcuts](../docs/adr/draft-diagram-shortcuts.md)):
+- **`diagram-shortcuts.spec.mjs`** ([ADR-0460](../docs/adr/0460-diagram-shortcuts.md)):
   favourite and recent diagrams against a stubbed API — a star in a list sends one diagram and
   adopts the list the server answers, the top-bar menu lists it and stays open when a star
   inside it is pressed, opening a canvas reports a visit by the id its route names (by

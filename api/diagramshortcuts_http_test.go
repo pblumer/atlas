@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Favourite and recent diagrams, end to end (ADR-draft-diagram-shortcuts).
+// Favourite and recent diagrams, end to end (ADR-0460).
 
 type shortcutEntry struct {
 	Kind      string `json:"kind"`

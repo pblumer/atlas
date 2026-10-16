@@ -545,6 +545,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0457](0457-modeler-xml-source.md) | The Modeler shows a model's source and applies a correction to it | Accepted | Landed |
 | [0458](0458-powershell-param-block.md) | A PowerShell script runs unchanged in Atlas and at a prompt | Accepted | Landed |
 | [0459](0459-display-preferences-per-user.md) | How a person reads — number format, time zone and language, per user | Proposed | Not started |
+| [0460](0460-diagram-shortcuts.md) | Favourite and recent diagrams are one record per account, resolved at read time | Accepted | Landed |
 
 ## The two states of a record
 

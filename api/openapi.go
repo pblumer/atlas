@@ -615,7 +615,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/drafts", s.handleSaveDraft, apiOp{
 			summary: "Save a diagram draft, keyed by its process id. ?from=<draft id> names the draft being edited (empty for a never-saved diagram): a changed process id then renames the draft instead of leaving a second copy behind, and a save onto an id another draft already holds is refused with 409 (ADR-0222). Omit ?from= for the plain upsert-by-id an import or an agent wants", tag: "Drafts", role: RoleModeler, req: jsonBody("Draft", tObject()), resp: jsonBody("Saved draft", tObject())}},
 		{"GET", "/api/v1/diagram-shortcuts", s.handleListDiagramShortcuts, apiOp{
-			summary: "The diagrams you marked as favourites and the ones you opened last, across the Modeler, Data and Panorama (ADR-draft-diagram-shortcuts). Always your own. A mark stores a kind and an id and grants nothing: each entry is resolved against the diagram's own scope on every read, a favourite you can no longer open comes back with available=false and no name so it can still be cleared, and a visit you can no longer open is left out", tag: "Drafts", role: roleAny,
+			summary: "The diagrams you marked as favourites and the ones you opened last, across the Modeler, Data and Panorama (ADR-0460). Always your own. A mark stores a kind and an id and grants nothing: each entry is resolved against the diagram's own scope on every read, a favourite you can no longer open comes back with available=false and no name so it can still be cleared, and a visit you can no longer open is left out", tag: "Drafts", role: roleAny,
 			resp: jsonBody("Your favourites and recent diagrams", schemaObj(map[string]any{
 				"favourites": tArray(), "recent": tArray(),
 			}))}},
