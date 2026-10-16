@@ -24,7 +24,8 @@ func (e errEngine) CompleteJobWithOutcome(uint64, model.ActionOutcomeValue, ...m
 
 func (e errEngine) CompleteJobWithDecision(uint64, *model.DecisionEvaluationValue, ...model.VariableValue) {
 }
-func (e errEngine) FailJob(uint64, int32, string, int64) {}
+func (e errEngine) FailJob(uint64, int32, string, int64)            {}
+func (e errEngine) ThrowJobErrorWithMessage(uint64, string, string) {}
 
 // TestDriveSurfacesRunUntilIdleError covers Drive's first branch: an engine that
 // cannot make progress aborts the drive loop with its error.

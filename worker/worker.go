@@ -38,6 +38,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -80,17 +81,10 @@ type Exec interface {
 // It is for an answer the process has a path for — a card declined, a recipient that
 // does not exist — not for a fault: anything else a handler returns fails the job and
 // is retried as before.
-type BPMNError struct {
-	Code    string
-	Message string
-}
-
-func (e *BPMNError) Error() string {
-	if e.Message == "" {
-		return "BPMN error " + e.Code
-	}
-	return "BPMN error " + e.Code + ": " + e.Message
-}
+//
+// It is the in-process runner's type under this package's name, so a handler shared by
+// both paths — a script task's [script.Run] — throws the same error on either.
+type BPMNError = job.BPMNError
 
 // ExecFunc adapts a function to [Exec].
 type ExecFunc func(ctx context.Context, j Job) (map[string]any, error)

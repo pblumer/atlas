@@ -12,6 +12,29 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A script task throws a BPMN error that an error boundary catches.** An error boundary on a script task could be drawn but
+  never reached: a script either returned a result or failed, and a failure was retried
+  three times and then parked on an incident — the "userPrincipalName already exists" the
+  boundary was drawn for included. Now a script gives its error a code in its own
+  language's idiom, and when the task's process catches that code, the instance takes the
+  boundary's path at once, with no retry spent
+  ([ADR-draft-script-bpmn-errors](docs/adr/draft-script-bpmn-errors.md)).
+
+  - **PowerShell:** the error's ErrorId — `Write-Error -Message $msg -ErrorId 'UPN_EXISTS'`,
+    or a bare `throw 'UPN_EXISTS'`.
+  - **Python:** the exception's `code` attribute.
+  - **JavaScript:** the error's `code` property, as Node's own errors carry it.
+
+  At a prompt each of these is an ordinary error, so the script still runs unchanged there.
+  Only a code an error boundary or error event subprocess of the process names is thrown;
+  every other failure, coded or not, is retried as before, so a transient fault keeps the
+  attempts it is owed. Out-of-process script workers make the same decision: the codes
+  travel with the leased job. The in-process job runner throws a returned `job.BPMNError`
+  the way an external worker's `worker.BPMNError` always was — the two are now one type.
+  The Modeler's Test run names the code a script raised.
+
 ## [0.14.0] — 2026-10-16
 
 **The Console keeps what is yours with your account.** Diagrams can be marked as

@@ -274,8 +274,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: jsonBody("Language, source, and sample variables", schemaObj(map[string]any{
 				"language": tString(), "source": tString(), "variables": tObject(),
 			}, "language", "source")),
-			resp: jsonBody("Run result", schemaObj(map[string]any{
-				"ok": tBool(), "result": tObject(), "error": tString(),
+			resp: jsonBody("Run result; errorCode is the code the script gave its error, when it gave one", schemaObj(map[string]any{
+				"ok": tBool(), "result": tObject(), "error": tString(), "errorCode": tString(),
 			}))}},
 
 		{"POST", "/api/v1/deployments", s.handleDeploy, apiOp{

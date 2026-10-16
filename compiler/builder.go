@@ -3203,6 +3203,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		userTasks:          b.userTasks,
 		boundaryEventDets:  b.boundaryEventDets,
 		eventSubProcesses:  b.eventSubProcesses,
+		caughtErrorCodes:   caughtErrorCodes(b.boundaryEventDets, b.eventSubProcesses),
 		eventSubs:          eventSubs,
 		rootEventSubs:      rootEventSubs,
 		messageCatches:     b.messageCatches,

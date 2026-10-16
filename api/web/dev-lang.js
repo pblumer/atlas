@@ -346,16 +346,19 @@ const SCRIPT_CONTRACT = {
     read: "Every instance variable is a PowerShell variable: <code>$Vorname</code>. A <code>param()</code> block is bound by name, so the same script also runs on its own: <code>param([string]$Vorname, [hashtable]$application)</code>.",
     write: "The <b>output stream</b> becomes the result variable — <code>Write-Output</code> or a bare expression. <code>Write-Host</code>, warnings and verbose messages are logs, shown with a failure.",
     env: "The script gets no worker credentials and no deployment variables — only PATH, HOME, temp and locale. Pass values as variables or constants.",
+    error: "A BPMN error is an error with a code the process catches: <code>Write-Error -Message $msg -ErrorId 'UPN_EXISTS'</code>. An error boundary with that code takes over; any other error fails the task and is retried.",
   },
   python: {
     read: "Every instance variable is a module-level name: <code>Vorname</code>.",
     write: "Assign to <code>result</code>; that value becomes the result variable.",
     env: "The script gets no worker credentials and no deployment variables — only PATH, HOME, temp and locale. Pass values as variables or constants.",
+    error: "A BPMN error is an exception whose <code>code</code> attribute the process catches: <code>e = RuntimeError(msg); e.code = 'UPN_EXISTS'; raise e</code>. Any other exception fails the task and is retried.",
   },
   javascript: {
     read: "Every instance variable is a global: <code>Vorname</code>.",
     write: "Assign to <code>result</code>; that value becomes the result variable.",
     env: "The script gets no worker credentials and no deployment variables — only PATH, HOME, temp and locale. Pass values as variables or constants.",
+    error: "A BPMN error is an error whose <code>code</code> property the process catches: <code>throw Object.assign(new Error(msg), { code: 'UPN_EXISTS' })</code>. Any other error fails the task and is retried.",
   },
 };
 
@@ -367,6 +370,7 @@ function contractGroup(lang) {
       { name: "Reading variables", sig: "in", doc: c.read.replace(/<[^>]+>/g, ""), ex: null },
       { name: "Returning a result", sig: "out", doc: c.write.replace(/<[^>]+>/g, ""), ex: null },
       { name: "Environment", sig: "env", doc: c.env.replace(/<[^>]+>/g, ""), ex: null },
+      { name: "Raising a BPMN error", sig: "error", doc: c.error.replace(/<[^>]+>/g, ""), ex: null },
     ],
   };
 }
@@ -427,18 +431,21 @@ const SNIPPETS = {
     { title: "Call a REST API", doc: "GET a JSON endpoint and return the parsed body.", code: '$r = Invoke-RestMethod -Uri "https://api.example.com/orders/$OrderId" -Method Get\nWrite-Output $r' },
     { title: "Guard a missing variable", doc: "Fail the job with a clear message.", code: 'if (-not $OrderId) { throw "OrderId is missing" }\nWrite-Output $OrderId' },
     { title: "Declare parameters", doc: "Bound from the variables of the same names — the script runs unchanged outside Atlas too.", code: 'param(\n  [Parameter(Mandatory)][string]$Vorname,\n  [Parameter(Mandatory)][hashtable]$application,\n  [string]$Sprache = "de-CH"\n)\nWrite-Host "Konto für $Vorname"\n"$Vorname ($Sprache) in Tenant $($application.TENANT_ID)"' },
+    { title: "Throw a BPMN error", doc: "Caught by an error boundary with the code UPN_EXISTS; any other error fails the task.", code: 'try {\n  New-CsOnlineApplicationInstance -UserPrincipalName $Upn -DisplayName $Name -ApplicationId $AppId\n}\ncatch {\n  if ($_.Exception.Message -like "*already exists*") {\n    Write-Error -Message $_.Exception.Message -ErrorId "UPN_EXISTS" -Category ResourceExists\n  }\n  throw\n}' },
   ],
   python: [
     { title: "Return a string", doc: "Assign to result.", code: 'result = f"Hallo {Vorname}"' },
     { title: "Return an object", doc: "A dict becomes a JSON object variable.", code: 'result = {\n    "name": Vorname,\n    "total": Betrag * 1.081,\n}' },
     { title: "Work a list", doc: "Total the line items.", code: 'result = sum(p["amount"] for p in positions)' },
     { title: "Guard a missing variable", doc: "Fail the job with a clear message.", code: 'if not OrderId:\n    raise ValueError("OrderId is missing")\nresult = OrderId' },
+    { title: "Throw a BPMN error", doc: "Caught by an error boundary with the code UPN_EXISTS; any other exception fails the task.", code: 'class UpnExists(Exception):\n    code = "UPN_EXISTS"\n\nif account_exists(Upn):\n    raise UpnExists(f"{Upn} already exists")' },
   ],
   javascript: [
     { title: "Return a string", doc: "Assign to result.", code: "const result = `Hallo ${Vorname}`" },
     { title: "Return an object", doc: "An object becomes a JSON object variable.", code: "const result = {\n  name: Vorname,\n  total: Betrag * 1.081,\n}" },
     { title: "Work a list", doc: "Total the line items.", code: "const result = positions.reduce((a, p) => a + p.amount, 0)" },
     { title: "Guard a missing variable", doc: "Fail the job with a clear message.", code: 'if (!OrderId) throw new Error("OrderId is missing")\nconst result = OrderId' },
+    { title: "Throw a BPMN error", doc: "Caught by an error boundary with the code UPN_EXISTS; any other error fails the task.", code: 'if (accountExists(Upn)) {\n  throw Object.assign(new Error(`${Upn} already exists`), { code: "UPN_EXISTS" })\n}' },
   ],
   json: [
     { title: "Object", doc: "A nested value.", code: '{\n  "customer": { "name": "acme", "tier": "gold" },\n  "amount": 100\n}' },
