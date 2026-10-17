@@ -67,6 +67,13 @@ const (
 	// Only the operation and its values are model-authored.
 	connectorKindS3    = "s3"
 	connectorKindEntra = "entra"
+	// connectorKindTeamsPhone is the Microsoft Teams Phone Worker Type
+	// (ADR-draft-teams-phone-worker): voice apps and their resource accounts,
+	// provisioned by fixed PowerShell on the worker host. A record holds a
+	// credentialsRef naming a vault bundle {tenantId, clientId} with a certificate or a
+	// certificate thumbprint. Worker-only like Entra: the engine never signs in, so the
+	// app never enters it.
+	connectorKindTeamsPhone = "teamsphone"
 	// connectorKindAD is the Active Directory Worker Type
 	// (ADR-0206). A record holds the directory's LDAP URL
 	// and a credentialsRef naming a vault {bindDN, password} bundle; the model names

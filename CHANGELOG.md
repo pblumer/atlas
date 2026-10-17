@@ -14,6 +14,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Teams Phone voice apps are provisioned without PowerShell in the model.** A new
+  worker-only Worker Type, `teamsphone`, resolves users and ensures or removes resource
+  accounts, call queues and auto attendants as named operations the compiler checks at
+  deploy. The worker runs fixed PowerShell shipped with Atlas — one `pwsh` per job, on a
+  host with the MicrosoftTeams module — and signs in with the app's certificate from the
+  vault or the host's store. Every ensure looks before it creates, so a retried job
+  converges; an account Entra already holds but Teams does not show yet is adopted rather
+  than refused. `ATLAS_TEAMSPHONE_MOCK=1` runs a model end to end against a tenant in the
+  worker's memory ([ADR-draft-teams-phone-worker](docs/adr/draft-teams-phone-worker.md)).
 - **The Entra ID worker signs in with a certificate.** An app registration that may not hold
   a client secret can now prove itself with a certificate: set
   `ATLAS_ENTRA_<NAME>_CLIENT_CERTIFICATE` (or `_CLIENT_CERTIFICATE_REF` for a vault key) to

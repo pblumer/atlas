@@ -1062,6 +1062,18 @@ type ConnectorTaskDetail struct {
 	S3SourceKey    RestExpr
 	S3ExpiresIn    int32
 	S3Metadata     []RestKV
+	// Teams Phone fields (JobType == TeamsPhoneJobType, ADR-draft-teams-phone-worker).
+	// Connector (above) names the configured tenant; its app certificate lives with the
+	// worker, never in a model. TeamsPhoneOp is the interned operation
+	// ("resolve-users"|"ensure-resource-account"|"ensure-call-queue"|
+	// "ensure-auto-attendant"|"remove-auto-attendant"|"remove-call-queue"|
+	// "remove-resource-account"), and TeamsPhoneArgs its values keyed by attribute name:
+	// the authored ones literal-or-FEEL, the static settings literals the compiler
+	// validated and defaulted. The compiler refuses a value the operation does not use,
+	// so none is quietly ignored at call time. All are the zero value for a non-Teams
+	// task; ResultVar (above) receives the operation's answer.
+	TeamsPhoneOp   int32
+	TeamsPhoneArgs []RestKV
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

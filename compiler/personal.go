@@ -84,8 +84,9 @@ var engineEvaluatedExpressions = map[string]bool{
 // Every one of these is a ConnectorTaskDetail field, and none of them is evaluated in
 // engine/: the evaluation sites are connector/rest/worker.go:95, connector/mail/worker.go:89,
 // connector/ldap/worker.go:190, connector/ad/worker.go:296, connector/jira/worker.go:82,
-// connector/discord/offload.go:141, connector/s3/offload.go:155 and
-// connector/agent/aitask.go:133, each over the scope variables handed to that call.
+// connector/discord/offload.go:141, connector/s3/offload.go:155,
+// connector/teamsphone/offload.go (resolveValue) and connector/agent/aitask.go:133, each
+// over the scope variables handed to that call.
 //
 // THE EXEMPTION IS CONDITIONAL, and the condition is the next step's to satisfy: it holds
 // only while the values a worker binds are deciphered before it binds them. If the
@@ -181,6 +182,10 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.UserName.Expr":          "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.UserPassword.Expr":      "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.UserRoles.Expr":         "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+
+	// Teams Phone's values are one list keyed by attribute name rather than a field per
+	// attribute, so one path covers every value its operations take.
+	"connectorTasks.TeamsPhoneArgs.Val.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 }
 
 // expressionKindByPath names each engine-evaluated path in the modeller's vocabulary, so

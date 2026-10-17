@@ -6361,6 +6361,68 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
+      <div class="card" id="runbook-teamsphone">
+        <h4>Microsoft Teams Phone</h4>
+        <p data-l="de">Warteschlangen (Call Queues), automatische Telefonzentralen (Auto Attendants) und ihre
+          Ressourcenkonten – ohne dass ein Modell PowerShell enthält. Microsoft bietet dafür nur das PowerShell-Modul
+          <code>MicrosoftTeams</code> an; atlas bringt die PowerShell fest mit, und der Worker führt sie pro Job in
+          einem eigenen <code>pwsh</code>-Prozess aus.</p>
+        <p data-l="en">Call queues, auto attendants and their resource accounts – without a model containing
+          PowerShell. Microsoft offers only the <code>MicrosoftTeams</code> PowerShell module for them; atlas ships the
+          PowerShell itself, and the worker runs it in a <code>pwsh</code> process of its own per job.</p>
+        <ol>
+          <li data-l="de"><b>Worker-Host vorbereiten:</b> PowerShell&nbsp;7 und das Modul installieren
+            (<code>Install-Module MicrosoftTeams -Scope AllUsers</code>). Liegt <code>pwsh</code> nicht im PATH,
+            nennt <code>ATLAS_TEAMSPHONE_PWSH</code> den Pfad. Der Host erreicht Microsoft über seinen eigenen
+            Proxy; atlas setzt keinen.</li>
+          <li data-l="en"><b>Prepare the worker host:</b> install PowerShell&nbsp;7 and the module
+            (<code>Install-Module MicrosoftTeams -Scope AllUsers</code>). If <code>pwsh</code> is not on the PATH,
+            <code>ATLAS_TEAMSPHONE_PWSH</code> names it. The host reaches Microsoft through its own proxy; atlas sets
+            none.</li>
+          <li data-l="de"><b>App-Registrierung</b> mit Zertifikat (kein Client-Secret – das Modul meldet Apps nur mit
+            Zertifikat an). Der Dienstprinzipal braucht die Entra-Rolle <i>Teams-Administrator</i> und die
+            Graph-Anwendungsberechtigung <code>User.ReadWrite.All</code> mit Administratorzustimmung: Damit findet der
+            Worker ein Ressourcenkonto, das Teams noch nicht anzeigt, und löscht eines beim Rückbau.</li>
+          <li data-l="en">An <b>app registration</b> with a certificate (no client secret – the module signs apps in
+            with a certificate only). The service principal needs the Entra role <i>Teams Administrator</i> and the
+            Graph application permission <code>User.ReadWrite.All</code> with admin consent: that is how the worker
+            finds a resource account Teams does not show yet, and deletes one on the way out.</li>
+          <li data-l="de">Secret anlegen, z.&nbsp;B. <code>teams_contoso</code>:
+            <code>{"tenantId": "…", "clientId": "…", "certificate": "…"}</code> mit Zertifikat und
+            <b>unverschlüsseltem</b> privatem Schlüssel als einem PEM-Text – oder <code>"certificateThumbprint"</code>
+            an seiner Stelle für ein Zertifikat, das schon im Speicher <code>CurrentUser\My</code> oder
+            <code>LocalMachine\My</code> des Worker-Kontos liegt. Nie beides.</li>
+          <li data-l="en">Create a secret, e.g. <code>teams_contoso</code>:
+            <code>{"tenantId": "…", "clientId": "…", "certificate": "…"}</code> with the certificate and its
+            <b>unencrypted</b> private key as one PEM text – or <code>"certificateThumbprint"</code> in its place for a
+            certificate already in the worker account's <code>CurrentUser\My</code> or <code>LocalMachine\My</code>
+            store. Never both.</li>
+          <li data-l="de">Worker anlegen: Typ <b>Microsoft Teams Phone</b>, ein Name, Credential-Referenz
+            <code>teams_contoso</code>, <b>kein Endpoint</b>. atlas überwacht den Worker und übernimmt den Tenant beim
+            Speichern.</li>
+          <li data-l="en">Create a worker of type <b>Microsoft Teams Phone</b>, a name, credential reference
+            <code>teams_contoso</code>, <b>no endpoint</b>. atlas supervises the worker and picks the tenant up when you
+            save.</li>
+          <li data-l="de">Ohne Tenant üben: <code>ATLAS_TEAMSPHONE_MOCK=1</code> bedient dieselben Tasks aus einem
+            Tenant im Speicher des Workers, mit denselben Regeln; <code>ATLAS_TEAMSPHONE_MOCK_USERS</code> nennt die
+            Personen, die <i>Resolve users</i> findet.</li>
+          <li data-l="en">Practise without a tenant: <code>ATLAS_TEAMSPHONE_MOCK=1</code> serves the same tasks from a
+            tenant in the worker's memory, with the same rules; <code>ATLAS_TEAMSPHONE_MOCK_USERS</code> names the people
+            <i>Resolve users</i> finds.</li>
+        </ol>
+        <p data-l="de"><b>Die Falle:</b> Teams zeigt ein neues Ressourcenkonto erst nach einer Synchronisation. Eine
+          Warteschlange oder Telefonzentrale wartet darauf bis zu zwei Minuten und wird danach abgelehnt, <i>bevor</i>
+          etwas angelegt ist. Liegt im Modell zwischen dem Anlegen der Konten und der Warteschlange keine Wartezeit
+          (etwa das Warten auf Lizenzen), plane eine ein, statt die Verzögerung als Fehler zu lesen. Ein Job dauert wegen Modulimport und Anmeldung etwa
+          zehn Sekunden; <code>ATLAS_TEAMSPHONE_TIMEOUT</code> (Standard 4m) begrenzt ihn.</p>
+        <p data-l="en"><b>The trap:</b> Teams shows a new resource account only after a synchronization. A queue or an
+          auto attendant waits for it for up to two minutes and is then refused <i>before</i> anything is created. If
+          the model has no pause between creating the accounts and the queue (waiting for licences, say), plan one
+          rather than reading the delay as a fault. A job takes about ten seconds for the module import and the sign-in;
+          <code>ATLAS_TEAMSPHONE_TIMEOUT</code> (default 4m) bounds it.</p>
+        <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked October 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
+      </div>
+
       <div class="card" id="runbook-jira">
         <h4>Jira</h4>
         <ol>

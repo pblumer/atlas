@@ -444,6 +444,22 @@ const S3JobType = "io.atlas.s3"
 // worker uses JiraJobTypeIndex.
 const S3JobTypeIndex int32 = 32
 
+// TeamsPhoneJobType is the reserved job type a Microsoft Teams Phone task carries
+// (ADR-draft-teams-phone-worker). One job type serves every voice-app operation —
+// resolving users, ensuring a resource account, a call queue or an auto attendant, and
+// removing them — because they share a tenant, a credential and an error envelope; the
+// operation is a modeled value rather than a reserved index of its own, as it is for
+// Entra (ADR-0172).
+//
+// Like Entra's it has no in-process handler: the kind is worker-only, so the app's
+// certificate never enters the engine, and the work is PowerShell that only a worker
+// host with the MicrosoftTeams module can run.
+const TeamsPhoneJobType = "io.atlas.teamsphone"
+
+// TeamsPhoneJobTypeIndex is the interned index TeamsPhoneJobType is guaranteed to occupy
+// in every compiled process: NewBuilder reserves it thirty-fourth, so it is always 33.
+const TeamsPhoneJobTypeIndex int32 = 33
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -484,6 +500,7 @@ var reservedJobTypes = []string{
 	ShopJobType,          // 30
 	ShopCommandJobType,   // 31
 	S3JobType,            // 32
+	TeamsPhoneJobType,    // 33
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -2151,6 +2168,45 @@ func (b *Builder) AddS3ConnectorTask(cfg S3Config) int32 {
 		S3SourceKey:    cfg.SourceKey,
 		S3ExpiresIn:    cfg.ExpiresIn,
 		S3Metadata:     cfg.Metadata,
+		Retries:        cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// TeamsPhoneConfig is the deploy-time configuration of a Teams Phone task
+// (ADR-draft-teams-phone-worker). Worker names the configured tenant (whose app
+// certificate lives with the worker, never in the model) and Operation is the voice-app
+// operation. Args are the operation's values keyed by attribute name: each authored one
+// a literal-or-FEEL value evaluated over the variables the task sees at call time, each
+// static setting a literal the compiler has already validated and defaulted, so the
+// runtime interprets nothing (I5). ResultVar, if set, receives the operation's answer.
+type TeamsPhoneConfig struct {
+	Worker    string
+	Operation string
+	Args      []RestKV
+	ResultVar string
+	Retries   int32
+}
+
+// AddTeamsPhoneConnectorTask adds a Teams Phone task and returns its element id. Like a
+// service task it creates a job on activation and waits; the job carries the reserved
+// TeamsPhoneJobType, which only a worker serves — the engine resolves the authored values
+// and hands them over, the worker runs the operation and completes the job with its
+// answer in ResultVar.
+func (b *Builder) AddTeamsPhoneConnectorTask(cfg TeamsPhoneConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:        b.intern(TeamsPhoneJobType),
+		Connector:      b.intern(cfg.Worker),
+		Subject:        -1, // not a clio task
+		EventType:      -1,
+		ClioQuery:      -1,
+		ReduceSpec:     -1,
+		Method:         -1, // not a REST task
+		ResultVar:      b.intern(cfg.ResultVar),
+		Auth:           -1,
+		TeamsPhoneOp:   b.intern(cfg.Operation),
+		TeamsPhoneArgs: cfg.Args,
 		Retries:        cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)

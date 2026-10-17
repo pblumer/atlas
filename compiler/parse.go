@@ -2437,6 +2437,11 @@ type xmlServiceTask struct {
 	// — put an object down, read a small one back, ask whether it is there, list what is
 	// under a prefix, copy one, delete one, or mint a link somebody can open it with.
 	S3 *xmlS3Connector `xml:"extensionElements>s3Connector"`
+	// TeamsPhone, when present, marks this service task a Microsoft Teams Phone task
+	// (ADR-draft-teams-phone-worker): one voice-app operation — resolve users, ensure a
+	// resource account, a call queue or an auto attendant, or remove one — against a
+	// tenant an operator configured.
+	TeamsPhone *xmlTeamsPhoneConnector `xml:"extensionElements>teamsPhoneConnector"`
 	// Agent, when present, marks this service task an AI task: one call to a language
 	// model, one answer into one variable (ADR-0256). It is the same extension element an
 	// ad-hoc container carries, read for its other half — prompt and resultVariable rather
@@ -3096,6 +3101,71 @@ type xmlS3Connector struct {
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
+}
+
+// A Teams Phone task's parameters, carried on a service task as an
+// <atlas:teamsPhoneConnector connector="..." operation="..." .../> extension element
+// (ADR-draft-teams-phone-worker). The connector attribute names the configured tenant
+// (whose app certificate lives with the worker, never in the model) and operation is
+// the voice-app operation. Element and attribute keep the …Connector spelling their
+// siblings carry, which the moddle drift guard recognizes.
+//
+// Which of the remaining attributes apply is decided by the operation, and only by it;
+// the compiler refuses one the operation does not use. users, agents and
+// authorizedUsers are lists — a FEEL list, or one text separated by commas; holidays is
+// a list of {name, start, end} with ISO dates; the rest are single values. Each is
+// literal or, with a leading '=', a FEEL expression evaluated over the variables the
+// task sees at call time (the fx toggle, ADR-0067). accountType, routingMethod,
+// presenceBasedRouting, conferenceMode and allowOptOut are not: each decides the shape
+// of what is created, and a shape that could differ on every token is not a shape.
+type xmlTeamsPhoneConnector struct {
+	Connector            string `xml:"connector,attr"`
+	Operation            string `xml:"operation,attr"`
+	Users                string `xml:"users,attr"`
+	UserPrincipalName    string `xml:"userPrincipalName,attr"`
+	DisplayName          string `xml:"displayName,attr"`
+	AccountType          string `xml:"accountType,attr"`
+	Name                 string `xml:"name,attr"`
+	ResourceAccountID    string `xml:"resourceAccountId,attr"`
+	TransferTarget       string `xml:"transferTarget,attr"`
+	Agents               string `xml:"agents,attr"`
+	AuthorizedUsers      string `xml:"authorizedUsers,attr"`
+	LanguageID           string `xml:"languageId,attr"`
+	TimeZone             string `xml:"timeZone,attr"`
+	Holidays             string `xml:"holidays,attr"`
+	RoutingMethod        string `xml:"routingMethod,attr"`
+	PresenceBasedRouting string `xml:"presenceBasedRouting,attr"`
+	ConferenceMode       string `xml:"conferenceMode,attr"`
+	AllowOptOut          string `xml:"allowOptOut,attr"`
+	ResultVariable       string `xml:"resultVariable,attr"`
+	// Retries is the task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// values lists every attribute of the element with what was authored for it, in the
+// order the element declares them; the compiler walks it once to apply the operation's
+// rules, so an attribute added to the struct and forgotten here is the one way a value
+// could be silently dropped — TestTeamsPhoneValuesCoverEveryAttribute guards that.
+func (c *xmlTeamsPhoneConnector) values() []struct{ attr, raw string } {
+	return []struct{ attr, raw string }{
+		{"users", c.Users},
+		{"userPrincipalName", c.UserPrincipalName},
+		{"displayName", c.DisplayName},
+		{"accountType", c.AccountType},
+		{"name", c.Name},
+		{"resourceAccountId", c.ResourceAccountID},
+		{"transferTarget", c.TransferTarget},
+		{"agents", c.Agents},
+		{"authorizedUsers", c.AuthorizedUsers},
+		{"languageId", c.LanguageID},
+		{"timeZone", c.TimeZone},
+		{"holidays", c.Holidays},
+		{"routingMethod", c.RoutingMethod},
+		{"presenceBasedRouting", c.PresenceBasedRouting},
+		{"conferenceMode", c.ConferenceMode},
+		{"allowOptOut", c.AllowOptOut},
+	}
 }
 
 type xmlRemedyConnector struct {

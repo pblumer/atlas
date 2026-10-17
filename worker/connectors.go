@@ -293,6 +293,22 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.EntraJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunEntraJob(ctx, j, reg)
 			})
+		case "teamsphone":
+			reg, names, err := teamsPhoneRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve Teams Phone, holding no tenant. Not an error, for Entra's
+				// reason: the kind is supervised by default and must park, not fail, on a
+				// server where nobody has configured a tenant yet.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.TeamsPhoneJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunTeamsPhoneJob(ctx, j, reg)
+			})
 		case "clio":
 			reg, names, err := clioRegistryFromEnv(env)
 			if err != nil {
@@ -509,7 +525,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "agent", "clio", "csv", "discord", "entra", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "temis", "webscrape"}
+	return []string{"ad", "agent", "clio", "csv", "discord", "entra", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "teamsphone", "temis", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.

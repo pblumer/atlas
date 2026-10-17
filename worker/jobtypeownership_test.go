@@ -51,6 +51,7 @@ var connectorJobTypes = map[string][]string{
 	"script":       {compiler.PwshJobType, compiler.PythonJobType, compiler.JsJobType},
 	"sharepoint":   {compiler.SharePointJobType},
 	"soap":         {compiler.SoapJobType},
+	"teamsphone":   {compiler.TeamsPhoneJobType},
 	"temis":        {compiler.TemisDecisionJobType},
 	"webscrape":    {compiler.WebScrapeJobType},
 }
@@ -94,6 +95,13 @@ func configuredEnvFor(t *testing.T, kind string) map[string]string {
 			"ATLAS_ENTRA_CONTOSO_TENANT_ID":     "11111111-2222-3333-4444-555555555555",
 			"ATLAS_ENTRA_CONTOSO_CLIENT_ID":     "app-1",
 			"ATLAS_ENTRA_CONTOSO_CLIENT_SECRET": "s3cr3t",
+		}
+	case "teamsphone":
+		return map[string]string{
+			"ATLAS_TEAMSPHONE_CONNECTORS":                     "contoso",
+			"ATLAS_TEAMSPHONE_CONTOSO_TENANT_ID":              "11111111-2222-3333-4444-555555555555",
+			"ATLAS_TEAMSPHONE_CONTOSO_CLIENT_ID":              "app-1",
+			"ATLAS_TEAMSPHONE_CONTOSO_CERTIFICATE_THUMBPRINT": "0123456789ABCDEF0123456789ABCDEF01234567",
 		}
 	case "googlesheets":
 		return map[string]string{

@@ -83,6 +83,14 @@ export const SECRET_SHAPES = {
     skeleton: { tenantId: "\u2026", clientId: "\u2026", clientSecret: "\u2026" },
     note: "Tenant and client id are on the app registration's <b>Overview</b>. A <b>client secret</b> comes from <b>Certificates &amp; secrets &rsaquo; Client secrets</b> and is shown once. A <b>certificate</b> is stored instead as <code>\"certificate\"</code>: the certificate and its <b>unencrypted</b> private key as one PEM text (<code>-----BEGIN CERTIFICATE-----</code> \u2026 <code>-----BEGIN PRIVATE KEY-----</code> \u2026), after uploading the certificate's public part under <b>Certificates &amp; secrets &rsaquo; Certificates</b>. Carry one of the two, never both.",
   },
+  "teamsphone:": {
+    what: "a Microsoft Teams Phone app credential bundle (JSON): {tenantId, clientId} with a certificate or a certificateThumbprint",
+    // anyOf for Entra's reason: the certificate travels as PEM or is named by the
+    // thumbprint of one already in the worker host's store, and never both.
+    anyOf: [["tenantId", "clientId", "certificate"], ["tenantId", "clientId", "certificateThumbprint"]],
+    skeleton: { tenantId: "\u2026", clientId: "\u2026", certificate: "-----BEGIN CERTIFICATE-----\u2026" },
+    note: "Tenant and client id are on the app registration's <b>Overview</b>; the app needs the Teams administrator role and the Graph application permission <code>User.ReadWrite.All</code> (finding a resource account Teams does not show yet, and deleting one). <code>\"certificate\"</code> is the certificate and its <b>unencrypted</b> private key as one PEM text, after uploading the public part under <b>Certificates &amp; secrets &rsaquo; Certificates</b>. <code>\"certificateThumbprint\"</code> instead names a certificate already in the worker host's <code>CurrentUser\\My</code> or <code>LocalMachine\\My</code>. Carry one of the two, never both; there is no client secret, because the module signs in with a certificate.",
+  },
   "discord:": {
     what: "a Discord bot credential bundle (JSON): {botToken}",
     fields: ["botToken"],

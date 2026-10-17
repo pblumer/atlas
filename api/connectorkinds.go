@@ -395,6 +395,19 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes:       []int32{compiler.EntraJobTypeIndex},
 	},
 	{
+		// A Microsoft Teams Phone task provisions or removes a voice app and its
+		// resource account (ADR-draft-teams-phone-worker). Worker-only for Entra's
+		// reason and one of its own: the work is PowerShell that only a worker host with
+		// the MicrosoftTeams module runs, so the engine has nothing to run it with — and
+		// the app is a tenant-wide Teams administrator that must not enter the engine.
+		// The record exists so an operator can add a tenant in the Console and the
+		// supervised worker be provisioned from it (teamsPhoneWorkerEnv).
+		name:           connectorKindTeamsPhone,
+		workerOnly:     true,
+		validateCreate: validateTeamsPhoneConnector,
+		jobTypes:       []int32{compiler.TeamsPhoneJobTypeIndex},
+	},
+	{
 		// An Active Directory task performs one directory operation against a
 		// domain controller an operator configured here
 		// (ADR-0206). The URL lives in the record and the
@@ -656,7 +669,7 @@ func DefaultOffloadedKinds() []string {
 // flag, no restart of Atlas. That is what makes the tenant a Console entry rather than a
 // deployment change.
 func DefaultSupervisedWorkerOnlyKinds() []string {
-	return []string{connectorKindAgent, connectorKindEntra, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
+	return []string{connectorKindAgent, connectorKindEntra, connectorKindTeamsPhone, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
 }
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
@@ -926,6 +939,21 @@ func validateEntraConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
 	if p.CredentialsRef == "" {
 		return "an entra worker requires a credentialsRef naming a vault bundle {tenantId, clientId, clientSecret} or {tenantId, clientId, certificate}"
+	}
+	return ""
+}
+
+// validateTeamsPhoneConnector accepts a Teams Phone tenant: the whole configuration is
+// the vault bundle, so a record without a credentialsRef has nothing to sign in with.
+// An endpoint has no meaning for this kind — the module reaches Microsoft's own — and is
+// refused rather than stored and ignored.
+func validateTeamsPhoneConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender = "", ""
+	if strings.TrimSpace(p.Endpoint) != "" {
+		return "a teamsphone worker takes no endpoint: the MicrosoftTeams module reaches Microsoft itself"
+	}
+	if p.CredentialsRef == "" {
+		return "a teamsphone worker requires a credentialsRef naming a vault bundle {tenantId, clientId, certificate} or {tenantId, clientId, certificateThumbprint}"
 	}
 	return ""
 }

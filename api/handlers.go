@@ -37,6 +37,7 @@ import (
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
+	"github.com/pblumer/atlas/connector/teamsphone"
 	"github.com/pblumer/atlas/connector/temis"
 	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/dmn"
@@ -6973,6 +6974,17 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"groupId": j.GroupID, "attributes": j.Attributes, "newPassword": j.NewPassword,
 			"filter": j.Filter, "select": j.Select, "pageSize": j.PageSize, "maxUsers": j.MaxUsers,
 			"search": j.Search, "advancedQuery": j.Advanced, "deltaLink": j.DeltaLink,
+			"resultVariable": j.ResultVariable,
+		}}
+	case compiler.TeamsPhoneJobTypeIndex:
+		// The operation and its values travel; the tenant's app certificate does not
+		// exist here to travel. Worker-only, like Entra (ADR-draft-teams-phone-worker).
+		j, err := teamsphone.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "teamsphone", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "args": j.Args,
 			"resultVariable": j.ResultVariable,
 		}}
 	case compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex:

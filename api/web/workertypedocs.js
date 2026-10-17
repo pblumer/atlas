@@ -159,6 +159,20 @@ export const WORKER_TYPE_DOCS = {
     trap: `Resetting a password or touching a role-bearing account needs more than <code>User.ReadWrite.All</code>: the app must also hold a <b>directory role</b> such as <i>User Administrator</i> — and even then it cannot act on holders of higher-privileged roles.`,
   },
 
+  teamsphone: {
+    anchor: "runbook-teamsphone", title: "Microsoft Teams Phone",
+    checked: "2026-10",
+    needs: `A configured Microsoft Teams Phone Worker in ${WORKERS}: a vault bundle with tenant, client and the app's certificate. No endpoint. The worker host needs PowerShell 7 and the MicrosoftTeams module.`,
+    steps: [
+      `On the worker host: PowerShell 7 and <code>Install-Module MicrosoftTeams -Scope AllUsers</code>. If <code>pwsh</code> is not on the PATH, <code>ATLAS_TEAMSPHONE_PWSH</code> names it. The host's own proxy is used; atlas sets none.`,
+      `Entra admin center &rarr; <b>App registrations</b> &rarr; new registration with a <b>certificate</b> (the module signs apps in with a certificate only). Give the service principal the role <i>Teams Administrator</i> and the Graph application permission <code>User.ReadWrite.All</code>, then <b>grant admin consent</b>.`,
+      `Store the bundle in the vault: ${VAULT}, e.g. <code>teams_contoso</code> holding <code>{"tenantId": "…", "clientId": "…", "certificate": "…"}</code> — the certificate and its unencrypted private key as one PEM text — or <code>"certificateThumbprint"</code> in its place for a certificate already in the worker account's store. Never both.`,
+      `${WORKERS} &rarr; <b>New worker</b>: type <b>Microsoft Teams Phone</b>, a name, credential reference <code>teams_contoso</code>, no endpoint.`,
+      `Practise without a tenant: <code>ATLAS_TEAMSPHONE_MOCK=1</code> serves the same tasks from a tenant in the worker's memory, and <code>ATLAS_TEAMSPHONE_MOCK_USERS</code> names the people Resolve users finds.`,
+    ],
+    trap: `Teams shows a new resource account only after a synchronization. A voice app waits up to two minutes for its account and is then refused before anything is created — give the model a pause between creating the accounts and the voice apps (waiting for licences is one), rather than reading the delay as a fault.`,
+  },
+
   // The three database entries quote the connection string exactly as the Console's own
   // field placeholder does, `PASSWORT` included (SQL_DSN_EXAMPLES in workerdialog.js):
   // an operator reads the example here and types into the field there, and two spellings

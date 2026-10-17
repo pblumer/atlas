@@ -109,6 +109,10 @@ export function workerShape(kind, provider) {
   // it with, neither derivable from the other.
   const jira = kind === "jira";
   const entra = kind === "entra";
+  // Teams Phone is Entra's shape: Microsoft's endpoints are the same for everyone, so the
+  // credential bundle is the whole configuration — with a certificate, or the thumbprint
+  // of one already in the worker host's store, and never a client secret.
+  const teamsphone = kind === "teamsphone";
   // Google Sheets is SharePoint's shape: Google's API bases are the same for everyone,
   // so there is no endpoint to author — the credential bundle *is* the configuration.
   const googlesheets = kind === "googlesheets";
@@ -140,7 +144,7 @@ export function workerShape(kind, provider) {
   const sql = kind === "postgres" || kind === "mariadb" || kind === "mssql";
   // Kinds that default their API base and authenticate with a credential bundle
   // instead of dialing a host:port. Remedy is not one: it needs both.
-  const bundle = native || sharepoint || entra || sql || googlesheets || discord;
+  const bundle = native || sharepoint || entra || teamsphone || sql || googlesheets || discord;
   return {
     mail,
     sql,
@@ -211,7 +215,8 @@ export function workerShape(kind, provider) {
       ? "Credential reference (vault {username,password})"
       : (sql ? "\u2026 or a credential reference (a vault key already holding the DSN)"
         : (entra ? "Credential reference (vault {tenantId, clientId, clientSecret or certificate})"
-          : (bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)"))),
+          : (teamsphone ? "Credential reference (vault {tenantId, clientId, certificate or certificateThumbprint})"
+            : (bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)")))),
     credRefPlaceholder: agent
       ? "anthropic_api_key (a vault key holding the key)"
       : cloudevents
@@ -230,11 +235,14 @@ export function workerShape(kind, provider) {
       ? "remedy_creds (vault {username,password})"
       : (sql ? kind + "_hr_dsn (a vault key holding the whole connection string)"
         : (entra ? "entra_blumer (vault {tenantId, clientId, clientSecret or certificate})"
-          : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token")))),
+          : (teamsphone ? "teams_contoso (vault {tenantId, clientId, certificate or certificateThumbprint})"
+            : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token"))))),
     hint: agent
       ? "The model an <b>agent-driven ad-hoc subprocess</b> asks which of its tools to run next. Its <b>API key</b> is a vault key named here \u2014 never a value \u2014 and the endpoint is optional: each wire format has a public default, so name one only for a gateway, a proxy or a self-hosted deployment. A round is one model call, minutes long and able to hang, so atlas never runs it itself: it supervises a worker for this kind and picks the model up as soon as you save, with no restart. <b>Messages</b> is Anthropic's format (also OpenRouter's <code>/api/v1/messages</code>); <b>Chat Completions</b> is OpenAI's, and anything calling itself OpenAI-compatible \u2014 that one has no default model, so name it."
       : cloudevents
       ? "Where the <b>event feed</b> is pushed: atlas POSTs the outcomes of product actions, every right granted and revoked, and every incident raised and resolved to this <b>https</b> address as CloudEvents batches (<code>application/cloudevents-batch+json</code>), and sends the token behind the reference as <code>Authorization: Bearer</code>. Nothing is sent until you subscribe the worker to the feed: <b>Feed…</b> in its menu, where you can narrow it to some catalogues. A refused batch is held and retried, never skipped; the receiver deduplicates by each event's <code>id</code>."
+      : teamsphone
+      ? "The credential reference names a vault bundle \u2014 never a value: <code>{\"tenantId\": \"\u2026\", \"clientId\": \"\u2026\", \"certificate\": \"-----BEGIN CERTIFICATE-----\u2026\"}</code> with the app\u0027s certificate and its unencrypted private key as one PEM text, or <code>\"certificateThumbprint\"</code> in its place for a certificate already in the worker host\u0027s <code>CurrentUser\\My</code> or <code>LocalMachine\\My</code>. There is no endpoint: the MicrosoftTeams module reaches Microsoft itself, through the host\u0027s proxy. The worker host needs <b>PowerShell 7</b> and the <b>MicrosoftTeams</b> module; atlas supervises the worker and picks the tenant up as soon as you save."
       : discord
       ? "The credential reference names a vault bundle holding the bot token \u2014 never a value: <code>{\"botToken\": \"\u2026\"}</code>, from <b>Discord Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Reset Token</b>. Store the token alone; atlas composes the <code>Bot </code> scheme itself. There is no endpoint to name \u2014 Discord\u0027s API base is the same for everyone \u2014 so the field stays empty unless you sit behind a proxy. The bot must be <b>invited to the server</b> and hold <b>View Channel</b> and <b>Send Messages</b> in every channel a process writes to: a missing grant comes back as code 50001, <i>Missing Access</i>, not as a bad token."
       : s3
