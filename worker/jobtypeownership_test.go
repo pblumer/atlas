@@ -36,6 +36,7 @@ var connectorJobTypes = map[string][]string{
 	"csv":          {compiler.CsvImportJobType},
 	"discord":      {compiler.DiscordJobType},
 	"entra":        {compiler.EntraJobType},
+	"exchange":     {compiler.ExchangeJobType},
 	"googlesheets": {compiler.GoogleSheetsJobType},
 	"jira":         {compiler.JiraJobType},
 	"ldap":         {compiler.LdapJobType},
@@ -94,6 +95,11 @@ func configuredEnvFor(t *testing.T, kind string) map[string]string {
 			"ATLAS_ENTRA_CONTOSO_TENANT_ID":     "11111111-2222-3333-4444-555555555555",
 			"ATLAS_ENTRA_CONTOSO_CLIENT_ID":     "app-1",
 			"ATLAS_ENTRA_CONTOSO_CLIENT_SECRET": "s3cr3t",
+		}
+	case "exchange":
+		return map[string]string{
+			"ATLAS_EXCHANGE_CONNECTORS":          "contoso",
+			"ATLAS_EXCHANGE_CONTOSO_CREDENTIALS": `{"organization":"contoso.onmicrosoft.com","clientId":"app-1","clientSecret":"s3cr3t"}`,
 		}
 	case "googlesheets":
 		return map[string]string{

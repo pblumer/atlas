@@ -133,6 +133,11 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.S3.Retries },
 		compile: compileS3ConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Exchange != nil },
+		retries: func(st xmlServiceTask) string { return st.Exchange.Retries },
+		compile: compileExchangeConnectorTask,
+	},
 }
 
 // The directory-file formats and directions a model can author. They are spelled here

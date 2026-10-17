@@ -479,6 +479,21 @@
       ]
     },
     {
+      "name": "ExchangeConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "cmdlet", "type": "String", "isAttr": true },
+        { "name": "parameters", "type": "String", "isAttr": true },
+        { "name": "parametersVariable", "type": "String", "isAttr": true },
+        { "name": "maxResults", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "S3Meta",
       "superClass": ["Element"],
       "properties": [

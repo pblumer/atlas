@@ -24,6 +24,7 @@ import (
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/entra"
+	"github.com/pblumer/atlas/connector/exchange"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
@@ -6973,6 +6974,21 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"groupId": j.GroupID, "attributes": j.Attributes, "newPassword": j.NewPassword,
 			"filter": j.Filter, "select": j.Select, "pageSize": j.PageSize, "maxUsers": j.MaxUsers,
 			"search": j.Search, "advancedQuery": j.Advanced, "deltaLink": j.DeltaLink,
+			"resultVariable": j.ResultVariable,
+		}}
+	case compiler.ExchangeJobTypeIndex:
+		// Entra's arm with Exchange's operation: the operation and its evaluated
+		// parameters travel, and nothing that says how to reach the organization — that
+		// and the credential exist only on the worker. Which cmdlet the operation becomes
+		// is the worker's to decide too, because it depends on the organization's target
+		// (ADR-draft-exchange-worker).
+		j, err := exchange.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "exchange", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "cmdlet": j.Cmdlet,
+			"parameters": j.Parameters, "maxResults": j.MaxResults,
 			"resultVariable": j.ResultVariable,
 		}}
 	case compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex:

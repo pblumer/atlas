@@ -93,19 +93,26 @@ func (f *saFetcher) signAssertion() (string, error) {
 	if f.c.Subject != "" {
 		claims["sub"] = f.c.Subject
 	}
+	return signRS256(f.c.Kind, header, claims, f.c.PrivateKey)
+}
+
+// signRS256 encodes and RS256-signs a JWT. It is the one signer every assertion grant
+// here shares — Google's service account and Microsoft's certificate credential differ
+// in their claims, not in how a JWT is put together.
+func signRS256(kind string, header map[string]string, claims map[string]any, key *rsa.PrivateKey) (string, error) {
 	hb, err := json.Marshal(header)
 	if err != nil {
-		return "", fmt.Errorf("%s: encode JWT header: %w", f.c.Kind, err)
+		return "", fmt.Errorf("%s: encode JWT header: %w", kind, err)
 	}
 	cb, err := json.Marshal(claims)
 	if err != nil {
-		return "", fmt.Errorf("%s: encode JWT claims: %w", f.c.Kind, err)
+		return "", fmt.Errorf("%s: encode JWT claims: %w", kind, err)
 	}
 	signingInput := base64.RawURLEncoding.EncodeToString(hb) + "." + base64.RawURLEncoding.EncodeToString(cb)
 	digest := sha256.Sum256([]byte(signingInput))
-	sig, err := rsa.SignPKCS1v15(rand.Reader, f.c.PrivateKey, crypto.SHA256, digest[:])
+	sig, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
 	if err != nil {
-		return "", fmt.Errorf("%s: sign JWT assertion: %w", f.c.Kind, err)
+		return "", fmt.Errorf("%s: sign JWT assertion: %w", kind, err)
 	}
 	return signingInput + "." + base64.RawURLEncoding.EncodeToString(sig), nil
 }
