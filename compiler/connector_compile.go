@@ -134,6 +134,11 @@ var connectorCompilers = []connectorCompiler{
 		compile: compileS3ConnectorTask,
 	},
 	{
+		present: func(st xmlServiceTask) bool { return st.Exchange != nil },
+		retries: func(st xmlServiceTask) string { return st.Exchange.Retries },
+		compile: compileExchangeConnectorTask,
+	},
+	{
 		present: func(st xmlServiceTask) bool { return st.TeamsPhone != nil },
 		retries: func(st xmlServiceTask) string { return st.TeamsPhone.Retries },
 		compile: compileTeamsPhoneConnectorTask,

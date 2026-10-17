@@ -65,11 +65,11 @@ func entraRegistryFromEnv(env func(string) string) (*entra.Registry, []string, e
 		// certificate.
 		var fetch oauth2.Fetcher
 		if certPEM != "" {
-			cert, priv, err := oauth2.ParseCertificateKeyPair("entra", certPEM)
+			cert, priv, err := oauth2.ParseCertificateBundle("entra", certPEM)
 			if err != nil {
 				return nil, nil, fmt.Errorf("worker: entra worker %q: %w", name, err)
 			}
-			fetch = oauth2.ClientAssertion(oauth2.ClientAssertionConfig{
+			fetch = oauth2.ClientCertificate(oauth2.CertificateConfig{
 				HTTPClient:  nettimeout.HTTPClient(),
 				Kind:        "entra",
 				TokenURL:    tokenURL,

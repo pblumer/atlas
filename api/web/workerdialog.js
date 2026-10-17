@@ -124,6 +124,10 @@ export function workerShape(kind, provider) {
   // is the store the installation runs — which is also what decides that its buckets are
   // addressed in the path rather than in the hostname.
   const s3 = kind === "s3";
+  // Exchange is S3's shape: a bundle that is the whole credential, and an endpoint whose
+  // meaning the bundle decides — empty for Exchange Online, a sovereign cloud's host, or
+  // an Exchange Server's Remote PowerShell URI.
+  const exchange = kind === "exchange";
   // Active Directory is Remedy's shape: an LDAP URL to dial and a bind account to dial
   // it with, neither derivable from the other. It is the newest kind to stop carrying
   // its directory in the model (ADR-0206).
@@ -183,7 +187,7 @@ export function workerShape(kind, provider) {
     // An agent's key is required *unless* an endpoint is named — a self-hosted endpoint
     // may legitimately need none — so the form asks for it without insisting, and the
     // server refuses a record with neither.
-    credRef: preview ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad || s3 ? "required" : "optional")),
+    credRef: preview ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad || s3 || exchange ? "required" : "optional")),
     modelPlaceholder: provider === "chat-completions" ? "gpt-4o" : "claude-opus-5",
     endpointPlaceholder: agent
       ? (provider === "chat-completions"
@@ -195,6 +199,8 @@ export function workerShape(kind, provider) {
       ? "smtp.office365.com:587"
       : s3
       ? "https://minio.example:9000 (empty = AWS)"
+      : exchange
+      ? "http://exch01.contoso.local/PowerShell/ (empty = Exchange Online)"
       : (ad ? "ldaps://dc.example.com:636"
         : (remedy ? "https://helix.example.com:8008" : (jira ? "https://acme.atlassian.net" : "https://temis.internal"))),
     credRefLabel: agent
@@ -207,6 +213,8 @@ export function workerShape(kind, provider) {
       ? "Credential reference (vault {botToken})"
       : s3
       ? "Credential reference (vault {accessKeyId, secretAccessKey, region})"
+      : exchange
+      ? "Credential reference (vault {organization, clientId, certificate} or {target: onprem, …})"
       : googlesheets
       ? "Credential reference (vault Google auth bundle)"
       : jira
@@ -227,6 +235,8 @@ export function workerShape(kind, provider) {
       ? "discord_team (vault {botToken})"
       : s3
       ? "s3_archiv (vault {accessKeyId, secretAccessKey, region})"
+      : exchange
+      ? "exo_contoso (vault Exchange bundle)"
       : googlesheets
       ? "google_sheets_auth (vault JSON bundle)"
       : jira
@@ -247,6 +257,8 @@ export function workerShape(kind, provider) {
       ? "The credential reference names a vault bundle holding the bot token \u2014 never a value: <code>{\"botToken\": \"\u2026\"}</code>, from <b>Discord Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Reset Token</b>. Store the token alone; atlas composes the <code>Bot </code> scheme itself. There is no endpoint to name \u2014 Discord\u0027s API base is the same for everyone \u2014 so the field stays empty unless you sit behind a proxy. The bot must be <b>invited to the server</b> and hold <b>View Channel</b> and <b>Send Messages</b> in every channel a process writes to: a missing grant comes back as code 50001, <i>Missing Access</i>, not as a bad token."
       : s3
       ? "The credential reference names a vault bundle holding the access key \u2014 never a value: <code>{\"accessKeyId\": \"\u2026\", \"secretAccessKey\": \"\u2026\", \"region\": \"eu-central-1\"}</code>, plus <code>\"sessionToken\"</code> for a key issued by STS. The <b>region belongs in the bundle</b> because the request signature is computed with it. Leave the <b>endpoint empty for AWS</b>; for MinIO, Ceph, Garage, R2 or Wasabi enter the store\u0027s base URL \u2014 which is also what tells atlas to address buckets in the path. The <b>bucket is not part of this record</b>: a task names it, so one key can serve several."
+      : exchange
+      ? "The credential reference names a vault bundle that says which organization this is and as whom \u2014 never a value. <b>Exchange Online:</b> <code>{\"organization\": \"contoso.onmicrosoft.com\", \"clientId\": \"\u2026\", \"certificate\": \"-----BEGIN CERTIFICATE-----\u2026-----BEGIN PRIVATE KEY-----\u2026\"}</code> for an app registration with <code>Exchange.ManageAsApp</code> and an Exchange role; leave the <b>endpoint empty</b>. <b>Exchange Server:</b> <code>{\"target\": \"onprem\"}</code>, with <code>username</code> and <code>password</code> unless the worker runs as a Kerberos service account, and the server\u0027s <b>Remote PowerShell URI</b> as endpoint \u2014 that worker needs PowerShell on its host, in practice a Windows domain member running <code>atlas worker --connector exchange</code>."
       : googlesheets
       ? "The credential reference names a JSON auth bundle in the vault \u2014 never a secret value. A <b>service account</b> is the normal shape: <code>{\"method\": \"serviceAccount\", \"clientEmail\": \"\u2026@\u2026.iam.gserviceaccount.com\", \"privateKey\": \"-----BEGIN PRIVATE KEY-----\u2026\"}</code>, copied out of the JSON key file Google hands out. A service account owns nothing by itself: <b>share each spreadsheet or folder with its address</b>, exactly as you would with a colleague, or it will read a 403 where you see a document."
       : ad

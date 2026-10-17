@@ -16,6 +16,7 @@ import (
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/entra"
+	"github.com/pblumer/atlas/connector/exchange"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
@@ -633,6 +634,7 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 		{"compiler.LdifJobTypeIndex", ldif.Job{}},
 		{"compiler.DiscordJobTypeIndex", discord.Job{}},
 		{"compiler.S3JobTypeIndex", s3.Job{}},
+		{"compiler.ExchangeJobTypeIndex", exchange.Job{}},
 		{"compiler.TeamsPhoneJobTypeIndex", teamsphone.Job{}},
 	} {
 		t.Run(tc.arm, func(t *testing.T) {
@@ -824,6 +826,7 @@ func payloadArmCases(t *testing.T) map[int32]bool {
 		"ShopJobTypeIndex":          compiler.ShopJobTypeIndex,
 		"ShopCommandJobTypeIndex":   compiler.ShopCommandJobTypeIndex,
 		"S3JobTypeIndex":            compiler.S3JobTypeIndex,
+		"ExchangeJobTypeIndex":      compiler.ExchangeJobTypeIndex,
 		"TeamsPhoneJobTypeIndex":    compiler.TeamsPhoneJobTypeIndex,
 	}
 	if len(indexByConstName) != int(compiler.ReservedJobTypeCount()) {

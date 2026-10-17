@@ -67,6 +67,14 @@ const (
 	// Only the operation and its values are model-authored.
 	connectorKindS3    = "s3"
 	connectorKindEntra = "entra"
+	// connectorKindExchange is the Microsoft Exchange Worker Type
+	// (ADR-0462). Worker-only like Entra: a record holds an optional
+	// endpoint — a sovereign cloud's Exchange Online host, or an Exchange server's
+	// Remote PowerShell URI — and a credentialsRef naming the vault bundle that says
+	// which organization it is and as whom (connector/exchange.Bundle). The engine
+	// builds no client from it; the record exists so an operator can add an
+	// organization in the Console and the supervised worker is provisioned from it.
+	connectorKindExchange = "exchange"
 	// connectorKindTeamsPhone is the Microsoft Teams Phone Worker Type
 	// (ADR-draft-teams-phone-worker): voice apps and their resource accounts,
 	// provisioned by fixed PowerShell on the worker host. A record holds a

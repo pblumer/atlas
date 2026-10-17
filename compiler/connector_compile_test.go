@@ -39,6 +39,7 @@ func TestConnectorCompilersRegistry(t *testing.T) {
 		{Agent: &xmlAgentConnector{}},
 		{Discord: &xmlDiscordConnector{}},
 		{S3: &xmlS3Connector{}},
+		{Exchange: &xmlExchangeConnector{}},
 		{TeamsPhone: &xmlTeamsPhoneConnector{}},
 	}
 	if len(cases) != len(connectorCompilers) {

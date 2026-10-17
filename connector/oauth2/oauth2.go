@@ -1,7 +1,6 @@
 // Package oauth2 is the OAuth2 token machinery every Atlas worker that speaks to
 // a token-protected API shares: an expiry-aware cache, the token-endpoint exchange,
-// and the grants that are not specific to any one vendor — client credentials with a
-// secret or with a certificate ([ClientAssertion]), and the refresh-token grant.
+// and the two grants that are not specific to any one vendor.
 //
 // It exists because three workers needed the same hundred lines. The mail
 // worker grew them first (ADR-0093), the SharePoint worker copied them

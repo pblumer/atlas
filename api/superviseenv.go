@@ -205,6 +205,10 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// engine renders its client secret out of the vault. Only the secret — tenant and
 		// client id are not secret and are inherited from this process's own environment.
 		"entra": s.entraWorkerEnv,
+		// Exchange is worker-only like Entra and provisioned for S3's reason: the bundle
+		// is the whole of what says which organization and as whom, and it lives in the
+		// vault, so a supervised worker holding neither could serve no Exchange task.
+		connectorKindExchange: s.exchangeWorkerEnv,
 		// Teams Phone is Entra's shape: a tenant in the Console, its app certificate in a
 		// vault bundle, and a supervised worker with no vault of its own — so the engine
 		// renders the bundle into the variables the worker reads.

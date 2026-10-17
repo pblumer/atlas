@@ -395,6 +395,18 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes:       []int32{compiler.EntraJobTypeIndex},
 	},
 	{
+		// An Exchange task administers a mailbox, a permission, a distribution group
+		// or a mailbox setting in Exchange Online or on an Exchange Server
+		// (ADR-0462). Worker-only for Entra's reason, and more so: the
+		// credential administers every mailbox in an organization. The store entry is
+		// what supervision provisions the worker from (superviseEnv); jobTypes keeps the
+		// deploy-time name check.
+		name:           connectorKindExchange,
+		workerOnly:     true,
+		validateCreate: validateExchangeConnector,
+		jobTypes:       []int32{compiler.ExchangeJobTypeIndex},
+	},
+	{
 		// A Microsoft Teams Phone task provisions or removes a voice app and its
 		// resource account (ADR-draft-teams-phone-worker). Worker-only for Entra's
 		// reason and one of its own: the work is PowerShell that only a worker host with
@@ -669,7 +681,7 @@ func DefaultOffloadedKinds() []string {
 // flag, no restart of Atlas. That is what makes the tenant a Console entry rather than a
 // deployment change.
 func DefaultSupervisedWorkerOnlyKinds() []string {
-	return []string{connectorKindAgent, connectorKindEntra, connectorKindTeamsPhone, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
+	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
 }
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
@@ -954,6 +966,21 @@ func validateTeamsPhoneConnector(p *createConnectorParams) string {
 	}
 	if p.CredentialsRef == "" {
 		return "a teamsphone worker requires a credentialsRef naming a vault bundle {tenantId, clientId, certificate} or {tenantId, clientId, certificateThumbprint}"
+	}
+	return ""
+}
+
+// validateExchangeConnector checks an Exchange organization a Console operator is
+// adding. Everything that says which organization and as whom lives in the vault bundle
+// the credentialsRef names — Online's {organization, clientId, certificate or
+// clientSecret}, or an Exchange Server's {"target": "onprem", …} — so a bundle is
+// required even for a server reached as the worker's own Kerberos identity: it is
+// what says the target is a server at all. The endpoint stays optional here because its
+// meaning depends on that target, which only the bundle knows.
+func validateExchangeConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if p.CredentialsRef == "" {
+		return "an exchange worker requires a credentialsRef naming a vault bundle: {organization, clientId, certificate} for Exchange Online, or {\"target\": \"onprem\", …} for an Exchange Server"
 	}
 	return ""
 }

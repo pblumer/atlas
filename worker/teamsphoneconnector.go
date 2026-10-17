@@ -110,7 +110,7 @@ func teamsPhoneCredential(name, key string, env func(string) string) (teamsphone
 	case certPEM != "":
 		// Parsed here only to refuse an unusable one at startup; the PEM itself travels
 		// to pwsh, which signs with it. The error never quotes the PEM.
-		if _, _, err := oauth2.ParseCertificateKeyPair("teamsphone", certPEM); err != nil {
+		if _, _, err := oauth2.ParseCertificateBundle("teamsphone", certPEM); err != nil {
 			return cred, fmt.Errorf("worker: teamsphone worker %q: %w", name, err)
 		}
 		cred.Certificate = certPEM

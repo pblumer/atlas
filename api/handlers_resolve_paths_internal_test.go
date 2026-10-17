@@ -140,6 +140,8 @@ func TestHandlersErasedSubjectsJobIsWithheldForEveryWorkerType(t *testing.T) {
 			compiler.ScimJobType, "scim", nil},
 		{"entra", handlersServiceTask(`<atlas:entraConnector connector="contoso" operation="list-users" resultVariable="users"/>`),
 			compiler.EntraJobType, "entra", nil},
+		{"exchange", handlersServiceTask(`<atlas:exchangeConnector connector="contoso" operation="list-mailboxes" resultVariable="postfaecher"/>`),
+			compiler.ExchangeJobType, "exchange", nil},
 		{"clio", handlersServiceTask(`<atlas:clioConnector connector="events" operation="write" subject="/kunden/42" eventType="kunde.angelegt"/>`),
 			compiler.ClioWriteJobType, "clio", nil},
 		{"webscrape", handlersServiceTask(`<atlas:webscrapeConnector url="https://example.com" selector=".price" resultVariable="hits"/>`),

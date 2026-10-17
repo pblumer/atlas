@@ -582,6 +582,18 @@ The control-flow basics most real models use.
   in, and the in-process handler remains as the fallback `--in-process-connectors` returns
   to. Attachments and inbound events are follow-ups — for the inbound half see
   [the Jira issue-watch draft](docs/adr/0214-jira-inbound-issue-watch.md).
+  **Exchange is another Worker Type in the catalog**
+  ([ADR-0462](docs/adr/0462-exchange-worker.md)): a service task marked
+  `<atlas:exchangeConnector connector operation parameters …>` runs one Exchange
+  administration cmdlet as a named operation — forty-five of them across mailboxes,
+  permissions (full access, send as, send on behalf, folders), distribution groups and mail
+  contacts, and mailbox settings, plus `run-get-cmdlet` for any read-only `Get-` cmdlet. One
+  operation table (`connector/exchange/catalog`) is read by the compiler and the worker
+  alike. Worker-only and supervised by default like Entra: Exchange Online over the REST
+  endpoint the Exchange Online PowerShell module uses (app-only, certificate or secret),
+  Exchange Server over Remote PowerShell from a pwsh on the worker host. Still open: the
+  transport has not been exercised against a live tenant (the record's open question), and
+  idempotent retries of grants and membership adds wait on confirmed error identities.
   **The mail Worker reads its mailbox** ([ADR-0438](docs/adr/0438-mailbox-worker.md)):
   an inbound watch on a mail Worker publishes the new mail of one folder as an Atlas
   message — over IMAP for an SMTP Worker that names a `mailboxEndpoint`, through the Gmail

@@ -1,0 +1,271 @@
+{
+  "id": "atlas.exchange-administration",
+  "version": "1.0.0",
+  "kind": "connector",
+  "title": "Microsoft Exchange administration",
+  "author": "Atlas core",
+  "description": "Administer Exchange Online or an Exchange Server from a process: create shared, room and equipment mailboxes, convert and update them, add and remove addresses; grant and revoke full access, send as, send on behalf and folder permissions; create distribution groups and mail contacts and manage their members; set automatic replies, forwarding, litigation hold, calendar processing and quotas — plus a read-only escape hatch that runs any Get- cmdlet. Each operation runs one Exchange cmdlet with the parameters it needs added by the Worker (full access is AccessRights FullAccess with InheritanceType All), and where Exchange Online and Exchange Server need different cmdlets for one intent, the Worker's organization picks. Parameters keep the cmdlets' own names, so Microsoft's cmdlet reference documents them. The organization's credential lives on the Worker, resolved from the vault; the engine never holds it.",
+  "engineCompat": ">=0.10",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "Microsoft Exchange",
+    "id": "atlas.exchange-administration",
+    "appliesTo": [
+      "bpmn:ServiceTask"
+    ],
+    "properties": [
+      {
+        "label": "Worker",
+        "type": "String",
+        "feel": "optional",
+        "value": "",
+        "binding": {
+          "type": "property",
+          "name": "atlas:connector"
+        },
+        "description": "Name of the configured Exchange Worker (Console → Workers) — an Exchange Online tenant or an Exchange Server. A FEEL expression picks the organization at runtime, which is how one process serves both halves of a hybrid organization. The attribute is spelled connector for compatibility with models already deployed."
+      },
+      {
+        "label": "Operation",
+        "type": "Dropdown",
+        "value": "get-mailbox",
+        "binding": {
+          "type": "property",
+          "name": "atlas:operation"
+        },
+        "choices": [
+          {
+            "name": "Read mailbox",
+            "value": "get-mailbox"
+          },
+          {
+            "name": "List mailboxes",
+            "value": "list-mailboxes"
+          },
+          {
+            "name": "Create shared mailbox",
+            "value": "create-shared-mailbox"
+          },
+          {
+            "name": "Create room mailbox",
+            "value": "create-room-mailbox"
+          },
+          {
+            "name": "Create equipment mailbox",
+            "value": "create-equipment-mailbox"
+          },
+          {
+            "name": "Update mailbox",
+            "value": "update-mailbox"
+          },
+          {
+            "name": "Convert mailbox type",
+            "value": "convert-mailbox"
+          },
+          {
+            "name": "Add e-mail address",
+            "value": "add-email-address"
+          },
+          {
+            "name": "Remove e-mail address",
+            "value": "remove-email-address"
+          },
+          {
+            "name": "Remove mailbox",
+            "value": "remove-mailbox"
+          },
+          {
+            "name": "Read mailbox statistics",
+            "value": "get-mailbox-statistics"
+          },
+          {
+            "name": "Grant full access",
+            "value": "add-full-access"
+          },
+          {
+            "name": "Revoke full access",
+            "value": "remove-full-access"
+          },
+          {
+            "name": "List mailbox permissions",
+            "value": "list-mailbox-permissions"
+          },
+          {
+            "name": "Grant send as",
+            "value": "add-send-as"
+          },
+          {
+            "name": "Revoke send as",
+            "value": "remove-send-as"
+          },
+          {
+            "name": "List send-as permissions (Online)",
+            "value": "list-send-as"
+          },
+          {
+            "name": "Grant send on behalf",
+            "value": "grant-send-on-behalf"
+          },
+          {
+            "name": "Revoke send on behalf",
+            "value": "revoke-send-on-behalf"
+          },
+          {
+            "name": "Grant folder permission",
+            "value": "add-folder-permission"
+          },
+          {
+            "name": "Change folder permission",
+            "value": "set-folder-permission"
+          },
+          {
+            "name": "Revoke folder permission",
+            "value": "remove-folder-permission"
+          },
+          {
+            "name": "List folder permissions",
+            "value": "list-folder-permissions"
+          },
+          {
+            "name": "Create distribution group",
+            "value": "create-distribution-group"
+          },
+          {
+            "name": "Read distribution group",
+            "value": "get-distribution-group"
+          },
+          {
+            "name": "List distribution groups",
+            "value": "list-distribution-groups"
+          },
+          {
+            "name": "Update distribution group",
+            "value": "update-distribution-group"
+          },
+          {
+            "name": "Remove distribution group",
+            "value": "remove-distribution-group"
+          },
+          {
+            "name": "Add group member",
+            "value": "add-distribution-group-member"
+          },
+          {
+            "name": "Remove group member",
+            "value": "remove-distribution-group-member"
+          },
+          {
+            "name": "List group members",
+            "value": "list-distribution-group-members"
+          },
+          {
+            "name": "Create mail contact",
+            "value": "create-mail-contact"
+          },
+          {
+            "name": "Read mail contact",
+            "value": "get-mail-contact"
+          },
+          {
+            "name": "Update mail contact",
+            "value": "update-mail-contact"
+          },
+          {
+            "name": "Remove mail contact",
+            "value": "remove-mail-contact"
+          },
+          {
+            "name": "Read automatic reply",
+            "value": "get-auto-reply"
+          },
+          {
+            "name": "Set automatic reply",
+            "value": "set-auto-reply"
+          },
+          {
+            "name": "Set forwarding",
+            "value": "set-forwarding"
+          },
+          {
+            "name": "Clear forwarding",
+            "value": "clear-forwarding"
+          },
+          {
+            "name": "Enable litigation hold",
+            "value": "enable-litigation-hold"
+          },
+          {
+            "name": "Disable litigation hold",
+            "value": "disable-litigation-hold"
+          },
+          {
+            "name": "Read calendar processing",
+            "value": "get-calendar-processing"
+          },
+          {
+            "name": "Set calendar processing",
+            "value": "set-calendar-processing"
+          },
+          {
+            "name": "Set mailbox quotas",
+            "value": "set-mailbox-quota"
+          },
+          {
+            "name": "Run a Get- cmdlet (read only)",
+            "value": "run-get-cmdlet"
+          }
+        ]
+      },
+      {
+        "label": "Parameters (JSON)",
+        "type": "Text",
+        "value": "",
+        "binding": {
+          "type": "property",
+          "name": "atlas:parameters"
+        },
+        "description": "The cmdlet's parameters as a JSON object, named as Microsoft's cmdlet reference names them, e.g. {\"Identity\": \"=postfach\", \"User\": \"=mitarbeiter.mail\"}. A string starting with = is a FEEL expression; true, false and numbers stay what they are, which a switch such as AutoMapping needs. A parameter whose expression evaluates to null is left out rather than sent, so a variable that is not set never clears a property. What an operation sets itself (AccessRights on Grant full access) is refused here."
+      },
+      {
+        "label": "Parameters variable",
+        "type": "String",
+        "value": "",
+        "binding": {
+          "type": "property",
+          "name": "atlas:parametersVariable"
+        },
+        "description": "Instead of the JSON above: the name of a variable holding the parameter object, for a process that assembles it itself. Use one or the other."
+      },
+      {
+        "label": "Cmdlet (Run a Get- cmdlet)",
+        "type": "String",
+        "value": "",
+        "binding": {
+          "type": "property",
+          "name": "atlas:cmdlet"
+        },
+        "description": "The Get- cmdlet the read-only escape hatch runs, e.g. Get-ADPermission or Get-MobileDevice. Only Get- cmdlets are accepted, at deploy; a change goes through the operation that names it."
+      },
+      {
+        "label": "Maximum results (listings)",
+        "type": "String",
+        "value": "",
+        "binding": {
+          "type": "property",
+          "name": "atlas:maxResults"
+        },
+        "description": "Caps what a listing may write into the result variable. Empty uses 1000. A listing past the cap fails instead of being cut short, because a short list is a wrong answer a process would act on."
+      },
+      {
+        "label": "Result variable",
+        "type": "String",
+        "value": "",
+        "binding": {
+          "type": "property",
+          "name": "atlas:resultVariable"
+        },
+        "description": "Receives what the cmdlet returned: one object (or null) for a read, an array for a listing, the created object for a create or a grant. Required on reads and listings; refused on operations that return nothing."
+      }
+    ]
+  }
+}

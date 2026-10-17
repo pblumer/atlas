@@ -393,11 +393,13 @@ script on that host could use it.
   startup error naming both variables, because the choice would otherwise be an accident
   of precedence. A PEM written on one line with literal `\n` is read as the PEM it spells,
   since a systemd unit or a one-line Kubernetes value cannot hold a line break.
-- It is still the client-credentials grant. `oauth2.ClientAssertion` posts
-  `client_assertion_type=…jwt-bearer` with an RS256 JWT whose header names the certificate
-  by `x5t#S256` and `x5t` and whose claims are RFC 7523's: `iss` = `sub` = the client id,
-  `aud` the token endpoint, a fresh `jti`, ten minutes of validity. The Google
-  service-account grant and this one now share one RS256 signer.
+- It is still the client-credentials grant, through the certificate credential
+  [ADR-0462](0462-exchange-worker.md) added for the Exchange Worker:
+  `oauth2.ClientCertificate` posts `client_assertion_type=…jwt-bearer` with an RS256 JWT
+  whose header names the certificate by `x5t#S256` and `x5t` and whose claims are RFC
+  7523's: `iss` = `sub` = the client id, `aud` the token endpoint, a fresh `jti`, ten
+  minutes of validity. Entra and Exchange read the PEM with the same
+  `oauth2.ParseCertificateBundle`, so the two Worker Types refuse the same bundles.
 - The key must be RSA, because the assertion is RS256. An EC key, a key that does not
   belong to the certificate, or an encrypted key is refused at startup, naming the tenant
   and never quoting the PEM.

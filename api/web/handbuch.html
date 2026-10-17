@@ -6361,6 +6361,97 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
+      <div class="card" id="runbook-exchange">
+        <h4>Microsoft Exchange</h4>
+        <p data-l="de">Ein Exchange-Worker verwaltet eine Organisation – Exchange Online oder einen Exchange
+          Server. Welche es ist, steht im Vault-Bündel, nicht im Modell: Dieselbe Aufgabe läuft gegen beide, und
+          wo die beiden für dieselbe Absicht verschiedene Cmdlets brauchen (Senden als), wählt der Worker. Eine
+          hybride Organisation sind zwei Worker; ein Worker-Name mit führendem <code>=</code> wählt zur Laufzeit.
+          <i>Die Schritte sind aus der Dokumentation von Microsoft geschrieben und noch nicht an einem Tenant
+          durchgegangen worden.</i></p>
+        <p data-l="en">An Exchange worker administers one organization – Exchange Online or an Exchange Server.
+          Which one is stated in the vault bundle, not in the model: the same task runs against either, and where
+          the two need different cmdlets for one intent (Send As) the worker picks. A hybrid organization is two
+          workers; a worker name starting with <code>=</code> chooses at runtime. <i>These steps are written from
+          Microsoft's documentation and have not yet been walked at a tenant.</i></p>
+        <ol>
+          <li data-l="de"><b>Exchange Online – App-Registrierung</b> im Entra-Admin-Center, <b>eigens für diesen
+            Worker</b>. Client-ID notieren; die Organisation ist die Initialdomäne des Tenants,
+            <code>contoso.onmicrosoft.com</code>.</li>
+          <li data-l="en"><b>Exchange Online – app registration</b> in the Entra admin center, <b>dedicated to this
+            worker</b>. Note the client id; the organization is the tenant's initial domain,
+            <code>contoso.onmicrosoft.com</code>.</li>
+          <li data-l="de"><b>API-Berechtigungen</b> → <i>Von meiner Organisation verwendete APIs</i> →
+            <b>Office 365 Exchange Online</b> → Anwendungsberechtigung <code>Exchange.ManageAsApp</code>, dann
+            <b>Administratorzustimmung erteilen</b>.</li>
+          <li data-l="en"><b>API permissions</b> → <i>APIs my organization uses</i> → <b>Office 365 Exchange
+            Online</b> → application permission <code>Exchange.ManageAsApp</code>, then <b>grant admin
+            consent</b>.</li>
+          <li data-l="de"><b>Zertifikat</b> hochladen (öffentlicher Teil). Zertifikat und privaten Schlüssel als
+            einen PEM-Text aufbewahren – Microsoft dokumentiert für unbeaufsichtigte Exchange-Verwaltung Zertifikate,
+            keine Client-Secrets. Ein Secret nimmt der Worker an, ob Exchange Online es akzeptiert, ist nicht
+            geprüft.</li>
+          <li data-l="en">Upload a <b>certificate</b> (the public half). Keep the certificate and its private key
+            together as one PEM text – Microsoft documents certificates, not client secrets, for unattended Exchange
+            administration. The worker accepts a secret; whether Exchange Online honours one has not been
+            verified.</li>
+          <li data-l="de"><b>Exchange-Rolle zuweisen:</b> Entra → <i>Rollen und Administratoren</i> →
+            <i>Exchange-Empfängeradministrator</i> (Empfänger und Berechtigungen) oder
+            <i>Exchange-Administrator</i> → die App hinzufügen. Ohne Rolle wird jeder Aufruf abgewiesen.</li>
+          <li data-l="en"><b>Assign an Exchange role:</b> Entra → <i>Roles and administrators</i> → <i>Exchange
+            Recipient Administrator</i> (recipients and permissions) or <i>Exchange Administrator</i> → add the app.
+            Without a role every call is refused.</li>
+          <li data-l="de">Secret anlegen, z.&nbsp;B. <code>exo_contoso</code>:
+            <code>{"organization": "contoso.onmicrosoft.com", "clientId": "…", "certificate": "-----BEGIN
+            CERTIFICATE-----…-----BEGIN PRIVATE KEY-----…"}</code>, dann einen Worker vom Typ <b>Microsoft
+            Exchange</b> mit dieser Referenz und <b>ohne Endpoint</b> (eine souveräne Cloud nennt ihren Host als
+            Endpoint und <code>authorityUrl</code> im Bündel).</li>
+          <li data-l="en">Create the secret, e.g. <code>exo_contoso</code>:
+            <code>{"organization": "contoso.onmicrosoft.com", "clientId": "…", "certificate": "-----BEGIN
+            CERTIFICATE-----…-----BEGIN PRIVATE KEY-----…"}</code>, then a worker of type <b>Microsoft
+            Exchange</b> with that reference and <b>no endpoint</b> (a sovereign cloud names its host as the
+            endpoint and <code>authorityUrl</code> in the bundle).</li>
+          <li data-l="de"><b>Exchange Server</b> hat keinen REST-Zugang; der Worker öffnet pro Aufruf eine
+            Remote-PowerShell-Sitzung zu <code>http://exch01.contoso.local/PowerShell/</code>. Dafür braucht er einen Host
+            mit PowerShell 7 oder Windows PowerShell 5.1, der den Server erreicht – praktisch ein
+            Windows-Domänenmitglied, auf dem <code>atlas worker --connector exchange</code> unter einem Dienstkonto in einer
+            passenden Rollengruppe läuft (<i>Recipient Management</i>, oder <i>Organization Management</i> für
+            alles). Kerberos braucht dann kein Passwort: Das Bündel ist nur
+            <code>{"target": "onprem"}</code>, sonst mit <code>username</code> und <code>password</code>. Der
+            Endpoint des Workers ist die Remote-PowerShell-URI.</li>
+          <li data-l="en"><b>Exchange Server</b> has no REST way in; the worker opens a Remote PowerShell session to
+            <code>http://exch01.contoso.local/PowerShell/</code> for each call. That needs a host with PowerShell 7
+            or Windows PowerShell 5.1 that reaches the server – in practice a Windows domain member running
+            <code>atlas worker --connector exchange</code> as a service account in a fitting role group
+            (<i>Recipient Management</i>, or <i>Organization Management</i> for everything). Kerberos then needs no
+            password: the bundle is just <code>{"target": "onprem"}</code>, otherwise with <code>username</code> and
+            <code>password</code>. The worker's endpoint is the Remote PowerShell URI.</li>
+        </ol>
+        <p data-l="de"><b>Im Modell.</b> Parameter heissen wie in der Cmdlet-Referenz von Microsoft
+          (<code>Identity</code>, <code>User</code>, <code>AccessRights</code>); was eine Operation selbst setzt
+          (<code>AccessRights FullAccess</code> bei <i>Vollzugriff gewähren</i>), wird beim Deploy abgewiesen. Ein
+          Parameter, dessen FEEL-Ausdruck <code>null</code> ergibt, wird weggelassen statt gesendet – eine nicht
+          gesetzte Variable leert keine Eigenschaft. <i>Get-Cmdlet ausführen</i> liest beliebig, ändert nie.</p>
+        <p data-l="en"><b>In the model.</b> Parameters are named as Microsoft's cmdlet reference names them
+          (<code>Identity</code>, <code>User</code>, <code>AccessRights</code>); what an operation sets itself
+          (<code>AccessRights FullAccess</code> on <i>Grant full access</i>) is refused at deploy. A parameter whose
+          FEEL expression evaluates to <code>null</code> is left out rather than sent – a variable that is not set
+          clears no property. <i>Run a Get- cmdlet</i> reads anything and never changes.</p>
+        <p data-l="de"><b>Drei Fallen.</b> <i>Berechtigung ohne Rolle:</i> <code>Exchange.ManageAsApp</code> erlaubt
+          der App zu fragen, die Rolle bestimmt, was sie darf – und eine neue Zuweisung braucht Zeit, bis sie
+          greift. <i>Ordnernamen sind lokalisiert:</i> Ein deutsches Postfach hat <code>anna@contoso.com:\Kalender</code>,
+          kein <code>:\Calendar</code>. <i>Wiederholte Zustellung:</i> Ein Job kann nach einem Abbruch erneut
+          laufen; ein zweites <i>Mitglied hinzufügen</i> meldet dann „ist bereits Mitglied" als Fehler. Der Worker
+          deutet solche Texte nicht um – der Vorfall sagt, was Exchange gesagt hat.</p>
+        <p data-l="en"><b>Three traps.</b> <i>Permission without a role:</i> <code>Exchange.ManageAsApp</code> lets
+          the app ask, the role decides what it may do – and a new assignment takes a while to apply. <i>Folder names
+          are localized:</i> a German mailbox has <code>anna@contoso.com:\Kalender</code>, not
+          <code>:\Calendar</code>. <i>Repeated delivery:</i> a job may run again after an interruption; a second
+          <i>Add group member</i> then reports "already a member" as an error. The worker does not reinterpret such
+          texts – the incident says what Exchange said.</p>
+        <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked October 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
+      </div>
+
       <div class="card" id="runbook-teamsphone">
         <h4>Microsoft Teams Phone</h4>
         <p data-l="de">Warteschlangen (Call Queues), automatische Telefonzentralen (Auto Attendants) und ihre
