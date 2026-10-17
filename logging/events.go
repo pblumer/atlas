@@ -278,6 +278,11 @@ var (
 	// and the job has already settled, so what is lost is one refresh of a view that
 	// the next statement sends again.
 	SQLMockReportFailed = newEvent("sql_mock.report_failed")
+	// TeamsPhoneMockMode is a Teams Phone worker announcing that it serves its tenants
+	// from memory rather than through PowerShell (ADR-0463). A
+	// warning for the reason the AD and SQL ones are: a mock worker completes every job
+	// it leases and is indistinguishable from a working one everywhere else.
+	TeamsPhoneMockMode = newEvent("teamsphone_mock.enabled")
 	// WorkerHistoryFailed is the job-history exporter reporting that an append did not
 	// reach its clio worker, or that its buffer is dropping entries. Both are
 	// warnings rather than errors on purpose: the history is telemetry, and the engine

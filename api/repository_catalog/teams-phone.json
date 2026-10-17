@@ -1,0 +1,66 @@
+{
+  "id": "atlas.teams-phone",
+  "version": "1.0.0",
+  "kind": "connector",
+  "title": "Microsoft Teams Phone voice apps",
+  "author": "Atlas core",
+  "description": "Provision a Teams Phone call queue and the auto attendant in front of it, with the resource accounts that answer their calls — and remove them again — without authoring PowerShell. A model names the operation and supplies values; the worker runs fixed PowerShell shipped with Atlas on a host that has PowerShell 7 and the MicrosoftTeams module, signing in with the app's certificate from the vault (ADR-0463). Every ensure operation looks before it creates, so a retried job converges instead of creating a second queue; a resource account Entra already holds but Teams does not show yet is adopted rather than refused. Licences and the employee id stay Entra operations.",
+  "engineCompat": ">=0.13",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "Microsoft Teams Phone voice apps",
+    "id": "atlas.teams-phone",
+    "appliesTo": ["bpmn:ServiceTask"],
+    "properties": [
+      { "label": "Worker", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:connector" },
+        "description": "Name of the configured Teams Phone tenant (Console → Workers), never a credential. The attribute behind this field is spelled connector like its siblings'." },
+      { "label": "Operation", "type": "Dropdown", "value": "ensure-call-queue", "binding": { "type": "property", "name": "atlas:operation" },
+        "choices": [
+          { "name": "Resolve users", "value": "resolve-users" },
+          { "name": "Ensure resource account", "value": "ensure-resource-account" },
+          { "name": "Ensure call queue", "value": "ensure-call-queue" },
+          { "name": "Ensure auto attendant", "value": "ensure-auto-attendant" },
+          { "name": "Remove auto attendant", "value": "remove-auto-attendant" },
+          { "name": "Remove call queue", "value": "remove-call-queue" },
+          { "name": "Remove resource account", "value": "remove-resource-account" }
+        ] },
+      { "label": "Users (Resolve users)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:users" },
+        "description": "The people to look up — a FEEL list, or one text separated by commas. They come back as ids, the form a queue's agents and authorized users take, and the ones not found are listed in notFound rather than failing the task." },
+      { "label": "User principal name (Ensure resource account)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:userPrincipalName" },
+        "description": "The resource account's sign-in name, e.g. =\"cq_\" + lower case(kuerzel) + \"@contoso.ch\". An address that belongs to an enabled person is refused." },
+      { "label": "Display name (Ensure resource account)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:displayName" },
+        "description": "What callers and the admin center see." },
+      { "label": "Account for (Ensure resource account)", "type": "Dropdown", "value": "call-queue", "binding": { "type": "property", "name": "atlas:accountType" },
+        "choices": [
+          { "name": "a call queue", "value": "call-queue" },
+          { "name": "an auto attendant", "value": "auto-attendant" }
+        ],
+        "description": "Decides which kind of voice app the account can carry; a call queue's account cannot later carry an auto attendant." },
+      { "label": "Voice app name (Ensure / optional on Remove)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:name" },
+        "description": "The call queue's or auto attendant's name. On a remove it finds a voice app whose account association a failed earlier run already removed." },
+      { "label": "Resource account id", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:resourceAccountId" },
+        "description": "The object id an Ensure resource account answered with, e.g. =konten.queue.objectId. Every voice-app operation is addressed by the account it is associated with." },
+      { "label": "Transfer to (Ensure auto attendant)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:transferTarget" },
+        "description": "The resource account id of the call queue the auto attendant hands every call to." },
+      { "label": "Agents (Ensure call queue)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:agents" },
+        "description": "Ids from Resolve users, at most 20. Empty creates a queue without agents." },
+      { "label": "Authorized users (Ensure call queue / auto attendant)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:authorizedUsers" },
+        "description": "Ids from Resolve users of the people who may change the voice app's settings in Teams." },
+      { "label": "Language (Ensure call queue optional / auto attendant)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:languageId" },
+        "description": "A language tag Teams supports, e.g. de-CH or en-US. Required on an auto attendant, which speaks it." },
+      { "label": "Time zone (Ensure auto attendant)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:timeZone" },
+        "description": "A Windows time zone id, e.g. W. Europe Standard Time." },
+      { "label": "Holidays (Ensure auto attendant)", "type": "Text", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:holidays" },
+        "description": "Optional. A list of {name, start, end} with dates as YYYY-MM-DD, on which calls are disconnected; end is the day after the last holiday and may be left out for one day." },
+      { "label": "Routing (Ensure call queue)", "type": "Dropdown", "value": "attendant", "binding": { "type": "property", "name": "atlas:routingMethod" },
+        "choices": [
+          { "name": "Attendant — ring every agent", "value": "attendant" },
+          { "name": "Serial", "value": "serial" },
+          { "name": "Round robin", "value": "round-robin" },
+          { "name": "Longest idle", "value": "longest-idle" }
+        ] },
+      { "label": "Result variable", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:resultVariable" },
+        "description": "Receives the answer: ids and notFound; objectId, created and source; id, name and created; or removed. Required on every operation but the removes." }
+    ]
+  }
+}

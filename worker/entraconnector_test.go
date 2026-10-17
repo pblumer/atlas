@@ -130,6 +130,27 @@ func TestRunEntraJobCarriesTheListingBounds(t *testing.T) {
 	}
 }
 
+// A get-user's select survives the hop from the engine to the worker and reaches the
+// Graph path (ADR-0172, amended) — the read a process uses to see a resource account's
+// licences.
+func TestRunEntraJobCarriesAGetUserSelect(t *testing.T) {
+	spy := &listingSpy{}
+	reg := entra.NewRegistry()
+	reg.Register("contoso", spy)
+	if _, err := RunEntraJob(context.Background(), Job{Connector: &ConnectorPayload{
+		Kind: "entra",
+		Fields: map[string]any{
+			"connector": "contoso", "operation": "get-user", "userId": "u1",
+			"select": "assignedLicenses", "resultVariable": "konto",
+		},
+	}}, reg); err != nil {
+		t.Fatalf("RunEntraJob: %v", err)
+	}
+	if spy.path != "/users/u1?$select=assignedLicenses" {
+		t.Errorf("path = %q, want the select on the single-object read", spy.path)
+	}
+}
+
 // advancedQuery has to survive the hop *on its own*, which is the case the bounds
 // test above cannot see: it also carries a search, and a search implies an advanced
 // query, so the flag could be dropped entirely and both halves would still appear.

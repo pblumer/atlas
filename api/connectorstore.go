@@ -75,6 +75,13 @@ const (
 	// builds no client from it; the record exists so an operator can add an
 	// organization in the Console and the supervised worker is provisioned from it.
 	connectorKindExchange = "exchange"
+	// connectorKindTeamsPhone is the Microsoft Teams Phone Worker Type
+	// (ADR-0463): voice apps and their resource accounts,
+	// provisioned by fixed PowerShell on the worker host. A record holds a
+	// credentialsRef naming a vault bundle {tenantId, clientId} with a certificate or a
+	// certificate thumbprint. Worker-only like Entra: the engine never signs in, so the
+	// app never enters it.
+	connectorKindTeamsPhone = "teamsphone"
 	// connectorKindAD is the Active Directory Worker Type
 	// (ADR-0206). A record holds the directory's LDAP URL
 	// and a credentialsRef naming a vault {bindDN, password} bundle; the model names

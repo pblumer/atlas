@@ -6369,10 +6369,13 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <ol>
           <li data-l="de"><b>App-Registrierung</b> im Entra-Admin-Center anlegen – eine <b>eigene, nur für diesen
             Worker</b>. Tenant-ID und Client-ID notieren, dann <i>Zertifikate &amp; Geheimnisse</i> → neues
-            Client-Secret; der Wert ist nur einmal sichtbar.</li>
+            Client-Secret; der Wert ist nur einmal sichtbar. Oder statt eines Secrets unter <i>Zertifikate</i> den
+            öffentlichen Teil eines Zertifikats hochladen und das Zertifikat samt privatem Schlüssel für den Vault
+            behalten.</li>
           <li data-l="en">Create an <b>app registration</b> in the Entra admin center – a <b>dedicated one, for this
             worker only</b>. Note the tenant id and client id, then <i>Certificates &amp; secrets</i> → new client
-            secret; the value is shown once.</li>
+            secret; the value is shown once. Or, instead of a secret, upload a certificate's public part under
+            <i>Certificates</i> and keep the certificate with its private key for the vault.</li>
           <li data-l="de"><b>API-Berechtigungen → Microsoft Graph → Anwendungsberechtigungen.</b> Für den üblichen
             Joiner/Mover/Leaver-Fall genügen genau zwei: <code>User.ReadWrite.All</code> und
             <code>Group.ReadWrite.All</code>. Verwaltet ein Prozess nur Mitgliedschaften und legt keine Gruppen an,
@@ -6392,10 +6395,15 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             ist der Schritt, dessen Fehlen sich als „es tut nichts, ohne Fehler" äussert.</li>
           <li data-l="en"><b>Grant admin consent.</b> Application permissions take effect only afterwards – this is the
             step whose absence shows up as "it does nothing, without an error".</li>
-          <li data-l="de">Secret anlegen: <code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code>, dann
-            einen Worker vom Typ <b>Microsoft Entra ID</b> mit einem Namen und <b>ohne Endpoint</b>.</li>
-          <li data-l="en">Create the secret <code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code>, then
-            a worker of type <b>Microsoft Entra ID</b> with a name and <b>no endpoint</b>.</li>
+          <li data-l="de">Secret anlegen: <code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code> – mit
+            Zertifikat stattdessen <code>{"tenantId": "…", "clientId": "…", "certificate": "…"}</code>, wobei
+            <code>certificate</code> das Zertifikat und seinen <b>unverschlüsselten</b> privaten Schlüssel als einen
+            PEM-Text enthält; nie beides. Dann einen Worker vom Typ <b>Microsoft Entra ID</b> mit einem Namen und
+            <b>ohne Endpoint</b>.</li>
+          <li data-l="en">Create the secret <code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code> – with
+            a certificate instead <code>{"tenantId": "…", "clientId": "…", "certificate": "…"}</code>, where
+            <code>certificate</code> holds the certificate and its <b>unencrypted</b> private key as one PEM text;
+            never both. Then a worker of type <b>Microsoft Entra ID</b> with a name and <b>no endpoint</b>.</li>
           <li data-l="de">Prüfen, dass der Dienstprinzipal <b>keine Verzeichnisrolle</b> hält, die er nicht braucht
             (Entra → Rollen und Administratoren).</li>
           <li data-l="en">Check that the service principal holds <b>no directory role</b> it does not need (Entra →
@@ -6514,6 +6522,68 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           texts – the incident says what Exchange said.</p>
         <p data-l="de">Beispiel: <a href="#bsp-exchange-austritt">Austritt: ein Postfach geordnet übergeben</a>.</p>
         <p data-l="en">Example: <a href="#bsp-exchange-austritt">Leaver: hand a mailbox over in order</a>.</p>
+        <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked October 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
+      </div>
+
+      <div class="card" id="runbook-teamsphone">
+        <h4>Microsoft Teams Phone</h4>
+        <p data-l="de">Warteschlangen (Call Queues), automatische Telefonzentralen (Auto Attendants) und ihre
+          Ressourcenkonten – ohne dass ein Modell PowerShell enthält. Microsoft bietet dafür nur das PowerShell-Modul
+          <code>MicrosoftTeams</code> an; atlas bringt die PowerShell fest mit, und der Worker führt sie pro Job in
+          einem eigenen <code>pwsh</code>-Prozess aus.</p>
+        <p data-l="en">Call queues, auto attendants and their resource accounts – without a model containing
+          PowerShell. Microsoft offers only the <code>MicrosoftTeams</code> PowerShell module for them; atlas ships the
+          PowerShell itself, and the worker runs it in a <code>pwsh</code> process of its own per job.</p>
+        <ol>
+          <li data-l="de"><b>Worker-Host vorbereiten:</b> PowerShell&nbsp;7 und das Modul installieren
+            (<code>Install-Module MicrosoftTeams -Scope AllUsers</code>). Liegt <code>pwsh</code> nicht im PATH,
+            nennt <code>ATLAS_TEAMSPHONE_PWSH</code> den Pfad. Der Host erreicht Microsoft über seinen eigenen
+            Proxy; atlas setzt keinen.</li>
+          <li data-l="en"><b>Prepare the worker host:</b> install PowerShell&nbsp;7 and the module
+            (<code>Install-Module MicrosoftTeams -Scope AllUsers</code>). If <code>pwsh</code> is not on the PATH,
+            <code>ATLAS_TEAMSPHONE_PWSH</code> names it. The host reaches Microsoft through its own proxy; atlas sets
+            none.</li>
+          <li data-l="de"><b>App-Registrierung</b> mit Zertifikat (kein Client-Secret – das Modul meldet Apps nur mit
+            Zertifikat an). Der Dienstprinzipal braucht die Entra-Rolle <i>Teams-Administrator</i> und die
+            Graph-Anwendungsberechtigung <code>User.ReadWrite.All</code> mit Administratorzustimmung: Damit findet der
+            Worker ein Ressourcenkonto, das Teams noch nicht anzeigt, und löscht eines beim Rückbau.</li>
+          <li data-l="en">An <b>app registration</b> with a certificate (no client secret – the module signs apps in
+            with a certificate only). The service principal needs the Entra role <i>Teams Administrator</i> and the
+            Graph application permission <code>User.ReadWrite.All</code> with admin consent: that is how the worker
+            finds a resource account Teams does not show yet, and deletes one on the way out.</li>
+          <li data-l="de">Secret anlegen, z.&nbsp;B. <code>teams_contoso</code>:
+            <code>{"tenantId": "…", "clientId": "…", "certificate": "…"}</code> mit Zertifikat und
+            <b>unverschlüsseltem</b> privatem Schlüssel als einem PEM-Text – oder <code>"certificateThumbprint"</code>
+            an seiner Stelle für ein Zertifikat, das schon im Speicher <code>CurrentUser\My</code> oder
+            <code>LocalMachine\My</code> des Worker-Kontos liegt. Nie beides.</li>
+          <li data-l="en">Create a secret, e.g. <code>teams_contoso</code>:
+            <code>{"tenantId": "…", "clientId": "…", "certificate": "…"}</code> with the certificate and its
+            <b>unencrypted</b> private key as one PEM text – or <code>"certificateThumbprint"</code> in its place for a
+            certificate already in the worker account's <code>CurrentUser\My</code> or <code>LocalMachine\My</code>
+            store. Never both.</li>
+          <li data-l="de">Worker anlegen: Typ <b>Microsoft Teams Phone</b>, ein Name, Credential-Referenz
+            <code>teams_contoso</code>, <b>kein Endpoint</b>. atlas überwacht den Worker und übernimmt den Tenant beim
+            Speichern.</li>
+          <li data-l="en">Create a worker of type <b>Microsoft Teams Phone</b>, a name, credential reference
+            <code>teams_contoso</code>, <b>no endpoint</b>. atlas supervises the worker and picks the tenant up when you
+            save.</li>
+          <li data-l="de">Ohne Tenant üben: <code>ATLAS_TEAMSPHONE_MOCK=1</code> bedient dieselben Tasks aus einem
+            Tenant im Speicher des Workers, mit denselben Regeln; <code>ATLAS_TEAMSPHONE_MOCK_USERS</code> nennt die
+            Personen, die <i>Resolve users</i> findet.</li>
+          <li data-l="en">Practise without a tenant: <code>ATLAS_TEAMSPHONE_MOCK=1</code> serves the same tasks from a
+            tenant in the worker's memory, with the same rules; <code>ATLAS_TEAMSPHONE_MOCK_USERS</code> names the people
+            <i>Resolve users</i> finds.</li>
+        </ol>
+        <p data-l="de"><b>Die Falle:</b> Teams zeigt ein neues Ressourcenkonto erst nach einer Synchronisation. Eine
+          Warteschlange oder Telefonzentrale wartet darauf bis zu zwei Minuten und wird danach abgelehnt, <i>bevor</i>
+          etwas angelegt ist. Liegt im Modell zwischen dem Anlegen der Konten und der Warteschlange keine Wartezeit
+          (etwa das Warten auf Lizenzen), plane eine ein, statt die Verzögerung als Fehler zu lesen. Ein Job dauert wegen Modulimport und Anmeldung etwa
+          zehn Sekunden; <code>ATLAS_TEAMSPHONE_TIMEOUT</code> (Standard 4m) begrenzt ihn.</p>
+        <p data-l="en"><b>The trap:</b> Teams shows a new resource account only after a synchronization. A queue or an
+          auto attendant waits for it for up to two minutes and is then refused <i>before</i> anything is created. If
+          the model has no pause between creating the accounts and the queue (waiting for licences, say), plan one
+          rather than reading the delay as a fault. A job takes about ten seconds for the module import and the sign-in;
+          <code>ATLAS_TEAMSPHONE_TIMEOUT</code> (default 4m) bounds it.</p>
         <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked October 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 

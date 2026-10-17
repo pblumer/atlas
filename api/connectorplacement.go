@@ -74,6 +74,8 @@ var authoredKindJobTypes = map[string][]int32{
 	"ad":    {compiler.AdJobTypeIndex},
 	"ldif":  {compiler.LdifJobTypeIndex},
 	"entra": {compiler.EntraJobTypeIndex},
+	// Keyed by the kind's name, which is also what the Modeler's picker calls it.
+	connectorKindTeamsPhone: {compiler.TeamsPhoneJobTypeIndex},
 	// The round job an agent-driven ad-hoc subprocess parks on (ADR-0253). Authored on
 	// the container itself rather than on a task, but it is a Worker Type an operator
 	// configures and the Console places like any other. It answers for both of the kind's

@@ -58,6 +58,12 @@ type Op struct {
 	// a read that discards what it read is one nothing asked for — and unlike every
 	// other operation, a 404 is an answer rather than a failure.
 	IsBinary bool
+	// Selects marks a single-object read that takes a select: Graph returns only a
+	// default set of properties for a user or a group, and some a process needs —
+	// assignedLicenses, employeeId — are outside it, so the read names the properties
+	// it wants (ADR-0172, amended). A listing and a delta query take one as well; this
+	// flag is for the reads that return one object.
+	Selects bool
 	// Describes the operation for an error message.
 	Label string
 }
@@ -69,7 +75,7 @@ type Op struct {
 // owners, create a channel, archive) — plus licence and directory-role assignment.
 var Ops = map[string]Op{
 	"create-user": {Method: "POST", NeedsAttributes: true, Label: "create a user"},
-	"get-user":    {Method: "GET", NeedsUser: true, Label: "read a user"},
+	"get-user":    {Method: "GET", NeedsUser: true, Selects: true, Label: "read a user"},
 	// The default size rather than one of Graph's fixed ones (/photos/240x240/$value
 	// and the rest): a fixed size a tenant does not hold answers 404, which is
 	// indistinguishable here from "this person has no photo", so asking for one
@@ -85,7 +91,7 @@ var Ops = map[string]Op{
 	"add-group-member":    {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a group member"},
 	"remove-group-member": {Method: "DELETE", NeedsUser: true, NeedsGroup: true, Label: "remove a group member"},
 	"create-group":        {Method: "POST", NeedsAttributes: true, Label: "create a group"},
-	"get-group":           {Method: "GET", NeedsGroup: true, Label: "read a group"},
+	"get-group":           {Method: "GET", NeedsGroup: true, Selects: true, Label: "read a group"},
 	"list-groups":         {Method: "GET", IsList: true, ListPath: "/groups", Label: "list groups"},
 	"delta-groups":        {Method: "GET", IsDelta: true, ListPath: "/groups/delta", Label: "delta-query groups"},
 	"update-group":        {Method: "PATCH", NeedsGroup: true, NeedsAttributes: true, Label: "update a group"},
@@ -606,6 +612,15 @@ func (j Job) advanced() bool {
 //
 // Only a listing can ask for eventual consistency: every other operation addresses
 // one object by id, where an advanced query has nothing to mean.
+// selectQuery is the $select a single-object read carries, or nothing. The parameter
+// name is written literally, as listPath writes it, so the $ stays readable in a log.
+func selectQuery(j Job) string {
+	if sel := strings.TrimSpace(j.Select); sel != "" {
+		return "?$select=" + url.QueryEscape(sel)
+	}
+	return ""
+}
+
 func request(j Job, spec Op, baseURL string) Request {
 	user := url.PathEscape(strings.TrimSpace(j.UserID))
 	group := url.PathEscape(strings.TrimSpace(j.GroupID))
@@ -628,7 +643,9 @@ func request(j Job, spec Op, baseURL string) Request {
 	switch j.Operation {
 	case "create-user":
 		r.Path, r.Body = "/users", j.Attributes
-	case "get-user", "delete-user":
+	case "get-user":
+		r.Path = "/users/" + user + selectQuery(j)
+	case "delete-user":
 		r.Path = "/users/" + user
 	case "get-user-photo":
 		r.Path = "/users/" + user + "/photo/$value"
@@ -660,7 +677,7 @@ func request(j Job, spec Op, baseURL string) Request {
 	case "create-group":
 		r.Path, r.Body = "/groups", j.Attributes
 	case "get-group":
-		r.Path = "/groups/" + group
+		r.Path = "/groups/" + group + selectQuery(j)
 	case "update-group":
 		r.Path, r.Body = "/groups/"+group, j.Attributes
 	case "delete-group":

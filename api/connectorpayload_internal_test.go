@@ -29,6 +29,7 @@ import (
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
+	"github.com/pblumer/atlas/connector/teamsphone"
 	"github.com/pblumer/atlas/connector/temis"
 	"github.com/pblumer/atlas/connector/webscrape"
 )
@@ -246,6 +247,24 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 			// The worker *name* travels, never the client secret (ADR-0168), and
 			// the name itself may be authored as FEEL.
 			fields: map[string]any{"connector": "contoso", "operation": "list-users"},
+		},
+		{
+			// The operation and its values travel — a FEEL list stays a list, and the
+			// compiled settings arrive as the words the compiler defaulted them to —
+			// while the tenant's app certificate does not exist here to travel.
+			name:      "teamsphone",
+			variables: `{"variables":{"agentIds":["a-1","a-2"]}}`,
+			element:   `<atlas:teamsPhoneConnector connector="contoso" operation="ensure-call-queue" name="CQ Support" resourceAccountId="ra-1" agents="=agentIds" resultVariable="queue"/>`,
+			jobType:   compiler.TeamsPhoneJobType,
+			want:      "teamsphone",
+			fields: map[string]any{
+				"connector": "contoso", "operation": "ensure-call-queue", "resultVariable": "queue",
+				"args": map[string]any{
+					"name": "CQ Support", "resourceAccountId": "ra-1", "agents": []any{"a-1", "a-2"},
+					"routingMethod": "attendant", "presenceBasedRouting": "true",
+					"conferenceMode": "true", "allowOptOut": "true",
+				},
+			},
 		},
 		{
 			name:    "remedy",
@@ -616,6 +635,7 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 		{"compiler.DiscordJobTypeIndex", discord.Job{}},
 		{"compiler.S3JobTypeIndex", s3.Job{}},
 		{"compiler.ExchangeJobTypeIndex", exchange.Job{}},
+		{"compiler.TeamsPhoneJobTypeIndex", teamsphone.Job{}},
 	} {
 		t.Run(tc.arm, func(t *testing.T) {
 			sent, ok := arms[tc.arm]
@@ -807,6 +827,7 @@ func payloadArmCases(t *testing.T) map[int32]bool {
 		"ShopCommandJobTypeIndex":   compiler.ShopCommandJobTypeIndex,
 		"S3JobTypeIndex":            compiler.S3JobTypeIndex,
 		"ExchangeJobTypeIndex":      compiler.ExchangeJobTypeIndex,
+		"TeamsPhoneJobTypeIndex":    compiler.TeamsPhoneJobTypeIndex,
 	}
 	if len(indexByConstName) != int(compiler.ReservedJobTypeCount()) {
 		t.Fatalf("this table names %d job-type constants but the compiler reserves %d; "+
