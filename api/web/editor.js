@@ -3735,8 +3735,10 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "select", label: "Properties", placeholder: "id,displayName,mail",
-        showIf: (v) => ["list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
-        hint: "An OData $select: which properties each object comes back with. Empty returns Graph's default set. Naming the few a process actually reads keeps a large read out of the state store. On a delta query Graph threads the $select forward into the deltaLink, so a resume keeps it automatically.",
+        showIf: (v) => ["get-user", "get-group", "list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
+        hint: (v) => ["get-user", "get-group"].includes(v.operation)
+          ? "An OData $select: which properties the object comes back with. Empty returns Graph's default set, which leaves out properties such as assignedLicenses and employeeId \u2014 name them here to read them, e.g. id,assignedLicenses,employeeId."
+          : "An OData $select: which properties each object comes back with. Empty returns Graph's default set. Naming the few a process actually reads keeps a large read out of the state store. On a delta query Graph threads the $select forward into the deltaLink, so a resume keeps it automatically.",
       },
       {
         key: "pageSize", label: "Page size", placeholder: "100",
@@ -3813,6 +3815,142 @@ const SERVICE_TASK_KINDS = [
         key: "resultVariable", label: "Result variable", resultType: (v) => exchangeResultType(v.operation || "get-mailbox"), placeholder: "postfach",
         hint: (v) => exchangeResultShape(v.operation || "get-mailbox") + " Objects carry the cmdlet's properties under their own names, complex values as text, e.g. =" +
           (v.resultVariable ? v.resultVariable : "postfach") + ".PrimarySmtpAddress.",
+      },
+    ],
+  },
+  {
+    id: "teamsphone", name: "Microsoft Teams Phone", group: "Directory & identity",
+    desc: "Provision a call queue and the auto attendant in front of it, with the resource accounts that answer their calls — and remove them again — without authoring PowerShell",
+    icon: "T",
+    // A handset on Teams purple: a voice app is a telephone number's front door, and the
+    // tile should read as Microsoft's next to Entra's blue.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#5b5fc7"/><path d="M5.2 3.4l1.5-.4 1 2.4-1 .8a6.4 6.4 0 0 0 2.9 2.9l.8-1 2.4 1-.4 1.5c-.2.7-.9 1.1-1.6 1A8.3 8.3 0 0 1 4.2 5c-.1-.7.3-1.4 1-1.6z" fill="#fff"/></svg>`,
+    ext: "atlas:TeamsPhoneConnector",
+    fields: [
+      { group: "Tenant" },
+      { key: "connector", label: "Worker", datalist: "teamsphone", placeholder: "contoso", hint: "The configured Teams Phone Worker this task acts through, by the name it has under Workers in the Console. The app's certificate reaches that worker and never the engine; the worker host needs PowerShell 7 and the MicrosoftTeams module." },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "resolve-users", l: "Resolve users" },
+          { v: "ensure-resource-account", l: "Ensure resource account" },
+          { v: "ensure-call-queue", l: "Ensure call queue" },
+          { v: "ensure-auto-attendant", l: "Ensure auto attendant" },
+          { v: "remove-auto-attendant", l: "Remove auto attendant" },
+          { v: "remove-call-queue", l: "Remove call queue" },
+          { v: "remove-resource-account", l: "Remove resource account" },
+        ],
+      },
+      {
+        key: "users", label: "Users", placeholder: "=agents", fx: true,
+        showIf: (v) => v.operation === "resolve-users",
+        hint: "The people to look up: a FEEL list, or one text separated by commas. They come back as ids — the form a queue's agents and authorized users take — and anybody not found is listed in notFound rather than failing the task. An empty list answers at once, without signing in.",
+      },
+      {
+        key: "userPrincipalName", label: "User principal name", placeholder: "=\"cq_\" + lower case(kuerzel) + \"@contoso.ch\"", fx: true,
+        showIf: (v) => v.operation === "ensure-resource-account",
+        hint: "The resource account's sign-in name. An account that already exists is found and reused — also one Entra holds but Teams does not show yet — so a retried task never fails on its own first run. An address that belongs to an enabled person is refused.",
+      },
+      {
+        key: "displayName", label: "Display name", placeholder: "=name", fx: true,
+        showIf: (v) => v.operation === "ensure-resource-account",
+        hint: "What callers and the Teams admin center see.",
+      },
+      {
+        key: "accountType", label: "Account for", type: "select",
+        options: [{ v: "call-queue", l: "a call queue" }, { v: "auto-attendant", l: "an auto attendant" }],
+        showIf: (v) => v.operation === "ensure-resource-account",
+        hint: "Which kind of voice app the account can carry. A call queue's account cannot later carry an auto attendant, so this is fixed in the model rather than a FEEL value.",
+      },
+      {
+        key: "name", label: "Voice app name", placeholder: "=\"CQ \" + name", fx: true,
+        showIf: (v) => ["ensure-call-queue", "ensure-auto-attendant", "remove-call-queue", "remove-auto-attendant"].includes(v.operation),
+        hint: (v) => (String(v.operation || "").startsWith("remove")
+          ? "Optional. Finds the voice app again when an earlier run already removed its account's association and then failed — the one case the account alone cannot answer."
+          : "The call queue's or auto attendant's name. One that already exists under this name is reused rather than created twice."),
+      },
+      {
+        key: "resourceAccountId", label: "Resource account id", placeholder: "=konten.queue.objectId", fx: true,
+        showIf: (v) => v.operation && v.operation !== "resolve-users" && v.operation !== "ensure-resource-account",
+        hint: "The object id an Ensure resource account answered with. Every voice-app operation is addressed by the account it is associated with.",
+      },
+      {
+        key: "transferTarget", label: "Transfer to", placeholder: "=konten.queue.objectId", fx: true,
+        showIf: (v) => v.operation === "ensure-auto-attendant",
+        hint: "The resource account id of the call queue this auto attendant hands every call to.",
+      },
+      {
+        key: "agents", label: "Agents", placeholder: "=benutzer.ids", fx: true,
+        showIf: (v) => v.operation === "ensure-call-queue",
+        hint: "Optional. Ids from Resolve users, at most 20. Larger queues are served from a group or a channel, which this Worker Type does not offer.",
+      },
+      {
+        key: "authorizedUsers", label: "Authorized users", placeholder: "=verantwortliche.ids", fx: true,
+        showIf: (v) => v.operation === "ensure-call-queue" || v.operation === "ensure-auto-attendant",
+        hint: "Optional. Ids from Resolve users of the people allowed to change this voice app's settings in Teams.",
+      },
+      {
+        key: "languageId", label: "Language", placeholder: "de-CH", fx: true,
+        showIf: (v) => v.operation === "ensure-call-queue" || v.operation === "ensure-auto-attendant",
+        hint: (v) => (v.operation === "ensure-auto-attendant"
+          ? "Required: the language the auto attendant speaks, e.g. de-CH or en-US."
+          : "Optional: the language of the queue's announcements, e.g. de-CH."),
+      },
+      {
+        key: "timeZone", label: "Time zone", placeholder: "W. Europe Standard Time", fx: true,
+        showIf: (v) => v.operation === "ensure-auto-attendant",
+        hint: "Required: a Windows time zone id. The auto attendant's holidays are read in it.",
+      },
+      {
+        key: "holidays", label: "Holidays", placeholder: "=[{name: \"Weihnachten\", start: \"2026-12-25\"}]", fx: true, rows: 3,
+        showIf: (v) => v.operation === "ensure-auto-attendant",
+        hint: "Optional. A list of {name, start, end} with dates as YYYY-MM-DD, on which calls are disconnected; end is the day after the last holiday and may be left out for a single day. Every other call goes to the queue.",
+      },
+      {
+        key: "routingMethod", label: "Routing", type: "select",
+        options: [
+          { v: "", l: "Attendant — ring every agent (default)" },
+          { v: "serial", l: "Serial" },
+          { v: "round-robin", l: "Round robin" },
+          { v: "longest-idle", l: "Longest idle" },
+        ],
+        showIf: (v) => v.operation === "ensure-call-queue",
+      },
+      {
+        key: "presenceBasedRouting", label: "Presence-based routing", type: "select",
+        options: [{ v: "", l: "On (default)" }, { v: "false", l: "Off" }],
+        showIf: (v) => v.operation === "ensure-call-queue",
+        hint: "On: a call is offered only to agents whose presence is Available.",
+      },
+      {
+        key: "conferenceMode", label: "Conference mode", type: "select",
+        options: [{ v: "", l: "On (default)" }, { v: "false", l: "Off" }],
+        showIf: (v) => v.operation === "ensure-call-queue",
+      },
+      {
+        key: "allowOptOut", label: "Agents may opt out", type: "select",
+        options: [{ v: "", l: "Yes (default)" }, { v: "false", l: "No" }],
+        showIf: (v) => v.operation === "ensure-call-queue",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "antwort",
+        resultType: () => "object",
+        showIf: (v) => !!v.operation,
+        hint: (v) => {
+          switch (v.operation) {
+            case "resolve-users":
+              return "Required. =antwort.ids are the users found, in the form agents and authorized users take; =antwort.notFound the entries that were not.";
+            case "ensure-resource-account":
+              return "Required. =antwort.objectId is the account a voice app is associated with; =antwort.created says whether this run made it, and =antwort.source where it was found (created, entra or teams).";
+            case "ensure-call-queue":
+            case "ensure-auto-attendant":
+              return "Required. =antwort.id and =antwort.name identify the voice app; =antwort.created says whether this run made it.";
+            default:
+              return "Optional. =antwort.removed is false when there was nothing left to remove, which a repeated leaver path meets.";
+          }
+        },
       },
     ],
   },

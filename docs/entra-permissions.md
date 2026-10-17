@@ -78,9 +78,16 @@ when a process actually uses those operations, and drop them otherwise.
   even then it cannot act on holders of higher-privileged roles. Use `reset-password` only
   against ordinary accounts and no directory role is needed, which matches the
   test-object boundary the example processes enforce.
-- **The client secret.** Keep it in the Atlas vault (Console), not in long-lived argv or
-  plaintext environment, and rotate it. The worker reads it from
-  `ATLAS_ENTRA_<NAME>_CLIENT_SECRET` (or `_CLIENT_SECRET_REF` for a vault key).
+- **The client secret, or a certificate.** Keep the credential in the Atlas vault
+  (Console), not in long-lived argv or plaintext environment, and rotate it. The worker
+  reads a secret from `ATLAS_ENTRA_<NAME>_CLIENT_SECRET` (or `_CLIENT_SECRET_REF` for a
+  vault key). An app that signs in with a certificate instead is configured with
+  `ATLAS_ENTRA_<NAME>_CLIENT_CERTIFICATE` (or `_CLIENT_CERTIFICATE_REF`): the certificate
+  and its unencrypted private key as one PEM text, whose public part is uploaded to the
+  app registration under *Certificates & secrets → Certificates*. In a Console bundle the
+  same text is the `certificate` field in place of `clientSecret`. Set one, never both —
+  the worker refuses a tenant that has both. With a certificate no shared secret travels
+  to Entra: the worker signs a short-lived assertion and only that is sent.
 
 ## See also
 

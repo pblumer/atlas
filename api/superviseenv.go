@@ -209,6 +209,10 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// is the whole of what says which organization and as whom, and it lives in the
 		// vault, so a supervised worker holding neither could serve no Exchange task.
 		connectorKindExchange: s.exchangeWorkerEnv,
+		// Teams Phone is Entra's shape: a tenant in the Console, its app certificate in a
+		// vault bundle, and a supervised worker with no vault of its own — so the engine
+		// renders the bundle into the variables the worker reads.
+		connectorKindTeamsPhone: s.teamsPhoneWorkerEnv,
 		// The three SQL products. Unlike every kind above them the *whole* configuration
 		// is the secret — a DSN has no public half — so what is rendered here is one
 		// connection string per configured database and nothing else
@@ -251,22 +255,24 @@ const (
 	entraConnectorsEnv = entraEnvPrefix + "CONNECTORS"
 )
 
-// entraWorkerEnv renders the client secrets a supervised Entra worker needs out of the
+// entraWorkerEnv renders the credentials a supervised Entra worker needs out of the
 // vault, one variable per tenant this process's environment names in ATLAS_ENTRA_CONNECTORS.
 //
 // It is the AD story with a worker name in place of a bind-secret reference. The
 // Entra worker is worker-only (ADR-0172): it reads ATLAS_ENTRA_<NAME>_TENANT_ID,
-// _CLIENT_ID and _CLIENT_SECRET, and the engine never builds an Entra client. Tenant
-// and client id are not secret and reach a supervised child by inheriting this
-// process's environment; the secret must not sit there in the clear, so an operator who
-// wants it in the vault sets ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF to a vault key instead
-// and types the secret into the Console. This resolves that reference — vault first,
-// environment on a miss (ADR-0069/0041) — and hands the child the value under the exact
-// name the worker reads it by.
+// _CLIENT_ID and one credential — _CLIENT_SECRET, or _CLIENT_CERTIFICATE, the app's
+// certificate with its private key as PEM (ADR-0172, amended) — and the engine never
+// builds an Entra client. Tenant and client id are not secret and reach a supervised
+// child by inheriting this process's environment; the credential must not sit there in
+// the clear, so an operator who wants it in the vault sets
+// ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF (or _CLIENT_CERTIFICATE_REF) to a vault key
+// instead and types the value into the Console. This resolves that reference — vault
+// first, environment on a miss (ADR-0069/0041) — and hands the child the value under the
+// exact name the worker reads it by.
 //
-// A tenant whose secret the operator set directly is left untouched: the child already
-// inherits ATLAS_ENTRA_<NAME>_CLIENT_SECRET, and overriding it would let a stale vault
-// entry silently win over an explicit choice.
+// A tenant whose credential the operator set directly is left untouched: the child
+// already inherits it, and overriding it would let a stale vault entry silently win
+// over an explicit choice.
 //
 // Re-rendered on every spawn and refresh, like the mail and AD configuration, so a
 // secret an operator adds or rotates in the Console reaches the worker without a restart.
@@ -293,19 +299,23 @@ func (s *Server) entraWorkerEnv() []string {
 				continue
 			}
 			key := entraEnvPrefix + envKey + "_"
-			if strings.TrimSpace(os.Getenv(key+"CLIENT_SECRET")) != "" {
-				continue // the operator set the secret directly; nothing to resolve
+			if strings.TrimSpace(os.Getenv(key+"CLIENT_SECRET")) != "" ||
+				strings.TrimSpace(os.Getenv(key+"CLIENT_CERTIFICATE")) != "" {
+				continue // the operator set the credential directly; nothing to resolve
 			}
-			if ref := strings.TrimSpace(os.Getenv(key + "CLIENT_SECRET_REF")); ref != "" {
-				if secret := s.resolveConnectorSecret(ref); secret != "" {
-					env = append(env, key+"CLIENT_SECRET="+secret)
+			for _, cred := range []string{"CLIENT_SECRET", "CLIENT_CERTIFICATE"} {
+				if ref := strings.TrimSpace(os.Getenv(key + cred + "_REF")); ref != "" {
+					if value := s.resolveConnectorSecret(ref); value != "" {
+						env = append(env, key+cred+"="+value)
+					}
 				}
 			}
 		}
 		// Tenants an operator added in the Console (ADR-0172, amended): the tenant id,
-		// client id and client secret live together in the vault bundle credentialsRef
-		// names. Render the three variables the worker reads — the engine holds none of
-		// them, it only hands them to its own supervised child at spawn.
+		// client id and the credential — a client secret or a certificate — live
+		// together in the vault bundle credentialsRef names. Render the three variables
+		// the worker reads — the engine holds none of them, it only hands them to its
+		// own supervised child at spawn.
 		recs, err := s.connectors.LoadAll()
 		if err != nil {
 			logging.Warn(logging.WorkerSupervisorFailed, "could not read the worker store for a supervised entra worker",
@@ -340,10 +350,12 @@ func (s *Server) entraWorkerEnv() []string {
 			}
 			taken[envKey] = c.Name
 			key := entraEnvPrefix + envKey + "_"
-			env = append(env,
-				key+"TENANT_ID="+b.TenantID,
-				key+"CLIENT_ID="+b.ClientID,
-				key+"CLIENT_SECRET="+b.ClientSecret)
+			env = append(env, key+"TENANT_ID="+b.TenantID, key+"CLIENT_ID="+b.ClientID)
+			if b.Certificate != "" {
+				env = append(env, key+"CLIENT_CERTIFICATE="+b.Certificate)
+			} else {
+				env = append(env, key+"CLIENT_SECRET="+b.ClientSecret)
+			}
 			if base := strings.TrimSpace(c.Endpoint); base != "" {
 				env = append(env, key+"BASE_URL="+base) // a national cloud overrides the Graph base
 			}
@@ -362,18 +374,21 @@ func (s *Server) entraWorkerEnv() []string {
 }
 
 // entraBundle is the OAuth bundle an operator stores in the vault under an entra
-// worker's credentialsRef: the tenant id, client id and client secret together, so
-// the record itself holds no credential (ADR-0172). ok is false when the bundle is
-// absent or missing a field — the tenant is then left unconfigured rather than handed
-// over half-filled.
+// worker's credentialsRef: the tenant id, client id and one credential together, so
+// the record itself holds no credential (ADR-0172). The credential is either a client
+// secret or a certificate — the app's certificate and its private key as one PEM text
+// (ADR-0172, amended). ok is false when the bundle is absent, missing a field, or
+// carries both credentials — the tenant is then left unconfigured rather than handed
+// over half-filled or with the choice left to precedence.
 type entraBundle struct {
 	TenantID     string `json:"tenantId"`
 	ClientID     string `json:"clientId"`
 	ClientSecret string `json:"clientSecret"`
+	Certificate  string `json:"certificate"`
 }
 
-// entraBundle parses a vault bundle value. An empty value, invalid JSON, or a missing
-// field yields ok=false.
+// entraBundleParse parses a vault bundle value. An empty value, invalid JSON, a missing
+// field, or a secret and a certificate together yield ok=false.
 func entraBundleParse(raw string) (entraBundle, bool) {
 	if strings.TrimSpace(raw) == "" {
 		return entraBundle{}, false
@@ -382,8 +397,123 @@ func entraBundleParse(raw string) (entraBundle, bool) {
 	if err := json.Unmarshal([]byte(raw), &b); err != nil {
 		return entraBundle{}, false
 	}
-	if strings.TrimSpace(b.TenantID) == "" || strings.TrimSpace(b.ClientID) == "" || strings.TrimSpace(b.ClientSecret) == "" {
+	if strings.TrimSpace(b.TenantID) == "" || strings.TrimSpace(b.ClientID) == "" {
 		return entraBundle{}, false
+	}
+	secret, cert := strings.TrimSpace(b.ClientSecret) != "", strings.TrimSpace(b.Certificate) != ""
+	if secret == cert {
+		return entraBundle{}, false // neither, or both
+	}
+	b.Certificate = strings.TrimSpace(b.Certificate)
+	return b, true
+}
+
+// Environment a supervised Teams Phone worker reads its tenants from — the same names
+// an operator sets by hand for an external worker (there is no private channel,
+// ADR-0157).
+const (
+	teamsPhoneEnvPrefix     = "ATLAS_TEAMSPHONE_"
+	teamsPhoneConnectorsEnv = teamsPhoneEnvPrefix + "CONNECTORS"
+)
+
+// teamsPhoneWorkerEnv renders the tenants an operator added in the Console as the
+// environment a supervised Teams Phone worker builds them from: per tenant the tenant
+// id, the client id, and either the certificate PEM or the thumbprint of a certificate
+// in the worker host's store — the bundle behind the record's credentialsRef, which the
+// engine reads out of the vault and hands only to its own supervised child at spawn.
+//
+// It is entraWorkerEnv without the host-set reference bridge: a tenant an operator sets
+// directly on the host is inherited by the child as it is, and only a Console tenant
+// needs rendering. Re-rendered on every spawn and refresh, so a tenant added or a
+// certificate rotated in the Console reaches the worker without a restart. It reads the
+// vault, so it runs on the run-loop goroutine (invariant I3), its owner.
+func (s *Server) teamsPhoneWorkerEnv() []string {
+	var env []string
+	names := splitConnectorList(os.Getenv(teamsPhoneConnectorsEnv))
+	seen := map[string]bool{}
+	for _, n := range names {
+		seen[n] = true
+	}
+	var fromStore bool
+	s.do(func() {
+		recs, err := s.connectors.LoadAll()
+		if err != nil {
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the worker store for a supervised teamsphone worker",
+				slog.String("error", err.Error()))
+			return
+		}
+		sort.Slice(recs, func(i, j int) bool { return recs[i].Name < recs[j].Name })
+		taken := map[string]string{}
+		for _, c := range recs {
+			if c.Kind != connectorKindTeamsPhone || !c.Enabled {
+				continue
+			}
+			envKey := connectorEnvKey(c.Name)
+			if envKey == "" {
+				continue
+			}
+			// Two names that fold to one variable would silently give one the other's
+			// app — the mail/Entra collision, left out for the same reason.
+			if first, dup := taken[envKey]; dup {
+				logging.Warn(logging.WorkerSupervisorFailed,
+					"two teamsphone workers share one environment name; the second is not handed to the supervised worker",
+					slog.String("connector", c.Name), slog.String("collidesWith", first))
+				continue
+			}
+			// A bundle that does not resolve is left out rather than handed over
+			// half-filled: the worker then simply does not build that tenant.
+			b, ok := teamsPhoneBundleParse(s.resolveConnectorSecret(c.CredentialsRef))
+			if !ok {
+				continue
+			}
+			taken[envKey] = c.Name
+			key := teamsPhoneEnvPrefix + envKey + "_"
+			env = append(env, key+"TENANT_ID="+b.TenantID, key+"CLIENT_ID="+b.ClientID)
+			if b.Certificate != "" {
+				env = append(env, key+"CERTIFICATE="+b.Certificate)
+			} else {
+				env = append(env, key+"CERTIFICATE_THUMBPRINT="+b.CertificateThumbprint)
+			}
+			if !seen[c.Name] {
+				seen[c.Name] = true
+				names = append(names, c.Name)
+			}
+			fromStore = true
+		}
+	})
+	if !fromStore {
+		return env
+	}
+	return append(env, teamsPhoneConnectorsEnv+"="+strings.Join(names, ","))
+}
+
+// teamsPhoneBundle is the bundle an operator stores in the vault under a teamsphone
+// worker's credentialsRef: the tenant id, the app's client id and one way to its
+// certificate — the certificate and its key as one PEM text, or the thumbprint of a
+// certificate already in the worker host's store. ok is false when the bundle is
+// absent, missing a field, or names both.
+type teamsPhoneBundle struct {
+	TenantID              string `json:"tenantId"`
+	ClientID              string `json:"clientId"`
+	Certificate           string `json:"certificate"`
+	CertificateThumbprint string `json:"certificateThumbprint"`
+}
+
+func teamsPhoneBundleParse(raw string) (teamsPhoneBundle, bool) {
+	if strings.TrimSpace(raw) == "" {
+		return teamsPhoneBundle{}, false
+	}
+	var b teamsPhoneBundle
+	if err := json.Unmarshal([]byte(raw), &b); err != nil {
+		return teamsPhoneBundle{}, false
+	}
+	b.TenantID, b.ClientID = strings.TrimSpace(b.TenantID), strings.TrimSpace(b.ClientID)
+	b.Certificate, b.CertificateThumbprint = strings.TrimSpace(b.Certificate), strings.TrimSpace(b.CertificateThumbprint)
+	if b.TenantID == "" || b.ClientID == "" {
+		return teamsPhoneBundle{}, false
+	}
+	if (b.Certificate != "") == (b.CertificateThumbprint != "") {
+		return teamsPhoneBundle{}, false // neither, or both
 	}
 	return b, true
 }

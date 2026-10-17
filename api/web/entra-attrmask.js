@@ -69,8 +69,9 @@ export function hasMask(operation) {
 // confidence. A body-less operation (Graph answers 204) says so plainly.
 export function entraResultShape(operation) {
   switch (operation) {
-    case "create-user":
     case "get-user":
+      return "Bei dieser Operation das Benutzer-Objekt (id, displayName, userPrincipalName, mail, …) — mit «Properties» genau die genannten Eigenschaften, z. B. assignedLicenses oder employeeId.";
+    case "create-user":
     case "update-user":
       return "Bei dieser Operation das Benutzer-Objekt (id, displayName, userPrincipalName, mail, …).";
     case "list-users":

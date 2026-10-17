@@ -1,6 +1,6 @@
 # ADR-0172: A Microsoft Entra ID connector
 
-- **Status:** Accepted (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`. Amended 2026-08-25: group lifecycle (`create-group`, `get-group`, `list-groups`, `update-group`, `delete-group`) and ownership (`add-group-owner`, `remove-group-owner`) beside the existing membership operations; a dedicated `reset-password` that wraps a literal-or-FEEL secret in a `passwordProfile`; Teams (`create-team` on a group, `add-team-member`, `add-team-owner`, `create-channel`, `archive-team`), a Team being addressed by its group's id; and `assign-license` / `assign-role`. Amended 2026-08-25: a supervised Entra worker can take its client secret from the engine vault — `ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF` names a vault key the server resolves and hands the child under `_CLIENT_SECRET`, the AD bind-secret story with a connector name in place of a reference, so an operator can type the secret into the Console instead of onto the worker host; the worker stays worker-only and the engine builds no client. Amended 2026-08-25: the attributes body can be authored inline as JSON in the modeler instead of naming a variable — a string value beginning with `=` is a FEEL expression evaluated per field at runtime, and the compiler turns the whole template into one FEEL context compiled once at deploy (I5); the two ways of supplying the body are mutually exclusive. Amended 2026-08-25: an Entra tenant is now an operator-managed connector in the Console — a worker-only managed kind whose `credentialsRef` names a vault OAuth bundle `{tenantId, clientId, clientSecret}` (as SharePoint's does), read only by `superviseEnv` so the engine still builds no client and holds no tenant credential; and the Entra worker is supervised by default, starting parked with nothing to serve and brought up by the same refresh that already restarts mail/AD workers the moment a tenant is added — so adding a tenant is a Console entry, not a deployment change. Amended 2026-08-25: the `connector` name may itself be a literal-or-FEEL value — a leading `=` resolves the tenant from the instance's variables at call time, so one process can serve several tenants; this is entra-only because the kind is worker-only and no engine-side credential lookup keys off a fixed name. Amended 2026-08-25: the body-carrying operations get a per-operation capture mask in the Modeler (named fields for the important attributes plus a Weitere-Attribute JSON escape hatch) assembled into the same `attributes` JSON — UI-only, no moddle/compiler change; and the result variable gets an operation-aware hint describing what it receives.)
+- **Status:** Accepted (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`. Amended 2026-08-25: group lifecycle (`create-group`, `get-group`, `list-groups`, `update-group`, `delete-group`) and ownership (`add-group-owner`, `remove-group-owner`) beside the existing membership operations; a dedicated `reset-password` that wraps a literal-or-FEEL secret in a `passwordProfile`; Teams (`create-team` on a group, `add-team-member`, `add-team-owner`, `create-channel`, `archive-team`), a Team being addressed by its group's id; and `assign-license` / `assign-role`. Amended 2026-08-25: a supervised Entra worker can take its client secret from the engine vault — `ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF` names a vault key the server resolves and hands the child under `_CLIENT_SECRET`, the AD bind-secret story with a connector name in place of a reference, so an operator can type the secret into the Console instead of onto the worker host; the worker stays worker-only and the engine builds no client. Amended 2026-08-25: the attributes body can be authored inline as JSON in the modeler instead of naming a variable — a string value beginning with `=` is a FEEL expression evaluated per field at runtime, and the compiler turns the whole template into one FEEL context compiled once at deploy (I5); the two ways of supplying the body are mutually exclusive. Amended 2026-08-25: an Entra tenant is now an operator-managed connector in the Console — a worker-only managed kind whose `credentialsRef` names a vault OAuth bundle `{tenantId, clientId, clientSecret}` (as SharePoint's does), read only by `superviseEnv` so the engine still builds no client and holds no tenant credential; and the Entra worker is supervised by default, starting parked with nothing to serve and brought up by the same refresh that already restarts mail/AD workers the moment a tenant is added — so adding a tenant is a Console entry, not a deployment change. Amended 2026-08-25: the `connector` name may itself be a literal-or-FEEL value — a leading `=` resolves the tenant from the instance's variables at call time, so one process can serve several tenants; this is entra-only because the kind is worker-only and no engine-side credential lookup keys off a fixed name. Amended 2026-08-25: the body-carrying operations get a per-operation capture mask in the Modeler (named fields for the important attributes plus a Weitere-Attribute JSON escape hatch) assembled into the same `attributes` JSON — UI-only, no moddle/compiler change; and the result variable gets an operation-aware hint describing what it receives. Amended 2026-10-17: the app may prove itself with a certificate instead of a client secret — a client assertion signed with the certificate's private key, still the client-credentials grant — configured as `_CLIENT_CERTIFICATE` (or `_CLIENT_CERTIFICATE_REF`) or as a bundle's `certificate` field; and `get-user` / `get-group` take a `select`, because Graph's default property set leaves out `assignedLicenses` and `employeeId`.)
 - **Implementation:** Landed
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
@@ -77,7 +77,8 @@ can create and disable accounts across an entire directory. That is plausibly th
 most valuable secret an Atlas installation touches, and there is no reason for the
 engine to be able to read it. `entra.Job` has nowhere to put one.
 
-Only the client-credentials grant is offered. Mail and SharePoint support a
+Only the client-credentials grant is offered (with a client secret or, since the
+2026-10-17 amendment, a certificate). Mail and SharePoint support a
 refresh-token grant because a person's mailbox is a legitimate thing to act as;
 unattended directory provisioning is not, and offering a delegated grant here would
 mostly be a way to build something that stops working when someone leaves.
@@ -375,6 +376,52 @@ move did not alter behaviour.
   - At-least-once delivery means a replayed `create-user` can attempt a duplicate.
     Graph rejects a duplicate `userPrincipalName`, so the failure is safe and visible
     rather than silent — but it is a failed job, not an idempotent retry.
+
+### Amendment (2026-10-17): a certificate instead of a client secret, and a select on a single read
+
+**A certificate credential.** An app registration can prove itself to Entra with a
+certificate instead of a client secret, and many organizations allow only that: a secret
+is a shared value that travels to the token endpoint on every exchange, while with a
+certificate only a short-lived assertion signed by its private key does. Until now the
+worker read only `_CLIENT_SECRET`, so such an organization had to fall back to a
+PowerShell script task holding the certificate in the worker host's store — where every
+script on that host could use it.
+
+- The worker reads exactly one credential per tenant: `_CLIENT_SECRET`, or
+  `_CLIENT_CERTIFICATE` — the certificate and its unencrypted private key as one PEM text,
+  the shape the LDAP Worker Type already takes for a client certificate. Both set is a
+  startup error naming both variables, because the choice would otherwise be an accident
+  of precedence. A PEM written on one line with literal `\n` is read as the PEM it spells,
+  since a systemd unit or a one-line Kubernetes value cannot hold a line break.
+- It is still the client-credentials grant, through the certificate credential
+  [ADR-0462](0462-exchange-worker.md) added for the Exchange Worker:
+  `oauth2.ClientCertificate` posts `client_assertion_type=…jwt-bearer` with an RS256 JWT
+  whose header names the certificate by `x5t#S256` and `x5t` and whose claims are RFC
+  7523's: `iss` = `sub` = the client id, `aud` the token endpoint, a fresh `jti`, ten
+  minutes of validity. Entra and Exchange read the PEM with the same
+  `oauth2.ParseCertificateBundle`, so the two Worker Types refuse the same bundles.
+- The key must be RSA, because the assertion is RS256. An EC key, a key that does not
+  belong to the certificate, or an encrypted key is refused at startup, naming the tenant
+  and never quoting the PEM.
+- A supervised worker gets it the way it gets a secret: a Console bundle carries
+  `certificate` in place of `clientSecret` (`{tenantId, clientId, certificate}`; a bundle
+  with both is left out like any bundle that does not resolve), and a host-set tenant may
+  name a vault key in `_CLIENT_CERTIFICATE_REF`. The engine still builds no client and
+  holds no tenant credential.
+- PFX is not read. Go's standard library cannot decode it, and the one PKCS#12 decoder at
+  hand (`x/crypto/pkcs12`) refuses the AES-encrypted PFX current Windows exports by
+  default — a format that works only sometimes is worse than one conversion an operator
+  does once (`openssl pkcs12 -nodes`, or PowerShell 7's `ExportCertificatePem` and
+  `ExportPkcs8PrivateKeyPem`).
+
+**A select on `get-user` and `get-group`.** Graph answers a single-object read with a
+default property set that leaves out properties a process routinely needs to decide on —
+`assignedLicenses` (has the account been licensed yet?) and `employeeId` among them. A
+missing property cannot be told from an unset one, so the read has to name what it wants.
+The `select` attribute, the compiled field and the payload already existed for listings;
+the compiler now accepts it on `get-user` and `get-group` (an operation-table flag,
+`Selects`, held in step with the compiler's by the drift test), and the worker appends
+`?$select=` to the single-object path. Every other operation still refuses it.
 
 ## Pros and cons of the options
 

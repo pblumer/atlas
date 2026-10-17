@@ -14,6 +14,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Teams Phone voice apps are provisioned without PowerShell in the model.** A new
+  worker-only Worker Type, `teamsphone`, resolves users and ensures or removes resource
+  accounts, call queues and auto attendants as named operations the compiler checks at
+  deploy. The worker runs fixed PowerShell shipped with Atlas — one `pwsh` per job, on a
+  host with the MicrosoftTeams module — and signs in with the app's certificate from the
+  vault or the host's store. Every ensure looks before it creates, so a retried job
+  converges; an account Entra already holds but Teams does not show yet is adopted rather
+  than refused. `ATLAS_TEAMSPHONE_MOCK=1` runs a model end to end against a tenant in the
+  worker's memory ([ADR-draft-teams-phone-worker](docs/adr/draft-teams-phone-worker.md)).
+- **The Entra ID worker signs in with a certificate.** An app registration that may not hold
+  a client secret can now prove itself with a certificate: set
+  `ATLAS_ENTRA_<NAME>_CLIENT_CERTIFICATE` (or `_CLIENT_CERTIFICATE_REF` for a vault key) to
+  the certificate and its unencrypted private key as one PEM text, or store
+  `{tenantId, clientId, certificate}` as a Console tenant's bundle. The worker signs a
+  short-lived client assertion with the key instead of sending a shared secret; a tenant
+  configured with both a secret and a certificate is refused at startup. The Secrets panel
+  now checks an Entra bundle's shape
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended).
+- **An Entra read names the properties it wants.** `get-user` and `get-group` take the
+  `select` a listing already had, so a process can read what Graph's default property set
+  leaves out — `id,assignedLicenses,employeeId`, say, to see whether a resource account has
+  been licensed yet ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended).
 - **A process administers Exchange mailboxes, permissions and distribution groups, online and on-premises.** A new
   worker-only Worker Type, **Microsoft Exchange**, offers the ExchangePowerShell cmdlets an
   administration process uses as named, checked operations: create shared, room and

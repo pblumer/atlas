@@ -170,7 +170,7 @@ func TestEntraConnectorValidation(t *testing.T) {
 		{"negative maxUsers", `connector="c" operation="list-users" resultVariable="r" maxUsers="-1"`, "negative maxUsers"},
 		{"pageSize above Graph's ceiling", `connector="c" operation="list-users" resultVariable="r" pageSize="1000"`, "above the 999"},
 		{"filter on a single-object read", `connector="c" operation="get-user" userId="u" filter="x eq 1"`, "applies to list-users"},
-		{"select on a single-object read", `connector="c" operation="get-user" userId="u" select="id"`, "applies to list-users"},
+		{"select on an operation that reads nothing", `connector="c" operation="disable" userId="u" select="id"`, "applies to get-user"},
 		{"pageSize on a single-object read", `connector="c" operation="disable" userId="u" pageSize="10"`, "applies to list-users"},
 		{"maxUsers on a single-object read", `connector="c" operation="disable" userId="u" maxUsers="10"`, "applies to list-users"},
 		{"search on a single-object read", `connector="c" operation="get-user" userId="u" search="&#34;x:y&#34;"`, "applies to list-users"},
@@ -219,6 +219,17 @@ func TestEntraConnectorListUsers(t *testing.T) {
 	_, lit := entraDetail(t, `connector="c" operation="list-users" resultVariable="r" filter="accountEnabled eq true"`)
 	if lit.EntraFilter.Literal != "accountEnabled eq true" || lit.EntraFilter.Expr != nil {
 		t.Errorf("filter = %+v, want the literal", lit.EntraFilter)
+	}
+}
+
+// A single-object read may name the properties it wants: Graph's default set for a
+// user leaves out assignedLicenses and employeeId (ADR-0172, amended).
+func TestEntraConnectorGetUserTakesASelect(t *testing.T) {
+	for _, op := range []string{`operation="get-user" userId="=ResourceAccounts.CallQueueObjectId"`, `operation="get-group" groupId="g"`} {
+		cp, d := entraDetail(t, `connector="c" `+op+` resultVariable="r" select="id,assignedLicenses,employeeId"`)
+		if got := cp.Intern(d.EntraSelect); got != "id,assignedLicenses,employeeId" {
+			t.Errorf("%s: select = %q", op, got)
+		}
 	}
 }
 

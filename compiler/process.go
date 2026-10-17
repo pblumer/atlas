@@ -840,8 +840,10 @@ type ConnectorTaskDetail struct {
 	//
 	// EntraFilter, EntraSelect, EntraPageSize and EntraMaxUsers configure list-users
 	// and are zero on every other operation, which the compiler enforces rather than
-	// ignores. EntraFilter is a literal-or-FEEL OData $filter and EntraSelect the
-	// interned $select projection. EntraPageSize is the $top asked of each request
+	// ignores — except EntraSelect, which get-user and get-group also take, because
+	// Graph's default property set leaves out what a process may need to read
+	// (ADR-0172, amended). EntraFilter is a literal-or-FEEL OData $filter and EntraSelect
+	// the interned $select projection. EntraPageSize is the $top asked of each request
 	// (0 leaves Graph its own page size) and EntraMaxUsers caps what may reach the
 	// result variable (0 is unbounded); the compiler has already applied the defaults,
 	// so the runtime interprets nothing (I5). EntraSearch is a literal-or-FEEL $search
@@ -1078,6 +1080,18 @@ type ConnectorTaskDetail struct {
 	ExchangeParameters    RestExpr
 	ExchangeParametersVar int32
 	ExchangeMaxResults    int32
+	// Teams Phone fields (JobType == TeamsPhoneJobType, ADR-draft-teams-phone-worker).
+	// Connector (above) names the configured tenant; its app certificate lives with the
+	// worker, never in a model. TeamsPhoneOp is the interned operation
+	// ("resolve-users"|"ensure-resource-account"|"ensure-call-queue"|
+	// "ensure-auto-attendant"|"remove-auto-attendant"|"remove-call-queue"|
+	// "remove-resource-account"), and TeamsPhoneArgs its values keyed by attribute name:
+	// the authored ones literal-or-FEEL, the static settings literals the compiler
+	// validated and defaulted. The compiler refuses a value the operation does not use,
+	// so none is quietly ignored at call time. All are the zero value for a non-Teams
+	// task; ResultVar (above) receives the operation's answer.
+	TeamsPhoneOp   int32
+	TeamsPhoneArgs []RestKV
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

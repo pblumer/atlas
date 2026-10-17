@@ -138,6 +138,11 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.Exchange.Retries },
 		compile: compileExchangeConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.TeamsPhone != nil },
+		retries: func(st xmlServiceTask) string { return st.TeamsPhone.Retries },
+		compile: compileTeamsPhoneConnectorTask,
+	},
 }
 
 // The directory-file formats and directions a model can author. They are spelled here
@@ -212,11 +217,15 @@ type entraOp struct {
 	// reason and takes none of the query fields: there is no collection to filter,
 	// project or page.
 	isBinary bool
+	// selects marks a single-object read that takes a select (get-user, get-group):
+	// Graph's default property set leaves out assignedLicenses, employeeId and others a
+	// process may need to read (ADR-0172, amended).
+	selects bool
 }
 
 var entraOps = map[string]entraOp{
 	"create-user":         {needsAttributes: true},
-	"get-user":            {needsUser: true},
+	"get-user":            {needsUser: true, selects: true},
 	"get-user-photo":      {needsUser: true, isBinary: true},
 	"list-users":          {isList: true},
 	"delta-users":         {isDelta: true},
@@ -228,7 +237,7 @@ var entraOps = map[string]entraOp{
 	"add-group-member":    {needsUser: true, needsGroup: true},
 	"remove-group-member": {needsUser: true, needsGroup: true},
 	"create-group":        {needsAttributes: true},
-	"get-group":           {needsGroup: true},
+	"get-group":           {needsGroup: true, selects: true},
 	"list-groups":         {isList: true},
 	"delta-groups":        {isDelta: true},
 	"update-group":        {needsGroup: true, needsAttributes: true},
@@ -428,7 +437,8 @@ func entraAdvancedQuery(taskID string, cn *xmlEntraConnector) (bool, error) {
 //
 //   - filter, search, advancedQuery — a listing only (list-users, list-groups). Graph's
 //     delta endpoint runs none of them, so they are an error on a delta op too.
-//   - select — a listing or a delta query (both return a collection to project).
+//   - select — a listing, a delta query, or a single-object read (get-user, get-group):
+//     each returns something whose properties can be projected.
 //   - deltaLink — a delta query alone; a resume cursor has nothing to resume elsewhere.
 //
 // pageSize and maxUsers are numbers, gated by [entraListBound]; this covers the
@@ -443,8 +453,8 @@ func entraFieldGating(taskID, op string, spec entraOp, cn *xmlEntraConnector) er
 			return fmt.Errorf("compiler: entra task %q sets %s on operation %q, which is not a listing (%s applies to list-users and list-groups)", taskID, a.what, op, a.what)
 		}
 	}
-	if strings.TrimSpace(cn.Select) != "" && !spec.isList && !spec.isDelta {
-		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which returns no collection (select applies to list-users, list-groups and the delta operations)", taskID, op)
+	if strings.TrimSpace(cn.Select) != "" && !spec.isList && !spec.isDelta && !spec.selects {
+		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which reads nothing to project (select applies to get-user, get-group, list-users, list-groups and the delta operations)", taskID, op)
 	}
 	if strings.TrimSpace(cn.DeltaLink) != "" && !spec.isDelta {
 		return fmt.Errorf("compiler: entra task %q sets deltaLink on operation %q, which is not a change-tracking query (deltaLink applies to delta-users and delta-groups)", taskID, op)
@@ -2684,4 +2694,136 @@ func s3Count(taskID, op, attr, raw string, takes bool, def, max int32) (int32, e
 		return 0, fmt.Errorf("compiler: s3 task %q operation %q has a %s of %d, and the most that takes effect is %d", taskID, op, attr, n, max)
 	}
 	return int32(n), nil
+}
+
+// teamsPhoneOp describes what one Teams Phone operation requires of a model and what it
+// may carry. The table is the compiler's half of connector/teamsphone's Ops table; the
+// compiler cannot import that package (the dependency runs the other way), and the drift
+// test TestTeamsPhoneOpsMatchTheCompiler keeps the two from disagreeing.
+//
+// required and optional are authored values (literal-or-FEEL); settings are static
+// values validated against teamsPhoneSettings and defaulted here, so the worker never
+// has to guess one.
+type teamsPhoneOp struct {
+	required    []string
+	optional    []string
+	settings    []string
+	needsResult bool
+}
+
+var teamsPhoneOps = map[string]teamsPhoneOp{
+	"resolve-users":           {required: []string{"users"}, needsResult: true},
+	"ensure-resource-account": {required: []string{"userPrincipalName", "displayName"}, settings: []string{"accountType"}, needsResult: true},
+	"ensure-call-queue": {
+		required:    []string{"name", "resourceAccountId"},
+		optional:    []string{"agents", "authorizedUsers", "languageId"},
+		settings:    []string{"routingMethod", "presenceBasedRouting", "conferenceMode", "allowOptOut"},
+		needsResult: true,
+	},
+	"ensure-auto-attendant": {
+		required:    []string{"name", "resourceAccountId", "transferTarget", "languageId", "timeZone"},
+		optional:    []string{"authorizedUsers", "holidays"},
+		needsResult: true,
+	},
+	"remove-auto-attendant":   {required: []string{"resourceAccountId"}, optional: []string{"name"}},
+	"remove-call-queue":       {required: []string{"resourceAccountId"}, optional: []string{"name"}},
+	"remove-resource-account": {required: []string{"resourceAccountId"}},
+}
+
+// teamsPhoneSettings are the static values and their defaults. An empty default makes a
+// setting required: an account type guessed wrong creates an account that cannot carry
+// the voice app it was meant for.
+var teamsPhoneSettings = map[string]struct {
+	values []string
+	def    string
+}{
+	"accountType":          {values: []string{"call-queue", "auto-attendant"}},
+	"routingMethod":        {values: []string{"attendant", "serial", "round-robin", "longest-idle"}, def: "attendant"},
+	"presenceBasedRouting": {values: []string{"true", "false"}, def: "true"},
+	"conferenceMode":       {values: []string{"true", "false"}, def: "true"},
+	"allowOptOut":          {values: []string{"true", "false"}, def: "true"},
+}
+
+func teamsPhoneOpNames() []string {
+	out := make([]string, 0, len(teamsPhoneOps))
+	for name := range teamsPhoneOps {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// compileTeamsPhoneConnectorTask compiles an <atlas:teamsPhoneConnector> task: one
+// voice-app operation against a tenant an operator configured, via the job path
+// (ADR-draft-teams-phone-worker). The app certificate is the worker's, by tenant name;
+// only the operation and its values live in the model.
+func compileTeamsPhoneConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.TeamsPhone
+	if strings.TrimSpace(cn.Connector) == "" {
+		return 0, fmt.Errorf("compiler: teamsphone task %q needs a connector attribute naming the tenant the worker holds the app certificate for", st.Id)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		return 0, fmt.Errorf("compiler: teamsphone task %q needs an operation (%s)", st.Id, strings.Join(teamsPhoneOpNames(), ", "))
+	}
+	spec, ok := teamsPhoneOps[op]
+	if !ok {
+		return 0, fmt.Errorf("compiler: teamsphone task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(teamsPhoneOpNames(), ", "))
+	}
+	in := func(list []string, s string) bool {
+		for _, e := range list {
+			if e == s {
+				return true
+			}
+		}
+		return false
+	}
+	var args []RestKV
+	for _, v := range cn.values() {
+		set := strings.TrimSpace(v.raw) != ""
+		isSetting := in(spec.settings, v.attr)
+		if set && !isSetting && !in(spec.required, v.attr) && !in(spec.optional, v.attr) {
+			return 0, fmt.Errorf("compiler: teamsphone task %q operation %q does not use %s; remove it rather than leaving a value the worker ignores", st.Id, op, v.attr)
+		}
+		if isSetting {
+			setting := teamsPhoneSettings[v.attr]
+			value := strings.ToLower(strings.TrimSpace(v.raw))
+			if strings.HasPrefix(value, "=") {
+				return 0, fmt.Errorf("compiler: teamsphone task %q: %s decides what is created and cannot be a FEEL expression (want %s)", st.Id, v.attr, strings.Join(setting.values, ", "))
+			}
+			if value == "" {
+				value = setting.def
+			}
+			if value == "" {
+				return 0, fmt.Errorf("compiler: teamsphone task %q operation %q needs %s (%s)", st.Id, op, v.attr, strings.Join(setting.values, ", "))
+			}
+			if !in(setting.values, value) {
+				return 0, fmt.Errorf("compiler: teamsphone task %q has %s %q (want %s)", st.Id, v.attr, v.raw, strings.Join(setting.values, ", "))
+			}
+			args = append(args, RestKV{Name: v.attr, Val: RestExpr{Literal: value}})
+			continue
+		}
+		if !set {
+			if in(spec.required, v.attr) {
+				return 0, fmt.Errorf("compiler: teamsphone task %q operation %q needs %s", st.Id, op, v.attr)
+			}
+			continue
+		}
+		val, err := connectorValue(b.gate(), st.Id, "teamsphone", v.attr, v.raw)
+		if err != nil {
+			return 0, err
+		}
+		args = append(args, RestKV{Name: v.attr, Val: val})
+	}
+	result := strings.TrimSpace(cn.ResultVariable)
+	if spec.needsResult && result == "" {
+		return 0, fmt.Errorf("compiler: teamsphone task %q operation %q needs a resultVariable to receive what it answers with — the ids a later task needs", st.Id, op)
+	}
+	return b.AddTeamsPhoneConnectorTask(TeamsPhoneConfig{
+		Worker:    strings.TrimSpace(cn.Connector),
+		Operation: op,
+		Args:      args,
+		ResultVar: result,
+		Retries:   retries,
+	}), nil
 }

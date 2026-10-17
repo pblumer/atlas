@@ -129,6 +129,7 @@ var releasedKinds = []releasedKind{
 		Why: "the order's own send task in mode command: it asks a held position for an action through the order act, in the name of the process's application, so there is no system to configure and nothing to publish"},
 	{JobType: compiler.S3JobType, Slug: "s3-object-store-worker", Class: classConnector, Package: "atlas.s3-objects"},
 	{JobType: compiler.ExchangeJobType, Slug: "exchange-worker", Class: classConnector, Package: "atlas.exchange-administration"},
+	{JobType: compiler.TeamsPhoneJobType, Slug: "teams-phone-worker", Class: classConnector, Package: "atlas.teams-phone"},
 }
 
 // packagesOwed is how many released connector kinds have no Repository package right

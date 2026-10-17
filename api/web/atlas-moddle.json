@@ -502,6 +502,33 @@
       ]
     },
     {
+      "name": "TeamsPhoneConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "users", "type": "String", "isAttr": true },
+        { "name": "userPrincipalName", "type": "String", "isAttr": true },
+        { "name": "displayName", "type": "String", "isAttr": true },
+        { "name": "accountType", "type": "String", "isAttr": true },
+        { "name": "name", "type": "String", "isAttr": true },
+        { "name": "resourceAccountId", "type": "String", "isAttr": true },
+        { "name": "transferTarget", "type": "String", "isAttr": true },
+        { "name": "agents", "type": "String", "isAttr": true },
+        { "name": "authorizedUsers", "type": "String", "isAttr": true },
+        { "name": "languageId", "type": "String", "isAttr": true },
+        { "name": "timeZone", "type": "String", "isAttr": true },
+        { "name": "holidays", "type": "String", "isAttr": true },
+        { "name": "routingMethod", "type": "String", "isAttr": true },
+        { "name": "presenceBasedRouting", "type": "String", "isAttr": true },
+        { "name": "conferenceMode", "type": "String", "isAttr": true },
+        { "name": "allowOptOut", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "WebscrapeConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },

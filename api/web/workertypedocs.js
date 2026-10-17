@@ -148,12 +148,12 @@ export const WORKER_TYPE_DOCS = {
   entra: {
     anchor: "runbook-entra", title: "Microsoft Entra ID",
     checked: "2026-09",
-    needs: `A configured Microsoft Entra ID Worker in ${WORKERS}: a vault bundle with tenant, client and secret. No endpoint — Graph's address is the same for everyone.`,
+    needs: `A configured Microsoft Entra ID Worker in ${WORKERS}: a vault bundle with tenant, client and a secret or a certificate. No endpoint — Graph's address is the same for everyone.`,
     steps: [
-      `Entra admin center &rarr; <b>App registrations</b> &rarr; new registration, <b>dedicated to this worker</b>. Note the <i>tenant id</i> and <i>client id</i>, then <i>Certificates &amp; secrets</i> &rarr; new client secret — its value is shown once.`,
+      `Entra admin center &rarr; <b>App registrations</b> &rarr; new registration, <b>dedicated to this worker</b>. Note the <i>tenant id</i> and <i>client id</i>, then <i>Certificates &amp; secrets</i> &rarr; new client secret — its value is shown once. Or upload a certificate's public part under <i>Certificates</i> instead and keep the certificate with its private key for the vault.`,
       `<i>API permissions</i> &rarr; <b>Microsoft Graph</b> &rarr; <b>Application permissions</b>. For the usual joiner/mover/leaver case exactly two suffice: <code>User.ReadWrite.All</code> and <code>Group.ReadWrite.All</code> (or the narrower <code>GroupMember.ReadWrite.All</code> when no groups are created). Read-only processes take the <code>*.Read.All</code> variants. Remove <code>Directory.ReadWrite.All</code> if it is there.`,
       `<b>Grant admin consent.</b> Application permissions do nothing until this is done — and its absence shows up as "it does nothing, without an error".`,
-      `Store the bundle in the vault: ${VAULT}, e.g. <code>entra_contoso</code> holding <code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code>.`,
+      `Store the bundle in the vault: ${VAULT}, e.g. <code>entra_contoso</code> holding <code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code> — or, with a certificate, <code>"certificate"</code> in place of <code>"clientSecret"</code>: the certificate and its unencrypted private key as one PEM text. Never both.`,
       `${WORKERS} &rarr; <b>New worker</b>: type <b>Microsoft Entra ID</b>, a name, credential reference <code>entra_contoso</code>, no endpoint.`,
     ],
     trap: `Resetting a password or touching a role-bearing account needs more than <code>User.ReadWrite.All</code>: the app must also hold a <b>directory role</b> such as <i>User Administrator</i> — and even then it cannot act on holders of higher-privileged roles.`,
@@ -173,6 +173,20 @@ export const WORKER_TYPE_DOCS = {
       `${WORKERS} &rarr; <b>New worker</b>: type <b>Microsoft Exchange</b>, a name, the credential reference, and for a server its Remote PowerShell URI as endpoint.`,
     ],
     trap: `An app with <code>Exchange.ManageAsApp</code> but no Exchange role in Entra — or a role assignment that has not yet taken effect, which can take a while — is refused on every call. The permission lets the app ask; the role is what it may do.`,
+  },
+
+  teamsphone: {
+    anchor: "runbook-teamsphone", title: "Microsoft Teams Phone",
+    checked: "2026-10",
+    needs: `A configured Microsoft Teams Phone Worker in ${WORKERS}: a vault bundle with tenant, client and the app's certificate. No endpoint. The worker host needs PowerShell 7 and the MicrosoftTeams module.`,
+    steps: [
+      `On the worker host: PowerShell 7 and <code>Install-Module MicrosoftTeams -Scope AllUsers</code>. If <code>pwsh</code> is not on the PATH, <code>ATLAS_TEAMSPHONE_PWSH</code> names it. The host's own proxy is used; atlas sets none.`,
+      `Entra admin center &rarr; <b>App registrations</b> &rarr; new registration with a <b>certificate</b> (the module signs apps in with a certificate only). Give the service principal the role <i>Teams Administrator</i> and the Graph application permission <code>User.ReadWrite.All</code>, then <b>grant admin consent</b>.`,
+      `Store the bundle in the vault: ${VAULT}, e.g. <code>teams_contoso</code> holding <code>{"tenantId": "…", "clientId": "…", "certificate": "…"}</code> — the certificate and its unencrypted private key as one PEM text — or <code>"certificateThumbprint"</code> in its place for a certificate already in the worker account's store. Never both.`,
+      `${WORKERS} &rarr; <b>New worker</b>: type <b>Microsoft Teams Phone</b>, a name, credential reference <code>teams_contoso</code>, no endpoint.`,
+      `Practise without a tenant: <code>ATLAS_TEAMSPHONE_MOCK=1</code> serves the same tasks from a tenant in the worker's memory, and <code>ATLAS_TEAMSPHONE_MOCK_USERS</code> names the people Resolve users finds.`,
+    ],
+    trap: `Teams shows a new resource account only after a synchronization. A voice app waits up to two minutes for its account and is then refused before anything is created — give the model a pause between creating the accounts and the voice apps (waiting for licences is one), rather than reading the delay as a fault.`,
   },
 
   // The three database entries quote the connection string exactly as the Console's own
