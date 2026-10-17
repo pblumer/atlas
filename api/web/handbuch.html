@@ -2218,12 +2218,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">41</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">42</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">41</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">42</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -4731,6 +4731,77 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="rz-status" role="status" aria-live="polite"></div>
       </div>
 
+      <div class="bsp" id="bsp-exchange-austritt">
+        <h4><span class="rz-emoji" aria-hidden="true">📬</span>
+          <span data-l="de">Austritt: ein Postfach geordnet übergeben</span><span data-l="en">Leaver: hand a mailbox over in order</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">Exchange</span>
+          <span class="tag">convert-mailbox</span><span class="tag">add-full-access</span><span class="tag">set-auto-reply</span>
+          <span class="tag" data-l="de">inklusives Gateway</span><span class="tag" data-l="en">inclusive gateway</span>
+          <span class="tag">examples/exchange-austritt.bpmn</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Eine Person verlässt das Unternehmen. Ihr Postfach soll nicht verschwinden, sondern an
+              jemanden übergehen: Wer schreibt, bekommt eine Antwort mit der neuen Ansprechperson, die Übernahme
+              sieht die Mail, niemand findet die Person mehr im Adressbuch, und sie steht in keiner Verteilerliste
+              mehr. Wo eine Aufbewahrungspflicht gilt, wird das Postfach zuerst gesichert.</p>
+            <p data-l="en">A person leaves the company. Their mailbox should not vanish but pass to someone: whoever
+              writes gets an answer naming the new contact, the successor sees the mail, nobody finds the person in
+              the address book any more, and they are on no distribution list. Where a retention duty applies, the
+              mailbox is secured first.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Eine Kette von <code>atlas:exchangeConnector</code>-Tasks. Der erste liest das Postfach
+              (<code>get-mailbox</code> → <code>postfach</code>) und scheitert bei einer falschen Adresse, bevor
+              etwas geändert ist; alle weiteren adressieren es über <code>=postfach.PrimarySmtpAddress</code>. Ein
+              <b>inklusives Gateway</b> nimmt Litigation Hold und Weiterleitung unabhängig voneinander. Danach:
+              Abwesenheitsnotiz, Umwandlung in ein geteiltes Postfach, Vollzugriff für die Übernahme, Ausblenden
+              aus dem Adressbuch, und eine <b>parallele Multi-Instance</b> trägt die Person aus jeder Liste aus,
+              die ein OPATH-Filter auf ihren DistinguishedName findet. Eine leere Liste ist kein Sonderfall.</p>
+            <p data-l="en">A chain of <code>atlas:exchangeConnector</code> tasks. The first reads the mailbox
+              (<code>get-mailbox</code> → <code>postfach</code>) and fails on a wrong address before anything has
+              changed; every later step addresses it as <code>=postfach.PrimarySmtpAddress</code>. An <b>inclusive
+              gateway</b> takes litigation hold and forwarding independently of each other. Then: automatic reply,
+              conversion to a shared mailbox, full access for the successor, hiding from the address book, and a
+              <b>parallel multi-instance</b> removes the person from every list an OPATH filter on their
+              DistinguishedName finds. An empty list is no special case.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="bsp-more">
+          <summary><span data-l="de">Inbetriebnahme &amp; die Fallen im Modell</span><span data-l="en">Commissioning &amp; the traps in the model</span></summary>
+          <p data-l="de">Organisation, App-Registrierung und Worker stehen im <a href="#runbook-exchange">Runbook
+            Microsoft&nbsp;Exchange</a>. Der Worker-Typ <code>exchange</code> ist <b>worker-only</b>; das Modell
+            nennt nur den Worker <code>contoso</code>, und ob dahinter Exchange Online oder ein Exchange Server
+            steht, entscheidet dessen Bündel – dasselbe Modell läuft gegen beide.</p>
+          <p data-l="en">Organization, app registration and worker are in the <a href="#runbook-exchange">Microsoft
+            Exchange runbook</a>. The worker type <code>exchange</code> is <b>worker-only</b>; the model names only
+            the worker <code>contoso</code>, and whether Exchange Online or an Exchange Server stands behind it is
+            its bundle's decision – the same model runs against either.</p>
+          <p data-l="de"><b>Drei Dinge, die das Modell vormacht.</b> Ein Parameter, dessen Ausdruck
+            <code>null</code> ergibt, wird weggelassen: ohne <code>aufbewahrungTage</code> gilt der Hold
+            unbefristet, statt eine Dauer zu leeren. Ein Apostroph im DistinguishedName (O'Brien) beendet einen
+            OPATH-String; <code>replace(…, "'", "''")</code> verdoppelt es. Und das Austragen aus fremd verwalteten
+            Listen braucht <code>BypassSecurityGroupManagerCheck</code> und eine Rolle, die das darf.</p>
+          <p data-l="en"><b>Three things the model shows.</b> A parameter whose expression evaluates to
+            <code>null</code> is left out: without <code>aufbewahrungTage</code> the hold is indefinite instead of
+            clearing a duration. An apostrophe in a DistinguishedName (O'Brien) ends an OPATH string;
+            <code>replace(…, "'", "''")</code> doubles it. And removing a person from lists others manage needs
+            <code>BypassSecurityGroupManagerCheck</code> and a role allowed to use it.</p>
+          <p data-l="de">Die Lizenz entzieht dieser Prozess nicht – das ist ein Entra-Schritt
+            (<code>assign-license</code> mit <code>removeLicenses</code>) nach der Umwandlung. Ein geteiltes
+            Postfach unter Litigation Hold braucht in Exchange Online weiterhin eine passende Lizenz.</p>
+          <p data-l="en">This process does not remove the licence – that is an Entra step
+            (<code>assign-license</code> with <code>removeLicenses</code>) after the conversion. A shared mailbox
+            on litigation hold still needs a fitting licence in Exchange Online.</p>
+        </details>
+      </div>
+
       <div class="bsp" id="bsp-unvereinbarkeit">
         <h4><span class="rz-emoji" aria-hidden="true">⚔️</span>
           <span data-l="de">Unvereinbarkeit: was nie zusammengehört</span><span data-l="en">Incompatible rights: what must never be held together</span></h4>
@@ -6449,6 +6520,8 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           <code>:\Calendar</code>. <i>Repeated delivery:</i> a job may run again after an interruption; a second
           <i>Add group member</i> then reports "already a member" as an error. The worker does not reinterpret such
           texts – the incident says what Exchange said.</p>
+        <p data-l="de">Beispiel: <a href="#bsp-exchange-austritt">Austritt: ein Postfach geordnet übergeben</a>.</p>
+        <p data-l="en">Example: <a href="#bsp-exchange-austritt">Leaver: hand a mailbox over in order</a>.</p>
         <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked October 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
@@ -10998,7 +11071,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">41</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">41</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">42</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">42</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>

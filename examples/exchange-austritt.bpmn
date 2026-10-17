@@ -1,0 +1,438 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Austritt: Postfach übergeben (Exchange) — was der Exchange-Worker nach ADR-0462 kann.
+
+  Der Leaver-Teil, der im Postfach stattfindet. Eine Person verlässt das Unternehmen;
+  ihr Postfach soll nicht verschwinden, sondern geordnet an jemanden übergehen:
+
+    Start "Austritt gemeldet"
+     → "Postfach lesen"                       (exchange get-mailbox → postfach)
+     → Gateway (inklusiv) "Was gilt zusätzlich?"
+         ├ aufbewahrung  → "Litigation Hold aktivieren"   (enable-litigation-hold)
+         ├ weiterleiten  → "Weiterleitung einrichten"     (set-forwarding)
+         └ nichts davon  (Default)
+     → Join
+     → "Abwesenheitstext verfassen"           (Script, FEEL → abwesenheitstext)
+     → "Abwesenheitsnotiz setzen"             (set-auto-reply)
+     → "In geteiltes Postfach umwandeln"      (convert-mailbox Type Shared)
+     → "Vollzugriff für die Übernahme"        (add-full-access)
+     → "Aus dem Adressbuch ausblenden"        (update-mailbox)
+     → "Verteilerlisten ermitteln"            (list-distribution-groups → verteiler)
+     → "Aus den Verteilerlisten austragen"    (remove-distribution-group-member, parallel je Liste)
+     → Ende "Postfach übergeben"
+
+  Der rote Faden ist `postfach`: Der erste Schritt liest das Postfach, und jeder
+  folgende adressiert es über `=postfach.PrimarySmtpAddress` — die eindeutige Adresse,
+  die Exchange selbst zurückgab, nicht die Schreibweise aus der Personalmeldung.
+
+  Läuft nicht ohne Worker-Instanz: Der Worker-Typ exchange ist worker-only, das
+  Credential der Organisation liegt nie in der Engine. Jeder Exchange-Task parkt, bis
+  eine Exchange-Worker-Instanz ihn abholt; wie sie zu starten ist, steht in der
+  Dokumentation des Prozesses.
+
+  Startvariablen:
+    mitarbeiter       { name, mail } — wer austritt
+    uebernahme        { name, mail } — wer das Postfach übernimmt
+    austrittsdatum    Zeichenkette, z. B. "2026-10-31"
+    aufbewahrung      true, wenn das Postfach auf Litigation Hold muss
+    aufbewahrungTage  optional: Dauer des Holds in Tagen; fehlt sie, gilt er unbefristet
+    weiterleiten      true, wenn neue Mail an die Übernahme weitergeleitet werden soll
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_exchange_austritt"
+                  targetNamespace="http://atlas/examples">
+
+  <bpmn:process id="exchange-austritt" name="Austritt: Postfach übergeben (Exchange)" isExecutable="true">
+    <bpmn:documentation>Übergibt das Postfach einer austretenden Person geordnet an eine andere: auf Wunsch unter
+Aufbewahrung und mit Weiterleitung, dann mit Abwesenheitsnotiz, als geteiltes Postfach mit
+Vollzugriff für die Übernahme, ausgeblendet aus dem Adressbuch und ausgetragen aus allen
+Verteilerlisten.
+
+Startvariablen: `mitarbeiter` und `uebernahme` (je { name, mail }), `austrittsdatum`
+(Zeichenkette), die beiden Schalter `aufbewahrung` und `weiterleiten` (Wahrheitswerte) und
+optional `aufbewahrungTage`. Ergebnis: `postfach` (das gelesene Postfach), `verteiler`
+(die Listen, aus denen die Person ausgetragen wurde) und `abwesenheitstext`.
+
+Jeder Exchange-Task ist eine benannte Operation des Exchange-Worker-Typs (ADR-0462) statt
+eines Cmdlet-Aufrufs in einem Skript: "Vollzugriff" ergänzt der Worker selbst zu
+AccessRights FullAccess mit InheritanceType All, und "Senden als" wäre online ein anderes
+Cmdlet als auf einem Exchange Server. Dasselbe Modell läuft deshalb gegen Exchange Online
+und gegen einen Exchange Server; welches es ist, bestimmt der Worker `contoso`, nicht das
+Diagramm. In einer hybriden Organisation wählt `connector="=organisation"` den Worker zur
+Laufzeit.
+
+Die Tasks parken, bis eine Exchange-Worker-Instanz sie abholt; der Worker-Typ ist
+worker-only, damit das Credential nie in die Engine gelangt:
+
+    export ATLAS_EXCHANGE_CONNECTORS=contoso
+    export ATLAS_EXCHANGE_CONTOSO_CREDENTIALS='{"organization": "contoso.onmicrosoft.com",
+      "clientId": "…", "certificate": "-----BEGIN CERTIFICATE-----…"}'
+    atlas worker --server http://localhost:8080 --connector exchange
+
+Für Exchange Online braucht die App-Registrierung Exchange.ManageAsApp mit
+Administratorzustimmung und eine Exchange-Rolle; das Austragen aus fremd verwalteten
+Listen braucht dazu das Recht, die Gruppenverwaltung zu übergehen (siehe den letzten
+Task). Die Lizenz entzieht dieser Prozess nicht — das ist ein Entra-Schritt
+(assign-license mit removeLicenses) und gehört nach der Umwandlung.</bpmn:documentation>
+
+    <bpmn:startEvent id="start" name="Austritt gemeldet">
+      <bpmn:documentation>Ein einfaches Start-Event, weil der Austritt von aussen gemeldet wird — aus dem
+Personalsystem, einem Formular oder einem übergeordneten Leaver-Prozess, der diesen als
+Call Activity aufruft. Wer austritt und wer übernimmt, kommt als Startvariable mit.</bpmn:documentation>
+      <bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="lesen" name="Postfach lesen">
+      <bpmn:documentation>Liest das Postfach, bevor irgendetwas geändert wird (get-mailbox → `postfach`).
+
+Zwei Gründe, warum das der erste Schritt ist. Erstens scheitert eine falsche Adresse hier,
+mit einem Incident und ohne dass etwas verändert wurde — und nicht nach der Hälfte der
+Schritte. Zweitens liefert Exchange die eindeutige `PrimarySmtpAddress` und den
+`DistinguishedName`, die alle folgenden Schritte brauchen; eine Adresse aus der
+Personalmeldung kann ein Alias sein.
+
+Eine Identität, die mehrere Postfächer trifft (ein Anzeigename, den zwei Personen
+tragen), lässt der Worker scheitern, statt mit dem ersten weiterzumachen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:exchangeConnector connector="contoso" operation="get-mailbox"
+                                 parameters='{"Identity": "=mitarbeiter.mail"}'
+                                 resultVariable="postfach"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f1</bpmn:incoming>
+      <bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:inclusiveGateway id="optionen" name="Was gilt zusätzlich?" default="f_keine">
+      <bpmn:documentation>Ein inklusives Gateway, weil die beiden Optionen unabhängig sind: Ein Postfach kann
+aufbewahrt *und* weitergeleitet werden, nur eins davon oder keins. Ein exklusives
+Gateway müsste dafür vier Wege haben.
+
+Die Bedingungen fragen `= aufbewahrung = true` und `= weiterleiten = true`. Fehlt eine
+Variable, ist der Vergleich nicht wahr und der Zweig wird nicht genommen — "nichts davon"
+ist der Default-Flow ohne Bedingung und wird nur genommen, wenn keine der beiden gilt.
+
+Aufbewahrung steht vor allen anderen Änderungen: Was aufbewahrt werden muss, wird
+gesichert, bevor das Postfach umgewandelt und umverteilt wird.</bpmn:documentation>
+      <bpmn:incoming>f2</bpmn:incoming>
+      <bpmn:outgoing>f_hold</bpmn:outgoing>
+      <bpmn:outgoing>f_fwd</bpmn:outgoing>
+      <bpmn:outgoing>f_keine</bpmn:outgoing>
+    </bpmn:inclusiveGateway>
+
+    <bpmn:serviceTask id="hold" name="Litigation Hold aktivieren">
+      <bpmn:documentation>enable-litigation-hold: Der Worker setzt LitigationHoldEnabled selbst; das Modell sagt
+nur, wie lange und warum.
+
+`LitigationHoldDuration` kommt aus `aufbewahrungTage`. Fehlt die Variable, ergibt der
+Ausdruck null — und ein Parameter, der null ergibt, wird **weggelassen statt gesendet**.
+Der Hold gilt dann unbefristet, was Exchanges eigener Default ist. Das ist die Regel, die
+verhindert, dass eine nicht gesetzte Variable eine Eigenschaft leert.
+
+Falle in Exchange Online: Ein geteiltes Postfach unter Litigation Hold braucht weiterhin
+eine Lizenz, die das erlaubt (z. B. Exchange Online Plan 2). Wer nach der Umwandlung die
+Lizenz entzieht, muss das wissen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:exchangeConnector connector="contoso" operation="enable-litigation-hold"
+                                 parameters='{"Identity": "=postfach.PrimarySmtpAddress", "LitigationHoldDuration": "=aufbewahrungTage", "RetentionComment": "=\"Austritt per \" + austrittsdatum"}'/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_hold</bpmn:incoming>
+      <bpmn:outgoing>f_hold_out</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="weiterleitung" name="Weiterleitung einrichten">
+      <bpmn:documentation>set-forwarding an die Übernahme. `DeliverToMailboxAndForward: true` legt jede Mail
+zusätzlich im Postfach ab: Die Übernahme sieht sie sofort, und das Postfach bleibt
+vollständig — gerade wenn es aufbewahrt wird.
+
+Ein Boolean steht im JSON als `true`, nicht als `"true"`: PowerShell weist die
+Zeichenkette für einen Schalter ab.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:exchangeConnector connector="contoso" operation="set-forwarding"
+                                 parameters='{"Identity": "=postfach.PrimarySmtpAddress", "ForwardingSmtpAddress": "=uebernahme.mail", "DeliverToMailboxAndForward": true}'/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_fwd</bpmn:incoming>
+      <bpmn:outgoing>f_fwd_out</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:inclusiveGateway id="optionen_join">
+      <bpmn:documentation>Der synchronisierende Join: Er wartet genau auf die Zweige, die das Gateway davor
+aktiviert hat — einen, beide oder nur den Default.</bpmn:documentation>
+      <bpmn:incoming>f_hold_out</bpmn:incoming>
+      <bpmn:incoming>f_fwd_out</bpmn:incoming>
+      <bpmn:incoming>f_keine</bpmn:incoming>
+      <bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:inclusiveGateway>
+
+    <bpmn:scriptTask id="text" name="Abwesenheitstext verfassen">
+      <bpmn:documentation>Ein Script-Task mit Inline-FEEL, weil der Text eine reine Rechnung aus Startvariablen
+ist — kein Umsystem. Ihn hier als eigene Variable `abwesenheitstext` zu bilden, statt den
+Ausdruck in den nächsten Task zu schreiben, hält ihn an einer Stelle: interne und
+externe Nachricht sind derselbe Text, und er steht nachher in den Variablen der Instanz.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="=mitarbeiter.name + &quot; ist nicht mehr bei uns tätig. Ihre Nachricht wird nicht persönlich gelesen; bitte wenden Sie sich an &quot; + uebernahme.name + &quot; (&quot; + uebernahme.mail + &quot;).&quot;"
+                      resultVariable="abwesenheitstext"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f3</bpmn:incoming>
+      <bpmn:outgoing>f4</bpmn:outgoing>
+    </bpmn:scriptTask>
+
+    <bpmn:serviceTask id="abwesenheit" name="Abwesenheitsnotiz setzen">
+      <bpmn:documentation>set-auto-reply mit `AutoReplyState: Enabled` — unbefristet, weil die Person nicht
+zurückkommt (Scheduled mit StartTime und EndTime wäre die befristete Form).
+`ExternalAudience: All` antwortet auch Absendern ausserhalb der Organisation, für die
+ein Austritt am wenigsten sichtbar ist.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:exchangeConnector connector="contoso" operation="set-auto-reply"
+                                 parameters='{"Identity": "=postfach.PrimarySmtpAddress", "AutoReplyState": "Enabled", "ExternalAudience": "All", "InternalMessage": "=abwesenheitstext", "ExternalMessage": "=abwesenheitstext"}'/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f4</bpmn:incoming>
+      <bpmn:outgoing>f5</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="umwandeln" name="In geteiltes Postfach umwandeln">
+      <bpmn:documentation>convert-mailbox mit `Type: Shared`. Ein geteiltes Postfach gehört niemandem und braucht
+keine Anmeldung — es ist die Form, in der ein Postfach weiterlebt, wenn seine Person geht.
+In Exchange Online kann es danach (bis 50 GB, ohne Hold) ohne Lizenz bestehen; die Lizenz
+selbst entzieht ein Entra-Schritt, nicht dieser Prozess.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:exchangeConnector connector="contoso" operation="convert-mailbox"
+                                 parameters='{"Identity": "=postfach.PrimarySmtpAddress", "Type": "Shared"}'/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f5</bpmn:incoming>
+      <bpmn:outgoing>f6</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="vollzugriff" name="Vollzugriff für die Übernahme">
+      <bpmn:documentation>add-full-access: Das Modell nennt Postfach und Person; AccessRights FullAccess und
+InheritanceType All ergänzt der Worker. Ein `AccessRights` im JSON würde beim Deploy
+abgewiesen, weil es die Bedeutung der Operation überschreiben würde.
+
+`AutoMapping: true` blendet das Postfach in Outlook der Übernahme von selbst ein.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:exchangeConnector connector="contoso" operation="add-full-access"
+                                 parameters='{"Identity": "=postfach.PrimarySmtpAddress", "User": "=uebernahme.mail", "AutoMapping": true}'/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f6</bpmn:incoming>
+      <bpmn:outgoing>f7</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="ausblenden" name="Aus dem Adressbuch ausblenden">
+      <bpmn:documentation>update-mailbox mit `HiddenFromAddressListsEnabled: true`: Niemand soll eine ausgetretene
+Person noch im Adressbuch finden und anschreiben. update-mailbox ist eine offene
+Operation — sie reicht jeden Parameter von Set-Mailbox durch, unter dem Namen, den die
+Cmdlet-Referenz von Microsoft ihm gibt.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:exchangeConnector connector="contoso" operation="update-mailbox"
+                                 parameters='{"Identity": "=postfach.PrimarySmtpAddress", "HiddenFromAddressListsEnabled": true}'/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f7</bpmn:incoming>
+      <bpmn:outgoing>f8</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="verteiler_lesen" name="Verteilerlisten ermitteln">
+      <bpmn:documentation>list-distribution-groups mit einem OPATH-Filter auf die Mitglieder: `Members -eq
+'&lt;DistinguishedName&gt;'` findet jede Verteilerliste, in der das Postfach steht. Dafür hat
+der erste Schritt den DistinguishedName gelesen — der Filter nimmt keine Mailadresse.
+
+Die Falle im Ausdruck: Ein DistinguishedName kann ein Apostroph enthalten (O'Brien), und
+in OPATH beendet es die Zeichenkette. `replace(…, "'", "''")` verdoppelt es, wie OPATH es
+verlangt; ohne das scheitert der Filter genau bei diesen Namen.
+
+`maxResults="200"` deckelt die Liste. Steht eine Person in mehr Listen, scheitert der Task,
+statt eine gekürzte Liste zu liefern — eine halbe Liste würde die Person in den übrigen
+Listen still zurücklassen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:exchangeConnector connector="contoso" operation="list-distribution-groups"
+                                 parameters='{"Filter": "=\"Members -eq &apos;\" + replace(postfach.DistinguishedName, \"&apos;\", \"&apos;&apos;\") + \"&apos;\""}'
+                                 maxResults="200"
+                                 resultVariable="verteiler"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f8</bpmn:incoming>
+      <bpmn:outgoing>f9</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="austragen" name="Aus den Verteilerlisten austragen">
+      <bpmn:documentation>remove-distribution-group-member als **parallele Multi-Instance** über `verteiler`: eine
+Instanz je Liste, `liste` ist das jeweilige Element. Die Austragungen hängen nicht
+voneinander ab, also laufen sie gleichzeitig.
+
+Eine leere Liste ist kein Sonderfall: Eine Multi-Instance über eine leere Sammlung startet
+keine Instanz und ist sofort abgeschlossen. Deshalb steht davor kein Gateway "in Listen?".
+
+`BypassSecurityGroupManagerCheck: true` erlaubt das Austragen auch aus Listen, die jemand
+anderes verwaltet — was beim Austritt die Regel ist. Das Konto des Workers braucht dafür
+nach der Dokumentation von Microsoft eine Rolle, die die Gruppenverwaltung übergehen darf
+(Organization Management); ohne sie scheitert genau diese Instanz mit einem Incident.
+
+Falle bei wiederholter Zustellung: Läuft eine Instanz nach einem Abbruch erneut, meldet
+Exchange "ist kein Mitglied" als Fehler. Der Incident zeigt dann den Text von Exchange; die
+Austragung ist in diesem Fall schon geschehen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:exchangeConnector connector="contoso" operation="remove-distribution-group-member"
+                                 parameters='{"Identity": "=liste.PrimarySmtpAddress", "Member": "=postfach.PrimarySmtpAddress", "BypassSecurityGroupManagerCheck": true}'/>
+      </bpmn:extensionElements>
+      <bpmn:multiInstanceLoopCharacteristics>
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=verteiler" inputElement="liste"/>
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+      <bpmn:incoming>f9</bpmn:incoming>
+      <bpmn:outgoing>f10</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="ende" name="Postfach übergeben">
+      <bpmn:documentation>Das Postfach ist geteilt, der Übernahme zugänglich, beantwortet Mail mit einer Notiz und
+steht in keiner Verteilerliste mehr. Was folgt — die Lizenz, das Konto selbst — gehört dem
+Verzeichnis-Teil des Leaver-Prozesses.</bpmn:documentation>
+      <bpmn:incoming>f10</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="lesen"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="lesen" targetRef="optionen"/>
+    <bpmn:sequenceFlow id="f_hold" name="Aufbewahrung" sourceRef="optionen" targetRef="hold">
+      <bpmn:conditionExpression>= aufbewahrung = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_fwd" name="Weiterleitung" sourceRef="optionen" targetRef="weiterleitung">
+      <bpmn:conditionExpression>= weiterleiten = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_keine" name="nichts davon" sourceRef="optionen" targetRef="optionen_join"/>
+    <bpmn:sequenceFlow id="f_hold_out" sourceRef="hold" targetRef="optionen_join"/>
+    <bpmn:sequenceFlow id="f_fwd_out" sourceRef="weiterleitung" targetRef="optionen_join"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="optionen_join" targetRef="text"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="text" targetRef="abwesenheit"/>
+    <bpmn:sequenceFlow id="f5" sourceRef="abwesenheit" targetRef="umwandeln"/>
+    <bpmn:sequenceFlow id="f6" sourceRef="umwandeln" targetRef="vollzugriff"/>
+    <bpmn:sequenceFlow id="f7" sourceRef="vollzugriff" targetRef="ausblenden"/>
+    <bpmn:sequenceFlow id="f8" sourceRef="ausblenden" targetRef="verteiler_lesen"/>
+    <bpmn:sequenceFlow id="f9" sourceRef="verteiler_lesen" targetRef="austragen"/>
+    <bpmn:sequenceFlow id="f10" sourceRef="austragen" targetRef="ende"/>
+  </bpmn:process>
+
+  <!--
+    Hand-authored BPMN-DI (AGENTS.md): eine gerade Hauptachse auf y=200 mit 150px Raster.
+    Die beiden Optionen liegen in eigenen Bahnen — Aufbewahrung darüber (y=60),
+    Weiterleitung darunter (y=340) —, verlassen das Gateway oben und unten und kehren von
+    oben und unten in den Join zurück. Der Default läuft gerade auf der Achse durch.
+  -->
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="exchange-austritt">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="152" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="125" y="222" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_lesen" bpmnElement="lesen">
+        <dc:Bounds x="250" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_optionen" bpmnElement="optionen">
+        <dc:Bounds x="425" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="354" y="126" width="84" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_hold" bpmnElement="hold">
+        <dc:Bounds x="550" y="20" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_weiterleitung" bpmnElement="weiterleitung">
+        <dc:Bounds x="550" y="300" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_optionen_join" bpmnElement="optionen_join">
+        <dc:Bounds x="725" y="175" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_text" bpmnElement="text">
+        <dc:Bounds x="850" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_abwesenheit" bpmnElement="abwesenheit">
+        <dc:Bounds x="1000" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_umwandeln" bpmnElement="umwandeln">
+        <dc:Bounds x="1150" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_vollzugriff" bpmnElement="vollzugriff">
+        <dc:Bounds x="1300" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ausblenden" bpmnElement="ausblenden">
+        <dc:Bounds x="1450" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_verteiler_lesen" bpmnElement="verteiler_lesen">
+        <dc:Bounds x="1600" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_austragen" bpmnElement="austragen">
+        <dc:Bounds x="1750" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende" bpmnElement="ende">
+        <dc:Bounds x="1922" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1895" y="222" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1">
+        <di:waypoint x="188" y="200"/>
+        <di:waypoint x="250" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2">
+        <di:waypoint x="350" y="200"/>
+        <di:waypoint x="425" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_hold" bpmnElement="f_hold">
+        <di:waypoint x="450" y="175"/>
+        <di:waypoint x="450" y="60"/>
+        <di:waypoint x="550" y="60"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="458" y="104" width="76" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_fwd" bpmnElement="f_fwd">
+        <di:waypoint x="450" y="225"/>
+        <di:waypoint x="450" y="340"/>
+        <di:waypoint x="550" y="340"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="458" y="270" width="76" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_keine" bpmnElement="f_keine">
+        <di:waypoint x="475" y="200"/>
+        <di:waypoint x="725" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="562" y="206" width="76" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_hold_out" bpmnElement="f_hold_out">
+        <di:waypoint x="650" y="60"/>
+        <di:waypoint x="750" y="60"/>
+        <di:waypoint x="750" y="175"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_fwd_out" bpmnElement="f_fwd_out">
+        <di:waypoint x="650" y="340"/>
+        <di:waypoint x="750" y="340"/>
+        <di:waypoint x="750" y="225"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3">
+        <di:waypoint x="775" y="200"/>
+        <di:waypoint x="850" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4">
+        <di:waypoint x="950" y="200"/>
+        <di:waypoint x="1000" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f5" bpmnElement="f5">
+        <di:waypoint x="1100" y="200"/>
+        <di:waypoint x="1150" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f6" bpmnElement="f6">
+        <di:waypoint x="1250" y="200"/>
+        <di:waypoint x="1300" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f7" bpmnElement="f7">
+        <di:waypoint x="1400" y="200"/>
+        <di:waypoint x="1450" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f8" bpmnElement="f8">
+        <di:waypoint x="1550" y="200"/>
+        <di:waypoint x="1600" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f9" bpmnElement="f9">
+        <di:waypoint x="1700" y="200"/>
+        <di:waypoint x="1750" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f10" bpmnElement="f10">
+        <di:waypoint x="1850" y="200"/>
+        <di:waypoint x="1922" y="200"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
