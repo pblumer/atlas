@@ -252,6 +252,10 @@ var catalogSources = []catalogSource{
 		Files: []string{"abgleich.bpmn", "austrittspruefung.bpmn"},
 		Main:  "abgleich.bpmn",
 	},
+	{
+		ID: "exchange-austritt", App: "Beispiel: Austritt (Exchange)",
+		Files: []string{"exchange-austritt.bpmn"},
+	},
 	{ID: "entra-onboarding-selfservice", App: "Beispiel: Onboarding-Self-Service (Entra)", Dir: "entra-onboarding-selfservice"},
 	{ID: "account-bestellung", App: "Beispiel: Account-Bestellung (Entra)", Dir: "account-bestellung"},
 	// No install: these three ship inside the binary and are deployed into the
