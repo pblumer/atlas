@@ -207,11 +207,15 @@ type entraOp struct {
 	// reason and takes none of the query fields: there is no collection to filter,
 	// project or page.
 	isBinary bool
+	// selects marks a single-object read that takes a select (get-user, get-group):
+	// Graph's default property set leaves out assignedLicenses, employeeId and others a
+	// process may need to read (ADR-0172, amended).
+	selects bool
 }
 
 var entraOps = map[string]entraOp{
 	"create-user":         {needsAttributes: true},
-	"get-user":            {needsUser: true},
+	"get-user":            {needsUser: true, selects: true},
 	"get-user-photo":      {needsUser: true, isBinary: true},
 	"list-users":          {isList: true},
 	"delta-users":         {isDelta: true},
@@ -223,7 +227,7 @@ var entraOps = map[string]entraOp{
 	"add-group-member":    {needsUser: true, needsGroup: true},
 	"remove-group-member": {needsUser: true, needsGroup: true},
 	"create-group":        {needsAttributes: true},
-	"get-group":           {needsGroup: true},
+	"get-group":           {needsGroup: true, selects: true},
 	"list-groups":         {isList: true},
 	"delta-groups":        {isDelta: true},
 	"update-group":        {needsGroup: true, needsAttributes: true},
@@ -423,7 +427,8 @@ func entraAdvancedQuery(taskID string, cn *xmlEntraConnector) (bool, error) {
 //
 //   - filter, search, advancedQuery — a listing only (list-users, list-groups). Graph's
 //     delta endpoint runs none of them, so they are an error on a delta op too.
-//   - select — a listing or a delta query (both return a collection to project).
+//   - select — a listing, a delta query, or a single-object read (get-user, get-group):
+//     each returns something whose properties can be projected.
 //   - deltaLink — a delta query alone; a resume cursor has nothing to resume elsewhere.
 //
 // pageSize and maxUsers are numbers, gated by [entraListBound]; this covers the
@@ -438,8 +443,8 @@ func entraFieldGating(taskID, op string, spec entraOp, cn *xmlEntraConnector) er
 			return fmt.Errorf("compiler: entra task %q sets %s on operation %q, which is not a listing (%s applies to list-users and list-groups)", taskID, a.what, op, a.what)
 		}
 	}
-	if strings.TrimSpace(cn.Select) != "" && !spec.isList && !spec.isDelta {
-		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which returns no collection (select applies to list-users, list-groups and the delta operations)", taskID, op)
+	if strings.TrimSpace(cn.Select) != "" && !spec.isList && !spec.isDelta && !spec.selects {
+		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which reads nothing to project (select applies to get-user, get-group, list-users, list-groups and the delta operations)", taskID, op)
 	}
 	if strings.TrimSpace(cn.DeltaLink) != "" && !spec.isDelta {
 		return fmt.Errorf("compiler: entra task %q sets deltaLink on operation %q, which is not a change-tracking query (deltaLink applies to delta-users and delta-groups)", taskID, op)

@@ -3734,8 +3734,10 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "select", label: "Properties", placeholder: "id,displayName,mail",
-        showIf: (v) => ["list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
-        hint: "An OData $select: which properties each object comes back with. Empty returns Graph's default set. Naming the few a process actually reads keeps a large read out of the state store. On a delta query Graph threads the $select forward into the deltaLink, so a resume keeps it automatically.",
+        showIf: (v) => ["get-user", "get-group", "list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
+        hint: (v) => ["get-user", "get-group"].includes(v.operation)
+          ? "An OData $select: which properties the object comes back with. Empty returns Graph's default set, which leaves out properties such as assignedLicenses and employeeId \u2014 name them here to read them, e.g. id,assignedLicenses,employeeId."
+          : "An OData $select: which properties each object comes back with. Empty returns Graph's default set. Naming the few a process actually reads keeps a large read out of the state store. On a delta query Graph threads the $select forward into the deltaLink, so a resume keeps it automatically.",
       },
       {
         key: "pageSize", label: "Page size", placeholder: "100",

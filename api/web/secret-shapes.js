@@ -75,6 +75,14 @@ export const SECRET_SHAPES = {
     },
     note: "Copied out of the JSON key file Google hands out for a service account (<code>client_email</code> and <code>private_key</code>, camel-cased here). Atlas fills in <code>tokenUrl</code> and the Sheets and Drive <code>scope</code>. Add <code>\"subject\"</code> to act as a Workspace user through domain-wide delegation. Pasting the whole key file is the common mistake: it is that file's two fields, not the file.",
   },
+  "entra:": {
+    what: "a Microsoft Entra ID app credential bundle (JSON): {tenantId, clientId} with a clientSecret or a certificate",
+    // anyOf, not fields: the app proves itself with a secret or with a certificate, and
+    // a bundle is valid when it carries either — the worker refuses one carrying both.
+    anyOf: [["tenantId", "clientId", "clientSecret"], ["tenantId", "clientId", "certificate"]],
+    skeleton: { tenantId: "\u2026", clientId: "\u2026", clientSecret: "\u2026" },
+    note: "Tenant and client id are on the app registration's <b>Overview</b>. A <b>client secret</b> comes from <b>Certificates &amp; secrets &rsaquo; Client secrets</b> and is shown once. A <b>certificate</b> is stored instead as <code>\"certificate\"</code>: the certificate and its <b>unencrypted</b> private key as one PEM text (<code>-----BEGIN CERTIFICATE-----</code> \u2026 <code>-----BEGIN PRIVATE KEY-----</code> \u2026), after uploading the certificate's public part under <b>Certificates &amp; secrets &rsaquo; Certificates</b>. Carry one of the two, never both.",
+  },
   "discord:": {
     what: "a Discord bot credential bundle (JSON): {botToken}",
     fields: ["botToken"],

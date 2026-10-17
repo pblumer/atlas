@@ -210,7 +210,7 @@ export function workerShape(kind, provider) {
       : remedy
       ? "Credential reference (vault {username,password})"
       : (sql ? "\u2026 or a credential reference (a vault key already holding the DSN)"
-        : (entra ? "Credential reference (vault {tenantId, clientId, clientSecret})"
+        : (entra ? "Credential reference (vault {tenantId, clientId, clientSecret or certificate})"
           : (bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)"))),
     credRefPlaceholder: agent
       ? "anthropic_api_key (a vault key holding the key)"
@@ -229,7 +229,7 @@ export function workerShape(kind, provider) {
       : remedy
       ? "remedy_creds (vault {username,password})"
       : (sql ? kind + "_hr_dsn (a vault key holding the whole connection string)"
-        : (entra ? "entra_blumer (vault {tenantId, clientId, clientSecret})"
+        : (entra ? "entra_blumer (vault {tenantId, clientId, clientSecret or certificate})"
           : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token")))),
     hint: agent
       ? "The model an <b>agent-driven ad-hoc subprocess</b> asks which of its tools to run next. Its <b>API key</b> is a vault key named here \u2014 never a value \u2014 and the endpoint is optional: each wire format has a public default, so name one only for a gateway, a proxy or a self-hosted deployment. A round is one model call, minutes long and able to hang, so atlas never runs it itself: it supervises a worker for this kind and picks the model up as soon as you save, with no restart. <b>Messages</b> is Anthropic's format (also OpenRouter's <code>/api/v1/messages</code>); <b>Chat Completions</b> is OpenAI's, and anything calling itself OpenAI-compatible \u2014 that one has no default model, so name it."

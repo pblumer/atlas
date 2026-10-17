@@ -2,13 +2,8 @@ package oauth2
 
 import (
 	"context"
-	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base64"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"net/http"
@@ -93,21 +88,7 @@ func (f *saFetcher) signAssertion() (string, error) {
 	if f.c.Subject != "" {
 		claims["sub"] = f.c.Subject
 	}
-	hb, err := json.Marshal(header)
-	if err != nil {
-		return "", fmt.Errorf("%s: encode JWT header: %w", f.c.Kind, err)
-	}
-	cb, err := json.Marshal(claims)
-	if err != nil {
-		return "", fmt.Errorf("%s: encode JWT claims: %w", f.c.Kind, err)
-	}
-	signingInput := base64.RawURLEncoding.EncodeToString(hb) + "." + base64.RawURLEncoding.EncodeToString(cb)
-	digest := sha256.Sum256([]byte(signingInput))
-	sig, err := rsa.SignPKCS1v15(rand.Reader, f.c.PrivateKey, crypto.SHA256, digest[:])
-	if err != nil {
-		return "", fmt.Errorf("%s: sign JWT assertion: %w", f.c.Kind, err)
-	}
-	return signingInput + "." + base64.RawURLEncoding.EncodeToString(sig), nil
+	return signRS256(f.c.Kind, f.c.PrivateKey, header, claims)
 }
 
 // ParseRSAPrivateKey decodes a PEM-encoded RSA private key for JWT signing: PKCS#8, as

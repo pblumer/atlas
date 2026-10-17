@@ -14,6 +14,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Entra ID worker signs in with a certificate.** An app registration that may not hold
+  a client secret can now prove itself with a certificate: set
+  `ATLAS_ENTRA_<NAME>_CLIENT_CERTIFICATE` (or `_CLIENT_CERTIFICATE_REF` for a vault key) to
+  the certificate and its unencrypted private key as one PEM text, or store
+  `{tenantId, clientId, certificate}` as a Console tenant's bundle. The worker signs a
+  short-lived client assertion with the key instead of sending a shared secret; a tenant
+  configured with both a secret and a certificate is refused at startup. The Secrets panel
+  now checks an Entra bundle's shape
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended).
+- **An Entra read names the properties it wants.** `get-user` and `get-group` take the
+  `select` a listing already had, so a process can read what Graph's default property set
+  leaves out — `id,assignedLicenses,employeeId`, say, to see whether a resource account has
+  been licensed yet ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended).
 - **A script task throws a BPMN error that an error boundary catches.** An error boundary on a script task could be drawn but
   never reached: a script either returned a result or failed, and a failure was retried
   three times and then parked on an incident — the "userPrincipalName already exists" the

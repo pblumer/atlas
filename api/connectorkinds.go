@@ -925,7 +925,7 @@ func validateAgentConnector(p *createConnectorParams) string {
 func validateEntraConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
 	if p.CredentialsRef == "" {
-		return "an entra worker requires a credentialsRef naming a vault bundle {tenantId, clientId, clientSecret}"
+		return "an entra worker requires a credentialsRef naming a vault bundle {tenantId, clientId, clientSecret} or {tenantId, clientId, certificate}"
 	}
 	return ""
 }

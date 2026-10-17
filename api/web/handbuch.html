@@ -6298,10 +6298,13 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <ol>
           <li data-l="de"><b>App-Registrierung</b> im Entra-Admin-Center anlegen – eine <b>eigene, nur für diesen
             Worker</b>. Tenant-ID und Client-ID notieren, dann <i>Zertifikate &amp; Geheimnisse</i> → neues
-            Client-Secret; der Wert ist nur einmal sichtbar.</li>
+            Client-Secret; der Wert ist nur einmal sichtbar. Oder statt eines Secrets unter <i>Zertifikate</i> den
+            öffentlichen Teil eines Zertifikats hochladen und das Zertifikat samt privatem Schlüssel für den Vault
+            behalten.</li>
           <li data-l="en">Create an <b>app registration</b> in the Entra admin center – a <b>dedicated one, for this
             worker only</b>. Note the tenant id and client id, then <i>Certificates &amp; secrets</i> → new client
-            secret; the value is shown once.</li>
+            secret; the value is shown once. Or, instead of a secret, upload a certificate's public part under
+            <i>Certificates</i> and keep the certificate with its private key for the vault.</li>
           <li data-l="de"><b>API-Berechtigungen → Microsoft Graph → Anwendungsberechtigungen.</b> Für den üblichen
             Joiner/Mover/Leaver-Fall genügen genau zwei: <code>User.ReadWrite.All</code> und
             <code>Group.ReadWrite.All</code>. Verwaltet ein Prozess nur Mitgliedschaften und legt keine Gruppen an,
@@ -6321,10 +6324,15 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             ist der Schritt, dessen Fehlen sich als „es tut nichts, ohne Fehler" äussert.</li>
           <li data-l="en"><b>Grant admin consent.</b> Application permissions take effect only afterwards – this is the
             step whose absence shows up as "it does nothing, without an error".</li>
-          <li data-l="de">Secret anlegen: <code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code>, dann
-            einen Worker vom Typ <b>Microsoft Entra ID</b> mit einem Namen und <b>ohne Endpoint</b>.</li>
-          <li data-l="en">Create the secret <code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code>, then
-            a worker of type <b>Microsoft Entra ID</b> with a name and <b>no endpoint</b>.</li>
+          <li data-l="de">Secret anlegen: <code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code> – mit
+            Zertifikat stattdessen <code>{"tenantId": "…", "clientId": "…", "certificate": "…"}</code>, wobei
+            <code>certificate</code> das Zertifikat und seinen <b>unverschlüsselten</b> privaten Schlüssel als einen
+            PEM-Text enthält; nie beides. Dann einen Worker vom Typ <b>Microsoft Entra ID</b> mit einem Namen und
+            <b>ohne Endpoint</b>.</li>
+          <li data-l="en">Create the secret <code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code> – with
+            a certificate instead <code>{"tenantId": "…", "clientId": "…", "certificate": "…"}</code>, where
+            <code>certificate</code> holds the certificate and its <b>unencrypted</b> private key as one PEM text;
+            never both. Then a worker of type <b>Microsoft Entra ID</b> with a name and <b>no endpoint</b>.</li>
           <li data-l="de">Prüfen, dass der Dienstprinzipal <b>keine Verzeichnisrolle</b> hält, die er nicht braucht
             (Entra → Rollen und Administratoren).</li>
           <li data-l="en">Check that the service principal holds <b>no directory role</b> it does not need (Entra →

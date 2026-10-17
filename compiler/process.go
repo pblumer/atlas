@@ -840,8 +840,10 @@ type ConnectorTaskDetail struct {
 	//
 	// EntraFilter, EntraSelect, EntraPageSize and EntraMaxUsers configure list-users
 	// and are zero on every other operation, which the compiler enforces rather than
-	// ignores. EntraFilter is a literal-or-FEEL OData $filter and EntraSelect the
-	// interned $select projection. EntraPageSize is the $top asked of each request
+	// ignores — except EntraSelect, which get-user and get-group also take, because
+	// Graph's default property set leaves out what a process may need to read
+	// (ADR-0172, amended). EntraFilter is a literal-or-FEEL OData $filter and EntraSelect
+	// the interned $select projection. EntraPageSize is the $top asked of each request
 	// (0 leaves Graph its own page size) and EntraMaxUsers caps what may reach the
 	// result variable (0 is unbounded); the compiler has already applied the defaults,
 	// so the runtime interprets nothing (I5). EntraSearch is a literal-or-FEEL $search

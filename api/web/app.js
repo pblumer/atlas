@@ -867,7 +867,7 @@ const WORKER_TYPES = [
   },
   {
     id: "entra", name: "Entra ID", kind: "Cloud directory",
-    desc: "Creates, licenses, disables, lists or delta-syncs accounts and groups in a Microsoft Entra ID tenant via the Graph API \u2014 on a worker, off the processor loop. A Graph collection arrives page by page and the worker follows the pages itself, so a list operation writes a whole list into a result variable rather than a continuation token. Configure each tenant below: its {tenantId, clientId, clientSecret} bundle lives in the vault and never enters a model. Worker-only, so the tenant credential never reaches the engine.",
+    desc: "Creates, licenses, disables, lists or delta-syncs accounts and groups in a Microsoft Entra ID tenant via the Graph API \u2014 on a worker, off the processor loop. A Graph collection arrives page by page and the worker follows the pages itself, so a list operation writes a whole list into a result variable rather than a continuation token. Configure each tenant below: its {tenantId, clientId} bundle with a client secret or a certificate lives in the vault and never enters a model. Worker-only, so the tenant credential never reaches the engine.",
     refs: "ADR-0172", status: "active", statusLabel: "configured below",
   },
   {

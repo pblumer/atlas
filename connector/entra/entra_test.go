@@ -794,7 +794,7 @@ func TestEntraOpsMatchTheConnector(t *testing.T) {
 				{`filter="accountEnabled eq true"`, spec.IsList},
 				{`search="&#34;displayName:Arno&#34;"`, spec.IsList},
 				{`advancedQuery="true"`, spec.IsList},
-				{`select="id"`, spec.IsList || spec.IsDelta},
+				{`select="id"`, spec.IsList || spec.IsDelta || spec.Selects},
 				{`pageSize="10"`, spec.IsList || spec.IsDelta},
 				{`maxUsers="10"`, spec.IsList || spec.IsDelta},
 				{`deltaLink="https://graph.microsoft.com/v1.0/users/delta?$deltatoken=t"`, spec.IsDelta},
