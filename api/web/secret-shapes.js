@@ -10,8 +10,8 @@
 // The shapes track the Go side: connector/mail/oauth.go's credentialBundle,
 // connector/sharepoint/oauth.go's, api/connectors.go's remedyCredentials, and
 // connector/jira/rest.go's, connector/googlesheets/oauth.go's,
-// connector/discord/rest.go's and connector/s3/rest.go's credentialBundle. A field added
-// there is a field added here.
+// connector/discord/rest.go's and connector/s3/rest.go's credentialBundle, and
+// connector/exchange/config.go's Bundle. A field added there is a field added here.
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -86,6 +86,14 @@ export const SECRET_SHAPES = {
     fields: ["accessKeyId", "secretAccessKey", "region"],
     skeleton: { accessKeyId: "AKIA\u2026", secretAccessKey: "\u2026", region: "eu-central-1" },
     note: "From <b>AWS console &rsaquo; IAM &rsaquo; Users &rsaquo; Security credentials &rsaquo; Create access key</b>, or your store's own console (MinIO: <b>Access Keys &rsaquo; Create</b>). The <b>region</b> belongs in here rather than beside it because the signature is computed with it — a self-hosted store that has no regions commonly answers to <code>us-east-1</code>. Add <code>\"sessionToken\"</code> for a key issued by STS. The bucket is not part of the credential: a task names it, so one key can serve several.",
+  },
+  "exchange:": {
+    what: "an Exchange organization (JSON): {organization, clientId, certificate} for Exchange Online, or {target: \"onprem\", …} for an Exchange Server",
+    // Three shapes: Online with a certificate, Online with a secret, or a server, which
+    // may carry nothing but its target (a Kerberos service account needs no password).
+    anyOf: [["organization", "clientId", "certificate"], ["organization", "clientId", "clientSecret"], ["target"]],
+    skeleton: { organization: "contoso.onmicrosoft.com", clientId: "\u2026", certificate: "-----BEGIN CERTIFICATE-----\u2026-----END CERTIFICATE-----\n-----BEGIN PRIVATE KEY-----\u2026-----END PRIVATE KEY-----" },
+    note: "<b>Exchange Online:</b> the app registration's client id, the tenant's initial domain, and its certificate with the private key as one PEM text (<code>clientSecret</code> in place of <code>certificate</code> is accepted, but Microsoft documents certificates for unattended Exchange administration). The app needs <code>Exchange.ManageAsApp</code> with admin consent and an Exchange role in Entra. <b>Exchange Server:</b> <code>{\"target\": \"onprem\"}</code>, with <code>username</code> and <code>password</code> unless the worker runs as a Kerberos service account; the server's Remote PowerShell URI is the worker's endpoint, not part of this secret.",
   },
   "mail:smtp": { what: "the SMTP password for the worker's sender address (a plain string)" },
   "mail:preview": { what: "nothing — the preview provider needs no credential" },

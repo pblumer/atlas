@@ -205,6 +205,10 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// engine renders its client secret out of the vault. Only the secret — tenant and
 		// client id are not secret and are inherited from this process's own environment.
 		"entra": s.entraWorkerEnv,
+		// Exchange is worker-only like Entra and provisioned for S3's reason: the bundle
+		// is the whole of what says which organization and as whom, and it lives in the
+		// vault, so a supervised worker holding neither could serve no Exchange task.
+		connectorKindExchange: s.exchangeWorkerEnv,
 		// The three SQL products. Unlike every kind above them the *whole* configuration
 		// is the secret — a DSN has no public half — so what is rendered here is one
 		// connection string per configured database and nothing else

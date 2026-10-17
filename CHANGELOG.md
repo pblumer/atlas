@@ -14,6 +14,25 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A process administers Exchange mailboxes, permissions and distribution groups, online and on-premises.** A new
+  worker-only Worker Type, **Microsoft Exchange**, offers the ExchangePowerShell cmdlets an
+  administration process uses as named, checked operations: create shared, room and
+  equipment mailboxes, update and convert them, add and remove addresses; grant and revoke
+  full access, send as, send on behalf and folder permissions; create distribution groups
+  and mail contacts and manage their members; set automatic replies, forwarding, litigation
+  hold, calendar processing and quotas — and run any `Get-` cmdlet, read only. A model says
+  *grant full access*; the Worker adds `AccessRights FullAccess` and `InheritanceType All`,
+  and where Exchange Online and Exchange Server need different cmdlets for one intent (Send
+  As) it picks the one for its organization, so one model runs against either and a hybrid
+  organization is two Workers. Parameters keep the cmdlets' own names and are checked at
+  deploy; one that evaluates to null is left out rather than sent, so an unset variable never
+  clears a property. Exchange Online is reached over the REST endpoint the Exchange Online
+  PowerShell module itself uses, with an app-only certificate (or client secret) token, and
+  needs nothing installed on the worker host; an Exchange Server is reached over Remote
+  PowerShell from a pwsh the worker starts. The organization's credential lives in the vault
+  and reaches only the worker
+  ([ADR-draft-exchange-worker](docs/adr/draft-exchange-worker.md)).
+
 - **A script task throws a BPMN error that an error boundary catches.** An error boundary on a script task could be drawn but
   never reached: a script either returned a result or failed, and a failure was retried
   three times and then parked on an incident — the "userPrincipalName already exists" the

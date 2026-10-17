@@ -1060,6 +1060,24 @@ type ConnectorTaskDetail struct {
 	S3SourceKey    RestExpr
 	S3ExpiresIn    int32
 	S3Metadata     []RestKV
+	// Exchange fields (JobType == ExchangeJobType, ADR-draft-exchange-worker).
+	// Connector (above) names the configured Exchange Worker, and ExchangeConnector
+	// carries it as literal-or-FEEL when a model picks the organization at runtime, as
+	// Entra's does. ExchangeOp is the interned operation — a row of
+	// connector/exchange/catalog — and ExchangeCmdlet the interned Get- cmdlet of the
+	// generic read, the empty name on every other operation.
+	//
+	// ExchangeParameters is the authored parameter object, compiled from the model's
+	// JSON template to one FEEL context at deploy (I5); ExchangeParametersVar names the
+	// variable holding the object instead. At most one is set. ExchangeMaxResults bounds
+	// a listing — compiled structure, with its default already applied — and is zero on
+	// every other operation. ResultVar (above) receives what the cmdlet returned.
+	ExchangeConnector     RestExpr
+	ExchangeOp            int32
+	ExchangeCmdlet        int32
+	ExchangeParameters    RestExpr
+	ExchangeParametersVar int32
+	ExchangeMaxResults    int32
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

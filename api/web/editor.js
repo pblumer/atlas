@@ -8,6 +8,7 @@ import { attachCodeEditor } from "./code-editor.js";
 import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
 import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } from "./entra-attrmask.js";
+import { exchangeOperationOptions, exchangeParametersPlaceholder, exchangeParametersHint, exchangeIsListing, exchangeResultType, exchangeResultShape } from "./exchange-ops.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { lookupSamples, sampleFor } from "./instance-samples.js";
 import { devLang } from "./dev-lang.js";
@@ -3764,6 +3765,54 @@ const SERVICE_TASK_KINDS = [
         hint: (v) => "Nimmt auf, was Graph zurückgibt. " + entraResultShape(v.operation) +
           " Der Wert ist zur Laufzeit unter Operations → Instanz → Variablen sichtbar und im Modell als =" +
           (v.resultVariable ? v.resultVariable : "konto") + ".<feld> referenzierbar. Leer lassen, um ihn zu verwerfen.",
+      },
+    ],
+  },
+  {
+    id: "exchange", name: "Microsoft Exchange", group: "Directory & identity", desc: "Administer Exchange Online or an Exchange Server: mailboxes (create shared, room and equipment mailboxes, update, convert, add and remove addresses, remove), permissions (full access, send as, send on behalf, folder permissions), distribution groups and mail contacts with their members, and mailbox settings (automatic reply, forwarding, litigation hold, calendar processing, quotas) - plus a read-only escape hatch for any Get- cmdlet", icon: "X",
+    // An envelope on Exchange blue: the mailbox this Worker Type administers, beside
+    // Entra's directory account in the same group.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0364b8"/><rect x="3" y="4.5" width="10" height="7" rx="1" fill="#fff"/><path d="M3.5 5.2 8 8.6l4.5-3.4" fill="none" stroke="#0364b8" stroke-width="1.2"/></svg>`,
+    ext: "atlas:ExchangeConnector",
+    fields: [
+      { group: "Organization" },
+      {
+        key: "connector", label: "Worker", datalist: "exchange", placeholder: "contoso",
+        hint: "The configured Exchange Worker this task administers, by its name under Workers in the Console: an Exchange Online tenant or an Exchange Server. Its credential reaches that worker and never the engine (ADR-draft-exchange-worker). A value starting with = is a FEEL expression, so one process can choose the organization at runtime, e.g. both halves of a hybrid organization.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: exchangeOperationOptions(),
+      },
+      {
+        key: "cmdlet", label: "Cmdlet", placeholder: "Get-ADPermission",
+        showIf: (v) => v.operation === "run-get-cmdlet",
+        hint: "The Get- cmdlet to run, e.g. Get-ADPermission, Get-MobileDevice or Get-InboxRule. Only Get- cmdlets are accepted, checked at deploy, so the task can only read; a change goes through the operation that names it. The result is always an array.",
+      },
+      {
+        key: "parameters", label: "Parameters", type: "json", rows: 8,
+        // Inline JSON and a variable are mutually exclusive (the compiler refuses both):
+        // the editor shows until a variable is named, and vice versa.
+        showIf: (v) => !v.parametersVariable,
+        placeholder: (v) => exchangeParametersPlaceholder(v.operation || "get-mailbox"),
+        hint: (v) => exchangeParametersHint(v.operation || "get-mailbox"),
+      },
+      {
+        key: "parametersVariable", label: "Parameters variable", placeholder: "aenderung",
+        showIf: (v) => !v.parameters,
+        hint: "Instead of the JSON above: a process variable holding the parameter object, for a process that assembles it itself. Its parameters are checked when the task runs rather than at deploy.",
+      },
+      {
+        key: "maxResults", label: "Maximum results", placeholder: "1000",
+        showIf: (v) => exchangeIsListing(v.operation || "get-mailbox"),
+        hint: "Caps what may land in the result variable. A listing returning more fails the task instead of being cut short, because a short list is a wrong answer a process would act on. Empty uses 1000.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", resultType: (v) => exchangeResultType(v.operation || "get-mailbox"), placeholder: "postfach",
+        hint: (v) => exchangeResultShape(v.operation || "get-mailbox") + " Objects carry the cmdlet's properties under their own names, complex values as text, e.g. =" +
+          (v.resultVariable ? v.resultVariable : "postfach") + ".PrimarySmtpAddress.",
       },
     ],
   },

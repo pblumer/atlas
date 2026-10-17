@@ -39,6 +39,7 @@ func TestConnectorCompilersRegistry(t *testing.T) {
 		{Agent: &xmlAgentConnector{}},
 		{Discord: &xmlDiscordConnector{}},
 		{S3: &xmlS3Connector{}},
+		{Exchange: &xmlExchangeConnector{}},
 	}
 	if len(cases) != len(connectorCompilers) {
 		t.Fatalf("cases = %d, connectorCompilers = %d; keep them in step", len(cases), len(connectorCompilers))

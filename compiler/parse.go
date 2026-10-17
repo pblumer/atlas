@@ -2437,6 +2437,11 @@ type xmlServiceTask struct {
 	// — put an object down, read a small one back, ask whether it is there, list what is
 	// under a prefix, copy one, delete one, or mint a link somebody can open it with.
 	S3 *xmlS3Connector `xml:"extensionElements>s3Connector"`
+	// Exchange, when present, marks this service task a Microsoft Exchange task
+	// (ADR-draft-exchange-worker): one administration operation — a mailbox, a
+	// permission, a distribution group, a mailbox setting — against an Exchange Online
+	// or Exchange Server organization a *worker* holds the credential for.
+	Exchange *xmlExchangeConnector `xml:"extensionElements>exchangeConnector"`
 	// Agent, when present, marks this service task an AI task: one call to a language
 	// model, one answer into one variable (ADR-0256). It is the same extension element an
 	// ad-hoc container carries, read for its other half — prompt and resultVariable rather
@@ -2686,6 +2691,27 @@ type xmlEntraConnector struct {
 	Search             string `xml:"search,attr"`
 	AdvancedQuery      string `xml:"advancedQuery,attr"`
 	DeltaLink          string `xml:"deltaLink,attr"`
+	// Retries is the task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlExchangeConnector is the <atlas:exchangeConnector> extension on a service task
+// (ADR-draft-exchange-worker). connector names the Exchange Worker (literal-or-FEEL);
+// as with Entra there is no credential attribute, because none enters the engine.
+// operation is a row of connector/exchange/catalog. parameters is the cmdlet's
+// parameters as a JSON object whose string leaves may be =FEEL, and parametersVariable
+// names a variable holding that object instead. cmdlet is the Get- cmdlet of the
+// generic read (run-get-cmdlet) and is refused on every other operation; maxResults
+// bounds a listing; resultVariable receives what the cmdlet returned.
+type xmlExchangeConnector struct {
+	Connector          string `xml:"connector,attr"`
+	Operation          string `xml:"operation,attr"`
+	Cmdlet             string `xml:"cmdlet,attr"`
+	Parameters         string `xml:"parameters,attr"`
+	ParametersVariable string `xml:"parametersVariable,attr"`
+	MaxResults         string `xml:"maxResults,attr"`
+	ResultVariable     string `xml:"resultVariable,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

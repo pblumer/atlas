@@ -871,6 +871,11 @@ const WORKER_TYPES = [
     refs: "ADR-0172", status: "active", statusLabel: "configured below",
   },
   {
+    id: "exchange", name: "Microsoft Exchange", kind: "Mailbox administration",
+    desc: "Administers Exchange Online or an Exchange Server from a process: shared, room and equipment mailboxes, full access, send as, send on behalf and folder permissions, distribution groups and mail contacts with their members, automatic replies, forwarding, litigation hold, calendar processing and quotas \u2014 plus a read-only run of any Get- cmdlet. Online is reached over the REST endpoint the Exchange Online PowerShell module uses, an Exchange Server over Remote PowerShell from the worker host. Configure each organization below: its bundle lives in the vault and never enters a model. Worker-only, so the credential never reaches the engine.",
+    refs: "ADR-draft-exchange-worker", status: "active", statusLabel: "configured below",
+  },
+  {
     id: "mssql", name: "Microsoft SQL Server", kind: "Database",
     desc: sqlWorkerTypeDesc("Microsoft SQL Server", "MSSQL", "@p1", "SQL Server is the one product of the three that also binds them by name (@id), which is why an object-shaped parameters variable is accepted here and refused by the other two."),
     refs: "ADR-0173 \u00b7 ADR-0188 \u00b7 ADR-0221", status: "active", statusLabel: "configured below",
@@ -4716,7 +4721,7 @@ function wireWorkerManagement(workers) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field provider-field" style="margin:0"><span class="provider-label">Provider</span><select name="provider"></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>

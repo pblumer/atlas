@@ -159,6 +159,22 @@ export const WORKER_TYPE_DOCS = {
     trap: `Resetting a password or touching a role-bearing account needs more than <code>User.ReadWrite.All</code>: the app must also hold a <b>directory role</b> such as <i>User Administrator</i> — and even then it cannot act on holders of higher-privileged roles.`,
   },
 
+  exchange: {
+    anchor: "runbook-exchange", title: "Microsoft Exchange",
+    checked: "2026-10",
+    needs: `A configured Microsoft Exchange Worker in ${WORKERS} per organization: a vault bundle that says which one and as whom. Exchange Online needs no endpoint; an Exchange Server's endpoint is its Remote PowerShell URI. <i>These steps are written from Microsoft's documentation and have not yet been walked at a tenant.</i>`,
+    steps: [
+      `<b>Exchange Online:</b> Entra admin center &rarr; <b>App registrations</b> &rarr; new registration, <b>dedicated to this worker</b>. Note the <i>client id</i>; the organization is the tenant's initial domain, <code>contoso.onmicrosoft.com</code>.`,
+      `<i>API permissions</i> &rarr; <i>APIs my organization uses</i> &rarr; <b>Office 365 Exchange Online</b> &rarr; <b>Application permissions</b> &rarr; <code>Exchange.ManageAsApp</code>, then <b>Grant admin consent</b>.`,
+      `<i>Certificates &amp; secrets</i> &rarr; upload the public half of a certificate. Keep the certificate and its private key together as one PEM text for the bundle; Microsoft documents certificates, not client secrets, for unattended Exchange administration.`,
+      `Give the app an Exchange role: Entra &rarr; <b>Roles and administrators</b> &rarr; <i>Exchange Recipient Administrator</i> (recipients and permissions) or <i>Exchange Administrator</i> &rarr; add the app. Without a role every call is refused.`,
+      `Store the bundle in the vault: ${VAULT}, e.g. <code>exo_contoso</code> holding <code>{"organization": "contoso.onmicrosoft.com", "clientId": "…", "certificate": "-----BEGIN CERTIFICATE-----…-----BEGIN PRIVATE KEY-----…"}</code>.`,
+      `<b>Exchange Server:</b> an account in a role group that covers the tasks (<i>Recipient Management</i>, or <i>Organization Management</i> for everything), and a worker host that reaches <code>http://exch01.contoso.local/PowerShell/</code> — in practice a Windows domain member with PowerShell 7 or Windows PowerShell 5.1, running <code>atlas worker --connector exchange</code> as that account, so Kerberos needs no password. The bundle is then <code>{"target": "onprem"}</code>, or carries <code>username</code> and <code>password</code>.`,
+      `${WORKERS} &rarr; <b>New worker</b>: type <b>Microsoft Exchange</b>, a name, the credential reference, and for a server its Remote PowerShell URI as endpoint.`,
+    ],
+    trap: `An app with <code>Exchange.ManageAsApp</code> but no Exchange role in Entra — or a role assignment that has not yet taken effect, which can take a while — is refused on every call. The permission lets the app ask; the role is what it may do.`,
+  },
+
   // The three database entries quote the connection string exactly as the Console's own
   // field placeholder does, `PASSWORT` included (SQL_DSN_EXAMPLES in workerdialog.js):
   // an operator reads the example here and types into the field there, and two spellings

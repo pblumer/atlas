@@ -444,6 +444,21 @@ const S3JobType = "io.atlas.s3"
 // worker uses JiraJobTypeIndex.
 const S3JobTypeIndex int32 = 32
 
+// ExchangeJobType is the reserved job type a Microsoft Exchange task carries
+// (ADR-draft-exchange-worker). One job type serves every Exchange operation — a
+// mailbox, a permission on one, a distribution group, a mailbox setting — and both
+// targets, Exchange Online and Exchange Server: which cmdlet runs is decided by the
+// operation and by the Worker's target, not by a reserved index of its own.
+//
+// Like Entra's, nothing in the engine subscribes to it: the kind is worker-only, so an
+// app registration or a service account that can administer every mailbox in an
+// organization never enters the engine.
+const ExchangeJobType = "io.atlas.exchange"
+
+// ExchangeJobTypeIndex is the interned index ExchangeJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it thirty-fourth, so it is always 33.
+const ExchangeJobTypeIndex int32 = 33
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -484,6 +499,7 @@ var reservedJobTypes = []string{
 	ShopJobType,          // 30
 	ShopCommandJobType,   // 31
 	S3JobType,            // 32
+	ExchangeJobType,      // 33
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -1697,6 +1713,53 @@ func (b *Builder) AddEntraConnectorTask(cfg EntraConfig) int32 {
 		EntraSearch:        cfg.Search,
 		EntraAdvanced:      cfg.Advanced,
 		EntraDeltaLink:     cfg.DeltaLink,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// ExchangeConfig is the deploy-time configuration of an Exchange task
+// (ADR-draft-exchange-worker). Worker names the configured Exchange Worker and
+// WorkerExpr carries it as literal-or-FEEL when the organization is chosen at runtime,
+// as Entra's does; Op is a row of connector/exchange/catalog; Cmdlet is the Get- cmdlet
+// of the generic read and empty on every other operation. Parameters is the authored
+// parameter object compiled to one FEEL context, ParametersVar the variable holding it
+// instead; the compiler has refused a model that sets both. MaxResults bounds a listing
+// and is zero on every other operation.
+type ExchangeConfig struct {
+	Worker        string
+	WorkerExpr    RestExpr
+	Op            string
+	Cmdlet        string
+	Parameters    RestExpr
+	ParametersVar string
+	MaxResults    int32
+	ResultVar     string
+	Retries       int32
+}
+
+// AddExchangeConnectorTask adds an Exchange task and returns its element id. Like a
+// service task it creates a job on activation and waits; the job carries the reserved
+// ExchangeJobType, which nothing in the engine subscribes to — the kind is worker-only,
+// so the job waits for a worker that holds the organization's credential.
+func (b *Builder) AddExchangeConnectorTask(cfg ExchangeConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:               b.intern(ExchangeJobType),
+		Connector:             b.intern(cfg.Worker),
+		ExchangeConnector:     cfg.WorkerExpr,
+		Subject:               -1, // not a clio task
+		EventType:             -1,
+		ClioQuery:             -1,
+		ReduceSpec:            -1,
+		Method:                -1, // an Exchange operation, not an HTTP method, is authored
+		Auth:                  -1, // the credential lives on the worker
+		ResultVar:             b.intern(cfg.ResultVar),
+		Retries:               cfg.Retries,
+		ExchangeOp:            b.intern(cfg.Op),
+		ExchangeCmdlet:        b.intern(cfg.Cmdlet),
+		ExchangeParameters:    cfg.Parameters,
+		ExchangeParametersVar: b.intern(cfg.ParametersVar),
+		ExchangeMaxResults:    cfg.MaxResults,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
