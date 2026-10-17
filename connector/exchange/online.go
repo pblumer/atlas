@@ -150,16 +150,18 @@ func (c *OnlineClient) post(ctx context.Context, cmdlet, target, anchor string, 
 		return nil, "", fmt.Errorf("exchange: %s: %w", cmdlet, err)
 	}
 	defer resp.Body.Close()
-	// One byte past the budget, so an oversized page is refused rather than cut short.
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, c.maxPage+1))
+	// budget is limits.Default().Payload, set by NewOnlineClient. One byte past it, so an
+	// oversized page is refused rather than cut short.
+	budget := c.maxPage
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, budget+1))
 	if err != nil {
 		return nil, "", fmt.Errorf("exchange: read %s response: %w", cmdlet, err)
 	}
 	if resp.StatusCode/100 != 2 {
 		return nil, "", failure(cmdlet, resp.StatusCode, raw)
 	}
-	if int64(len(raw)) > c.maxPage {
-		return nil, "", fmt.Errorf("exchange: %s answered a page larger than the %d byte payload budget; narrow the call", cmdlet, c.maxPage)
+	if int64(len(raw)) > budget {
+		return nil, "", fmt.Errorf("exchange: %s answered a page larger than the %d byte payload budget; narrow the call", cmdlet, budget)
 	}
 	var page struct {
 		Value    *[]any `json:"value"`
