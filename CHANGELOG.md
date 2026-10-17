@@ -31,7 +31,7 @@ _Changed_ / _Removed_ for each version.
   needs nothing installed on the worker host; an Exchange Server is reached over Remote
   PowerShell from a pwsh the worker starts. The organization's credential lives in the vault
   and reaches only the worker
-  ([ADR-draft-exchange-worker](docs/adr/draft-exchange-worker.md)).
+  ([ADR-0462](docs/adr/0462-exchange-worker.md)).
 
 - **A script task throws a BPMN error that an error boundary catches.** An error boundary on a script task could be drawn but
   never reached: a script either returned a result or failed, and a failure was retried

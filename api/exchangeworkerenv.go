@@ -21,7 +21,7 @@ const (
 
 // exchangeWorkerEnv renders the organizations a supervised Exchange worker needs out of
 // the vault, one set of variables per Exchange Worker the store holds
-// (ADR-draft-exchange-worker).
+// (ADR-0462).
 //
 // It is S3's arrangement: the bundle travels whole, as one opaque JSON value, and the
 // endpoint beside it. The bundle's shape depends on its target — an app registration

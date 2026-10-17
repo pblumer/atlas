@@ -1060,7 +1060,7 @@ type ConnectorTaskDetail struct {
 	S3SourceKey    RestExpr
 	S3ExpiresIn    int32
 	S3Metadata     []RestKV
-	// Exchange fields (JobType == ExchangeJobType, ADR-draft-exchange-worker).
+	// Exchange fields (JobType == ExchangeJobType, ADR-0462).
 	// Connector (above) names the configured Exchange Worker, and ExchangeConnector
 	// carries it as literal-or-FEEL when a model picks the organization at runtime, as
 	// Entra's does. ExchangeOp is the interned operation — a row of

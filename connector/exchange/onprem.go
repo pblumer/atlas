@@ -63,7 +63,7 @@ type Runner interface {
 }
 
 // OnPremClient runs cmdlets on Exchange Server through Remote PowerShell
-// (ADR-draft-exchange-worker). Exchange Server has no REST surface for its management
+// (ADR-0462). Exchange Server has no REST surface for its management
 // cmdlets — Remote PowerShell to its Microsoft.Exchange endpoint is the supported way
 // in — so this backend starts PowerShell on the worker host for each call.
 //

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises
+# ADR-0462: A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -1,5 +1,5 @@
 // Package exchange administers Microsoft Exchange — Exchange Online and Exchange
-// Server — on behalf of a BPMN service task (ADR-draft-exchange-worker).
+// Server — on behalf of a BPMN service task (ADR-0462).
 //
 // # What it is for
 //

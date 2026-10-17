@@ -54,7 +54,7 @@ type OnlineConfig struct {
 }
 
 // OnlineClient runs cmdlets in Exchange Online over the REST endpoint the Exchange
-// Online PowerShell module itself uses (ADR-draft-exchange-worker).
+// Online PowerShell module itself uses (ADR-0462).
 //
 // The endpoint is the module's transport, not a published API: Microsoft documents the
 // module and not the requests it sends. That is the decision the record weighs — what

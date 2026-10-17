@@ -3778,7 +3778,7 @@ const SERVICE_TASK_KINDS = [
       { group: "Organization" },
       {
         key: "connector", label: "Worker", datalist: "exchange", placeholder: "contoso",
-        hint: "The configured Exchange Worker this task administers, by its name under Workers in the Console: an Exchange Online tenant or an Exchange Server. Its credential reaches that worker and never the engine (ADR-draft-exchange-worker). A value starting with = is a FEEL expression, so one process can choose the organization at runtime, e.g. both halves of a hybrid organization.",
+        hint: "The configured Exchange Worker this task administers, by its name under Workers in the Console: an Exchange Online tenant or an Exchange Server. Its credential reaches that worker and never the engine (ADR-0462). A value starting with = is a FEEL expression, so one process can choose the organization at runtime, e.g. both halves of a hybrid organization.",
       },
       { group: "Operation" },
       {

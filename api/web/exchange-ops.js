@@ -1,5 +1,5 @@
 // exchange-ops.js — what the Modeler knows about the Microsoft Exchange Worker's
-// operations (ADR-draft-exchange-worker): each operation's label, which cmdlet
+// operations (ADR-0462): each operation's label, which cmdlet
 // parameters it requires and takes, which ones it sets itself, what it returns, and
 // against which targets it runs.
 //

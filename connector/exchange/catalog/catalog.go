@@ -1,6 +1,6 @@
 // Package catalog is the Exchange Worker's operation table: which Exchange cmdlet each
 // low-code operation runs, which parameters a model must and may author for it, and
-// which ones the operation sets itself (ADR-draft-exchange-worker).
+// which ones the operation sets itself (ADR-0462).
 //
 // # Why it is a package of its own
 //

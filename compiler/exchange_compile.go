@@ -23,7 +23,7 @@ const (
 
 // compileExchangeConnectorTask compiles an <atlas:exchangeConnector> task: one Exchange
 // administration operation through a Worker an operator configured
-// (ADR-draft-exchange-worker).
+// (ADR-0462).
 //
 // The operation table is connector/exchange/catalog's, read here directly rather than
 // restated: unlike the other Worker Types' tables it imports nothing of Atlas's, so the

@@ -6981,7 +6981,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// parameters travel, and nothing that says how to reach the organization — that
 		// and the credential exist only on the worker. Which cmdlet the operation becomes
 		// is the worker's to decide too, because it depends on the organization's target
-		// (ADR-draft-exchange-worker).
+		// (ADR-0462).
 		j, err := exchange.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			return nil

@@ -445,7 +445,7 @@ const S3JobType = "io.atlas.s3"
 const S3JobTypeIndex int32 = 32
 
 // ExchangeJobType is the reserved job type a Microsoft Exchange task carries
-// (ADR-draft-exchange-worker). One job type serves every Exchange operation — a
+// (ADR-0462). One job type serves every Exchange operation — a
 // mailbox, a permission on one, a distribution group, a mailbox setting — and both
 // targets, Exchange Online and Exchange Server: which cmdlet runs is decided by the
 // operation and by the Worker's target, not by a reserved index of its own.
@@ -1718,7 +1718,7 @@ func (b *Builder) AddEntraConnectorTask(cfg EntraConfig) int32 {
 }
 
 // ExchangeConfig is the deploy-time configuration of an Exchange task
-// (ADR-draft-exchange-worker). Worker names the configured Exchange Worker and
+// (ADR-0462). Worker names the configured Exchange Worker and
 // WorkerExpr carries it as literal-or-FEEL when the organization is chosen at runtime,
 // as Entra's does; Op is a row of connector/exchange/catalog; Cmdlet is the Get- cmdlet
 // of the generic read and empty on every other operation. Parameters is the authored

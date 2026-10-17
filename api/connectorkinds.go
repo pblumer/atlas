@@ -397,7 +397,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 	{
 		// An Exchange task administers a mailbox, a permission, a distribution group
 		// or a mailbox setting in Exchange Online or on an Exchange Server
-		// (ADR-draft-exchange-worker). Worker-only for Entra's reason, and more so: the
+		// (ADR-0462). Worker-only for Entra's reason, and more so: the
 		// credential administers every mailbox in an organization. The store entry is
 		// what supervision provisions the worker from (superviseEnv); jobTypes keeps the
 		// deploy-time name check.

@@ -183,7 +183,7 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.UserPassword.Expr":      "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.UserRoles.Expr":         "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 
-	// The Exchange Worker's (ADR-draft-exchange-worker), in a block of their own so the
+	// The Exchange Worker's (ADR-0462), in a block of their own so the
 	// table above keeps its alignment.
 	"connectorTasks.ExchangeConnector.Expr":  "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.ExchangeParameters.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",

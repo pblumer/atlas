@@ -873,7 +873,7 @@ const WORKER_TYPES = [
   {
     id: "exchange", name: "Microsoft Exchange", kind: "Mailbox administration",
     desc: "Administers Exchange Online or an Exchange Server from a process: shared, room and equipment mailboxes, full access, send as, send on behalf and folder permissions, distribution groups and mail contacts with their members, automatic replies, forwarding, litigation hold, calendar processing and quotas \u2014 plus a read-only run of any Get- cmdlet. Online is reached over the REST endpoint the Exchange Online PowerShell module uses, an Exchange Server over Remote PowerShell from the worker host. Configure each organization below: its bundle lives in the vault and never enters a model. Worker-only, so the credential never reaches the engine.",
-    refs: "ADR-draft-exchange-worker", status: "active", statusLabel: "configured below",
+    refs: "ADR-0462", status: "active", statusLabel: "configured below",
   },
   {
     id: "mssql", name: "Microsoft SQL Server", kind: "Database",

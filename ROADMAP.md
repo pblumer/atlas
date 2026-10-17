@@ -583,7 +583,7 @@ The control-flow basics most real models use.
   to. Attachments and inbound events are follow-ups — for the inbound half see
   [the Jira issue-watch draft](docs/adr/0214-jira-inbound-issue-watch.md).
   **Exchange is another Worker Type in the catalog**
-  ([ADR-draft-exchange-worker](docs/adr/draft-exchange-worker.md)): a service task marked
+  ([ADR-0462](docs/adr/0462-exchange-worker.md)): a service task marked
   `<atlas:exchangeConnector connector operation parameters …>` runs one Exchange
   administration cmdlet as a named operation — forty-five of them across mailboxes,
   permissions (full access, send as, send on behalf, folders), distribution groups and mail

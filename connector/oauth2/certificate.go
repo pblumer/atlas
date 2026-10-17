@@ -18,7 +18,7 @@ import (
 
 // The Microsoft identity platform's certificate credential: a client-credentials grant
 // in which the app proves itself with a JWT signed by its certificate's private key
-// rather than with a shared secret (ADR-draft-exchange-worker).
+// rather than with a shared secret (ADR-0462).
 //
 // It lives here and not with the Exchange Worker for this package's standing reason:
 // it is mechanism, not policy. Entra and SharePoint speak to the same token endpoint and
