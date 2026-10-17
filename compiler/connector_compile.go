@@ -2755,7 +2755,7 @@ func teamsPhoneOpNames() []string {
 
 // compileTeamsPhoneConnectorTask compiles an <atlas:teamsPhoneConnector> task: one
 // voice-app operation against a tenant an operator configured, via the job path
-// (ADR-draft-teams-phone-worker). The app certificate is the worker's, by tenant name;
+// (ADR-0463). The app certificate is the worker's, by tenant name;
 // only the operation and its values live in the model.
 func compileTeamsPhoneConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.TeamsPhone

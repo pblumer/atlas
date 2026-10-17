@@ -408,7 +408,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 	},
 	{
 		// A Microsoft Teams Phone task provisions or removes a voice app and its
-		// resource account (ADR-draft-teams-phone-worker). Worker-only for Entra's
+		// resource account (ADR-0463). Worker-only for Entra's
 		// reason and one of its own: the work is PowerShell that only a worker host with
 		// the MicrosoftTeams module runs, so the engine has nothing to run it with — and
 		// the app is a tenant-wide Teams administrator that must not enter the engine.

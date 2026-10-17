@@ -878,7 +878,7 @@ const WORKER_TYPES = [
   {
     id: "teamsphone", name: "Microsoft Teams Phone", kind: "Telephony",
     desc: "Provisions a Teams Phone call queue and the auto attendant in front of it, with the resource accounts that answer their calls, and removes them again \u2014 without a model authoring PowerShell. The work is fixed PowerShell shipped with atlas, run by the worker on a host with PowerShell 7 and the MicrosoftTeams module, one process per job. Every ensure looks before it creates, so a retried task converges, and an account Entra already holds but Teams does not show yet is adopted instead of failing. Configure each tenant below: its {tenantId, clientId} bundle with a certificate or a certificate thumbprint lives in the vault and never enters a model. Worker-only, and atlas supervises the worker for it.",
-    refs: "ADR-draft-teams-phone-worker \u00b7 ADR-0172", status: "active", statusLabel: "configured below",
+    refs: "ADR-0463 \u00b7 ADR-0172", status: "active", statusLabel: "configured below",
   },
   {
     id: "mssql", name: "Microsoft SQL Server", kind: "Database",

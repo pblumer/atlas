@@ -2443,7 +2443,7 @@ type xmlServiceTask struct {
 	// or Exchange Server organization a *worker* holds the credential for.
 	Exchange *xmlExchangeConnector `xml:"extensionElements>exchangeConnector"`
 	// TeamsPhone, when present, marks this service task a Microsoft Teams Phone task
-	// (ADR-draft-teams-phone-worker): one voice-app operation — resolve users, ensure a
+	// (ADR-0463): one voice-app operation — resolve users, ensure a
 	// resource account, a call queue or an auto attendant, or remove one — against a
 	// tenant an operator configured.
 	TeamsPhone *xmlTeamsPhoneConnector `xml:"extensionElements>teamsPhoneConnector"`
@@ -3131,7 +3131,7 @@ type xmlS3Connector struct {
 
 // A Teams Phone task's parameters, carried on a service task as an
 // <atlas:teamsPhoneConnector connector="..." operation="..." .../> extension element
-// (ADR-draft-teams-phone-worker). The connector attribute names the configured tenant
+// (ADR-0463). The connector attribute names the configured tenant
 // (whose app certificate lives with the worker, never in the model) and operation is
 // the voice-app operation. Element and attribute keep the …Connector spelling their
 // siblings carry, which the moddle drift guard recognizes.

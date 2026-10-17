@@ -76,7 +76,7 @@ const (
 	// organization in the Console and the supervised worker is provisioned from it.
 	connectorKindExchange = "exchange"
 	// connectorKindTeamsPhone is the Microsoft Teams Phone Worker Type
-	// (ADR-draft-teams-phone-worker): voice apps and their resource accounts,
+	// (ADR-0463): voice apps and their resource accounts,
 	// provisioned by fixed PowerShell on the worker host. A record holds a
 	// credentialsRef naming a vault bundle {tenantId, clientId} with a certificate or a
 	// certificate thumbprint. Worker-only like Entra: the engine never signs in, so the

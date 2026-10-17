@@ -460,7 +460,7 @@ const ExchangeJobType = "io.atlas.exchange"
 const ExchangeJobTypeIndex int32 = 33
 
 // TeamsPhoneJobType is the reserved job type a Microsoft Teams Phone task carries
-// (ADR-draft-teams-phone-worker). One job type serves every voice-app operation —
+// (ADR-0463). One job type serves every voice-app operation —
 // resolving users, ensuring a resource account, a call queue or an auto attendant, and
 // removing them — because they share a tenant, a credential and an error envelope; the
 // operation is a modeled value rather than a reserved index of its own, as it is for
@@ -2237,7 +2237,7 @@ func (b *Builder) AddS3ConnectorTask(cfg S3Config) int32 {
 }
 
 // TeamsPhoneConfig is the deploy-time configuration of a Teams Phone task
-// (ADR-draft-teams-phone-worker). Worker names the configured tenant (whose app
+// (ADR-0463). Worker names the configured tenant (whose app
 // certificate lives with the worker, never in the model) and Operation is the voice-app
 // operation. Args are the operation's values keyed by attribute name: each authored one
 // a literal-or-FEEL value evaluated over the variables the task sees at call time, each

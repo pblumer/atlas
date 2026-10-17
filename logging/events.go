@@ -279,7 +279,7 @@ var (
 	// the next statement sends again.
 	SQLMockReportFailed = newEvent("sql_mock.report_failed")
 	// TeamsPhoneMockMode is a Teams Phone worker announcing that it serves its tenants
-	// from memory rather than through PowerShell (ADR-draft-teams-phone-worker). A
+	// from memory rather than through PowerShell (ADR-0463). A
 	// warning for the reason the AD and SQL ones are: a mock worker completes every job
 	// it leases and is indistinguishable from a working one everywhere else.
 	TeamsPhoneMockMode = newEvent("teamsphone_mock.enabled")

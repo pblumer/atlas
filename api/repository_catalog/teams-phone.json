@@ -4,7 +4,7 @@
   "kind": "connector",
   "title": "Microsoft Teams Phone voice apps",
   "author": "Atlas core",
-  "description": "Provision a Teams Phone call queue and the auto attendant in front of it, with the resource accounts that answer their calls — and remove them again — without authoring PowerShell. A model names the operation and supplies values; the worker runs fixed PowerShell shipped with Atlas on a host that has PowerShell 7 and the MicrosoftTeams module, signing in with the app's certificate from the vault (ADR-draft-teams-phone-worker). Every ensure operation looks before it creates, so a retried job converges instead of creating a second queue; a resource account Entra already holds but Teams does not show yet is adopted rather than refused. Licences and the employee id stay Entra operations.",
+  "description": "Provision a Teams Phone call queue and the auto attendant in front of it, with the resource accounts that answer their calls — and remove them again — without authoring PowerShell. A model names the operation and supplies values; the worker runs fixed PowerShell shipped with Atlas on a host that has PowerShell 7 and the MicrosoftTeams module, signing in with the app's certificate from the vault (ADR-0463). Every ensure operation looks before it creates, so a retried job converges instead of creating a second queue; a resource account Entra already holds but Teams does not show yet is adopted rather than refused. Licences and the employee id stay Entra operations.",
   "engineCompat": ">=0.13",
   "template": {
     "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",

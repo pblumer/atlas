@@ -6994,7 +6994,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		}}
 	case compiler.TeamsPhoneJobTypeIndex:
 		// The operation and its values travel; the tenant's app certificate does not
-		// exist here to travel. Worker-only, like Entra (ADR-draft-teams-phone-worker).
+		// exist here to travel. Worker-only, like Entra (ADR-0463).
 		j, err := teamsphone.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil

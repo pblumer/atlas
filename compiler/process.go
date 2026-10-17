@@ -1080,7 +1080,7 @@ type ConnectorTaskDetail struct {
 	ExchangeParameters    RestExpr
 	ExchangeParametersVar int32
 	ExchangeMaxResults    int32
-	// Teams Phone fields (JobType == TeamsPhoneJobType, ADR-draft-teams-phone-worker).
+	// Teams Phone fields (JobType == TeamsPhoneJobType, ADR-0463).
 	// Connector (above) names the configured tenant; its app certificate lives with the
 	// worker, never in a model. TeamsPhoneOp is the interned operation
 	// ("resolve-users"|"ensure-resource-account"|"ensure-call-queue"|
