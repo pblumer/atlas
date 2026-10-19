@@ -29,5 +29,7 @@
 // A job may run twice. Every "ensure" operation looks for what it would create before it
 // creates it, and every "remove" operation answers removed=false for something already
 // gone, so a retried job converges instead of creating a second queue or failing on the
-// first run's success.
+// first run's success. ensure-call-queue also brings a queue it finds to the agents the
+// model names, so running it again after a change of staff changes the queue rather than
+// reporting success over the old list.
 package teamsphone

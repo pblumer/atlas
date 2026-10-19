@@ -7,6 +7,17 @@ func (p *Pwsh) WithEndpoints(loginRoot, graphRoot string) *Pwsh {
 	return p
 }
 
+// AgentsOf answers the agents the mock tenant holds for a call queue, so a test sees
+// what a reconciliation left behind and not only what it reported.
+func (m *MockTenant) AgentsOf(queueID string) []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if app, ok := m.apps[queueID]; ok {
+		return append([]string(nil), app.agents...)
+	}
+	return nil
+}
+
 var (
 	LastEnvelope = lastEnvelope
 	ASCIIJSON    = asciiJSON

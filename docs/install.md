@@ -762,6 +762,16 @@ certificate store is not read) or put IIS in front as the TLS terminator, and se
 `ATLAS_ADMIN_USERNAME` / `ATLAS_ADMIN_PASSWORD` as machine-level environment
 variables before the first start with `--auth`.
 
+**Outbound proxy.** On Windows, `atlas serve` and every worker follow the proxy settings
+of the account they run as, the way PowerShell and every other .NET program do: a PAC
+script, automatic detection (WPAD), or a proxy and bypass list in Internet Options — which
+a group policy usually sets. A proxy variable (`HTTPS_PROXY`, `HTTP_PROXY`) set for the
+service still wins, and `ATLAS_SYSTEM_PROXY=off` makes Atlas read only the variables, as it
+did before. Loopback and the host's own addresses — and so the supervised workers' way
+back to their server — never go through a proxy. The startup line `outbound_proxy.selected` says which source a process
+follows. A proxy that demands Windows authentication (NTLM, Kerberos) is out of reach for
+the Go workers either way; give the server an exception there.
+
 **PowerShell script tasks** run through `pwsh` — that is PowerShell **Core** (7+),
 not the Windows PowerShell 5.1 that ships with the OS. Install it separately if
 you need them, or start with `--powershell=false`.

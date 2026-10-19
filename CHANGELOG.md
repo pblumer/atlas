@@ -25,6 +25,51 @@ _Changed_ / _Removed_ for each version.
   form editor's back link now asks before it discards unsaved changes
   ([ADR-draft-form-doors](docs/adr/draft-form-doors.md)).
 
+- **The Entra ID worker signs with a certificate from the Windows certificate store.** On
+  a Windows server a tenant may name its certificate by thumbprint — a bundle's
+  `certificateThumbprint`, or `ATLAS_ENTRA_<NAME>_CLIENT_CERTIFICATE_THUMBPRINT` — instead
+  of handing over a PEM. The worker finds it in `CurrentUser\My` of its account, then
+  `LocalMachine\My`, the order the Teams Phone Worker and `Connect-MicrosoftTeams` use, and
+  each signature is made by CNG: the key never leaves the store, so a non-exportable key
+  serves as it serves PowerShell. The key is tried once at startup, so a missing
+  certificate or a key the service account may not read is a startup error naming the
+  store and the account. A thumbprint bundle on a server that is not Windows is not used
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended).
+
+### Changed
+
+- **Go Workers on Windows take the proxy PowerShell takes.** A server's and a worker's
+  outbound HTTP used to read only `HTTPS_PROXY` and its siblings, so on a Windows server
+  whose proxy a group policy sets — a PAC script, WPAD, or Internet Options — every Go
+  Worker went direct and timed out, while a PowerShell on the same host found the proxy.
+  Both now follow the same rules, .NET's: a proxy variable still wins; otherwise the
+  account's Windows settings apply, auto-configuration first, then the manual proxy and
+  its bypass list; loopback and the host's own addresses are never proxied.
+  `ATLAS_SYSTEM_PROXY=off` restores the old behaviour, and the startup line
+  `outbound_proxy.selected` says which source a process follows. Nothing changes off
+  Windows ([ADR-0464](docs/adr/0464-windows-system-proxy.md)).
+
+- **Ensure call queue brings an existing queue to the agents it names.** A Teams Phone
+  task that runs `ensure-call-queue` again after a change of staff now sets the queue's
+  directly assigned agents to the list it names, in that order under serial routing, and
+  answers `agentsChanged`; until now it found the queue, returned it unchanged and reported
+  success. A task that names no agents leaves them as they are. Two values are refused
+  instead of applied: `agents` that resolved to nothing, such as a variable nobody set, also
+  for a new queue; and an empty list for a queue that has agents, because a Resolve users
+  that found nobody reads the same. This changes deployed models: one that names agents now
+  overwrites agents maintained in the Teams admin center since, so leave `agents` empty
+  where the admin center keeps them ([ADR-0463](docs/adr/0463-teams-phone-worker.md),
+  amendment 2026-10-19).
+
+### Fixed
+
+- **A required constant's reference sits on its own line.** On an application's and the
+  server's Constants page, the table of constants the deployed processes require showed
+  the reference a process reads, such as `application.CLIENT_ID`, after the name on the
+  same line, and the browser broke it onto a second line only where the name was long, so
+  the rows did not line up. The reference now always sits under the name, smaller and in
+  a monospace font, as the identifier a process writes.
+
 ## [0.15.0] — 2026-10-17
 
 **Atlas administers Exchange and Teams Phone, and a script can take the path a process
@@ -145,6 +190,16 @@ Windows.
 
 ### Fixed
 
+- **The handbook's runbook cards and the panel's setup steps close with a plain caveat.**
+  The line under each of the 27 runbook cards that names the month it was last checked
+  went on to say that, where the text no longer matched what the reader saw, "this
+  section is out of date, not you" — a sentence readers took for a riddle rather than
+  the reassurance it was meant to be. The setup steps beside a Worker Type said the same
+  in other words ("the provider is right and this is out of date"). Both now say what
+  can have changed and what to follow: menu paths and labels may have moved since, and
+  where they differ the current interface takes precedence. They are one instruction at
+  two lengths and now close with one sentence. The dates and their freshness checks are
+  unchanged (ADR-0289).
 - **A selection in a code field lies on the text it selects.** The script, FEEL, JSON
   and Developer View editors draw a transparent text area over a coloured copy of the
   text and a line-number gutter. The copy and the gutter also spanned the text area's

@@ -76,12 +76,13 @@ export const SECRET_SHAPES = {
     note: "Copied out of the JSON key file Google hands out for a service account (<code>client_email</code> and <code>private_key</code>, camel-cased here). Atlas fills in <code>tokenUrl</code> and the Sheets and Drive <code>scope</code>. Add <code>\"subject\"</code> to act as a Workspace user through domain-wide delegation. Pasting the whole key file is the common mistake: it is that file's two fields, not the file.",
   },
   "entra:": {
-    what: "a Microsoft Entra ID app credential bundle (JSON): {tenantId, clientId} with a clientSecret or a certificate",
-    // anyOf, not fields: the app proves itself with a secret or with a certificate, and
-    // a bundle is valid when it carries either — the worker refuses one carrying both.
-    anyOf: [["tenantId", "clientId", "clientSecret"], ["tenantId", "clientId", "certificate"]],
+    what: "a Microsoft Entra ID app credential bundle (JSON): {tenantId, clientId} with a clientSecret, a certificate or a certificateThumbprint",
+    // anyOf, not fields: the app proves itself with a secret, with a certificate as PEM,
+    // or with one named by its thumbprint in the Windows certificate store, and a bundle
+    // is valid when it carries one — the worker refuses one carrying more.
+    anyOf: [["tenantId", "clientId", "clientSecret"], ["tenantId", "clientId", "certificate"], ["tenantId", "clientId", "certificateThumbprint"]],
     skeleton: { tenantId: "\u2026", clientId: "\u2026", clientSecret: "\u2026" },
-    note: "Tenant and client id are on the app registration's <b>Overview</b>. A <b>client secret</b> comes from <b>Certificates &amp; secrets &rsaquo; Client secrets</b> and is shown once. A <b>certificate</b> is stored instead as <code>\"certificate\"</code>: the certificate and its <b>unencrypted</b> private key as one PEM text (<code>-----BEGIN CERTIFICATE-----</code> \u2026 <code>-----BEGIN PRIVATE KEY-----</code> \u2026), after uploading the certificate's public part under <b>Certificates &amp; secrets &rsaquo; Certificates</b>. Carry one of the two, never both.",
+    note: "Tenant and client id are on the app registration's <b>Overview</b>. A <b>client secret</b> comes from <b>Certificates &amp; secrets &rsaquo; Client secrets</b> and is shown once. A <b>certificate</b> is stored instead as <code>\"certificate\"</code>: the certificate and its <b>unencrypted</b> private key as one PEM text (<code>-----BEGIN CERTIFICATE-----</code> \u2026 <code>-----BEGIN PRIVATE KEY-----</code> \u2026), after uploading the certificate's public part under <b>Certificates &amp; secrets &rsaquo; Certificates</b>. On a Windows server, <code>\"certificateThumbprint\"</code> may instead name a certificate already in the worker host's <code>CurrentUser\\My</code> or <code>LocalMachine\\My</code>: its key signs there and may be non-exportable — elsewhere such a bundle is not used. Carry exactly one of the three.",
   },
   "teamsphone:": {
     what: "a Microsoft Teams Phone app credential bundle (JSON): {tenantId, clientId} with a certificate or a certificateThumbprint",

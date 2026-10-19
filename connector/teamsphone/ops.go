@@ -11,11 +11,18 @@ import "sort"
 // a FEEL expression evaluated over the variables the task sees at call time. Settings
 // name static values the compiler validates against [Settings] and defaults, because
 // each decides the shape of what is created rather than its content.
+//
+// Reconciled names the optional values an operation also brings an existing object to,
+// not only a new one. For those, not naming the value and naming an empty one mean
+// different things — leave it as it is, and make it empty — so [Prepare] passes such a
+// value on only when the model named it, and refuses one that resolved to nothing rather
+// than reading a variable nobody set as "empty".
 type Op struct {
 	Label       string
 	Required    []string
 	Optional    []string
 	Settings    []string
+	Reconciled  []string
 	NeedsResult bool
 }
 
@@ -36,10 +43,15 @@ var Ops = map[string]Op{
 		NeedsResult: true,
 	},
 	"ensure-call-queue": {
-		Label:       "ensure a call queue",
-		Required:    []string{"name", "resourceAccountId"},
-		Optional:    []string{"agents", "authorizedUsers", "languageId"},
-		Settings:    []string{"routingMethod", "presenceBasedRouting", "conferenceMode", "allowOptOut"},
+		Label:    "ensure a call queue",
+		Required: []string{"name", "resourceAccountId"},
+		Optional: []string{"agents", "authorizedUsers", "languageId"},
+		Settings: []string{"routingMethod", "presenceBasedRouting", "conferenceMode", "allowOptOut"},
+		// The agents a model names are the queue's agents: a process run again after a
+		// change of staff means the new list, and a queue that kept the old one while the
+		// task reported success would be the failure nobody sees (ADR-0463, amendment
+		// 2026-10-19).
+		Reconciled:  []string{"agents"},
 		NeedsResult: true,
 	},
 	"ensure-auto-attendant": {

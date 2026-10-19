@@ -303,13 +303,48 @@ func TestTheShippedScriptProvisionsAndUnwinds(t *testing.T) {
 	aaID := must("ensure-resource-account", map[string]any{"userPrincipalName": "aa_zuerich@contoso.example", "displayName": "Zürich Empfang", "accountType": "auto-attendant"})["objectId"].(string)
 	must("ensure-resource-account", map[string]any{"userPrincipalName": "aa_zuerich@contoso.example", "displayName": "Zürich Empfang", "accountType": "auto-attendant"})
 
-	queueArgs := map[string]any{"name": "CQ Zürich", "resourceAccountId": cqID, "agents": []any{"user-anna"}, "routingMethod": "serial", "languageId": "de-CH"}
+	// A queue made without naming its agents gets none — not one blank agent.
+	queueArgs := map[string]any{"name": "CQ Zürich", "resourceAccountId": cqID, "routingMethod": "serial", "languageId": "de-CH"}
 	queue := must("ensure-call-queue", queueArgs)
-	if queue["created"] != true || must("ensure-call-queue", queueArgs)["id"] != queue["id"] {
-		t.Errorf("ensure-call-queue did not converge: %v", queue)
+	if again := must("ensure-call-queue", queueArgs); queue["created"] != true || again["id"] != queue["id"] || again["agentsChanged"] != false {
+		t.Errorf("ensure-call-queue did not converge: %v, then %v", queue, again)
 	}
-	if params := stub.load().Apps[queue["id"].(string)]["Params"].(map[string]any); params["RoutingMethod"] != "Serial" || params["ConferenceMode"] != true {
+	queueID := queue["id"].(string)
+	if params := stub.load().Apps[queueID]["Params"].(map[string]any); params["RoutingMethod"] != "Serial" || params["ConferenceMode"] != true {
 		t.Errorf("queue created with %v", params)
+	}
+	agentsOf := func(id string) []any { users, _ := stub.load().Apps[id]["Users"].([]any); return users }
+	agentsNow := func() []any { return agentsOf(queueID) }
+	if users := agentsNow(); len(users) != 0 {
+		t.Errorf("a queue made without agents has the agents %v", users)
+	}
+	// A change of staff reaches the existing queue, in the order serial routing rings
+	// in, and a repeat of it changes nothing more.
+	staffed := map[string]any{"name": "CQ Zürich", "resourceAccountId": cqID, "agents": []any{"user-beat", "USER-ANNA"}, "routingMethod": "serial"}
+	if got := must("ensure-call-queue", staffed); got["created"] != false || got["agentsChanged"] != true {
+		t.Errorf("ensure-call-queue with new agents = %v, want them set on the existing queue", got)
+	}
+	if users := agentsNow(); len(users) != 2 || users[0] != "user-beat" || users[1] != "USER-ANNA" {
+		t.Errorf("the queue's agents are %v, want [user-beat USER-ANNA]", users)
+	}
+	if got := must("ensure-call-queue", staffed); got["agentsChanged"] != false {
+		t.Errorf("a repeated change of staff = %v, want nothing left to change", got)
+	}
+	if got := must("ensure-call-queue", map[string]any{"name": "CQ Zürich", "resourceAccountId": cqID}); got["agentsChanged"] != false || len(agentsNow()) != 2 {
+		t.Errorf("ensure-call-queue without agents = %v and left %v; want the agents as they were", got, agentsNow())
+	}
+	if _, err := run("ensure-call-queue", map[string]any{"name": "CQ Zürich", "resourceAccountId": cqID, "agents": []any{}}); err == nil ||
+		!strings.Contains(err.Error(), "would remove every agent") {
+		t.Errorf("an empty list for a staffed queue: %v; want it refused", err)
+	}
+	if len(agentsNow()) != 2 {
+		t.Errorf("a refused reconciliation left the agents %v", agentsNow())
+	}
+	// A queue made with its agents carries them from the start.
+	must("remove-call-queue", map[string]any{"resourceAccountId": cqID})
+	remade := must("ensure-call-queue", staffed)
+	if users := agentsOf(remade["id"].(string)); remade["created"] != true || remade["agentsChanged"] != false || len(users) != 2 || users[0] != "user-beat" {
+		t.Errorf("ensure-call-queue with agents = %v carrying %v, want a new queue with [user-beat USER-ANNA]", remade, users)
 	}
 	attendantArgs := map[string]any{
 		"name": "AA Zürich", "resourceAccountId": aaID, "transferTarget": cqID, "languageId": "de-CH",

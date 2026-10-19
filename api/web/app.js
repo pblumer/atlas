@@ -3767,7 +3767,7 @@ async function renderHeldConstants(host, o) {
     "type-mismatch": `<span class="pill warn" title="Held here with another type than a process declares; instances get the type held here">type differs</span>`,
   };
   const reqRows = view.required.map((r) => `<tr data-req="${esc(r.name)}">
-      <td><b>${esc(r.name)}</b> <span class="muted">${esc(o.ns)}.${esc(r.name)}</span></td>
+      <td><b>${esc(r.name)}</b><div class="muted mono" style="font-size:12px">${esc(o.ns)}.${esc(r.name)}</div></td>
       <td><span class="chip">${esc(r.type)}</span></td>
       <td class="muted">${r.processes.map(esc).join(", ")}</td>
       <td>${states[r.state] || esc(r.state)}</td>
