@@ -12,7 +12,31 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The Entra ID worker signs with a certificate from the Windows certificate store.** On
+  a Windows server a tenant may name its certificate by thumbprint — a bundle's
+  `certificateThumbprint`, or `ATLAS_ENTRA_<NAME>_CLIENT_CERTIFICATE_THUMBPRINT` — instead
+  of handing over a PEM. The worker finds it in `CurrentUser\My` of its account, then
+  `LocalMachine\My`, the order the Teams Phone Worker and `Connect-MicrosoftTeams` use, and
+  each signature is made by CNG: the key never leaves the store, so a non-exportable key
+  serves as it serves PowerShell. The key is tried once at startup, so a missing
+  certificate or a key the service account may not read is a startup error naming the
+  store and the account. A thumbprint bundle on a server that is not Windows is not used
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended).
+
 ### Changed
+
+- **Go Workers on Windows take the proxy PowerShell takes.** A server's and a worker's
+  outbound HTTP used to read only `HTTPS_PROXY` and its siblings, so on a Windows server
+  whose proxy a group policy sets — a PAC script, WPAD, or Internet Options — every Go
+  Worker went direct and timed out, while a PowerShell on the same host found the proxy.
+  Both now follow the same rules, .NET's: a proxy variable still wins; otherwise the
+  account's Windows settings apply, auto-configuration first, then the manual proxy and
+  its bypass list; loopback and the host's own addresses are never proxied.
+  `ATLAS_SYSTEM_PROXY=off` restores the old behaviour, and the startup line
+  `outbound_proxy.selected` says which source a process follows. Nothing changes off
+  Windows ([ADR-0464](docs/adr/0464-windows-system-proxy.md)).
 
 - **Ensure call queue brings an existing queue to the agents it names.** A Teams Phone
   task that runs `ensure-call-queue` again after a change of staff now sets the queue's
@@ -155,6 +179,16 @@ Windows.
 
 ### Fixed
 
+- **The handbook's runbook cards and the panel's setup steps close with a plain caveat.**
+  The line under each of the 27 runbook cards that names the month it was last checked
+  went on to say that, where the text no longer matched what the reader saw, "this
+  section is out of date, not you" — a sentence readers took for a riddle rather than
+  the reassurance it was meant to be. The setup steps beside a Worker Type said the same
+  in other words ("the provider is right and this is out of date"). Both now say what
+  can have changed and what to follow: menu paths and labels may have moved since, and
+  where they differ the current interface takes precedence. They are one instruction at
+  two lengths and now close with one sentence. The dates and their freshness checks are
+  unchanged (ADR-0289).
 - **A selection in a code field lies on the text it selects.** The script, FEEL, JSON
   and Developer View editors draw a transparent text area over a coloured copy of the
   text and a line-number gutter. The copy and the gutter also spanned the text area's

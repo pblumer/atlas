@@ -549,6 +549,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0461](0461-script-bpmn-errors.md) | A script throws a BPMN error by giving its error a code the process catches | Accepted | Landed |
 | [0462](0462-exchange-worker.md) | A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises | Accepted | Landed |
 | [0463](0463-teams-phone-worker.md) | A Microsoft Teams Phone Worker Type for voice apps and their resource accounts | Accepted (amended) | Landed |
+| [0464](0464-windows-system-proxy.md) | Outbound HTTP follows the Windows proxy settings, the way .NET does | Accepted | Landed |
 
 ## The two states of a record
 

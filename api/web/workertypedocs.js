@@ -148,12 +148,12 @@ export const WORKER_TYPE_DOCS = {
   entra: {
     anchor: "runbook-entra", title: "Microsoft Entra ID",
     checked: "2026-09",
-    needs: `A configured Microsoft Entra ID Worker in ${WORKERS}: a vault bundle with tenant, client and a secret or a certificate. No endpoint — Graph's address is the same for everyone.`,
+    needs: `A configured Microsoft Entra ID Worker in ${WORKERS}: a vault bundle with tenant, client and a secret, a certificate, or — on Windows — a certificate's thumbprint. No endpoint — Graph's address is the same for everyone.`,
     steps: [
       `Entra admin center &rarr; <b>App registrations</b> &rarr; new registration, <b>dedicated to this worker</b>. Note the <i>tenant id</i> and <i>client id</i>, then <i>Certificates &amp; secrets</i> &rarr; new client secret — its value is shown once. Or upload a certificate's public part under <i>Certificates</i> instead and keep the certificate with its private key for the vault.`,
       `<i>API permissions</i> &rarr; <b>Microsoft Graph</b> &rarr; <b>Application permissions</b>. For the usual joiner/mover/leaver case exactly two suffice: <code>User.ReadWrite.All</code> and <code>Group.ReadWrite.All</code> (or the narrower <code>GroupMember.ReadWrite.All</code> when no groups are created). Read-only processes take the <code>*.Read.All</code> variants. Remove <code>Directory.ReadWrite.All</code> if it is there.`,
       `<b>Grant admin consent.</b> Application permissions do nothing until this is done — and its absence shows up as "it does nothing, without an error".`,
-      `Store the bundle in the vault: ${VAULT}, e.g. <code>entra_contoso</code> holding <code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code> — or, with a certificate, <code>"certificate"</code> in place of <code>"clientSecret"</code>: the certificate and its unencrypted private key as one PEM text. Never both.`,
+      `Store the bundle in the vault: ${VAULT}, e.g. <code>entra_contoso</code> holding <code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code> — or, with a certificate, <code>"certificate"</code> in place of <code>"clientSecret"</code>: the certificate and its unencrypted private key as one PEM text. On a Windows server, <code>"certificateThumbprint"</code> may name a certificate already in the store instead (the service account's <code>CurrentUser\\My</code>, or <code>LocalMachine\\My</code>); its key signs there and may be non-exportable. Exactly one of the three.`,
       `${WORKERS} &rarr; <b>New worker</b>: type <b>Microsoft Entra ID</b>, a name, credential reference <code>entra_contoso</code>, no endpoint.`,
     ],
     trap: `Resetting a password or touching a role-bearing account needs more than <code>User.ReadWrite.All</code>: the app must also hold a <b>directory role</b> such as <i>User Administrator</i> — and even then it cannot act on holders of higher-privileged roles.`,
@@ -494,7 +494,7 @@ function renderDoc(doc) {
   // Inside the fold on purpose: it qualifies the steps, and the reader deciding how far
   // to trust them is the reader who has opened them.
   const checked = doc.checked
-    ? `<p class="wtdoc-checked">Steps last checked <time datetime="${doc.checked}">${monthName(doc.checked)}</time>. Where a provider has moved a menu since, the provider is right and this is out of date.</p>`
+    ? `<p class="wtdoc-checked">Steps last checked <time datetime="${doc.checked}">${monthName(doc.checked)}</time>. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</p>`
     : "";
   return `<div class="wtdoc">
     <p class="wtdoc-needs">${doc.needs}</p>
