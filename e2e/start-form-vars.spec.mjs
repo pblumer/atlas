@@ -23,13 +23,15 @@ test("a linked start form's fields appear under a Form group", async ({ page }) 
   // The form schema loads asynchronously; wait for its fields to land.
   await expect(list.locator('.var-row[data-var="filename"]')).toBeVisible();
 
-  // Two groups, in order: the form's fields first, then the process's variables.
-  const heads = page.locator(".vars-group-head");
+  // Two groups, in order: the form's fields first, then the process's variables. The
+  // undeclared namespace members below them collapse the same way but are not variables
+  // of the process, so they are not counted here.
+  const heads = page.locator(".vars-group:not(.vars-available) > .vars-group-head");
   await expect(heads).toHaveCount(2);
   // The group header now also carries a collapse chevron and a member count, so read
   // the title span. innerText reflects the CSS text-transform:uppercase, so compare
   // case-insensitively.
-  const titles = page.locator(".vars-group-head .vg-title");
+  const titles = heads.locator(".vg-title");
   expect((await titles.allInnerTexts()).map((s) => s.toLowerCase())).toEqual(["form", "process"]);
 
   // Every input-bearing field is surfaced; layout-only components and a dynamic

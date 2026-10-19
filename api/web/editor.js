@@ -2580,14 +2580,17 @@ function wireEditorVars(root, modeler, api) {
   const list = root.querySelector("#vars-list");
   if (!panel || !toggle || !list) return;
 
-  // Which variable groups (Form / Process) the author collapsed — persisted so the
-  // choice sticks across edits and reopening. Groups are collapsible only when there
-  // is more than one (a linked form splits Form from Process), so a header doubles as
-  // its toggle.
+  // Which variable groups (Form / Process, and the undeclared members below them) the
+  // author collapsed — persisted so the choice sticks across edits and reopening. Form
+  // and Process are collapsible only when there is more than one (a linked form splits
+  // Form from Process), so a header doubles as its toggle.
   const GKEY = "atlas.vars.collapsedGroups";
   let collapsedCats;
   try { collapsedCats = new Set(JSON.parse(localStorage.getItem(GKEY) || "[]")); } catch { collapsedCats = new Set(); }
   const saveCats = () => { try { localStorage.setItem(GKEY, JSON.stringify([...collapsedCats])); } catch { /* ignore */ } };
+  // The "Available, not declared yet" section's entry in that set. Not a word a variable
+  // category can be, so collapsing it never collapses a real group of the same name.
+  const AVAIL = "@available";
 
   // The values the variables actually held on the last run of this process, keyed by
   // name — {value, kind} as the instance list returns them. A diagram that was never
@@ -2703,14 +2706,22 @@ function wireEditorVars(root, modeler, api) {
     // list, each with the one click that declares it (ADR-0456).
     let available = [];
     try { available = undeclaredMembers(rootProcess(modeler)).filter((m) => !q || m.path.toLowerCase().includes(q)); } catch { /* best-effort */ }
+    // It collapses like a Form / Process group, and remembers it under the same key: an
+    // installation with many constants would otherwise push the process's own variables
+    // out of view on every opening.
+    const availCol = collapsedCats.has(AVAIL);
     const availableHTML = available.length
-      ? `<div class="vars-available" id="vars-available">
-          <div class="vars-available-head">Available, not declared yet</div>
-          ${available.map((m) => `<div class="var-row var-row-available" data-avail="${esc(m.path)}">
+      ? `<div class="vars-group vars-available${availCol ? " collapsed" : ""}" id="vars-available" data-cat="${AVAIL}">
+          <button type="button" class="vars-group-head" aria-expanded="${availCol ? "false" : "true"}">
+            <span class="vg-chevron" aria-hidden="true">▸</span>
+            <span class="vg-title">Available, not declared yet</span>
+            <span class="vg-count">${available.length}</span>
+          </button>
+          <div class="vars-group-body">${available.map((m) => `<div class="var-row var-row-available" data-avail="${esc(m.path)}">
             <div class="var-head"><div class="var-name">${esc(m.path)}</div><span class="vtag">${esc(m.type)}</span>
               <button type="button" class="btn neutral var-declare" data-declare="${esc(m.path)}"
                 title="Declare ${esc(m.path)} on this process, so its instances carry it">Declare</button></div>
-            <div class="var-meta">${esc(m.ns)} ${m.info ? "info" : "constant"}</div></div>`).join("")}
+            <div class="var-meta">${esc(m.ns)} ${m.info ? "info" : "constant"}</div></div>`).join("")}</div>
         </div>`
       : "";
     if (!vars.length) {

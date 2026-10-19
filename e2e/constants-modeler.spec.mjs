@@ -206,6 +206,41 @@ test("the Variables panel offers undeclared namespace members and declares one",
   expect(page.__errors).toEqual([]);
 });
 
+// The undeclared members collapse like a Form / Process group: an installation with many
+// constants would otherwise push the process's own variables out of view. The choice is
+// remembered, so the section stays closed across a re-render and a reopening.
+test("the undeclared namespace members collapse and stay collapsed", async ({ page }) => {
+  await openConstants(page, "declared");
+  await page.locator("#vars-toggle").click();
+  const avail = page.locator("#vars-available");
+  const head = avail.locator(".vars-group-head");
+  const row = avail.locator('[data-avail="application.CLIENT_ID"]');
+  await expect(row).toBeVisible();
+  await expect(head).toHaveAttribute("aria-expanded", "true");
+  const count = Number(await head.locator(".vg-count").innerText());
+  await expect(avail.locator(".var-row-available")).toHaveCount(count);
+
+  await head.click();
+  await expect(row).toBeHidden();
+  await expect(head).toHaveAttribute("aria-expanded", "false");
+  // Still counted while closed, so what is on offer is not lost from view.
+  await expect(head.locator(".vg-count")).toHaveText(String(count));
+  // Every keystroke in the filter re-renders the list; the section stays as the author
+  // left it.
+  await page.locator("#vars-filter").fill("CLIENT");
+  await page.locator("#vars-filter").fill("");
+  await expect(row).toBeHidden();
+  // So does closing and reopening the panel.
+  await page.locator("#vars-toggle").click();
+  await page.locator("#vars-toggle").click();
+  await expect(row).toBeHidden();
+
+  await head.click();
+  await expect(row).toBeVisible();
+  await expect(head).toHaveAttribute("aria-expanded", "true");
+  expect(page.__errors).toEqual([]);
+});
+
 // Completion offers a namespace member the process does not read yet, and picking it
 // declares it — the model keeps saying what it reads without a trip to the process panel.
 test("picking an undeclared namespace member in completion declares it", async ({ page }) => {

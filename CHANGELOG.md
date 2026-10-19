@@ -12,6 +12,16 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+
+- **The undeclared namespace members in the Variables panel collapse.** The Modeler's
+  Variables panel lists, under the process's own variables, what the process could read
+  from the `application` and `server` namespaces but does not declare yet. On an
+  installation with several constants that list was longer than the variables above it
+  and could not be put away. It is now a group like Form and Process: its header shows
+  how many members are on offer, a click closes or opens it, and the panel remembers the
+  choice across edits and reopening.
+
 ### Fixed
 
 - **A required constant's reference sits on its own line.** On an application's and the
