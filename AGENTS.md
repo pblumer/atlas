@@ -129,7 +129,7 @@ internal/trustedproxy/ The client's address behind a load balancer: --trusted-pr
             the handler, read from listed peers only (ADR-0448)
 internal/sysproxy/ The outbound proxy, chosen as .NET chooses it: a proxy variable, else on
             Windows the account's PAC, WPAD or Internet Options settings
-            (ADR-draft-windows-system-proxy)
+            (ADR-0464)
 internal/certstore/ Signing with a key in the Windows certificate store, named by its
             certificate's thumbprint, without reading the key out (ADR-0172, amended)
 ```

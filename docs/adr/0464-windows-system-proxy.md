@@ -1,4 +1,4 @@
-# ADR-DRAFT: Outbound HTTP follows the Windows proxy settings, the way .NET does
+# ADR-0464: Outbound HTTP follows the Windows proxy settings, the way .NET does
 
 - **Status:** Accepted
 - **Implementation:** Landed

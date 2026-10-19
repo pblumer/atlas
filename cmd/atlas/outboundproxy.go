@@ -9,7 +9,7 @@ import (
 
 // installOutboundProxy makes this process's outbound HTTP take the route .NET takes on
 // the same host — a proxy variable when one is set, otherwise on Windows the system's
-// proxy settings (ADR-draft-windows-system-proxy) — and logs which it took. Called once,
+// proxy settings (ADR-0464) — and logs which it took. Called once,
 // after logging is set up and before the first request; every client that leaves its
 // transport to the default inherits the choice, every Worker Type's among them.
 func installOutboundProxy(getenv func(string) string) {

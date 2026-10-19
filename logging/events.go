@@ -225,7 +225,7 @@ var (
 	WorkerStarting = newEvent("worker.starting")
 	// OutboundProxySelected says, once at startup, where a server's or a worker's
 	// outbound HTTP takes its proxy from — the proxy variables, the Windows settings,
-	// or neither (ADR-draft-windows-system-proxy). Info, not a warning: it is a choice
+	// or neither (ADR-0464). Info, not a warning: it is a choice
 	// rather than a fault, and the line to read when a Worker's requests time out on
 	// one host and not on another.
 	OutboundProxySelected = newEvent("outbound_proxy.selected")

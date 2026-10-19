@@ -1,5 +1,5 @@
 // Package sysproxy chooses the proxy an outbound HTTP request goes through the way .NET,
-// and so PowerShell, chooses it on the same host (ADR-draft-windows-system-proxy).
+// and so PowerShell, chooses it on the same host (ADR-0464).
 //
 // # Why
 //

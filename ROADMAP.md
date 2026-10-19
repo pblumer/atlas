@@ -595,7 +595,7 @@ The control-flow basics most real models use.
   transport has not been exercised against a live tenant (the record's open question), and
   idempotent retries of grants and membership adds wait on confirmed error identities.
   **On Windows, the Go Workers take the route PowerShell takes**
-  ([ADR-draft-windows-system-proxy](docs/adr/draft-windows-system-proxy.md)): outbound
+  ([ADR-0464](docs/adr/0464-windows-system-proxy.md)): outbound
   HTTP follows a proxy variable when one is set and otherwise the account's PAC, WPAD or
   Internet Options settings, by .NET's rules, so a group-policy proxy needs no
   configuration; and the Entra Worker signs with a certificate from the Windows

@@ -36,7 +36,7 @@ _Changed_ / _Removed_ for each version.
   its bypass list; loopback and the host's own addresses are never proxied.
   `ATLAS_SYSTEM_PROXY=off` restores the old behaviour, and the startup line
   `outbound_proxy.selected` says which source a process follows. Nothing changes off
-  Windows ([ADR-draft-windows-system-proxy](docs/adr/draft-windows-system-proxy.md)).
+  Windows ([ADR-0464](docs/adr/0464-windows-system-proxy.md)).
 
 ### Fixed
 
