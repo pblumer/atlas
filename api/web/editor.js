@@ -252,7 +252,7 @@ let generation = 0;
 // the diagram on screen.
 let leaveForDecision = async () => true;
 // leaveForForm is the same question for the form doors on a start event, a user task
-// and a repair form (ADR-draft-form-doors): opening the form, or
+// and a repair form (ADR-0465): opening the form, or
 // creating one, leaves this diagram for the form editor's page.
 let leaveForForm = async () => ({ ok: true, processId: "" });
 // pendingAdopt is what a decision authored for one of this diagram's tasks left
@@ -978,7 +978,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     } catch { pendingAdopt = null; }
   }
   // Coming back from the form editor: the same selection, and the form saved on the
-  // way linked to the element it was opened from (ADR-draft-form-doors).
+  // way linked to the element it was opened from (ADR-0465).
   if (formTrip) returnFromForm(modeler, formTrip, toast);
   wireEditorVars(root, modeler, api);
   // What this installation holds for the namespaces, for the Variables panel and
@@ -2476,7 +2476,7 @@ function newFormHref(bo, forThisStep) {
 }
 
 // formDoorsHTML is the row under a form picker: "＋ New form" and "Open form"
-// (ADR-draft-form-doors) — the doors a business rule task has had
+// (ADR-0465) — the doors a business rule task has had
 // for its decision since ADR-0320, and a call activity for its callee. Both are real
 // links, so a middle click or "open in new tab" reaches the form's own address and
 // leaves the diagram open here; a plain click is the round trip instead (wireFormDoors).
@@ -2511,7 +2511,7 @@ function setFormOpen(door, formId, missing) {
 }
 
 // returnFromForm ends a trip to the form editor on the diagram it left
-// (ADR-draft-form-doors): the element is selected again, and a form
+// (ADR-0465): the element is selected again, and a form
 // saved on the way under an id the element does not name — one created for it, or the
 // one it opened, renamed (ADR-0222) — is linked to it. Only over what the element
 // named when the trip began: anything else means the link has changed since, and then
@@ -2544,7 +2544,7 @@ function takesForm(bo) {
 }
 
 // wireFormDoors makes a plain click on a form door the round trip
-// (ADR-draft-form-doors): this diagram's edits are saved first (or the
+// (ADR-0465): this diagram's edits are saved first (or the
 // author is asked, where there is no draft to save them to), the trip is recorded with
 // what the element names now, and the form editor opens with the way back in its
 // address. Without a draft to come back to — a deployed version — the form opens
@@ -10086,7 +10086,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     const fform = body.querySelector("#f-form");
     if (fform) {
       // The doors beside the picker: Open follows whatever is picked, before anything
-      // is saved (ADR-draft-form-doors).
+      // is saved (ADR-0465).
       const fopen = body.querySelector("#f-form-open");
       setFormOpen(fopen, fform.value, false);
       wireFormDoors(body, element);

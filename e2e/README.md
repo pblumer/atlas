@@ -274,7 +274,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   re-renders on every selection does not pepper the server; and a burst of keystrokes
   asks exactly one question.
 
-- **`form-doors.spec.mjs`** ([ADR-draft-form-doors](../docs/adr/draft-form-doors.md)):
+- **`form-doors.spec.mjs`** ([ADR-0465](../docs/adr/0465-form-doors.md)):
   the **way from a step to its form and back**, through the real app (`index.html` →
   `app.js`) against a mocked `/api/v1`, because the routing is half of it. The start
   event's, the user task's and the repair form's pickers carry **Open form** and

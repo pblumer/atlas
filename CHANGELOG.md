@@ -23,7 +23,7 @@ _Changed_ / _Removed_ for each version.
   opened, saved under a new id. A link changed in the meantime is left alone. A Ctrl- or
   middle-click still opens the form in a new tab and leaves the diagram as it is, and the
   form editor's back link now asks before it discards unsaved changes
-  ([ADR-draft-form-doors](docs/adr/draft-form-doors.md)).
+  ([ADR-0465](docs/adr/0465-form-doors.md)).
 
 - **The Entra ID worker signs with a certificate from the Windows certificate store.** On
   a Windows server a tenant may name its certificate by thumbprint — a bundle's

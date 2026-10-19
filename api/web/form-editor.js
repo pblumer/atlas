@@ -92,7 +92,7 @@ export function cleanup() {
 // their click already said (ADR-0260).
 //
 // from is {draftId, elementId} when the editor was reached through one of the
-// Modeler's form doors (ADR-draft-form-doors): back goes to that
+// Modeler's form doors (ADR-0465): back goes to that
 // diagram, and a save completes the trip, so the element is linked to the form it now
 // is when the author returns.
 export async function mountFormEditor(root, { api, toast, formId, projectId, generateFor, from }) {
@@ -175,7 +175,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
   nameInput.value = name;
 
   // Point the back link at the diagram the form was opened from, when it was — that is
-  // where the author is going back to (ADR-draft-form-doors) — and
+  // where the author is going back to (ADR-0465) — and
   // otherwise at the owning project when the form belongs to one, so a form opened
   // from inside a project returns there rather than dumping the operator on the
   // Modeler home. The edit route (#/modeler/form/e/{id}) doesn't name the project, so
@@ -637,7 +637,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
       baseline = snapshot();
       savedName = nameInput.value;
       // A form reached from a step completes its trip: the element it was opened from
-      // links this id when the author goes back (ADR-draft-form-doors).
+      // links this id when the author goes back (ADR-0465).
       noteFormSaved(from, nextId);
       // The URL always addresses the form as it is now stored: a freshly created form
       // becomes editable in place (so a second Save updates rather than duplicating),
@@ -662,7 +662,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
   // The back link is a door, and leaving through it must not cost the form's edits —
   // the question the Modeler asks before it leaves a diagram (makeKeepEdits). It
   // matters more since a form can be reached from a step and the way back is one click
-  // (ADR-draft-form-doors). A modified click opens the link elsewhere
+  // (ADR-0465). A modified click opens the link elsewhere
   // and leaves this editor as it is, so it is not asked about.
   root.querySelector("#form-back").addEventListener("click", (ev) => {
     if (ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;

@@ -10672,7 +10672,7 @@ async function viewEditorDraft(id) {
   const project = await resolveProject(projectId);
   if (superseded(gen)) return; // a newer navigation landed during the pre-mount fetches
   // A trip to the form editor from one of this diagram's steps ends here: the element is
-  // selected again, and a form saved on the way is linked to it (ADR-draft-form-doors).
+  // selected again, and a form saved on the way is linked to it (ADR-0465).
   // Taken this late, after the superseded check, because leaving for a form can itself
   // save the draft under a new id — a navigation of its own, which the form route then
   // overtakes — and that mount must not be the one to consume the trip.
@@ -10701,7 +10701,7 @@ async function viewDmnEditor({ refId, draftId, projectId, forTask } = {}) {
 // the author to say again what pressing that door already said
 // (ADR-0260). from, when given, is the {draftId, elementId} the
 // Modeler's form doors left from, which is where back goes and whose element links
-// what is saved (ADR-draft-form-doors).
+// what is saved (ADR-0465).
 async function viewFormEditor(formId, projectId, generateFor, from) {
   const gen = navGen;
   const mod = await import("./form-editor.js");
@@ -11084,7 +11084,7 @@ async function route() {
     const dnew = path.match(/^#\/modeler\/new(?:\/p\/(.+))?$/);
     if (dnew) return await viewEditor(null, dnew[1] ? decodeURIComponent(dnew[1]) : "");
     // A form editor reached from a step in a diagram carries the way back as a
-    // /from/{draft}/{element} tail (ADR-draft-form-doors). It is
+    // /from/{draft}/{element} tail (ADR-0465). It is
     // taken off before the form routes below are matched, so each keeps the shape it
     // had, and handed to whichever of them matches.
     let formPath = path;
