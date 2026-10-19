@@ -108,7 +108,7 @@ test("the steps say when they were last checked against the provider", async ({ 
   await expect(checked).toContainText(/Steps last checked \w+ 20\d\d/);
   // Machine-readable alongside the prose, and it says which source wins when they differ.
   await expect(checked.locator("time")).toHaveAttribute("datetime", /^20\d\d-\d\d$/);
-  await expect(checked).toContainText("the provider is right");
+  await expect(checked).toContainText("the current interface takes precedence");
   expect(page.__errors).toEqual([]);
 });
 
