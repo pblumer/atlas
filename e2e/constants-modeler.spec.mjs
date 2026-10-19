@@ -195,6 +195,8 @@ test("the Variables panel offers undeclared namespace members and declares one",
   await openConstants(page, "declared");
   await page.locator("#vars-toggle").click();
   const avail = page.locator("#vars-available");
+  // The section starts closed; open it the way a reader would.
+  await avail.locator(".vars-group-head").click();
   await expect(avail.locator('[data-avail="application.CLIENT_ID"]')).toBeVisible();
   await expect(avail.locator('[data-avail="server.ENTRA_TENANT_ID"]')).toBeVisible();
   await expect(avail.locator('[data-avail="server.environment"]')).toContainText("server info");
@@ -206,38 +208,43 @@ test("the Variables panel offers undeclared namespace members and declares one",
   expect(page.__errors).toEqual([]);
 });
 
-// The undeclared members collapse like a Form / Process group: an installation with many
-// constants would otherwise push the process's own variables out of view. The choice is
-// remembered, so the section stays closed across a re-render and a reopening.
-test("the undeclared namespace members collapse and stay collapsed", async ({ page }) => {
+// The undeclared members are a group like Form / Process, closed until the author opens
+// it: an installation with many constants would otherwise push the process's own
+// variables out of view. Opening it is remembered, so it stays open across a re-render
+// and a reopening, and so does closing it again.
+test("the undeclared namespace members start closed and remember being opened", async ({ page }) => {
   await openConstants(page, "declared");
   await page.locator("#vars-toggle").click();
   const avail = page.locator("#vars-available");
   const head = avail.locator(".vars-group-head");
   const row = avail.locator('[data-avail="application.CLIENT_ID"]');
-  await expect(row).toBeVisible();
-  await expect(head).toHaveAttribute("aria-expanded", "true");
+  await expect(head).toBeVisible();
+  await expect(head).toHaveAttribute("aria-expanded", "false");
+  await expect(row).toBeHidden();
+  // Counted while closed, so what is on offer is not lost from view.
   const count = Number(await head.locator(".vg-count").innerText());
+  expect(count).toBeGreaterThan(0);
   await expect(avail.locator(".var-row-available")).toHaveCount(count);
 
   await head.click();
-  await expect(row).toBeHidden();
-  await expect(head).toHaveAttribute("aria-expanded", "false");
-  // Still counted while closed, so what is on offer is not lost from view.
-  await expect(head.locator(".vg-count")).toHaveText(String(count));
+  await expect(row).toBeVisible();
+  await expect(head).toHaveAttribute("aria-expanded", "true");
   // Every keystroke in the filter re-renders the list; the section stays as the author
   // left it.
   await page.locator("#vars-filter").fill("CLIENT");
   await page.locator("#vars-filter").fill("");
-  await expect(row).toBeHidden();
+  await expect(row).toBeVisible();
   // So does closing and reopening the panel.
   await page.locator("#vars-toggle").click();
   await page.locator("#vars-toggle").click();
-  await expect(row).toBeHidden();
+  await expect(row).toBeVisible();
 
   await head.click();
-  await expect(row).toBeVisible();
-  await expect(head).toHaveAttribute("aria-expanded", "true");
+  await expect(row).toBeHidden();
+  await expect(head).toHaveAttribute("aria-expanded", "false");
+  await page.locator("#vars-toggle").click();
+  await page.locator("#vars-toggle").click();
+  await expect(row).toBeHidden();
   expect(page.__errors).toEqual([]);
 });
 
