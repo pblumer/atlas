@@ -33,10 +33,19 @@ _Changed_ / _Removed_ for each version.
   Worker went direct and timed out, while a PowerShell on the same host found the proxy.
   Both now follow the same rules, .NET's: a proxy variable still wins; otherwise the
   account's Windows settings apply, auto-configuration first, then the manual proxy and
-  its bypass list; loopback and the host's own addresses are never proxied. `ATLAS_SYSTEM_PROXY=off` restores the old
-  behaviour, and the startup line `outbound_proxy.selected` says which source a process
-  follows. Nothing changes off Windows
-  ([ADR-draft-windows-system-proxy](docs/adr/draft-windows-system-proxy.md)).
+  its bypass list; loopback and the host's own addresses are never proxied.
+  `ATLAS_SYSTEM_PROXY=off` restores the old behaviour, and the startup line
+  `outbound_proxy.selected` says which source a process follows. Nothing changes off
+  Windows ([ADR-draft-windows-system-proxy](docs/adr/draft-windows-system-proxy.md)).
+
+### Fixed
+
+- **A required constant's reference sits on its own line.** On an application's and the
+  server's Constants page, the table of constants the deployed processes require showed
+  the reference a process reads, such as `application.CLIENT_ID`, after the name on the
+  same line, and the browser broke it onto a second line only where the name was long, so
+  the rows did not line up. The reference now always sits under the name, smaller and in
+  a monospace font, as the identifier a process writes.
 
 ## [0.15.0] — 2026-10-17
 
