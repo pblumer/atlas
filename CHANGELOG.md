@@ -12,6 +12,19 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A step's form opens from the step, and a form created for it comes back linked.** The
+  Implement panel's form picker on a start event, a user task and a repair form now has two
+  buttons, **＋ New form** and **Open form**, where it had a "Create a new form" link that
+  opened a second tab and asked the author to come back and link the form by hand. A plain
+  click saves the diagram and opens the form editor with a way back to it; back selects the
+  element again and links a form saved on the way — one created for it, or the one it
+  opened, saved under a new id. A link changed in the meantime is left alone. A Ctrl- or
+  middle-click still opens the form in a new tab and leaves the diagram as it is, and the
+  form editor's back link now asks before it discards unsaved changes
+  ([ADR-draft-form-doors](docs/adr/draft-form-doors.md)).
+
 ## [0.15.0] — 2026-10-17
 
 **Atlas administers Exchange and Teams Phone, and a script can take the path a process

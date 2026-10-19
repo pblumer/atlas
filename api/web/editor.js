@@ -17,6 +17,7 @@ import { devLang } from "./dev-lang.js";
 // here any more.
 import { tokenSimulationModule } from "./token-simulation.js";
 import { attachIdCheck } from "./idcheck.js";
+import { beginFormTrip, fromTail } from "./form-return.js";
 import { migrateInstanceFlow, migrateProcessFlow, runningByDefinition } from "./migrationdialog.js";
 // Which keys a form-js schema binds — the Developer View reads it to offer a linked
 // form's fields as variables, the incident's repair form reads it to know which keys a
@@ -250,6 +251,10 @@ let generation = 0;
 // machinery that has to run first. Replaced on every mount, so it always answers for
 // the diagram on screen.
 let leaveForDecision = async () => true;
+// leaveForForm is the same question for the form doors on a start event, a user task
+// and a repair form (ADR-draft-form-doors): opening the form, or
+// creating one, leaves this diagram for the form editor's page.
+let leaveForForm = async () => ({ ok: true, processId: "" });
 // pendingAdopt is what a decision authored for one of this diagram's tasks left
 // behind. The panel consumes it the first time it renders that task and clears it, so
 // the decision is adopted exactly once — on the way back, not on every later open.
@@ -729,7 +734,7 @@ async function markFrozenDeployment(root, api, key, gen) {
 // Documentation are in the menu, where a toggle reads as on by its check rather than by a
 // pressed button. Every control kept its id, so what each one does is still wired where
 // it was.
-export async function mountEditor(root, { api, toast, key, draftId, projectId, project, adopt }) {
+export async function mountEditor(root, { api, toast, key, draftId, projectId, project, adopt, formTrip }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
@@ -953,6 +958,9 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   leaveForDecision = async () => (await makeKeepEdits(modeler, identity, saveDraft, "authoring a decision", true)())
     ? { ok: true, processId: identity.draftId || "" }
     : { ok: false, processId: "" };
+  leaveForForm = async () => (await makeKeepEdits(modeler, identity, saveDraft, "opening the form editor", true)())
+    ? { ok: true, processId: identity.draftId || "" }
+    : { ok: false, processId: "" };
   pendingAdopt = adopt || null;
   // Coming back from the decision editor, select the task the decision was authored
   // for. Without this the adoption would sit waiting until the author happened to
@@ -969,6 +977,9 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       }
     } catch { pendingAdopt = null; }
   }
+  // Coming back from the form editor: the same selection, and the form saved on the
+  // way linked to the element it was opened from (ADR-draft-form-doors).
+  if (formTrip) returnFromForm(modeler, formTrip, toast);
   wireEditorVars(root, modeler, api);
   // What this installation holds for the namespaces, for the Variables panel and
   // completion to offer; the panel redraws when it arrives.
@@ -2462,6 +2473,99 @@ function newFormHref(bo, forThisStep) {
   if (!pid) return "#/modeler/form/new";
   const href = "#/modeler/form/new/for/" + encodeURIComponent(pid);
   return forThisStep && bo.id ? href + "/" + encodeURIComponent(bo.id) : href;
+}
+
+// formDoorsHTML is the row under a form picker: "＋ New form" and "Open form"
+// (ADR-draft-form-doors) — the doors a business rule task has had
+// for its decision since ADR-0320, and a call activity for its callee. Both are real
+// links, so a middle click or "open in new tab" reaches the form's own address and
+// leaves the diagram open here; a plain click is the round trip instead (wireFormDoors).
+//
+// Open starts shut and is pointed at the picked form by setFormOpen once the panel is
+// wired, which is also what keeps it in step with the picker afterwards: one place
+// decides what it opens, not the markup and a change handler separately.
+function formDoorsHTML(newHref) {
+  return `<div class="form-doors" style="display:flex; gap:8px; margin:-4px 0 6px">
+      <a class="btn ghost" id="f-form-new" href="${esc(newHref)}" title="Create a new form for this element in the form editor">＋ New form</a>
+      <a class="btn ghost" id="f-form-open" aria-disabled="true">Open form</a>
+    </div>`;
+}
+
+// setFormOpen points the Open door at a form, or shuts it and says why. An anchor
+// without an href is how a link is shut: it is not focusable and goes nowhere, and
+// aria-disabled is what the styling and a screen reader read. A form this server does
+// not hold is shut too — the form editor would open on a failure, not on the form.
+function setFormOpen(door, formId, missing) {
+  if (!door) return;
+  if (formId && !missing) {
+    door.setAttribute("href", "#/modeler/form/e/" + encodeURIComponent(formId));
+    door.removeAttribute("aria-disabled");
+    door.title = "Open the linked form in the form editor";
+    return;
+  }
+  door.removeAttribute("href");
+  door.setAttribute("aria-disabled", "true");
+  door.title = formId
+    ? `There is no form “${formId}” on this server to open — pick another, or create one.`
+    : "No form is linked yet — pick one above, or create one.";
+}
+
+// returnFromForm ends a trip to the form editor on the diagram it left
+// (ADR-draft-form-doors): the element is selected again, and a form
+// saved on the way under an id the element does not name — one created for it, or the
+// one it opened, renamed (ADR-0222) — is linked to it. Only over what the element
+// named when the trip began: anything else means the link has changed since, and then
+// the record is the stale one, not the diagram.
+//
+// The link goes through the modeling API like a pick from the picker would, so it is
+// an edit the author sees, can undo, and saves.
+function returnFromForm(modeler, trip, toast) {
+  let el = null;
+  try { el = modeler.get("elementRegistry").get(trip.elementId); } catch { /* no registry */ }
+  if (!el) return; // the element is gone; there is nothing to come back to
+  const bo = el.businessObject;
+  const fd = findExt(bo, "zeebe:FormDefinition");
+  const now = (fd && fd.formId) || "";
+  if (trip.formId && trip.formId !== now && now === (trip.linked || "") && takesForm(bo)) {
+    upsertExt(modeler, el, "zeebe:FormDefinition", { formId: trip.formId });
+    if (toast) toast(`Linked the form “${trip.formId}” — save the diagram to keep it.`, "ok");
+  }
+  try {
+    modeler.get("selection").select(el);
+    modeler.get("canvas").scrollToElement(el);
+  } catch { /* older bpmn-js */ }
+}
+
+// takesForm says whether an element offers a form picker at all: a start event's start
+// form, a user task's work form, or a repair form (ADR-0028, ADR-0169).
+function takesForm(bo) {
+  const t = bo && bo.$type;
+  return t === "bpmn:StartEvent" || t === "bpmn:UserTask" || REPAIR_FORM_TYPES.has(t);
+}
+
+// wireFormDoors makes a plain click on a form door the round trip
+// (ADR-draft-form-doors): this diagram's edits are saved first (or the
+// author is asked, where there is no draft to save them to), the trip is recorded with
+// what the element names now, and the form editor opens with the way back in its
+// address. Without a draft to come back to — a deployed version — the form opens
+// plainly, as the decision editor does from the same place.
+function wireFormDoors(body, element) {
+  for (const door of body.querySelectorAll("#f-form-new, #f-form-open")) {
+    door.addEventListener("click", async (ev) => {
+      // A modified click is the browser opening the link in a new tab or window, and
+      // the diagram stays open in this one: nothing to save and no way back to carry.
+      if (ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
+      ev.preventDefault();
+      const href = door.getAttribute("href");
+      if (!href) return; // shut: nothing to open
+      const left = await leaveForForm();
+      if (!left.ok) return;
+      if (!left.processId) { location.hash = href; return; }
+      const fd = findExt(element.businessObject, "zeebe:FormDefinition");
+      beginFormTrip({ draftId: left.processId, elementId: element.id, linked: (fd && fd.formId) || "" });
+      location.hash = href + fromTail(left.processId, element.id);
+    });
+  }
 }
 
 // ensureFormFields fetches the schema of each not-yet-cached form id, records its
@@ -5852,8 +5956,8 @@ const REPAIR_FORM_TYPES = new Set(["bpmn:ServiceTask", "bpmn:SendTask", "bpmn:Bu
 // exactly what makes one the work form and the other the repair form. An element is one
 // type, so the two branches never both render and the id is never duplicated.
 //
-// Its "Create a new form" link is deliberately the plain one, where the work-form and
-// start-form links carry their step into the generator (newFormHref): a repair form is
+// Its "＋ New form" door is deliberately the plain one, where the work-form and
+// start-form doors carry their step into the generator (newFormHref): a repair form is
 // neither of the two things the generator writes. It is the subset of a parked
 // instance's variables an operator corrects to get the task moving, and opening the
 // generator on this task would frame it as the task's work form — the very confusion
@@ -5868,11 +5972,11 @@ function repairFormHTML(bo) {
         <option value="">&mdash; none &mdash;</option>
         ${cur ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : ""}
       </select></label>
+    ${formDoorsHTML("#/modeler/form/new")}
     <p class="muted" style="font-size:12px">Shown to an operator when this task parks behind an incident, so they can correct
       the values that matter instead of editing the whole variable set as JSON. Only the form's own fields are written, and the
       change is audited like any other. Leave it unset and the raw editor is the only way — which is fine for a task with
-      nothing specific to say. <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen
-      this to link it.</p>`;
+      nothing specific to say. <b>＋ New form</b> creates one; coming back to the draft links it to this task.</p>`;
 }
 
 // multiInstanceHTML renders the Loop section for an activity: the mode — a BPMN
@@ -8371,8 +8475,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
                 <option value="">— none —</option>
                 ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
               </select></label>
+            ${formDoorsHTML(newFormHref(bo, true))}
             <p class="muted" style="font-size:12px">The form the Tasks app renders for this task, submitted as its variables.
-              <a href="${newFormHref(bo, true)}" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
+              <b>＋ New form</b> creates one; coming back to the draft links it to this task.</p>
             <h3>Assignment</h3>
             <label class="field"><span>Assignee</span>
               <textarea id="f-assignee" rows="1" spellcheck="false" placeholder="editor">${esc(a.assignee || "")}</textarea></label>
@@ -8666,8 +8771,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
                 <option value="">— none —</option>
                 ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
               </select></label>
+            ${formDoorsHTML(newFormHref(bo, false))}
             <p class="muted" style="font-size:12px">Shown before the process starts — from the Tasks app's <b>Start</b> view — its data becomes the instance's start variables.
-              <a href="${newFormHref(bo, false)}" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
+              <b>＋ New form</b> creates one; coming back to the draft links it to this start event.</p>
             <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> start event instead.</p>`;
         }
       } else if (bo.$type === "bpmn:EventBasedGateway") {
@@ -9978,12 +10084,18 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
 
     const fform = body.querySelector("#f-form");
     if (fform) {
+      // The doors beside the picker: Open follows whatever is picked, before anything
+      // is saved (ADR-draft-form-doors).
+      const fopen = body.querySelector("#f-form-open");
+      setFormOpen(fopen, fform.value, false);
+      wireFormDoors(body, element);
       // Link/unlink writes (or drops) the zeebe:FormDefinition formId — the same
       // extension the compiler reads to bind a form (ADR-0028).
       fform.addEventListener("change", () => {
         const id = fform.value;
         if (id) upsertExt(modeler, element, "zeebe:FormDefinition", { formId: id });
         else removeExt(modeler, element, "zeebe:FormDefinition");
+        setFormOpen(fopen, id, false);
       });
       // Populate the picker with the project's forms once loaded; keep the
       // currently-linked one selected even if it is no longer in the list.
@@ -9999,6 +10111,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         }
         if (cur && !sawCur) opts.push(`<option value="${esc(cur)}" selected>${esc(cur)} (missing)</option>`);
         fform.innerHTML = opts.join("");
+        setFormOpen(fopen, cur, !!cur && !sawCur);
       }).catch(() => { /* leave the current single-option select as-is */ });
     }
 

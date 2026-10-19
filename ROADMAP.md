@@ -1819,6 +1819,11 @@ dataset of up to 50 000 cases":
 - ✅ **Into a call activity**: double-clicking its "+" opens the process it calls, on
   every surface that draws one, with a hover cue
   ([ADR-0245](docs/adr/0245-call-activity-drilldown.md)).
+- ✅ **Into a step's form and back**: **Open form** and **＋ New form** under the form
+  picker of a start event, a user task and a repair form save the diagram, open the form
+  editor with a way back, and link a form created or renamed on the way when the author
+  returns ([ADR-draft-form-doors](docs/adr/draft-form-doors.md)). The canvas has no form
+  door yet.
 
 **Version history** ([ADR-0031](docs/adr/0031-diagram-version-history.md)):
 - 🔲 A **Versions** control: explicit named checkpoints (immutable snapshots)

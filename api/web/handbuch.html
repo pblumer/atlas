@@ -5614,6 +5614,29 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <p data-l="en">People interact with the process through <b>forms</b>: as a <b>start form</b> (collects data when
         the instance is created) or at a <b>user task</b> (in the Tasks inbox). The Modeler has a form editor;
         submitted fields become process variables.</p>
+      <p data-l="de"><b>Vom Schritt ins Formular und zurück.</b> Unter der Auswahl <i>Linked form</i> am
+        Start-Ereignis, am User-Task und beim <i>Repair form</i> eines Service-Tasks stehen zwei Knöpfe:
+        <b>Open form</b> öffnet das verknüpfte Formular im Formular-Editor, <b>＋ New form</b> legt ein neues an.
+        Der Modeler speichert vorher den Entwurf (bei einer deployten Version fragt er, bevor Änderungen verloren
+        gehen). Der Zurück-Link oben links im Formular-Editor trägt dann den Namen des Prozesses und führt zum
+        Diagramm zurück; das Element ist wieder ausgewählt, und ein unterwegs gespeichertes Formular ist mit ihm
+        verknüpft &ndash; ein neu angelegtes ebenso wie eines, das unter einer neuen ID gespeichert wurde. Die
+        Verknüpfung ist eine gewöhnliche Änderung am Diagramm: rückgängig zu machen und mit <i>Save</i> zu sichern.
+        Wurde die Verknüpfung des Elements in der Zwischenzeit anders gesetzt, bleibt sie, wie sie ist. Mit
+        Strg- oder Mittelklick öffnet sich das Formular stattdessen in einem neuen Tab, und das Diagramm bleibt
+        unverändert offen. Von einer deployten Version aus öffnet sich das Formular ohne Rückweg, weil es keinen
+        Entwurf gibt, in den es zurückgehen könnte. Hat das Formular ungespeicherte Änderungen, fragt der
+        Zurück-Link, bevor er sie verwirft.</p>
+      <p data-l="en"><b>From the step to its form and back.</b> Under the <i>Linked form</i> picker on a start event,
+        on a user task and on a service task's <i>Repair form</i> there are two buttons: <b>Open form</b> opens the
+        linked form in the form editor, <b>＋ New form</b> creates one. The Modeler saves the draft first (on a
+        deployed version it asks before changes are lost). The back link at the top left of the form editor then
+        names the process and returns to the diagram; the element is selected again, and a form saved on the way is
+        linked to it &ndash; a new one as well as one saved under a new id. The link is an ordinary change to the
+        diagram: it can be undone, and <i>Save</i> keeps it. If the element's link was set differently in the
+        meantime, it is left as it is. A Ctrl- or middle-click opens the form in a new tab instead and leaves the
+        diagram open as it was. From a deployed version the form opens without a way back, since there is no draft
+        to return to. When the form has unsaved changes, the back link asks before it discards them.</p>
       <p data-l="de"><b>Start-Formular und Startvariablen gemeinsam.</b> Deklariert der Prozess zusätzlich
         Startvariablen (Prozess-Panel, Tab <i>Implement</i>, <i>Start variables</i>), fragen <i>Deploy &amp; run</i>,
         <i>Start instance</i> und der Start in der Tasks-App unter dem Formular nach denjenigen, die das Formular
@@ -5697,15 +5720,15 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 
       <h4 data-l="de">Ein Formular schreiben lassen</h4><h4 data-l="en">Letting the AI Worker write one</h4>
       <p data-l="de">Ist ein <b>KI-Worker</b> eingerichtet (Console &rsaquo; Workers, Typ <code>agent</code>), geht das
-        so: im Modeler am <b>User-Task</b> (oder am <b>Start-Ereignis</b>) auf <i>Create a new form</i> drücken. Der
+        so: im Modeler am <b>User-Task</b> (oder am <b>Start-Ereignis</b>) auf <b>＋ New form</b> drücken. Der
         Formular-Editor öffnet sich mit bereits geöffnetem Generator, der Prozess und Schritt schon kennt — dieser
         Klick war ja die Aussage, wofür das Formular da ist. Zu schreiben bleibt der Satz, wonach gefragt werden soll.
         Derselbe Knopf <b>✨ Generate</b> sitzt in der Leiste des Editors, für ein Formular, das über die Formularliste
         begonnen wurde; dort wählt man <b>Prozess</b> und <b>Schritt</b> selbst.</p>
       <p data-l="en">With an <b>AI Worker</b> configured (Console &rsaquo; Workers, kind <code>agent</code>), it goes
-        like this: in the Modeler, press <i>Create a new form</i> on the <b>user task</b> (or on the <b>start
+        like this: in the Modeler, press <b>＋ New form</b> on the <b>user task</b> (or on the <b>start
         event</b>). The form editor opens with the generator already up and the process and step already known —
-        pressing that link was you saying what the form is for. What is left to write is the sentence about what it
+        pressing that button was you saying what the form is for. What is left to write is the sentence about what it
         should ask for. The same <b>✨ Generate</b> button sits in the editor's bar for a form begun from the forms
         list, where you pick the <b>process</b> and <b>step</b> yourself.</p>
       <p data-l="de">Der lohnende Teil ist der Prozess. Gelesen werden dann die eigenen Worte des Modells: die Prozessdokumentation,
