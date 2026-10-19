@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -16,7 +17,8 @@ import (
 //
 // It keeps the rules the shipped PowerShell keeps, because a mock that is more forgiving
 // than the real thing proves nothing: an existing voice app is found before one is
-// created, an account Entra holds but Teams does not show yet is adopted, an enabled
+// created, an existing call queue is brought to the agents a model names but never
+// emptied, an account Entra holds but Teams does not show yet is adopted, an enabled
 // user's address is refused as a resource account, and a remove of something already
 // gone answers removed=false. Teams' synchronization lag is modelled too: an account the
 // mock creates is invisible to Teams until the next operation that looks for it, which
@@ -38,6 +40,7 @@ type mockAccount struct {
 
 type mockApp struct {
 	id, name, kind string
+	agents         []string
 }
 
 // NewMockTenant creates an empty tenant. users names the people resolve-users finds,
@@ -89,9 +92,9 @@ func (m *MockTenant) Do(_ context.Context, req Request) (map[string]any, error) 
 	case "ensure-resource-account":
 		return m.ensureAccount(str("userPrincipalName"), str("displayName"), str("accountType"))
 	case "ensure-call-queue":
-		return m.ensureApp("call queue", AccountCallQueue, str("name"), str("resourceAccountId"), "")
+		return m.ensureApp("call queue", AccountCallQueue, str("name"), str("resourceAccountId"), "", a)
 	case "ensure-auto-attendant":
-		return m.ensureApp("auto attendant", AccountAutoAttendant, str("name"), str("resourceAccountId"), str("transferTarget"))
+		return m.ensureApp("auto attendant", AccountAutoAttendant, str("name"), str("resourceAccountId"), str("transferTarget"), nil)
 	case "remove-call-queue":
 		return m.removeApp(AccountCallQueue, str("resourceAccountId"), str("name")), nil
 	case "remove-auto-attendant":
@@ -135,7 +138,11 @@ func (m *MockTenant) ensureAccount(upn, displayName, accountType string) (map[st
 	return result(acc, true, "created"), nil
 }
 
-func (m *MockTenant) ensureApp(label, kind, name, accountID, transferTarget string) (map[string]any, error) {
+// ensureApp finds or creates a voice app and associates it with its account. queue is a
+// call queue's request — the agents it names, the routing it rings them in — and nil for
+// an auto attendant; a queue that already exists is brought to the agents it names
+// before anything else changes, as the shipped PowerShell does.
+func (m *MockTenant) ensureApp(label, kind, name, accountID, transferTarget string, queue map[string]any) (map[string]any, error) {
 	acc, ok := m.accounts[accountID]
 	if !ok {
 		return nil, fmt.Errorf("teamsphone: no resource account has the object id %s", accountID)
@@ -148,26 +155,74 @@ func (m *MockTenant) ensureApp(label, kind, name, accountID, transferTarget stri
 			return nil, fmt.Errorf("teamsphone: the transfer target %s is no resource account in this tenant", transferTarget)
 		}
 	}
-	result := func(app *mockApp, created bool) map[string]any {
-		return map[string]any{"id": app.id, "name": app.name, "created": created}
+	result := func(app *mockApp, created, agentsChanged bool) map[string]any {
+		out := map[string]any{"id": app.id, "name": app.name, "created": created}
+		if kind == AccountCallQueue {
+			out["agentsChanged"] = agentsChanged
+		}
+		return out
 	}
 	if id, ok := m.associated[accountID]; ok {
 		app := m.apps[id]
 		if app.kind != kind {
 			return nil, fmt.Errorf("teamsphone: resource account %s is already associated with %q, which is no %s", acc.upn, app.name, label)
 		}
-		return result(app, false), nil
+		changed, err := syncAgents(app, queue)
+		if err != nil {
+			return nil, err
+		}
+		return result(app, false, changed), nil
 	}
 	for _, app := range m.apps {
 		if app.kind == kind && app.name == name {
+			changed, err := syncAgents(app, queue)
+			if err != nil {
+				return nil, err
+			}
 			m.associated[accountID] = app.id
-			return result(app, false), nil
+			return result(app, false, changed), nil
 		}
 	}
 	app := &mockApp{id: mockID(kind + ":" + name), name: name, kind: kind}
+	if agents, ok := queue["agents"].([]string); ok {
+		app.agents = append([]string(nil), agents...)
+	}
 	m.apps[app.id] = app
 	m.associated[accountID] = app.id
-	return result(app, true), nil
+	return result(app, true, false), nil
+}
+
+// syncAgents brings an existing call queue to the agents a request names, by the rule
+// the shipped PowerShell keeps (Sync-QueueAgents in operations.ps1): agents not named are
+// left as they are, ids compare without regard to case, the order counts only where
+// serial routing rings in it, and a list that would take every agent away is refused.
+func syncAgents(app *mockApp, queue map[string]any) (bool, error) {
+	want, named := queue["agents"].([]string)
+	if !named {
+		return false, nil
+	}
+	serial := queue["routingMethod"] == "serial"
+	if agentKey(want, serial) == agentKey(app.agents, serial) {
+		return false, nil
+	}
+	if len(want) == 0 {
+		return false, fmt.Errorf("teamsphone: ensure-call-queue: the empty list of agents would remove every agent from the call queue %s, which has %d; an ensure never empties a queue, because a Resolve users that found nobody reads the same: name at least one agent, or leave agents out to keep the ones it has", app.name, len(app.agents))
+	}
+	app.agents = append([]string(nil), want...)
+	return true, nil
+}
+
+// agentKey is what two lists of agents are compared by: their ids in lower case, sorted
+// unless the order is the routing.
+func agentKey(agents []string, ordered bool) string {
+	keys := make([]string, len(agents))
+	for i, a := range agents {
+		keys[i] = strings.ToLower(a)
+	}
+	if !ordered {
+		sort.Strings(keys)
+	}
+	return strings.Join(keys, ",")
 }
 
 func (m *MockTenant) removeApp(kind, accountID, name string) map[string]any {

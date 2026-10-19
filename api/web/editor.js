@@ -3883,7 +3883,7 @@ const SERVICE_TASK_KINDS = [
       {
         key: "agents", label: "Agents", placeholder: "=benutzer.ids", fx: true,
         showIf: (v) => v.operation === "ensure-call-queue",
-        hint: "Optional. Ids from Resolve users, at most 20. Larger queues are served from a group or a channel, which this Worker Type does not offer.",
+        hint: "Optional. Ids from Resolve users, at most 20. When set, a queue that already exists is brought to exactly this list — a change of staff is one more run of this task — but never emptied: an empty list for a queue with agents is refused, because a Resolve users that found nobody reads the same. Leave it empty to keep the agents a queue has. Larger queues are served from a group or a channel, which this Worker Type does not offer.",
       },
       {
         key: "authorizedUsers", label: "Authorized users", placeholder: "=verantwortliche.ids", fx: true,
@@ -3945,6 +3945,7 @@ const SERVICE_TASK_KINDS = [
             case "ensure-resource-account":
               return "Required. =antwort.objectId is the account a voice app is associated with; =antwort.created says whether this run made it, and =antwort.source where it was found (created, entra or teams).";
             case "ensure-call-queue":
+              return "Required. =antwort.id and =antwort.name identify the queue; =antwort.created says whether this run made it, and =antwort.agentsChanged whether it set an existing queue's agents to the list named here.";
             case "ensure-auto-attendant":
               return "Required. =antwort.id and =antwort.name identify the voice app; =antwort.created says whether this run made it.";
             default:

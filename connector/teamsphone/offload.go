@@ -127,6 +127,16 @@ func Prepare(j Job) (Request, error) {
 	}
 	args := map[string]any{}
 	for _, name := range append(append([]string{}, spec.Required...), spec.Optional...) {
+		if contains(spec.Reconciled, name) {
+			raw, named := j.Args[name]
+			if !named {
+				// Not named is "leave it as it is", which only the value's absence says.
+				continue
+			}
+			if raw == nil {
+				return Request{}, fmt.Errorf("teamsphone: %s: %s resolved to nothing, and %s sets an existing one's %s to it; set the variable it reads before this task, or leave %s out to keep them as they are", j.Operation, name, spec.Label, name, name)
+			}
+		}
 		v, err := normalize(name, Attributes[name], j.Args[name])
 		if err != nil {
 			return Request{}, fmt.Errorf("teamsphone: %s: %w", j.Operation, err)

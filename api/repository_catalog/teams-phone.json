@@ -1,6 +1,6 @@
 {
   "id": "atlas.teams-phone",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kind": "connector",
   "title": "Microsoft Teams Phone voice apps",
   "author": "Atlas core",
@@ -43,7 +43,7 @@
       { "label": "Transfer to (Ensure auto attendant)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:transferTarget" },
         "description": "The resource account id of the call queue the auto attendant hands every call to." },
       { "label": "Agents (Ensure call queue)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:agents" },
-        "description": "Ids from Resolve users, at most 20. Empty creates a queue without agents." },
+        "description": "Ids from Resolve users, at most 20. When set, an existing queue is brought to exactly this list, but never emptied: an empty list for a queue with agents is refused. Empty keeps the agents a queue has, and creates a new queue without agents." },
       { "label": "Authorized users (Ensure call queue / auto attendant)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:authorizedUsers" },
         "description": "Ids from Resolve users of the people who may change the voice app's settings in Teams." },
       { "label": "Language (Ensure call queue optional / auto attendant)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:languageId" },
