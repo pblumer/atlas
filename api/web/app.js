@@ -10671,7 +10671,15 @@ async function viewEditorDraft(id) {
   } catch { /* best-effort: fall back to a Home-only crumb */ }
   const project = await resolveProject(projectId);
   if (superseded(gen)) return; // a newer navigation landed during the pre-mount fetches
-  await mod.mountEditor(view, { api, toast, draftId: id, projectId, project, adopt });
+  // A trip to the form editor from one of this diagram's steps ends here: the element is
+  // selected again, and a form saved on the way is linked to it (ADR-0465).
+  // Taken this late, after the superseded check, because leaving for a form can itself
+  // save the draft under a new id — a navigation of its own, which the form route then
+  // overtakes — and that mount must not be the one to consume the trip.
+  const { takeFormTrip } = await import("./form-return.js");
+  if (superseded(gen)) return;
+  const formTrip = takeFormTrip(id);
+  await mod.mountEditor(view, { api, toast, draftId: id, projectId, project, adopt, formTrip });
 }
 
 // viewDmnEditor mounts the decision editor
@@ -10688,15 +10696,17 @@ async function viewDmnEditor({ refId, draftId, projectId, forTask } = {}) {
   await mod.mountDmnEditor(view, { api, toast, refId, draftId, projectId, forTask });
 }
 
-// generateFor, when given, is the {processId, elementId} the "Create a new form" link
-// on a step carried here: the editor opens its generator on that step rather than
-// asking the author to say again what pressing that link already said
-// (ADR-0260).
-async function viewFormEditor(formId, projectId, generateFor) {
+// generateFor, when given, is the {processId, elementId} the "＋ New form" door on a
+// step carried here: the editor opens its generator on that step rather than asking
+// the author to say again what pressing that door already said
+// (ADR-0260). from, when given, is the {draftId, elementId} the
+// Modeler's form doors left from, which is where back goes and whose element links
+// what is saved (ADR-0465).
+async function viewFormEditor(formId, projectId, generateFor, from) {
   const gen = navGen;
   const mod = await import("./form-editor.js");
   if (superseded(gen)) return; // don't mount over a newer view after the dynamic import
-  await mod.mountFormEditor(view, { api, toast, formId, projectId, generateFor });
+  await mod.mountFormEditor(view, { api, toast, formId, projectId, generateFor, from });
 }
 
 async function viewLive(key, instance) {
@@ -11073,20 +11083,31 @@ async function route() {
     if (pd) return await viewProjectDetail(decodeURIComponent(pd[1]));
     const dnew = path.match(/^#\/modeler\/new(?:\/p\/(.+))?$/);
     if (dnew) return await viewEditor(null, dnew[1] ? decodeURIComponent(dnew[1]) : "");
-    const fnew = path.match(/^#\/modeler\/form\/new(?:\/p\/(.+))?$/);
-    if (fnew) return await viewFormEditor(null, fnew[1] ? decodeURIComponent(fnew[1]) : "");
-    // A new form for a named step: the Modeler's "Create a new form" link on a user
-    // task carries the process and the element, and on a start event the process
-    // alone — which is the start-form case, where the form is for the process itself.
-    const ffor = path.match(/^#\/modeler\/form\/new\/for\/([^/]+)(?:\/([^/]+))?$/);
+    // A form editor reached from a step in a diagram carries the way back as a
+    // /from/{draft}/{element} tail (ADR-0465). It is
+    // taken off before the form routes below are matched, so each keeps the shape it
+    // had, and handed to whichever of them matches.
+    let formPath = path;
+    let formFrom = null;
+    const ftail = path.match(/^(#\/modeler\/form\/.+)\/from\/([^/]+)\/([^/]+)$/);
+    if (ftail) {
+      formPath = ftail[1];
+      formFrom = { draftId: decodeURIComponent(ftail[2]), elementId: decodeURIComponent(ftail[3]) };
+    }
+    const fnew = formPath.match(/^#\/modeler\/form\/new(?:\/p\/(.+))?$/);
+    if (fnew) return await viewFormEditor(null, fnew[1] ? decodeURIComponent(fnew[1]) : "", null, formFrom);
+    // A new form for a named step: the Modeler's "＋ New form" on a user task carries
+    // the process and the element, and on a start event the process alone — which is
+    // the start-form case, where the form is for the process itself.
+    const ffor = formPath.match(/^#\/modeler\/form\/new\/for\/([^/]+)(?:\/([^/]+))?$/);
     if (ffor) {
       return await viewFormEditor(null, "", {
         processId: decodeURIComponent(ffor[1]),
         elementId: ffor[2] ? decodeURIComponent(ffor[2]) : "",
-      });
+      }, formFrom);
     }
-    const fe = path.match(/^#\/modeler\/form\/e\/(.+)$/);
-    if (fe) return await viewFormEditor(decodeURIComponent(fe[1]));
+    const fe = formPath.match(/^#\/modeler\/form\/e\/(.+)$/);
+    if (fe) return await viewFormEditor(decodeURIComponent(fe[1]), "", null, formFrom);
     const dm = path.match(/^#\/modeler\/draft\/(.+)$/);
     if (dm) return await viewEditorDraft(decodeURIComponent(dm[1]));
     // The decision editor, before the viewer below: "new" and "e/…" would otherwise

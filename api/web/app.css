@@ -569,6 +569,10 @@ ol.steps li { margin: 6px 0; }
 .btn.neutral.on, .btn.toggle[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .btn.toggle[aria-pressed="false"] { color: var(--muted); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+/* A link styled as a button is shut by taking its href away and saying so in
+   aria-disabled (the Modeler's form doors), so it reads as a disabled button does. */
+.btn[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+.btn.ghost[aria-disabled="true"]:hover { background: transparent; }
 
 /* Bulk-terminate selection over the live "All instances" list */
 .var-panel .vp-inst.picked { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }

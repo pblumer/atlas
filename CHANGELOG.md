@@ -72,6 +72,17 @@ steps beside a Worker Type close with a plain caveat.
 
 ### Added
 
+- **A step's form opens from the step, and a form created for it comes back linked.** The
+  Implement panel's form picker on a start event, a user task and a repair form now has two
+  buttons, **＋ New form** and **Open form**, where it had a "Create a new form" link that
+  opened a second tab and asked the author to come back and link the form by hand. A plain
+  click saves the diagram and opens the form editor with a way back to it; back selects the
+  element again and links a form saved on the way — one created for it, or the one it
+  opened, saved under a new id. A link changed in the meantime is left alone. A Ctrl- or
+  middle-click still opens the form in a new tab and leaves the diagram as it is, and the
+  form editor's back link now asks before it discards unsaved changes
+  ([ADR-0465](docs/adr/0465-form-doors.md)).
+
 - **The Entra ID worker signs with a certificate from the Windows certificate store.** On
   a Windows server a tenant may name its certificate by thumbprint — a bundle's
   `certificateThumbprint`, or `ATLAS_ENTRA_<NAME>_CLIENT_CERTIFICATE_THUMBPRINT` — instead
