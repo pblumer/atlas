@@ -28,9 +28,12 @@ proxy has not yet met a server whose proxy a group policy sets, which ADR-0464 l
 open, and there `HTTPS_PROXY` still wins. Teams Phone's `ensure-call-queue` brings an
 existing queue to the agents a model names, where it reported success on a queue it had
 left as it was ([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendment 2026-10-19); its
-script is still tested against a stand-in module, not a tenant. Among the fixes, a required
-constant's reference sits on its own line, and the handbook's runbook cards and the setup
-steps beside a Worker Type close with a plain caveat.
+script is still tested against a stand-in module, not a tenant. In the Modeler, a step's
+form opens from the step, and a form created for it comes back linked: a plain click saves
+the diagram and opens the form editor with a way back, where the old link opened a second
+tab and left the linking to the author ([ADR-0465](docs/adr/0465-form-doors.md)). Among the
+fixes, a required constant's reference sits on its own line, and the handbook's runbook
+cards and the setup steps beside a Worker Type close with a plain caveat.
 
 **Read this before upgrading from 0.15.0.** These act on an existing installation:
 
