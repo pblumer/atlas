@@ -274,6 +274,21 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   re-renders on every selection does not pepper the server; and a burst of keystrokes
   asks exactly one question.
 
+- **`form-doors.spec.mjs`** ([ADR-draft-form-doors](../docs/adr/draft-form-doors.md)):
+  the **way from a step to its form and back**, through the real app (`index.html` →
+  `app.js`) against a mocked `/api/v1`, because the routing is half of it. The start
+  event's, the user task's and the repair form's pickers carry **Open form** and
+  **＋ New form**; Open follows the picker before anything is saved and is shut, with the
+  reason, while nothing is picked or the form is missing. A plain click saves a diagram
+  with edits (and only then), opens the form editor at an address with a
+  `/from/{draft}/{element}` tail, and the editor's back link names the draft; coming back
+  selects the element, and a form created for it — or the one it opened, renamed — arrives
+  linked, while a link changed since the trip began is left alone. The way back asks
+  before it drops a form's unsaved edits and does not ask for an untouched one; a
+  Ctrl-click opens the form's plain address in a new tab and leaves the diagram unsaved
+  and in place; a repair form's new form stays the plain one; and a deployed version
+  opens the form without a way back.
+
 - **`form-identity.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
   the **form editor's single identity**, on the state that reported the bug — a form
   stored as `form-mtjs4` whose schema had drifted to `frm_jira_ticket_new`, so the

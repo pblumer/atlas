@@ -1,12 +1,15 @@
-// The "Create a new form" links in the Modeler's Implement panel carry where they were
-// pressed from (api/web/editor.js, ADR-0260).
+// The "＋ New form" doors in the Modeler's Implement panel carry where they were
+// pressed from (api/web/editor.js, ADR-0260). The door was a "Create a new form"
+// link until the form doors gave it a button and a way back
+// (ADR-draft-form-doors); what it addresses is unchanged, and that is
+// what this pins — the round trip itself is form-doors.spec.mjs.
 //
 // Pressing one on a user task is the author saying what the form is for, and until the
 // link carried that, the form editor could not know: it opened blank, the author laid
 // the form out by hand and came back to link it. The link now names the process and the
 // step, which is what lets the generator open on them.
 //
-// Three links, three different answers, and the differences are the point — so this
+// Three doors, three different answers, and the differences are the point — so this
 // asserts all three against the same model. It reuses the repair-form harness because
 // that model already has the three elements: a user task, a plain start event, and a
 // service task that offers a repair form.
@@ -28,9 +31,9 @@ async function open(page, id, group) {
   await page.locator(".pgroup-head", { hasText: group }).click();
 }
 
-// formLink is the "Create a new form" anchor inside the expanded group.
+// formLink is the "＋ New form" door inside the expanded group.
 const formLink = (page, group) =>
-  page.locator(".pgroup", { hasText: group }).locator("a", { hasText: "Create a new form" });
+  page.locator(`.pgroup[data-group="${group}"]`).locator("#f-form-new");
 
 test("a user task's link names the process and the task", async ({ page }) => {
   await open(page, "Activity_approve", "Form");

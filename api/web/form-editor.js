@@ -21,6 +21,7 @@ import { installDevShortcut } from "./dev-view.js";
 import { makeIdCheck } from "./idcheck.js";
 import { generationWorkers, openFormGenerator } from "./formgen-dialog.js";
 import { ensureFormStyles } from "./formviewer.js";
+import { fromTail, noteFormSaved } from "./form-return.js";
 
 const FORM_CSS = "vendor/form-js/form-playground.css";
 
@@ -86,10 +87,15 @@ export function cleanup() {
 // existing form; without it creates a new one (optionally seeded into projectId).
 //
 // generateFor is {processId, elementId} when the editor was reached by pressing
-// "Create a new form" on a step in the Modeler. It says what the form is for, so the
+// "＋ New form" on a step in the Modeler. It says what the form is for, so the
 // generator opens on it straight away instead of asking the author to say again what
 // their click already said (ADR-0260).
-export async function mountFormEditor(root, { api, toast, formId, projectId, generateFor }) {
+//
+// from is {draftId, elementId} when the editor was reached through one of the
+// Modeler's form doors (ADR-draft-form-doors): back goes to that
+// diagram, and a save completes the trip, so the element is linked to the form it now
+// is when the author returns.
+export async function mountFormEditor(root, { api, toast, formId, projectId, generateFor, from }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
   // Claim the shared cleanup slot so navigating away tears this editor down
@@ -168,13 +174,27 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
   let savedId = isNew ? "" : id;
   nameInput.value = name;
 
-  // Point the back link at the owning project when the form belongs to one, so a form
-  // opened from inside a project returns there rather than dumping the operator on the
+  // Point the back link at the diagram the form was opened from, when it was — that is
+  // where the author is going back to (ADR-draft-form-doors) — and
+  // otherwise at the owning project when the form belongs to one, so a form opened
+  // from inside a project returns there rather than dumping the operator on the
   // Modeler home. The edit route (#/modeler/form/e/{id}) doesn't name the project, so
   // this resolves from the loaded form's projectId (or, for a new form, the seeded one).
+  // Names are resolved after the fact, so the link works at once and gets its label
+  // when the answer arrives.
   (async () => {
     const backEl = root.querySelector("#form-back");
     if (!backEl) return;
+    if (from && from.draftId) {
+      backEl.href = "#/modeler/draft/" + encodeURIComponent(from.draftId);
+      backEl.innerHTML = "&larr; Process";
+      try {
+        const drafts = (await api("GET", "/api/v1/drafts")) || [];
+        const d = drafts.find((x) => x.processId === from.draftId);
+        if (d && d.name && root.querySelector("#form-back") === backEl) backEl.innerHTML = `&larr; ${esc(d.name)}`;
+      } catch { /* best-effort: the generic "Process" label still links correctly */ }
+      return;
+    }
     if (!project) return; // ungrouped/new: keep "← Forms" → Modeler home
     backEl.href = `#/modeler/p/${encodeURIComponent(project)}`;
     backEl.innerHTML = "&larr; Application"; // generic label until the name resolves
@@ -279,6 +299,33 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
   }
   syncIdentity();
 
+  // ---- Unsaved edits ---------------------------------------------------------
+  // Whether the form on screen differs from the one last loaded or saved — what the
+  // back link asks before it leaves (see Leaving, below). It is a comparison rather than
+  // a flag, so an edit undone is no edit. The baseline is taken from the Playground
+  // itself once it is up, because it normalises a schema on import (schemaVersion, the
+  // exporter, generated ids): compared with the stored document instead, every form
+  // would read as edited the moment it opened.
+  let baseline = null;
+  let savedName = name;
+  // liveSchema is the schema as the active pane holds it, uncommitted edits included.
+  // Source that does not parse is an edit too, and reads as one.
+  function liveSchema() {
+    try {
+      if (activeTab === "design" && panes.design.pg) return panes.design.pg.getSchema();
+      if (activeTab === "editor" && panes.editor.editor) return JSON.parse(panes.editor.editor.getValue());
+    } catch { return undefined; }
+    return schema;
+  }
+  const snapshot = () => JSON.stringify(liveSchema());
+  function isDirty() {
+    if (nameInput.value.trim() !== savedName.trim()) return true;
+    // Before the Playground has reported in there is no baseline: only what has been
+    // committed into the shared schema since is known to be an edit.
+    if (baseline === null) return rev > 0;
+    return snapshot() !== baseline;
+  }
+
   // The Design pane's properties panel is where the id is normally typed, so follow its
   // edits live rather than waiting for a tab change. getEditor() only exists once the
   // Playground has mounted its editor, which it does asynchronously, so this retries
@@ -287,7 +334,11 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
   (function followDesignEdits(tries = 0) {
     let ed = null;
     try { ed = panes.design.pg && panes.design.pg.getEditor(); } catch { /* not ready */ }
-    if (ed && typeof ed.on === "function") { ed.on("changed", syncIdentity); return; }
+    if (ed && typeof ed.on === "function") {
+      ed.on("changed", syncIdentity);
+      if (baseline === null) baseline = snapshot(); // the form as opened, as form-js holds it
+      return;
+    }
     if (tries < 40) idWatchTimer = setTimeout(() => followDesignEdits(tries + 1), 50);
   })();
 
@@ -583,10 +634,17 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
         : "Form saved");
       savedId = nextId;
       syncIdentity();
+      baseline = snapshot();
+      savedName = nameInput.value;
+      // A form reached from a step completes its trip: the element it was opened from
+      // links this id when the author goes back (ADR-draft-form-doors).
+      noteFormSaved(from, nextId);
       // The URL always addresses the form as it is now stored: a freshly created form
       // becomes editable in place (so a second Save updates rather than duplicating),
-      // and a renamed one stops pointing at an id that no longer exists.
-      history.replaceState(null, "", "#/modeler/form/e/" + encodeURIComponent(nextId));
+      // and a renamed one stops pointing at an id that no longer exists. The way back
+      // stays on it.
+      const back = from && from.draftId ? fromTail(from.draftId, from.elementId) : "";
+      history.replaceState(null, "", "#/modeler/form/e/" + encodeURIComponent(nextId) + back);
     } catch (e) {
       statusEl.textContent = "";
       // A refused collision is about the id, so re-run the check: the chip goes red and
@@ -599,6 +657,18 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
   }
   root.querySelector("#form-save").addEventListener("click", save);
   nameInput.addEventListener("input", () => { statusEl.textContent = ""; });
+
+  // ---- Leaving -------------------------------------------------------------
+  // The back link is a door, and leaving through it must not cost the form's edits —
+  // the question the Modeler asks before it leaves a diagram (makeKeepEdits). It
+  // matters more since a form can be reached from a step and the way back is one click
+  // (ADR-draft-form-doors). A modified click opens the link elsewhere
+  // and leaves this editor as it is, so it is not asked about.
+  root.querySelector("#form-back").addEventListener("click", (ev) => {
+    if (ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
+    if (!isDirty()) return;
+    if (!window.confirm("This form has unsaved changes, and going back discards them.\n\nContinue?")) ev.preventDefault();
+  });
 
   // ---- Generate ------------------------------------------------------------
   // Writing the form from a description and from the process it belongs to
