@@ -81,13 +81,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
-- **The handbook's runbook cards close with a plain caveat.** The line under each of the
-  27 runbook cards that names the month it was last checked went on to say that, where
-  the text no longer matched what the reader saw, "this section is out of date, not
-  you" — a sentence readers took for a riddle rather than the reassurance it was meant
-  to be. It now says what can have changed and what to follow: menu paths and labels
-  may have moved since, and where they differ the current interface takes precedence.
-  The date and its freshness check are unchanged (ADR-0289).
+- **The handbook's runbook cards and the panel's setup steps close with a plain caveat.**
+  The line under each of the 27 runbook cards that names the month it was last checked
+  went on to say that, where the text no longer matched what the reader saw, "this
+  section is out of date, not you" — a sentence readers took for a riddle rather than
+  the reassurance it was meant to be. The setup steps beside a Worker Type said the same
+  in other words ("the provider is right and this is out of date"). Both now say what
+  can have changed and what to follow: menu paths and labels may have moved since, and
+  where they differ the current interface takes precedence. They are one instruction at
+  two lengths and now close with one sentence. The dates and their freshness checks are
+  unchanged (ADR-0289).
 - **A selection in a code field lies on the text it selects.** The script, FEEL, JSON
   and Developer View editors draw a transparent text area over a coloured copy of the
   text and a line-number gutter. The copy and the gutter also spanned the text area's

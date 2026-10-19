@@ -494,7 +494,7 @@ function renderDoc(doc) {
   // Inside the fold on purpose: it qualifies the steps, and the reader deciding how far
   // to trust them is the reader who has opened them.
   const checked = doc.checked
-    ? `<p class="wtdoc-checked">Steps last checked <time datetime="${doc.checked}">${monthName(doc.checked)}</time>. Where a provider has moved a menu since, the provider is right and this is out of date.</p>`
+    ? `<p class="wtdoc-checked">Steps last checked <time datetime="${doc.checked}">${monthName(doc.checked)}</time>. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</p>`
     : "";
   return `<div class="wtdoc">
     <p class="wtdoc-needs">${doc.needs}</p>
