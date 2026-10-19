@@ -223,6 +223,12 @@ var (
 	// WorkerStarting is the out-of-process job worker announcing what it will serve
 	// and for which server (ADR-0157).
 	WorkerStarting = newEvent("worker.starting")
+	// OutboundProxySelected says, once at startup, where a server's or a worker's
+	// outbound HTTP takes its proxy from — the proxy variables, the Windows settings,
+	// or neither (ADR-draft-windows-system-proxy). Info, not a warning: it is a choice
+	// rather than a fault, and the line to read when a Worker's requests time out on
+	// one host and not on another.
+	OutboundProxySelected = newEvent("outbound_proxy.selected")
 	// WorkerPollFailed is a worker reporting that a poll failed and will be retried.
 	WorkerPollFailed = newEvent("worker.poll_failed")
 	// WorkerSupervisorStarted and WorkerSupervisorFailed report the lifecycle of a

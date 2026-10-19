@@ -12,6 +12,32 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The Entra ID worker signs with a certificate from the Windows certificate store.** On
+  a Windows server a tenant may name its certificate by thumbprint — a bundle's
+  `certificateThumbprint`, or `ATLAS_ENTRA_<NAME>_CLIENT_CERTIFICATE_THUMBPRINT` — instead
+  of handing over a PEM. The worker finds it in `CurrentUser\My` of its account, then
+  `LocalMachine\My`, the order the Teams Phone Worker and `Connect-MicrosoftTeams` use, and
+  each signature is made by CNG: the key never leaves the store, so a non-exportable key
+  serves as it serves PowerShell. The key is tried once at startup, so a missing
+  certificate or a key the service account may not read is a startup error naming the
+  store and the account. A thumbprint bundle on a server that is not Windows is not used
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended).
+
+### Changed
+
+- **Go Workers on Windows take the proxy PowerShell takes.** A server's and a worker's
+  outbound HTTP used to read only `HTTPS_PROXY` and its siblings, so on a Windows server
+  whose proxy a group policy sets — a PAC script, WPAD, or Internet Options — every Go
+  Worker went direct and timed out, while a PowerShell on the same host found the proxy.
+  Both now follow the same rules, .NET's: a proxy variable still wins; otherwise the
+  account's Windows settings apply, auto-configuration first, then the manual proxy and
+  its bypass list; loopback and the host's own addresses are never proxied.
+  `ATLAS_SYSTEM_PROXY=off` restores the old behaviour, and the startup line
+  `outbound_proxy.selected` says which source a process follows. Nothing changes off
+  Windows ([ADR-draft-windows-system-proxy](docs/adr/draft-windows-system-proxy.md)).
+
 ### Fixed
 
 - **A required constant's reference sits on its own line.** On an application's and the

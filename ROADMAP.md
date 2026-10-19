@@ -594,6 +594,14 @@ The control-flow basics most real models use.
   Exchange Server over Remote PowerShell from a pwsh on the worker host. Still open: the
   transport has not been exercised against a live tenant (the record's open question), and
   idempotent retries of grants and membership adds wait on confirmed error identities.
+  **On Windows, the Go Workers take the route PowerShell takes**
+  ([ADR-draft-windows-system-proxy](docs/adr/draft-windows-system-proxy.md)): outbound
+  HTTP follows a proxy variable when one is set and otherwise the account's PAC, WPAD or
+  Internet Options settings, by .NET's rules, so a group-policy proxy needs no
+  configuration; and the Entra Worker signs with a certificate from the Windows
+  certificate store by thumbprint, its key never read
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended). Still open: both are
+  exercised on the CI's Windows runner, not yet behind a real group-policy proxy.
   **The mail Worker reads its mailbox** ([ADR-0438](docs/adr/0438-mailbox-worker.md)):
   an inbound watch on a mail Worker publishes the new mail of one folder as an Atlas
   message — over IMAP for an SMTP Worker that names a `mailboxEndpoint`, through the Gmail
