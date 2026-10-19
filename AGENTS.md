@@ -127,6 +127,11 @@ internal/ownerfile/ Making a file this account's alone, and checking it is: mode
 internal/trustedproxy/ The client's address behind a load balancer: --trusted-proxies,
             the PROXY protocol under the public listener and X-Forwarded-For in front of
             the handler, read from listed peers only (ADR-0448)
+internal/sysproxy/ The outbound proxy, chosen as .NET chooses it: a proxy variable, else on
+            Windows the account's PAC, WPAD or Internet Options settings
+            (ADR-draft-windows-system-proxy)
+internal/certstore/ Signing with a key in the Windows certificate store, named by its
+            certificate's thumbprint, without reading the key out (ADR-0172, amended)
 ```
 
 **`connector/` holds the Worker Types.** Every capability a model can put on a

@@ -1,6 +1,6 @@
 # ADR-0172: A Microsoft Entra ID connector
 
-- **Status:** Accepted (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`. Amended 2026-08-25: group lifecycle (`create-group`, `get-group`, `list-groups`, `update-group`, `delete-group`) and ownership (`add-group-owner`, `remove-group-owner`) beside the existing membership operations; a dedicated `reset-password` that wraps a literal-or-FEEL secret in a `passwordProfile`; Teams (`create-team` on a group, `add-team-member`, `add-team-owner`, `create-channel`, `archive-team`), a Team being addressed by its group's id; and `assign-license` / `assign-role`. Amended 2026-08-25: a supervised Entra worker can take its client secret from the engine vault — `ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF` names a vault key the server resolves and hands the child under `_CLIENT_SECRET`, the AD bind-secret story with a connector name in place of a reference, so an operator can type the secret into the Console instead of onto the worker host; the worker stays worker-only and the engine builds no client. Amended 2026-08-25: the attributes body can be authored inline as JSON in the modeler instead of naming a variable — a string value beginning with `=` is a FEEL expression evaluated per field at runtime, and the compiler turns the whole template into one FEEL context compiled once at deploy (I5); the two ways of supplying the body are mutually exclusive. Amended 2026-08-25: an Entra tenant is now an operator-managed connector in the Console — a worker-only managed kind whose `credentialsRef` names a vault OAuth bundle `{tenantId, clientId, clientSecret}` (as SharePoint's does), read only by `superviseEnv` so the engine still builds no client and holds no tenant credential; and the Entra worker is supervised by default, starting parked with nothing to serve and brought up by the same refresh that already restarts mail/AD workers the moment a tenant is added — so adding a tenant is a Console entry, not a deployment change. Amended 2026-08-25: the `connector` name may itself be a literal-or-FEEL value — a leading `=` resolves the tenant from the instance's variables at call time, so one process can serve several tenants; this is entra-only because the kind is worker-only and no engine-side credential lookup keys off a fixed name. Amended 2026-08-25: the body-carrying operations get a per-operation capture mask in the Modeler (named fields for the important attributes plus a Weitere-Attribute JSON escape hatch) assembled into the same `attributes` JSON — UI-only, no moddle/compiler change; and the result variable gets an operation-aware hint describing what it receives. Amended 2026-10-17: the app may prove itself with a certificate instead of a client secret — a client assertion signed with the certificate's private key, still the client-credentials grant — configured as `_CLIENT_CERTIFICATE` (or `_CLIENT_CERTIFICATE_REF`) or as a bundle's `certificate` field; and `get-user` / `get-group` take a `select`, because Graph's default property set leaves out `assignedLicenses` and `employeeId`.)
+- **Status:** Accepted (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`. Amended 2026-08-25: group lifecycle (`create-group`, `get-group`, `list-groups`, `update-group`, `delete-group`) and ownership (`add-group-owner`, `remove-group-owner`) beside the existing membership operations; a dedicated `reset-password` that wraps a literal-or-FEEL secret in a `passwordProfile`; Teams (`create-team` on a group, `add-team-member`, `add-team-owner`, `create-channel`, `archive-team`), a Team being addressed by its group's id; and `assign-license` / `assign-role`. Amended 2026-08-25: a supervised Entra worker can take its client secret from the engine vault — `ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF` names a vault key the server resolves and hands the child under `_CLIENT_SECRET`, the AD bind-secret story with a connector name in place of a reference, so an operator can type the secret into the Console instead of onto the worker host; the worker stays worker-only and the engine builds no client. Amended 2026-08-25: the attributes body can be authored inline as JSON in the modeler instead of naming a variable — a string value beginning with `=` is a FEEL expression evaluated per field at runtime, and the compiler turns the whole template into one FEEL context compiled once at deploy (I5); the two ways of supplying the body are mutually exclusive. Amended 2026-08-25: an Entra tenant is now an operator-managed connector in the Console — a worker-only managed kind whose `credentialsRef` names a vault OAuth bundle `{tenantId, clientId, clientSecret}` (as SharePoint's does), read only by `superviseEnv` so the engine still builds no client and holds no tenant credential; and the Entra worker is supervised by default, starting parked with nothing to serve and brought up by the same refresh that already restarts mail/AD workers the moment a tenant is added — so adding a tenant is a Console entry, not a deployment change. Amended 2026-08-25: the `connector` name may itself be a literal-or-FEEL value — a leading `=` resolves the tenant from the instance's variables at call time, so one process can serve several tenants; this is entra-only because the kind is worker-only and no engine-side credential lookup keys off a fixed name. Amended 2026-08-25: the body-carrying operations get a per-operation capture mask in the Modeler (named fields for the important attributes plus a Weitere-Attribute JSON escape hatch) assembled into the same `attributes` JSON — UI-only, no moddle/compiler change; and the result variable gets an operation-aware hint describing what it receives. Amended 2026-10-17: the app may prove itself with a certificate instead of a client secret — a client assertion signed with the certificate's private key, still the client-credentials grant — configured as `_CLIENT_CERTIFICATE` (or `_CLIENT_CERTIFICATE_REF`) or as a bundle's `certificate` field; and `get-user` / `get-group` take a `select`, because Graph's default property set leaves out `assignedLicenses` and `employeeId`. Amended 2026-10-19: on Windows the certificate may stay in the certificate store, named by its thumbprint — `_CLIENT_CERTIFICATE_THUMBPRINT`, or a bundle's `certificateThumbprint` — and its key signs there through CNG without ever being read, so a non-exportable key serves as it serves PowerShell.)
 - **Implementation:** Landed
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
@@ -422,6 +422,53 @@ The `select` attribute, the compiled field and the payload already existed for l
 the compiler now accepts it on `get-user` and `get-group` (an operation-table flag,
 `Selects`, held in step with the compiler's by the drift test), and the worker appends
 `?$select=` to the single-object path. Every other operation still refuses it.
+
+### Amendment (2026-10-19): a certificate in the Windows certificate store, by thumbprint
+
+**Why.** The 2026-10-17 amendment took the certificate as PEM, with its private key in the
+clear. On the Windows servers where these processes run, the app's certificate usually
+already sits in the store of the host, its key marked **non-exportable** — the property that
+keeps it from being copied, and the one PowerShell relies on when it signs in with
+`-CertificateThumbprint`. A key that cannot be exported cannot be turned into PEM, so the
+Entra Worker could not use the very certificate the Teams Phone Worker
+([ADR-0463](0463-teams-phone-worker.md)) uses on the same host by thumbprint. An operator
+had to create and register a second certificate, with an exportable key, for the same app.
+
+- The worker takes a third credential, still exactly one per tenant:
+  `_CLIENT_CERTIFICATE_THUMBPRINT`, the SHA-1 thumbprint as Windows shows it (spaces,
+  colons and the invisible marks a copy out of the certificate dialog brings are
+  ignored). Two of the three set is a startup error naming each, as before.
+- The store is searched as the Teams Phone Worker and `Connect-MicrosoftTeams` search it:
+  `CurrentUser\My` of the account the worker runs as, then `LocalMachine\My`. So one
+  thumbprint names one certificate for every Worker on the host.
+- **The key is never read.** `internal/certstore` implements `crypto.Signer`: each digest
+  goes to CNG (`NCryptSignHash`, PKCS #1 v1.5) and the signature comes back. The client
+  assertion is the same RS256 JWT through the same `oauth2.ClientCertificate`, which now
+  takes a `crypto.Signer` instead of an `*rsa.PrivateKey` — an RSA key read from PEM is
+  one, so nothing else changes.
+- **Silent and CNG only.** A service has nobody to show a PIN or consent prompt to, so a
+  key that would ask fails instead of hanging. Every key a current Windows creates or
+  imports is a CNG key, and CNG also opens the legacy CryptoAPI software keys; a key that
+  only a smart-card CSP holds is refused with that reason.
+- **Tried at startup.** Opening the certificate signs one digest and verifies it against
+  the certificate, so a thumbprint the store does not hold, a key the service account has
+  no read permission on (*Manage Private Keys*), or a key that is not the certificate's
+  is a startup error — naming the store and the account searched — rather than a failed
+  token request in the middle of a run.
+- **Nothing is held between signatures.** The store is opened, the key acquired and both
+  released per signature; the worker signs at most once an hour (the token is cached), so
+  a renewed or removed certificate cannot leave a stale handle behind.
+- **A Console bundle** may carry `certificateThumbprint` in place of `clientSecret` or
+  `certificate` (`{tenantId, clientId, certificateThumbprint}`). On a host without a
+  certificate store — anything but Windows — such a bundle is left out like any bundle
+  that does not resolve, because handing it over would make the worker refuse to start
+  for every tenant it serves, not only this one. An external worker set up by hand on
+  such a host refuses the variable at startup and says why.
+- The thumbprint is not a secret, but it stays in the bundle with the rest of the tenant,
+  so a tenant is still one vault entry.
+
+The same mechanism is open to the Exchange Worker and anything else that signs a client
+assertion; it is built for Entra first because that is where it was needed.
 
 ## Pros and cons of the options
 

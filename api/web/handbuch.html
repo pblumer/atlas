@@ -6398,12 +6398,18 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           <li data-l="de">Secret anlegen: <code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code> – mit
             Zertifikat stattdessen <code>{"tenantId": "…", "clientId": "…", "certificate": "…"}</code>, wobei
             <code>certificate</code> das Zertifikat und seinen <b>unverschlüsselten</b> privaten Schlüssel als einen
-            PEM-Text enthält; nie beides. Dann einen Worker vom Typ <b>Microsoft Entra ID</b> mit einem Namen und
+            PEM-Text enthält. Auf einem Windows-Server kann stattdessen <code>"certificateThumbprint"</code> ein
+            Zertifikat nennen, das schon im Zertifikatsspeicher liegt (<code>CurrentUser\My</code> des Dienstkontos
+            oder <code>LocalMachine\My</code>); sein Schlüssel signiert dort und darf nicht exportierbar sein. Immer
+            genau eines der drei. Dann einen Worker vom Typ <b>Microsoft Entra ID</b> mit einem Namen und
             <b>ohne Endpoint</b>.</li>
           <li data-l="en">Create the secret <code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code> – with
             a certificate instead <code>{"tenantId": "…", "clientId": "…", "certificate": "…"}</code>, where
-            <code>certificate</code> holds the certificate and its <b>unencrypted</b> private key as one PEM text;
-            never both. Then a worker of type <b>Microsoft Entra ID</b> with a name and <b>no endpoint</b>.</li>
+            <code>certificate</code> holds the certificate and its <b>unencrypted</b> private key as one PEM text. On a
+            Windows server, <code>"certificateThumbprint"</code> may instead name a certificate already in the
+            certificate store (the service account's <code>CurrentUser\My</code>, or <code>LocalMachine\My</code>);
+            its key signs there and may be non-exportable. Always exactly one of the three. Then a worker of type
+            <b>Microsoft Entra ID</b> with a name and <b>no endpoint</b>.</li>
           <li data-l="de">Prüfen, dass der Dienstprinzipal <b>keine Verzeichnisrolle</b> hält, die er nicht braucht
             (Entra → Rollen und Administratoren).</li>
           <li data-l="en">Check that the service principal holds <b>no directory role</b> it does not need (Entra →

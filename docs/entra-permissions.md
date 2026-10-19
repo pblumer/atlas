@@ -85,9 +85,14 @@ when a process actually uses those operations, and drop them otherwise.
   `ATLAS_ENTRA_<NAME>_CLIENT_CERTIFICATE` (or `_CLIENT_CERTIFICATE_REF`): the certificate
   and its unencrypted private key as one PEM text, whose public part is uploaded to the
   app registration under *Certificates & secrets → Certificates*. In a Console bundle the
-  same text is the `certificate` field in place of `clientSecret`. Set one, never both —
-  the worker refuses a tenant that has both. With a certificate no shared secret travels
-  to Entra: the worker signs a short-lived assertion and only that is sent.
+  same text is the `certificate` field in place of `clientSecret`. On a Windows server the
+  certificate may instead stay in the certificate store:
+  `ATLAS_ENTRA_<NAME>_CLIENT_CERTIFICATE_THUMBPRINT`, or `certificateThumbprint` in a
+  Console bundle, names it, the worker looks in `CurrentUser\My` of its service account and
+  then `LocalMachine\My`, and CNG signs with the key there — it may be non-exportable, and
+  the service account needs read permission on it (*Manage Private Keys*). Set exactly one
+  of the three — the worker refuses a tenant that has more. With a certificate no shared
+  secret travels to Entra: the worker signs a short-lived assertion and only that is sent.
 
 ## See also
 
