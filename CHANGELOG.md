@@ -12,6 +12,66 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A required constant's reference sits on its own line.** On an application's and the
+  server's Constants page, the table of constants the deployed processes require showed
+  the reference a process reads, such as `application.CLIENT_ID`, after the name on the
+  same line, and the browser broke it onto a second line only where the name was long, so
+  the rows did not line up. The reference now always sits under the name, smaller and in
+  a monospace font, as the identifier a process writes.
+
+## [0.15.0] — 2026-10-17
+
+**Atlas administers Exchange and Teams Phone, and a script can take the path a process
+drew for its error.** Two new worker-only Worker Types reach Microsoft 365. **Microsoft
+Exchange** offers the cmdlets an administration process uses — mailboxes, their
+permissions, distribution groups, mail contacts and mailbox settings — as named operations
+the compiler checks at deploy, against Exchange Online and Exchange Server alike
+([ADR-0462](docs/adr/0462-exchange-worker.md)). **Teams Phone** ensures and removes
+resource accounts, call queues and auto attendants with fixed PowerShell shipped with Atlas
+([ADR-0463](docs/adr/0463-teams-phone-worker.md)). Neither has run against a real tenant
+yet: Exchange Online is reached over the REST endpoint the Exchange Online PowerShell
+module uses, which Microsoft does not document, and the Teams Phone script is tested
+against a stand-in module, so the first installation that uses either is the first to see
+a tenant answer. The Entra ID worker signs in with a certificate as well as a secret, and
+`get-user` and `get-group` take a `select`. A script task gives its error a code in its
+own language's idiom, and when the process catches that code, the instance takes the error
+boundary's path at once instead of spending its retries
+([ADR-0461](docs/adr/0461-script-bpmn-errors.md)). Among the fixes, a selection in the
+script, FEEL and JSON editors lies on the text it selects where scrollbars take room, as on
+Windows.
+
+**Read this before upgrading from 0.14.0.** These act on an existing installation:
+
+- A script that fails with a code its process catches now throws that BPMN error, where
+  0.14.0 retried the job and then parked it on an incident. The code is a PowerShell
+  error's ErrorId, the text of a bare `throw` included, a Python exception's `code`
+  attribute, an HTTP status among them, or a JavaScript error's `code` property, such as
+  `ECONNREFUSED`. Every deployed definition is compiled again at the first start, so this
+  holds for models deployed under 0.14.0 and for the jobs of instances already running: an
+  error boundary that names such a code, unreachable until now, is taken. A code the
+  process catches somewhere, but not around the failing task, waits on an incident without
+  being retried. An error boundary without a code catches nothing new, and a failure with
+  any other code is retried as before. Look at the codes your processes catch that a
+  library's errors may also carry, because such a failure is no longer retried.
+- A script worker you run yourself with `atlas worker` throws only once it runs 0.15.0. A
+  0.14.0 worker ignores the codes the server now hands out with a script job and fails the
+  job as before. A worker the server supervises is the server's own binary.
+- Exchange and Teams Phone change nothing until somebody configures them. Both are
+  worker-only: the engine never signs in to either, and a worker serves them only when its
+  `--connector` names `exchange` or `teamsphone` or the Console holds an organization or a
+  tenant of that kind. An Entra worker configured with a secret works as before. A Console
+  tenant's Entra bundle that carries both a `clientSecret` and a `certificate`, which
+  0.14.0 read as a secret, is now left unconfigured as ambiguous.
+- 0.15.0 reads the data directory 0.14.0 wrote: nothing under the log, the state or the
+  record format changed, no store was added, and no system process changed, so the first
+  start deploys nothing new.
+- Going back to 0.14.0 is not claimed once a model uses what 0.15.0 adds. 0.14.0 refuses
+  to reload a deployed model with an Exchange or Teams Phone task (`service task … has no
+  task definition type`) or with `select` on an Entra `get-user` or `get-group`, and a
+  server that cannot reload a deployment does not start. Take a backup before upgrading.
+
 ### Added
 
 - **Teams Phone voice apps are provisioned without PowerShell in the model.** A new
@@ -15030,7 +15090,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/pblumer/atlas/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/pblumer/atlas/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/pblumer/atlas/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/pblumer/atlas/compare/v0.11.0...v0.12.0
