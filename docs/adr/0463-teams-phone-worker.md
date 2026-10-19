@@ -1,6 +1,6 @@
 # ADR-0463: A Microsoft Teams Phone Worker Type for voice apps and their resource accounts
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-19: `ensure-call-queue` brings a queue it finds to the agents a model names — the directly assigned ones, in order under serial routing — and answers `agentsChanged`; agents not named are left as they are, a value that resolved to nothing is refused, and an empty list never empties a queue that has agents)
 - **Implementation:** Landed
 - **Date:** 2026-10-17
 - **Deciders:** Atlas maintainers
@@ -182,6 +182,58 @@ starting PowerShell.
 - **Follow-ups / risks to watch:** a warm `pwsh` session per tenant; phone-number
   assignment once Microsoft documents a stable path; whether this kind should move to an
   external package (the open question).
+
+### Amendment (2026-10-19): ensure-call-queue brings an existing queue to the agents it names
+
+As landed, `ensure-call-queue` found an existing queue — through its account's
+association or by its name — and returned it as it was. A process run again after a
+change of staff therefore answered `created: false` and completed while the queue kept the
+old agents. Nothing failed, so nothing showed it: the one failure in this design nobody
+sees. A model that names the agents of an *ensure* means them as the queue's agents, and
+for agents the operation did not do what its name says.
+
+**Decision.** When a model names `agents`, a queue the operation finds is brought to that
+list with `Set-CsCallQueue -Users`, on both paths, and the answer gains `agentsChanged`.
+
+- **Only the agents named directly** (the queue's `Users`) are compared and set. Agents a
+  distribution list or a Teams channel brings stay Teams' to keep, as they were before.
+- **Ids compare without regard to case; order counts only under serial routing.** There
+  the order *is* the routing, so a reordered list is a change; under every other routing it
+  is not. The routing compared under is the one the model asks for.
+- **Not named means "leave them".** The worker passes `agents` on only when the model
+  named it (`Op.Reconciled`), so an existing queue keeps agents an operator maintains in
+  the Teams admin center unless the model claims them.
+- **A value that resolved to nothing is refused**, for a new queue as well: the worker
+  cannot know before PowerShell starts whether the queue exists, and a variable nobody set
+  is not "no agents". Until now it created a queue without agents.
+- **An empty list never empties a queue that has agents; it is refused.** The strongest
+  case for applying it is that an explicit empty list is the model's statement. It loses
+  to what produces such a list in practice: `resolve-users` reports every lookup it could
+  not make as `notFound`, so an outage turns a staffed hotline's list into an empty one,
+  and silently emptying the queue is the most damaging outcome this operation could have.
+  Emptying a queue remains `remove-call-queue` or a script task. The same mechanism removes
+  a single agent who was only briefly not found; that is not refused, because it cannot be
+  told from a leaver, so the handbook tells a model to check `notFound` first.
+- **On the name path the agents are set before the association.** A refused list leaves
+  the queue as unattached as it found it, and a failure after the change is met by a retry
+  that finds the agents already right.
+
+**Considered and not chosen:** an opt-in setting that would have left deployed models
+unchanged. It would also have kept the silent outcome for every model whose author does
+not know the switch, and naming the agents of an *ensure* already says what is wanted.
+The consequence is accepted: a deployed model that names agents now overwrites agents
+changed in the admin center since; such a model leaves `agents` empty.
+
+**Not reconciled:** routing, presence-based routing, conference mode, opt-out, authorized
+users and language still apply only when a queue is created. A model that changes those
+on an existing queue still needs a script task; that asymmetry is a named follow-up.
+
+**Assumption.** Microsoft documents `-Users` as a parameter but not the properties of the
+object `Get-CsCallQueue` returns; the script reads the directly assigned agents from its
+`Users` property, as the stand-in module models it. Were the property missing, a named
+non-empty list would be set again on every run — converging, but answering
+`agentsChanged: true` each time — and an empty one would never be refused. Like the rest
+of the script, this is found by the first installation that runs it against a tenant.
 
 ## Pros and cons of the options
 

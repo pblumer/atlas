@@ -12,6 +12,20 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+
+- **Ensure call queue brings an existing queue to the agents it names.** A Teams Phone
+  task that runs `ensure-call-queue` again after a change of staff now sets the queue's
+  directly assigned agents to the list it names, in that order under serial routing, and
+  answers `agentsChanged`; until now it found the queue, returned it unchanged and reported
+  success. A task that names no agents leaves them as they are. Two values are refused
+  instead of applied: `agents` that resolved to nothing, such as a variable nobody set, also
+  for a new queue; and an empty list for a queue that has agents, because a Resolve users
+  that found nobody reads the same. This changes deployed models: one that names agents now
+  overwrites agents maintained in the Teams admin center since, so leave `agents` empty
+  where the admin center keeps them ([ADR-0463](docs/adr/0463-teams-phone-worker.md),
+  amendment 2026-10-19).
+
 ## [0.15.0] — 2026-10-17
 
 **Atlas administers Exchange and Teams Phone, and a script can take the path a process

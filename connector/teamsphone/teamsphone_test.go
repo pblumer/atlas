@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -173,6 +174,7 @@ func TestPrepareRefusals(t *testing.T) {
 		"empty required":    {teamsphone.Job{Operation: "ensure-call-queue", Args: map[string]any{"name": nil, "resourceAccountId": "r"}}, "needs name"},
 		"list as a name":    {teamsphone.Job{Operation: "remove-call-queue", Args: map[string]any{"resourceAccountId": []any{"a", "b"}}}, "must be one value"},
 		"too many agents":   {teamsphone.Job{Operation: "ensure-call-queue", Args: map[string]any{"name": "n", "resourceAccountId": "r", "agents": agents}}, "at most 20"},
+		"agents unset":      {teamsphone.Job{Operation: "ensure-call-queue", Args: map[string]any{"name": "n", "resourceAccountId": "r", "agents": nil}}, "agents resolved to nothing"},
 		"unknown setting":   {teamsphone.Job{Operation: "ensure-resource-account", Args: map[string]any{"userPrincipalName": "u", "displayName": "d", "accountType": "queue"}}, `accountType "queue"`},
 		"no account type":   {teamsphone.Job{Operation: "ensure-resource-account", Args: map[string]any{"userPrincipalName": "u", "displayName": "d"}}, `accountType ""`},
 		"holiday no date":   {attendant(`[{"name":"Weihnachten","start":"25.12.2026"}]`), "YYYY-MM-DD"},
@@ -187,6 +189,148 @@ func TestPrepareRefusals(t *testing.T) {
 				t.Errorf("want an error containing %q, got %v", c.want, err)
 			}
 		})
+	}
+}
+
+// The agents a model names are a queue's agents, so the worker tells three cases apart
+// that a list alone cannot: agents not named at all leave an existing queue's agents as
+// they are, an empty list is a list, and a value that resolved to nothing — a variable
+// read before anybody set it — is refused rather than read as "no agents".
+func TestUnnamedAgentsAreNotNoAgents(t *testing.T) {
+	queue := func(args map[string]any) teamsphone.Job {
+		args["name"], args["resourceAccountId"] = "CQ Support", "ra-1"
+		return teamsphone.Job{Operation: "ensure-call-queue", Args: args}
+	}
+	req, err := teamsphone.Prepare(queue(map[string]any{}))
+	if err != nil {
+		t.Fatalf("Prepare without agents: %v", err)
+	}
+	if v, ok := req.Args["agents"]; ok {
+		t.Errorf("agents nobody named reached the client as %#v; want it left out", v)
+	}
+	req, err = teamsphone.Prepare(queue(map[string]any{"agents": []any{}}))
+	if err != nil {
+		t.Fatalf("Prepare with an empty list: %v", err)
+	}
+	if v, ok := req.Args["agents"].([]string); !ok || len(v) != 0 {
+		t.Errorf("an empty list of agents reached the client as %#v; want an empty list", req.Args["agents"])
+	}
+
+	j := resolve(t, `connector="contoso" operation="ensure-call-queue" name="CQ Support" resourceAccountId="ra-1" agents="=agentIds" resultVariable="queue"`)
+	c := &recordingClient{}
+	reg := teamsphone.NewRegistry()
+	reg.Register("contoso", c)
+	if _, err := teamsphone.Run(context.Background(), j, reg); err == nil || !strings.Contains(err.Error(), "agents resolved to nothing") {
+		t.Errorf("an unset agents variable: %v; want it refused", err)
+	}
+	if len(c.reqs) != 0 {
+		t.Error("an unset agents variable reached the client")
+	}
+}
+
+// ensure-call-queue brings an existing queue's agents to the list a model names, so a
+// process that runs it again after a change of staff changes the queue instead of
+// reporting success and leaving it as it was. It does so through the queue's account
+// and through its name alike, compares ids as Teams does (without regard to case), and
+// lets order count only where serial routing rings in it. It never empties a queue: a
+// Resolve users that found nobody reads exactly like a queue nobody staffs.
+func TestEnsureCallQueueReconcilesItsAgents(t *testing.T) {
+	m := teamsphone.NewMockTenant()
+	reg := teamsphone.NewRegistry()
+	reg.Register("contoso", m)
+	run := func(op string, args map[string]any) (map[string]any, error) {
+		out, err := teamsphone.Run(context.Background(), teamsphone.Job{Connector: "contoso", Operation: op, Args: args, ResultVariable: "r"}, reg)
+		if err != nil {
+			return nil, err
+		}
+		return out["r"].(map[string]any), nil
+	}
+	account := func(upn string) string {
+		t.Helper()
+		out, err := run("ensure-resource-account", map[string]any{"userPrincipalName": upn, "displayName": "Support", "accountType": "call-queue"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out["objectId"].(string)
+	}
+	accountID := account("cq_support@contoso.example")
+	ensure := func(args map[string]any) map[string]any {
+		t.Helper()
+		args["name"] = "CQ Support"
+		if _, ok := args["resourceAccountId"]; !ok {
+			args["resourceAccountId"] = accountID
+		}
+		out, err := run("ensure-call-queue", args)
+		if err != nil {
+			t.Fatalf("ensure-call-queue %v: %v", args, err)
+		}
+		return out
+	}
+
+	first := ensure(map[string]any{"agents": "A-1, a-2"})
+	if first["created"] != true || first["agentsChanged"] != false {
+		t.Fatalf("first ensure-call-queue = %v, want created with its agents and nothing to change", first)
+	}
+	queueID := first["id"].(string)
+	steps := []struct {
+		name        string
+		args        map[string]any
+		wantChanged bool
+		wantAgents  []string
+	}{
+		{"the same agents in another case and order", map[string]any{"agents": []any{"a-2", "a-1"}}, false, []string{"A-1", "a-2"}},
+		{"a change of staff", map[string]any{"agents": "a-2, a-3"}, true, []string{"a-2", "a-3"}},
+		{"the same change again", map[string]any{"agents": "a-2, a-3"}, false, []string{"a-2", "a-3"}},
+		{"agents not named", map[string]any{}, false, []string{"a-2", "a-3"}},
+		{"another order under serial routing", map[string]any{"agents": "a-3, a-2", "routingMethod": "serial"}, true, []string{"a-3", "a-2"}},
+	}
+	for _, s := range steps {
+		got := ensure(s.args)
+		if got["created"] != false || got["id"] != queueID || got["agentsChanged"] != s.wantChanged {
+			t.Errorf("%s: ensure-call-queue = %v, want the queue %s with agentsChanged=%v", s.name, got, queueID, s.wantChanged)
+		}
+		if agents := m.AgentsOf(queueID); !reflect.DeepEqual(agents, s.wantAgents) {
+			t.Errorf("%s: the queue's agents are %v, want %v", s.name, agents, s.wantAgents)
+		}
+	}
+
+	if _, err := run("ensure-call-queue", map[string]any{"name": "CQ Support", "resourceAccountId": accountID, "agents": []any{}}); err == nil ||
+		!strings.Contains(err.Error(), "would remove every agent") {
+		t.Errorf("an empty list for a staffed queue: %v; want it refused", err)
+	}
+	if agents := m.AgentsOf(queueID); !reflect.DeepEqual(agents, []string{"a-3", "a-2"}) {
+		t.Errorf("a refused reconciliation changed the agents to %v", agents)
+	}
+
+	// A queue found by its name — its account was removed and a new one made — is
+	// reconciled before the new account is associated with it.
+	if _, err := run("remove-resource-account", map[string]any{"resourceAccountId": accountID}); err != nil {
+		t.Fatal(err)
+	}
+	newAccount := account("cq_support2@contoso.example")
+	if _, err := run("ensure-call-queue", map[string]any{"name": "CQ Support", "resourceAccountId": newAccount, "agents": []any{}}); err == nil {
+		t.Error("an empty list for a staffed queue found by name was not refused")
+	}
+	byName := ensure(map[string]any{"resourceAccountId": newAccount, "agents": "a-4"})
+	if byName["created"] != false || byName["id"] != queueID || byName["agentsChanged"] != true {
+		t.Errorf("ensure-call-queue by name = %v, want the queue %s found and its agents changed", byName, queueID)
+	}
+	if agents := m.AgentsOf(queueID); !reflect.DeepEqual(agents, []string{"a-4"}) {
+		t.Errorf("the queue found by name has the agents %v, want [a-4]", agents)
+	}
+
+	// A queue without agents is not emptied by an empty list either: there is nothing to
+	// take away, so there is nothing to refuse.
+	emptyAccount := account("cq_empty@contoso.example")
+	emptyQueue := func() map[string]any {
+		return map[string]any{"name": "CQ Empty", "resourceAccountId": emptyAccount, "agents": []any{}}
+	}
+	created, err := run("ensure-call-queue", emptyQueue())
+	if err != nil || created["created"] != true {
+		t.Fatalf("a queue without agents = %v, %v", created, err)
+	}
+	if again, err := run("ensure-call-queue", emptyQueue()); err != nil || again["agentsChanged"] != false || again["id"] != created["id"] {
+		t.Errorf("an empty list for a queue without agents = %v, %v; want it unchanged", again, err)
 	}
 }
 
@@ -331,6 +475,13 @@ func TestTeamsPhoneOpsMatchTheCompiler(t *testing.T) {
 	for _, op := range teamsphone.OpNames() {
 		spec := teamsphone.Ops[op]
 		t.Run(op, func(t *testing.T) {
+			for _, name := range spec.Reconciled {
+				// Prepare reads only what an operation takes; a reconciled value it does
+				// not take would be dropped, and its absence read as "leave it".
+				if !slices.Contains(spec.Optional, name) {
+					t.Errorf("%s reconciles %s, which is not one of its optional values", op, name)
+				}
+			}
 			if _, _, _, err := compileTask(attrs(op, spec, "")); err != nil {
 				t.Fatalf("the compiler rejects a model that satisfies Ops[%q]: %v", op, err)
 			}

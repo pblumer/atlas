@@ -594,6 +594,16 @@ The control-flow basics most real models use.
   Exchange Server over Remote PowerShell from a pwsh on the worker host. Still open: the
   transport has not been exercised against a live tenant (the record's open question), and
   idempotent retries of grants and membership adds wait on confirmed error identities.
+  **Teams Phone is another Worker Type in the catalog**
+  ([ADR-0463](docs/adr/0463-teams-phone-worker.md)): a service task marked
+  `<atlas:teamsPhoneConnector connector operation …>` resolves users, ensures the resource
+  accounts, a call queue and the auto attendant in front of it, and removes all three
+  again — fixed PowerShell shipped with Atlas, run by `pwsh` and the MicrosoftTeams module
+  on the worker host with the app's certificate from the vault. Every ensure looks before
+  it creates, and `ensure-call-queue` brings an existing queue to the agents a model names,
+  without ever emptying it. Still open: a run against a live tenant, phone numbers,
+  business hours and menus, the settings of an existing queue other than its agents, and a
+  warm `pwsh` session per tenant.
   **The mail Worker reads its mailbox** ([ADR-0438](docs/adr/0438-mailbox-worker.md)):
   an inbound watch on a mail Worker publishes the new mail of one folder as an Atlas
   message — over IMAP for an SMTP Worker that names a `mailboxEndpoint`, through the Gmail

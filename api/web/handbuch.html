@@ -6574,6 +6574,21 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             tenant in the worker's memory, with the same rules; <code>ATLAS_TEAMSPHONE_MOCK_USERS</code> names the people
             <i>Resolve users</i> finds.</li>
         </ol>
+        <p data-l="de"><b>Agenten:</b> <i>Ensure call queue</i> bringt eine bestehende Warteschlange auf genau die
+          Agenten, die das Modell nennt – ein Personalwechsel ist ein weiterer Lauf derselben Task, und
+          <code>agentsChanged</code> im Ergebnis sagt, ob er etwas geändert hat. Verglichen werden nur direkt zugewiesene
+          Agenten (nicht die einer Verteilerliste oder eines Kanals), bei serieller Verteilung auch ihre Reihenfolge.
+          Nennt das Modell keine Agenten, bleiben sie, wie sie sind. Eine leere Liste leert eine Warteschlange mit
+          Agenten nie, sondern wird abgelehnt: Ein <i>Resolve users</i>, das während einer Störung niemanden fand, sähe
+          genau so aus. Prüfe <code>notFound</code> deshalb im Modell, bevor die Liste die Warteschlange erreicht – auch
+          ein einzelner Agent, der nur vorübergehend nicht gefunden wurde, fiele sonst aus der Warteschlange.</p>
+        <p data-l="en"><b>Agents:</b> <i>Ensure call queue</i> brings an existing queue to exactly the agents the model
+          names – a change of staff is one more run of the same task, and <code>agentsChanged</code> in the result says
+          whether it changed anything. Only agents assigned directly are compared (not those of a distribution list or a
+          channel), and under serial routing their order too. A model that names no agents leaves them as they are. An
+          empty list never empties a queue with agents; it is refused, because a <i>Resolve users</i> that found nobody
+          during an outage would look the same. So check <code>notFound</code> in the model before the list reaches the
+          queue – otherwise a single agent who was only briefly not found would drop out of the queue.</p>
         <p data-l="de"><b>Die Falle:</b> Teams zeigt ein neues Ressourcenkonto erst nach einer Synchronisation. Eine
           Warteschlange oder Telefonzentrale wartet darauf bis zu zwei Minuten und wird danach abgelehnt, <i>bevor</i>
           etwas angelegt ist. Liegt im Modell zwischen dem Anlegen der Konten und der Warteschlange keine Wartezeit
