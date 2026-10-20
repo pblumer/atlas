@@ -1840,8 +1840,8 @@ dataset of up to 50 000 cases":
 - ✅ **Into a step's form and back**: **Open form** and **＋ New form** under the form
   picker of a start event, a user task and a repair form save the diagram, open the form
   editor with a way back, and link a form created or renamed on the way when the author
-  returns ([ADR-0465](docs/adr/0465-form-doors.md)). The canvas has no form
-  door yet.
+  returns ([ADR-0465](docs/adr/0465-form-doors.md)). The canvas has the same door:
+  **Open form** in the context pad, and in the Implement view a form mark that is a link.
 
 **Version history** ([ADR-0031](docs/adr/0031-diagram-version-history.md)):
 - 🔲 A **Versions** control: explicit named checkpoints (immutable snapshots)

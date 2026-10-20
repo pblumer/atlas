@@ -12,6 +12,16 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A step's form opens from the canvas too.** An element that names a form now has
+  **Open form** in its context pad, and in the Implement view a start event or user task
+  with a form carries a small form mark that opens it. Both take the way the panel's
+  button takes: the diagram is saved, the form editor opens with a way back, and a form
+  saved on the way is linked on return; a Ctrl- or middle-click opens a new tab instead.
+  A form the server does not hold is reported in a message, and the diagram is neither
+  saved nor left ([ADR-0465](docs/adr/0465-form-doors.md), amended).
+
 ### Changed
 
 - **The undeclared namespace members in the Variables panel collapse.** The Modeler's

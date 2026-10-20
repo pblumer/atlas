@@ -287,7 +287,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   before it drops a form's unsaved edits and does not ask for an untouched one; a
   Ctrl-click opens the form's plain address in a new tab and leaves the diagram unsaved
   and in place; a repair form's new form stays the plain one; and a deployed version
-  opens the form without a way back.
+  opens the form without a way back. On the canvas (ADR-0465, amended): the context pad
+  offers **Open form** only where a form is named, reaches a repair form too, reports a
+  form the server does not hold instead of saving or leaving, and a Ctrl-click opens a new
+  tab; the Implement view marks start events and user tasks that name a form (not repair
+  forms, and nothing in the Design view), redraws the mark as the picker changes, and the
+  mark is the same door.
 
 - **`form-identity.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
   the **form editor's single identity**, on the state that reported the bug — a form

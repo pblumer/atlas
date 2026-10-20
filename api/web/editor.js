@@ -930,7 +930,11 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   }
 
   const rerender = wireProperties(root, modeler, api, projectId, toast, identity);
-  const refreshBadges = makeImplementBadges(root, modeler, api);
+  // The form mark is a door out of this diagram (ADR-0465),
+  // and so is the context pad's "Open form": both walk through leaveForForm, published
+  // further down this mount, which is what saves the diagram before it is left.
+  const refreshBadges = makeImplementBadges(root, modeler, api, (el) => openLinkedForm(api, toast, el));
+  registerFormContextPad(modeler, api, toast);
   refreshBadges(); // reflect the initial tab for the diagram just imported
   const refreshPoolCaptions = makePoolProcessCaptions(modeler);
   refreshPoolCaptions(); // name the process each pool runs, on the diagram just imported
@@ -1874,7 +1878,7 @@ function watchShopBadges(viewer, api) {
 // (ADR-0429 §6). It is asked for the first time the Implement tab shows, not before — the
 // Design view draws no badge, so it has no question to ask — and once for the diagram;
 // its answer redraws through this same refresh, so it too is gated on the tab.
-function makeImplementBadges(root, modeler, api) {
+function makeImplementBadges(root, modeler, api, openForm) {
   let ids = []; // overlay ids currently on the canvas, so we can remove ours only
 
   const clear = () => {
@@ -1888,7 +1892,7 @@ function makeImplementBadges(root, modeler, api) {
     clear();
     if (activeTab(root) !== "implement") return;
     loadShopOwners(modeler, api, refresh);
-    ids = drawImplBadges(modeler);
+    ids = drawImplBadges(modeler).concat(openForm ? drawFormBadges(modeler, openForm) : []);
   };
 
   // Keep badges in step with edits (language switched, task added/removed) while the
@@ -2498,7 +2502,7 @@ function formDoorsHTML(newHref) {
 function setFormOpen(door, formId, missing) {
   if (!door) return;
   if (formId && !missing) {
-    door.setAttribute("href", "#/modeler/form/e/" + encodeURIComponent(formId));
+    door.setAttribute("href", formEditHref(formId));
     door.removeAttribute("aria-disabled");
     door.title = "Open the linked form in the form editor";
     return;
@@ -2551,21 +2555,148 @@ function takesForm(bo) {
 // plainly, as the decision editor does from the same place.
 function wireFormDoors(body, element) {
   for (const door of body.querySelectorAll("#f-form-new, #f-form-open")) {
-    door.addEventListener("click", async (ev) => {
+    door.addEventListener("click", (ev) => {
       // A modified click is the browser opening the link in a new tab or window, and
       // the diagram stays open in this one: nothing to save and no way back to carry.
-      if (ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
+      if (modifiedClick(ev)) return;
       ev.preventDefault();
       const href = door.getAttribute("href");
       if (!href) return; // shut: nothing to open
-      const left = await leaveForForm();
-      if (!left.ok) return;
-      if (!left.processId) { location.hash = href; return; }
-      const fd = findExt(element.businessObject, "zeebe:FormDefinition");
-      beginFormTrip({ draftId: left.processId, elementId: element.id, linked: (fd && fd.formId) || "" });
-      location.hash = href + fromTail(left.processId, element.id);
+      walkFormDoor(element, href);
     });
   }
+}
+
+// modifiedClick is a click the browser answers itself — a new tab or window, a
+// download — rather than the page: the button other than the first, or a modifier held.
+const modifiedClick = (ev) => !!ev && (ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey);
+
+// walkFormDoor is what every form door does on a plain click, in the panel and on the
+// canvas alike (ADR-0465): this diagram's edits are saved
+// first (or the author is asked), the trip is recorded with what the element names
+// now, and the form editor opens with the way back in its address.
+async function walkFormDoor(element, href) {
+  const left = await leaveForForm();
+  if (!left.ok) return;
+  if (!left.processId) { location.hash = href; return; }
+  beginFormTrip({ draftId: left.processId, elementId: element.id, linked: linkedFormId(element) });
+  location.hash = href + fromTail(left.processId, element.id);
+}
+
+// linkedFormId is the form an element names, or "" — for the elements that take one.
+// A label shares its shape's business object, so it is asked about as its shape.
+function linkedFormId(element) {
+  const bo = element && element.businessObject;
+  if (!takesForm(bo)) return "";
+  const fd = findExt(bo, "zeebe:FormDefinition");
+  return (fd && fd.formId) || "";
+}
+
+const formEditHref = (formId) => "#/modeler/form/e/" + encodeURIComponent(formId);
+
+// openLinkedForm is the canvas's door to the form an element names: the context pad's
+// entry and the Implement view's form mark (ADR-0465,
+// amendment 2026-10-19). The panel knows from its forms list whether the form exists and
+// shuts its door when it does not; the canvas does not hold that list, so it asks the
+// server first — before the diagram is saved or left, so a door that would open on a
+// failure costs nothing.
+async function openLinkedForm(api, toast, element) {
+  const formId = linkedFormId(element);
+  if (!formId) return;
+  try {
+    await api("GET", "/api/v1/forms/" + encodeURIComponent(formId));
+  } catch (e) {
+    if (e && e.status === 404) {
+      if (toast) toast(`There is no form “${formId}” on this server — pick another in the panel, or create one.`, "err");
+      return;
+    }
+    // Anything else is the server failing to answer, not the form missing: the form
+    // editor says what it says when it tries.
+  }
+  await walkFormDoor(element, formEditHref(formId));
+}
+
+// registerFormContextPad adds "Open form" to the context pad of an element that names a
+// form (ADR-0465, amendment 2026-10-19). Only there: on an
+// element with no form there is nothing to open, and creating one is the panel's
+// "＋ New form", where the picker that links it is. A double-click stays the label
+// editor's — the reason the call activity's door is its marker, not the whole shape
+// (ADR-0245).
+function registerFormContextPad(modeler, api, toast) {
+  let pad;
+  try { pad = modeler.get("contextPad"); } catch { return; }
+  pad.registerProvider(500, {
+    getContextPadEntries(element) {
+      if (!element || element.labelTarget) return {};
+      const formId = linkedFormId(element);
+      if (!formId) return {};
+      return {
+        "atlas-open-form": {
+          group: "edit",
+          className: "atlas-cp-form",
+          title: `Open the form “${formId}”`,
+          action: {
+            click: (ev, el) => {
+              // A modified click opens the form where the browser would open a link,
+              // and leaves this diagram as it is.
+              if (modifiedClick(ev)) { window.open(formEditHref(formId), "_blank", "noopener"); return; }
+              openLinkedForm(api, toast, el);
+            },
+          },
+        },
+      };
+    },
+  });
+}
+
+// FORM_GLYPH is a form: a sheet with lines on it, drawn in the badge's colour.
+const FORM_GLYPH = `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="2.5" y="1.5" width="11" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5 5.5h6M5 8.5h6M5 11.5h3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
+
+// FORM_BADGE_SPOT is where the form mark sits: in a user task's top-right corner,
+// opposite the person bpmn-js draws at its top-left, and on a start event's upper left —
+// a start event has nothing coming in on that side, its label hangs below, and the
+// context pad opens on its right. The unsupported-element ⚠ sits on a shape's top-right
+// corner, and neither kind of element is one the compiler refuses.
+const FORM_BADGE_SPOT = {
+  "bpmn:UserTask": { top: 4, right: 24 },
+  "bpmn:StartEvent": { top: -12, left: -12 },
+};
+
+// drawFormBadges marks, in the Implement view, the start events and user tasks that
+// name a form, and returns the overlay ids it added (ADR-0465,
+// amendment 2026-10-19). A form is how a person takes part in the process, so it is worth
+// seeing on the drawing without selecting anything; the mark is a link, so a click on it
+// is the same door the context pad and the panel are, and a modified click opens the
+// form in a new tab. A repair form is not marked: it is an operator's aid for an
+// incident, not a step anybody fills in, and a mark on every such task would say
+// otherwise.
+function drawFormBadges(modeler, open) {
+  const ids = [];
+  let overlays, registry;
+  try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+  catch { return ids; } // modeler torn down mid-flight
+  registry.forEach((el) => {
+    if (el.labelTarget) return;
+    const bo = el.businessObject;
+    const spot = bo && FORM_BADGE_SPOT[bo.$type];
+    const formId = spot ? linkedFormId(el) : "";
+    if (!formId) return;
+    const name = (formFieldCache.get(formId) || {}).name || formId;
+    const a = document.createElement("a");
+    a.className = "form-badge";
+    a.href = formEditHref(formId);
+    a.title = `${bo.$type === "bpmn:StartEvent" ? "Start form" : "Form"}: ${name === formId ? `“${formId}”` : `${name} (“${formId}”)`} — click to open it`;
+    a.innerHTML = FORM_GLYPH;
+    a.addEventListener("click", (ev) => {
+      if (modifiedClick(ev)) return;
+      ev.preventDefault();
+      open(el);
+    });
+    try {
+      ids.push(overlays.add(el.id, "form-badge", { position: spot, html: a }));
+    } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+  });
+  return ids;
 }
 
 // ensureFormFields fetches the schema of each not-yet-cached form id, records its
