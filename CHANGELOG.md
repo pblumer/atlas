@@ -70,6 +70,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **An import tells an update from an edit made here.** Every import remembers, per artifact,
+  the version it brought, and compares the next one with that as well as with the server. A
+  process, form, decision, model, catalogue, product or constant the server still holds as the
+  last import left it is updated when the package brings it newer (`behind`); one edited on the
+  server while the package brings it as before is kept (`ahead`); only what both sides moved, or
+  what no import has brought yet, is asked about. A decision to keep is remembered, so the same
+  package does not ask again. Constants are imported through the new
+  `POST /api/v1/applications/{id}/constants/import`, which sets a value only for an
+  administrator and names the rest under `notSet`. A hand-written file without a trailing
+  newline no longer reads as changed on every import
+  ([ADR-0467](docs/adr/0467-application-package-export.md), amended).
 - **An import asks before it replaces what changed on the server.** The source import, the
   catalogue import, `atlas import` and the Console's imports compare every artifact with the
   server's version — processes, forms, decisions and their models, constants, catalogues,

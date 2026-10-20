@@ -473,18 +473,27 @@ th{color:var(--muted);font-weight:600}
         <td data-l="en">show the plan only – what is new, what stays the same, what differs – and write nothing</td></tr>
     </tbody>
   </table>
-  <p data-l="de">Bevor der Befehl etwas schreibt, vergleicht er jedes Artefakt des Pakets mit dem Server: Prozesse,
-    Formulare, Entscheidungen und ihre DMN-Modelle, Konstanten, Kataloge und Produkte. Neues wird angelegt, Gleiches
-    bleibt unberührt. Was auf dem Server anders aussieht, ist dort geleistete Arbeit und wird <b>nie ungefragt
-    ersetzt</b>. Sitzt jemand am Terminal, fragt der Befehl für jedes solche Artefakt einzeln nach; Enter allein
-    behält die Fassung des Servers. In einem CI-Job fragt niemand: Dort bricht der Befehl vor dem ersten Schreiben ab
-    und nennt jedes Artefakt, das du mit <code>--overwrite</code> oder <code>--keep</code> entscheidest.</p>
-  <p data-l="en">Before the command writes anything, it compares every artifact of the package with the server:
-    processes, forms, decisions and their DMN models, constants, catalogues and products. What is new is created, what
-    is the same is left alone. What differs on the server is work done there and is <b>never replaced unasked</b>. With
-    somebody at the terminal, the command asks for each such artifact on its own; Enter alone keeps the server's
-    version. A CI job has nobody to ask: there the command stops before the first write and names every artifact,
-    which you decide with <code>--overwrite</code> or <code>--keep</code>.</p>
+  <p data-l="de">Bevor der Befehl etwas schreibt, vergleicht er jedes Artefakt des Pakets mit dem Server und mit der
+    Fassung, die der letzte Import gebracht hat: Prozesse, Formulare, Entscheidungen und ihre DMN-Modelle, Konstanten,
+    Kataloge und Produkte. Neues wird angelegt, Gleiches bleibt unberührt. Ist ein Artefakt auf dem Server noch so,
+    wie der letzte Import es hinterlassen hat, und bringt das Paket eine neuere Fassung, wird es ohne Rückfrage
+    aktualisiert (<i>behind</i>). Wurde es auf dem Server bearbeitet und bringt das Paket es wie beim letzten Mal,
+    bleibt es ohne Rückfrage, wie es ist (<i>ahead</i>). Nur was <b>auf beiden Seiten</b> geändert wurde – oder was
+    noch nie ein Import gebracht hat – ist dort geleistete Arbeit, die das Paket überschreiben würde, und wird
+    <b>nie ungefragt ersetzt</b>. Sitzt jemand am Terminal, fragt der Befehl für jedes solche Artefakt einzeln nach;
+    Enter allein behält die Fassung des Servers. In einem CI-Job fragt niemand: Dort bricht der Befehl vor dem ersten
+    Schreiben ab und nennt jedes Artefakt, das du mit <code>--overwrite</code> oder <code>--keep</code> entscheidest.
+    Wie du entschieden hast, merkt sich der Server: Dasselbe Paket fragt beim nächsten Mal nicht wieder.</p>
+  <p data-l="en">Before the command writes anything, it compares every artifact of the package with the server and
+    with the version the last import brought: processes, forms, decisions and their DMN models, constants, catalogues
+    and products. What is new is created, what is the same is left alone. An artifact the server still holds as the
+    last import left it, and the package brings newer, is updated without a question (<i>behind</i>). One edited on
+    the server while the package brings it as last time stays as it is, without a question (<i>ahead</i>). Only what
+    changed <b>on both sides</b> – or what no import has brought yet – is work done there that the package would
+    overwrite, and it is <b>never replaced unasked</b>. With somebody at the terminal, the command asks for each such
+    artifact on its own; Enter alone keeps the server's version. A CI job has nobody to ask: there the command stops
+    before the first write and names every artifact, which you decide with <code>--overwrite</code> or
+    <code>--keep</code>. The server remembers how you decided: the same package does not ask again next time.</p>
   <p data-l="de">Ein zweiter Lauf legt nichts doppelt an und ändert nichts: Die Applikation wird über den Schlüssel in
     <code>atlas.json</code> gefunden, Kataloge und Produkte über ihre IDs. Veröffentlicht wird die Applikation nur, wenn
     der Lauf sie geändert hat oder sie hier noch nie veröffentlicht wurde, und ein Katalog nur, wenn sich er selbst
@@ -494,16 +503,18 @@ th{color:var(--muted);font-weight:600}
     <code>atlas.json</code>, catalogues and products by their ids. The application is published only when the run
     changed it or it was never published here, and a catalogue only when it or one of its products changed. The
     application's artifacts the package does not name stay as they are and are listed.</p>
-  <p data-l="de"><b>Konstanten</b> (<code>konstanten.json</code>) sind ein Vorschlag: Fehlende Werte setzt der Befehl,
-    ein Wert, den der Server anders hält – auf INT einer, auf PROD ein anderer –, ist ein Artefakt wie jedes andere
-    und wird nur ersetzt, wenn du es so entscheidest. Konstanten setzen darf nur, wer die Rolle <code>admin</code> hat,
-    und ein Token trägt sie nie. Mit Token nennt der Befehl deshalb, was jemand mit dieser Rolle noch setzen muss,
-    und importiert den Rest. Am Ende meldet er jede Konstante, die die Applikation liest und dieser Server nicht hält.</p>
-  <p data-l="en"><b>Constants</b> (<code>konstanten.json</code>) are a suggestion: the command sets missing values; a
-    value the server holds otherwise – one on INT, another on PROD – is an artifact like any other and is replaced only
-    when you decide so. Only the <code>admin</code> role may set constants, and a token never carries it. With a token
-    the command therefore names what an administrator still has to set, and imports the rest. At the end it reports
-    every constant the application reads and this server does not hold.</p>
+  <p data-l="de"><b>Konstanten</b> (<code>konstanten.json</code>) sind ein Vorschlag: Fehlende Werte setzt der Befehl.
+    Einen Wert, den jemand auf diesem Server gesetzt hat – auf INT einer, auf PROD ein anderer –, lässt er stehen,
+    solange das Paket vorschlägt, was es schon beim letzten Mal vorgeschlagen hat. Gefragt wird nur, wenn sich auch
+    der Vorschlag geändert hat. Konstanten setzen darf nur, wer die Rolle <code>admin</code> hat, und ein Token trägt
+    sie nie. Mit Token nennt der Befehl deshalb, was jemand mit dieser Rolle noch setzen muss, und importiert den
+    Rest. Am Ende meldet er jede Konstante, die die Applikation liest und dieser Server nicht hält.</p>
+  <p data-l="en"><b>Constants</b> (<code>konstanten.json</code>) are a suggestion: the command sets missing values. A
+    value somebody set on this server – one on INT, another on PROD – stays as long as the package suggests what it
+    suggested last time; you are asked only when the suggestion changed too. Only the <code>admin</code> role may set
+    constants, and a token never carries it. With a token the command therefore names what an administrator still has
+    to set, and imports the rest. At the end it reports every constant the application reads and this server does not
+    hold.</p>
 </section>
 
 <section id="export">

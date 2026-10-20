@@ -2188,6 +2188,9 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   a pipeline, and the Console asks with one box each. Unchanged artifacts are not written, and
   nothing is published again that the import did not change
   ([ADR-0467](docs/adr/0467-application-package-export.md)).
+  Each import remembers what it brought, so only what both sides moved is asked about: an
+  artifact the package moved on is taken, one edited here is kept, constants included
+  (ADR-0467, amended).
   Information models, Playground scenarios and Panorama models do not travel yet, and the shop
   handbook's browser installer does not use the plan.
 

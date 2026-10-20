@@ -1,6 +1,6 @@
 # ADR-0467: An application and its shop move as a package, and an import asks before it replaces
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-20: an import remembers, per artifact, the version the last import brought, and asks only about what both sides moved — see "The plan remembers the last import"; constants are imported through `POST /api/v1/applications/{id}/constants/import`)
 - **Implementation:** Landed
 - **Date:** 2026-10-20
 - **Deciders:** Atlas maintainers
@@ -185,6 +185,68 @@ This departs from ADR-0453's "the portable design-time export does not" carry va
 so in the package, not in the source tree. The tree stays design source. The package is the
 unit that crosses installations, and a person decides each value that would replace one.
 
+### The plan remembers the last import (amended 2026-10-20)
+
+As first built, the plan compared the import with the server and nothing else. That could not
+tell a process edited on production from one a newer package had moved on: both read as
+changed. Every update of a package therefore asked about every artifact it touched, and a
+pipeline had to pass `--overwrite all` — which also replaced the work the plan was meant to
+protect.
+
+Each import now remembers, per artifact, the hash of the version it brought — its **base** —
+in a store of this installation (`import-baselines`, one record per application and one for
+the catalogue; class instance, since it describes this installation's history and means
+nothing elsewhere). With three versions the plan has two more classes:
+
+| Status | Server | Import | Without a word |
+|---|---|---|---|
+| **behind** | as the last import left it | newer | taken |
+| **ahead** | edited here | as the last import brought it | kept |
+| **changed** | edited here | newer | asked |
+
+- **Changed is also every difference where no base exists.** That covers an artifact never
+  imported, and the first import after this change. That import asks once, as before; the
+  bases exist afterwards.
+- **A named ref wins either way.** `?keep=` holds back a behind artifact, and `?overwrite=` puts
+  the import's version back over an ahead one.
+- **`*` decides only what is changed.** `overwrite=*` never replaces work done only here, and
+  `keep=*` never holds back what only the import moved.
+- **Every artifact an import settled becomes the base**, whether written or kept. A changed
+  artifact kept against this version is then ahead of it, and is asked about again only when
+  a later import brings it changed.
+- **Hashes cover the parts each kind is compared by.** Name and newline-terminated content for
+  a process or form; name and handle for a decision; bytes for a model; the record without
+  revision, times, owner and theme for a catalogue or product; the model for a process a
+  document deploys; type and value for a constant. A hand-written file that ends without a
+  newline no longer reads as changed on every import.
+- **Models stay guarded when behind.** A model the last import wrote and a newer tree brings is
+  still refused while a decision outside the application resolves its handle.
+- **Constants are imported through their own route**, `POST /api/v1/applications/{id}/constants/import`,
+  with the same plan, decisions and base. This makes the INT/PROD case quiet: a value an
+  administrator set here while the package suggests what it suggested before is ahead, and
+  kept without a question.
+  - **The route is a modeler's** with an editor's role on the application, because comparing
+    and remembering are not setting.
+  - **A value is written only for an administrator.** Anyone else gets `notSet`, and nothing is
+    written or remembered for them. The suggestion is therefore offered again rather than taken
+    as settled.
+  - **MCP leaves the route out**, as it leaves out the PUT it complements.
+- **What the clients send.**
+  - `atlas import` lists behind and ahead in its plan, asks only about changed, and names only
+    what the operator decided. An artifact edited between plan and import is then refused
+    rather than replaced.
+  - The Console dialog lists three groups — changed on both sides (unticked), newer in the file
+    (ticked), changed here only (unticked) — and names behind and ahead only where a box was
+    moved.
+
+Considered and set aside:
+
+- **Storing the base on each record** (a field on drafts, forms, catalogues and products) would
+  need no store. But every writer that rebuilds a record would have to carry the field, a
+  model file has no record to carry it, and an export would have to strip it.
+- **Storing whole base versions** would allow a merge, which this record refuses. A hash
+  answers the only question asked: is this the version the last import brought?
+
 ### Why not the others
 
 **A server route for the whole package** would serve the Console without a terminal, which is
@@ -211,6 +273,9 @@ silently wrong. ADR-0134 refused to merge for that reason, and it holds here.
 - **Negative / trade-offs accepted:**
   - **Every import first asks for the plan.** That is two requests and one more turn of the
     run loop per import.
+  - **The bases are this installation's.** A restored snapshot carries them. A design-time
+    restore onto another installation does not, so its first import asks about every
+    difference, as an import without bases always does.
   - **A script that relied on an import replacing changed artifacts** now gets 409 until it
     passes `overwrite=*`. That includes the Console's earlier behaviour and the shop
     handbook's installer for a catalogue.
