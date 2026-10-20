@@ -63,6 +63,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The handbook's German reads as German.** Much of it had been translated word for word
+  from the English and carried English idioms over: «Der Lehrsatz ist …» for *the lesson
+  is*, «Dasselbe Muster trägt …» for *the same pattern carries*, «das ist der Punkt»,
+  «rot sehen» for *go red*, «Umbau auf echt». Some renderings said something else than
+  the English: «bw- vor allem» for *in front of everything*, «sonst nichts» for *nothing
+  else is forgiven*, «Rückhalt» for a subscription on *hold*, «gut laufend» for *busy*, a
+  tool that «sperrt sich selbst aus» where the English has it lock the company out. About
+  seventy places are rewritten, among them the 35 a review rated hardest to read; where
+  the English was a riddle as well ("plan the rotation before it plans you", "the clock
+  belongs to the run, not to the wall", "user is a floor, not a grant"), both languages
+  now say it plainly. The *Darstellung* section addressed the reader as *Sie* and now uses
+  *du* like the rest; an unexplained English fragment in the German now names the Modeler
+  option it quotes, and a *ß*, a wrong gender and two sentences without a verb are
+  corrected. `AGENTS.md` gains a short writing guideline so
+  new text does not repeat the pattern.
 - **A required constant's reference sits on its own line.** On an application's and the
   server's Constants page, the table of constants the deployed processes require showed
   the reference a process reads, such as `application.CLIENT_ID`, after the name on the

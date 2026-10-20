@@ -2057,10 +2057,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p class="rz-how"><span data-l="de">Ein <code>dataObject</code> ist ein benannter Datenspeicher im Prozess; eine <code>dataObjectReference</code> zeigt darauf. Eine <code>dataOutputAssociation</code> <b>schreibt</b> ein Feld (<code>from</code>-Ausdruck → <code>to</code>-Feld), eine <code>dataInputAssociation</code> <b>liest</b> es (<code>sourceRef</code> → Variable). Nutze Datenobjekte, wenn der Datenfluss im Diagramm sichtbar sein soll; für einfaches „Variable setzen“ genügt ein <a href="#rz-script-value">Script-Task</a>.</span><span data-l="en">A <code>dataObject</code> is a named data store in the process; a <code>dataObjectReference</code> points at it. A <code>dataOutputAssociation</code> <b>writes</b> a field (<code>from</code> expression → <code>to</code> field), a <code>dataInputAssociation</code> <b>reads</b> it (<code>sourceRef</code> → variable). Use data objects when the data flow should be visible in the diagram; for a simple "set a variable" a <a href="#rz-script-value">script task</a> is enough.</span></p>
         <p class="rz-how"><span data-l="de"><b>Der Datenzustand auf dem Diagramm:</b> Ein Datenobjekt trägt neben seinem Namen einen <b>Datenzustand</b> — das <code>[ARCHIVIERT]</code> in eckigen Klammern unter dem Kasten. Er steht im Eigenschaften-Panel und wird auf dem Diagramm mitgezeichnet, denn oft ist er das Einzige, was zwei Kästen desselben Objekts unterscheidet. <b>Zurückgenommen dargestellt</b> wird er dort, wo ihn nichts schreibt: Ein Zustand an einem Kasten, auf den eine <code>dataOutputAssociation</code> zeigt, wird ausgeführt, landet im Ereignislog und wird gegen den Lebenszyklus der Klasse geprüft. Ein Zustand an einem Kasten, der nur <i>gelesen</i> wird, fällt beim Kompilieren weg — er beschreibt eine Erwartung an diese Stelle, aber keine Maschine handelt danach und keine Prüfung erreicht ihn, auch der Tippfehler-Check nicht.</span><span data-l="en"><b>The data state on the diagram:</b> beside its name a data object carries a <b>data state</b> — the <code>[ARCHIVIERT]</code> in square brackets under the box. It is set in the properties panel and drawn on the diagram, because it is often the only thing that tells two boxes of the same object apart. It is <b>set back</b> wherever nothing writes it: a state on a box a <code>dataOutputAssociation</code> points at is executed, lands in the event log and is checked against the class’s lifecycle. A state on a box that is only <i>read</i> is dropped when the model compiles — it documents what this step expects, but nothing acts on it and no check reaches it, the typo check included.</span></p>
         <p class="rz-how"><span data-l="de"><b>Prozessübergreifend:</b> BPMN sagt nur, wie ein Datenobjekt <i>heisst</i> — sein <code>itemSubjectRef</code> zeigt auf einen Typ, den die Spezifikation bewusst offen lässt. Unter <b>Data › Model</b> zeichnest du diesen Typ als UML-Klasse: Attribute mit Typ und Kardinalität, und einen <b>fachlichen Schlüssel</b>, der <code>Order#ORD-1</code> in drei Prozessen zur selben Bestellung macht. Ein ERD wäre hier die falsche Notation — dessen Vokabular ist Speicherung, und wo ein Datum liegt, entscheidet der Data Store, nicht das Modell.</span><span data-l="en"><b>Across processes:</b> BPMN only says what a data object is <i>called</i> — its <code>itemSubjectRef</code> points at a type the specification deliberately leaves open. Under <b>Data › Model</b> you draw that type as a UML class: attributes with types and multiplicities, and a <b>business key</b> that makes <code>Order#ORD-1</code> the same order in three processes. An ERD would be the wrong notation here — its vocabulary is storage, and where a datum lives is the data store's question, not the model's.</span></p>
-        <p class="rz-how"><span data-l="de"><b>Vorhandenes Modell importieren:</b> Wer sein Datenmodell schon in einem UML-Werkzeug gezeichnet hat, tippt es nicht ab: <b>Data › Information model › Import…</b> liest das <b>XMI 2.5.1</b>, das Enterprise Architect, Papyrus und Visual Paradigm exportieren — und ebenso atlas’ eigenes JSON, mit dem ein Modell von einer Applikation oder Installation in eine andere umzieht. Welches Format vorliegt, erkennt atlas am Dokument. Da atlas bewusst nur einen kleinen Teil von UML führt, sagt ein echtes Dokument stets Dinge, für die es hier keinen Platz gibt — eine Schnittstelle, eine Operation, eine Beziehung mit drei Enden. Nichts davon lehnt die Datei ab, und nichts davon verschwindet stillschweigend: Jede Stelle erscheint im Bericht, benannt und als <i>verworfen</i>, <i>angepasst</i> oder <i>wissenswert</i> markiert. Den Bericht liest man, bevor gespeichert wird. Zwei Lesarten sind Absicht: Ein als Identifikator markiertes Attribut ohne genannte Multiplizität gilt als Pflichtfeld — sonst ginge der fachliche Schlüssel verloren —, und ein Dokument ohne Diagrammgeometrie wird auf einem Raster angeordnet, denn XMI verwahrt das Bild in einer eigenen Datei.</span><span data-l="en"><b>Importing a model you already have:</b> if your data model is already drawn in a UML tool, do not retype it: <b>Data › Information model › Import…</b> reads the <b>XMI 2.5.1</b> that Enterprise Architect, Papyrus and Visual Paradigm export — and atlas’s own JSON, which is how a model moves from one application or installation to another. Which of the two it is, atlas reads off the document. Because atlas deliberately authors a small part of UML, a real document always says things it has no place for — an interface, an operation, a relationship with three ends. None of that refuses your file, and none of it disappears quietly: every one of them appears in the report, named and marked <i>dropped</i>, <i>adjusted</i> or <i>worth knowing</i>. You read that report before anything is stored. Two readings are deliberate: an attribute marked as the identifier with no multiplicity stated counts as required — otherwise the business key would be lost — and a document with no diagram geometry is laid out on a grid, because XMI keeps the picture in a file of its own.</span></p>
+        <p class="rz-how"><span data-l="de"><b>Vorhandenes Modell importieren:</b> Wer sein Datenmodell schon in einem UML-Werkzeug gezeichnet hat, tippt es nicht ab: <b>Data › Information model › Import…</b> liest das <b>XMI 2.5.1</b>, das Enterprise Architect, Papyrus und Visual Paradigm exportieren — und ebenso atlas’ eigenes JSON, mit dem ein Modell von einer Applikation oder Installation in eine andere umzieht. Welches Format vorliegt, erkennt atlas am Dokument. Da atlas bewusst nur einen kleinen Teil von UML führt, sagt ein echtes Dokument stets Dinge, für die es hier keinen Platz gibt — eine Schnittstelle, eine Operation, eine Beziehung mit drei Enden. Die Datei wird deswegen nicht abgelehnt, und nichts davon verschwindet stillschweigend: Jede Stelle erscheint im Bericht, benannt und als <i>verworfen</i>, <i>angepasst</i> oder <i>wissenswert</i> markiert. Den Bericht liest man, bevor gespeichert wird. Zwei Lesarten sind Absicht: Ein als Identifikator markiertes Attribut ohne genannte Multiplizität gilt als Pflichtfeld — sonst ginge der fachliche Schlüssel verloren —, und ein Dokument ohne Diagrammgeometrie wird auf einem Raster angeordnet, denn XMI verwahrt das Bild in einer eigenen Datei.</span><span data-l="en"><b>Importing a model you already have:</b> if your data model is already drawn in a UML tool, do not retype it: <b>Data › Information model › Import…</b> reads the <b>XMI 2.5.1</b> that Enterprise Architect, Papyrus and Visual Paradigm export — and atlas’s own JSON, which is how a model moves from one application or installation to another. Which of the two it is, atlas reads off the document. Because atlas deliberately authors a small part of UML, a real document always says things it has no place for — an interface, an operation, a relationship with three ends. Your file is not rejected for any of that, and none of it disappears quietly: every one of them appears in the report, named and marked <i>dropped</i>, <i>adjusted</i> or <i>worth knowing</i>. You read that report before anything is stored. Two readings are deliberate: an attribute marked as the identifier with no multiplicity stated counts as required — otherwise the business key would be lost — and a document with no diagram geometry is laid out on a grid, because XMI keeps the picture in a file of its own.</span></p>
         <p class="rz-how"><span data-l="de"><b>Was geprüft wird:</b> Sobald ein Datenobjekt einen Typ trägt, schlägt atlas ihn beim Deploy und in der Problems-Leiste nach: ein Typ, den niemand modelliert hat, ein Schreibvorgang auf ein Feld, das die Klasse nicht hat — und, ganz ohne Modell, eine Aufgabe, die ein Objekt liest, das keine Aufgabe davor schreibt. <b>Keiner dieser Befunde verweigert ein Deployment</b>: Ein Prozess wird regelmässig gezeichnet, bevor das Vokabular dazu existiert.</span><span data-l="en"><b>What gets checked:</b> once a data object carries a type, atlas resolves it at deploy and in the Problems bar: a type nobody has modelled, a write to a field the class does not have — and, needing no model at all, an activity that reads an object no activity before it writes. <b>None of these refuses a deploy</b>: a process is routinely drawn before the vocabulary it names exists.</span></p>
         <p class="rz-how"><span data-l="de"><b>Als Bild:</b> Im Reiter <b>Data</b> einer Instanz schaltet <b>Diagram</b> auf das <b>Objektdiagramm</b> um — dieselben Daten als UML-Objekte, mit unterstrichenem Namen (so markiert die Notation eine Instanz statt eines Typs). Zwei Linienarten: durchgezogen mit Raute heisst „liegt im Wert des Ganzen", gestrichelt heisst „hält dessen fachlichen Schlüssel". Zeigt eine Referenz auf etwas, das diese Instanz nicht trägt, sagt das Diagramm es darunter — das ist der Rand einer Instanz, kein Fehler.</span><span data-l="en"><b>As a picture:</b> in an instance's <b>Data</b> tab, <b>Diagram</b> switches to the <b>object diagram</b> — the same data as UML objects, their names underlined (the notation's mark for an instance rather than a type). Two kinds of line: solid with a diamond means "lives inside the whole's value", dashed means "holds its business key". Where a reference points at something this instance does not carry, the diagram says so underneath — that is the edge of one instance, not a fault.</span></p>
-        <p class="rz-how"><span data-l="de"><b>Prozessübergreifend suchen:</b> Unter <b>Data › Instances</b> steht dieselbe Frage von der anderen Seite: nicht „was trägt dieser Prozess", sondern „wer trägt dieses Datum". Gruppiert nach Klasse und dann nach fachlichem Schlüssel — eine Bestellung erscheint einmal, mit jeder Instanz darunter, die daran arbeitet. Abgeschlossene Instanzen lassen sich einbeziehen: Ihre Daten bleiben erhalten, bis sie gelöscht werden, und das ist standardmässig aus. Atlas geht dafür die Instanzen durch und sagt danach, wie viele es waren und ob es vorzeitig aufgehört hat.</span><span data-l="en"><b>Searching across processes:</b> <b>Data › Instances</b> asks the same question from the other side — not "what does this process carry" but "who carries this datum". Grouped by class and then by business key, so one order appears once with every instance working on it beneath it. Finished instances can be included: their data is kept until it is purged, and purging is off by default. Atlas walks the instances to answer, and says afterwards how many it examined and whether it stopped early.</span></p>
+        <p class="rz-how"><span data-l="de"><b>Prozessübergreifend suchen:</b> Unter <b>Data › Instances</b> steht dieselbe Frage von der anderen Seite: nicht „was trägt dieser Prozess", sondern „wer trägt dieses Datum". Gruppiert nach Klasse und dann nach fachlichem Schlüssel — eine Bestellung erscheint einmal, mit jeder Instanz darunter, die daran arbeitet. Abgeschlossene Instanzen lassen sich einbeziehen: Ihre Daten bleiben erhalten, bis sie gelöscht werden, und das Löschen ist standardmässig ausgeschaltet. Atlas geht dafür die Instanzen durch und sagt danach, wie viele es waren und ob es vorzeitig aufgehört hat.</span><span data-l="en"><b>Searching across processes:</b> <b>Data › Instances</b> asks the same question from the other side — not "what does this process carry" but "who carries this datum". Grouped by class and then by business key, so one order appears once with every instance working on it beneath it. Finished instances can be included: their data is kept until it is purged, and purging is off by default. Atlas walks the instances to answer, and says afterwards how many it examined and whether it stopped early.</span></p>
         <p class="rz-how"><span data-l="de"><b>Variable oder Datenobjekt?</b> Beide können <code>Kunde</code> heissen, und sie sind trotzdem nicht dasselbe. Ein <b>Datenobjekt</b> trägt den deklarierten Typ, einen Datenzustand und die aufgezeichnete Geschichte jedes Schreibvorgangs; eine <b>Variable</b> trägt einen Wert. Sie liegen in getrennten Sätzen und werden von getrennten Ereignissen geschrieben — eine Datenassoziation <i>kopiert</i>, sie wertet ihren Ausdruck einmal aus. <b>Ein Schreibvorgang auf das eine ändert das andere nie.</b> Und nur eines der beiden hört auf den Namen: FEEL wird allein aus den Variablen gebunden, also meint <code>Kunde</code> in einer Bedingung, einem Mapping oder einer Worker-Nutzlast immer die Variable — auch in einem Modell, in dem es um das Objekt geht. Ein Objekt kommt ausschliesslich über eine <code>dataInputAssociation</code> in eine Variable und damit in Reichweite eines Ausdrucks. Deshalb warnt die Problems-Leiste, wenn eine Variable so heisst wie ein Datenobjekt desselben Prozesses (<code>variable.shadows-data-object</code>): Es ist erlaubt, aber die beiden driften unter einem Namen auseinander, während das Diagramm einen Kasten zeigt. <b>Das übliche Muster:</b> Der Task schreibt sein Ergebnis in <code>customer</code>, eine <code>dataOutputAssociation</code> hebt es mit <code>=customer</code> in das Datenobjekt <code>Kunde</code>, und ein späterer Task liest es bei Bedarf in eine <i>anders</i> benannte Variable zurück.</span><span data-l="en"><b>Variable or data object?</b> Both can be called <code>Kunde</code>, and they are still not the same thing. A <b>data object</b> carries the declared type, a data state and the recorded history of every write; a <b>variable</b> carries a value. They live in separate records and are written by separate events — a data association <i>copies</i>, evaluating its expression once. <b>Writing one never changes the other.</b> And only one of them answers to the name: FEEL is bound from the variables alone, so <code>Kunde</code> in a condition, a mapping or a worker payload always means the variable, even in a model whose whole point is the object. An object reaches an expression only by way of a <code>dataInputAssociation</code> copying it into a variable. That is why the Problems bar warns when a variable is named after a data object of the same process (<code>variable.shadows-data-object</code>): it is legal, but the two drift apart under one name while the diagram shows one box. <b>The usual pattern:</b> the task writes its result into <code>customer</code>, a <code>dataOutputAssociation</code> lifts it into the data object <code>Kunde</code> with <code>=customer</code>, and a later task reads it back into a <i>differently</i> named variable when it needs one.</span></p>
         <p class="rz-how"><span data-l="de"><b>Zur Laufzeit:</b> Öffne die Instanz unter Betrieb › Instanzen und wechsle im Replay auf den Reiter <b>Data</b>. Dort steht jedes Datenobjekt, das die Instanz trägt — mit der Klasse, die das Modell dafür nennt (<code>itemSubjectRef</code>), seinem Datenzustand und seinem Wert. Ein Klick auf den Namen öffnet die <b>Zustandsspur</b>: jeder Schreibvorgang, der Zustand, in den er das Objekt gebracht hat, und welche Aufgabe ihn gemacht hat. Genau dafür sind Datenobjekte ereignisbasiert — ein Datum hat hier eine Geschichte, nicht nur einen aktuellen Wert.</span><span data-l="en"><b>At runtime:</b> open the instance under Operations › Instances and switch the replay to the <b>Data</b> tab. It lists every data object the instance carries — with the class the model declares for it (<code>itemSubjectRef</code>), its data state and its value. Clicking the name opens the <b>state trail</b>: every write, the state it moved the object into, and which activity made it. That is what data objects are event-sourced for — here a datum has a history, not just a current value.</span></p>
       </div>
@@ -2797,7 +2797,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               du den Fehlerpfad garantiert, statt auf den Zufall zu warten.</li>
             <li data-l="en"><b>Provoke the outage.</b> <code>failRate="1"</code> and one start – that shows you the
               error path for certain instead of waiting on chance.</li>
-            <li data-l="de"><b>Der Umbau auf echt.</b> Genau <i>ein</i> Element ändert sich: der Mockup-Task wird ein
+            <li data-l="de"><b>Auf den Echtbetrieb umstellen.</b> Genau <i>ein</i> Element ändert sich: der Mockup-Task wird ein
               REST-Task (<a href="#runbook-rest">Runbook</a>) mit derselben Ergebnisvariablen. Gateway, Fehlerpfad und
               alles danach bleiben, wie sie sind – das ist der Sinn der Übung.</li>
             <li data-l="en"><b>Going live.</b> Exactly <i>one</i> element changes: the mockup task becomes a REST
@@ -2837,14 +2837,14 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               abgeschlossen sind. Jede Buchung trägt eine Kompensations-Boundary, an der über eine
               <code>&lt;association&gt;</code> ein Task mit <code>isForCompensation="true"</code> hängt – <b>kein
               Sequenzfluss</b>, sonst liefe er immer. Zwei Wurf-Ereignisse wickeln <b>rückwärts</b> ab: erst das
-              Hotel, dann der Flug. Und kompensiert wird nur, was gelaufen ist – bricht es schon beim Flug ab, hat das
-              Hotel nie stattgefunden.</p>
+              Hotel, dann der Flug. Und kompensiert wird nur, was gelaufen ist – scheitert schon die Flugbuchung, wurde das
+              Hotel nie gebucht und wird folglich auch nicht storniert.</p>
             <p data-l="en">The distinction at issue: an <b>error</b> jumps out of an activity that just went wrong –
               a <b>compensation</b> undoes activities that completed <i>successfully</i> long ago. Each booking carries
               a compensation boundary with a task hanging off it through an <code>&lt;association&gt;</code>, marked
               <code>isForCompensation="true"</code> – <b>no sequence flow</b>, or it would always run. Two throw events
-              unwind <b>backwards</b>: the hotel first, then the flight. And only what ran is compensated – if it
-              breaks at the flight, the hotel never happened.</p>
+              unwind <b>backwards</b>: the hotel first, then the flight. And only what ran is compensated – if the
+              flight booking already fails, the hotel was never booked and so is not cancelled either.</p>
           </div>
         </div>
         <div class="rz-actions"></div>
@@ -2931,7 +2931,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             non-interrupting boundary, and the timeline shows both tokens.</p>
           <p data-l="de">Den anderen Weg zeigt eine Nachricht: veröffentliche <code>zahlung.eingegangen</code> mit dem
             Korrelationsschlüssel <code>RE-2026-0042</code> (Operations, oder per MCP), und der Mahnlauf wird
-            abgebrochen – Ende <i>„Bezahlt"</i>. Der Schlüssel ist der Punkt: die Nachricht trifft <b>genau diese
+            abgebrochen – Ende <i>„Bezahlt"</i>. Entscheidend ist der Korrelationsschlüssel: Die Nachricht trifft <b>genau diese
             eine</b> Rechnung. Ein Signal träfe alle – die Gegenprobe steht in
             <a href="#bsp-preisaenderung">Preisänderung</a>.</p>
           <p data-l="en">A message shows the other path: publish <code>zahlung.eingegangen</code> with the correlation
@@ -2957,23 +2957,23 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <p data-l="de">Ein Handwerksbetrieb hat ein Dutzend Offerten draussen, die auf einen Kundenentscheid
               warten. Der Lieferant erhöht die Preise. Ohne Prozess heisst das, sich an jede offene Offerte zu
               <i>erinnern</i> – und die eine zu vergessen, die zum Selbstkostenpreis rausgeht. Mit Prozess wirft eine
-              Instanz ein Signal, und <b>jede</b> wartende Offerte rechnet sich selbst nach. Dasselbe Muster trägt eine
+              Instanz ein Signal, und <b>jede</b> wartende Offerte rechnet sich selbst nach. Dasselbe Muster eignet sich ebenso für eine
               Betriebsschliessung, einen Produktrückruf oder einen Systemausfall.</p>
             <p data-l="en">A trade business has a dozen quotes out, waiting for a customer's decision. The supplier
               raises prices. With no process that means <i>remembering</i> every open quote – and forgetting the one
               that goes out at cost. With a process, one instance throws a signal and <b>every</b> waiting quote
-              recalculates itself. The same pattern carries a site closure, a product recall or a system outage.</p>
+              recalculates itself. The same pattern works for a site closure, a product recall or a system outage.</p>
           </div>
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
-            <p data-l="de">Zwei Modelle, und der Satz dazwischen ist der ganze Lehrsatz: <b>Eine Nachricht trifft
+            <p data-l="de">Das Beispiel besteht aus zwei Modellen, die über ein Signal gekoppelt sind. Worauf es ankommt, ist der Unterschied zwischen Nachricht und Signal: <b>Eine Nachricht trifft
               genau eine Instanz</b> – die, deren Korrelationsschlüssel passt. <b>Ein Signal trifft alle</b>, die
               gerade darauf warten, und weiss nicht, wie viele das sind. Deshalb hat ein Signal bewusst
               <b>keinen</b> Korrelationsschlüssel. Die Boundary an der Offerte ist <b>nicht unterbrechend</b> – eine
               unterbrechende würde bei jeder Preisänderung jede offene Offerte vernichten, der teuerste
               Modellierfehler in diesem Diagramm. Und das Ergebnis landet in <code>angebotNeu</code>, überschreibt
               <code>angebot</code> also nicht: Was dem Kunden genannt wurde, ist ein Fakt und keine Variable.</p>
-            <p data-l="en">Two models, and the sentence between them is the whole lesson: <b>a message hits exactly
+            <p data-l="en">The example consists of two models coupled by a signal. What matters is the difference between a message and a signal: <b>a message hits exactly
               one instance</b> – the one whose correlation key matches. <b>A signal hits all</b> that are waiting for
               it, and does not know how many that is. Which is why a signal deliberately has <b>no</b> correlation key.
               The boundary on the quote is <b>non-interrupting</b> – an interrupting one would destroy every open quote
@@ -3020,13 +3020,13 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               hat alles, was einen Prozess ausmacht: <b>drei Stränge, die gleichzeitig laufen</b> (kündigen,
               Umzugsfirma, Adressen), eine <b>Frist, die man nicht verpassen darf</b>, und einen Abschluss, der auf
               alle drei wartet. Eine Liste auf Papier kann das nicht: Sie erinnert nicht, sie wartet nicht, und sie
-              weiss hinterher nicht mehr, was abgehakt war. Dieselbe Bauform trägt eine Hochzeit, einen Hausbau, eine
-              Firmengründung oder einen Vereinsanlass.</p>
+              weiss hinterher nicht mehr, was abgehakt war. Derselbe Aufbau passt auch zu einer Hochzeit, einem Hausbau, einer
+              Firmengründung oder einem Vereinsanlass.</p>
             <p data-l="en">The example against the reflex that a workflow engine is for corporations. A move has
               everything a process has: <b>three strands running at once</b> (give notice, hire movers, change
               addresses), a <b>deadline you must not miss</b>, and a closing step that waits for all three. A list on
               paper cannot do that: it does not remind you, it does not wait, and afterwards it no longer knows what
-              was ticked off. The same shape carries a wedding, building a house, founding a company or a club
+              was ticked off. The same structure fits a wedding, building a house, founding a company or a club
               event.</p>
           </div>
           <div>
@@ -3173,12 +3173,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               Minderjährigen zusätzlich eine Einverständniserklärung der Eltern; bei einer Inlandreise für Erwachsene
               nichts von beidem. <b>Wer welche Formulare ausfüllen muss, ist eine Fachregel</b> – und die ändert sich,
               sobald ein Land seine Einreisebestimmungen anpasst. Hier ändert das eine Fachperson in einer Tabelle,
-              ohne dass jemand ein Diagramm anfasst. Dasselbe Muster trägt eine Kreditantragsstrecke, eine
-              Schadensmeldung oder ein Aufnahmeverfahren.</p>
+              ohne dass jemand ein Diagramm anfasst. Auch eine Kreditantragsstrecke, eine
+              Schadensmeldung oder ein Aufnahmeverfahren lässt sich nach diesem Muster aufbauen.</p>
             <p data-l="en">A travel agency takes a booking. A long-haul trip needs visa details; a minor also needs a
               parental consent; a domestic trip for an adult needs neither. <b>Who has to fill in which form is a
               business rule</b> – and it changes the moment a country adjusts its entry requirements. Here a
-              subject-matter expert changes that in a table, with nobody touching a diagram. The same pattern carries
+              subject-matter expert changes that in a table, with nobody touching a diagram. The same pattern applies to
               a loan application, an insurance claim or an admission procedure.</p>
           </div>
           <div>
@@ -3270,12 +3270,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               die neue Person arbeitet: ein Gerät, je nach Gerät dessen Details, Software, zum Schluss eine
               Zusammenfassung mit den geschätzten Kosten. Sie füllt das <b>in einem Zug</b> aus, Maske für Maske,
               ohne nach jeder Maske im Posteingang zu suchen. Danach stellt die IT den Arbeitsplatz bereit. Dasselbe
-              Muster trägt jede interne Erfassung über mehrere Masken: eine Spesenabrechnung, eine Schadenaufnahme,
+              Muster lässt sich für jede interne Erfassung über mehrere Masken verwenden: eine Spesenabrechnung, eine Schadenaufnahme,
               eine Bedarfsmeldung.</p>
             <p data-l="en">The personnel office reports a new hire. The supervisor then picks what the new person will
               work with: a device, its details depending on the device, software, and at the end a summary with the
               estimated cost. They fill it in <b>in one go</b>, screen by screen, without hunting for the next one in
-              the inbox. Then IT provides the workplace. The same pattern carries any internal intake over several
+              the inbox. Then IT provides the workplace. The same pattern suits any internal intake over several
               screens: an expense claim, a damage report, a request for supplies.</p>
           </div>
           <div>
@@ -3352,8 +3352,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <p data-l="de">Eine Bewerbung geht ein, wird vorgeprüft, und je nach Abschluss und Erfahrung folgen
               <b>null, eine oder zwei Interviewrunden</b>. Dazwischen: eine Erinnerung, wenn zu lange nichts passiert;
               ein Ausweichpfad, wenn ein Umsystem streikt; und ein <b>Rückzug</b>, der jederzeit eintreffen kann –
-              auch mitten im dritten Schritt. Das ist der Punkt: eine Bewerbung ist kein gerader Weg, und ein Modell,
-              das nur den geraden Weg kennt, hält der ersten echten Woche nicht stand.</p>
+              auch mitten im dritten Schritt. Genau darum geht es: Eine Bewerbung verläuft nicht geradlinig, und ein Modell,
+              das nur den geradlinigen Ablauf kennt, scheitert schon in der ersten Woche im Echtbetrieb.</p>
             <p data-l="en">An application arrives, is screened, and depending on degree and experience <b>zero, one
               or two interview rounds</b> follow. In between: a reminder when nothing happens for too long; a fallback
               when a foreign system refuses; and a <b>withdrawal</b> that can arrive at any time – including in the
@@ -3725,7 +3725,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <p data-l="de">Ein Web-Scraping-Task mit <code>format="rss"</code> holt den Feed und schreibt
               <b>strukturierte Einträge</b> (<code>title</code>, <code>link</code>, <code>description</code>,
               <code>published</code>) nach <code>schlagzeilen</code>; <code>maxItems="15"</code> begrenzt ohne
-              Folge-Skript. Der Lehrsatz ist, <b>wer das Format wählt</b>: das Modell beim Deployment, nicht die
+              Folge-Skript. Entscheidend ist, <b>wer das Format festlegt</b>: das Modell beim Deployment, nicht die
               Antwort zur Laufzeit – ein Server, der seinen Feed als <code>application/xml</code> ausliefert, ändert
               damit nicht die Gestalt einer Prozessvariablen. Der Filter ist bewusst
               <code>for e in … return …</code> und <b>kein</b> Listenfilter: ein Filter wertet jeden freien Namen
@@ -3796,7 +3796,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
             <p data-l="de">Das Gegenstück zum Feed-Beispiel: hier gibt es nur HTML, und trotzdem kommt <b>pro
               Tabellenzeile ein Objekt</b> heraus. Der Selektor wählt die Zeile, drei
-              <code>&lt;atlas:scrapeField&gt;</code>-Kinder wählen darin die Zellen. Der Lehrsatz ist, <b>wie man die
+              <code>&lt;atlas:scrapeField&gt;</code>-Kinder wählen darin die Zellen. Lehrreich ist hier, <b>wie man die
               richtige Tabelle trifft</b>: sechs Tabellen der Seite tragen dieselbe CSS-Klasse, also identifiziert
               der Selektor sie über ihren <i>Inhalt</i>
               (<code>table:has(th:contains('Online-Hypothek'))</code>) und nicht über ihre Position –
@@ -3860,8 +3860,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <p data-l="de">Der häufigste Anfang einer Automatisierung im kleinen Betrieb: <b>Es gibt schon ein
               Google-Formular</b>, und seine Antworten landen in einer Tabelle. Ferienanträge, Spesen, Anmeldungen,
               Reparaturmeldungen. Bisher schaut jemand einmal am Tag hinein. Jetzt wird jede neue Zeile ein Vorgang –
-              mit Prüfung, Freigabe und einem Ergebnis, das <b>in derselben Zeile</b> zurücksteht, damit die
-              Tabelle weiterhin die Wahrheit zeigt. Niemand muss ein neues Werkzeug lernen; das Formular bleibt, wie
+              mit Prüfung, Freigabe und einem Ergebnis, das <b>in dieselbe Zeile</b> zurückgeschrieben wird, damit die
+              Tabelle stets den aktuellen Stand zeigt. Niemand muss ein neues Werkzeug lernen; das Formular bleibt, wie
               es ist.</p>
             <p data-l="en">The most common start of automation in a small business: <b>there is already a Google
               Form</b>, and its answers land in a spreadsheet. Leave requests, expenses, sign-ups, repair reports. So
@@ -3936,15 +3936,15 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               nach der Wiederholung zweimal da. Das Gegenmittel ist die Merkspalte, die dieses Modell vorführt: vor
               dem Anhängen lesen. — <b>Ein Zeilen-Watch folgt der Zeilennummer.</b> Werden Zeilen im beobachteten
               Bereich gelöscht, rutscht der Rest hoch, und eine später angehängte Zeile auf einer schon gelieferten
-              Nummer kommt nicht mehr. Ein Ordner-Watch kann das nicht passieren. — <b>Der Scope entscheidet, welche
-              Hälfte funktioniert:</b> <code>drive.file</code> reicht, solange der Prozess jede Tabelle selbst
+              Nummer kommt nicht mehr. Bei einem Ordner-Watch kann das nicht passieren. — <b>Der Scope entscheidet, welche
+              Tabellen erreichbar sind:</b> <code>drive.file</code> reicht, solange der Prozess jede Tabelle selbst
               anlegt; eine Tabelle, die ein Mensch mit dem Dienstkonto teilt, ist damit nicht erreichbar.</p>
             <p data-l="en" style="margin:.3em 0 0"><b>Delivery is at-least-once, and a spreadsheet has no idempotency
               key.</b> If atlas crashes between "row appended" and "job complete", the row is there twice after the
               retry. The remedy is the marker column this model demonstrates: read before appending. — <b>A row watch
               follows the row number.</b> Delete rows inside the watched range and the rest moves up, so a row
               appended later onto an already-delivered number never arrives. A folder watch cannot have that problem.
-              — <b>The scope decides which half works:</b> <code>drive.file</code> suffices while the process creates
+              — <b>The scope decides which spreadsheets are reachable:</b> <code>drive.file</code> suffices while the process creates
               every spreadsheet itself; one a human shares with the service account is out of reach with it.</p>
           </div>
         </details>
@@ -4056,8 +4056,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               pollt</b> – es muss nichts aus dem Internet diesen Server erreichen, was den ganzen Weg über
               Firewall-Freigaben und Webhook-Endpunkte erspart. Die Instanz startet <b>ohne Formular</b>:
               <code>issueKey</code>, <code>projectKey</code>, <code>summary</code>, <code>reporter</code> und der
-              ganze Vorgang kommen aus dem Ereignis. Der Lehrsatz ist die Kette dahinter: <code>reporter</code> ist
-              ein <b>Anzeigename</b>, Jira übergibt aber an eine <b><code>accountId</code></b> – also steht
+              ganze Vorgang kommen aus dem Ereignis. Aufschlussreich ist die Abfolge der Tasks: <code>reporter</code> ist
+              ein <b>Anzeigename</b>, Jira weist Vorgänge aber einer <b><code>accountId</code></b> zu – also steht
               <code>search-users</code> dazwischen und <code>assign-issue</code> dahinter, mit
               <code>=konten[1].accountId</code>, denn FEEL-Listen sind 1-basiert.</p>
             <p data-l="en">A <b>message start</b> waits for <code>jira.ticket.created</code>; an event watch publishes
@@ -4136,10 +4136,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
             <p data-l="de">Ein <code>atlas:mssqlConnector</code> mit <code>operation="query-one"</code> schlägt nach,
               ein Exklusiv-Gateway verzweigt auf <code>= person != null</code>, ein zweiter mit
-              <code>operation="execute"</code> setzt aktiv. Der Lehrsatz ist, <b>warum die Anweisung literal ist</b>:
+              <code>operation="execute"</code> setzt aktiv. Wichtig ist vor allem, <b>warum die Anweisung literal ist</b>:
               Das <code>statement</code>-Feld hat als einziges bewusst keinen <code>fx</code>-Schalter, denn eine aus
-              Prozessdaten zusammengesetzte Anweisung wäre eine Injection, die keinen Anführungszeichenfehler mehr
-              bräuchte. Werte kommen deshalb über <code>parametersVariable</code> herein: eine <b>Liste</b> bindet der
+              Prozessdaten zusammengesetzte Anweisung wäre schon für sich eine SQL-Injection-Lücke, auch ohne jeden Fehler beim
+              Maskieren von Anführungszeichen. Werte kommen deshalb über <code>parametersVariable</code> herein: eine <b>Liste</b> bindet der
               Reihe nach (<code>@p1</code>), ein <b>Objekt</b> über die Namen (<code>@id</code>) – und Namensbindung
               kann nur SQL&nbsp;Server, weshalb MS&nbsp;SQL, MariaDB und PostgreSQL drei Worker-Typen sind und kein
               Auswahlfeld. <code>query-one</code> liefert <code>null</code> statt einer leeren Liste und
@@ -4149,7 +4149,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               person up, an exclusive gateway branches on <code>= person != null</code>, and a second one with
               <code>operation="execute"</code> activates them. The lesson is <b>why the statement is literal</b>: the
               <code>statement</code> field is the one field deliberately without an <code>fx</code> toggle, because a
-              statement assembled from process data would be an injection that needs no quoting bug to work. Values
+              statement assembled from process data would be open to SQL injection in itself, even without any quote-escaping bug. Values
               therefore arrive through <code>parametersVariable</code>: a <b>list</b> binds positionally
               (<code>@p1</code>), an <b>object</b> by name (<code>@id</code>) – and only SQL&nbsp;Server can bind by
               name, which is why MS&nbsp;SQL, MariaDB and PostgreSQL are three worker types and not a dropdown.
@@ -4220,8 +4220,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <p data-l="de">Zwei <code>atlas:adConnector</code>-Tasks mit <code>operation="search"</code> suchen erst
               das Konto über seinen <code>sAMAccountName</code>, dann die Gruppe über ihren <code>cn</code>;
               Exklusiv-Gateways verzweigen auf <code>=benutzer.found</code> bzw. <code>=gruppe.found</code>, ein Zweig
-              legt die fehlende Gruppe an, und <code>add-group-member</code> setzt die Mitgliedschaft. Der Lehrsatz
-              ist, <b>warum die Suche überhaupt nötig ist</b>: Eine Mitgliedschaft adressiert die Gruppe über ihren
+              legt die fehlende Gruppe an, und <code>add-group-member</code> setzt die Mitgliedschaft. Hier wird
+              deutlich, <b>warum die Suche überhaupt nötig ist</b>: Eine Mitgliedschaft adressiert die Gruppe über ihren
               <b>Distinguished Name</b>, und ein DN ist eine Position im Baum – nichts, was eine Fachabteilung
               mitliefert. Das Ergebnis <code>{found, count, dn, entries}</code> trennt beides sauber:
               <code>found</code> ist die Verzweigung, <code>dn</code> die Adresse für den nächsten Task.
@@ -4269,7 +4269,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <p data-l="de">Zwei Firmen fusionieren, zwei Behörden arbeiten zusammen, ein Konzern hat historisch zwei
               Verzeichnisse: Die Leute sollen einander im Adressbuch finden, ohne dass die Verzeichnisse
               zusammengelegt werden. Klassisch ist das ein Produkt (MIM bringt es als Management Agent mit). Hier ist
-              es ein <b>Prozess</b> – und das ist der Punkt: GALSync ist eine <i>Richtlinie</i> („wer erscheint drüben,
+              es ein <b>Prozess</b> – und genau darauf kommt es an: GALSync ist eine <i>Richtlinie</i> („wer erscheint drüben,
               mit welchen Feldern, und was passiert beim Austritt"), kein Protokoll. Richtlinien gehören dorthin, wo
               man sie sieht und ändert.</p>
             <p data-l="en">Two companies merge, two agencies cooperate, a group has two directories for historical
@@ -4431,16 +4431,16 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <p data-l="de">Ein <code>atlas:entraConnector</code> mit <code>list-users</code> holt die aktiven Konten
               eines Bereichs (der <code>$filter</code> ist FEEL, also listet der Prozess genau den Bereich auf, um den
               es gerade geht), ein Inline-FEEL-Skript gleicht sie gegen die UPN-Liste aus dem Personalsystem ab, und
-              eine <b>parallele Multi-Instance</b> deaktiviert je verwaistes Konto. Der Lehrsatz steht als das im
-              Diagramm, was <i>nicht</i> darin steht: <b>nirgends wird geblättert</b>. Eine Graph-Collection kommt
+              eine <b>parallele Multi-Instance</b> deaktiviert je verwaistes Konto. Bemerkenswert ist, was im
+              Diagramm <i>nicht</i> vorkommt: <b>Nirgends wird geblättert</b>. Eine Graph-Collection kommt
               seitenweise hinter einem <code>@odata.nextLink</code>, aber der Worker folgt den Seiten selbst –
               deshalb ist <code>konten</code> eine Liste und der Abgleich ein einzelner Ausdruck statt einer Schleife
               über einen Continuation-Token.</p>
             <p data-l="en">An <code>atlas:entraConnector</code> with <code>list-users</code> fetches the active
               accounts of a scope (the <code>$filter</code> is FEEL, so the process lists exactly the scope at hand),
               an inline FEEL script reconciles them against the UPN list from the HR system, and a <b>parallel
-              multi-instance</b> disables each orphaned account. The lesson is in the diagram as what is <i>not</i> in
-              it: <b>nothing pages anywhere</b>. A Graph collection arrives page by page behind an
+              multi-instance</b> disables each orphaned account. The notable thing is what the diagram does <i>not</i>
+              contain: <b>there is no paging step anywhere</b>. A Graph collection arrives page by page behind an
               <code>@odata.nextLink</code>, but the worker follows the pages itself – which is why <code>konten</code>
               is a list and the reconciliation a single expression instead of a loop over a continuation token.</p>
           </div>
@@ -4496,8 +4496,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
             <p data-l="de">Ein <code>atlas:entraConnector</code> mit <code>delta-users</code> liest ab dem Cursor
               <code>letzterDeltaLink</code> (leer beim ersten Lauf) die geänderten und entfernten Benutzer nach
-              <code>aenderungen</code> – ein Objekt <code>{ value, deltaLink }</code>. Der Lehrsatz ist, <b>wo der
-              Cursor lebt</b>: nicht im Worker (der ist zustandslos und worker-only), sondern im Prozess. Der neue
+              <code>aenderungen</code> – ein Objekt <code>{ value, deltaLink }</code>. Wesentlich ist, <b>wo der
+              Cursor gespeichert wird</b>: nicht im Worker (der ist zustandslos und worker-only), sondern im Prozess. Der neue
               <code>=aenderungen.deltaLink</code> wird persistiert und beim nächsten Lauf als
               <code>letzterDeltaLink</code> wieder hereingereicht – genau wie <a href="#bsp-galsync">GALSync</a> den
               DirSync-Cookie durch eine Variable reicht. <b>Gelöschte Objekte kommen in <code>value</code> mit
@@ -4556,7 +4556,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               wird. Zwei <code>atlas:entraConnector</code>-Tasks lesen <code>delta-users</code> und
               <code>delta-groups</code> ab diesen Cursorn, und <code>POST /api/v1/directory-sync</code> meldet beides
               zurück. Der Schalter ist ein Feld der Meldung: <code>apply</code>, nicht <code>dryRun</code> –
-              ein fehlendes JSON-Feld ist der Nullwert, und der muss „nichts schreiben“ heißen.</p>
+              ein fehlendes JSON-Feld ist der Nullwert, und der muss „nichts schreiben“ bedeuten.</p>
             <p data-l="de">Drei Eigenschaften tragen das: <b>ein Codepfad</b> – der Trockenlauf entscheidet mit
               demselben Code, nur der letzte Schritt fällt aus; <b>der Cursor bleibt stehen</b>, solange nichts
               geschrieben wurde, sonst wären genau die angesehenen Änderungen verloren; und
@@ -4594,17 +4594,17 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="bsp-cols">
           <div>
             <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
-            <p data-l="de">Am Tag der Inbetriebnahme ist das Inventar leer und die Wirklichkeit voll: Jede
+            <p data-l="de">Am Tag der Inbetriebnahme ist das Inventar leer, obwohl in den Zielsystemen längst Rechte vergeben sind: Jede
               Gruppenmitgliedschaft und jede Lizenz existiert bereits. Würde man in diesem Zustand abgleichen,
               wäre <b>jedes Recht im Betrieb eine Abweichung</b> – und jede Abweichung trägt eine ausführbare
-              Handlung „im Zielsystem entfernen“. Genau so sperrt sich ein neues Berechtigungswerkzeug beim
-              ersten Lauf selbst aus.</p>
+              Handlung „im Zielsystem entfernen“. Genau so sperrt ein neues Berechtigungswerkzeug beim
+              ersten Lauf das Unternehmen aus seinen eigenen Systemen aus.</p>
             <p data-l="de">Dieser Prozess trägt daher zuerst ein, was da ist – mit dem Ursprung
               <code>legacy</code>: <i>das gab es vor uns, wir haben es nicht vergeben, und wir behaupten es auch
               nicht</i>. Der wertvollste Teil des Berichts ist dabei nicht, was eingetragen würde, sondern
               <code>unmapped</code>: <b>was der Betrieb vergibt, ohne dass es im Katalog steht</b>. Diese Liste gab
               es vorher nirgends.</p>
-            <p data-l="en">On the day an installation goes live the inventory is empty and reality is full: every
+            <p data-l="en">On the day an installation goes live the inventory is empty, although rights have long been granted in the target systems: every
               group membership and every licence already exists. Reconciling in that state would report <b>every
               privilege in the estate as a discrepancy</b> – and each discrepancy carries an executable "remove it
               in the target system". That is how a new access-governance tool locks a company out of itself on its
@@ -4817,8 +4817,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <div>
             <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
             <p data-l="de">Bestandsaufnahme, Abgleich, Rezertifizierung und Befristung sind alle
-              <b>aufdeckend oder zeitlich</b>: sie betrachten je <i>ein</i> Recht, und sie schauen
-              <i>danach</i>. Keines kann die älteste Kontrolle der Zugriffssteuerung aussprechen –
+              <b>aufdeckend oder zeitlich</b>: sie betrachten jeweils <i>ein</i> Recht und prüfen erst
+              <i>nachträglich</i>. Keines kann die älteste Kontrolle der Zugriffssteuerung aussprechen –
               <b>diese beiden Dinge darf nie dieselbe Person halten</b>. Wer Lieferanten anlegen darf,
               darf nicht auch Zahlungen an sie freigeben.</p>
             <p data-l="de"><b>Ein Konflikt hat keinen Schuldigen.</b> Kein Recht ist für sich falsch;
@@ -4826,7 +4826,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               über die Arbeit und nicht über den Katalog – deshalb entzieht hier nichts automatisch,
               und der Befund nennt immer beide Seiten.</p>
             <p data-l="en">The commissioning load, reconciliation, recertification and expiry are all
-              <b>detective or temporal</b>: each looks at <i>one</i> right, and each looks <i>after</i>.
+              <b>detective or temporal</b>: each looks at <i>one</i> right, and each checks only <i>after the fact</i>.
               None can express the oldest control in access governance – <b>these two things must never
               be held by the same person</b>. Whoever may create a supplier must not also approve
               payments to it.</p>
@@ -5029,7 +5029,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               unbeantworteten Zeilen, und die bleiben unbeantwortet: „Schweigen heisst behalten“ erfindet
               eine Bestätigung, die niemand gegeben hat, „Schweigen heisst entziehen“ sperrt Leute aus,
               weil jemand in den Ferien war. <code>undecided</code> ist deshalb eine eigene Zahl und kein
-              Rest. Wer prüft, bestimmt das Modell und nicht atlas – eine Vorgesetztensuche ist eine
+              Rest. Das Modell legt fest, wer prüft, nicht atlas – eine Vorgesetztensuche ist eine
               Verzeichnisfrage, genau wie bei der Genehmigungsregel <code>superior</code>.</p>
             <p data-l="en">The whole design is a refusal to make a signature cheap. There is <b>no way to
               answer several rows at once</b> – not in the screen and not in the API. A campaign answered
@@ -5188,7 +5188,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <p data-l="de">Aufnahme, Zugriffs-Review, Offboarding – der Lebenszyklus eines Benutzerkontos, als
               Prozess. Interessant ist weniger, <i>dass</i> es geht, als die <b>Abgrenzung</b>: Die direkte
               Admin-Maske bleibt, wie sie ist – sie ist der schnelle, synchrone Weg und der Notausgang. Die Prozesse
-              sind die <b>Vordertür für regierte Änderungen</b>: Antrag, Freigabe, Audit, Mail. Beide schreiben in
+              sind der <b>reguläre Weg für kontrollierte Änderungen</b>: Antrag, Freigabe, Audit, Mail. Beide schreiben in
               denselben Benutzerspeicher. Die Faustregel dazu gilt weit über atlas hinaus: <b>Zustandsübergang mit
               Dauer, Beteiligten, Genehmigung oder Nebenwirkung → Prozess. Sofortige Direktmanipulation an einem
               Datensatz → Maske.</b></p>
@@ -5300,8 +5300,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             Daten-Assoziationen werden nur im Wurzel-Scope verdrahtet, und ein <code>zeebe:ioMapping</code> am
             Ereignis-Subprozess überschreibt das Register beim Auslösen mit <code>null</code>. Ein nicht
             unterbrechender <b>Boundary-Event</b> schreibt zwar korrekt, feuert aber genau einmal – nur
-            Timer-Boundaries werden neu scharfgestellt. Bleibt die <b>Schleife im Wurzel-Scope</b>: sie darf beliebig
-            oft <i>und</i> schreiben. Der Preis: die Dienste haben keinen eigenen Token; wer je Produkt einen
+            Timer-Boundaries werden neu scharfgestellt. Bleibt die <b>Schleife im Wurzel-Scope</b>: sie kann sich beliebig
+            oft wiederholen <i>und</i> dabei schreiben. Der Preis: die Dienste haben keinen eigenen Token; wer je Produkt einen
             sichtbaren eigenen Ablauf braucht, modelliert ihn als eigenen Prozess und verbindet ihn über dieselbe
             Personalnummer.</p>
           <p data-l="en">The obvious shape – a non-interrupting <b>event subprocess</b> per service order, each with
@@ -5399,8 +5399,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <div>
             <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
             <p data-l="de">Zwei Kataloge einer Verwaltung: Die Dienstleistungen für alle bieten den Zutrittsbadge und den
-              Parkplatz an, der Fachbereich Bau zusätzlich den Zugang zum Geoportal. Der Badge wird vorgesetzt
-              genehmigt, der Parkplatz vom Facility Management, der Geoportal-Zugang von seinen Verantwortlichen;
+              Parkplatz an, der Fachbereich Bau zusätzlich den Zugang zum Geoportal. Der Badge wird von der vorgesetzten
+              Person genehmigt, der Parkplatz vom Facility Management, der Geoportal-Zugang von seinen Verantwortlichen;
               Parkplatz und Zugang sind befristet.</p>
             <p data-l="en">Two catalogues of a public administration: the services for everyone offer the access badge
               and a parking space, the building department also access to the geoportal. The badge is approved by the
@@ -5806,7 +5806,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           unchanged</i>: <code>source="=iban"</code>, <code>target="iban"</code>. The engine then copies the sealed
           value without opening it; the copy reads and erases exactly like the original (ADR-0314). Renaming it or
           computing from it is not possible, because the engine holds no key; that is a worker's job.</li>
-        <li data-l="de"><b>Ein öffentlicher Wizard</b> (<i>for the anonymous visitor of a public start link</i>)
+        <li data-l="de"><b>Ein öffentlicher Wizard</b> (im Modeler die Option <i>Yes — for the anonymous visitor of a public start link</i>)
           gehört der Person, die ihn über den öffentlichen Link begonnen hat. Die öffentliche Seite führt sie ohne
           Konto von Maske zu Maske; ein Pass, den nur dieser Browser-Tab kennt, öffnet genau ihre Masken. Nach einem
           Neuladen geht es an derselben Stelle weiter. Die Masken stehen in keinem Posteingang; sehen und
@@ -5901,7 +5901,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <tr><td><b>Jira</b></td><td data-l="de">Vorgang anlegen, lesen, ändern, weiterschalten, kommentieren, zuweisen, per JQL suchen — oder Konten suchen, um die accountId zu bekommen, die das Zuweisen braucht.</td><td data-l="en">Create, read, update, transition, comment on, assign, or search issues with JQL — or search accounts, to get the accountId assigning takes.</td></tr>
           <tr><td><b>Google&nbsp;Sheets</b></td><td data-l="de">Bereich lesen, Bereich schreiben, Zeilen anhängen, Bereich leeren, Tabelle anlegen, Blatt hinzufügen oder löschen, ganze Datei in den Papierkorb legen. <b>Werte</b> dürfen eine Liste von Zeilen sein, eine einzelne Zeile, oder eine Liste von Objekten – die dann über <b>Spalten</b> geschrieben wird, denn die Reihenfolge der Schlüssel eines Objekts ist keine Spaltenreihenfolge und wird nicht geraten. Beim Lesen macht <b>Kopfzeile</b> aus den Zeilen benannte Objekte, also die Form, die ein Multi-Instance-Unterprozess durchläuft. Anlegen und Löschen einer Tabelle sind Drive-Operationen mit derselben Berechtigung; gelöscht wird in den <b>Papierkorb</b>, nie endgültig. Zustellung ist <i>mindestens einmal</i> und eine Tabelle hat keinen Idempotenzschlüssel: nach einem Absturz zwischen „angehängt“ und „Job fertig“ steht die Zeile zweimal da. Wo das nicht tragbar ist, gehört eine Merkspalte in die Tabelle, die der Prozess vor dem Anhängen liest.</td><td data-l="en">Read a range, write one, append rows, clear a range, create a spreadsheet, add or delete a sheet, move the whole file to the trash. <b>Values</b> may be a list of rows, one row, or a list of objects – written through <b>Columns</b>, because an object's key order is not a column order and is not guessed. On a read, <b>Header</b> turns the rows into named objects, which is the shape a multi-instance subprocess iterates. Creating and deleting a spreadsheet are Drive operations on the same credential; a delete goes to the <b>trash</b>, never permanently. Delivery is <i>at least once</i> and a spreadsheet has no idempotency key: a crash between "appended" and "job complete" leaves the row there twice. Where that is not acceptable, put a marker column in the sheet and read it before appending.</td></tr>
           <tr><td><b>Microsoft&nbsp;Entra&nbsp;ID</b></td><td data-l="de">Konten und Gruppen im Tenant anlegen, lizenzieren, deaktivieren, auflisten oder per Delta abgleichen.</td><td data-l="en">Create, license, disable, list or delta-sync accounts and groups in the tenant.</td></tr>
-          <tr><td><b data-l="de">SQL-Datenbanken</b><b data-l="en">SQL databases</b></td><td data-l="de">MS&nbsp;SQL, MariaDB und PostgreSQL abfragen (viele Zeilen, genau eine Zeile) und schreiben. Die Anweisung ist <b>immer literal</b> – sie hat bewusst keinen <code>fx</code>-Schalter, denn eine aus Prozessdaten zusammengesetzte Anweisung wäre eine Injection, die keinen Anführungszeichenfehler mehr bräuchte. Werte kommen ausschliesslich als <b>gebundene Parameter</b> hinein. Oder <b>Mockup</b>: ein Schalter in der Konsole lässt denselben Task gegen hinterlegte Antworten im Arbeitsspeicher des Workers laufen, ohne dass eine Datenbank angefasst wird und ohne Verbindungszeichenfolge; was ein Lauf gefragt hat, steht unter <a href="/#/operations/sql-mock">Betrieb &rsaquo; Mock database</a> (siehe <a href="#testen">Testen &amp; Simulieren</a>).</td><td data-l="en">Query (many rows, exactly one row) and write MS&nbsp;SQL, MariaDB and PostgreSQL. The statement is <b>always literal</b> – it deliberately has no <code>fx</code> toggle, because a statement assembled from process data would be an injection that needs no quoting bug to work. Values reach it only as <b>bound parameters</b>. Or <b>mockup</b>: a switch in the Console runs the same task against seeded answers in the worker's memory, with no database touched and no connection string needed (see <a href="#testen">Test &amp; simulate</a>).</td></tr>
+          <tr><td><b data-l="de">SQL-Datenbanken</b><b data-l="en">SQL databases</b></td><td data-l="de">MS&nbsp;SQL, MariaDB und PostgreSQL abfragen (viele Zeilen, genau eine Zeile) und schreiben. Die Anweisung ist <b>immer literal</b> – sie hat bewusst keinen <code>fx</code>-Schalter, denn eine aus Prozessdaten zusammengesetzte Anweisung wäre schon für sich eine SQL-Injection-Lücke, auch ohne jeden Fehler beim Maskieren von Anführungszeichen. Werte kommen ausschliesslich als <b>gebundene Parameter</b> hinein. Oder <b>Mockup</b>: ein Schalter in der Konsole lässt denselben Task gegen hinterlegte Antworten im Arbeitsspeicher des Workers laufen, ohne dass eine Datenbank angefasst wird und ohne Verbindungszeichenfolge; was ein Lauf gefragt hat, steht unter <a href="/#/operations/sql-mock">Betrieb &rsaquo; Mock database</a> (siehe <a href="#testen">Testen &amp; Simulieren</a>).</td><td data-l="en">Query (many rows, exactly one row) and write MS&nbsp;SQL, MariaDB and PostgreSQL. The statement is <b>always literal</b> – it deliberately has no <code>fx</code> toggle, because a statement assembled from process data would be an injection that needs no quoting bug to work. Values reach it only as <b>bound parameters</b>. Or <b>mockup</b>: a switch in the Console runs the same task against seeded answers in the worker's memory, with no database touched and no connection string needed (see <a href="#testen">Test &amp; simulate</a>).</td></tr>
           <tr><td><b data-l="de">Web-Scraping</b><b data-l="en">Web scraping</b></td><td data-l="de">Eine Seite per CSS-Selektor auslesen oder einen RSS-/Atom-Feed als strukturierte Liste holen.</td><td data-l="en">Read a page by CSS selector, or pull an RSS/Atom feed as a structured list.</td></tr>
           <tr><td><b>CSV</b></td><td data-l="de">Eine CSV-Datei in eine Liste von Objekten verwandeln.</td><td data-l="en">Turn a CSV file into a list of objects.</td></tr>
           <tr><td><b data-l="de">Skript</b><b data-l="en">Script</b></td><td data-l="de">PowerShell, Python oder JavaScript ausführen – ausserhalb der Engine, in einem eigenen Prozess.</td><td data-l="en">Run PowerShell, Python or JavaScript – outside the engine, in a process of its own.</td></tr>
@@ -6124,11 +6124,11 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             <td data-l="en">mint a <code>worker</code> token for the worker</td></tr>
         </tbody>
       </table>
-      <p data-l="de">Die Rolle ist die am Eingang geprüfte – ein Mensch mit ihr darf einen Job von Hand
+      <p data-l="de">Die Spalte <i>Rolle</i> nennt die Rolle, die der Server beim jeweiligen Aufruf prüft – ein Mensch mit dieser Rolle darf einen Job von Hand
         abschliessen. Ein Worker hält keine Rolle, sondern einen Token: der Scope <code>worker</code> erreicht
         genau diese Job-Aufrufe (plus die Mail-Outbox der Vorschau und die Mockup-Ablagen) und antwortet überall
         sonst mit <i>403</i>; ohne Token ist es <i>401</i>.</p>
-      <p data-l="en">The role is the one checked at the boundary – a human with it may complete a job by hand. A
+      <p data-l="en">The Role column names the role the server checks for that call – a human with that role may complete a job by hand. A
         worker holds no role but a token: the <code>worker</code> scope reaches exactly these job calls (plus the
         preview mail outbox and the mockup journals) and answers <i>403</i> everywhere else; without a token it is
         <i>401</i>.</p>
@@ -6327,11 +6327,11 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             everyone. Saving is enough; atlas restarts the supervised worker with the new environment by itself.</li>
           <li data-l="de"><b>Freigeben.</b> Ein Dienstkonto besitzt von sich aus nichts. Es hat eine eigene
             E-Mail-Adresse und sieht genau die Dateien, die mit dieser Adresse geteilt sind – teile jede Tabelle bzw.
-            jeden Ordner mit ihr, als <b>Bearbeiter</b>, sonst antwortet der Worker mit <code>403</code> auf ein
-            Dokument, das du vor dir offen hast.</li>
+            jeden Ordner mit ihr, als <b>Bearbeiter</b>, sonst antwortet der Worker mit <code>403</code>, obwohl du
+            das Dokument selbst öffnen kannst.</li>
           <li data-l="en"><b>Share.</b> A service account owns nothing by itself. It has an email address of its own
             and sees exactly the files shared with that address – share every spreadsheet or folder with it, as an
-            <b>editor</b>, or the worker answers <code>403</code> on a document you have open in front of you.</li>
+            <b>editor</b>, or the worker answers <code>403</code> even though you can open the document yourself.</li>
         </ol>
         <p data-l="de"><b>Prüfen:</b> <a href="#bsp-google-sheets-antragseingang">Antragseingang</a> installieren und
           <code>google-sheets-verbindungstest.bpmn</code> mit <code>tabellenname</code> starten.</p>
@@ -6443,13 +6443,13 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           mit Rolle zu ändern verlangt zusätzlich eine <b>Verzeichnisrolle</b> für die App (z.&nbsp;B.
           <i>Benutzeradministrator</i>), und selbst dann wirkt sie nicht auf höher privilegierte Konten. <i>Das
           Client-Secret</i> gehört in den Vault, nicht in eine dauerhafte Kommandozeile oder eine Klartext-Umgebung –
-          und es läuft ab; plane die Rotation, bevor sie dich plant.</p>
+          und es läuft ab: Plane die Rotation vor dem Ablaufdatum, sonst kann sich der Worker nicht mehr anmelden.</p>
         <p data-l="en"><b>Two traps operators miss.</b> <i>Passwords and privileged accounts:</i>
           <code>User.ReadWrite.All</code> is enough for ordinary accounts – resetting a password or modifying a
           role-bearing account additionally requires the app to hold a <b>directory role</b> (e.g. <i>User
           Administrator</i>), and even then it cannot act on holders of higher-privileged roles. <i>The client
-          secret</i> belongs in the vault, not in long-lived argv or a plaintext environment – and it expires; plan
-          the rotation before it plans you.</p>
+          secret</i> belongs in the vault, not in long-lived argv or a plaintext environment – and it expires: schedule
+          the rotation before the expiry date, otherwise the worker can no longer sign in.</p>
         <p data-l="de">Die vollständige Zuordnung <i>Operation → kleinste Berechtigung</i> steht in
           <code>docs/entra-permissions.md</code>. Beispiele: <a href="#bsp-entra-team-onboarding">Team-Onboarding</a>,
           <a href="#bsp-entra-rezertifizierung">Rezertifizierung</a>,
@@ -6466,13 +6466,13 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p data-l="de">Ein Exchange-Worker verwaltet eine Organisation – Exchange Online oder einen Exchange
           Server. Welche es ist, steht im Vault-Bündel, nicht im Modell: Dieselbe Aufgabe läuft gegen beide, und
           wo die beiden für dieselbe Absicht verschiedene Cmdlets brauchen (Senden als), wählt der Worker. Eine
-          hybride Organisation sind zwei Worker; ein Worker-Name mit führendem <code>=</code> wählt zur Laufzeit.
+          hybride Organisation braucht zwei Worker; ein Worker-Name, der mit <code>=</code> beginnt, ist ein Ausdruck und entscheidet erst zur Laufzeit, welcher der beiden die Aufgabe übernimmt.
           <i>Die Schritte sind aus der Dokumentation von Microsoft geschrieben und noch nicht an einem Tenant
           durchgegangen worden.</i></p>
         <p data-l="en">An Exchange worker administers one organization – Exchange Online or an Exchange Server.
           Which one is stated in the vault bundle, not in the model: the same task runs against either, and where
-          the two need different cmdlets for one intent (Send As) the worker picks. A hybrid organization is two
-          workers; a worker name starting with <code>=</code> chooses at runtime. <i>These steps are written from
+          the two need different cmdlets for one intent (Send As) the worker picks. A hybrid organization needs two
+          workers; a worker name starting with <code>=</code> is an expression that decides at runtime which of them takes the task. <i>These steps are written from
           Microsoft's documentation and have not yet been walked at a tenant.</i></p>
         <ol>
           <li data-l="de"><b>Exchange Online – App-Registrierung</b> im Entra-Admin-Center, <b>eigens für diesen
@@ -6604,7 +6604,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             <i>Resolve users</i> finds.</li>
         </ol>
         <p data-l="de"><b>Agenten:</b> <i>Ensure call queue</i> bringt eine bestehende Warteschlange auf genau die
-          Agenten, die das Modell nennt – ein Personalwechsel ist ein weiterer Lauf derselben Task, und
+          Agenten, die das Modell nennt – bei einem Personalwechsel lässt du denselben Task einfach erneut laufen, und
           <code>agentsChanged</code> im Ergebnis sagt, ob er etwas geändert hat. Verglichen werden nur direkt zugewiesene
           Agenten (nicht die einer Verteilerliste oder eines Kanals), bei serieller Verteilung auch ihre Reihenfolge.
           Nennt das Modell keine Agenten, bleiben sie, wie sie sind. Eine leere Liste leert eine Warteschlange mit
@@ -6680,8 +6680,8 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <h4 data-l="de">Mail – und der Weg ganz ohne Mailserver</h4><h4 data-l="en">Mail – and the way with no mail server at all</h4>
         <p data-l="de">Vier Betriebsarten, und die erste kostet nichts: <b>Vorschau</b> baut die Nachricht genau
           gleich, legt sie aber in den Postausgang unter <i>Operations ▸ Outbox</i> statt sie zuzustellen. Damit lässt
-          sich ein Mail-Task vollständig entwickeln und vorführen, ohne Mailserver und ohne Zugangsdaten – der Umbau
-          auf echt ist später ein Wechsel des Workers, nicht des Modells.</p>
+          sich ein Mail-Task vollständig entwickeln und vorführen, ohne Mailserver und ohne Zugangsdaten – für den
+          echten Versand wechselst du später nur den Worker, nicht das Modell.</p>
         <p data-l="en">Four modes, and the first costs nothing: <b>preview</b> frames the message identically but puts
           it into the outbox under <i>Operations ▸ Outbox</i> instead of delivering it. A mail task can be developed
           and demonstrated in full that way, with no mail server and no credentials – going live later is a change of
@@ -6846,8 +6846,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             very host.</p>
         </div>
         <p data-l="de"><b>Die Anweisung ist immer literal.</b> Das <code>statement</code>-Feld hat als einziges Feld in
-          atlas bewusst keinen <code>fx</code>-Schalter: eine aus Prozessdaten zusammengesetzte Anweisung wäre eine
-          Injection, die keinen Anführungszeichenfehler mehr bräuchte. Werte kommen ausschliesslich als <b>gebundene
+          atlas bewusst keinen <code>fx</code>-Schalter: eine aus Prozessdaten zusammengesetzte Anweisung wäre schon für sich eine SQL-Injection-Lücke, auch ohne jeden Fehler beim Maskieren von Anführungszeichen. Werte kommen ausschliesslich als <b>gebundene
           Parameter</b> herein.</p>
         <p data-l="en"><b>The statement is always literal.</b> The <code>statement</code> field is the one field in
           atlas deliberately without an <code>fx</code> toggle: a statement assembled from process data would be an
@@ -7020,7 +7019,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p data-l="de"><b>Die Falle:</b> Zugestellt wird mindestens einmal – ein Stapel, der kurz vor einem Neustart
           angenommen wurde, kann noch einmal kommen. Der Empfänger dedupliziert nach der <code>id</code> jedes
           Ereignisses. Lehnt er einen Stapel ab, hält atlas das Abonnement an und versucht es gestaffelt wieder; nichts
-          wird übersprungen. Eine dauerhafte Ablehnung zeigt sich als Rückhalt, der nicht endet.</p>
+          wird übersprungen. Lehnt der Empfänger dauerhaft ab, erkennst du das daran, dass das Abonnement angehalten bleibt.</p>
         <p data-l="en"><b>The trap:</b> delivery is at least once – a batch accepted just before a restart can arrive
           again. The receiver deduplicates by each event's <code>id</code>. If it refuses a batch, atlas holds the
           subscription and retries on a widening interval; nothing is skipped. A permanent refusal shows as a hold
@@ -7372,8 +7371,8 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
     <!-- ==================== TEST & SIMULATE ==================== -->
     <section id="testen">
       <h2 data-l="de">Testen &amp; Simulieren</h2><h2 data-l="en">Test &amp; simulate</h2>
-      <p class="lead" data-l="de">Bevor ein Prozess auf echte Fälle losgelassen wird, willst du wissen, dass er sich
-        richtig verhält. Atlas bietet dafür mehrere Ebenen – von „im Kopf durchspielen" bis „echt ausführen".</p>
+      <p class="lead" data-l="de">Bevor ein Prozess echte Fälle bearbeitet, willst du wissen, dass er sich
+        richtig verhält. Atlas bietet dafür mehrere Ebenen – von „im Kopf durchspielen" bis „tatsächlich ausführen".</p>
       <p class="lead" data-l="en">Before a process meets real cases, you want to know it behaves correctly. Atlas
         offers several levels for that – from "play it through" to "actually execute".</p>
 
@@ -7463,9 +7462,9 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
         <li data-l="en">Control flow, FEEL conditions, gateways, multi-instance, boundary events,
           <a href="#dmn">DMN</a> decisions and <a href="#infomodell">data objects</a> are the <b>production code
           path</b>, because there is no other one.</li>
-        <li data-l="de">Die Uhr gehört dem Lauf, nicht der Wand. Ist nichts mehr auszuführen, springt die Zeit zum
+        <li data-l="de">Der Lauf hat eine eigene, simulierte Uhr und richtet sich nicht nach der realen Zeit. Ist nichts mehr auszuführen, springt die Zeit zum
           nächsten fälligen Timer &ndash; ein Prozess mit dreitägiger Eskalation ist in Millisekunden durch.</li>
-        <li data-l="en">The clock belongs to the run, not to the wall. When nothing is runnable, time jumps to the
+        <li data-l="en">The run has its own simulated clock and does not follow real time. When nothing is runnable, time jumps to the
           next due timer &ndash; a process with a three-day escalation finishes in milliseconds.</li>
         <li data-l="de">Ein Job, der auf einen Menschen wartet, wird zu einem <b>Complete</b>-Knopf; der
           abgeschlossene Schritt wird zurück auf die Zeichenfläche gemalt.</li>
@@ -7477,13 +7476,13 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
       <p data-l="de">Die Frage vor einem Go-live lautet selten «funktioniert dieser eine Fall», sondern: <i>Hier
         sind zweihundert echte Fälle &ndash; welche Wege nimmt der Prozess, wo staut es sich, und wie lange dauert
         es?</i> Dafür nimmt der Playground einen Datensatz entgegen: als hochgeladene CSV-Datei oder als
-        <b>Beschreibung</b> &ndash; je Feld dessen Art und Parameter, aus denen die Fälle erzeugt werden. Beschrieben
-        reisen zwanzig Zeilen zum Server statt fünfhundert im Browser gebauter.</p>
+        <b>Beschreibung</b> &ndash; je Feld dessen Art und Parameter, aus denen die Fälle erzeugt werden. Mit einer
+        Beschreibung schickt der Browser nur etwa zwanzig Zeilen an den Server, statt fünfhundert Fälle selbst zu erzeugen und zu übertragen.</p>
       <p data-l="en">The question before a go-live is rarely "does this one case work" but: <i>here are two hundred
         real cases &ndash; which paths does the process take, where does it pile up, and how long does it take?</i>
         For that the Playground takes a dataset: an uploaded CSV file, or a <b>description</b> &ndash; each field's
-        kind and parameters, from which the cases are generated. Described, twenty lines travel to the server
-        instead of five hundred built in the browser.</p>
+        kind and parameters, from which the cases are generated. With a description, the browser sends only about twenty lines to the server
+        instead of building five hundred cases itself and sending them.</p>
       <p data-l="de">Wie lange ein Service-Task «dauert» und wie oft er scheitert, wird dabei vom Diagramm
         abgelesen &ndash; eine Zeile je Task, die die Autorin gezeichnet hat.</p>
       <p data-l="en">How long a service task "takes" and how often it fails is read off the diagram &ndash; a row
@@ -7570,8 +7569,8 @@ then  end = "abgelehnt"</code></pre>
         <p data-l="de"><b>Eine Regel, die keinen Fall trifft, gilt als erfüllt.</b> Ein Tippfehler im
           <code>when</code> – <code>duaer &gt; 30</code> statt <code>dauer &gt; 30</code> – wählt nichts aus, und
           das Urteil lautet trotzdem bestanden; daneben steht nur <i>no case of 200 matched</i>. In einer Pipeline
-          liest das niemand, solange sie grün ist. Deshalb jede neue Regel einmal <b>rot</b> sehen: einen Fehler
-          absichtlich ins Modell setzen, prüfen, dass die Regel anschlägt, und ihn wieder entfernen.</p>
+          liest das niemand, solange sie grün ist. Lass deshalb jede neue Regel einmal absichtlich <b>fehlschlagen</b>: Setze einen
+          Fehler ins Modell, prüfe, dass die Regel anschlägt, und entferne ihn wieder.</p>
         <p data-l="en"><b>A rule that matches no case counts as met.</b> A typo in the <code>when</code> –
           <code>duaer &gt; 30</code> for <code>dauer &gt; 30</code> – selects nothing, and the verdict still says
           passed; only <i>no case of 200 matched</i> stands beside it. In a pipeline nobody reads that while it is
@@ -7745,17 +7744,17 @@ atlas playground --server "$ATLAS" --file scenarios/guest-access.json</code></pr
         longer live in the model. The attribute is still spelled <code>connector</code>
         (<a href="#formulare">why</a>):</p>
       <pre><code>&lt;atlas:adConnector connector="prod-forest" operation="disable" dn="=benutzerDN"/&gt;</code></pre>
-      <p data-l="de"><b>Mehrere Verzeichnisse sind mehrere Worker</b> — desselben Worker-Typs. Ein Prozess für den
+      <p data-l="de"><b>Für mehrere Verzeichnisse legst du mehrere Worker an</b>, alle vom selben Worker-Typ. Ein Prozess für den
         Produktiv-Forest und einer für den Test-Forest nennen einfach unterschiedliche Worker-Namen. Die Jobs
         beider holt <b>eine</b> AD-<i>Worker-Instanz</i> ab, denn die ist an kein Verzeichnis gebunden. Hier zeigt
-        sich der Unterschied der drei Ebenen am schärfsten: ein zweites Ziel ist ein zweiter <b>Worker</b>, mehr
-        Durchsatz sind mehr <b>Instanzen</b> — und mehr Instanzen trennen nichts, weil Jobs nach Typ verteilt werden
+        sich der Unterschied der drei Ebenen am schärfsten: für ein zweites Ziel brauchst du einen zweiten <b>Worker</b>, für mehr
+        Durchsatz mehr <b>Instanzen</b> — und zusätzliche Instanzen trennen die Ziele nicht voneinander, weil Jobs nach Typ verteilt werden
         und nicht nach Ziel.</p>
-      <p data-l="en"><b>Several directories are several workers</b> — of the same worker type. A process for the
+      <p data-l="en"><b>Several directories need several workers</b>, all of the same worker type. A process for the
         production forest and one for the test forest simply name different workers. Both their jobs are leased by
         <b>one</b> AD <i>worker instance</i>, because that instance is bound to no directory. This is where the three
-        levels separate most sharply: a second target is a second <b>worker</b>, more throughput is more
-        <b>instances</b> — and more instances separate nothing, since jobs are handed out by type and not by
+        levels separate most sharply: a second target needs a second <b>worker</b>, more throughput needs more
+        <b>instances</b> — and more instances do not keep the targets apart, since jobs are handed out by type and not by
         target.</p>
       <p data-l="de">Verwende <b>ldaps://</b>, sofern du nicht StartTLS aktivierst: Active Directory weigert sich,
         ein Passwort über eine unverschlüsselte Verbindung zu setzen. Ein <code>ldap://</code>-Verzeichnis
@@ -7892,8 +7891,8 @@ atlas playground --server "$ATLAS" --file scenarios/guest-access.json</code></pr
         <p data-l="de" style="margin:.3em 0 0">Dasselbe Konto ein zweites Mal anlegen, ein Passwort über eine
           unverschlüsselte Verbindung setzen, ein Gruppenmitglied zweimal hinzufügen, einen Container mit Inhalt
           löschen, einen Delta-Abgleich an der falschen Stelle im Verzeichnisbaum: Das scheitert im Mockup genauso
-          wie am echten Domain Controller. Genau das ist der Sinn – die Fehler, die man sonst erst in der
-          Produktion trifft, trifft man beim Entwerfen.</p>
+          wie am echten Domain Controller. Genau dafür ist das Mockup da: Fehler, auf die du sonst erst in der
+          Produktion stösst, bemerkst du schon beim Entwerfen.</p>
         <p data-l="en" style="margin:.3em 0 0">Creating the same account twice, setting a password over an
           unencrypted connection, adding a group member twice, deleting a container that still has children,
           reading a delta from the wrong place in the tree: all of that fails in the mockup exactly as it does
@@ -7957,14 +7956,14 @@ ATLAS_MSSQL_MOCK=1 ATLAS_MSSQL_MOCK_SEED=/srv/atlas/hr-seed.json \
 atlas worker --connector mssql</code></pre>
       <p data-l="de">Dort ist der Seed wieder ein Pfad, weil dieser Worker auf seinem eigenen Host läuft und
         atlas ihm nichts hinlegen kann. Findet er die Datei nicht, startet er mit einem Mockup <b>ohne
-        Antworten</b> und schreibt eine Warnung — er verweigert den Start nicht. Jede Anweisung scheitert dann und
-        nennt sich selbst, was auf den fehlenden Seed zeigt, statt ihn zu verbergen.
+        Antworten</b> und schreibt eine Warnung — er verweigert den Start nicht. Jede Anweisung scheitert dann mit einer
+        Fehlermeldung, die die Anweisung wörtlich wiedergibt; so ist sofort erkennbar, dass der Seed fehlt.
         <code>ATLAS_MSSQL_CONNECTORS</code> bleibt hier nötig, denn der Task nennt einen Worker beim Namen, und
         ein Mockup ohne Namen hat nichts, was ein Task ansprechen könnte.</p>
       <p data-l="en">There the seed is a path again, because that worker runs on its own host and atlas has
         nowhere to put it. If it cannot find the file it starts with a mockup that has <b>no answers</b> and logs
-        a warning – it does not refuse to start. Every statement then fails naming itself, which points at the
-        missing seed rather than hiding it. <code>ATLAS_MSSQL_CONNECTORS</code> is still required here, because a
+        a warning – it does not refuse to start. Every statement then fails with an error message that quotes the
+        statement, so the missing seed is obvious at once. <code>ATLAS_MSSQL_CONNECTORS</code> is still required here, because a
         task names a worker and a mockup with no names has nothing a task could address.</p>
       <p data-l="de">Für die drei Datenbank-Worker-Typen gilt das <b>gleichermassen</b>, mit dem Präfix des
         jeweiligen Produkts: <code>ATLAS_MARIADB_CONNECTORS</code>, <code>ATLAS_MARIADB_MOCK</code>,
@@ -8009,10 +8008,10 @@ atlas worker --connector mssql</code></pre>
       "error": "Violation of UNIQUE KEY constraint 'UQ_personen_mail'" }
   ]
 }</code></pre>
-      <p data-l="de">Gross-/Kleinschreibung und Zeilenumbrüche sind egal — sonst nichts: Eine andere Spaltenliste
+      <p data-l="de">Beim Abgleich zählen Gross-/Kleinschreibung und Zeilenumbrüche nicht, jede andere Abweichung schon: Eine andere Spaltenliste
         ist eine andere Anweisung. Und eine Antwort darf <b>scheitern</b>. Das ist keine Spielerei: Ein doppelt
-        zugestellter Job, der ein zweites Mal einfügt, ist in einem Identity-Prozess kein Sonderfall, sondern der
-        Normalfall der Zustellgarantie — und im Mockup lässt er sich auslösen, wann immer man will.</p>
+        zugestellter Job, der ein zweites Mal einfügt, ist in einem Identity-Prozess kein Sonderfall, sondern eine
+        regelmässige Folge der Zustellgarantie (mindestens einmal) — und im Mockup lässt er sich auslösen, wann immer man will.</p>
       <p data-l="en">Case and line breaks do not matter — nothing else is forgiven: a different column list is a
         different statement. And an answer may <b>fail</b>. That is not a curiosity: a redelivered job that
         inserts a second time is not an edge case in an identity process, it is what the delivery guarantee
@@ -8043,12 +8042,12 @@ atlas worker --connector mssql</code></pre>
         empties the view.</p>
       <p class="muted" style="font-size:13px" data-l="de">Die Ansicht ist <b>Administratoren
         vorbehalten</b>, und aus einem strengeren Grund als das Mock-Verzeichnis: Sie zeigt die
-        <i>gebundenen Werte</i>, und ein Prozess bindet, was er bindet — ein Passwort-Hash auf dem Weg
+        <i>gebundenen Werte</i>, und das kann alles sein, was ein Prozess bindet — ein Passwort-Hash auf dem Weg
         in eine Tabelle ist ein gebundener Parameter wie jeder andere, und nichts kann ihn von einer
         Id unterscheiden.</p>
       <p class="muted" style="font-size:13px" data-l="en">The view is <b>admin-only</b>, and for a
-        stronger reason than the mock directory: it shows the <i>bound values</i>, and a process binds
-        whatever it binds — a password hash on its way into a table is a bound parameter like any
+        stronger reason than the mock directory: it shows the <i>bound values</i>, which can be
+        anything a process binds — a password hash on its way into a table is a bound parameter like any
         other, and nothing can tell it from an id.</p>
 
       <div class="note">
@@ -8057,13 +8056,13 @@ atlas worker --connector mssql</code></pre>
           Trefferliste</b>, sondern lässt die Aufgabe scheitern — mit der Anweisung und den gebundenen Werten im
           Fehlertext, sodass du sie direkt in die Startdatei übernehmen kannst. Das ist Absicht: „keine Treffer"
           ist eine <i>fachliche</i> Antwort (die Suche hat niemanden gefunden), und ein Mockup, das sie erfindet,
-          schiebt dem Prozess eine Tatsache unter — in der Richtung, die am schwersten auffällt, weil der Lauf
-          aussieht, als hätte er funktioniert.</p>
+          täuscht dem Prozess ein fachliches Ergebnis vor, das niemand hinterlegt hat. Ein solcher Fehler ist
+          besonders schwer zu bemerken, weil der Lauf aussieht, als hätte er funktioniert.</p>
         <p data-l="en" style="margin:.3em 0 0">A statement with no seeded answer does <b>not</b> come back as an
           empty result set: it fails the task, with the statement and the bound values in the error so you can
           paste them straight into the seed. That is deliberate — "no rows" is a <i>business</i> answer (the
-          lookup found nobody), and a mockup that invents one hands the process a fact, in the direction that is
-          hardest to notice, because the run looks like it worked.</p>
+          lookup found nobody), and a mockup that invents one hands the process a business result that nobody seeded.
+          That kind of error is the hardest to notice, because the run looks like it worked.</p>
       </div>
 
       <div class="note warn">
@@ -8262,7 +8261,7 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
   -H "Content-Type: application/gzip" --data-binary @berechtigungen-source.tar.gz</code></pre>
 
       <h3 data-l="de">Die Aufrufe im Überblick</h3><h3 data-l="en">The calls at a glance</h3>
-      <p data-l="de">Die Rolle ist die am Eingang geprüfte; Publizieren, Promoten und der Quellexport verlangen
+      <p data-l="de">Die Spalte «Rolle» nennt die Rolle, die beim Eintreffen des Aufrufs geprüft wird; Publizieren, Promoten und der Quellexport verlangen
         zusätzlich eine Stufe auf der Applikation (editor bzw. Betrachter).</p>
       <p data-l="en">The role is the one checked at the boundary; publishing, promoting and the source export also
         need a level on the application (editor or viewer).</p>
@@ -8440,7 +8439,7 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
       <p data-l="de">Fällt ein Zielsystem aus – ein SMTP-Host antwortet nicht mehr, eine REST-Schnittstelle ist
         weg –, dann scheitert nicht <i>ein</i> Job, sondern <b>einer pro Instanz</b>, die die Aufgabe erreicht.
         Früher hiess das: jeder Token verbrauchte sein Retry-Budget und parkte auf einem eigenen Incident, und
-        eine Stunde Ausfall in einem gut laufenden Prozess ergab Tausende davon.</p>
+        eine Stunde Ausfall in einem stark genutzten Prozess ergab Tausende davon.</p>
       <p data-l="en">When a target system fails – an SMTP host stops answering, a REST endpoint disappears – it is
         not <i>one</i> job that fails but <b>one per instance</b> that reaches the task. That used to mean every
         token spent its retry budget and parked on an incident of its own, so an hour of downtime in a busy
@@ -8485,13 +8484,14 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
         <code>/metrics</code> führt <code>atlas_worker_breakers_open</code> (wie viele Ziele gerade
         zurückgehalten werden) sowie die Summen <code>atlas_worker_breaker_trips_total</code> und
         <code>atlas_worker_breaker_probes_total</code>. <i>Welches</i> Ziel es ist, beantwortet die Workers-Ansicht
-        – ein Metrik-Label mit dem Worker-Namen wäre pro Modell erfindbar und würde das Scrape-Ziel sprengen.</p>
+        – ein Metrik-Label mit dem Worker-Namen hätte unbegrenzt viele Werte, weil die Worker-Namen aus den deployten Modellen stammen, und würde das Scrape-Ziel überlasten.</p>
       <p data-l="en">For alerting: every state change is logged as <code>worker.breaker_open</code> or
         <code>worker.breaker_closed</code>, and <code>/metrics</code> carries
         <code>atlas_worker_breakers_open</code> (how many targets are currently held) plus the totals
         <code>atlas_worker_breaker_trips_total</code> and <code>atlas_worker_breaker_probes_total</code>.
-        <i>Which</i> target is answered by the Workers view – a metric label carrying a Worker's name would be
-        invented per model and would blow up the scrape target.</p>
+        <i>Which</i> target is answered by the Workers view – a metric label carrying a Worker's name would have
+        no upper bound on its values, because Worker names come from the deployed models, and it would overload
+        the scrape target.</p>
 
       <h3 data-l="de">Atlas installieren &amp; betreiben</h3><h3 data-l="en">Installing &amp; operating atlas</h3>
       <p data-l="de">Atlas ist <b>ein einziges, in sich geschlossenes Binary</b> – keine Datenbank, kein Broker,
@@ -9301,7 +9301,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         <b>latest</b> for the newest one – and since ADR-0423 <b>latest</b> means the newest version <i>at the time
         the task runs</i>, not the one frozen when the process was deployed. Binding a version that is not deployed
         makes the process deploy refuse it and name the deployed versions.</p>
-      <p data-l="de">Eine Entscheidungs-Deployment, an die ein deployter Prozess gebunden ist, lässt sich
+      <p data-l="de">Ein Entscheidungs-Deployment, an das ein deployter Prozess gebunden ist, lässt sich
         <b>nicht löschen</b>: <code>DELETE /api/v1/decision-deployments/{key}</code> antwortet mit 409 und nennt die
         Definition, die daran hängt – erst die Definition entfernen. Eine Version, an die nichts gebunden ist, lässt
         sich löschen.</p>
@@ -9535,12 +9535,12 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
           Anbieter in keiner genannten Gruppe ist, trifft auf keine Regel und bekommt nichts.</li>
         <li data-l="en"><b>Nothing is granted by absence.</b> Every rule is an exact value match. Somebody the
           provider says nothing about matches no rule and is granted nothing.</li>
-        <li data-l="de"><b><code>user</code> ist ein Boden, keine Vergabe.</b> Entschieden werden
+        <li data-l="de"><b>Die Abbildung vergibt und entzieht <code>user</code> nicht.</b> Entschieden werden
           <code>admin</code>, <code>modeler</code>, <code>operator</code>, <code>productmanager</code> und
           <code>feedreader</code>; wer sich
           anmelden kann, behält <code>user</code> – eine verschwundene Gruppe nimmt niemandem die eigene
           Aufgabenliste.</li>
-        <li data-l="en"><b><code>user</code> is a floor, not a grant.</b> What is decided is <code>admin</code>,
+        <li data-l="en"><b>The mapping neither grants nor removes <code>user</code>.</b> What is decided is <code>admin</code>,
           <code>modeler</code>, <code>operator</code>, <code>productmanager</code> and <code>feedreader</code>; anybody
           who can sign in keeps
           <code>user</code> – a group that goes away does not cost somebody their own task list.</li>
@@ -9562,8 +9562,8 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
       </ul>
       <div class="note warn">
         <span class="lbl" data-l="de">Eine echte Entscheidung</span><span class="lbl" data-l="en">A real decision</span>
-        <p data-l="de" style="margin:.3em 0 0">Solange die Abbildung an ist, verwaltet die Rollen dieser Installation,
-          <b>wer jene Gruppen verwaltet</b>. Das ist der Sinn der Föderation und zugleich ihre schärfste Kante. Wenn
+        <p data-l="de" style="margin:.3em 0 0">Solange die Abbildung eingeschaltet ist, gilt:
+          <b>Wer beim Anbieter jene Gruppen verwaltet</b>, bestimmt die Rollen dieser Installation. Das ist der Sinn der Föderation und zugleich ihre schärfste Kante. Wenn
           du Rollen weiterhin hier vergeben willst, lass sie aus.</p>
         <p data-l="en" style="margin:.3em 0 0">While the mapping is on, this instance's roles are administered by
           <b>whoever administers those groups</b>. That is the point of federation and also its sharpest edge. If you
@@ -9652,8 +9652,8 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
           <i>nachdem</i> die Änderung erfolgreich war.</li>
         <li data-l="en">An entry is <b>immutable</b> and only ever appended; it is written <i>after</i> the change
           has succeeded.</li>
-        <li data-l="de">Das globale Protokoll ist <b>Administratorinnen</b> vorbehalten. Die Historie <i>einer</i>
-          Applikation sieht auch, wem sie gehört.</li>
+        <li data-l="de">Das globale Protokoll ist <b>Administratorinnen</b> vorbehalten. Die Historie <i>einer einzelnen</i>
+          Applikation ist auch für die Person sichtbar, der sie gehört.</li>
         <li data-l="en">The global log is for <b>administrators</b>. The history of a <i>single</i> application is
           also visible to whoever owns it.</li>
         <li data-l="de"><b>Ohne eingeschaltete Authentisierung wird nichts aufgezeichnet</b> &ndash; ohne
@@ -9666,19 +9666,19 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
     <!-- ==================== DARSTELLUNG ==================== -->
     <section id="darstellung">
       <h2 data-l="de">Darstellung: Zahlen, Zeitzone, Sprache</h2><h2 data-l="en">Display: numbers, time zone, language</h2>
-      <p class="lead" data-l="de">Wie <b>Sie</b> die Console lesen. Drei Einstellungen unter
+      <p class="lead" data-l="de">Wie <b>du</b> die Console liest. Drei Einstellungen unter
         <a class="applink" href="/#/console/settings">Console&nbsp;→&nbsp;Display</a> (oder im Kontomenü oben
         rechts): wie eine Zahl geschrieben wird, auf welcher Uhr ein Zeitstempel steht und in welcher Sprache die
-        übersetzten Screens erscheinen. Sie gelten für Sie und für niemanden sonst, und sie ändern nichts an den
-        gespeicherten Daten – nur daran, wie sie Ihnen gezeigt werden.</p>
+        übersetzten Screens erscheinen. Sie gelten für dich und für niemanden sonst, und sie ändern nichts an den
+        gespeicherten Daten – nur daran, wie sie dir gezeigt werden.</p>
       <p class="lead" data-l="en">How <b>you</b> read the Console. Three settings under
         <a class="applink" href="/#/console/settings">Console&nbsp;→&nbsp;Display</a> (or in the account menu at
         the top right): how a number is written, which clock a timestamp is on, and which language the translated
         screens use. They apply to you and to nobody else, and they change nothing about the stored data – only
         how it is shown to you.</p>
-      <p data-l="de">Jede Option trägt ihr eigenes Muster, denn das ist, was Sie tatsächlich wählen: «Schweiz»
+      <p data-l="de">Jede Option trägt ihr eigenes Muster, denn das ist es, was du tatsächlich wählst: «Schweiz»
         sagt niemandem, was ein Badge druckt, <code>25'864.5</code> sagt es genau. Die Vorschau oben auf dem
-        Screen folgt Ihrer Wahl, <i>bevor</i> Sie speichern – Sie können eine Option ansehen und wieder
+        Screen folgt deiner Wahl, <i>bevor</i> du speicherst – du kannst eine Option ansehen und wieder
         verwerfen.</p>
       <p data-l="en">Every option carries its own sample, because that is what you are really choosing:
         "Switzerland" tells nobody what a badge will print, <code>25'864.5</code> tells them exactly. The preview
@@ -9723,9 +9723,9 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
 
       <h3 data-l="de">Zeitzone – die Einstellung, die nicht kosmetisch ist</h3><h3 data-l="en">Time zone – the setting that is not cosmetic</h3>
       <p data-l="de">Jeder Zeitstempel in der Console wird auf dieser Uhr gezeigt. Bleibt es bei «dieses Gerät»,
-        liest sich derselbe Moment auf Ihrem Laptop anders als auf dem einer Kollegin und anders als im Log des
+        liest sich derselbe Moment auf deinem Laptop anders als auf dem einer Kollegin und anders als im Log des
         Servers – und nichts auf dem Bildschirm sagt, welche Uhr gerade gilt. Genau so wird ein Incident eine
-        Stunde zu spät bearbeitet. Stellen Sie die Zone einmal ein, und die Console zeigt überall dieselbe.</p>
+        Stunde zu spät bearbeitet. Stell die Zone einmal ein, und die Console zeigt überall dieselbe.</p>
       <p data-l="en">Every timestamp in the Console is shown on this clock. Left on "this device", the same
         instant reads as one time on your laptop, another on a colleague's, and another again in the server's
         log – and nothing on screen says which clock is in force. That is exactly how an incident gets worked an
@@ -9740,7 +9740,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         <li data-l="en"><b>The zone changes the display only.</b> An instant stays what it is in storage, and the
           API answers unchanged, in unix nanoseconds or ISO time.</li>
         <li data-l="de"><b>Exporte tragen die Einstellung dessen, der sie erzeugt hat</b> &ndash; die
-          Prozess- und Entscheidungsdokumentation etwa stempelt «Erstellt» in Ihrer Zone und Ihrem Format.</li>
+          Prozess- und Entscheidungsdokumentation etwa stempelt «Erstellt» in deiner Zone und deinem Format.</li>
         <li data-l="en"><b>Exports carry the setting of whoever made them</b> &ndash; the process and decision
           documentation, for instance, stamps "Created" in your zone and your format.</li>
       </ul>
@@ -9756,17 +9756,18 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         Console reloads once so the language takes effect everywhere at the same moment.</p>
 
       <h3 data-l="de">Wo die Einstellung liegt</h3><h3 data-l="en">Where the setting is kept</h3>
-      <p data-l="de">Bei Ihrem Konto, auf dem Server – sie folgt Ihnen also in jeden Browser, in dem Sie sich
-        anmelden. Das ist der Zeitzone geschuldet: eine Sprache ist, wie jemand an einem Schreibtisch liest, eine
-        Zeitzone ist, wo jemand <i>ist</i>, und wer Tasks am Laptop beantwortet und eine hängende Instanz am
-        Tablet anschaut, hat eine davon und zwei Browser. Der Browser behält zusätzlich eine Kopie: der erste
+      <p data-l="de">Bei deinem Konto, auf dem Server – sie folgt dir also in jeden Browser, in dem du dich
+        anmeldest. Das ist der Zeitzone geschuldet: Die Sprache betrifft, wie jemand an einem bestimmten
+        Arbeitsplatz liest; die Zeitzone dagegen hängt davon ab, wo sich jemand <i>befindet</i>, nicht vom Gerät.
+        Wer Tasks am Laptop beantwortet und eine hängende Instanz am Tablet ansieht, ist in einer einzigen
+        Zeitzone, benutzt aber zwei Browser und braucht in beiden dieselbe Einstellung. Der Browser behält zusätzlich eine Kopie: der erste
         Bildaufbau ist damit sofort richtig, und ein Server, der gerade nicht antwortet, ändert nichts an dem, was
-        Sie sehen. Auf einer Installation <b>ohne Anmeldung</b> gibt es kein Konto, bei dem etwas liegen könnte –
+        du siehst. Auf einer Installation <b>ohne Anmeldung</b> gibt es kein Konto, bei dem etwas liegen könnte –
         dort bleibt die Einstellung in diesem Browser, und der Screen sagt es.</p>
       <p data-l="en">With your account, on the server – so it follows you to any browser you sign in from. The
-        time zone is the reason: a language is how somebody reads at one desk, a time zone is where somebody
-        <i>is</i>, and a person who answers tasks on a laptop and checks a stuck instance on a tablet has one of
-        those and two browsers. The browser keeps a copy as well: the first paint is then already right, and a
+        time zone is the reason: a language concerns how somebody reads at a particular desk, but a time zone
+        depends on where somebody <i>is</i>, not on the device. A person who answers tasks on a laptop and checks a
+        stuck instance on a tablet is in one time zone but uses two browsers, and needs the same setting in both. The browser keeps a copy as well: the first paint is then already right, and a
         server that does not answer right now changes nothing about what you see. On an installation
         <b>without sign-in</b> there is no account to keep anything with – there the setting stays in that
         browser, and the screen says so.</p>
@@ -9992,8 +9993,8 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         is how you get a canvas that lets somebody draw an arrow the server then rejects.</p>
 
       <h3 data-l="de">Der Business Key</h3><h3 data-l="en">The business key</h3>
-      <p data-l="de">Der <b>Business Key</b> ist die eine Angabe, für die BPMN kein Gegenstück hat: die Tatsache,
-        die sagt, dass zwei Dinge <i>dasselbe</i> Ding sind. Bei einem Auftrag ist das die Auftragsnummer, bei
+      <p data-l="de">Der <b>Business Key</b> ist die eine Angabe, für die BPMN kein Gegenstück hat: das Merkmal,
+        an dem man erkennt, dass zwei Objekte <i>denselben</i> fachlichen Gegenstand bezeichnen. Bei einem Auftrag ist das die Auftragsnummer, bei
         einer Bewerbung die Referenz, bei einer Person die Sozialversicherungsnummer &ndash; was immer im
         Fachbereich als Identität gilt.</p>
       <p data-l="en">The <b>business key</b> is the one fact BPMN has no equivalent for: the fact that says two
@@ -10434,7 +10435,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
       <div class="note">
         <span class="lbl" data-l="de">Ein Pr&auml;fix je Applikation</span><span class="lbl" data-l="en">One prefix per application</span>
         <p data-l="de" style="margin:.3em 0 0">Prozess-, Formular- und Entscheidungs-Ids leben pro Server in
-          <i>einem</i> Namensraum. <code>bw-</code> vor allem ist die billigste Kollisionsvermeidung, die es gibt
+          <i>einem</i> Namensraum. Das Pr&auml;fix <code>bw-</code> vor jeder Id ist die einfachste Art, Kollisionen zu vermeiden
           &ndash; und beim Lesen einer Instanz sieht man sofort, wozu ein Artefakt geh&ouml;rt.</p>
         <p data-l="en" style="margin:.3em 0 0">Process, form and decision ids share <i>one</i> namespace per server.
           A <code>bw-</code> in front of everything is the cheapest collision avoidance there is &ndash; and when
@@ -10479,8 +10480,8 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
 
         <li><b data-l="de">Die Regel in eine Tabelle</b><b data-l="en">The rule into a table</b>
           <p data-l="de">&bdquo;Master mit f&uuml;nf Jahren: zwei Runden; Studium mit zwei Jahren: eine Runde; Lehre
-            mit f&uuml;nf: eine Runde; sonst Absage&ldquo; &ndash; als Gateway-Kaskade w&auml;re das vier
-            verschachtelte Rauten. Als <a href="#dmn">DMN-Tabelle</a> ist es vier Zeilen, die HR selbst pflegen kann.
+            mit f&uuml;nf: eine Runde; sonst Absage&ldquo; &ndash; als Gateway-Kaskade w&auml;ren das vier
+            verschachtelte Rauten. Als <a href="#dmn">DMN-Tabelle</a> sind es vier Zeilen, die HR selbst pflegen kann.
             Der Clou steht in der zweiten Ausgabespalte: <code>runden</code> ist eine <b>Liste</b>, keine Zahl.</p>
           <p data-l="en">"Master with five years: two rounds; a degree with two years: one round; apprenticeship with
             five: one round; otherwise reject" &ndash; as a gateway cascade that is four nested diamonds. As a
@@ -10592,7 +10593,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
             <p data-l="de" style="margin:.3em 0 0">Der Teilprozess hat zwei Enden: Feedback erfasst &ndash; oder Frist
               abgelaufen. <b>Beide</b> schreiben eine <code>bewertung</code>; das Fristende schreibt eine mit
               &bdquo;nein&ldquo; und einer Notiz. F&auml;nde die Sammelstelle beim Zusammenf&uuml;hren nichts vor, h&auml;tte
-              die Liste ein Loch &ndash; und die Auswertung r&auml;chte sich einen Schritt sp&auml;ter.</p>
+              die Liste ein Loch &ndash; und der Fehler w&uuml;rde sich erst einen Schritt sp&auml;ter in der Auswertung zeigen.</p>
             <p data-l="en" style="margin:.3em 0 0">The child has two ends: feedback captured &ndash; or deadline
               expired. <b>Both</b> write a <code>bewertung</code>; the deadline writes one with "no" and a note. If
               the collector found nothing there, the list would have a hole &ndash; and the evaluation one step later
@@ -10822,8 +10823,8 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
         <code>rolle</code> (entwicklung, vertrieb, produktion, verwaltung, ein Unbekannter); Stubs beantworten den Job
         und die Aufgaben, damit jeder Fall zu Ende läuft. Eine Regel je Fall –
         <code>when rolle = "vertrieb" then ausstattung.laptop = "ThinkPad X1"</code> – und die Erwartungen
-        <i>no incidents</i> und <i>every case finishes</i>. Den Auffangfall einmal <b>rot</b> sehen: die Regel
-        absichtlich falsch schreiben. Mehr unter <a href="#szenarien">Testen als Code</a>.</p>
+        <i>no incidents</i> und <i>every case finishes</i>. Schreib die Regel einmal absichtlich falsch, damit du siehst, wie der
+        Auffangfall <b>rot</b> wird, also fehlschlägt. Mehr unter <a href="#szenarien">Testen als Code</a>.</p>
       <p data-l="en"><b>Starting point:</b> the deployed model in the Playground. <b>Scenario:</b> a dataset over
         <code>rolle</code> (entwicklung, vertrieb, produktion, verwaltung, and an unknown one); stubs answer the job
         and the tasks so every case finishes. A rule per case –
@@ -11088,7 +11089,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
           <tr><td data-l="de">Worker-Instanz</td><td data-l="en">Worker instance</td><td data-l="de">Ein laufender Prozess, der Jobs abholt. Null bis viele pro Worker; Skalieren heisst mehr Instanzen.</td><td data-l="en">A running process that leases jobs. Zero to many per worker; scaling means more instances.</td></tr>
           <tr><td data-l="de">Connector <i>(veraltet)</i></td><td data-l="en">Connector <i>(legacy)</i></td><td data-l="de">Der frühere Name. Je nach Stelle war damit ein Worker-Typ oder ein Worker gemeint – deshalb der neue Sprachgebrauch. XML-Attribute, API und CLI tragen ihn weiter.</td><td data-l="en">The former name. Depending on where it stood it meant a worker type or a worker – which is why the vocabulary changed. XML attributes, the API and the CLI keep it.</td></tr>
                   <tr><td data-l="de">Informationsmodell</td><td data-l="en">Information model</td><td data-l="de">Ein UML-Klassendiagramm, das einer Applikation gehört und für alle ihre Prozesse gilt: was ein Auftrag <i>ist</i>. Siehe <a href="#infomodell">Kapitel</a>.</td><td data-l="en">A UML class diagram owned by an application and holding for all of its processes: what an order <i>is</i>. See the <a href="#infomodell">chapter</a>.</td></tr>
-          <tr><td data-l="de">Business Key</td><td data-l="en">Business key</td><td data-l="de">Die Angabe, die sagt, dass zwei Dinge dasselbe Ding sind – die Auftragsnummer, die Referenz. BPMN hat dafür kein Gegenstück.</td><td data-l="en">The fact that says two things are the same thing – the order number, the reference. BPMN has no equivalent.</td></tr>
+          <tr><td data-l="de">Business Key</td><td data-l="en">Business key</td><td data-l="de">Das Merkmal, an dem man erkennt, dass zwei Objekte denselben fachlichen Gegenstand bezeichnen – die Auftragsnummer, die Referenz. BPMN hat dafür kein Gegenstück.</td><td data-l="en">The fact that says two things are the same thing – the order number, the reference. BPMN has no equivalent.</td></tr>
           <tr><td data-l="de">Landschaft (Starmap)</td><td data-l="en">Landscape (Starmap)</td><td data-l="de">Der Graph aller Applikationen, Prozesse, Worker und Entscheidungen einer Installation. Berechnet, nicht gezeichnet. Die Ansicht darauf heisst <b>Starmap</b>. Siehe <a href="#panorama">Panorama</a>.</td><td data-l="en">The graph of every application, process, worker and decision on an installation. Computed, not drawn. The view onto it is called the <b>Starmap</b>. See <a href="#panorama">Panorama</a>.</td></tr>
           <tr><td>Playground</td><td data-l="de">Der Modeler-Tab, der den Entwurf mit echten Daten auf der echten Engine rechnet – in einer Wegwerf-Sandbox, ohne Deploy. Siehe <a href="#playground">Testen</a>.</td><td data-l="en">The Modeler tab that runs the draft with real data on the real engine – in a throwaway sandbox, with no deploy. See <a href="#playground">Test</a>.</td></tr>
           <tr><td>MCP</td><td data-l="de">Das Protokoll, über das ein KI-Assistent atlas bedient. Ein Werkzeug läuft mit den Rollen dessen, der es ruft. Siehe <a href="#konten">Konten &amp; Rollen</a>.</td><td data-l="en">The protocol an AI assistant drives atlas over. A tool runs with the roles of whoever calls it. See <a href="#konten">accounts &amp; roles</a>.</td></tr>
