@@ -54,6 +54,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A product whose order form asks for a number can be ordered.** The order takes each
+  answer as text (`POST /api/v1/orders`, config is a map of strings), and the shop sent
+  what the form held as it held it: a number field a number, a checkbox a boolean, a
+  multiple choice a list. The form rendered and checked out, and «order» failed with 400
+  «cannot unmarshal number into … placeReq.config of type string» for the whole basket.
+  The shop now sends every answer as text — `"5"`, `"true"`, the choices joined by a
+  comma — on ordering and on correcting a held position, and a correction opens its form
+  on the stored answers in each field's own kind, so an earlier multiple choice is still
+  chosen instead of dropped. `e2e/shop-config-answers.spec.mjs` orders and corrects through
+  the real shop page.
+
 - **A form created from a step is filed under the process's application.** **＋ New form**
   on a start event, a user task or a repair form opened the form editor without naming the
   diagram's application, so the new form was saved under none: it was listed among the
