@@ -30,6 +30,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A position ordered in a variant is started again.** A position's key joins the
+  product and its variant with `#` (`lizenz#standard`), and the shop's fulfilment model and
+  its three approval models put that key into the URL they call unencoded. In a URL `#`
+  opens the fragment, so `POST …/lines/lizenz#standard/start` reached the server as
+  `POST …/lines/lizenz` — the route that sets a line's status — without one, and was
+  refused with «a line cannot be set to here». The orchestration raised an incident a retry
+  could not clear, and every product with variants stopped before its process started.
+  The four models now encode the key (`#` as `%23`); two tests order a product in a
+  variant, with and without an approval, and wait for its process to run.
+
 - **The handbook's German reads as German.** Much of it had been translated word for word
   from the English and carried English idioms over: «Der Lehrsatz ist …» for *the lesson
   is*, «Dasselbe Muster trägt …» for *the same pattern carries*, «das ist der Punkt»,

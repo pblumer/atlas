@@ -103,6 +103,12 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
 
 ## Voraussetzungen auf der Zielinstanz
 
+0. **Ein Atlas-Server, der Positionen mit Variante startet.** Die Lizenz ist das einzige
+   Produkt mit Varianten (Standard, Erweitert, Frontline). Ältere Server setzten die
+   Positions-ID `m365-lizenz#standard` unkodiert in die Adresse ihres Systemprozesses
+   «Shop: Auftrag erfüllen»; die Bestellung blieb dann mit dem Incident «a line cannot be
+   set to here» stehen. Behoben im Eintrag «A position ordered in a variant is started
+   again» des CHANGELOG. Alle anderen Produkte sind davon nicht betroffen.
 1. **Worker** (Console → Workers), jeweils mit eigener App-Registrierung; die Einrichtung
    beschreibt das Handbuch unter «Runbooks»:
    - `ucc_entra` (Microsoft Entra ID): `User.ReadWrite.All`, `Group.ReadWrite.All`. Für
@@ -208,6 +214,12 @@ Ebenso geprüft: `installieren.sh` gegen eine frische Instanz mit Anmeldung (Sch
 mit einem Admin-Token, Schritt 4 abgelehnt und danach über eine angemeldete Sitzung
 importiert, beide Kataloge veröffentlicht).
 
+Auf atlas.blumer.cloud über die Shop-Oberfläche bestellt; dabei fielen zwei Fehler auf,
+die die Bestellungen über die API nicht zeigten: Das Bestellformular des Sitzungszimmers
+fragte die Plätze mit einem Zahlenfeld ab, das der Shop als Zahl sendet und die Bestellung
+nur als Text annimmt (jetzt ein Textfeld mit Muster), und der Systemprozess startete die
+Lizenz-Position mit Variante nicht (siehe Voraussetzung 0).
+
 Nicht geprüft: die Entra- und Exchange-Schritte gegen einen echten Tenant (für diese
 Worker gibt es keinen Mock), die Governance-Prüfung gegen echte Daten und
 `installieren.ps1` (in der Prüfumgebung stand keine PowerShell zur Verfügung).
@@ -255,7 +267,8 @@ Worker gibt es keinen Mock), die Governance-Prüfung gegen echte Daten und
 
 `go test ./examples` prüft ohne Server: alle Prozesse kompilieren, das Katalogdokument
 veröffentlicht sich, Lebenszyklus-Bindungen und Shop-Aufgaben passen zu den Prozessen,
-jedes Formular ist vorhanden, jede Antwort eines Bestellformulars ist als Personendatum
+jedes Formular ist vorhanden, jedes Bestellformular liefert nur Text (keine Zahlenfelder,
+Checkboxen oder Mehrfachauswahlen), jede Antwort eines Bestellformulars ist als Personendatum
 deklariert oder als nicht personenbezogen markiert, jeder Platzhalter wird gefragt, und
 `atlas.json` nennt genau die Prozesse und Formulare dieses Verzeichnisses.
 `go test ./api/layout` hält alle Diagramme an die Layout-Regeln (keine Überlappungen,

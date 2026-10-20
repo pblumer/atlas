@@ -420,3 +420,89 @@ func TestEveryPackageManifestNamesWhatItShips(t *testing.T) {
 		}
 	}
 }
+
+// TestConfigFormsAnswerInText: the answers to a product's configuration form travel
+// with the order as text. POST /api/v1/orders takes them as a map of strings
+// (ADR-0358), and the shop sends what the form holds as it holds it — so a number
+// field, a checkbox or a multi-select sends a number, a boolean or a list, and the
+// order is refused with 400 before anybody approves anything. The form renders, the
+// basket fills, and only "bestellen" fails, which is the worst moment to find out.
+//
+// A count is a text field with a pattern, and a yes/no is a select or radio whose
+// values are strings; the process turns the answer into what it needs. An action's
+// form is not checked here: an action takes its variables untyped.
+func TestConfigFormsAnswerInText(t *testing.T) {
+	nonText := map[string]string{
+		"number":    "a number",
+		"checkbox":  "a boolean",
+		"checklist": "a list",
+		"taglist":   "a list",
+	}
+	for _, path := range shopDocuments(t) {
+		dir := filepath.Dir(path)
+		doc, _ := readShopDocument(t, path)
+		forms := exampleFormComponents(t, dir)
+		for _, it := range doc.Products {
+			if it.ConfigForm == "" {
+				continue
+			}
+			for _, c := range forms[it.ConfigForm] {
+				if c.Key == "" {
+					continue
+				}
+				if what, ok := nonText[c.Type]; ok {
+					t.Errorf("%s: product %s asks with form %s, whose %s field %q sends %s; "+
+						"the order takes answers as text — use a text field with a pattern",
+						dir, it.ID, it.ConfigForm, c.Type, c.Key, what)
+				}
+				for _, v := range c.Values {
+					if len(v.Value) == 0 || v.Value[0] != '"' {
+						t.Errorf("%s: product %s asks with form %s, whose field %q has the option value %s; "+
+							"the order takes answers as text — quote it", dir, it.ID, it.ConfigForm, c.Key, v.Value)
+					}
+				}
+			}
+		}
+	}
+}
+
+// formComponent is what TestConfigFormsAnswerInText reads of one form field.
+type formComponent struct {
+	Key    string `json:"key"`
+	Type   string `json:"type"`
+	Values []struct {
+		Value json.RawMessage `json:"value"`
+	} `json:"values"`
+	Components []formComponent `json:"components"`
+}
+
+// exampleFormComponents reads every form an example ships, by id, with the fields of
+// its groups flattened in: a field inside a group answers like one outside it.
+func exampleFormComponents(t *testing.T, dir string) map[string][]formComponent {
+	t.Helper()
+	out := map[string][]formComponent{}
+	matches, _ := filepath.Glob(filepath.Join(dir, "*.json"))
+	for _, path := range matches {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		var form struct {
+			Type       string          `json:"type"`
+			ID         string          `json:"id"`
+			Components []formComponent `json:"components"`
+		}
+		if json.Unmarshal(raw, &form) != nil || form.Type != "default" || form.Components == nil {
+			continue
+		}
+		var walk func([]formComponent)
+		walk = func(cs []formComponent) {
+			for _, c := range cs {
+				out[form.ID] = append(out[form.ID], c)
+				walk(c.Components)
+			}
+		}
+		walk(form.Components)
+	}
+	return out
+}
