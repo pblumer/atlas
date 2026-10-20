@@ -1,0 +1,74 @@
+{
+  "type": "default",
+  "id": "m365-verteiler-anmeldung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Verteiler abonnieren · Subscribe to a list**"
+    },
+    {
+      "key": "aktion",
+      "type": "radio",
+      "label": "Ich möchte · I want to",
+      "values": [
+        {
+          "label": "mich anmelden · subscribe",
+          "value": "anmelden"
+        },
+        {
+          "label": "mich abmelden · unsubscribe",
+          "value": "abmelden"
+        }
+      ],
+      "defaultValue": "anmelden",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "liste",
+      "type": "select",
+      "label": "Liste · List",
+      "values": [
+        {
+          "label": "Partner-News",
+          "value": "partner-news"
+        },
+        {
+          "label": "Medienmitteilungen · Press releases",
+          "value": "medienmitteilungen"
+        },
+        {
+          "label": "Kundenbeirat · Customer advisory board",
+          "value": "kundenbeirat"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "email",
+      "type": "textfield",
+      "label": "E-Mail · Email",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "einwilligung",
+      "type": "checkbox",
+      "label": "Ich willige ein, dass meine Adresse für diese Liste gespeichert wird. · I consent to my address being stored for this list.",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

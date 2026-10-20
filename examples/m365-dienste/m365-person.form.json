@@ -1,0 +1,19 @@
+{
+  "type": "default",
+  "id": "m365-person",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Für wen · For whom**\n\nBenutzername der Person, die das Recht erhält – in der Regel die empfangende Person der Bestellung. · User name of the person who receives the right – normally the recipient of the order."
+    },
+    {
+      "key": "upn",
+      "type": "textfield",
+      "label": "Benutzername (UPN) · User principal name",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    }
+  ]
+}

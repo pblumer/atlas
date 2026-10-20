@@ -14,6 +14,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A shop for Microsoft 365 services, with governance built into the models.**
+  `examples/m365-dienste/` is a package that offers what an IT department delivers through
+  the Entra, Exchange and Teams Phone Worker Types: a licence with mailbox, Teams telephony,
+  teams, shared mailboxes, distribution lists, access to a mailbox, meeting rooms, call
+  queues and auto attendants, in two catalogues, with fourteen processes, five decision
+  tables and 23 forms, bilingual. A naming rule kept as a decision builds every name and
+  rejects reserved and overlong ones with a reason; every Exchange object is tagged with its
+  order and owner, and returns and changes find it by that tag; a weekly process reports what
+  exists outside the tag or the rule. Two public forms let externals request partner access
+  and subscribe to a list, and nothing is created before a person has reviewed it. Install
+  scripts for sh and PowerShell upload the decision models, import and publish the
+  application and fill the catalogue's placeholders; the handbook's examples chapter has
+  its card.
 - **The Start view groups its processes by application, filters them and keeps favourites.**
   The Tasks app's Start list was one alphabetical column of every process with a start form.
   It now sits under one heading per application the process was deployed under, sorted by
@@ -53,6 +66,16 @@ _Changed_ / _Removed_ for each version.
   unfiltered list.
 
 ### Fixed
+
+- **A position ordered in a variant is started again.** A position's key joins the
+  product and its variant with `#` (`lizenz#standard`), and the shop's fulfilment model and
+  its three approval models put that key into the URL they call unencoded. In a URL `#`
+  opens the fragment, so `POST …/lines/lizenz#standard/start` reached the server as
+  `POST …/lines/lizenz` — the route that sets a line's status — without one, and was
+  refused with «a line cannot be set to here». The orchestration raised an incident a retry
+  could not clear, and every product with variants stopped before its process started.
+  The four models now encode the key (`#` as `%23`); two tests order a product in a
+  variant, with and without an approval, and wait for its process to run.
 
 - **A form created from a step is filed under the process's application.** **＋ New form**
   on a start event, a user task or a repair form opened the form editor without naming the
