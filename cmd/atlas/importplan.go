@@ -15,7 +15,7 @@ import (
 )
 
 // The plan `atlas import` shows before its first write
-// (ADR-draft-application-package-export). The server compares what the package
+// (ADR-0467). The server compares what the package
 // carries with what it holds — the application's processes, forms, decisions and
 // decision models, the shop's catalogues, products and processes — and the command
 // compares the application's constants itself. Every artifact is then new,

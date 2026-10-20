@@ -24,7 +24,7 @@ _Changed_ / _Removed_ for each version.
   A form outside the application, a process deployed nowhere and a home catalogue left out are
   named. Exporting again into the same directory updates it in place, keeping a README and
   questions reworded by hand, so a package can be kept in git
-  ([ADR-draft-application-package-export](docs/adr/draft-application-package-export.md)).
+  ([ADR-0467](docs/adr/0467-application-package-export.md)).
 - **An application's own decision models travel with its source.** The source tree
   (`GET /api/v1/applications/{id}/source`, *Download source…*) carries every decision model the
   server keeps in its own model folder as `decisions/<handle>.dmn` (format version 2). An
@@ -32,7 +32,7 @@ _Changed_ / _Removed_ for each version.
   there and refused to publish. The import compiles each model first, and refuses to replace a
   model that a decision outside the application uses. A server whose models come from temis
   keeps the references and names the models it did not write
-  ([ADR-draft-application-package-export](docs/adr/draft-application-package-export.md)).
+  ([ADR-0467](docs/adr/0467-application-package-export.md)).
 - **A shop for Microsoft 365 services, with governance built into the models.**
   `examples/m365-dienste/` is a package that offers what an IT department delivers through
   the Entra, Exchange and Teams Phone Worker Types: a licence with mailbox, Teams telephony,
@@ -81,14 +81,14 @@ _Changed_ / _Removed_ for each version.
   first write. The Console shows one box per changed artifact, unticked meaning keep.
   `?dryRun=true` and `atlas import --dry-run` show the plan alone. A script that relied on an
   import replacing changed artifacts now gets 409, with the plan, until it passes
-  `overwrite=*` ([ADR-draft-application-package-export](docs/adr/draft-application-package-export.md)).
+  `overwrite=*` ([ADR-0467](docs/adr/0467-application-package-export.md)).
 - **A package installed again changes nothing.** `atlas import` publishes the application only
   when the import changed it or it was never published there, rather than on every run. A
   publishing catalogue import releases a catalogue only when it has no release yet or the
   import changed it or a product it offers. Constants in the package are set where the target
   holds none; a value it holds otherwise is decided like any other change. The run then
   reports every constant the application reads that the target lacks
-  ([ADR-draft-application-package-export](docs/adr/draft-application-package-export.md)).
+  ([ADR-0467](docs/adr/0467-application-package-export.md)).
 - **The undeclared namespace members in the Variables panel collapse.** The Modeler's
   Variables panel lists, under the process's own variables, what the process could read
   from the `application` and `server` namespaces but does not declare yet. On an

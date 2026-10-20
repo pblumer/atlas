@@ -1,5 +1,5 @@
 // The dialog an import shows before it replaces anything
-// (ADR-draft-application-package-export).
+// (ADR-0467).
 //
 // An import compares every artifact it carries with what the server holds: new,
 // unchanged, or changed. New is written and unchanged left alone, so the same file

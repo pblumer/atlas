@@ -354,7 +354,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   products file is posted with `?into=` the catalogue shown; a refused import lists every
   problem with its subject and names the processes deployed before the refusal; and the
   catalogue list posts a whole file, with `publish` when asked. Every import asks for the plan
-  first ([ADR-draft-application-package-export](../docs/adr/draft-application-package-export.md)):
+  first ([ADR-0467](../docs/adr/0467-application-package-export.md)):
   with nothing changed on the server it imports straight away; with products that differ it
   shows one box each, unticked meaning keep, and posts the ticked ones under `overwrite` and the
   rest under `keep`; cancelling imports nothing. Drives the real `viewCatalogDetail` and

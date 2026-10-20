@@ -10,7 +10,7 @@ import (
 )
 
 // Importing a document asks before it replaces anything
-// (ADR-draft-application-package-export). Every catalogue, product and process the
+// (ADR-0467). Every catalogue, product and process the
 // document carries is compared with what this server holds — new, unchanged or
 // changed — and what differs is written only when the importer said so: named
 // under ?overwrite=, or left as it is when named under ?keep=. One named under

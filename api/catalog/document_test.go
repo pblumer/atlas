@@ -100,7 +100,7 @@ func importDocWith(t *testing.T, s *Service, p *httpapi.Principal, query, body s
 // so a second import finds its records — nothing is created twice. What is as the
 // document has it is not written again; what differs is written only when the
 // importer says so, and then the revision moves on while the owner and the creation
-// stay (ADR-draft-application-package-export).
+// stay (ADR-0467).
 func TestImportingTheSameDocumentAgainUpdatesWhatItCreated(t *testing.T) {
 	s := newService(t)
 	if code, out := importDoc(t, s, importer, shopDocument); code != http.StatusOK {

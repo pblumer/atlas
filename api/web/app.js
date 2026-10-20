@@ -5938,7 +5938,7 @@ function downloadApplicationSource(id) {
 // has never seen it (ADR-0134). An import never deletes — artifacts the tree omits
 // are reported back and left alone — and never replaces unasked: the plan comes
 // first, and whatever differs from this server's is listed to tick or leave
-// (ADR-draft-application-package-export).
+// (ADR-0467).
 function importApplicationSource(reload) {
   const picker = document.createElement("input");
   picker.type = "file";

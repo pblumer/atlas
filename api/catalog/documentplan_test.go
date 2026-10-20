@@ -7,7 +7,7 @@ import (
 )
 
 // An import asks before it replaces anything, and changes nothing twice
-// (ADR-draft-application-package-export).
+// (ADR-0467).
 
 func releasesOf(t *testing.T, s *Service, id string) int {
 	t.Helper()

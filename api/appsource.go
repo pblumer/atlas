@@ -45,7 +45,7 @@ import (
 //     (ADR-0321) — Atlas is the only place the model lives, and a tree without it
 //     installs elsewhere as a decision whose model is not there. Such a model
 //     travels as `decisions/<handle>.dmn`, once however many of its decisions the
-//     application references (ADR-draft-application-package-export).
+//     application references (ADR-0467).
 //
 // Deployments and releases deliberately do not travel: they are records of what
 // happened on one server, not source an author edits (ADR-0134).

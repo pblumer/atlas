@@ -23,7 +23,7 @@ import (
 // `atlas export` writes a package from a running atlas: the directory `atlas
 // import` installs (ADR-0437), so what was built on one installation reaches
 // another with one command on each side
-// (ADR-draft-application-package-export).
+// (ADR-0467).
 //
 //	atlas.json, *.bpmn, *.form.json, *.dmn  the application's source (ADR-0134)
 //	konstanten.json                         its constants, as this server holds them

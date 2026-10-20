@@ -27,7 +27,7 @@
 // end-to-end test against exactly the list length a prompt could not show.
 import { openPickModal } from "./pickmodal.js";
 // The plan, and a box for every catalogue, product and process the file would
-// replace (ADR-draft-application-package-export).
+// replace (ADR-0467).
 import { importAsking } from "./importchoices.js";
 import { fmtDateTime } from "./datefmt.js";
 

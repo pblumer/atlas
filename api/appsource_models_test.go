@@ -12,7 +12,7 @@ import (
 )
 
 // An application whose decisions live in this server's model folder travels with
-// its models (ADR-draft-application-package-export). Before, the tree carried the
+// its models (ADR-0467). Before, the tree carried the
 // references alone, and on a server that had never seen the models every one of
 // them pointed at a handle that was not there — the application imported and then
 // refused to publish.

@@ -13,7 +13,7 @@ import (
 	"github.com/pblumer/atlas/dmn"
 )
 
-// Decision models in the source tree (ADR-draft-application-package-export). A
+// Decision models in the source tree (ADR-0467). A
 // reference names a model by its handle, and the handle is this server's: a tree
 // carrying only the reference installs on another server as a decision whose model
 // is not there, and its publish fails. A model this server keeps in its own model

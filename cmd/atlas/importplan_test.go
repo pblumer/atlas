@@ -12,7 +12,7 @@ import (
 )
 
 // `atlas import` shows its plan and replaces nothing unasked
-// (ADR-draft-application-package-export).
+// (ADR-0467).
 
 // copyPackage copies the example package into a directory of its own, so a test
 // can add to it.

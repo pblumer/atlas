@@ -1,5 +1,5 @@
 // Package importplan is the vocabulary an import shares when it asks before it
-// replaces anything (ADR-draft-application-package-export): how an artifact an
+// replaces anything (ADR-0467): how an artifact an
 // import carries compares with the one this server holds, what the caller decided
 // for those that differ, and what became of each.
 //

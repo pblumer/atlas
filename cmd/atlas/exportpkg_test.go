@@ -14,7 +14,7 @@ import (
 )
 
 // `atlas export` writes the package `atlas import` installs
-// (ADR-draft-application-package-export). These tests run both
+// (ADR-0467). These tests run both
 // against real servers, because the property that matters is the trip: built on
 // one installation, installed on another, and the same package when it comes back.
 

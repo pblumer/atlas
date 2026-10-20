@@ -1,4 +1,4 @@
-# ADR-DRAFT: An application and its shop move as a package, and an import asks before it replaces
+# ADR-0467: An application and its shop move as a package, and an import asks before it replaces
 
 - **Status:** Accepted
 - **Implementation:** Landed

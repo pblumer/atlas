@@ -109,7 +109,7 @@ func TestImportInstallsTheExampleShopAndAgain(t *testing.T) {
 
 	// Installed again, the package changes nothing: no second application, no
 	// release for an application nothing changed in, no catalogue written or
-	// released again (ADR-draft-application-package-export).
+	// released again (ADR-0467).
 	out.Reset()
 	if err := runImport(args, &out); err != nil {
 		t.Fatalf("second import: %v\n%s", err, out.String())

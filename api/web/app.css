@@ -7148,7 +7148,7 @@ button.im-problem:hover { background: var(--accent-soft); }
 .ds-option input:checked ~ .ds-option-name { font-weight: 600; }
 
 /* The plan an import shows before it replaces anything
-   (ADR-draft-application-package-export): one box per artifact that differs. */
+   (ADR-0467): one box per artifact that differs. */
 .import-choices .import-changed { list-style: none; padding: 0; margin: 10px 0 0; max-height: 40vh; overflow: auto; }
 .import-choices .import-changed li { padding: 4px 0; }
 .import-choices .import-changed label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }

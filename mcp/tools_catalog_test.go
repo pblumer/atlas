@@ -393,7 +393,7 @@ func TestTheTwoHeadingsSurviveAnAgentsReadModifyWrite(t *testing.T) {
 
 // TestImportingACatalogueAsksBeforeItReplaces: the tool forwards the plan and the
 // decisions, so an agent can show a person what differs and import only what they
-// chose (ADR-draft-application-package-export).
+// chose (ADR-0467).
 func TestImportingACatalogueAsksBeforeItReplaces(t *testing.T) {
 	ts := newAtlas(t)
 	doc := func(name string) map[string]any {
