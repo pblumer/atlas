@@ -420,3 +420,109 @@ test("a deployed version opens the form plainly, since there is no draft to come
   await expect(page.locator("#form-back")).not.toHaveAttribute("href", /draft/);
   expect(page.__errors).toEqual([]);
 });
+
+// ---------------------------------------------------------------------------------
+// The canvas: the same door, where the author is looking (ADR-0465,
+// amendment 2026-10-19). A context-pad entry on an element that names a form, and in
+// the Implement view a mark on a start event or user task with one, which is a link.
+// ---------------------------------------------------------------------------------
+
+// pad is the context pad bpmn-js opens beside the selected element; padEntry its form door.
+const padEntry = (page) => page.locator('.djs-context-pad .entry[data-action="atlas-open-form"]');
+
+async function selectOnly(page, id) {
+  await page.evaluate((el) => {
+    const m = window.__atlasModeler;
+    m.get("selection").select(m.get("elementRegistry").get(el));
+  }, id);
+}
+
+test("the context pad opens the form an element names, and offers nothing where none is named", async ({ page }) => {
+  const state = installMock(page);
+  await openDiagram(page);
+
+  await selectOnly(page, "Task_review");
+  await expect(page.locator(".djs-context-pad")).toBeVisible();
+  await expect(padEntry(page)).toHaveCount(0);
+
+  await selectOnly(page, "Start_1");
+  await expect(padEntry(page)).toBeVisible();
+  await expect(padEntry(page)).toHaveAttribute("title", /reise-antrag/);
+  await padEntry(page).click();
+  // The panel's round trip, entered from the canvas: the way back is on the address.
+  await expect.poll(() => hash(page)).toBe("#/modeler/form/e/reise-antrag/from/reise/Start_1");
+  await formEditorReady(page);
+  expect(state.draftSaves).toHaveLength(0);
+  await expect(page.locator("#form-back")).toHaveAttribute("href", "#/modeler/draft/reise");
+  expect(page.__errors).toEqual([]);
+});
+
+test("the context pad reaches a repair form too", async ({ page }) => {
+  installMock(page);
+  await openDiagram(page);
+  await selectOnly(page, "Activity_charge");
+  await padEntry(page).click();
+  await expect.poll(() => hash(page)).toBe("#/modeler/form/e/fix-payment/from/reise/Activity_charge");
+});
+
+test("a form the server does not hold is said, not opened", async ({ page }) => {
+  const state = installMock(page);
+  await openDiagram(page);
+  await page.evaluate(() => {
+    const m = window.__atlasModeler;
+    m.get("modeling").updateLabel(m.get("elementRegistry").get("End_1"), "Abgeschlossen");
+  });
+  await selectOnly(page, "Task_lost");
+  await padEntry(page).click();
+  await expect(page.locator("#toast")).toContainText("no form “gone”");
+  // Nothing was traded for a door that opens on nothing: no save, no navigation.
+  expect(await hash(page)).toBe("#/modeler/draft/reise");
+  expect(state.draftSaves).toHaveLength(0);
+});
+
+test("a modified click on the context pad opens the form in a new tab", async ({ page, context }) => {
+  const state = installMock(page);
+  await openDiagram(page);
+  await selectOnly(page, "Start_1");
+  const [tab] = await Promise.all([
+    context.waitForEvent("page"),
+    padEntry(page).click({ modifiers: ["ControlOrMeta"] }),
+  ]);
+  await expect.poll(() => tab.url()).toContain("#/modeler/form/e/reise-antrag");
+  expect(tab.url()).not.toContain("/from/");
+  expect(await hash(page)).toBe("#/modeler/draft/reise");
+  expect(state.draftSaves).toHaveLength(0);
+  await tab.close();
+});
+
+test("the Implement view marks a step with a form, and the mark is the door", async ({ page }) => {
+  installMock(page);
+  // openDiagram lands on the Implement view, which is where the mark is drawn.
+  await openDiagram(page);
+  const badge = (id) => page.locator(`.djs-overlays[data-container-id="${id}"] .djs-overlay-form-badge a.form-badge`);
+  await expect(badge("Start_1")).toBeVisible();
+  await expect(badge("Start_1")).toHaveAttribute("href", "#/modeler/form/e/reise-antrag");
+  await expect(badge("Start_1")).toHaveAttribute("title", /reise-antrag/);
+  await expect(badge("Task_lost")).toBeVisible();
+  // No form, no mark; and a repair form is an operator's, not a step's, so it is not
+  // drawn as one — the context pad and the panel still reach it.
+  await expect(badge("Task_review")).toHaveCount(0);
+  await expect(badge("Activity_charge")).toHaveCount(0);
+
+  // Picking a form draws the mark at once.
+  await select(page, "Task_review", "Form");
+  await page.locator("#f-form").selectOption("review-form");
+  await expect(badge("Task_review")).toHaveAttribute("href", "#/modeler/form/e/review-form");
+
+  // The Design view stays the drawing it is.
+  await page.locator('[data-tab="design"]').click();
+  await expect(page.locator("a.form-badge")).toHaveCount(0);
+  await page.locator('[data-tab="implement"]').click();
+
+  // The test viewport is narrow enough that the start event sits under the palette;
+  // move the drawing clear of it, as an author would, and click the mark itself.
+  await page.evaluate(() => window.__atlasModeler.get("canvas").scroll({ dx: 160, dy: 0 }));
+  await badge("Start_1").click();
+  await expect.poll(() => hash(page)).toBe("#/modeler/form/e/reise-antrag/from/reise/Start_1");
+  expect(page.__errors).toEqual([]);
+});
