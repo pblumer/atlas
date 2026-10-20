@@ -407,6 +407,14 @@ func TestImportingACatalogueAsksBeforeItReplaces(t *testing.T) {
 	if text, isErr := callText(t, ts, "atlas_import_catalog", doc("Eins")); isErr {
 		t.Fatalf("first import = %q", text)
 	}
+	// The product is renamed on the server, and the document renames it too: both
+	// sides moved, so the import asks (ADR-0467, amended).
+	edit := `{"id":"p-mcp","homeCatalog":"cat-mcp","state":"active","texts":{"de":"Hier"},"approval":{"kind":"none"}}`
+	resp, err := ts.Client().Post(ts.URL+"/api/v1/catalog-products", "application/json", strings.NewReader(edit))
+	if err != nil || resp.StatusCode >= 300 {
+		t.Fatalf("edit the product: %v %v", resp, err)
+	}
+	_ = resp.Body.Close()
 	changed := doc("Zwei")
 	if text, isErr := callText(t, ts, "atlas_import_catalog", changed); !isErr || !strings.Contains(text, "product:p-mcp") {
 		t.Fatalf("an undecided change = (%q, isErr=%v), want a refusal naming the product", text, isErr)
@@ -420,9 +428,8 @@ func TestImportingACatalogueAsksBeforeItReplaces(t *testing.T) {
 	if text, isErr := callText(t, ts, "atlas_import_catalog", changed); isErr || !strings.Contains(text, `"updated":["product:p-mcp"]`) {
 		t.Fatalf("overwriting the product = (%q, isErr=%v)", text, isErr)
 	}
-	changed = doc("Drei")
-	changed["keep"] = []any{"*"}
-	if text, isErr := callText(t, ts, "atlas_import_catalog", changed); isErr || !strings.Contains(text, `"outcome":"kept"`) {
-		t.Fatalf("keeping everything = (%q, isErr=%v)", text, isErr)
+	// Moved on in the document alone, the product is taken without a question.
+	if text, isErr := callText(t, ts, "atlas_import_catalog", doc("Drei")); isErr || !strings.Contains(text, `"status":"behind"`) {
+		t.Fatalf("a product only the document moved = (%q, isErr=%v)", text, isErr)
 	}
 }

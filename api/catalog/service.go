@@ -85,6 +85,11 @@ type Service struct {
 	// Nil refuses such a document.
 	Deployer ProcessDeployer
 
+	// Baselines remembers what the last import of a document brought, so an import
+	// tells a record edited here from one the document moved on (documentplan.go).
+	// Nil remembers nothing: every difference is then a question.
+	Baselines Baselines
+
 	// Remainders counts the order lines a converted product left on its old
 	// processes, for the fulfilment report (ADR-0427). Nil leaves the report's
 	// remainder empty.

@@ -62,8 +62,8 @@ func heldConstants(t *testing.T, ts *httptest.Server, appID string) map[string]s
 
 // changedHere is a server with the example installed, then worked on: a draft
 // edited, and a constant holding this installation's value. It returns the server,
-// the application's id and a package whose constants hold another installation's
-// value and one this server lacks.
+// the application's id and a package that moved the same draft on since, whose
+// constants hold another installation's value and one this server lacks.
 func changedHere(t *testing.T) (*httptest.Server, string, string, []string) {
 	t.Helper()
 	ts, _ := liveServer(t)
@@ -83,7 +83,9 @@ func changedHere(t *testing.T) (*httptest.Server, string, string, []string) {
 	_ = resp.Body.Close()
 	putConstants(t, ts, appID, `{"constants":[{"name":"TENANT_ID","type":"string","value":"int-01"}]}`)
 
+	// The package moved the same process on since the last import: both sides moved.
 	pkg := copyPackage(t)
+	writeFile(t, pkg, "parkplatz-zuteilen.bpmn", string(raw)+"<!-- im Paket geändert -->\n")
 	writeFile(t, pkg, packageConstants, `{"constants":[{"name":"TENANT_ID","type":"string","value":"prod-01"},{"name":"NEU","type":"number","value":"1"}]}`)
 	args := []string{"--server", ts.URL, "--answers", writeAnswers(t, map[string]string{
 		"zielgruppe": "Alle Mitarbeitenden", "zielgruppe-bau": "Fachbereich Bau",
@@ -130,7 +132,7 @@ func TestImportStopsAtWhatNobodyDecided(t *testing.T) {
 	if err := runImport(append(args, "--dry-run", pkg), &out); err != nil {
 		t.Fatalf("dry run: %v\n%s", err, out.String())
 	}
-	for _, want := range []string{"plan: 1 new, 20 unchanged, 2 changed",
+	for _, want := range []string{"plan: 1 new, 20 unchanged, 0 behind, 0 ahead, 2 changed",
 		`changed   process:proc_vd_parkplatz_zuteilen "Parkplatz: zuteilen" — undecided`,
 		"new       constant:NEU", "dry run: nothing was written"} {
 		if !strings.Contains(out.String(), want) {
@@ -142,7 +144,8 @@ func TestImportStopsAtWhatNobodyDecided(t *testing.T) {
 	if err := runImport(append(args, "--overwrite", "process:proc_vd_parkplatz_zuteilen", "--keep", "constant:TENANT_ID", pkg), &out); err != nil {
 		t.Fatalf("decided import: %v\n%s", err, out.String())
 	}
-	for _, want := range []string{") updated: 5 processes", "published release 2", `constants set: NEU (number) = "1"`} {
+	for _, want := range []string{") updated: 5 processes", "published release 2", `constants set: NEU (number) = "1"`,
+		"constants kept as the server holds them: constant:TENANT_ID"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output lacks %q:\n%s", want, out.String())
 		}
@@ -201,23 +204,50 @@ func TestImportAsksAtATerminal(t *testing.T) {
 // to set rather than failing for it.
 func TestConstantsAnAdministratorMustSet(t *testing.T) {
 	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPut {
-			http.Error(w, `{"error":"admin role required"}`, http.StatusForbidden)
-			return
-		}
-		_, _ = w.Write([]byte(`{"constants":[],"required":[]}`))
+		_, _ = w.Write([]byte(`{"artifacts":[{"ref":"constant:TENANT_ID","name":"TENANT_ID","status":"new","outcome":"created"}],"set":[],"notSet":["TENANT_ID"]}`))
 	}))
 	defer refusing.Close()
 	c := &importClient{apiClient: newAPIClient(refusing.URL, "")}
 	var out bytes.Buffer
-	if err := c.setConstants(&out, "app1", []packageConstant{{Name: "TENANT_ID", Type: "string", Value: "prod-01"}}); err != nil {
-		t.Fatalf("setConstants: %v", err)
+	if err := c.installConstants(&out, "app1", []packageConstant{{Name: "TENANT_ID", Type: "string", Value: "prod-01"}}, ""); err != nil {
+		t.Fatalf("installConstants: %v", err)
 	}
 	if !strings.Contains(out.String(), `constants not set — setting them is an administrator's`) ||
 		!strings.Contains(out.String(), `TENANT_ID (string) = "prod-01"`) {
 		t.Errorf("output:\n%s", out.String())
 	}
-	if err := c.setConstants(&out, "app1", nil); err != nil {
+	if err := c.installConstants(&out, "app1", nil, ""); err != nil {
 		t.Errorf("nothing to set: %v", err)
+	}
+}
+
+// TestAPackageUpdateNeedsNoAnswers: installed once and left alone on the server,
+// an application is updated by the next version of its package without a question
+// — in a pipeline too. Only what was worked on here is a question.
+func TestAPackageUpdateNeedsNoAnswers(t *testing.T) {
+	ts, _ := liveServer(t)
+	installExample(t, ts)
+	raw, err := os.ReadFile(filepath.Join(examplePackage, "parkplatz-zuteilen.bpmn"))
+	if err != nil {
+		t.Fatalf("read the model: %v", err)
+	}
+	pkg := copyPackage(t)
+	writeFile(t, pkg, "parkplatz-zuteilen.bpmn", string(raw)+"<!-- Version 2 -->\n")
+	var out bytes.Buffer
+	args := []string{"--server", ts.URL, "--answers", writeAnswers(t, map[string]string{
+		"zielgruppe": "Alle Mitarbeitenden", "zielgruppe-bau": "Fachbereich Bau",
+		"geoportal-verantwortliche": "Geoportal-Team", "facility-management": "Fabienne Meier",
+	}), pkg}
+	if err := runImport(args, &out); err != nil {
+		t.Fatalf("an update nobody worked on here: %v\n%s", err, out.String())
+	}
+	for _, want := range []string{"plan: 0 new, 20 unchanged, 1 behind, 0 ahead, 0 changed",
+		`behind    process:proc_vd_parkplatz_zuteilen "Parkplatz: zuteilen" — updated`, ") updated: 5 processes", "published release 2"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output lacks %q:\n%s", want, out.String())
+		}
+	}
+	if !strings.Contains(draftXML(t, ts), "Version 2") {
+		t.Error("the newer version was not taken")
 	}
 }

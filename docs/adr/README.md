@@ -552,7 +552,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0464](0464-windows-system-proxy.md) | Outbound HTTP follows the Windows proxy settings, the way .NET does | Accepted | Landed |
 | [0465](0465-form-doors.md) | A step's form is opened from the step, and the way back links it | Accepted (amended) | Landed |
 | [0466](0466-start-view-groups-and-favourites.md) | The Start view groups by application and keeps favourites per person | Accepted | Landed |
-| [0467](0467-application-package-export.md) | An application and its shop move as a package, and an import asks before it replaces | Accepted | Landed |
+| [0467](0467-application-package-export.md) | An application and its shop move as a package, and an import asks before it replaces | Accepted (amended) | Landed |
 
 ## The two states of a record
 

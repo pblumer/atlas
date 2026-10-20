@@ -114,7 +114,7 @@ func TestImportInstallsTheExampleShopAndAgain(t *testing.T) {
 	if err := runImport(args, &out); err != nil {
 		t.Fatalf("second import: %v\n%s", err, out.String())
 	}
-	for _, want := range []string{"plan: 0 new, 21 unchanged, 0 changed", ") unchanged: 5 processes",
+	for _, want := range []string{"plan: 0 new, 21 unchanged, 0 behind, 0 ahead, 0 changed", ") unchanged: 5 processes",
 		"the application is unchanged, so it is not published again; release 1 stays", "shop unchanged", "catalogues published: 0"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("second import output lacks %q:\n%s", want, out.String())

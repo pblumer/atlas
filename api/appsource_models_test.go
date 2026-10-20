@@ -227,10 +227,11 @@ func TestApplicationSourceImportAsksBeforeOverwriting(t *testing.T) {
 		t.Errorf("the draft chosen for keeping was overwritten: %s", xml)
 	}
 
-	// * stands for every changed artifact the other list leaves out.
-	code, res, body = importSourceWith(t, ts, archive, "?keep=*&overwrite=form:antrag-form")
-	if code != http.StatusOK || res.outcomes()["form:antrag-form"] != "changed/updated" || res.outcomes()["process:pruefung"] != "changed/kept" {
-		t.Fatalf("keep=*: status=%d body=%s", code, body)
+	// The import remembers what it brought, so what was kept is now ahead of this
+	// tree: kept without being named, replaced when named (ADR-0467, amended).
+	code, res, body = importSourceWith(t, ts, archive, "?overwrite=form:antrag-form")
+	if code != http.StatusOK || res.outcomes()["form:antrag-form"] != "ahead/updated" || res.outcomes()["process:pruefung"] != "ahead/kept" {
+		t.Fatalf("after the decisions: status=%d body=%s", code, body)
 	}
 	for _, q := range []string{"?overwrite=*&keep=*", "?overwrite=process:antrag&keep=process:antrag"} {
 		if code, _, body := importSourceWith(t, ts, archive, q); code != http.StatusBadRequest {

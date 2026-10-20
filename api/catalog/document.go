@@ -202,11 +202,16 @@ func (s *Service) HandleImportDocument(w http.ResponseWriter, r *http.Request) {
 		problems []DocumentProblem
 		opErr    error
 	)
-	s.loop.Do(func() { plan, problems, opErr = s.resolveImport(doc, into, p) })
-	plan.decide(decide)
+	var bases map[string]string
+	s.loop.Do(func() {
+		if plan, problems, opErr = s.resolveImport(doc, into, p); opErr == nil {
+			bases, opErr = s.bases()
+		}
+	})
+	plan.decide(decide, bases)
 	// The processes are compared off the loop: the source answers for the server,
 	// and reaches its state through the loop itself.
-	deploy, procArtifacts, procUndecided := s.decideProcesses(doc.Processes, decide)
+	deploy, procArtifacts, procUndecided, procIncoming := s.decideProcesses(doc.Processes, decide, bases)
 	plan.artifacts = append(plan.artifacts, procArtifacts...)
 	plan.undecided = append(plan.undecided, procUndecided...)
 	if opErr == nil && len(deploy) > 0 {
@@ -270,7 +275,7 @@ func (s *Service) HandleImportDocument(w http.ResponseWriter, r *http.Request) {
 	// whether the bound processes are deployed is not asked again — that is the
 	// server's to answer on a visit of its own, as a single publish asks it.
 	var written DocumentResult
-	s.loop.Do(func() { written, problems, opErr = s.applyImport(doc, into, p, decide) })
+	s.loop.Do(func() { written, problems, opErr = s.applyImport(doc, into, p, decide, procIncoming) })
 	switch {
 	case opErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "import: "+opErr.Error())
@@ -304,15 +309,22 @@ func refuseUndecided(w http.ResponseWriter, plan importPlan) {
 // ones the importer chose to overwrite. Deploying is not undone, so a changed one
 // is held to the same decision as a catalogue: a newer version deployed here is
 // work done here. Runs off the loop.
-func (s *Service) decideProcesses(procs []Process, d importplan.Decisions) (deploy []Process, artifacts []importplan.Artifact, undecided []string) {
+//
+// incoming is each process's hash as the document has it, the base the next import
+// compares with.
+func (s *Service) decideProcesses(procs []Process, d importplan.Decisions, bases map[string]string) (deploy []Process, artifacts []importplan.Artifact, undecided []string, incoming map[string]string) {
+	incoming = map[string]string{}
 	for _, pr := range procs {
-		status := importplan.New
+		ref := "process:" + pr.ID
+		incoming[ref] = processHash(pr.XML)
+		deployed, local := false, ""
 		if s.Models != nil {
-			if cur, deployed := s.Models.ProcessXML(pr.ID); deployed {
-				status = importplan.Compare(string(cur) == pr.XML)
+			var cur []byte
+			if cur, deployed = s.Models.ProcessXML(pr.ID); deployed {
+				local = processHash(string(cur))
 			}
 		}
-		ref := "process:" + pr.ID
+		status := importplan.Classify(deployed, local, incoming[ref], bases[ref])
 		outcome := d.Outcome(ref, status)
 		artifacts = append(artifacts, importplan.Artifact{Ref: ref, Name: pr.ID, Status: status, Outcome: outcome})
 		switch {
@@ -322,7 +334,7 @@ func (s *Service) decideProcesses(procs []Process, d importplan.Decisions) (depl
 			undecided = append(undecided, ref)
 		}
 	}
-	return deploy, artifacts, undecided
+	return deploy, artifacts, undecided, incoming
 }
 
 // refuseImport answers a refused document: 403 when any problem is one of
@@ -428,6 +440,9 @@ type importPlan struct {
 	write     map[string]bool
 	artifacts []importplan.Artifact
 	undecided []string
+	// incoming is each catalogue's and product's hash as the document has it: the
+	// base the next import compares with.
+	incoming map[string]string
 	// into is the catalogue a document of products is imported into. Offering them
 	// there is what the importer asked for, so its change is not a question.
 	into string
@@ -642,16 +657,20 @@ func (s *Service) plannedInputs(plan importPlan) ([]Input, error) {
 // products, then — when asked — a release of each catalogue, computed before the
 // first write from the store as the writes will leave it. Runs on the run loop, so
 // nothing changes between the check and the write.
-func (s *Service) applyImport(doc Document, into string, p *httpapi.Principal, decide importplan.Decisions) (DocumentResult, []DocumentProblem, error) {
+func (s *Service) applyImport(doc Document, into string, p *httpapi.Principal, decide importplan.Decisions, procIncoming map[string]string) (DocumentResult, []DocumentProblem, error) {
 	result := DocumentResult{Created: []string{}, Updated: []string{}}
 	plan, problems, err := s.resolveImport(doc, into, p)
 	if err != nil || len(problems) > 0 {
 		return result, problems, err
 	}
+	bases, err := s.bases()
+	if err != nil {
+		return result, nil, err
+	}
 	// Decided again where nothing can change under it: a record edited since the
 	// plan was shown differs now, and is not written over on the strength of a
 	// decision made about what it was.
-	plan.decide(decide)
+	plan.decide(decide, bases)
 	for _, ref := range plan.undecided {
 		problems = append(problems, DocumentProblem{Subject: ref, Problem: importplan.UndecidedProblem})
 	}
@@ -722,6 +741,19 @@ func (s *Service) applyImport(doc Document, into string, p *httpapi.Principal, d
 			return result, nil, err
 		}
 		result.Releases = append(result.Releases, rel)
+	}
+	// What this import settled is the base the next one compares with: every
+	// catalogue, product and process, written or kept, was reconciled with this
+	// document. The processes were settled before this visit, which reaching here
+	// means none was left undecided.
+	reconciled := plan.incoming
+	for ref, h := range procIncoming {
+		reconciled[ref] = h
+	}
+	if s.Baselines != nil {
+		if err := s.Baselines.RecordImportBaselines(reconciled); err != nil {
+			return result, nil, err
+		}
 	}
 	return result, nil, nil
 }

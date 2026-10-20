@@ -9,29 +9,47 @@ import (
 	"github.com/pblumer/atlas/api/importplan"
 )
 
-// Importing a document asks before it replaces anything
-// (ADR-0467). Every catalogue, product and process the
-// document carries is compared with what this server holds — new, unchanged or
-// changed — and what differs is written only when the importer said so: named
-// under ?overwrite=, or left as it is when named under ?keep=. One named under
-// neither stops the import before anything is written. What is unchanged is not
-// written at all, and a catalogue is published again only when the import changed
-// what its release is made of, so the same document imported twice changes nothing
-// the second time.
+// Importing a document asks before it replaces work done here
+// (ADR-0467). Every catalogue, product and process the document carries is
+// compared with what this server holds and with the version the last import brought
+// (its base): new, unchanged, behind (as the last import left it, and moved on in
+// the document — taken), ahead (edited here, and as before in the document — kept)
+// or changed (both moved, or never imported). A changed one is written only when the
+// importer said so: named under ?overwrite=, or left as it is when named under
+// ?keep=. One named under neither stops the import before anything is written. What
+// is unchanged is not written at all, and a catalogue is published again only when
+// the import changed what its release is made of, so the same document imported
+// twice changes nothing the second time.
+
+// Baselines remembers, per artifact, the hash of the version the last import of a
+// document brought. Both methods run on the run loop.
+type Baselines interface {
+	ImportBaselines() (map[string]string, error)
+	RecordImportBaselines(hashes map[string]string) error
+}
+
+// bases answers what the last import brought, empty without a store. Runs on the
+// run loop.
+func (s *Service) bases() (map[string]string, error) {
+	if s.Baselines == nil {
+		return map[string]string{}, nil
+	}
+	return s.Baselines.ImportBaselines()
+}
 
 // decide classes each catalogue and product of the plan and settles what is
 // written. One that is unchanged or kept is put back in the plan as it is stored,
 // so a release computed from the plan is the release of what the store will hold.
 // Runs on the plan alone, wherever the plan is.
-func (plan *importPlan) decide(d importplan.Decisions) {
-	plan.write, plan.artifacts, plan.undecided = map[string]bool{}, nil, nil
-	note := func(subject, name string, existing, same bool) bool {
-		status := importplan.New
-		if existing {
-			status = importplan.Compare(same)
-		}
+func (plan *importPlan) decide(d importplan.Decisions, bases map[string]string) {
+	plan.write, plan.artifacts, plan.undecided, plan.incoming = map[string]bool{}, nil, nil, map[string]string{}
+	note := func(subject, name string, existing bool, local, in string) bool {
+		plan.incoming[subject] = in
+		status := importplan.Classify(existing, local, in, bases[subject])
 		outcome := d.Outcome(subject, status)
-		if subject == "catalog:"+plan.into && status == importplan.Changed {
+		// Offering products in the catalogue the importer named is the import's own
+		// act, built on that catalogue as it is stored: nothing done here is lost.
+		if subject == "catalog:"+plan.into && status != importplan.New && status != importplan.Unchanged {
 			outcome = importplan.Updated
 		}
 		plan.artifacts = append(plan.artifacts, importplan.Artifact{Ref: subject, Name: name, Status: status, Outcome: outcome})
@@ -44,14 +62,14 @@ func (plan *importPlan) decide(d importplan.Decisions) {
 	for _, id := range plan.order {
 		next := plan.catalogs[id]
 		prev, existing := plan.prevCatalogs[id]
-		if !note("catalog:"+id, textOf(next.Texts), existing, existing && sameCatalog(prev, next)) && existing {
+		if !note("catalog:"+id, textOf(next.Texts), existing, catalogHash(prev), catalogHash(next)) && existing {
 			plan.catalogs[id] = prev
 		}
 	}
 	for _, id := range plan.items {
 		next := plan.products[id]
 		prev, existing := plan.prevProducts[id]
-		if !note("product:"+id, textOf(next.Texts), existing, existing && sameItem(prev, next)) && existing {
+		if !note("product:"+id, textOf(next.Texts), existing, itemHash(prev), itemHash(next)) && existing {
 			plan.products[id] = prev
 		}
 	}
@@ -70,23 +88,34 @@ func textOf(texts map[string]string) string {
 	return ""
 }
 
-// sameCatalog reports whether a document's catalogue says what the stored one
-// says, setting aside what the store stamps on every write and what an import
-// never carries: revision, times, owner and theme.
-func sameCatalog(a, b Catalog) bool {
-	for _, c := range []*Catalog{&a, &b} {
-		c.Revision, c.CreatedAt, c.UpdatedAt, c.OwnerID, c.Theme = 0, 0, 0, "", Theme{}
-	}
-	return sameRecord(a, b)
+// catalogHash is what a catalogue is compared by: what it says, setting aside what
+// the store stamps on every write and what an import never carries — revision,
+// times, owner and theme.
+func catalogHash(c Catalog) string {
+	c.Revision, c.CreatedAt, c.UpdatedAt, c.OwnerID, c.Theme = 0, 0, 0, "", Theme{}
+	return recordHash(c)
 }
 
-// sameItem is sameCatalog for a product.
-func sameItem(a, b Item) bool {
-	for _, it := range []*Item{&a, &b} {
-		it.Revision, it.CreatedAt, it.UpdatedAt = 0, 0, 0
-	}
-	return sameRecord(a, b)
+// itemHash is catalogHash for a product.
+func itemHash(it Item) string {
+	it.Revision, it.CreatedAt, it.UpdatedAt = 0, 0, 0
+	return recordHash(it)
 }
+
+// processHash is what a process a document deploys is compared by: its model.
+func processHash(xml string) string { return importplan.Hash([]byte(xml)) }
+
+// recordHash hashes a record as its JSON says it, empty and absent taken as one.
+func recordHash(v any) string {
+	raw, _ := json.Marshal(canonical(v))
+	return importplan.Hash(raw)
+}
+
+// sameCatalog reports whether two catalogues say the same thing.
+func sameCatalog(a, b Catalog) bool { return catalogHash(a) == catalogHash(b) }
+
+// sameItem is sameCatalog for a product.
+func sameItem(a, b Item) bool { return itemHash(a) == itemHash(b) }
 
 // sameRecord compares two records as their JSON says them, with empty and absent
 // taken as one: a list the store keeps as [] and a document leaves out say the
