@@ -512,7 +512,9 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   match, and while it is in use every group with a match is open; with nothing filed under a
   visible application the list has no headings; a star puts a process into **Favourites** at the
   top without opening it and without taking it out of its application, and the mark follows the
-  process id across a new version.
+  process id across a new version. Signed in, the stars are read from and written to
+  `/api/v1/me/start-favourites` and nothing is kept in the browser; a write the server refuses
+  puts the star back and shows the reason. With authentication off (404) they are the browser's.
 
 ## Rendering a conformance gallery diagram
 

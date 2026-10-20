@@ -171,3 +171,48 @@ func TestProcessListSurvivesAnUnreadableApplicationStore(t *testing.T) {
 		t.Fatalf("a name was listed that could not have been read: %s", body)
 	}
 }
+
+// TestStartFavouritesFollowThePersonAcrossSessions: the star on the Start view is
+// kept on the server per person, so it is there again from a second browser — here a
+// second sign-in — and an operator who holds no `user` role reaches it, since roles do
+// not nest and the people who start processes hold `operator`.
+func TestStartFavouritesFollowThePersonAcrossSessions(t *testing.T) {
+	ts, _ := newAuthServer(t, "admin", "password1")
+	admin := newClient(t)
+	login(t, admin, ts, "admin", "password1")
+	createUserWithRoles(t, admin, ts.URL, "ola", `["operator"]`)
+	createUserWithRoles(t, admin, ts.URL, "ben", `["operator"]`)
+	if code, body := cReq(t, admin, ts, "POST", "/api/v1/deployments", simpleBPMN("travel")); code != http.StatusOK {
+		t.Fatalf("deploy = %d: %s", code, body)
+	}
+
+	ola := signInAs(t, ts.URL, "ola", "a-password-that-is-long")
+	if code, body := cReq(t, ola, ts, "PUT", "/api/v1/me/start-favourites/travel", ""); code != http.StatusOK || !strings.Contains(string(body), `"processIds":["travel"]`) {
+		t.Fatalf("mark = %d: %s", code, body)
+	}
+	if code, body := cReq(t, ola, ts, "PUT", "/api/v1/me/start-favourites/no-such-process", ""); code != http.StatusNotFound {
+		t.Fatalf("mark of an undeployed process = %d: %s, want 404", code, body)
+	}
+
+	again := signInAs(t, ts.URL, "ola", "a-password-that-is-long")
+	if code, body := cReq(t, again, ts, "GET", "/api/v1/me/start-favourites", ""); code != http.StatusOK || !strings.Contains(string(body), `"processIds":["travel"]`) {
+		t.Fatalf("second session reads = %d: %s", code, body)
+	}
+	ben := signInAs(t, ts.URL, "ben", "a-password-that-is-long")
+	if code, body := cReq(t, ben, ts, "GET", "/api/v1/me/start-favourites", ""); code != http.StatusOK || !strings.Contains(string(body), `"processIds":[]`) {
+		t.Fatalf("another person reads = %d: %s, want an empty list", code, body)
+	}
+	if code, body := cReq(t, ola, ts, "DELETE", "/api/v1/me/start-favourites/travel", ""); code != http.StatusOK || !strings.Contains(string(body), `"processIds":[]`) {
+		t.Fatalf("unmark = %d: %s", code, body)
+	}
+}
+
+// TestStartFavouritesAreBrowserSideWithoutAuthentication: with nobody signed in there
+// is no person to keep them for, and the 404 is what tells the console to keep the
+// stars in the browser instead.
+func TestStartFavouritesAreBrowserSideWithoutAuthentication(t *testing.T) {
+	ts := newTestServer(t)
+	if code, body := doReq(t, ts, "GET", "/api/v1/me/start-favourites", "", ""); code != http.StatusNotFound {
+		t.Fatalf("GET without authentication = %d: %s, want 404", code, body)
+	}
+}

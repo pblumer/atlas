@@ -51,6 +51,7 @@ import (
 	"github.com/pblumer/atlas/api/infomodel"
 	"github.com/pblumer/atlas/api/panorama"
 	"github.com/pblumer/atlas/api/runloop"
+	"github.com/pblumer/atlas/api/startfavourites"
 	"github.com/pblumer/atlas/api/taskfolder"
 	"github.com/pblumer/atlas/api/userprefs"
 	"github.com/pblumer/atlas/checkpoint"
@@ -353,6 +354,9 @@ type Server struct {
 	// userPrefs serves how one person reads the console — number format, time
 	// zone, language (ADR-0459).
 	userPrefs *userprefs.Service
+	// startFavourites serves the processes each person starred on the Tasks app's
+	// Start view (ADR-draft-start-view-groups-and-favourites).
+	startFavourites *startfavourites.Service
 	// formGen writes a form from a description and from the process it belongs to
 	// (ADR-0260). It is the one area service that holds no run
 	// loop, because it owns no state: it stores nothing, and the three closures in
@@ -1403,6 +1407,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	startFavouritesStore, err := startfavourites.NewStore(filepath.Join(dataDir, "start-favourites"))
+	if err != nil {
+		return nil, err
+	}
 	panoramaStore, err := panorama.NewStore(filepath.Join(dataDir, "panorama-models"))
 	if err != nil {
 		return nil, err
@@ -1835,6 +1843,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// back — so the loop is their whole collaborator: it is what serializes two
 	// tabs saving the same record.
 	s.userPrefs = userprefs.New(s.runLoop, userPrefsStore)
+	// Start favourites check one thing against the engine — that a process is
+	// deployed before it can be starred — and read it on the loop, which the
+	// service's own turn already holds when it asks.
+	s.startFavourites = startfavourites.New(s.runLoop, startFavouritesStore,
+		func(processID string) bool { _, ok := s.versions[processID]; return ok },
+		func() int { return int(s.budgets().StartFavourites) })
 	// Panorama reuses the process-application scope rather than inventing an ACL.
 	// The resolver is called only from the service's run-loop turn, so reading the
 	// project store here keeps both authorization and model persistence under the

@@ -300,6 +300,12 @@ type Limits struct {
 	// different people's shortcuts and tuning one should not move the other.
 	DiagramFavourites int32
 
+	// StartFavourites is how many processes one account may star on the Tasks app's
+	// Start view (ADR-draft-start-view-groups-and-favourites).
+	// Its own number for the reason DiagramFavourites has one: the people who start
+	// processes are not the people who model them.
+	StartFavourites int32
+
 	// OrderLineAnswers is how many configuration answers one order line may carry
 	// (ADR-0358) — the fields of
 	// the form its product declares. Small, because a form somebody fills in while
@@ -379,6 +385,7 @@ func Default() Limits {
 		HistoryReport:         2000,
 		Favourites:            100,
 		DiagramFavourites:     100,
+		StartFavourites:       100,
 		OrderLineAnswers:      50,
 	}
 }

@@ -7,7 +7,8 @@
 // heading per application the process was deployed under — named by the listing's
 // applicationName, which the server leaves out where the viewer may not see the
 // application — with "Other" last, and a filter box narrows it by name, id or
-// application. A star puts a process into a Favourites group at the top.
+// application. A star puts a process into a Favourites group at the top; the server
+// keeps it for the signed-in person, and the browser does when nobody is signed in.
 //
 // This drives the REAL app shell against a mocked /api/v1.
 import { test, expect } from "@playwright/test";
@@ -28,11 +29,26 @@ const PROCESSES = [
   proc(6, "proc_jira_test_01", "Jira Test Prozess"),
 ];
 
-function installMock(page, processes = PROCESSES) {
+// installMock stands in for a server. Without `starred` it is one with authentication
+// off, which keeps no favourites (404) and leaves them to the browser; with it, the
+// server keeps them in that array and records every write in `writes`.
+function installMock(page, processes = PROCESSES, starred = null, writes = []) {
   page.route("**/api/v1/**", async (route) => {
-    const path = new URL(route.request().url()).pathname;
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
     if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
     if (path === "/api/v1/processes") return route.fulfill({ json: processes });
+    if (path.startsWith("/api/v1/me/start-favourites")) {
+      if (!starred) return route.fulfill({ status: 404, json: { error: "no signed-in identity" } });
+      const id = decodeURIComponent(path.split("/").pop());
+      if (req.method() !== "GET") {
+        writes.push(req.method() + " " + id);
+        if (id === "refused") return route.fulfill({ status: 422, json: { error: "too many favourites" } });
+        if (req.method() === "PUT" && !starred.includes(id)) starred.push(id);
+        if (req.method() === "DELETE" && starred.includes(id)) starred.splice(starred.indexOf(id), 1);
+      }
+      return route.fulfill({ json: { processIds: [...starred] } });
+    }
     if (path.startsWith("/api/v1/forms/")) {
       return route.fulfill({ json: { id: "f", name: "f", schema: { type: "default", components: [] } } });
     }
@@ -158,5 +174,36 @@ test("a starred process heads the list under Favourites, and stays in its applic
   // Clearing the star removes the group again.
   await page.locator('.tasks-item[data-key="33"] .start-fav').first().click();
   expect((await listed(page))[0]).toEqual("# Benutzerverwaltung (2)");
+  expect(errors).toEqual([]);
+});
+
+test("signed in, the stars are the server's: read on opening, written on a click", async ({ page }) => {
+  const starred = ["proc_jira_test_01"];
+  const writes = [];
+  installMock(page, PROCESSES, starred, writes);
+  const errors = await open(page);
+  // What the server holds is what the list opens with, from any browser.
+  expect((await listed(page)).slice(0, 2)).toEqual(["# Favourites (1)", "Jira Test Prozess"]);
+
+  await page.locator('.tasks-item[data-key="3"] .start-fav').first().click();
+  await expect(page.locator('.start-group-head[data-group="fav"] .tasks-count')).toHaveText("2");
+  await page.locator('.tasks-item[data-key="6"] .start-fav').first().click();
+  await expect(page.locator('.start-group-head[data-group="fav"] .tasks-count')).toHaveText("1");
+  expect(writes).toEqual(["PUT proc_reisebuchung", "DELETE proc_jira_test_01"]);
+  expect(starred).toEqual(["proc_reisebuchung"]);
+  // And nothing was kept in the browser alongside.
+  expect(await page.evaluate(() => localStorage.getItem("atlas.start.favourites"))).toBeNull();
+  expect(errors).toEqual([]);
+});
+
+test("a star the server refuses goes back to how it was, with the reason", async ({ page }) => {
+  const writes = [];
+  installMock(page, [...PROCESSES, proc(7, "refused", "Abgelehnt", "app_rs", "Reisen")], [], writes);
+  const errors = await open(page);
+  await page.locator('.tasks-item[data-key="7"] .start-fav').click();
+  await expect(page.locator("#toast")).toContainText("too many favourites");
+  await expect(page.locator('.start-group-head[data-group="fav"]')).toHaveCount(0);
+  await expect(page.locator('.tasks-item[data-key="7"] .start-fav')).toHaveAttribute("aria-pressed", "false");
+  expect(writes).toEqual(["PUT refused"]);
   expect(errors).toEqual([]);
 });

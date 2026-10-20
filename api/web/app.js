@@ -9782,7 +9782,11 @@ async function viewTasks(preselectKey) {
 async function viewStartProcess() {
   const state = {
     procs: [], selected: null, form: null, links: [], query: "",
-    collapsed: loadStartSet(START_COLLAPSED_KEY), favourites: loadStartSet(START_FAVOURITES_KEY),
+    collapsed: loadStartSet(START_COLLAPSED_KEY), favourites: new Set(),
+    // favServer is whether the stars are kept on the server for the signed-in person,
+    // which is settled by the first read: a server without authentication answers 404,
+    // and then they are kept in this browser instead.
+    favServer: false,
   };
   view.innerHTML = `
     <div class="tasks" id="start-grid">
@@ -10006,13 +10010,41 @@ async function viewStartProcess() {
     // The star marks the process, not the version: a favourite follows the process
     // id, so deploying v2 keeps it starred. It does not open the process it sits on.
     listEl.querySelectorAll(".start-fav").forEach((b) =>
-      b.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const id = b.dataset.fav;
-        if (state.favourites.has(id)) state.favourites.delete(id); else state.favourites.add(id);
-        saveStartSet(START_FAVOURITES_KEY, state.favourites);
-        renderList();
-      }));
+      b.addEventListener("click", (e) => { e.stopPropagation(); toggleFavourite(b.dataset.fav); }));
+  }
+
+  // toggleFavourite shows the change at once and then keeps it: on the server for a
+  // signed-in person, whose answer is the list as it now stands, or in this browser.
+  // A server that refuses puts the star back as it was and says why.
+  async function toggleFavourite(id) {
+    const on = !state.favourites.has(id);
+    const before = new Set(state.favourites);
+    if (on) state.favourites.add(id); else state.favourites.delete(id);
+    renderList();
+    if (!state.favServer) { saveStartSet(START_FAVOURITES_KEY, state.favourites); return; }
+    try {
+      const res = await api(on ? "PUT" : "DELETE", "/api/v1/me/start-favourites/" + encodeURIComponent(id));
+      state.favourites = new Set((res && res.processIds) || []);
+    } catch (err) {
+      state.favourites = before;
+      toast(tr("start.fav.failed", { error: err.message }), "err");
+    }
+    renderList();
+  }
+
+  // loadFavourites reads the signed-in person's stars, or this browser's when the
+  // server keeps none (404: authentication is off). Any other failure leaves the stars
+  // with the server and shows none until the next read, rather than offering the
+  // browser's list as though it were theirs.
+  async function loadFavourites() {
+    try {
+      const res = await api("GET", "/api/v1/me/start-favourites");
+      state.favServer = true;
+      state.favourites = new Set((res && Array.isArray(res.processIds)) ? res.processIds : []);
+    } catch (err) {
+      state.favServer = err.status !== 404;
+      state.favourites = state.favServer ? new Set() : loadStartSet(START_FAVOURITES_KEY);
+    }
   }
 
   async function load() {
@@ -10020,6 +10052,7 @@ async function viewStartProcess() {
       const [all, links] = await Promise.all([
         api("GET", "/api/v1/processes"),
         api("GET", "/api/v1/public-links").catch(() => []),
+        loadFavourites(),
       ]);
       state.links = Array.isArray(links) ? links : [];
       // Only executable processes with a start form; keep the latest version per
@@ -10067,9 +10100,10 @@ function startGroups(procs, favourites) {
   return favs.length ? [{ id: "fav", label: tr("start.group.favourites"), procs: favs }, ...groups] : groups;
 }
 
-// The groups a viewer closed and the processes they starred on the Start view,
-// remembered in this browser like the inbox's list width. Both are sets of strings —
-// group ids and process ids — kept as a JSON array under one key each.
+// The groups a viewer closed on the Start view, remembered in this browser like the
+// inbox's list width, and the processes starred there when nobody is signed in — a
+// signed-in person's stars are kept on the server. Both are sets of strings, group ids
+// and process ids, kept as a JSON array under one key each.
 const START_COLLAPSED_KEY = "atlas.start.collapsed";
 const START_FAVOURITES_KEY = "atlas.start.favourites";
 
