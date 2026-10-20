@@ -300,7 +300,9 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   form the server does not hold instead of saving or leaving, and a Ctrl-click opens a new
   tab; the Implement view marks start events and user tasks that name a form (not repair
   forms, and nothing in the Design view), redraws the mark as the picker changes, and the
-  mark is the same door.
+  mark is the same door. A diagram filed under an application (amendment 2026-10-20) names
+  it on every "＋ New form" door — a user task's, a start event's, a repair form's, and a
+  deployed version's — and the form is saved under it, with the way back unchanged.
 
 - **`form-identity.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
   the **form editor's single identity**, on the state that reported the bug — a form

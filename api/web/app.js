@@ -11094,16 +11094,18 @@ async function route() {
       formPath = ftail[1];
       formFrom = { draftId: decodeURIComponent(ftail[2]), elementId: decodeURIComponent(ftail[3]) };
     }
-    const fnew = formPath.match(/^#\/modeler\/form\/new(?:\/p\/(.+))?$/);
+    const fnew = formPath.match(/^#\/modeler\/form\/new(?:\/p\/([^/]+))?$/);
     if (fnew) return await viewFormEditor(null, fnew[1] ? decodeURIComponent(fnew[1]) : "", null, formFrom);
     // A new form for a named step: the Modeler's "＋ New form" on a user task carries
     // the process and the element, and on a start event the process alone — which is
-    // the start-form case, where the form is for the process itself.
-    const ffor = formPath.match(/^#\/modeler\/form\/new\/for\/([^/]+)(?:\/([^/]+))?$/);
+    // the start-form case, where the form is for the process itself. A diagram filed
+    // under an application names it too, so the form is filed where its process is
+    // (ADR-0465, amendment 2026-10-20).
+    const ffor = formPath.match(/^#\/modeler\/form\/new(?:\/p\/([^/]+))?\/for\/([^/]+)(?:\/([^/]+))?$/);
     if (ffor) {
-      return await viewFormEditor(null, "", {
-        processId: decodeURIComponent(ffor[1]),
-        elementId: ffor[2] ? decodeURIComponent(ffor[2]) : "",
+      return await viewFormEditor(null, ffor[1] ? decodeURIComponent(ffor[1]) : "", {
+        processId: decodeURIComponent(ffor[2]),
+        elementId: ffor[3] ? decodeURIComponent(ffor[3]) : "",
       }, formFrom);
     }
     const fe = formPath.match(/^#\/modeler\/form\/e\/(.+)$/);

@@ -63,7 +63,10 @@ const XML = `<?xml version="1.0" encoding="UTF-8"?>
 // save, so coming back opens what was saved on the way out), the forms it can link, the
 // deployment it was once deployed as, and the writes a round trip makes — recorded so a
 // test asserts what was sent rather than only what was then shown.
-function installMock(page) {
+//
+// `projectId` files the draft — and the deployment it was once deployed as — under an
+// application, the way a diagram authored inside one is filed.
+function installMock(page, { projectId = "" } = {}) {
   const state = {
     stored: XML,
     draftSaves: [],
@@ -81,7 +84,7 @@ function installMock(page) {
     const method = request.method();
     if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
     if (path === "/api/v1/drafts" && method === "GET") {
-      return route.fulfill({ json: [{ processId: "reise", name: "Reise", projectId: "" }] });
+      return route.fulfill({ json: [{ processId: "reise", name: "Reise", projectId }] });
     }
     if (path === "/api/v1/drafts/reise/xml") {
       return route.fulfill({ body: state.stored, contentType: "application/xml" });
@@ -92,7 +95,7 @@ function installMock(page) {
       return route.fulfill({ json: { processId: "reise", name: "Reise" } });
     }
     if (path === "/api/v1/processes" && method === "GET") {
-      return route.fulfill({ json: [{ key: 7, processId: "reise", name: "Reise", version: 1 }] });
+      return route.fulfill({ json: [{ key: 7, processId: "reise", name: "Reise", version: 1, projectId }] });
     }
     if (path === "/api/v1/processes/7/xml") {
       return route.fulfill({ body: XML, contentType: "application/xml" });
@@ -118,6 +121,9 @@ function installMock(page) {
       if (renamed) state.forms.delete(renamed);
       state.forms.set(body.id, body.name);
       return route.fulfill({ json: { id: body.id, name: body.name, renamedFrom: renamed } });
+    }
+    if (path === "/api/v1/applications") {
+      return route.fulfill({ json: [{ id: "app-1", name: "Reisen", myRole: "owner" }] });
     }
     if (path.endsWith("/validate")) return route.fulfill({ json: { version: "test", problems: [] } });
     return route.fulfill({ json: [] });
@@ -524,5 +530,71 @@ test("the Implement view marks a step with a form, and the mark is the door", as
   await page.evaluate(() => window.__atlasModeler.get("canvas").scroll({ dx: 160, dy: 0 }));
   await badge("Start_1").click();
   await expect.poll(() => hash(page)).toBe("#/modeler/form/e/reise-antrag/from/reise/Start_1");
+  expect(page.__errors).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------------
+// A form created from a step belongs where the step does (ADR-0465, amendment
+// 2026-10-20). Until the "＋ New form" door named the diagram's application, every form
+// created from the Modeler was filed under none and turned up as ungrouped, apart from
+// the process it was written for — and an application's release did not carry it.
+// ---------------------------------------------------------------------------------
+
+test("a form created for a step is filed under the diagram's application", async ({ page }) => {
+  const state = installMock(page, { projectId: "app-1" });
+  await openDiagram(page);
+  await select(page, "Task_review", "Form");
+  await expect(page.locator("#f-form-new")).toHaveAttribute("href", "#/modeler/form/new/p/app-1/for/reise/Task_review");
+
+  await page.locator("#f-form-new").click();
+  await expect.poll(() => hash(page)).toBe("#/modeler/form/new/p/app-1/for/reise/Task_review/from/reise/Task_review");
+  await formEditorReady(page);
+  // The way back is still the diagram's, not the application's.
+  await expect(page.locator("#form-back")).toHaveAttribute("href", "#/modeler/draft/reise");
+  await page.locator("#form-save").click();
+  await expect.poll(() => state.formSaves.length).toBe(1);
+  expect(state.formSaves[0].projectId).toBe("app-1");
+
+  await page.locator("#form-back").click();
+  await expect(page.locator('[data-element-id="Task_review"]').first()).toBeVisible({ timeout: 20000 });
+  await expect.poll(() => formIdOf(page, "Task_review")).toBe(state.formSaves[0].id);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a start form and a repair form are filed under the application too", async ({ page }) => {
+  const state = installMock(page, { projectId: "app-1" });
+  await openDiagram(page);
+  await select(page, "Start_1", "Start form");
+  await expect(page.locator("#f-form-new")).toHaveAttribute("href", "#/modeler/form/new/p/app-1/for/reise");
+
+  // A repair form's new form stays without the generator's step, and gains the
+  // application all the same.
+  await select(page, "Activity_charge", "Repair form");
+  await expect(page.locator("#f-form-new")).toHaveAttribute("href", "#/modeler/form/new/p/app-1");
+  await page.locator("#f-form-new").click();
+  await expect.poll(() => hash(page)).toBe("#/modeler/form/new/p/app-1/from/reise/Activity_charge");
+  await formEditorReady(page);
+  await page.locator("#form-save").click();
+  await expect.poll(() => state.formSaves.length).toBe(1);
+  expect(state.formSaves[0].projectId).toBe("app-1");
+  expect(page.__errors).toEqual([]);
+});
+
+test("a deployed version files a new form under the application it was deployed from", async ({ page }) => {
+  const state = installMock(page, { projectId: "app-1" });
+  await openDiagram(page, "#/modeler/d/7");
+  await select(page, "Task_review", "Form");
+  await expect(page.locator("#f-form-new")).toHaveAttribute("href", "#/modeler/form/new/p/app-1/for/reise/Task_review");
+
+  await page.locator("#f-form-new").click();
+  // No draft to come back to, so no way back on the address — and back goes to the
+  // application the form now belongs to.
+  await expect.poll(() => hash(page)).toBe("#/modeler/form/new/p/app-1/for/reise/Task_review");
+  await formEditorReady(page);
+  await expect(page.locator("#form-back")).toHaveAttribute("href", "#/modeler/p/app-1");
+  await expect(page.locator("#form-back")).toHaveText("← Reisen");
+  await page.locator("#form-save").click();
+  await expect.poll(() => state.formSaves.length).toBe(1);
+  expect(state.formSaves[0].projectId).toBe("app-1");
   expect(page.__errors).toEqual([]);
 });
