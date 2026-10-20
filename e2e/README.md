@@ -181,6 +181,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   `<standardLoopCharacteristics>`, and switching to a multi-instance replaces one marker
   with the other. This is the icon-and-property sync check: both directions, in a real
   browser, against the vendored bpmn-js.
+- **`worker-fields-modeler.spec.mjs`** (ADR-0067): a **Worker task's extension carries only
+  what its operation uses** — choosing Teams Phone writes no `accountType` for the Resolve
+  users it starts on, switching an operation drops the previous one's fields and writes the
+  select the new one shows, and the next edit clears a value an earlier Modeler left hidden.
+  Entra's inline attributes and attributes variable, two alternatives that hide each other,
+  are both kept. Assertions are on the exported XML, because a hidden attribute is what the
+  compiler refuses and the panel cannot show.
 - **`documentation-modeler.spec.mjs`** (ADR-0025): the **Documentation** property — every
   element (task, gateway, event, sequence flow, data object) shows the `<bpmn:documentation>`
   its model carries and writes an edit back onto that element, blanking it drops the child

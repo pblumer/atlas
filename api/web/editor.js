@@ -5535,9 +5535,51 @@ function sendTaskKindHTML(modeler, bo) {
     stKindFieldsHTML(cur, ext);
 }
 
+// settleKindFields completes props — the values about to be written over a kind's
+// stored extension — so the extension states what the panel shows for the operation,
+// auth type or format they choose. A field that choice hides is dropped: the panel
+// neither shows nor saves it again, so a value left there could only be removed in the
+// XML source, and Teams Phone, Mail, Jira and Discord refuse to compile a task that
+// carries one. A select the choice shows starts on its first option when it holds
+// nothing, because that is the option the panel displays as chosen.
+//
+// A field is dropped only when the mode fields (the reRender ones) hide it, whatever its
+// siblings hold. Entra's inline attributes and its attributes variable hide each other
+// too, but they are alternatives the author is choosing between, not an operation's
+// leftovers: with both filled in, the compiler names the conflict.
+function settleKindFields(kind, stored, props) {
+  const value = (key) => (key in props ? props[key] : (stored ? stored[key] : undefined));
+  const firstOption = (f) => (f.options && f.options.length ? selectOption(f.options[0]).v : "");
+  for (const f of kind.fields) {
+    if (f.reRender && f.type === "select" && !value(f.key) && firstOption(f)) props[f.key] = firstOption(f);
+  }
+  const mode = {};
+  const all = {};
+  for (const f of kind.fields) {
+    if (f.group) continue;
+    all[f.key] = value(f.key);
+    if (f.reRender) mode[f.key] = all[f.key];
+  }
+  const shown = (f, values) => {
+    if (!f.showIf) return true;
+    try { return !!f.showIf(values); } catch { return true; }
+  };
+  for (const f of kind.fields) {
+    // A map field reads its rows from the panel, so a hidden one is already saved empty.
+    if (f.group || f.reRender || f.type === "map") continue;
+    if (!shown(f, mode) && !shown(f, all)) {
+      if (value(f.key) !== undefined) props[f.key] = undefined;
+    } else if (f.type === "select" && !value(f.key) && firstOption(f) && shown(f, all)) {
+      props[f.key] = firstOption(f);
+    }
+  }
+  return props;
+}
+
 // applyServiceTaskKind switches a service task to a catalog kind by writing that
-// kind's extension (seeding select defaults) and removing every other kind's
-// extension, so the compiler sees exactly one Worker Type (ADR-0067).
+// kind's extension (seeding the defaults of the selects its first operation shows) and
+// removing every other kind's extension, so the compiler sees exactly one Worker Type
+// (ADR-0067). Choosing the kind a task already has keeps what its extension states.
 function applyServiceTaskKind(modeler, element, kindId) {
   const kind = SERVICE_TASK_KINDS.find((k) => k.id === kindId) || SERVICE_TASK_KINDS[0];
   // The retry budget is a property of the task, not of the implementation it happens
@@ -5550,13 +5592,7 @@ function applyServiceTaskKind(modeler, element, kindId) {
   }
   const defaults = {};
   if (prev.retries && kind.fields.some((f) => f.key === "retries")) defaults.retries = prev.retries;
-  for (const f of kind.fields) {
-    if (f.type === "select" && f.options && f.options.length) {
-      const v = selectOption(f.options[0]).v;
-      if (v) defaults[f.key] = v;
-    }
-  }
-  upsertExt(modeler, element, kind.ext, defaults);
+  upsertExt(modeler, element, kind.ext, settleKindFields(kind, findExt(element.businessObject, kind.ext), defaults));
 }
 
 // applySendTaskKind switches a send task between its Message kind, its Shop kind (ADR-0429) and
@@ -9339,7 +9375,8 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       for (const f of stKind.fields) {
         if (f.group) continue;
         if (f.type === "map") { props[f.key] = readMapField(f); continue; }
-        // A showIf-hidden field isn't rendered; leave its stored value untouched.
+        // A showIf-hidden field isn't rendered; settleKindFields decides what becomes
+        // of its stored value.
         const el = body.querySelector("#f-st-" + f.key);
         if (!el) continue;
         const v = (el.value || "").trim();
@@ -9347,6 +9384,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // than write an empty one, so the exported XML says what the task means.
         props[f.key] = (f.type === "number" && v === "") ? undefined : v;
       }
+      // The panel on screen is the one the previous operation drew, so a change of
+      // operation reads that operation's fields; settling drops the ones the new
+      // operation does not use and starts the selects it brings.
+      settleKindFields(stKind, findExt(bo, stKind.ext), props);
       // Normalize mutually exclusive authored fields before the generic extension update.
       if (stKind.normalize) stKind.normalize(props);
       upsertExt(modeler, element, stKind.ext, props);
