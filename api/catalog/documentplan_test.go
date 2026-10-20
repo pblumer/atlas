@@ -113,3 +113,88 @@ func TestTheNewestReleaseIsTheLatestMade(t *testing.T) {
 		t.Error("a value JSON cannot say is compared as nothing")
 	}
 }
+
+// fakeBaselines keeps bases in memory, as the server's store keeps them on disk.
+type fakeBaselines struct{ hashes map[string]string }
+
+func (f *fakeBaselines) ImportBaselines() (map[string]string, error) {
+	out := map[string]string{}
+	for k, v := range f.hashes {
+		out[k] = v
+	}
+	return out, nil
+}
+
+func (f *fakeBaselines) RecordImportBaselines(h map[string]string) error {
+	if f.hashes == nil {
+		f.hashes = map[string]string{}
+	}
+	for k, v := range h {
+		f.hashes[k] = v
+	}
+	return nil
+}
+
+// TestACatalogueImportTellsAnUpdateFromAnEdit: with what the last import brought
+// remembered, a product the document moved on and nobody touched here is taken, one
+// edited here is kept while the document carries it as before, and only one both
+// sides moved is asked about (ADR-0467, amended).
+func TestACatalogueImportTellsAnUpdateFromAnEdit(t *testing.T) {
+	s := newService(t)
+	s.Baselines = &fakeBaselines{}
+	if code, out := importDoc(t, s, importer, shopDocument); code != http.StatusOK {
+		t.Fatalf("first import = %d %v", code, out)
+	}
+	newer := strings.Replace(shopDocument, `"texts":{"de":"Parkplatz"}`, `"texts":{"de":"Parkplatz Nord"}`, 1)
+	code, out := importDoc(t, s, importer, newer)
+	if code != http.StatusOK || asJSON(out["updated"]) != `["product:parking"]` ||
+		!strings.Contains(asJSON(out["artifacts"]), `"outcome":"updated","ref":"product:parking","status":"behind"`) {
+		t.Fatalf("a product the document moved on = %d %v", code, out)
+	}
+
+	// Edited here — through the store, as the Console would — and the document as
+	// before: kept, and nothing asked.
+	s.loop.Do(func() {
+		it, _, _ := s.store.Item("parking")
+		it.Texts = map[string]string{"de": "Parkplatz (hier)"}
+		_ = s.store.SaveItem(it)
+	})
+	code, out = importDoc(t, s, importer, newer)
+	if code != http.StatusOK || len(out["updated"].([]any)) != 0 ||
+		!strings.Contains(asJSON(out["artifacts"]), `"outcome":"kept","ref":"product:parking","status":"ahead"`) {
+		t.Fatalf("a product edited here = %d %v", code, out)
+	}
+
+	// Both moved: asked.
+	newest := strings.Replace(shopDocument, `"texts":{"de":"Parkplatz"}`, `"texts":{"de":"Parkplatz Süd"}`, 1)
+	if code, out := importDoc(t, s, importer, newest); code != http.StatusConflict || asJSON(out["undecided"]) != `["product:parking"]` {
+		t.Fatalf("both sides moved = %d %v", code, out)
+	}
+
+	// Without a store for bases, everything that differs is asked, as before.
+	s.Baselines = nil
+	if code, out := importDoc(t, s, importer, newer); code != http.StatusConflict {
+		t.Fatalf("no bases = %d %v, want 409", code, out)
+	}
+}
+
+// TestADocumentsProcessMovedOnIsDeployed: a process deployed as the last import
+// brought it, and newer in the document, is deployed without a question.
+func TestADocumentsProcessMovedOnIsDeployed(t *testing.T) {
+	doc := func(xml string) string {
+		return `{"processes":[{"id":"prov-badge","xml":"` + xml + `"}],` + strings.TrimPrefix(shopDocument, "{")
+	}
+	s := newService(t)
+	d := &fakeDeployer{}
+	s.Deployer, s.Models, s.Baselines = d, fakeModels{}, &fakeBaselines{}
+	if code, out := importDoc(t, s, importer, doc("<v1/>")); code != http.StatusOK || len(d.deployed) != 1 {
+		t.Fatalf("first import = %d %v", code, out)
+	}
+	s.Models = fakeModels{"prov-badge": "<v1/>"}
+	d.deployed = nil
+	code, out := importDoc(t, s, importer, doc("<v2/>"))
+	if code != http.StatusOK || len(d.deployed) != 1 ||
+		!strings.Contains(asJSON(out["artifacts"]), `"outcome":"updated","ref":"process:prov-badge","status":"behind"`) {
+		t.Fatalf("a process the document moved on = %d %v, deployed %v", code, out, d.deployed)
+	}
+}

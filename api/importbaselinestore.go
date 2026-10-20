@@ -68,3 +68,16 @@ func (s *Server) recordImportBaselines(scope string, hashes map[string]string) e
 	rec.Scope, rec.UpdatedAt = scope, time.Now().Unix()
 	return s.baselines.Save(rec)
 }
+
+// catalogBaselines is the catalogue service's memory of what the last import of a
+// document brought, kept in this server's baseline store under the catalogue's
+// scope. The service calls it on the run loop it shares with the server.
+type catalogBaselines struct{ s *Server }
+
+func (b catalogBaselines) ImportBaselines() (map[string]string, error) {
+	return b.s.importBaselines(catalogueBaselineScope)
+}
+
+func (b catalogBaselines) RecordImportBaselines(hashes map[string]string) error {
+	return b.s.recordImportBaselines(catalogueBaselineScope, hashes)
+}
