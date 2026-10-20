@@ -42,7 +42,7 @@ import (
 //     (ADR-0014/0034), and copying it into the tree would pretend Atlas owns it.
 //     Where it resolves against this server's own model folder — the
 //     zero-config default, written by the decision editor and the model upload
-//     (ADR-0319) — Atlas is the only place the model lives, and a tree without it
+//     (ADR-0321) — Atlas is the only place the model lives, and a tree without it
 //     installs elsewhere as a decision whose model is not there. Such a model
 //     travels as `decisions/<handle>.dmn`, once however many of its decisions the
 //     application references (ADR-draft-application-package-export).
