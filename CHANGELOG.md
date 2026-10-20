@@ -24,6 +24,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A form created from a step is filed under the process's application.** **＋ New form**
+  on a start event, a user task or a repair form opened the form editor without naming the
+  diagram's application, so the new form was saved under none: it was listed among the
+  ungrouped forms, apart from its process, and the application's release did not carry it.
+  The button now names the application of the draft or deployed version it is pressed in,
+  and the form is saved there. A diagram filed under no application keeps its forms
+  ungrouped, as before, and an existing form opened with **Open form** stays where it is
+  ([ADR-0465](docs/adr/0465-form-doors.md), amended).
+
 - **The handbook's German reads as German.** Much of it had been translated word for word
   from the English and carried English idioms over: «Der Lehrsatz ist …» for *the lesson
   is*, «Dasselbe Muster trägt …» for *the same pattern carries*, «das ist der Punkt»,

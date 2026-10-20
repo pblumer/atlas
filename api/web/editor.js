@@ -2463,7 +2463,7 @@ function owningProcessId(bo) {
   return "";
 }
 
-// newFormHref is the "Create a new form" link, carrying where it was pressed from
+// newFormHref is the "＋ New form" door, carrying where it was pressed from
 // (ADR-0260). Pressing it on a step is the author saying what the
 // form is for, and the form editor's generator opens on exactly that: the process and
 // the step for a user task, the process alone for a start event — which is the
@@ -2472,11 +2472,21 @@ function owningProcessId(bo) {
 //
 // A diagram whose element belongs to no identifiable process still gets the plain link:
 // a new form is a new form, and the generator simply opens with nothing preselected.
-function newFormHref(bo, forThisStep) {
+function newFormHref(bo, forThisStep, projectId) {
   const pid = owningProcessId(bo);
-  if (!pid) return "#/modeler/form/new";
-  const href = "#/modeler/form/new/for/" + encodeURIComponent(pid);
+  if (!pid) return newFormBase(projectId);
+  const href = newFormBase(projectId) + "/for/" + encodeURIComponent(pid);
   return forThisStep && bo.id ? href + "/" + encodeURIComponent(bo.id) : href;
+}
+
+// newFormBase is where every "＋ New form" door starts: the form editor's new form,
+// filed under the diagram's application when the diagram has one (ADR-0465,
+// amendment 2026-10-20). A form is written for the process it is created from, and an
+// application holds that process — so it holds the form too. Filed under none, the form
+// turned up as ungrouped, apart from its process, and an application release did not
+// carry it.
+function newFormBase(projectId) {
+  return "#/modeler/form/new" + (projectId ? "/p/" + encodeURIComponent(projectId) : "");
 }
 
 // formDoorsHTML is the row under a form picker: "＋ New form" and "Open form"
@@ -6094,7 +6104,7 @@ const REPAIR_FORM_TYPES = new Set(["bpmn:ServiceTask", "bpmn:SendTask", "bpmn:Bu
 // instance's variables an operator corrects to get the task moving, and opening the
 // generator on this task would frame it as the task's work form — the very confusion
 // the paragraph below exists to prevent.
-function repairFormHTML(bo) {
+function repairFormHTML(bo, projectId) {
   if (!REPAIR_FORM_TYPES.has(bo.$type)) return "";
   const fd = findExt(bo, "zeebe:FormDefinition") || {};
   const cur = fd.formId || "";
@@ -6104,7 +6114,7 @@ function repairFormHTML(bo) {
         <option value="">&mdash; none &mdash;</option>
         ${cur ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : ""}
       </select></label>
-    ${formDoorsHTML("#/modeler/form/new")}
+    ${formDoorsHTML(newFormBase(projectId))}
     <p class="muted" style="font-size:12px">Shown to an operator when this task parks behind an incident, so they can correct
       the values that matter instead of editing the whole variable set as JSON. Only the form's own fields are written, and the
       change is audited like any other. Leave it unset and the raw editor is the only way — which is fine for a task with
@@ -8607,7 +8617,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
                 <option value="">— none —</option>
                 ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
               </select></label>
-            ${formDoorsHTML(newFormHref(bo, true))}
+            ${formDoorsHTML(newFormHref(bo, true, projectId))}
             <p class="muted" style="font-size:12px">The form the Tasks app renders for this task, submitted as its variables.
               <b>＋ New form</b> creates one; coming back to the draft links it to this task.</p>
             <h3>Assignment</h3>
@@ -8635,7 +8645,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // The repair form is offered on the task kinds that can park behind an incident
         // an operator repairs by correcting variables (ADR-0169); repairFormHTML itself
         // decides which those are, so the panel and the compiler agree on the set.
-        html += repairFormHTML(bo);
+        html += repairFormHTML(bo, projectId);
         // Every task kind can carry a loop marker (ADR-0077 multi-instance, ADR-0133
         // standard loop) — including the ones with no implementation of their own: an
         // undefined or manual task repeats its pass-through, a business rule task
@@ -8903,7 +8913,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
                 <option value="">— none —</option>
                 ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
               </select></label>
-            ${formDoorsHTML(newFormHref(bo, false))}
+            ${formDoorsHTML(newFormHref(bo, false, projectId))}
             <p class="muted" style="font-size:12px">Shown before the process starts — from the Tasks app's <b>Start</b> view — its data becomes the instance's start variables.
               <b>＋ New form</b> creates one; coming back to the draft links it to this start event.</p>
             <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> start event instead.</p>`;
