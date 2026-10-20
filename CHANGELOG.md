@@ -39,6 +39,18 @@ _Changed_ / _Removed_ for each version.
   option it quotes, and a *ß*, a wrong gender and two sentences without a verb are
   corrected. `AGENTS.md` gains a short writing guideline so new text does not repeat the
   pattern.
+- **A Worker task keeps only the fields its operation uses.** The Modeler left a field
+  behind on the task when the operation it belonged to was no longer chosen: choosing
+  Microsoft Teams Phone wrote `accountType="call-queue"` onto the Resolve users it starts
+  on, and switching an operation kept the previous one's values. The panel hides such a
+  field and never saved it again, so it could only be removed in the XML source — and
+  Teams Phone, Mail, Jira and Discord refuse to deploy a task that carries one ("does not
+  use accountType; remove it"). Choosing a Worker Type or an operation, an auth type or a
+  format now drops every field that choice hides and starts the selects it shows on the
+  option the panel displays, for every Worker Type. A task saved by an earlier Modeler is
+  cleaned up by its next edit in the panel. Fields that are alternatives to each other,
+  such as Entra's inline attributes and its attributes variable, are left as they are,
+  and choosing the Worker Type a task already has no longer resets its operation.
 
 ## [0.16.0] — 2026-10-20
 
