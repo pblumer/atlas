@@ -664,14 +664,14 @@ async function deployDemo() {
 const APPS = [
   { id: "console", name: "Console", route: "#/console", on: true, role: "any" },
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
-  { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
   { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
+  { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
+  { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
   { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
   // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
   // catalogue means choosing from processes already deployed, never deploying one,
   // so it is deliberately not the modeller's role — deploy is code execution.
   { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue" },
-  { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
   // The shop is a page of its own, not a view of this app, so its route
   // is a path and not a hash — written without a leading slash, because a route in
   // this table is what the handbook appends to the site root (href="/" + route),
