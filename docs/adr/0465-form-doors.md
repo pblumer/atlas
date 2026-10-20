@@ -1,6 +1,6 @@
 # ADR-0465: A step's form is opened from the step, and the way back links it
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-19: the canvas has the door too — "Open form" in the context pad of an element that names a form, and in the Implement view a form mark on a start event or user task that is a link to it; the canvas asks the server whether the form exists before it saves or leaves anything; amended 2026-10-20: a form created through "＋ New form" is filed under the diagram's application)
 - **Implementation:** Landed
 - **Date:** 2026-10-19
 - **Deciders:** Atlas maintainers
@@ -104,6 +104,65 @@ inside it.
   entry on an element that names a form would be the next step, and it would be a
   different click on the same `wireFormDoors` path. The browser's own back button is
   not guarded in the form editor, as it is not in the decision editor.
+
+### Amendment (2026-10-19): the canvas has the door too
+
+As landed, the doors were in the panel alone, and the record named the canvas as the next
+step. The author is usually looking at the drawing, not at the panel, when they want the
+form behind a step — the reason ADR-0245 put the call activity's door on its marker.
+
+**Decision.** The canvas gets the same door, through the same round trip
+(`walkFormDoor`): save first, the trip recorded, the way back on the address.
+
+- **"Open form" in the context pad** of an element that names a form — a start event, a
+  user task, a repair form's task — and of no other. On an element without one there is
+  nothing to open, and creating one stays the panel's "＋ New form", beside the picker
+  that links it. A modified click opens the form's plain address in a new tab and leaves
+  the diagram as it is, as the panel's links do.
+- **A form mark in the Implement view** on a start event and a user task that name a
+  form: a small sheet in a user task's top-right corner, opposite the person bpmn-js
+  draws, and on a start event's upper left, away from the context pad that opens on its
+  right. It is drawn with the implementation badges and only where they are, so the
+  Design view stays the drawing it is. The mark is a link: a click is the same door, a
+  modified click a new tab. A repair form is not marked — it is an operator's aid for an
+  incident, not a step anybody fills in, and a mark on every such task would say
+  otherwise. The context pad and the panel still reach it.
+- **The canvas asks the server whether the form exists before it leaves.** The panel
+  knows from its forms list and shuts its door on a missing form; the canvas holds no
+  such list, and a door that opened on a failure would have cost a save for nothing. A
+  form the server does not hold is said in a message, and nothing is saved or left.
+- **A double-click stays the label editor's**, for ADR-0245's reason: a task has no
+  marker that means "form", and taking the whole shape would take renaming with it.
+
+**Consequences.** A step's form is reachable from where the step is drawn. The mark adds
+one more badge to the Implement view, where a reader already looks for how a step is
+implemented. The existence check is one request per click, made only on the canvas.
+
+### Amendment (2026-10-20): a new form is filed under the diagram's application
+
+As landed, "＋ New form" opened the form editor at `#/modeler/form/new/for/…`, an address
+that named the process and the step for the generator but no application — the "Create a
+new form" link it replaced had never named one either. So every form created from a step
+was saved under none: it showed among the ungrouped forms, apart from the process it was
+written for, and an application's release did not carry it. The round trip made such
+forms more frequent, which is what brought the gap up.
+
+**Decision.** A diagram filed under an application names it on its "＋ New form" door —
+`#/modeler/form/new/p/{application}/for/…`, and `#/modeler/form/new/p/{application}` for
+a repair form — and the form editor files the new form there, as it already does for a
+form created from the application's own "Create new" menu.
+
+- **The application is the diagram's**: the draft's, a deployed version's (the one it was
+  deployed from), or the one a new diagram is created in. A diagram filed under none
+  files its forms under none, as before.
+- **It is part of the link**, not looked up by the form editor, so a modified click into
+  a new tab files the form the same way, and a deployed version, which has no draft to
+  come back to, does too.
+- **Access is unchanged.** Filing a form into an application needs the editor role there
+  (ADR-0071), the same role that saves the draft the form was created from; a save the
+  server refuses is reported like any other failed save.
+- **An existing form keeps its application.** "Open form" opens a form where it is; only
+  a form created through the door is filed.
 
 ## Pros and cons of the options
 

@@ -38,6 +38,13 @@ _Changed_ / _Removed_ for each version.
   operation with what it needs, what it answers, how an existing queue is reconciled, the
   error codes and what to do with each, and the BPMN attributes a model deployed over the
   API or MCP writes. The properties panel links to it beside the setup card.
+- **A step's form opens from the canvas too.** An element that names a form now has
+  **Open form** in its context pad, and in the Implement view a start event or user task
+  with a form carries a small form mark that opens it. Both take the way the panel's
+  button takes: the diagram is saved, the form editor opens with a way back, and a form
+  saved on the way is linked on return; a Ctrl- or middle-click opens a new tab instead.
+  A form the server does not hold is reported in a message, and the diagram is neither
+  saved nor left ([ADR-0465](docs/adr/0465-form-doors.md), amended).
 
 ### Changed
 
@@ -51,8 +58,30 @@ _Changed_ / _Removed_ for each version.
   nothing is refused. A deployed model whose task names a setting now sets it on an existing
   queue — also one built from the Repository template before 1.2.0, which named
   `routingMethod="attendant"`; choose *Keep* there to leave the queue's routing alone.
+- **The undeclared namespace members in the Variables panel collapse.** The Modeler's
+  Variables panel lists, under the process's own variables, what the process could read
+  from the `application` and `server` namespaces but does not declare yet. On an
+  installation with several constants that list was longer than the variables above it
+  and could not be put away. It is now a group like Form and Process, closed when the
+  panel first opens: its header shows how many members are on offer, a click opens or
+  closes it, and the panel remembers the choice across edits and reopening.
+- **Filtering the Variables panel opens the groups it finds something in.** A closed
+  group — Form, Process or the undeclared namespace members — hid what the filter found
+  in it behind its header and showed only the count. While a filter is typed, every group
+  with a match is now open; a group closed by hand while filtering stays closed until the
+  filter is cleared, and clearing it brings back what the author had chosen for the
+  unfiltered list.
 
 ### Fixed
+
+- **A form created from a step is filed under the process's application.** **＋ New form**
+  on a start event, a user task or a repair form opened the form editor without naming the
+  diagram's application, so the new form was saved under none: it was listed among the
+  ungrouped forms, apart from its process, and the application's release did not carry it.
+  The button now names the application of the draft or deployed version it is pressed in,
+  and the form is saved there. A diagram filed under no application keeps its forms
+  ungrouped, as before, and an existing form opened with **Open form** stays where it is
+  ([ADR-0465](docs/adr/0465-form-doors.md), amended).
 
 - **The handbook's German reads as German.** Much of it had been translated word for word
   from the English and carried English idioms over: «Der Lehrsatz ist …» for *the lesson
@@ -69,6 +98,18 @@ _Changed_ / _Removed_ for each version.
   option it quotes, and a *ß*, a wrong gender and two sentences without a verb are
   corrected. `AGENTS.md` gains a short writing guideline so new text does not repeat the
   pattern.
+- **A Worker task keeps only the fields its operation uses.** The Modeler left a field
+  behind on the task when the operation it belonged to was no longer chosen: choosing
+  Microsoft Teams Phone wrote `accountType="call-queue"` onto the Resolve users it starts
+  on, and switching an operation kept the previous one's values. The panel hides such a
+  field and never saved it again, so it could only be removed in the XML source — and
+  Teams Phone, Mail, Jira and Discord refuse to deploy a task that carries one ("does not
+  use accountType; remove it"). Choosing a Worker Type or an operation, an auth type or a
+  format now drops every field that choice hides and starts the selects it shows on the
+  option the panel displays, for every Worker Type. A task saved by an earlier Modeler is
+  cleaned up by its next edit in the panel. Fields that are alternatives to each other,
+  such as Entra's inline attributes and its attributes variable, are left as they are,
+  and choosing the Worker Type a task already has no longer resets its operation.
 
 ## [0.16.0] — 2026-10-20
 

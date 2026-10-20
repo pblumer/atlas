@@ -195,6 +195,8 @@ test("the Variables panel offers undeclared namespace members and declares one",
   await openConstants(page, "declared");
   await page.locator("#vars-toggle").click();
   const avail = page.locator("#vars-available");
+  // The section starts closed; open it the way a reader would.
+  await avail.locator(".vars-group-head").click();
   await expect(avail.locator('[data-avail="application.CLIENT_ID"]')).toBeVisible();
   await expect(avail.locator('[data-avail="server.ENTRA_TENANT_ID"]')).toBeVisible();
   await expect(avail.locator('[data-avail="server.environment"]')).toContainText("server info");
@@ -203,6 +205,89 @@ test("the Variables panel offers undeclared namespace members and declares one",
   // Declared, it is a variable of the process now, and no longer offered.
   await expect(page.locator('#vars-list .var-row[data-var="application.CLIENT_ID"]').first()).toContainText("application constant");
   await expect(avail.locator('[data-avail="application.CLIENT_ID"]')).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+// The undeclared members are a group like Form / Process, closed until the author opens
+// it: an installation with many constants would otherwise push the process's own
+// variables out of view. Opening it is remembered, so it stays open across a re-render
+// and a reopening, and so does closing it again.
+test("the undeclared namespace members start closed and remember being opened", async ({ page }) => {
+  await openConstants(page, "declared");
+  await page.locator("#vars-toggle").click();
+  const avail = page.locator("#vars-available");
+  const head = avail.locator(".vars-group-head");
+  const row = avail.locator('[data-avail="application.CLIENT_ID"]');
+  await expect(head).toBeVisible();
+  await expect(head).toHaveAttribute("aria-expanded", "false");
+  await expect(row).toBeHidden();
+  // Counted while closed, so what is on offer is not lost from view.
+  const count = Number(await head.locator(".vg-count").innerText());
+  expect(count).toBeGreaterThan(0);
+  await expect(avail.locator(".var-row-available")).toHaveCount(count);
+
+  await head.click();
+  await expect(row).toBeVisible();
+  await expect(head).toHaveAttribute("aria-expanded", "true");
+  // Every keystroke in the filter re-renders the list; the section stays as the author
+  // left it.
+  await page.locator("#vars-filter").fill("CLIENT");
+  await page.locator("#vars-filter").fill("");
+  await expect(row).toBeVisible();
+  // So does closing and reopening the panel.
+  await page.locator("#vars-toggle").click();
+  await page.locator("#vars-toggle").click();
+  await expect(row).toBeVisible();
+
+  await head.click();
+  await expect(row).toBeHidden();
+  await expect(head).toHaveAttribute("aria-expanded", "false");
+  await page.locator("#vars-toggle").click();
+  await page.locator("#vars-toggle").click();
+  await expect(row).toBeHidden();
+  expect(page.__errors).toEqual([]);
+});
+
+// A filter is a search: it opens the closed section while it finds something there, and
+// leaves the author's choice for the unfiltered list alone. Closed by hand while
+// filtering, the section stays closed until the filter is cleared.
+test("filtering opens the undeclared namespace members without changing the stored choice", async ({ page }) => {
+  await openConstants(page, "declared");
+  await page.locator("#vars-toggle").click();
+  const filter = page.locator("#vars-filter");
+  const avail = page.locator("#vars-available");
+  const head = avail.locator(".vars-group-head");
+  const row = avail.locator('[data-avail="application.CLIENT_ID"]');
+  await expect(row).toBeHidden();
+
+  await filter.fill("CLIENT");
+  await expect(row).toBeVisible();
+  await expect(head).toHaveAttribute("aria-expanded", "true");
+  await filter.fill("");
+  await expect(row).toBeHidden();
+
+  // Closed while filtering, it stays closed as the filter is refined.
+  await filter.fill("CLI");
+  await expect(row).toBeVisible();
+  await head.click();
+  await expect(row).toBeHidden();
+  await filter.fill("CLIENT");
+  await expect(row).toBeHidden();
+  // Cleared, the list is back to the stored choice, and the next filter opens it again.
+  await filter.fill("");
+  await expect(row).toBeHidden();
+  await filter.fill("CLIENT");
+  await expect(row).toBeVisible();
+
+  // Opened for the unfiltered list, it stays open after a filter closed it by hand.
+  await filter.fill("");
+  await head.click();
+  await expect(row).toBeVisible();
+  await filter.fill("CLIENT");
+  await head.click();
+  await expect(row).toBeHidden();
+  await filter.fill("");
+  await expect(row).toBeVisible();
   expect(page.__errors).toEqual([]);
 });
 

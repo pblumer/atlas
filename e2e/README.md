@@ -181,6 +181,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   `<standardLoopCharacteristics>`, and switching to a multi-instance replaces one marker
   with the other. This is the icon-and-property sync check: both directions, in a real
   browser, against the vendored bpmn-js.
+- **`worker-fields-modeler.spec.mjs`** (ADR-0067): a **Worker task's extension carries only
+  what its operation uses** — choosing Teams Phone writes no `accountType` for the Resolve
+  users it starts on, switching an operation drops the previous one's fields and writes the
+  select the new one shows, and the next edit clears a value an earlier Modeler left hidden.
+  Entra's inline attributes and attributes variable, two alternatives that hide each other,
+  are both kept, and so are CSV's columns, one attribute the catalog describes twice (names,
+  or name:width) with one description always hidden. Assertions are on the exported XML,
+  because a hidden attribute is what the compiler refuses and the panel cannot show.
 - **`documentation-modeler.spec.mjs`** (ADR-0025): the **Documentation** property — every
   element (task, gateway, event, sequence flow, data object) shows the `<bpmn:documentation>`
   its model carries and writes an edit back onto that element, blanking it drops the child
@@ -287,7 +295,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   before it drops a form's unsaved edits and does not ask for an untouched one; a
   Ctrl-click opens the form's plain address in a new tab and leaves the diagram unsaved
   and in place; a repair form's new form stays the plain one; and a deployed version
-  opens the form without a way back.
+  opens the form without a way back. On the canvas (ADR-0465, amended): the context pad
+  offers **Open form** only where a form is named, reaches a repair form too, reports a
+  form the server does not hold instead of saving or leaving, and a Ctrl-click opens a new
+  tab; the Implement view marks start events and user tasks that name a form (not repair
+  forms, and nothing in the Design view), redraws the mark as the picker changes, and the
+  mark is the same door. A diagram filed under an application (amendment 2026-10-20) names
+  it on every "＋ New form" door — a user task's, a start event's, a repair form's, and a
+  deployed version's — and the form is saved under it, with the way back unchanged.
 
 - **`form-identity.spec.mjs`** ([ADR-0222](../docs/adr/0222-artifact-id-renames.md)):
   the **form editor's single identity**, on the state that reported the bug — a form
