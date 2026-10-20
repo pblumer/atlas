@@ -264,6 +264,28 @@ numbers (`docs/adr/number.go`, `make adr-number`).
 - Public APIs get doc comments.
 - Small, focused changes over large ones.
 
+## Writing the handbook (and any other text a person reads)
+
+The handbook ([`api/web/handbuch.html`](api/web/handbuch.html)) is bilingual, and its
+German was long written as a word-for-word translation of the English. That produced
+sentences a German reader cannot parse — «ist dieser Abschnitt veraltet und nicht du»,
+«Der Lehrsatz ist …», «Dasselbe Muster trägt …», «rot sehen» — and one-liners that were
+already cryptic in English ("plan the rotation before it plans you", "user is a floor,
+not a grant"). A reader who has to decode a sentence has been failed by it, however
+neat it looks.
+
+- **Write the German as German.** Draft each language from the meaning, not from the
+  other language's words. An English idiom without a German equivalent is said plainly
+  (*that is the point* → «darauf kommt es an», *the lesson is* → «lehrreich ist hier»,
+  *watch it go red* → «bewusst fehlschlagen lassen»).
+- **Say it plainly, in both languages.** No aphorism, paradox, wordplay or
+  personification in place of the statement (*the clock belongs to the run, not to the
+  wall* → "the run keeps its own simulated clock"). A caveat says what can have changed
+  and what to follow, not how the reader should feel about it.
+- **German conventions.** Address the reader with *du* throughout. Swiss spelling: `ss`,
+  never `ß`. No English left in German prose — code, UI labels and product names aside.
+- **Both languages say the same thing.** When you change one, read the other.
+
 ## Authoring BPMN models (examples, onboarding, anything deployed)
 
 When you create or edit a BPMN diagram — the `examples/` scenarios, onboarding
