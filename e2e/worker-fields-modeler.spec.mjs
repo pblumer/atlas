@@ -97,3 +97,31 @@ test("fields hidden by a filled-in alternative are kept", async ({ page }) => {
   expect(task).toContain("addLicenses");
   expect(page.__errors).toEqual([]);
 });
+
+test("a field the catalog describes twice is kept while one description shows it", async ({ page }) => {
+  // CSV's columns are names for a delimited file and name:width for a fixed-width one:
+  // two descriptions of one attribute, one of them always hidden. The hidden one does
+  // not make the attribute unused.
+  await select(page, "Activity_csv");
+  await page.locator("#f-st-source").fill("datei");
+  await page.locator("#f-st-source").blur();
+
+  const task = await taskXML(page, "Activity_csv");
+  expect(task).toContain('source="datei"');
+  expect(task).toContain('columns="email,group,license"');
+  expect(task).toContain('delimiter=";"');
+  expect(page.__errors).toEqual([]);
+});
+
+test("switching a CSV task to fixed width keeps its columns and drops its delimiter", async ({ page }) => {
+  await select(page, "Activity_csv");
+  await page.locator("#f-st-format").selectOption("fixed-width");
+
+  // The columns stay on screen, as names:widths now, for the author to correct.
+  await expect(page.locator("#f-st-columns")).toHaveValue("email,group,license");
+  const task = await taskXML(page, "Activity_csv");
+  expect(task).toContain('format="fixed-width"');
+  expect(task).toContain('columns="email,group,license"');
+  expect(task).not.toContain("delimiter");
+  expect(page.__errors).toEqual([]);
+});

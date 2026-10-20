@@ -186,8 +186,9 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   users it starts on, switching an operation drops the previous one's fields and writes the
   select the new one shows, and the next edit clears a value an earlier Modeler left hidden.
   Entra's inline attributes and attributes variable, two alternatives that hide each other,
-  are both kept. Assertions are on the exported XML, because a hidden attribute is what the
-  compiler refuses and the panel cannot show.
+  are both kept, and so are CSV's columns, one attribute the catalog describes twice (names,
+  or name:width) with one description always hidden. Assertions are on the exported XML,
+  because a hidden attribute is what the compiler refuses and the panel cannot show.
 - **`documentation-modeler.spec.mjs`** (ADR-0025): the **Documentation** property — every
   element (task, gateway, event, sequence flow, data object) shows the `<bpmn:documentation>`
   its model carries and writes an edit back onto that element, blanking it drops the child

@@ -5564,14 +5564,23 @@ function settleKindFields(kind, stored, props) {
     if (!f.showIf) return true;
     try { return !!f.showIf(values); } catch { return true; }
   };
+  // An attribute may be described more than once — CSV's columns are names for a
+  // delimited file and name:width for a fixed-width one — so it is unused only when
+  // every field that writes it is hidden.
+  const byKey = new Map();
   for (const f of kind.fields) {
     // A map field reads its rows from the panel, so a hidden one is already saved empty.
     if (f.group || f.reRender || f.type === "map") continue;
-    if (!shown(f, mode) && !shown(f, all)) {
-      if (value(f.key) !== undefined) props[f.key] = undefined;
-    } else if (f.type === "select" && !value(f.key) && firstOption(f) && shown(f, all)) {
-      props[f.key] = firstOption(f);
+    if (!byKey.has(f.key)) byKey.set(f.key, []);
+    byKey.get(f.key).push(f);
+  }
+  for (const [key, fields] of byKey) {
+    if (!fields.some((f) => shown(f, mode) || shown(f, all))) {
+      if (value(key) !== undefined) props[key] = undefined;
+      continue;
     }
+    const select = fields.find((f) => f.type === "select" && shown(f, all));
+    if (select && !value(key) && firstOption(select)) props[key] = firstOption(select);
   }
   return props;
 }
