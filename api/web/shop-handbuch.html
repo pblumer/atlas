@@ -83,6 +83,7 @@ th{color:var(--muted);font-weight:600}
   <a href="#dokument"><span data-l="de">Ein Shop als Dokument</span><span data-l="en">A shop as a document</span></a>
   <a href="#beispiel"><span data-l="de">Das Beispiel installieren</span><span data-l="en">Installing the example</span></a>
   <a href="#terminal"><span data-l="de">Im Terminal: atlas import</span><span data-l="en">From a terminal: atlas import</span></a>
+  <a href="#export"><span data-l="de">Ein Paket schreiben: atlas export</span><span data-l="en">Writing a package: atlas export</span></a>
 </nav>
 <main>
 
@@ -454,15 +455,110 @@ th{color:var(--muted);font-weight:600}
       <tr><td><code>--note</code></td>
         <td data-l="de">die Notiz der Release, die das Veröffentlichen anlegt; ohne Angabe <code>atlas import</code></td>
         <td data-l="en">the note on the release publishing creates; <code>atlas import</code> when omitted</td></tr>
+      <tr><td><code>--overwrite</code></td>
+        <td data-l="de">Artefakte, die auf dem Server anders aussehen, durch die Fassung des Pakets ersetzen: Verweise wie
+          <code>process:ID</code>, <code>form:ID</code>, <code>model:HANDLE</code>, <code>constant:NAME</code> oder
+          <code>product:ID</code>, durch Komma getrennt, oder <code>all</code>; mehrfach möglich</td>
+        <td data-l="en">replace artifacts that differ on the server with the package's version: refs such as
+          <code>process:ID</code>, <code>form:ID</code>, <code>model:HANDLE</code>, <code>constant:NAME</code> or
+          <code>product:ID</code>, comma-separated, or <code>all</code>; repeatable</td></tr>
+      <tr><td><code>--keep</code></td>
+        <td data-l="de">Artefakte, die auf dem Server anders aussehen, so lassen, wie sie dort sind: Verweise oder
+          <code>all</code>; mehrfach möglich</td>
+        <td data-l="en">leave artifacts that differ on the server as they are there: refs or <code>all</code>;
+          repeatable</td></tr>
+      <tr><td><code>--dry-run</code></td>
+        <td data-l="de">nur den Plan zeigen – was neu ist, was gleich bleibt, was sich unterscheidet – und nichts
+          schreiben</td>
+        <td data-l="en">show the plan only – what is new, what stays the same, what differs – and write nothing</td></tr>
     </tbody>
   </table>
-  <p data-l="de">Ein zweiter Lauf aktualisiert, statt doppelt anzulegen: Die Applikation wird über den Schlüssel in
-    <code>atlas.json</code> gefunden, Kataloge und Produkte über ihre IDs. Jeder Lauf veröffentlicht die Applikation
-    neu und legt dabei eine weitere Release an. Artefakte der Applikation, die das Paket nicht nennt, bleiben
-    unverändert und werden aufgezählt.</p>
-  <p data-l="en">A second run updates instead of creating twice: the application is found by the key in
-    <code>atlas.json</code>, catalogues and products by their ids. Each run publishes the application again and records
-    another release. The application's artifacts the package does not name stay as they are and are listed.</p>
+  <p data-l="de">Bevor der Befehl etwas schreibt, vergleicht er jedes Artefakt des Pakets mit dem Server: Prozesse,
+    Formulare, Entscheidungen und ihre DMN-Modelle, Konstanten, Kataloge und Produkte. Neues wird angelegt, Gleiches
+    bleibt unberührt. Was auf dem Server anders aussieht, ist dort geleistete Arbeit und wird <b>nie ungefragt
+    ersetzt</b>. Sitzt jemand am Terminal, fragt der Befehl für jedes solche Artefakt einzeln nach; Enter allein
+    behält die Fassung des Servers. In einem CI-Job fragt niemand: Dort bricht der Befehl vor dem ersten Schreiben ab
+    und nennt jedes Artefakt, das du mit <code>--overwrite</code> oder <code>--keep</code> entscheidest.</p>
+  <p data-l="en">Before the command writes anything, it compares every artifact of the package with the server:
+    processes, forms, decisions and their DMN models, constants, catalogues and products. What is new is created, what
+    is the same is left alone. What differs on the server is work done there and is <b>never replaced unasked</b>. With
+    somebody at the terminal, the command asks for each such artifact on its own; Enter alone keeps the server's
+    version. A CI job has nobody to ask: there the command stops before the first write and names every artifact,
+    which you decide with <code>--overwrite</code> or <code>--keep</code>.</p>
+  <p data-l="de">Ein zweiter Lauf legt nichts doppelt an und ändert nichts: Die Applikation wird über den Schlüssel in
+    <code>atlas.json</code> gefunden, Kataloge und Produkte über ihre IDs. Veröffentlicht wird die Applikation nur, wenn
+    der Lauf sie geändert hat oder sie hier noch nie veröffentlicht wurde, und ein Katalog nur, wenn sich er selbst
+    oder eines seiner Produkte geändert hat. Artefakte der Applikation, die das Paket nicht nennt, bleiben unverändert
+    und werden aufgezählt.</p>
+  <p data-l="en">A second run creates nothing twice and changes nothing: the application is found by the key in
+    <code>atlas.json</code>, catalogues and products by their ids. The application is published only when the run
+    changed it or it was never published here, and a catalogue only when it or one of its products changed. The
+    application's artifacts the package does not name stay as they are and are listed.</p>
+  <p data-l="de"><b>Konstanten</b> (<code>konstanten.json</code>) sind ein Vorschlag: Fehlende Werte setzt der Befehl,
+    ein Wert, den der Server anders hält – auf INT einer, auf PROD ein anderer –, ist ein Artefakt wie jedes andere
+    und wird nur ersetzt, wenn du es so entscheidest. Konstanten setzen darf nur, wer die Rolle <code>admin</code> hat,
+    und ein Token trägt sie nie. Mit Token nennt der Befehl deshalb, was jemand mit dieser Rolle noch setzen muss,
+    und importiert den Rest. Am Ende meldet er jede Konstante, die die Applikation liest und dieser Server nicht hält.</p>
+  <p data-l="en"><b>Constants</b> (<code>konstanten.json</code>) are a suggestion: the command sets missing values; a
+    value the server holds otherwise – one on INT, another on PROD – is an artifact like any other and is replaced only
+    when you decide so. Only the <code>admin</code> role may set constants, and a token never carries it. With a token
+    the command therefore names what an administrator still has to set, and imports the rest. At the end it reports
+    every constant the application reads and this server does not hold.</p>
+</section>
+
+<section id="export">
+  <h2 data-l="de">Ein Paket schreiben: <code>atlas export</code></h2><h2 data-l="en">Writing a package: <code>atlas export</code></h2>
+  <p data-l="de">Das Gegenstück zu <code>atlas import</code>: Der Befehl schreibt aus einer laufenden Instanz ein Paket,
+    das <code>atlas import</code> auf einer anderen installiert – die Applikation mit Prozessen, Formularen,
+    Entscheidungen und den DMN-Modellen, die dieser Server selbst hält, ihre Konstanten und auf Wunsch die Kataloge
+    samt Produkten. Gruppen und Personen, die die Kataloge nennen, werden zu Fragen in <code>fragen.json</code>: Ihre
+    IDs vergibt jeder Server selbst, ihre Namen sind überall gleich. Die Antworten schreibt der Befehl deshalb mit den
+    Namen dieses Servers in <code>antworten.json</code>.</p>
+  <p data-l="en">The counterpart of <code>atlas import</code>: the command writes a package from a running instance that
+    <code>atlas import</code> installs on another one – the application with its processes, forms, decisions and the
+    DMN models this server keeps itself, its constants and, if asked, the catalogues with their products. Groups and
+    people the catalogues name become questions in <code>fragen.json</code>: each server mints its own ids, while names
+    stay the same. The command therefore writes the answers, as this server names them, into
+    <code>antworten.json</code>.</p>
+<pre>atlas export --server https://atlas-test.example.com --application beispiel-dienstleistungen-der-verwaltung \
+  --catalog cat-verwaltung-dienste --catalog cat-fachbereich-bau paket
+
+atlas import --server https://atlas.example.com --answers paket/antworten.json paket</pre>
+  <table id="export-flags">
+    <thead><tr>
+      <th data-l="de">Angabe</th><th data-l="en">Flag</th>
+      <th data-l="de">Bedeutung</th><th data-l="en">Meaning</th>
+    </tr></thead>
+    <tbody>
+      <tr><td><code>--server</code></td>
+        <td data-l="de">Adresse der atlas-Instanz, aus der exportiert wird; ohne Angabe <code>http://localhost:8080</code></td>
+        <td data-l="en">Address of the atlas instance to export from; <code>http://localhost:8080</code> when omitted</td></tr>
+      <tr><td><code>--token</code></td>
+        <td data-l="de">API-Token, wenn die Anmeldung eingeschaltet ist; ohne Angabe aus <code>ATLAS_TOKEN</code>: für
+          die Applikation <code>modeler</code>, für jeden Katalog <code>productmanager</code> und seine Pflege</td>
+        <td data-l="en">API token when sign-in is on; taken from <code>ATLAS_TOKEN</code> when omitted: <code>modeler</code>
+          for the application, <code>productmanager</code> and maintaining each catalogue for the shop</td></tr>
+      <tr><td><code>--application</code></td>
+        <td data-l="de">die Applikation: ihr Schlüssel, ihre ID oder ein Name, den nur sie trägt</td>
+        <td data-l="en">the application: its key, its id, or a name only it carries</td></tr>
+      <tr><td><code>--catalog</code></td>
+        <td data-l="de">ein Katalog, der mitkommt, mit seiner ID; mehrfach möglich</td>
+        <td data-l="en">a catalogue to come along, by its id; repeatable</td></tr>
+    </tbody>
+  </table>
+  <p data-l="de">Das Verzeichnis muss leer sein oder ein Paket enthalten, das ein früherer Export geschrieben hat. So
+    lässt sich ein Paket in Git führen: Ein erneuter Export ersetzt, was der frühere schrieb, entfernt, was die
+    Applikation nicht mehr hat, und lässt alles andere stehen – eine README etwa, und Fragen, deren Wortlaut du von
+    Hand verbessert hast. Was nicht mitreisen kann, nennt der Befehl samt seiner Folge auf dem Ziel: ein Formular
+    ausserhalb der Applikation, ein Prozess, den dieser Server nirgends bereitstellt, ein Produkt, dessen Heimatkatalog
+    fehlt. Ein Prozess, an den ein Produkt gebunden ist und der nicht in der Applikation liegt, reist in
+    <code>katalog.json</code> mit.</p>
+  <p data-l="en">The directory must be empty or hold a package an earlier export wrote. That is how a package is kept in
+    git: exporting again replaces what the earlier export wrote, removes what the application no longer has, and leaves
+    everything else – a README, say, and questions whose wording you improved by hand. What cannot travel is named
+    with what it will do on the target: a form outside the application, a process this server deploys nowhere, a
+    product whose home catalogue is missing. A process a product is bound to that is not in the application travels in
+    <code>katalog.json</code>.</p>
 </section>
 
 </main>

@@ -2177,6 +2177,19 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   id or by name, and every open answer is refused before the first write
   ([ADR-0437](docs/adr/0437-a-package-is-imported-from-the-command-line.md)).
   An `atlas.json` for the other examples is a follow-up.
+- ✅ **A package is written from a server.** `atlas export` writes the package `atlas import`
+  installs elsewhere: the application's source with the decision models the server keeps, its
+  constants as a suggestion, and the chosen catalogues, whose groups and people become questions
+  answered by name; exporting again updates the directory in place, for git
+  ([ADR-draft-application-package-export](docs/adr/draft-application-package-export.md)).
+- ✅ **Imports ask before they replace, and repeat without effect.** The source and catalogue
+  imports answer a plan (`?dryRun=true`) and replace a changed artifact only when
+  `?overwrite=`/`?keep=` decides it; `atlas import` asks per artifact at a terminal and stops in
+  a pipeline, and the Console asks with one box each. Unchanged artifacts are not written, and
+  nothing is published again that the import did not change
+  ([ADR-draft-application-package-export](docs/adr/draft-application-package-export.md)).
+  Information models, Playground scenarios and Panorama models do not travel yet, and the shop
+  handbook's browser installer does not use the plan.
 
 **The shop & ordering**
 - ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per
