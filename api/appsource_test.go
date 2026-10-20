@@ -23,14 +23,30 @@ import (
 
 // sourceImportResult mirrors the import response.
 type sourceImportResult struct {
-	ApplicationID string   `json:"applicationId"`
-	Key           string   `json:"key"`
-	Name          string   `json:"name"`
-	Created       bool     `json:"created"`
-	Processes     int      `json:"processes"`
-	Forms         int      `json:"forms"`
-	Decisions     int      `json:"decisions"`
-	Untracked     []string `json:"untracked"`
+	ApplicationID string `json:"applicationId"`
+	Key           string `json:"key"`
+	Name          string `json:"name"`
+	Created       bool   `json:"created"`
+	Processes     int    `json:"processes"`
+	Forms         int    `json:"forms"`
+	Decisions     int    `json:"decisions"`
+	Models        int    `json:"models"`
+	DryRun        bool   `json:"dryRun"`
+	Artifacts     []struct {
+		Ref     string `json:"ref"`
+		Status  string `json:"status"`
+		Outcome string `json:"outcome"`
+	} `json:"artifacts"`
+	Untracked []string `json:"untracked"`
+}
+
+// outcomes maps each artifact of an import result to its status and outcome.
+func (r sourceImportResult) outcomes() map[string]string {
+	out := map[string]string{}
+	for _, a := range r.Artifacts {
+		out[a.Ref] = a.Status + "/" + a.Outcome
+	}
+	return out
 }
 
 // saveDraftIn saves a BPMN draft into an application.
@@ -82,7 +98,14 @@ func exportSource(t *testing.T, ts *httptest.Server, appID string) []byte {
 // importSource uploads a source archive and decodes the result.
 func importSource(t *testing.T, ts *httptest.Server, archive []byte) (int, sourceImportResult, []byte) {
 	t.Helper()
-	code, body := doReqBytes(t, ts, http.MethodPost, "/api/v1/applications/source", archive, "application/gzip")
+	return importSourceWith(t, ts, archive, "")
+}
+
+// importSourceWith uploads a source archive with a query — the plan, and the
+// decisions — and decodes the result.
+func importSourceWith(t *testing.T, ts *httptest.Server, archive []byte, query string) (int, sourceImportResult, []byte) {
+	t.Helper()
+	code, body := doReqBytes(t, ts, http.MethodPost, "/api/v1/applications/source"+query, archive, "application/gzip")
 	var res sourceImportResult
 	if code == http.StatusOK {
 		if err := json.Unmarshal(body, &res); err != nil {
@@ -340,7 +363,16 @@ func TestApplicationSourceRenamesFromTheTree(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("rename status=%d body=%s", code, body)
 	}
-	code, res, body := importSource(t, origin, archive)
+	// The local name is work done here, so the tree does not replace it unasked.
+	code, _, body = importSource(t, origin, archive)
+	if code != http.StatusConflict || !strings.Contains(string(body), `"undecided":["application:onboarding"]`) {
+		t.Fatalf("an undecided rename: status=%d body=%s, want 409 naming the application", code, body)
+	}
+	code, res, body := importSourceWith(t, origin, archive, "?keep=application:onboarding")
+	if code != http.StatusOK || res.Name != "Umbenannt" {
+		t.Fatalf("keep: status=%d body=%s, want the local name kept", code, body)
+	}
+	code, res, body = importSourceWith(t, origin, archive, "?overwrite=application:onboarding")
 	if code != http.StatusOK {
 		t.Fatalf("import status=%d body=%s", code, body)
 	}

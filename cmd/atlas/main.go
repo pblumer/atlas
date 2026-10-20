@@ -103,6 +103,10 @@ func main() {
 		if err := runImport(args, os.Stdout); err != nil {
 			fatal("atlas import", err)
 		}
+	case "export":
+		if err := runExport(args, os.Stdout); err != nil {
+			fatal("atlas export", err)
+		}
 	case "check-job-types":
 		if err := runCheckJobTypes(args); err != nil {
 			fatal("atlas check-job-types", err)
@@ -170,6 +174,7 @@ Usage:
   atlas worker         [flags]      Work service-task jobs for a running atlas, out of process
   atlas reset-password [flags] USER Reset a local user's password from the shell
   atlas import         [flags] DIR  Install a package (an application, and its shop) into a running atlas
+  atlas export         [flags] DIR  Write a package from a running atlas, for atlas import elsewhere
   atlas import-mim     [flags] FILE Convert a MIM/FIM XOML workflow to BPMN 2.0
   atlas check-job-types [flags]     Check a data directory's job-type table for index collisions
   atlas mock-remedy    [flags]      Run a mock BMC Remedy AR System for the Remedy worker

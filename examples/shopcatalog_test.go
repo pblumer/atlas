@@ -423,10 +423,12 @@ func TestEveryPackageManifestNamesWhatItShips(t *testing.T) {
 
 // TestConfigFormsAnswerInText: the answers to a product's configuration form travel
 // with the order as text. POST /api/v1/orders takes them as a map of strings
-// (ADR-0358), and the shop sends what the form holds as it holds it — so a number
-// field, a checkbox or a multi-select sends a number, a boolean or a list, and the
-// order is refused with 400 before anybody approves anything. The form renders, the
-// basket fills, and only "bestellen" fails, which is the worst moment to find out.
+// (ADR-0358). This shop turns a number, a checkbox and a multi-select into text before
+// it sends them; the shop of 0.16.0 and earlier sent them as they were, and the order
+// was refused with 400 before anybody approved anything — the form renders, the
+// basket fills, and only "bestellen" fails. An example is installed into servers of
+// either kind, often from a downloaded package, so it asks in text itself and is
+// orderable on both.
 //
 // A count is a text field with a pattern, and a yes/no is a select or radio whose
 // values are strings; the process turns the answer into what it needs. An action's

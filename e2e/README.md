@@ -353,9 +353,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   export as one document, and none ticked asks for some rather than calling the server; a
   products file is posted with `?into=` the catalogue shown; a refused import lists every
   problem with its subject and names the processes deployed before the refusal; and the
-  catalogue list posts a whole file, with `publish` when asked. Drives the real
-  `viewCatalogDetail` and `viewCatalogs` through the editor harness, whose mock refuses an
-  import when a spec sets `window.__importRefusal`.
+  catalogue list posts a whole file, with `publish` when asked. Every import asks for the plan
+  first ([ADR-0467](../docs/adr/0467-application-package-export.md)):
+  with nothing to replace or keep it imports straight away; otherwise it shows one box per
+  product, in three groups — changed on both sides (unticked), newer in the file (ticked) and
+  changed here only (unticked) — and posts every changed one by name, behind and ahead only
+  where a box was moved; cancelling imports nothing. Drives the real `viewCatalogDetail` and
+  `viewCatalogs` (and `api/web/importchoices.js` through them) via the editor harness, whose mock
+  refuses an import when a spec sets `window.__importRefusal` and answers a dry run with
+  `window.__importPlan`.
 
 - **`catalog-commanded-by.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md) §10):
   **which process applications may command a product** in the catalogue editor. The
@@ -375,6 +381,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   asks first and sends a command id, one with a form opens it under the position, refuses
   to send it empty and sends its answers; and a product whose return only an operator gives
   is not offered for return. Loads the real `shop.html` with only the network replaced.
+
+- **`shop-config-answers.spec.mjs`** ([ADR-0358](../docs/adr/0358-order-line-configuration.md)):
+  the **answers an order carries**. An order form asks one question of each kind the form
+  editor offers — text, number, checkbox, one choice, several choices — and the order the
+  page sends carries every answer as text, saying what was entered (`"5"`, `"true"`, the
+  choices joined by a comma), because `POST /api/v1/orders` takes them as a map of strings
+  and refused the whole basket with 400 over a number. A correction of a held position
+  opens its form on the stored answers in each field's own kind — the number, the unticked
+  box, the earlier choices still chosen — and saves them as text again. Loads the real
+  `shop.html` and form runtime with only the network replaced.
 
 - **`worker-events-modeler.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
   the **Worker events in the message picker**. An element that waits for a message — a

@@ -682,8 +682,16 @@ func catalogTools() []Tool {
 				"catalogue carries its id, texts, rank, languages, items (the product ids it offers), " +
 				"groups (its audience), members and edges; each product carries the fields " +
 				"atlas_save_catalog_product takes, including its homeCatalog. IDs are the document's " +
-				"own and stable, so importing the same document again UPDATES what the first import " +
-				"created. Pass `into` to import a document of PRODUCTS ALONE into a catalogue you " +
+				"own and stable, so importing the same document again finds what the first import " +
+				"created and CHANGES NOTHING: what is as the document has it is not written, and a " +
+				"catalogue is released again only when the import changed it or a product it offers. " +
+				"Work done on the server is never replaced unasked: a catalogue, product or process " +
+				"that DIFFERS from the server's is written only when named in `overwrite` and left as " +
+				"it is when named in `keep` (refs catalog:<id>, product:<id>, process:<id>, or * for " +
+				"every one the other list does not name); one in neither stops the import with 409, " +
+				"`undecided` and the plan. Pass dryRun:true first to see the plan — every artifact " +
+				"with its status (new, unchanged, changed) — and ask the person which changes to take. " +
+				"Pass `into` to import a document of PRODUCTS ALONE into a catalogue you " +
 				"maintain: every product is offered there, one new to this server is homed there, one " +
 				"it already has keeps its home, and the document's edges are added to that catalogue. " +
 				"`processes` ({id, xml} each) are deployed BEFORE the catalogue is written and need the " +
@@ -692,8 +700,8 @@ func catalogTools() []Tool {
 				"otherwise: every id, every catalogue you must maintain and — with publish:true — every " +
 				"publish problem is checked before anything is written; a refusal writes nothing and " +
 				"lists every problem with its subject (catalog:<id>, product:<id>, process:<id>). " +
-				"Returns {created, updated, releases, deployed, unchanged}. A theme, a logo and " +
-				"pictures are not part of a document.",
+				"Returns {created, updated, releases, deployed, unchanged, artifacts}. A theme, a logo " +
+				"and pictures are not part of a document.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -708,6 +716,12 @@ func catalogTools() []Tool {
 					"publish": map[string]any{"type": "boolean",
 						"description": "Publish a release of every catalogue in the document once it is written"},
 					"into": stringProp("Import the document's products into this existing catalogue you maintain"),
+					"dryRun": map[string]any{"type": "boolean",
+						"description": "Answer the plan — every artifact with its status and outcome — and write nothing"},
+					"overwrite": map[string]any{"type": "array", "items": map[string]any{"type": "string"},
+						"description": "Refs of changed artifacts to replace with the document's (catalog:<id>, product:<id>, process:<id>, or *)"},
+					"keep": map[string]any{"type": "array", "items": map[string]any{"type": "string"},
+						"description": "Refs of changed artifacts to leave as the server has them (or *)"},
 				},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
@@ -718,9 +732,21 @@ func catalogTools() []Tool {
 				if err != nil {
 					return "", err
 				}
-				path := "/api/v1/catalogs/import"
+				q := url.Values{}
 				if into, _ := args["into"].(string); into != "" {
-					path += "?into=" + url.QueryEscape(into)
+					q.Set("into", into)
+				}
+				if args["dryRun"] == true {
+					q.Set("dryRun", "true")
+				}
+				for _, list := range []string{"overwrite", "keep"} {
+					if refs := stringList(args[list]); len(refs) > 0 {
+						q.Set(list, strings.Join(refs, ","))
+					}
+				}
+				path := "/api/v1/catalogs/import"
+				if len(q) > 0 {
+					path += "?" + q.Encode()
 				}
 				return asText(c.post(path, "application/json", body))
 			},
@@ -826,4 +852,17 @@ func markCatalogue(tools []Tool) []Tool {
 		tools[i].Catalogue = true
 	}
 	return tools
+}
+
+// stringList reads an array argument of strings, skipping anything that is not a
+// non-empty string.
+func stringList(v any) []string {
+	raw, _ := v.([]any)
+	var out []string
+	for _, e := range raw {
+		if s, ok := e.(string); ok && s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }

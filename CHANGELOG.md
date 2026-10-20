@@ -49,6 +49,25 @@ _Changed_ / _Removed_ for each version.
   operation with what it needs, what it answers, how an existing queue is reconciled, the
   error codes and what to do with each, and the BPMN attributes a model deployed over the
   API or MCP writes. The properties panel links to it beside the setup card.
+- **An application and its shop are written as a package.** `atlas export --application KEY
+  [--catalog ID]... DIR` writes the directory `atlas import` installs on another installation:
+  the application's processes, forms, decisions and the decision models this server keeps,
+  its constants (`konstanten.json`), and the catalogues with their products (`katalog.json`).
+  Every group and person the catalogues name becomes a question (`fragen.json`), answered in
+  `antworten.json` with the name it carries here, since ids differ per server and names do not.
+  A process a product is bound to and the application does not hold travels in `katalog.json`.
+  A form outside the application, a process deployed nowhere and a home catalogue left out are
+  named. Exporting again into the same directory updates it in place, keeping a README and
+  questions reworded by hand, so a package can be kept in git
+  ([ADR-0467](docs/adr/0467-application-package-export.md)).
+- **An application's own decision models travel with its source.** The source tree
+  (`GET /api/v1/applications/{id}/source`, *Download source…*) carries every decision model the
+  server keeps in its own model folder as `decisions/<handle>.dmn` (format version 2). An
+  application with decisions imported on another server used to point at handles that were not
+  there and refused to publish. The import compiles each model first, and refuses to replace a
+  model that a decision outside the application uses. A server whose models come from temis
+  keeps the references and names the models it did not write
+  ([ADR-0467](docs/adr/0467-application-package-export.md)).
 - **A shop for Microsoft 365 services, with governance built into the models.**
   `examples/m365-dienste/` is a package that offers what an IT department delivers through
   the Entra, Exchange and Teams Phone Worker Types: a licence with mailbox, Teams telephony,
@@ -99,6 +118,36 @@ _Changed_ / _Removed_ for each version.
   nothing is refused. A deployed model whose task names a setting now sets it on an existing
   queue — also one built from the Repository template before 1.2.0, which named
   `routingMethod="attendant"`; choose *Keep* there to leave the queue's routing alone.
+- **An import tells an update from an edit made here.** Every import remembers, per artifact,
+  the version it brought, and compares the next one with that as well as with the server. A
+  process, form, decision, model, catalogue, product or constant the server still holds as the
+  last import left it is updated when the package brings it newer (`behind`); one edited on the
+  server while the package brings it as before is kept (`ahead`); only what both sides moved, or
+  what no import has brought yet, is asked about. A decision to keep is remembered, so the same
+  package does not ask again. Constants are imported through the new
+  `POST /api/v1/applications/{id}/constants/import`, which sets a value only for an
+  administrator and names the rest under `notSet`. A hand-written file without a trailing
+  newline no longer reads as changed on every import
+  ([ADR-0467](docs/adr/0467-application-package-export.md), amended).
+- **An import asks before it replaces what changed on the server.** The source import, the
+  catalogue import, `atlas import` and the Console's imports compare every artifact with the
+  server's version — processes, forms, decisions and their models, constants, catalogues,
+  products, and the processes a document deploys — and class it new, unchanged or changed.
+  Unchanged is no longer written. Changed is replaced only when decided:
+  `?overwrite=`/`?keep=` on the routes (refs such as `process:ID` or `product:ID`, or `*`), one
+  question per artifact in `atlas import` at a terminal (Enter keeps the server's version), and
+  `--overwrite`/`--keep` in a pipeline, where an undecided change stops the run before the
+  first write. The Console shows one box per changed artifact, unticked meaning keep.
+  `?dryRun=true` and `atlas import --dry-run` show the plan alone. A script that relied on an
+  import replacing changed artifacts now gets 409, with the plan, until it passes
+  `overwrite=*` ([ADR-0467](docs/adr/0467-application-package-export.md)).
+- **A package installed again changes nothing.** `atlas import` publishes the application only
+  when the import changed it or it was never published there, rather than on every run. A
+  publishing catalogue import releases a catalogue only when it has no release yet or the
+  import changed it or a product it offers. Constants in the package are set where the target
+  holds none; a value it holds otherwise is decided like any other change. The run then
+  reports every constant the application reads that the target lacks
+  ([ADR-0467](docs/adr/0467-application-package-export.md)).
 - **The undeclared namespace members in the Variables panel collapse.** The Modeler's
   Variables panel lists, under the process's own variables, what the process could read
   from the `application` and `server` namespaces but does not declare yet. On an
@@ -114,6 +163,17 @@ _Changed_ / _Removed_ for each version.
   unfiltered list.
 
 ### Fixed
+
+- **A product whose order form asks for a number can be ordered.** The order takes each
+  answer as text (`POST /api/v1/orders`, config is a map of strings), and the shop sent
+  what the form held as it held it: a number field a number, a checkbox a boolean, a
+  multiple choice a list. The form rendered and checked out, and «order» failed with 400
+  «cannot unmarshal number into … placeReq.config of type string» for the whole basket.
+  The shop now sends every answer as text — `"5"`, `"true"`, the choices joined by a
+  comma — on ordering and on correcting a held position, and a correction opens its form
+  on the stored answers in each field's own kind, so an earlier multiple choice is still
+  chosen instead of dropped. `e2e/shop-config-answers.spec.mjs` orders and corrects through
+  the real shop page.
 
 - **A position ordered in a variant is started again.** A position's key joins the
   product and its variant with `#` (`lizenz#standard`), and the shop's fulfilment model and

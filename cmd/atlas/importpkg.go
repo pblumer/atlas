@@ -18,6 +18,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/importplan"
 )
 
 // `atlas import` installs a package into a running atlas from a terminal or a CI
@@ -26,15 +28,19 @@ import (
 //
 //	atlas.json           the source manifest (ADR-0134): key, name, and the files below
 //	*.bpmn, *.form.json  the processes and forms the manifest names
+//	*.dmn                the decision models it names, when the package carries them
 //	katalog.json         optional: the shop, as a catalogue document
 //	fragen.json          optional: what each {{placeholder}} in katalog.json asks for
+//	konstanten.json      optional: the application's constants, as a suggestion
 //
 // It takes the steps the installer takes, in its order: the application's source
 // goes in through the route a source export comes back through, the application is
 // published, and only then is the catalogue imported — its products are bound to
 // processes the publish deployed. Everything the command can check before the
 // first write it checks first, every answer included, so a package refused for a
-// missing answer leaves the server as it was.
+// missing answer leaves the server as it was. That includes the plan
+// (importplan.go): what differs from the server's is replaced only when the
+// operator decided so, and a package installed again changes nothing.
 
 // Package file names, beside the manifest.
 const (
@@ -56,6 +62,11 @@ type packageManifestFile struct {
 	Forms []struct {
 		Path string `json:"path"`
 	} `json:"forms"`
+	// Decisions name a path only when the package carries the decision's model, and
+	// several decisions of one model name the same file.
+	Decisions []struct {
+		Path string `json:"path"`
+	} `json:"decisions"`
 }
 
 // packageQuestion is one entry of fragen.json. Kind says where an answer must be
@@ -83,6 +94,8 @@ type importPackage struct {
 	archive   []byte
 	catalogue []byte
 	questions map[string]packageQuestion
+	// constants are konstanten.json's, nil when the package carries none.
+	constants []packageConstant
 }
 
 // answerFlags collects repeated --set name=value flags.
@@ -108,11 +121,20 @@ func runImport(args []string, out io.Writer) error {
 	set := answerFlags{}
 	fs.Var(set, "set", "answer one question, name=value; repeatable, and wins over --answers")
 	note := fs.String("note", "atlas import", "the note the application's release carries")
+	overwrite, keep := newRefFlag(), newRefFlag()
+	fs.Var(overwrite, "overwrite",
+		"replace artifacts that differ from the server's with the package's: refs such as process:ID, form:ID, model:HANDLE, constant:NAME or product:ID, comma-separated, or all; repeatable")
+	fs.Var(keep, "keep", "leave artifacts that differ from the server's as the server has them: refs, comma-separated, or all; repeatable")
+	dryRun := fs.Bool("dry-run", false, "show what the import would create, leave and change, and write nothing")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
 		return errors.New("name the package: atlas import [flags] DIR")
+	}
+	decide, err := decisions(overwrite, keep)
+	if err != nil {
+		return err
 	}
 
 	pkg, err := readImportPackage(fs.Arg(0))
@@ -152,42 +174,98 @@ func runImport(args []string, out io.Writer) error {
 		fmt.Fprintf(out, "note: %s has no %s, so its answers are not used\n", fs.Arg(0), packageCatalogue)
 	}
 
-	src, err := c.importSource(pkg.archive)
+	// The plan, before the first write: what is new, what is unchanged, and what
+	// differs from the server's and needs a decision.
+	plan, err := c.plan(pkg, document)
 	if err != nil {
 		return err
 	}
-	verb := "updated"
-	if src.Created {
-		verb = "created"
+	plan.decide(decide)
+	plan.show(out, *dryRun)
+	if *dryRun {
+		fmt.Fprintln(out, "dry run: nothing was written")
+		return nil
 	}
-	fmt.Fprintf(out, "application %q (%s) %s: %d processes, %d forms, %d decisions\n",
+	if err := plan.ask(out); err != nil {
+		return err
+	}
+	decided := plan.query()
+
+	src, err := c.importSource(pkg.archive, decided)
+	if err != nil {
+		return err
+	}
+	verb := "unchanged"
+	switch {
+	case src.Created:
+		verb = "created"
+	case sourceChanged(src):
+		verb = "updated"
+	}
+	fmt.Fprintf(out, "application %q (%s) %s: %d processes, %d forms, %d decisions",
 		src.Name, src.Key, verb, src.Processes, src.Forms, src.Decisions)
+	if src.Models > 0 {
+		fmt.Fprintf(out, ", %d decision models", src.Models)
+	}
+	fmt.Fprintln(out)
+	if k := kept(src.Artifacts); len(k) > 0 {
+		fmt.Fprintf(out, "  kept as the server has them: %s\n", strings.Join(k, ", "))
+	}
+	if len(src.ModelsSkipped) > 0 {
+		fmt.Fprintf(out, "  decision models not written, the server reads its models from temis: %s\n", strings.Join(src.ModelsSkipped, ", "))
+	}
 	if len(src.Untracked) > 0 {
 		fmt.Fprintf(out, "  left in place, not in the package: %s\n", strings.Join(src.Untracked, ", "))
 	}
 
-	pub, err := c.publish(src.ApplicationID, *note)
+	// Published only when the import changed the application, or it was never
+	// published here: a package installed every night is not a release every night.
+	latest, err := c.latestRelease(src.ApplicationID)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "published release %d: %d processes, %d decisions deployed\n",
-		pub.Release.Version, len(pub.Definitions), len(pub.Decisions))
-	for _, w := range pub.Warnings {
-		fmt.Fprintf(out, "  warning: %s\n", w)
+	if latest > 0 && !sourceChanged(src) {
+		fmt.Fprintf(out, "the application is unchanged, so it is not published again; release %d stays\n", latest)
+	} else {
+		pub, err := c.publish(src.ApplicationID, *note)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "published release %d: %d processes, %d decisions deployed\n",
+			pub.Release.Version, len(pub.Definitions), len(pub.Decisions))
+		for _, w := range pub.Warnings {
+			fmt.Fprintf(out, "  warning: %s\n", w)
+		}
+	}
+	if err := c.installConstants(out, src.ApplicationID, pkg.constants, decided); err != nil {
+		return err
 	}
 
-	if document == nil {
-		return nil
+	if document != nil {
+		if err := c.installShop(out, document, decided); err != nil {
+			return err
+		}
 	}
-	res, err := c.importCatalogue(document)
+	return c.reportConstants(out, src.ApplicationID)
+}
+
+// installShop imports the catalogue document with the decisions the plan settled.
+func (c *importClient) installShop(out io.Writer, document []byte, decided string) error {
+	res, err := c.importCatalogue(document, decided)
 	if err != nil {
 		return err
+	}
+	if len(res.Created)+len(res.Updated) == 0 {
+		fmt.Fprintln(out, "shop unchanged")
 	}
 	if len(res.Created) > 0 {
 		fmt.Fprintf(out, "shop created: %s\n", strings.Join(res.Created, ", "))
 	}
 	if len(res.Updated) > 0 {
 		fmt.Fprintf(out, "shop updated: %s\n", strings.Join(res.Updated, ", "))
+	}
+	if k := kept(res.Artifacts); len(k) > 0 {
+		fmt.Fprintf(out, "  kept as the server has them: %s\n", strings.Join(k, ", "))
 	}
 	fmt.Fprintf(out, "catalogues published: %d\n", len(res.Releases))
 	for _, w := range res.Warnings {
@@ -215,6 +293,11 @@ func readImportPackage(dir string) (importPackage, error) {
 	}
 	for _, f := range man.Forms {
 		paths = append(paths, f.Path)
+	}
+	for _, d := range man.Decisions {
+		if d.Path != "" && !slices.Contains(paths, d.Path) {
+			paths = append(paths, d.Path)
+		}
 	}
 	sort.Strings(paths)
 
@@ -245,6 +328,18 @@ func readImportPackage(dir string) (importPackage, error) {
 	} else if q != nil {
 		if err := json.Unmarshal(q, &pkg.questions); err != nil {
 			return importPackage{}, fmt.Errorf("%s: %w", filepath.Join(dir, packageQuestions), err)
+		}
+	}
+	if k, err := readOptional(filepath.Join(dir, packageConstants)); err != nil {
+		return importPackage{}, err
+	} else if k != nil {
+		var file constantsFile
+		if err := json.Unmarshal(k, &file); err != nil {
+			return importPackage{}, fmt.Errorf("%s: %w", filepath.Join(dir, packageConstants), err)
+		}
+		pkg.constants = file.Constants
+		if pkg.constants == nil {
+			pkg.constants = []packageConstant{}
 		}
 	}
 	return pkg, nil
@@ -422,14 +517,17 @@ type importClient struct {
 }
 
 type sourceImportBody struct {
-	ApplicationID string   `json:"applicationId"`
-	Key           string   `json:"key"`
-	Name          string   `json:"name"`
-	Created       bool     `json:"created"`
-	Processes     int      `json:"processes"`
-	Forms         int      `json:"forms"`
-	Decisions     int      `json:"decisions"`
-	Untracked     []string `json:"untracked"`
+	ApplicationID string                `json:"applicationId"`
+	Key           string                `json:"key"`
+	Name          string                `json:"name"`
+	Created       bool                  `json:"created"`
+	Processes     int                   `json:"processes"`
+	Forms         int                   `json:"forms"`
+	Decisions     int                   `json:"decisions"`
+	Models        int                   `json:"models"`
+	ModelsSkipped []string              `json:"modelsSkipped"`
+	Artifacts     []importplan.Artifact `json:"artifacts"`
+	Untracked     []string              `json:"untracked"`
 }
 
 type publishBody struct {
@@ -444,9 +542,10 @@ type publishBody struct {
 }
 
 type catalogueImportBody struct {
-	Created  []string          `json:"created"`
-	Updated  []string          `json:"updated"`
-	Releases []json.RawMessage `json:"releases"`
+	Created   []string              `json:"created"`
+	Updated   []string              `json:"updated"`
+	Artifacts []importplan.Artifact `json:"artifacts"`
+	Releases  []json.RawMessage     `json:"releases"`
 	// Warnings are what the published catalogues leave exposed: answers that reach a
 	// process in the clear. The import went through; they say what to change.
 	Warnings []struct {
@@ -473,12 +572,16 @@ func (c *importClient) directory() ([]directoryEntry, error) {
 	return dir, err
 }
 
-func (c *importClient) importSource(archive []byte) (sourceImportBody, error) {
+// importSource sends the application's source with a query: ?dryRun=true for the
+// plan, or the decisions.
+func (c *importClient) importSource(archive []byte, query string) (sourceImportBody, error) {
 	var res sourceImportBody
-	if err := c.send(http.MethodPost, "/api/v1/applications/source", "application/gzip", archive, &res); err != nil {
+	if err := c.send(http.MethodPost, "/api/v1/applications/source"+query, "application/gzip", archive, &res); err != nil {
 		return res, err
 	}
-	if res.ApplicationID == "" {
+	// A plan for an application the server has never seen names no id: none is
+	// taken until it is written.
+	if res.ApplicationID == "" && !(query == "?dryRun=true" && res.Created) {
 		return res, errors.New("the server imported the source without naming the application")
 	}
 	return res, nil
@@ -503,8 +606,10 @@ func (c *importClient) publish(id, note string) (publishBody, error) {
 	return res, nil
 }
 
-func (c *importClient) importCatalogue(doc []byte) (catalogueImportBody, error) {
+// importCatalogue sends the catalogue document with a query: ?dryRun=true for the
+// plan, or the decisions.
+func (c *importClient) importCatalogue(doc []byte, query string) (catalogueImportBody, error) {
 	var res catalogueImportBody
-	err := c.do(http.MethodPost, "/api/v1/catalogs/import", doc, &res)
+	err := c.do(http.MethodPost, "/api/v1/catalogs/import"+query, doc, &res)
 	return res, err
 }

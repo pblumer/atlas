@@ -107,14 +107,22 @@ func TestImportInstallsTheExampleShopAndAgain(t *testing.T) {
 		t.Fatalf("a placeholder was imported literally: %s", raw)
 	}
 
+	// Installed again, the package changes nothing: no second application, no
+	// release for an application nothing changed in, no catalogue written or
+	// released again (ADR-0467).
 	out.Reset()
 	if err := runImport(args, &out); err != nil {
 		t.Fatalf("second import: %v\n%s", err, out.String())
 	}
-	for _, want := range []string{") updated: 5 processes", "published release 2", "shop updated: catalog:cat-verwaltung-dienste"} {
+	for _, want := range []string{"plan: 0 new, 21 unchanged, 0 behind, 0 ahead, 0 changed", ") unchanged: 5 processes",
+		"the application is unchanged, so it is not published again; release 1 stays", "shop unchanged", "catalogues published: 0"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("second import output lacks %q:\n%s", want, out.String())
 		}
+	}
+	code, raw = apiCall(t, ts, http.MethodGet, "/api/v1/applications", "")
+	if code != http.StatusOK || strings.Count(string(raw), `"key":"beispiel-dienstleistungen-der-verwaltung"`) != 1 {
+		t.Fatalf("applications after two imports = %d %s, want the one", code, raw)
 	}
 }
 
@@ -282,6 +290,10 @@ func TestImportSaysWhatTheServerRefused(t *testing.T) {
 		answers["/api/v1/applications/app1/publish"] = ok(`{"deployed":true,"definitions":[{}],"warnings":["worker verzeichnis is not configured"],"release":{"version":4}}`)
 		answers["/api/v1/catalogs/import"] = ok(`{"created":[],"updated":["catalog:c"],"releases":[{}],
 		  "warnings":[{"subject":"product:park","problem":"the answers fahrzeug of form f reach p in the clear"}]}`)
+		answers["/api/v1/applications/app1/releases"] = ok(`[]`)
+		answers["/api/v1/applications/app1/constants"] = ok(`{"constants":[],"required":[
+		  {"name":"TENANT","type":"string","state":"missing"},{"name":"LIMIT","type":"number","state":"type-mismatch"},
+		  {"name":"LANG","type":"string","state":"fallback"}]}`)
 	}
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/applications/source" && r.Header.Get("Content-Type") != "application/gzip" {
@@ -337,7 +349,9 @@ func TestImportSaysWhatTheServerRefused(t *testing.T) {
 	}
 	for _, want := range []string{"left in place, not in the package: old-form", "published release 4: 1 processes",
 		"warning: worker verzeichnis is not configured", "shop updated: catalog:c", "catalogues published: 1",
-		"warning: product:park: the answers fahrzeug of form f reach p in the clear"} {
+		"warning: product:park: the answers fahrzeug of form f reach p in the clear",
+		"warning: the application reads constant TENANT (string), and this server holds no value for it",
+		"warning: the application reads constant LIMIT as number, and this server holds it with another type"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output lacks %q:\n%s", want, out.String())
 		}

@@ -7146,3 +7146,14 @@ button.im-problem:hover { background: var(--accent-soft); }
    where the separators fall, and a proportional font moves them. */
 .ds-option-sample { font-family: ui-monospace, monospace; font-size: 13px; color: var(--muted); }
 .ds-option input:checked ~ .ds-option-name { font-weight: 600; }
+
+/* The plan an import shows before it replaces anything
+   (ADR-0467): one box per artifact that differs. */
+.import-choices .import-changed { list-style: none; padding: 0; margin: 10px 0 0; max-height: 40vh; overflow: auto; }
+.import-choices .import-changed li { padding: 4px 0; }
+.import-choices .import-changed label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+.import-choices .import-bulk { display: flex; gap: 6px; }
+.import-choices .import-new { margin-top: 12px; }
+.import-choices .import-new ul { margin: 6px 0 0; max-height: 25vh; overflow: auto; }
+.import-choices .import-group { margin-top: 14px; }
+.import-choices .import-group h3 { font-size: 13px; margin: 0 0 2px; }

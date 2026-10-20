@@ -433,6 +433,7 @@ type Server struct {
 	connectors       *connectorStore           // durable sidecar for managed workers (ADR-0041)
 	callOverrides    *callOverrideStore        // durable sidecar for per-server call-activity target overrides (ADR-0105)
 	appConstants     *applicationConstantStore // durable sidecar for each application's constants on this installation (ADR-0453)
+	baselines        *importBaselineStore      // what the last import brought, per artifact: the base an import compares with (ADR-0467)
 	srvConstants     *serverConstantStore      // durable sidecar for the installation's constants for every application (ADR-0456)
 	repository       []repositoryPackage       // curated, bundled repository catalog, immutable after New (ADR-0081)
 	repositoryStore  *repositoryStore          // durable sidecar for installed repository templates (ADR-0081)
@@ -1509,6 +1510,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	baselines, err := newImportBaselineStore(filepath.Join(dataDir, "import-baselines"))
+	if err != nil {
+		return nil, err
+	}
 	srvConstants, err := newServerConstantStore(filepath.Join(dataDir, "server-constants"))
 	if err != nil {
 		return nil, err
@@ -1623,6 +1628,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		connectors:        connectors,
 		callOverrides:     callOverrides,
 		appConstants:      appConstants,
+		baselines:         baselines,
 		srvConstants:      srvConstants,
 		repository:        repositoryCatalog,
 		repositoryStore:   repositoryStore,
@@ -1944,6 +1950,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogs.Forms = processLookup{s: s}
 	s.catalogs.Models = processLookup{s: s}
 	s.catalogs.Deployer = catalogDeployer{s: s}
+	s.catalogs.Baselines = catalogBaselines{s: s}
 	s.catalogs.Personal = processLookup{s: s}
 	s.catalogs.Remainders = remainderLookup{s: s}
 	s.orders.Limits = s.budgets()

@@ -825,8 +825,9 @@ var mcpOmittedRoutes = map[string]string{
 	// Per-installation operator config in the category ADR-0105 kept read-only on MCP — an
 	// agent reads them with atlas_application_constants and atlas_server_constants to
 	// explain a refused start, and an administrator sets them.
-	"PUT /api/v1/applications/{id}/constants": "setting an application's per-installation constants is an administrator's decision, not an agent action; an agent reads them via atlas_application_constants",
-	"PUT /api/v1/server/constants":            "setting the installation's constants is an administrator's decision, not an agent action; an agent reads them via atlas_server_constants",
+	"PUT /api/v1/applications/{id}/constants":         "setting an application's per-installation constants is an administrator's decision, not an agent action; an agent reads them via atlas_application_constants",
+	"POST /api/v1/applications/{id}/constants/import": "the constants half of atlas import: it sets per-installation values when an administrator runs it, which is that administrator's decision, not an agent action; an agent reads the constants via atlas_application_constants",
+	"PUT /api/v1/server/constants":                    "setting the installation's constants is an administrator's decision, not an agent action; an agent reads them via atlas_server_constants",
 
 	// Source-tree export/import (ADR-0134): a gzip-tar file transfer of an
 	// application's whole working set, in the same category as backup/restore. An
