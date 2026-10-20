@@ -1,0 +1,25 @@
+{
+  "type": "default",
+  "id": "m365-rufnummer-person",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Rufnummer zuweisen · Assign a phone number**\n\nSet-CsPhoneNumberAssignment für die Person, dann hier die Nummer festhalten. · Set-CsPhoneNumberAssignment for the person, then record the number here."
+    },
+    {
+      "key": "upn",
+      "type": "textfield",
+      "label": "Person (UPN)",
+      "disabled": true
+    },
+    {
+      "key": "rufnummer",
+      "type": "textfield",
+      "label": "Rufnummer (E.164) · Phone number (E.164)",
+      "validate": {
+        "required": true,
+        "pattern": "^\\+[0-9]{8,15}$"
+      }
+    }
+  ]
+}
