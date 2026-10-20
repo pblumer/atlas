@@ -390,3 +390,39 @@ func TestTheTwoHeadingsSurviveAnAgentsReadModifyWrite(t *testing.T) {
 		t.Errorf("the category did not survive: %q", after)
 	}
 }
+
+// TestImportingACatalogueAsksBeforeItReplaces: the tool forwards the plan and the
+// decisions, so an agent can show a person what differs and import only what they
+// chose (ADR-draft-application-package-export).
+func TestImportingACatalogueAsksBeforeItReplaces(t *testing.T) {
+	ts := newAtlas(t)
+	doc := func(name string) map[string]any {
+		return map[string]any{
+			"catalogs": []any{map[string]any{"id": "cat-mcp", "texts": map[string]any{"de": "MCP"}, "rank": 7,
+				"languages": []any{"de"}, "items": []any{"p-mcp"}}},
+			"products": []any{map[string]any{"id": "p-mcp", "homeCatalog": "cat-mcp", "state": "active",
+				"texts": map[string]any{"de": name}, "approval": map[string]any{"kind": "none"}}},
+		}
+	}
+	if text, isErr := callText(t, ts, "atlas_import_catalog", doc("Eins")); isErr {
+		t.Fatalf("first import = %q", text)
+	}
+	changed := doc("Zwei")
+	if text, isErr := callText(t, ts, "atlas_import_catalog", changed); !isErr || !strings.Contains(text, "product:p-mcp") {
+		t.Fatalf("an undecided change = (%q, isErr=%v), want a refusal naming the product", text, isErr)
+	}
+	changed["dryRun"] = true
+	if text, isErr := callText(t, ts, "atlas_import_catalog", changed); isErr || !strings.Contains(text, `"status":"changed"`) {
+		t.Fatalf("the plan = (%q, isErr=%v)", text, isErr)
+	}
+	delete(changed, "dryRun")
+	changed["overwrite"] = []any{"product:p-mcp"}
+	if text, isErr := callText(t, ts, "atlas_import_catalog", changed); isErr || !strings.Contains(text, `"updated":["product:p-mcp"]`) {
+		t.Fatalf("overwriting the product = (%q, isErr=%v)", text, isErr)
+	}
+	changed = doc("Drei")
+	changed["keep"] = []any{"*"}
+	if text, isErr := callText(t, ts, "atlas_import_catalog", changed); isErr || !strings.Contains(text, `"outcome":"kept"`) {
+		t.Fatalf("keeping everything = (%q, isErr=%v)", text, isErr)
+	}
+}

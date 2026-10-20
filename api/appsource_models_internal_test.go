@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pblumer/atlas/api/importplan"
 	"github.com/pblumer/atlas/dmn"
 )
 
@@ -229,7 +230,7 @@ func modelTree(content string) (sourceManifest, map[string][]byte) {
 func TestApplySourceTreeWritesDecisionModels(t *testing.T) {
 	s, dir := modelStoresFor(t)
 	man, byPath := modelTree(sourceModelXML)
-	res, err := s.applySourceTree(man, byPath, "", allow, importDecisions{})
+	res, err := s.applySourceTree(man, byPath, "", allow, importplan.Decisions{})
 	if err != nil {
 		t.Fatalf("applySourceTree: %v", err)
 	}
@@ -246,7 +247,7 @@ func TestApplySourceTreeWritesDecisionModels(t *testing.T) {
 	if err := s.dmnrefs.Save(dmnRef{ID: "theirs", Name: "Fremd", ModelRef: "freigabe", ProjectID: "other"}); err != nil {
 		t.Fatalf("save ref: %v", err)
 	}
-	if res, err = s.applySourceTree(man, byPath, "", allow, importDecisions{}); err != nil {
+	if res, err = s.applySourceTree(man, byPath, "", allow, importplan.Decisions{}); err != nil {
 		t.Fatalf("second applySourceTree: %v", err)
 	}
 	if res.Models != 1 {
@@ -270,7 +271,7 @@ func TestApplySourceTreeRefusesAModelOthersUse(t *testing.T) {
 				t.Fatalf("save ref: %v", err)
 			}
 			man, byPath := modelTree(sourceModelXML)
-			_, err := s.applySourceTree(man, byPath, "", allow, importDecisions{OverwriteAll: true})
+			_, err := s.applySourceTree(man, byPath, "", allow, importplan.Decisions{OverwriteAll: true})
 			var refusal sourceRefusal
 			if !errors.As(err, &refusal) || refusal.status != http.StatusConflict ||
 				!strings.Contains(refusal.msg, `decision model "freigabe"`) {
@@ -299,7 +300,7 @@ func TestApplySourceTreeOverwritesItsOwnModel(t *testing.T) {
 	}
 	writeModelFile(t, dir, "freigabe.dmn", "<old/>")
 	man, byPath := modelTree(sourceModelXML)
-	if _, err := s.applySourceTree(man, byPath, "", allow, importDecisions{Overwrite: map[string]bool{"model:freigabe": true}}); err != nil {
+	if _, err := s.applySourceTree(man, byPath, "", allow, importplan.Decisions{Overwrite: map[string]bool{"model:freigabe": true}}); err != nil {
 		t.Fatalf("applySourceTree: %v", err)
 	}
 	if data, _ := os.ReadFile(filepath.Join(dir, "freigabe.dmn")); string(data) != sourceModelXML {
@@ -314,7 +315,7 @@ func TestApplySourceTreeLeavesRemoteModelsAlone(t *testing.T) {
 	s := storesFor(t)
 	s.dmnResolver = dmn.ServiceResolver{BaseURL: "http://127.0.0.1:1"}
 	man, byPath := modelTree(sourceModelXML)
-	res, err := s.applySourceTree(man, byPath, "", allow, importDecisions{})
+	res, err := s.applySourceTree(man, byPath, "", allow, importplan.Decisions{})
 	if err != nil {
 		t.Fatalf("applySourceTree: %v", err)
 	}
@@ -339,7 +340,7 @@ func TestApplySourceTreeReportsModelFolderFailures(t *testing.T) {
 				t.Fatalf("mkdir: %v", err)
 			}
 			man, byPath := modelTree(sourceModelXML)
-			_, err := s.applySourceTree(man, byPath, "", allow, importDecisions{})
+			_, err := s.applySourceTree(man, byPath, "", allow, importplan.Decisions{})
 			var refusal sourceRefusal
 			if err == nil || errors.As(err, &refusal) {
 				t.Fatalf("err = %v, want a plain failure", err)

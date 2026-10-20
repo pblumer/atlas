@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/importplan"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -164,7 +165,7 @@ func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Re
 	r.Body = http.MaxBytesReader(w, r.Body, s.budgets().AppBundle)
 	defer r.Body.Close()
 
-	decide, err := parseImportDecisions(r.URL.Query())
+	decide, err := importplan.Parse(r.URL.Query())
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return

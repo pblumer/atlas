@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"path"
 	"sort"
 	"strconv"
@@ -15,6 +14,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/pblumer/atlas/api/importplan"
 	"github.com/pblumer/atlas/dmn"
 )
 
@@ -531,105 +531,15 @@ type sourceImportResult struct {
 	// are in; whether temis has the models is temis's to answer.
 	ModelsSkipped []string `json:"modelsSkipped,omitempty"`
 	// Artifacts is every artifact of the tree, the application itself first, with
-	// how it compares to this server's and what the import did with it.
-	Artifacts []sourceArtifact `json:"artifacts"`
+	// how it compares to this server's and what the import did with it. A ref is
+	// application:<key>, process:<id>, form:<id>, decision:<id> or model:<handle>.
+	Artifacts []importplan.Artifact `json:"artifacts"`
 	// Untracked names local artifacts that stayed behind because the tree does not
 	// mention them. An import never deletes: a tree is not proof that an artifact
 	// was removed on purpose (it may simply have been written by an older server),
 	// and silently dropping a diagram is not a mistake anyone can undo. Naming them
 	// leaves the decision with the operator.
 	Untracked []string `json:"untracked"`
-}
-
-// sourceArtifact is one artifact of a tree as an import sees it. Ref names it as
-// the request's overwrite and keep lists do: application:<key>, process:<id>,
-// form:<id>, decision:<id> or model:<handle>.
-type sourceArtifact struct {
-	Ref  string `json:"ref"`
-	Name string `json:"name,omitempty"`
-	// Status compares the tree's artifact with this server's: new, unchanged or
-	// changed.
-	Status string `json:"status"`
-	// Outcome is what the import did with it, or would do: created, updated,
-	// unchanged or kept — or undecided, for a changed artifact the request names
-	// under neither overwrite nor keep.
-	Outcome string `json:"outcome"`
-}
-
-// How an artifact of a tree compares with this server's, and what became of it.
-const (
-	artifactNew       = "new"
-	artifactUnchanged = "unchanged"
-	artifactChanged   = "changed"
-
-	outcomeCreated   = "created"
-	outcomeUpdated   = "updated"
-	outcomeUnchanged = "unchanged"
-	outcomeKept      = "kept"
-	outcomeUndecided = "undecided"
-)
-
-// importDecisions is what the caller decided for the artifacts a tree would
-// change. An artifact that differs from this server's is written only when the
-// caller said so, and kept only when the caller said so; one the caller did not
-// decide stops the import, because work done on this server must not be
-// replaced by an import nobody looked at.
-type importDecisions struct {
-	DryRun                bool
-	Overwrite, Keep       map[string]bool
-	OverwriteAll, KeepAll bool
-}
-
-// parseImportDecisions reads ?dryRun=, ?overwrite= and ?keep=. Each list is refs
-// separated by commas, the parameter may repeat, and * stands for every changed
-// artifact the other list does not name. A ref in both lists is a contradiction,
-// and refused.
-func parseImportDecisions(q url.Values) (importDecisions, error) {
-	d := importDecisions{Overwrite: map[string]bool{}, Keep: map[string]bool{}}
-	d.DryRun = q.Get("dryRun") == "true" || q.Get("dryRun") == "1"
-	read := func(param string, refs map[string]bool, all *bool) {
-		for _, v := range q[param] {
-			for _, ref := range strings.Split(v, ",") {
-				switch ref = strings.TrimSpace(ref); ref {
-				case "":
-				case "*":
-					*all = true
-				default:
-					refs[ref] = true
-				}
-			}
-		}
-	}
-	read("overwrite", d.Overwrite, &d.OverwriteAll)
-	read("keep", d.Keep, &d.KeepAll)
-	if d.OverwriteAll && d.KeepAll {
-		return d, errors.New("overwrite=* and keep=* contradict each other")
-	}
-	for ref := range d.Overwrite {
-		if d.Keep[ref] {
-			return d, fmt.Errorf("%s is named under both overwrite and keep", ref)
-		}
-	}
-	return d, nil
-}
-
-// outcome is what becomes of an artifact of a status under these decisions.
-func (d importDecisions) outcome(ref, status string) string {
-	switch {
-	case status == artifactNew:
-		return outcomeCreated
-	case status == artifactUnchanged:
-		return outcomeUnchanged
-	case d.Overwrite[ref]:
-		return outcomeUpdated
-	case d.Keep[ref]:
-		return outcomeKept
-	case d.OverwriteAll:
-		return outcomeUpdated
-	case d.KeepAll:
-		return outcomeKept
-	}
-	return outcomeUndecided
 }
 
 // sourceRefusal is an import the server declines on the caller's behalf rather
@@ -689,7 +599,7 @@ func (e sourceUndecided) Error() string {
 // a concurrent request then changed is the gap a two-step version would leave.
 //
 // Runs on the run loop.
-func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, ownerID string, authorize func(project) (int, string), decide importDecisions) (sourceImportResult, error) {
+func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, ownerID string, authorize func(project) (int, string), decide importplan.Decisions) (sourceImportResult, error) {
 	all, err := s.projects.LoadAll()
 	if err != nil {
 		return sourceImportResult{}, err
@@ -703,7 +613,7 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 		}
 	}
 	now := time.Now().Unix()
-	res := sourceImportResult{Key: man.Key, DryRun: decide.DryRun, Artifacts: []sourceArtifact{}, Untracked: []string{}}
+	res := sourceImportResult{Key: man.Key, DryRun: decide.DryRun, Artifacts: []importplan.Artifact{}, Untracked: []string{}}
 	if !found {
 		id, err := newID()
 		if err != nil {
@@ -771,46 +681,43 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 	writes := map[string]bool{}
 	var undecided []string
 	note := func(ref, name, status string, regroup bool) {
-		outcome := decide.outcome(ref, status)
+		outcome := decide.Outcome(ref, status)
 		// An ungrouped artifact the tree names joins the application even when its
 		// content is already the tree's: that moves nobody's work, it files it.
-		if outcome == outcomeUnchanged && regroup {
+		if importplan.Writes(outcome) || outcome == importplan.Unchanged && regroup {
 			writes[ref] = true
 		}
-		switch outcome {
-		case outcomeCreated, outcomeUpdated:
-			writes[ref] = true
-		case outcomeUndecided:
+		if outcome == importplan.Undecided {
 			undecided = append(undecided, ref)
 		}
-		res.Artifacts = append(res.Artifacts, sourceArtifact{Ref: ref, Name: name, Status: status, Outcome: outcome})
+		res.Artifacts = append(res.Artifacts, importplan.Artifact{Ref: ref, Name: name, Status: status, Outcome: outcome})
 	}
-	appStatus := artifactNew
+	appStatus := importplan.New
 	if found {
-		appStatus = compared(app.Name == man.Name)
+		appStatus = importplan.Compare(app.Name == man.Name)
 	}
 	note("application:"+man.Key, man.Name, appStatus, false)
 	for _, p := range man.Processes {
 		d, ok := draftOwner[p.ID]
-		status := artifactNew
+		status := importplan.New
 		if ok {
-			status = compared(d.Name == p.Name && bytes.Equal(newlineTerminated([]byte(d.XML)), byPath[p.Path]))
+			status = importplan.Compare(d.Name == p.Name && bytes.Equal(newlineTerminated([]byte(d.XML)), byPath[p.Path]))
 		}
 		note("process:"+p.ID, p.Name, status, ok && d.ProjectID == "")
 	}
 	for _, f := range man.Forms {
 		rec, ok := formOwner[f.ID]
-		status := artifactNew
+		status := importplan.New
 		if ok {
-			status = compared(rec.Name == f.Name && bytes.Equal(newlineTerminated([]byte(rec.Schema)), byPath[f.Path]))
+			status = importplan.Compare(rec.Name == f.Name && bytes.Equal(newlineTerminated([]byte(rec.Schema)), byPath[f.Path]))
 		}
 		note("form:"+f.ID, f.Name, status, ok && rec.ProjectID == "")
 	}
 	for _, d := range man.Decisions {
 		rec, ok := refOwner[d.ID]
-		status := artifactNew
+		status := importplan.New
 		if ok {
-			status = compared(rec.Name == d.Name && rec.ModelRef == d.ModelRef)
+			status = importplan.Compare(rec.Name == d.Name && rec.ModelRef == d.ModelRef)
 		}
 		note("decision:"+d.ID, d.Name, status, ok && rec.ProjectID == "")
 	}
@@ -821,7 +728,7 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 	res.ModelsSkipped = models.skipped
 	for _, m := range models.models {
 		note("model:"+m.handle, m.handle, m.status, false)
-		if outcome := res.Artifacts[len(res.Artifacts)-1].Outcome; outcome != outcomeKept && outcome != outcomeUndecided {
+		if outcome := res.Artifacts[len(res.Artifacts)-1].Outcome; outcome != importplan.Kept && outcome != importplan.Undecided {
 			res.Models++
 		}
 	}
@@ -848,7 +755,7 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 		inTree[d.ID] = true
 	}
 	for _, m := range models.models {
-		if m.status != artifactChanged || !writes["model:"+m.handle] {
+		if m.status != importplan.Changed || !writes["model:"+m.handle] {
 			continue
 		}
 		for _, rec := range refs {
@@ -930,15 +837,6 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 	return res, nil
 }
 
-// compared is the status of an artifact this server has: unchanged when it is as
-// the tree has it, changed otherwise.
-func compared(same bool) string {
-	if same {
-		return artifactUnchanged
-	}
-	return artifactChanged
-}
-
 // untrackedArtifacts names what is filed in the application here and not in the
 // tree, sorted.
 func untrackedArtifacts(appID string, man sourceManifest, drafts []draft, forms []form, refs []dmnRef) []string {
@@ -1015,14 +913,14 @@ func (s *Server) planSourceModels(man sourceManifest, byPath map[string][]byte) 
 	}
 	plan.dir = dir
 	for _, h := range handles {
-		m := sourceModel{handle: h, data: byPath[pathOf[h]], status: artifactNew}
+		m := sourceModel{handle: h, data: byPath[pathOf[h]], status: importplan.New}
 		existing, err := s.dmnResolver.Resolve(context.Background(), h)
 		switch {
 		case errors.Is(err, dmn.ErrNotFound):
 		case err != nil:
 			return sourceModelPlan{}, err
 		default:
-			m.status = compared(bytes.Equal(existing, m.data))
+			m.status = importplan.Compare(bytes.Equal(existing, m.data))
 		}
 		plan.models = append(plan.models, m)
 	}
