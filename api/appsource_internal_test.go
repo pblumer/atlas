@@ -27,6 +27,7 @@ func TestBuildSourceTreeLayout(t *testing.T) {
 		[]draft{{ProcessID: "onboarding", Name: "Onboarding", XML: "<definitions/>"}},
 		[]form{{ID: "neuer-mitarbeiter", Name: "Neuer Mitarbeiter", Schema: `{"components":[]}`}},
 		[]dmnRef{{ID: "d1", Name: "Freigabestufe", ModelRef: "temis://m/1"}},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("buildSourceTree: %v", err)
@@ -52,14 +53,16 @@ func TestBuildSourceTreeLayout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseSourceTree: %v", err)
 	}
-	if man.FormatVersion != sourceFormatVersion || man.Key != "mitarbeiter-onboarding" || man.Name != "Mitarbeiter Onboarding" {
+	// A tree that carries no decision model is written in the version every reader
+	// reads, so a server that knows only references still takes it whole.
+	if man.FormatVersion != sourceFormatVersionReferencesOnly || man.Key != "mitarbeiter-onboarding" || man.Name != "Mitarbeiter Onboarding" {
 		t.Errorf("manifest header = %+v", man)
 	}
 	if len(man.Processes) != 1 || man.Processes[0].ID != "onboarding" {
 		t.Errorf("manifest processes = %+v", man.Processes)
 	}
-	// A DMN reference is a name plus a temis handle, so it lives entirely in the
-	// manifest: Atlas never owns the model and must not write a .dmn file for it.
+	// A DMN reference to a model this server does not keep is a name plus a temis
+	// handle, so it lives entirely in the manifest: no .dmn file is written for it.
 	if len(man.Decisions) != 1 || man.Decisions[0].ModelRef != "temis://m/1" {
 		t.Errorf("manifest decisions = %+v", man.Decisions)
 	}
@@ -90,13 +93,13 @@ func TestBuildSourceTreeIsDeterministic(t *testing.T) {
 	forms := []form{{ID: "f2", Name: "Zwei", Schema: "{}"}, {ID: "f1", Name: "Eins", Schema: "{}"}}
 	refs := []dmnRef{{ID: "r2", Name: "B", ModelRef: "m2"}, {ID: "r1", Name: "A", ModelRef: "m1"}}
 
-	first, err := buildSourceTree(app, drafts, forms, refs)
+	first, err := buildSourceTree(app, drafts, forms, refs, nil)
 	if err != nil {
 		t.Fatalf("buildSourceTree: %v", err)
 	}
 	// Reversed input, identical output.
 	second, err := buildSourceTree(app,
-		[]draft{drafts[1], drafts[0]}, []form{forms[1], forms[0]}, []dmnRef{refs[1], refs[0]})
+		[]draft{drafts[1], drafts[0]}, []form{forms[1], forms[0]}, []dmnRef{refs[1], refs[0]}, nil)
 	if err != nil {
 		t.Fatalf("buildSourceTree (reversed): %v", err)
 	}
@@ -114,7 +117,7 @@ func TestBuildSourceTreeIsDeterministic(t *testing.T) {
 // tree without one would be unimportable. Refuse to write it rather than emit a
 // manifest nobody can read back.
 func TestBuildSourceTreeNeedsKey(t *testing.T) {
-	_, err := buildSourceTree(project{ID: "a", Name: "No Key"}, nil, nil, nil)
+	_, err := buildSourceTree(project{ID: "a", Name: "No Key"}, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "portable key") {
 		t.Fatalf("err = %v, want a missing-key error", err)
 	}
@@ -127,7 +130,7 @@ func TestSourcePathsDisambiguate(t *testing.T) {
 	files, err := buildSourceTree(app,
 		[]draft{{ProcessID: "p1", Name: "Antrag"}, {ProcessID: "p2", Name: "Antrag"}},
 		[]form{{ID: "f1", Name: "Antrag", Schema: "{}"}, {ID: "f2", Name: "Antrag", Schema: "{}"}},
-		nil)
+		nil, nil)
 	if err != nil {
 		t.Fatalf("buildSourceTree: %v", err)
 	}
@@ -183,7 +186,7 @@ func TestParseSourceTreeRefusals(t *testing.T) {
 			project{ID: "a", Name: "App", Key: "app"},
 			[]draft{{ProcessID: "p1", Name: "P", XML: "<x/>"}},
 			[]form{{ID: "f1", Name: "F", Schema: "{}"}},
-			nil)
+			nil, nil)
 		if err != nil {
 			t.Fatalf("buildSourceTree: %v", err)
 		}
@@ -262,7 +265,7 @@ func TestCleanSourcePath(t *testing.T) {
 // key, and after nothing in particular when the tree has no readable manifest —
 // a download must still have a filename.
 func TestSourceArchiveNameFallsBack(t *testing.T) {
-	files, err := buildSourceTree(project{ID: "a", Name: "Onboarding", Key: "onboarding"}, nil, nil, nil)
+	files, err := buildSourceTree(project{ID: "a", Name: "Onboarding", Key: "onboarding"}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("buildSourceTree: %v", err)
 	}

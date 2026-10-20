@@ -30,6 +30,7 @@ type sourceImportResult struct {
 	Processes     int      `json:"processes"`
 	Forms         int      `json:"forms"`
 	Decisions     int      `json:"decisions"`
+	Models        int      `json:"models"`
 	Untracked     []string `json:"untracked"`
 }
 

@@ -26,6 +26,7 @@ import (
 //
 //	atlas.json           the source manifest (ADR-0134): key, name, and the files below
 //	*.bpmn, *.form.json  the processes and forms the manifest names
+//	*.dmn                the decision models it names, when the package carries them
 //	katalog.json         optional: the shop, as a catalogue document
 //	fragen.json          optional: what each {{placeholder}} in katalog.json asks for
 //
@@ -56,6 +57,11 @@ type packageManifestFile struct {
 	Forms []struct {
 		Path string `json:"path"`
 	} `json:"forms"`
+	// Decisions name a path only when the package carries the decision's model, and
+	// several decisions of one model name the same file.
+	Decisions []struct {
+		Path string `json:"path"`
+	} `json:"decisions"`
 }
 
 // packageQuestion is one entry of fragen.json. Kind says where an answer must be
@@ -160,8 +166,15 @@ func runImport(args []string, out io.Writer) error {
 	if src.Created {
 		verb = "created"
 	}
-	fmt.Fprintf(out, "application %q (%s) %s: %d processes, %d forms, %d decisions\n",
+	fmt.Fprintf(out, "application %q (%s) %s: %d processes, %d forms, %d decisions",
 		src.Name, src.Key, verb, src.Processes, src.Forms, src.Decisions)
+	if src.Models > 0 {
+		fmt.Fprintf(out, ", %d decision models", src.Models)
+	}
+	fmt.Fprintln(out)
+	if len(src.ModelsSkipped) > 0 {
+		fmt.Fprintf(out, "  decision models not written, the server reads its models from temis: %s\n", strings.Join(src.ModelsSkipped, ", "))
+	}
 	if len(src.Untracked) > 0 {
 		fmt.Fprintf(out, "  left in place, not in the package: %s\n", strings.Join(src.Untracked, ", "))
 	}
@@ -215,6 +228,11 @@ func readImportPackage(dir string) (importPackage, error) {
 	}
 	for _, f := range man.Forms {
 		paths = append(paths, f.Path)
+	}
+	for _, d := range man.Decisions {
+		if d.Path != "" && !slices.Contains(paths, d.Path) {
+			paths = append(paths, d.Path)
+		}
 	}
 	sort.Strings(paths)
 
@@ -429,6 +447,8 @@ type sourceImportBody struct {
 	Processes     int      `json:"processes"`
 	Forms         int      `json:"forms"`
 	Decisions     int      `json:"decisions"`
+	Models        int      `json:"models"`
+	ModelsSkipped []string `json:"modelsSkipped"`
 	Untracked     []string `json:"untracked"`
 }
 

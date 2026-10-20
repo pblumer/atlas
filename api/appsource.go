@@ -1,7 +1,10 @@
 package api
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path"
@@ -10,6 +13,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/pblumer/atlas/dmn"
 )
 
 // The curated source layout (ADR-0134 Phase 4): an application's *source* —
@@ -20,6 +25,7 @@ import (
 //	atlas.json                                # manifest: key, name, format version, index
 //	processes/mitarbeiter-onboarding.bpmn     # the draft's XML, verbatim
 //	forms/neuer-mitarbeiter.form.json         # the form-js schema, verbatim
+//	decisions/freigabe.dmn                    # a model this server keeps, verbatim
 //
 // Two things are worth stating because they refine the illustrative tree in
 // ADR-0134:
@@ -29,11 +35,16 @@ import (
 //     native content, so a `.bpmn` opens in any modeler and a `.form.json` opens
 //     in any form editor — neither carries an Atlas-specific wrapper, and neither
 //     has to be parsed to learn which artifact it is.
-//   - **DMN references have no file.** Atlas stores a reference to a model
-//     authored in temis, never the model itself (ADR-0014/0034), so there is no
-//     `.dmn` content to write; a reference is a name plus a handle, which is
-//     manifest data. Emitting a `decisions/*.dmn` would mean copying a
-//     temis-owned model into the repository and pretending Atlas owns it.
+//   - **A DMN reference is manifest data; its model is a file only when Atlas
+//     keeps it.** A reference is a name plus a model handle. Where the handle
+//     resolves against a remote temis service the model is temis's
+//     (ADR-0014/0034), and copying it into the tree would pretend Atlas owns it.
+//     Where it resolves against this server's own model folder — the
+//     zero-config default, written by the decision editor and the model upload
+//     (ADR-0319) — Atlas is the only place the model lives, and a tree without it
+//     installs elsewhere as a decision whose model is not there. Such a model
+//     travels as `decisions/<handle>.dmn`, once however many of its decisions the
+//     application references (ADR-draft-application-package-export).
 //
 // Deployments and releases deliberately do not travel: they are records of what
 // happened on one server, not source an author edits (ADR-0134).
@@ -41,11 +52,21 @@ import (
 // This is design-time state throughout. Nothing here enters the event log, and
 // none of it affects recovery (ADR-0002).
 
-// sourceFormatVersion is the layout's format version, carried in every manifest.
-// A second serialization can drift from the records it mirrors; the version is
-// what lets a later reader say so out loud instead of silently misreading a tree
-// written by an older server (ADR-0134).
-const sourceFormatVersion = 1
+// The layout's format version, carried in every manifest. A second serialization
+// can drift from the records it mirrors; the version is what lets a later reader
+// say so out loud instead of silently misreading a tree written by an older server
+// (ADR-0134).
+const (
+	// sourceFormatVersion is the newest version this server writes and reads.
+	// Version 2 carries the decision models this server keeps as files.
+	sourceFormatVersion = 2
+	// sourceFormatVersionReferencesOnly is version 1, in which decisions are
+	// references alone. A tree that carries no model is still written in it: a
+	// server that reads only version 1 reads such a tree whole, and would read a
+	// version-2 tree by ignoring its models, which is the silent misreading the
+	// version exists to prevent.
+	sourceFormatVersionReferencesOnly = 1
+)
 
 // sourceManifest is atlas.json: what the application is, and what is in the tree.
 type sourceManifest struct {
@@ -75,12 +96,14 @@ type sourceForm struct {
 	Path string `json:"path"`
 }
 
-// sourceDecision is a DMN reference in full: it has no file, so the manifest
-// carries the temis model handle itself.
+// sourceDecision is a DMN reference in full: the manifest carries the model handle
+// itself. Path names the model's file when the tree carries the model, and is empty
+// when the model is not this server's to copy.
 type sourceDecision struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	ModelRef string `json:"modelRef"`
+	Path     string `json:"path,omitempty"`
 }
 
 // sourceFile is one file in the tree. The tree is built and consumed in memory:
@@ -100,10 +123,11 @@ const manifestPath = "atlas.json"
 // the round-trip stability ADR-0134 promises a test rather than a hope.
 //
 // The caller passes only artifacts belonging to the application; filtering is the
-// loader's job, not the serializer's.
-func buildSourceTree(app project, drafts []draft, forms []form, refs []dmnRef) ([]sourceFile, error) {
+// loader's job, not the serializer's. models holds, by handle, the models the tree
+// carries; a reference whose handle it lacks travels as a reference alone.
+func buildSourceTree(app project, drafts []draft, forms []form, refs []dmnRef, models map[string][]byte) ([]sourceFile, error) {
 	man := sourceManifest{
-		FormatVersion: sourceFormatVersion,
+		FormatVersion: sourceFormatVersionReferencesOnly,
 		Key:           app.Key,
 		Name:          app.Name,
 		Processes:     []sourceProcess{},
@@ -137,8 +161,25 @@ func buildSourceTree(app project, drafts []draft, forms []form, refs []dmnRef) (
 		man.Forms = append(man.Forms, sourceForm{ID: f.ID, Name: f.Name, Path: p})
 		files = append(files, sourceFile{Path: p, Data: newlineTerminated([]byte(f.Schema))})
 	}
+	modelPaths := map[string]string{}
 	for _, rec := range sortedRefs {
-		man.Decisions = append(man.Decisions, sourceDecision{ID: rec.ID, Name: rec.Name, ModelRef: rec.ModelRef})
+		entry := sourceDecision{ID: rec.ID, Name: rec.Name, ModelRef: rec.ModelRef}
+		if data, ok := models[rec.ModelRef]; ok {
+			p, written := modelPaths[rec.ModelRef]
+			if !written {
+				p = uniquePath(taken, "decisions/"+slugify(rec.ModelRef, rec.Name)+".dmn")
+				modelPaths[rec.ModelRef] = p
+				// Verbatim, not newline-terminated: an import compares these bytes with
+				// the model already under the handle, and a newline added here would
+				// read there as a change to a model other decisions may share.
+				files = append(files, sourceFile{Path: p, Data: data})
+			}
+			entry.Path = p
+		}
+		man.Decisions = append(man.Decisions, entry)
+	}
+	if len(modelPaths) > 0 {
+		man.FormatVersion = sourceFormatVersion
 	}
 
 	// Indented, newline-terminated: the manifest is read in a diff like every other
@@ -258,8 +299,9 @@ func parseSourceTree(files []sourceFile) (sourceManifest, map[string][]byte, err
 	if err := json.Unmarshal(raw, &man); err != nil {
 		return sourceManifest{}, nil, fmt.Errorf("invalid %s: %w", manifestPath, err)
 	}
-	if man.FormatVersion != sourceFormatVersion {
-		return sourceManifest{}, nil, fmt.Errorf("unsupported format version %d (this server reads %d)", man.FormatVersion, sourceFormatVersion)
+	if man.FormatVersion < sourceFormatVersionReferencesOnly || man.FormatVersion > sourceFormatVersion {
+		return sourceManifest{}, nil, fmt.Errorf("unsupported format version %d (this server reads %d to %d)",
+			man.FormatVersion, sourceFormatVersionReferencesOnly, sourceFormatVersion)
 	}
 	if strings.TrimSpace(man.Key) == "" {
 		return sourceManifest{}, nil, fmt.Errorf("%s has no application key", manifestPath)
@@ -283,12 +325,39 @@ func parseSourceTree(files []sourceFile) (sourceManifest, map[string][]byte, err
 			return sourceManifest{}, nil, fmt.Errorf("form %q names %q, which is not in the tree", f.ID, f.Path)
 		}
 	}
+	modelPaths := map[string]string{}
 	for _, d := range man.Decisions {
 		if strings.TrimSpace(d.ID) == "" {
 			return sourceManifest{}, nil, fmt.Errorf("%s: a decision entry has no id", manifestPath)
 		}
+		if d.Path == "" {
+			continue
+		}
+		if !modelHandleSafe(d.ModelRef) {
+			return sourceManifest{}, nil, fmt.Errorf("decision %q carries a model under %q, which is not a model handle", d.ID, d.ModelRef)
+		}
+		if _, ok := byPath[d.Path]; !ok {
+			return sourceManifest{}, nil, fmt.Errorf("decision %q names %q, which is not in the tree", d.ID, d.Path)
+		}
+		if prev, ok := modelPaths[d.ModelRef]; ok && prev != d.Path {
+			return sourceManifest{}, nil, fmt.Errorf("decision model %q is carried twice, as %q and %q", d.ModelRef, prev, d.Path)
+		}
+		modelPaths[d.ModelRef] = d.Path
 	}
 	return man, byPath, nil
+}
+
+// modelHandleSafe reports whether a handle names exactly one file in the model
+// folder. A tree's handle is the name its model is written under, so it is held to
+// more than the resolver's own traversal guard: nothing a file system on either
+// platform reads as a path, a drive or a stream.
+func modelHandleSafe(h string) bool {
+	if h == "" || h != strings.TrimSpace(h) || h == "." || h == ".." {
+		return false
+	}
+	return !strings.ContainsFunc(h, func(r rune) bool {
+		return r < 0x20 || strings.ContainsRune(`/\:*?"<>|`, r)
+	})
 }
 
 // deriveApplicationKey mints a portable key for an application from its name.
@@ -384,7 +453,59 @@ func (s *Server) exportApplicationSource(app project) ([]sourceFile, error) {
 			myRefs = append(myRefs, rec)
 		}
 	}
-	return buildSourceTree(app, mine, myForms, myRefs)
+	models, err := s.localDecisionModels(myRefs)
+	if err != nil {
+		return nil, err
+	}
+	return buildSourceTree(app, mine, myForms, myRefs, models)
+}
+
+// localDecisionModels reads, by handle, the model behind each reference when this
+// server keeps its models in its own folder. With a remote temis service behind the
+// resolver it reads nothing: the model is temis's, and the export does not reach
+// out to copy it. A handle that resolves to nothing is left out — the reference is
+// broken here already, and travels as the reference it is.
+//
+// Runs on the run loop. It reads local files only, one per model the application
+// references, which is the cost of the store reads beside it.
+func (s *Server) localDecisionModels(refs []dmnRef) (map[string][]byte, error) {
+	if _, local := s.dmnModelDir(); !local {
+		return nil, nil
+	}
+	models := map[string][]byte{}
+	for _, rec := range refs {
+		if _, done := models[rec.ModelRef]; done || !modelHandleSafe(rec.ModelRef) {
+			continue
+		}
+		data, err := s.dmnResolver.Resolve(context.Background(), rec.ModelRef)
+		switch {
+		case errors.Is(err, dmn.ErrNotFound):
+			continue
+		case err != nil:
+			return nil, err
+		}
+		models[rec.ModelRef] = data
+	}
+	return models, nil
+}
+
+// checkSourceModels compiles every model a tree carries, once per file, before
+// anything is written: a model that does not compile, stored under a handle every
+// reference and every publish resolves, would break each of them at once. It runs
+// off the run loop, because compiling is CPU work the single writer must not wait
+// on.
+func (s *Server) checkSourceModels(ctx context.Context, man sourceManifest, byPath map[string][]byte) error {
+	checked := map[string]bool{}
+	for _, d := range man.Decisions {
+		if d.Path == "" || checked[d.Path] {
+			continue
+		}
+		checked[d.Path] = true
+		if res := s.dmnValidator.ValidateXML(ctx, byPath[d.Path]); !res.Valid {
+			return fmt.Errorf("decision model %q (%s) is not a valid DMN model: %s", d.ModelRef, d.Path, res.Message)
+		}
+	}
+	return nil
 }
 
 // sourceImportResult reports what an import did, in the terms an operator asked
@@ -398,6 +519,13 @@ type sourceImportResult struct {
 	Processes     int    `json:"processes"`
 	Forms         int    `json:"forms"`
 	Decisions     int    `json:"decisions"`
+	// Models counts the decision models the tree carried that are now under their
+	// handles, written or already identical.
+	Models int `json:"models"`
+	// ModelsSkipped names the handles of models the tree carried and this server did
+	// not write, because its models come from a remote temis service. The references
+	// are in; whether temis has the models is temis's to answer.
+	ModelsSkipped []string `json:"modelsSkipped,omitempty"`
 	// Untracked names local artifacts that stayed behind because the tree does not
 	// mention them. An import never deletes: a tree is not proof that an artifact
 	// was removed on purpose (it may simply have been written by an older server),
@@ -422,14 +550,16 @@ func (e sourceRefusal) Error() string { return e.msg }
 // never seen it — authorizes the caller against whatever it resolved, and then
 // upserts every artifact the manifest lists.
 //
-// It refuses rather than guesses in four cases, all of which mean the tree and
+// It refuses rather than guesses in five cases, all of which mean the tree and
 // this server disagree about who owns something:
 //
 //   - the caller may not write the application the key resolves to;
 //   - the key names a protected system project (ADR-0122), which no import may
 //     write into;
 //   - a process id in the tree is a draft belonging to a *different* application;
-//   - a form or decision id in the tree belongs to a different application.
+//   - a form or decision id in the tree belongs to a different application;
+//   - a model the tree carries would replace a different model under a handle that
+//     a decision outside the application resolves.
 //
 // Adopting such an artifact would move it out of an application somebody else is
 // working in, which is exactly the kind of silent damage ADR-0134 refuses when it
@@ -518,6 +648,19 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 			return sourceImportResult{}, sourceRefusal{http.StatusConflict, fmt.Sprintf("decision %q already belongs to another application", d.ID)}
 		}
 	}
+	models, err := s.planSourceModels(man, byPath, app, refs)
+	if err != nil {
+		return sourceImportResult{}, err
+	}
+
+	// The models go first: a model that cannot be written then leaves no reference
+	// behind pointing at it.
+	for _, m := range models.write {
+		if err := writeModelInPlace(models.dir, m.handle, m.data); err != nil {
+			return sourceImportResult{}, fmt.Errorf("write decision model %q: %w", m.handle, err)
+		}
+	}
+	res.Models, res.ModelsSkipped = models.inPlace, models.skipped
 
 	if !found {
 		if err := s.projects.Save(app); err != nil {
@@ -596,4 +739,76 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 	}
 	sort.Strings(res.Untracked)
 	return res, nil
+}
+
+// sourceModelPlan is what an import does with the models a tree carries: which it
+// writes, how many are then under their handles, and which it leaves to a remote
+// service.
+type sourceModelPlan struct {
+	dir     string
+	write   []sourceModel
+	inPlace int
+	skipped []string
+}
+
+type sourceModel struct {
+	handle string
+	data   []byte
+}
+
+// planSourceModels decides, before anything is written, what becomes of each model
+// the tree carries. A model already stored with the same bytes is left alone. A
+// different model under the handle is replaced only when every decision on this
+// server that resolves the handle is the application's or named by the tree: any
+// other would change without its author knowing, so the tree is refused.
+//
+// Runs on the run loop, beside the ownership checks it extends; it reads one local
+// file per model.
+func (s *Server) planSourceModels(man sourceManifest, byPath map[string][]byte, app project, refs []dmnRef) (sourceModelPlan, error) {
+	var handles []string
+	pathOf := map[string]string{}
+	inTree := map[string]bool{}
+	for _, d := range man.Decisions {
+		inTree[d.ID] = true
+		if d.Path == "" {
+			continue
+		}
+		if _, seen := pathOf[d.ModelRef]; !seen {
+			handles = append(handles, d.ModelRef)
+		}
+		pathOf[d.ModelRef] = d.Path
+	}
+	sort.Strings(handles)
+	var plan sourceModelPlan
+	if len(handles) == 0 {
+		return plan, nil
+	}
+	dir, local := s.dmnModelDir()
+	if !local {
+		plan.skipped = handles
+		return plan, nil
+	}
+	plan.dir = dir
+	for _, h := range handles {
+		data := byPath[pathOf[h]]
+		existing, err := s.dmnResolver.Resolve(context.Background(), h)
+		switch {
+		case errors.Is(err, dmn.ErrNotFound):
+		case err != nil:
+			return sourceModelPlan{}, err
+		case bytes.Equal(existing, data):
+			plan.inPlace++
+			continue
+		default:
+			for _, rec := range refs {
+				if rec.ModelRef == h && !inTree[rec.ID] && rec.ProjectID != app.ID {
+					return sourceModelPlan{}, sourceRefusal{http.StatusConflict, fmt.Sprintf(
+						"decision model %q is stored here with other content, and a decision outside this application uses it; rename the model in the tree or on this server", h)}
+				}
+			}
+		}
+		plan.write = append(plan.write, sourceModel{handle: h, data: data})
+		plan.inPlace++
+	}
+	return plan, nil
 }

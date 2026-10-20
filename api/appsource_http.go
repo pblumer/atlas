@@ -153,8 +153,9 @@ func cleanSourcePath(name string) (string, bool) {
 // point of the key being that a repository cloned into a server that has never
 // seen the application still knows what it is (ADR-0134).
 //
-// The archive is decoded off the run loop; resolving the application, authorizing
-// against it, and writing every artifact happen together in one turn of the loop.
+// The archive is decoded and its decision models compiled off the run loop;
+// resolving the application, authorizing against it, and writing every artifact
+// happen together in one turn of the loop.
 func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, s.budgets().AppBundle)
 	defer r.Body.Close()
@@ -166,6 +167,10 @@ func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Re
 	}
 	man, byPath, err := parseSourceTree(files)
 	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.checkSourceModels(r.Context(), man, byPath); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
