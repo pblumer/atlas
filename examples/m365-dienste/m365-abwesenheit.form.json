@@ -1,0 +1,42 @@
+{
+  "type": "default",
+  "id": "m365-abwesenheit",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Abwesenheitsnotiz · Automatic reply**"
+    },
+    {
+      "key": "von",
+      "type": "datetime",
+      "subtype": "date",
+      "dateLabel": "Von · From",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bis",
+      "type": "datetime",
+      "subtype": "date",
+      "dateLabel": "Bis · Until",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "abwesenheitstext",
+      "type": "textarea",
+      "label": "Text · Message",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Exchange: Sitzungszimmer entfernen.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_m365_raum_entfernen" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <process id="proc_m365_raum_entfernen" name="Exchange: Sitzungszimmer entfernen" isExecutable="true">
+    <documentation>Entfernt das Raumpostfach der Position wieder. Rückgabeprozess des Produkts m365-raum; das Postfach wird über seine Herkunftskennzeichnung gefunden.</documentation>
+    <extensionElements>
+      <atlas:constants>
+        <atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/>
+      </atlas:constants>
+    </extensionElements>
+    <startEvent id="s" name="Rückgabe gestartet"><documentation>Die Rückgabe startet den Prozess für die Position.</documentation><outgoing>f_s__st_finden</outgoing></startEvent>
+    <serviceTask id="st_finden" name="Raumpostfach finden"><documentation>Findet das Raumpostfach über die Herkunftskennzeichnung: CustomAttribute3 trägt seit der Bereitstellung «&lt;orderId&gt;/&lt;positionId&gt;». Die Suche hängt damit nicht am Namen, der sich nach einer Änderung der Namensregel anders bilden würde, sondern an der Position, die das Recht im Bestand begründet. maxResults 5: Mehr Treffer wären ein Fehler der Kennzeichnung, und Exchange-Listen scheitern über der Grenze, statt abgeschnitten zu werden.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="list-mailboxes" parameters="{&quot;Filter&quot;: &quot;=\&quot;CustomAttribute3 -eq '\&quot; + orderId + \&quot;/\&quot; + (if positionId = null then itemId else positionId) + \&quot;'\&quot;&quot;, &quot;RecipientTypeDetails&quot;: &quot;RoomMailbox&quot;}" maxResults="5" resultVariable="treffer"/></extensionElements><incoming>f_s__st_finden</incoming><outgoing>f_st_finden__gw_gef</outgoing></serviceTask>
+    <exclusiveGateway id="gw_gef" name="Raum vorhanden?" default="f_gw_gef__st_entfernen"><incoming>f_st_finden__gw_gef</incoming><outgoing>f_gw_gef__st_entfernen</outgoing><outgoing>f_gw_gef__gw_join</outgoing></exclusiveGateway>
+    <serviceTask id="st_entfernen" name="Raumpostfach entfernen"><documentation>remove-mailbox.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="remove-mailbox" parameters='{"Identity": "=treffer[1].PrimarySmtpAddress"}'/></extensionElements><incoming>f_gw_gef__st_entfernen</incoming><outgoing>f_st_entfernen__gw_join</outgoing></serviceTask>
+    <exclusiveGateway id="gw_join"><incoming>f_gw_gef__gw_join</incoming><incoming>f_st_entfernen__gw_join</incoming><outgoing>f_gw_join__st_returned</outgoing></exclusiveGateway>
+    <serviceTask id="st_returned" name="Rückgabe melden"><documentation>Meldet die Rückgabe (status "returned") über die Positionsroute; damit endet das Recht im Bestand. Braucht das Secret "atlas" mit einem API-Token der Rolle operator. Eine Rückgabe erhält die Variable atlasApiBase nicht; die Adresse kommt dann aus der Applikationskonstante ATLAS_API_BASE (Fallback http://127.0.0.1:8080), die auf jeder Installation einmal zu setzen ist, deren Server nicht dort lauscht.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="returned"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_gw_join__st_returned</incoming><outgoing>f_st_returned__e</outgoing></serviceTask>
+    <endEvent id="e" name="Sitzungszimmer entfernt"><incoming>f_st_returned__e</incoming></endEvent>
+    <sequenceFlow id="f_s__st_finden" sourceRef="s" targetRef="st_finden"/>
+    <sequenceFlow id="f_st_finden__gw_gef" sourceRef="st_finden" targetRef="gw_gef"/>
+    <sequenceFlow id="f_gw_gef__st_entfernen" sourceRef="gw_gef" targetRef="st_entfernen" name="ja"/>
+    <sequenceFlow id="f_gw_gef__gw_join" sourceRef="gw_gef" targetRef="gw_join" name="nein"><conditionExpression>=count(treffer) = 0</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_st_entfernen__gw_join" sourceRef="st_entfernen" targetRef="gw_join"/>
+    <sequenceFlow id="f_gw_join__st_returned" sourceRef="gw_join" targetRef="st_returned"/>
+    <sequenceFlow id="f_st_returned__e" sourceRef="st_returned" targetRef="e"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_m365_raum_entfernen_diagram">
+    <bpmndi:BPMNPlane id="proc_m365_raum_entfernen_plane" bpmnElement="proc_m365_raum_entfernen">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="162" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_finden_di" bpmnElement="st_finden"><omgdc:Bounds x="280" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_gef_di" bpmnElement="gw_gef" isMarkerVisible="true"><omgdc:Bounds x="455" y="105" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="383" y="74" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_entfernen_di" bpmnElement="st_entfernen"><omgdc:Bounds x="580" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_join_di" bpmnElement="gw_join" isMarkerVisible="true"><omgdc:Bounds x="755" y="105" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_returned_di" bpmnElement="st_returned"><omgdc:Bounds x="880" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_di" bpmnElement="e"><omgdc:Bounds x="1062" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s__st_finden_di" bpmnElement="f_s__st_finden"><omgdi:waypoint x="198" y="130"/><omgdi:waypoint x="280" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_finden__gw_gef_di" bpmnElement="f_st_finden__gw_gef"><omgdi:waypoint x="380" y="130"/><omgdi:waypoint x="455" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_gef__st_entfernen_di" bpmnElement="f_gw_gef__st_entfernen"><omgdi:waypoint x="505" y="130"/><omgdi:waypoint x="580" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="511" y="108" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_gef__gw_join_di" bpmnElement="f_gw_gef__gw_join"><omgdi:waypoint x="480" y="155"/><omgdi:waypoint x="480" y="270"/><omgdi:waypoint x="780" y="270"/><omgdi:waypoint x="780" y="155"/><bpmndi:BPMNLabel><omgdc:Bounds x="486" y="205" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_entfernen__gw_join_di" bpmnElement="f_st_entfernen__gw_join"><omgdi:waypoint x="680" y="130"/><omgdi:waypoint x="755" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_join__st_returned_di" bpmnElement="f_gw_join__st_returned"><omgdi:waypoint x="805" y="130"/><omgdi:waypoint x="880" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_returned__e_di" bpmnElement="f_st_returned__e"><omgdi:waypoint x="980" y="130"/><omgdi:waypoint x="1062" y="130"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

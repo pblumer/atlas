@@ -12,6 +12,22 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A shop for Microsoft 365 services, with governance built into the models.**
+  `examples/m365-dienste/` is a package that offers what an IT department delivers through
+  the Entra, Exchange and Teams Phone Worker Types: a licence with mailbox, Teams telephony,
+  teams, shared mailboxes, distribution lists, access to a mailbox, meeting rooms, call
+  queues and auto attendants, in two catalogues, with fourteen processes, five decision
+  tables and 23 forms, bilingual. A naming rule kept as a decision builds every name and
+  rejects reserved and overlong ones with a reason; every Exchange object is tagged with its
+  order and owner, and returns and changes find it by that tag; a weekly process reports what
+  exists outside the tag or the rule. Two public forms let externals request partner access
+  and subscribe to a list, and nothing is created before a person has reviewed it. Install
+  scripts for sh and PowerShell upload the decision models, import and publish the
+  application and fill the catalogue's placeholders; the handbook's examples chapter has
+  its card.
+
 ### Fixed
 
 - **The handbook's German reads as German.** Much of it had been translated word for word

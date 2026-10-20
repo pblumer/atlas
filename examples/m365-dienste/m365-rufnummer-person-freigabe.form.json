@@ -1,0 +1,24 @@
+{
+  "type": "default",
+  "id": "m365-rufnummer-person-freigabe",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Rufnummer freigeben · Release the phone number**\n\nRemove-CsPhoneNumberAssignment für die Person. · Remove-CsPhoneNumberAssignment for the person."
+    },
+    {
+      "key": "upn",
+      "type": "textfield",
+      "label": "Person (UPN)",
+      "disabled": true
+    },
+    {
+      "key": "freigegeben",
+      "type": "checkbox",
+      "label": "Nummer freigegeben · Number released",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

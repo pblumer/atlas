@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  M365TelefonieSprachregion: Sprache und Zeitzone der Teams-Telefonie je Sprachregion.
+
+  Eingabe:  sprachregion ("de" | "fr" | "it" | "en")
+  Ausgaben: languageId (Sprache der Ansagen), timeZone (Zeitzone der Telefonzentrale)
+
+  ANNAHME, VOR DEM EINSATZ PRÜFEN: Teams nimmt nur Sprachen und Zeitzonen aus seinen eigenen Listen an
+  (Get-CsAutoAttendantSupportedLanguage, Get-CsAutoAttendantSupportedTimeZone). Die Werte hier sind die
+  üblichen für die Schweiz; eine regionale Variante wie de-CH ist nur zu verwenden, wenn die Liste des
+  Tenants sie führt.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_M365TelefonieSprachregion" name="M365TelefonieSprachregion" namespace="http://atlas/dmn">
+  <inputData id="id_sprachregion" name="sprachregion"/>
+  <decision id="M365TelefonieSprachregion" name="M365TelefonieSprachregion">
+    <informationRequirement id="ir_sprachregion"><requiredInput href="#id_sprachregion"/></informationRequirement>
+    <decisionTable id="dt_M365TelefonieSprachregion" hitPolicy="FIRST">
+      <input id="in_sprachregion" label="sprachregion"><inputExpression id="ie_sprachregion" typeRef="string"><text>sprachregion</text></inputExpression></input>
+      <output id="out_languageId" label="languageId" name="languageId" typeRef="string"/>
+      <output id="out_timeZone" label="timeZone" name="timeZone" typeRef="string"/>
+      <rule id="r1">
+        <description>Deutsch</description>
+        <inputEntry id="r1_i0"><text>"de"</text></inputEntry>
+        <outputEntry id="r1_o0"><text>"de-DE"</text></outputEntry>
+        <outputEntry id="r1_o1"><text>"W. Europe Standard Time"</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Französisch</description>
+        <inputEntry id="r2_i0"><text>"fr"</text></inputEntry>
+        <outputEntry id="r2_o0"><text>"fr-FR"</text></outputEntry>
+        <outputEntry id="r2_o1"><text>"W. Europe Standard Time"</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Italienisch</description>
+        <inputEntry id="r3_i0"><text>"it"</text></inputEntry>
+        <outputEntry id="r3_o0"><text>"it-IT"</text></outputEntry>
+        <outputEntry id="r3_o1"><text>"W. Europe Standard Time"</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Englisch</description>
+        <inputEntry id="r4_i0"><text>"en"</text></inputEntry>
+        <outputEntry id="r4_o0"><text>"en-US"</text></outputEntry>
+        <outputEntry id="r4_o1"><text>"W. Europe Standard Time"</text></outputEntry>
+      </rule>
+      <rule id="r5">
+        <description>Auffangregel: Deutsch</description>
+        <inputEntry id="r5_i0"><text>-</text></inputEntry>
+        <outputEntry id="r5_o0"><text>"de-DE"</text></outputEntry>
+        <outputEntry id="r5_o1"><text>"W. Europe Standard Time"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>
