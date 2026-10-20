@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path"
 	"sort"
 	"strconv"
@@ -510,28 +511,125 @@ func (s *Server) checkSourceModels(ctx context.Context, man sourceManifest, byPa
 
 // sourceImportResult reports what an import did, in the terms an operator asked
 // the question in: which application it landed in, whether that application had
-// to be created, and how many artifacts of each kind it wrote.
+// to be created, and what became of each artifact the tree carries.
 type sourceImportResult struct {
 	ApplicationID string `json:"applicationId"`
 	Key           string `json:"key"`
 	Name          string `json:"name"`
 	Created       bool   `json:"created"`
-	Processes     int    `json:"processes"`
-	Forms         int    `json:"forms"`
-	Decisions     int    `json:"decisions"`
-	// Models counts the decision models the tree carried that are now under their
-	// handles, written or already identical.
+	// DryRun says nothing was written: the answer is the plan, with the outcome
+	// each artifact would have under the decisions the request gave.
+	DryRun    bool `json:"dryRun,omitempty"`
+	Processes int  `json:"processes"`
+	Forms     int  `json:"forms"`
+	Decisions int  `json:"decisions"`
+	// Models counts the decision models the tree carried that are, or would be,
+	// under their handles as the tree has them: written, or already identical.
 	Models int `json:"models"`
 	// ModelsSkipped names the handles of models the tree carried and this server did
 	// not write, because its models come from a remote temis service. The references
 	// are in; whether temis has the models is temis's to answer.
 	ModelsSkipped []string `json:"modelsSkipped,omitempty"`
+	// Artifacts is every artifact of the tree, the application itself first, with
+	// how it compares to this server's and what the import did with it.
+	Artifacts []sourceArtifact `json:"artifacts"`
 	// Untracked names local artifacts that stayed behind because the tree does not
 	// mention them. An import never deletes: a tree is not proof that an artifact
 	// was removed on purpose (it may simply have been written by an older server),
 	// and silently dropping a diagram is not a mistake anyone can undo. Naming them
 	// leaves the decision with the operator.
 	Untracked []string `json:"untracked"`
+}
+
+// sourceArtifact is one artifact of a tree as an import sees it. Ref names it as
+// the request's overwrite and keep lists do: application:<key>, process:<id>,
+// form:<id>, decision:<id> or model:<handle>.
+type sourceArtifact struct {
+	Ref  string `json:"ref"`
+	Name string `json:"name,omitempty"`
+	// Status compares the tree's artifact with this server's: new, unchanged or
+	// changed.
+	Status string `json:"status"`
+	// Outcome is what the import did with it, or would do: created, updated,
+	// unchanged or kept — or undecided, for a changed artifact the request names
+	// under neither overwrite nor keep.
+	Outcome string `json:"outcome"`
+}
+
+// How an artifact of a tree compares with this server's, and what became of it.
+const (
+	artifactNew       = "new"
+	artifactUnchanged = "unchanged"
+	artifactChanged   = "changed"
+
+	outcomeCreated   = "created"
+	outcomeUpdated   = "updated"
+	outcomeUnchanged = "unchanged"
+	outcomeKept      = "kept"
+	outcomeUndecided = "undecided"
+)
+
+// importDecisions is what the caller decided for the artifacts a tree would
+// change. An artifact that differs from this server's is written only when the
+// caller said so, and kept only when the caller said so; one the caller did not
+// decide stops the import, because work done on this server must not be
+// replaced by an import nobody looked at.
+type importDecisions struct {
+	DryRun                bool
+	Overwrite, Keep       map[string]bool
+	OverwriteAll, KeepAll bool
+}
+
+// parseImportDecisions reads ?dryRun=, ?overwrite= and ?keep=. Each list is refs
+// separated by commas, the parameter may repeat, and * stands for every changed
+// artifact the other list does not name. A ref in both lists is a contradiction,
+// and refused.
+func parseImportDecisions(q url.Values) (importDecisions, error) {
+	d := importDecisions{Overwrite: map[string]bool{}, Keep: map[string]bool{}}
+	d.DryRun = q.Get("dryRun") == "true" || q.Get("dryRun") == "1"
+	read := func(param string, refs map[string]bool, all *bool) {
+		for _, v := range q[param] {
+			for _, ref := range strings.Split(v, ",") {
+				switch ref = strings.TrimSpace(ref); ref {
+				case "":
+				case "*":
+					*all = true
+				default:
+					refs[ref] = true
+				}
+			}
+		}
+	}
+	read("overwrite", d.Overwrite, &d.OverwriteAll)
+	read("keep", d.Keep, &d.KeepAll)
+	if d.OverwriteAll && d.KeepAll {
+		return d, errors.New("overwrite=* and keep=* contradict each other")
+	}
+	for ref := range d.Overwrite {
+		if d.Keep[ref] {
+			return d, fmt.Errorf("%s is named under both overwrite and keep", ref)
+		}
+	}
+	return d, nil
+}
+
+// outcome is what becomes of an artifact of a status under these decisions.
+func (d importDecisions) outcome(ref, status string) string {
+	switch {
+	case status == artifactNew:
+		return outcomeCreated
+	case status == artifactUnchanged:
+		return outcomeUnchanged
+	case d.Overwrite[ref]:
+		return outcomeUpdated
+	case d.Keep[ref]:
+		return outcomeKept
+	case d.OverwriteAll:
+		return outcomeUpdated
+	case d.KeepAll:
+		return outcomeKept
+	}
+	return outcomeUndecided
 }
 
 // sourceRefusal is an import the server declines on the caller's behalf rather
@@ -545,10 +643,29 @@ type sourceRefusal struct {
 
 func (e sourceRefusal) Error() string { return e.msg }
 
+// sourceUndecided is an import stopped because artifacts it would change were
+// decided neither way. It carries the plan, so the caller can show it and ask.
+type sourceUndecided struct {
+	plan sourceImportResult
+	refs []string
+}
+
+func (e sourceUndecided) Error() string {
+	return fmt.Sprintf("%d artifacts differ from this server's and were not decided (%s); name each under overwrite or keep",
+		len(e.refs), strings.Join(e.refs, ", "))
+}
+
 // applySourceTree writes a parsed tree into the stores. It resolves the
 // application by the manifest's portable key — creating it when this server has
-// never seen it — authorizes the caller against whatever it resolved, and then
-// upserts every artifact the manifest lists.
+// never seen it — authorizes the caller against whatever it resolved, compares
+// every artifact the manifest lists with this server's, and writes what is new
+// and what the caller decided to overwrite.
+//
+// It is idempotent: an artifact that is already as the tree has it is not written
+// again, so importing the same tree twice changes nothing the second time. And it
+// never replaces work silently: an artifact that differs from this server's is
+// written only when the caller named it under overwrite, kept when named under
+// keep, and stops the import, with the plan, when named under neither.
 //
 // It refuses rather than guesses in five cases, all of which mean the tree and
 // this server disagree about who owns something:
@@ -565,14 +682,14 @@ func (e sourceRefusal) Error() string { return e.msg }
 // working in, which is exactly the kind of silent damage ADR-0134 refuses when it
 // refuses to merge. An *ungrouped* artifact of the same id is adopted rather than
 // refused: it belongs to nobody, and the tree naming it is the closest thing to a
-// claim there is.
+// claim there is. Its content is still compared, and decided, like any other.
 //
-// Resolution, authorization, and writing all happen in this one call so they
-// happen under one turn of the single writer: authorizing against a project that
-// a concurrent request then re-owned is the gap a two-step version would leave.
+// Resolution, authorization, the plan and writing all happen in this one call so
+// they happen under one turn of the single writer: a plan checked against a store
+// a concurrent request then changed is the gap a two-step version would leave.
 //
 // Runs on the run loop.
-func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, ownerID string, authorize func(project) (int, string)) (sourceImportResult, error) {
+func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, ownerID string, authorize func(project) (int, string), decide importDecisions) (sourceImportResult, error) {
 	all, err := s.projects.LoadAll()
 	if err != nil {
 		return sourceImportResult{}, err
@@ -586,7 +703,7 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 		}
 	}
 	now := time.Now().Unix()
-	res := sourceImportResult{Key: man.Key, Untracked: []string{}}
+	res := sourceImportResult{Key: man.Key, DryRun: decide.DryRun, Artifacts: []sourceArtifact{}, Untracked: []string{}}
 	if !found {
 		id, err := newID()
 		if err != nil {
@@ -648,26 +765,121 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 			return sourceImportResult{}, sourceRefusal{http.StatusConflict, fmt.Sprintf("decision %q already belongs to another application", d.ID)}
 		}
 	}
-	models, err := s.planSourceModels(man, byPath, app, refs)
+
+	// The plan: every artifact compared with this server's, and what the decisions
+	// make of it. writes holds what is to be written, by ref.
+	writes := map[string]bool{}
+	var undecided []string
+	note := func(ref, name, status string, regroup bool) {
+		outcome := decide.outcome(ref, status)
+		// An ungrouped artifact the tree names joins the application even when its
+		// content is already the tree's: that moves nobody's work, it files it.
+		if outcome == outcomeUnchanged && regroup {
+			writes[ref] = true
+		}
+		switch outcome {
+		case outcomeCreated, outcomeUpdated:
+			writes[ref] = true
+		case outcomeUndecided:
+			undecided = append(undecided, ref)
+		}
+		res.Artifacts = append(res.Artifacts, sourceArtifact{Ref: ref, Name: name, Status: status, Outcome: outcome})
+	}
+	appStatus := artifactNew
+	if found {
+		appStatus = compared(app.Name == man.Name)
+	}
+	note("application:"+man.Key, man.Name, appStatus, false)
+	for _, p := range man.Processes {
+		d, ok := draftOwner[p.ID]
+		status := artifactNew
+		if ok {
+			status = compared(d.Name == p.Name && bytes.Equal(newlineTerminated([]byte(d.XML)), byPath[p.Path]))
+		}
+		note("process:"+p.ID, p.Name, status, ok && d.ProjectID == "")
+	}
+	for _, f := range man.Forms {
+		rec, ok := formOwner[f.ID]
+		status := artifactNew
+		if ok {
+			status = compared(rec.Name == f.Name && bytes.Equal(newlineTerminated([]byte(rec.Schema)), byPath[f.Path]))
+		}
+		note("form:"+f.ID, f.Name, status, ok && rec.ProjectID == "")
+	}
+	for _, d := range man.Decisions {
+		rec, ok := refOwner[d.ID]
+		status := artifactNew
+		if ok {
+			status = compared(rec.Name == d.Name && rec.ModelRef == d.ModelRef)
+		}
+		note("decision:"+d.ID, d.Name, status, ok && rec.ProjectID == "")
+	}
+	models, err := s.planSourceModels(man, byPath)
 	if err != nil {
 		return sourceImportResult{}, err
+	}
+	res.ModelsSkipped = models.skipped
+	for _, m := range models.models {
+		note("model:"+m.handle, m.handle, m.status, false)
+		if outcome := res.Artifacts[len(res.Artifacts)-1].Outcome; outcome != outcomeKept && outcome != outcomeUndecided {
+			res.Models++
+		}
+	}
+	res.Processes, res.Forms, res.Decisions = len(man.Processes), len(man.Forms), len(man.Decisions)
+	res.ApplicationID, res.Name = app.ID, man.Name
+	if found && !writes["application:"+man.Key] {
+		res.Name = app.Name
+	}
+	if res.Created {
+		// A plan for an application this server has never seen names no id: none is
+		// taken until it is written.
+		if decide.DryRun {
+			res.ApplicationID = ""
+		}
+	}
+	res.Untracked = untrackedArtifacts(app.ID, man, drafts, forms, refs)
+
+	// A model replaced under a handle that a decision outside the application
+	// resolves would change that decision without its author knowing; only a model
+	// that is actually to be written is held to it, so keeping the local model is
+	// always a way through.
+	inTree := map[string]bool{}
+	for _, d := range man.Decisions {
+		inTree[d.ID] = true
+	}
+	for _, m := range models.models {
+		if m.status != artifactChanged || !writes["model:"+m.handle] {
+			continue
+		}
+		for _, rec := range refs {
+			if rec.ModelRef == m.handle && !inTree[rec.ID] && rec.ProjectID != app.ID {
+				return sourceImportResult{}, sourceRefusal{http.StatusConflict, fmt.Sprintf(
+					"decision model %q is stored here with other content, and a decision outside this application uses it; keep this server's model, or rename the model in the tree or on this server", m.handle)}
+			}
+		}
+	}
+	if decide.DryRun {
+		return res, nil
+	}
+	if len(undecided) > 0 {
+		return res, sourceUndecided{plan: res, refs: undecided}
 	}
 
 	// The models go first: a model that cannot be written then leaves no reference
 	// behind pointing at it.
-	for _, m := range models.write {
-		if err := writeModelInPlace(models.dir, m.handle, m.data); err != nil {
-			return sourceImportResult{}, fmt.Errorf("write decision model %q: %w", m.handle, err)
+	for _, m := range models.models {
+		if writes["model:"+m.handle] {
+			if err := writeModelInPlace(models.dir, m.handle, m.data); err != nil {
+				return sourceImportResult{}, fmt.Errorf("write decision model %q: %w", m.handle, err)
+			}
 		}
 	}
-	res.Models, res.ModelsSkipped = models.inPlace, models.skipped
-
 	if !found {
 		if err := s.projects.Save(app); err != nil {
 			return sourceImportResult{}, err
 		}
 		s.noteApplication(app)
-	} else if app.Name != man.Name {
+	} else if writes["application:"+man.Key] {
 		// The repository is the source of truth for the application's name, the same
 		// as for its artifacts; the key, not the name, is what identifies it.
 		app.Name, app.UpdatedAt = man.Name, now
@@ -676,9 +888,11 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 		}
 		s.noteApplication(app)
 	}
-	res.ApplicationID, res.Name = app.ID, app.Name
 
 	for _, p := range man.Processes {
+		if !writes["process:"+p.ID] {
+			continue
+		}
 		rec := draft{
 			ProcessID: p.ID, Name: p.Name, ProjectID: app.ID,
 			SavedAt: now, SavedBy: ownerID, XML: string(byPath[p.Path]),
@@ -686,9 +900,11 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 		if err := s.drafts.Save(rec); err != nil {
 			return sourceImportResult{}, err
 		}
-		res.Processes++
 	}
 	for _, f := range man.Forms {
+		if !writes["form:"+f.ID] {
+			continue
+		}
 		rec := form{
 			ID: f.ID, Name: f.Name, ProjectID: app.ID,
 			SavedAt: now, Schema: string(byPath[f.Path]),
@@ -696,9 +912,11 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 		if err := s.forms.Save(rec); err != nil {
 			return sourceImportResult{}, err
 		}
-		res.Forms++
 	}
 	for _, d := range man.Decisions {
+		if !writes["decision:"+d.ID] {
+			continue
+		}
 		rec := dmnRef{ID: d.ID, Name: d.Name, ModelRef: d.ModelRef, ProjectID: app.ID, CreatedAt: now}
 		// Keep the original creation time so the Modeler's ordering does not jump
 		// every time a repository is re-imported.
@@ -708,10 +926,22 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 		if err := s.dmnrefs.Save(rec); err != nil {
 			return sourceImportResult{}, err
 		}
-		res.Decisions++
 	}
+	return res, nil
+}
 
-	// Anything still tagged into the application that the tree never mentioned.
+// compared is the status of an artifact this server has: unchanged when it is as
+// the tree has it, changed otherwise.
+func compared(same bool) string {
+	if same {
+		return artifactUnchanged
+	}
+	return artifactChanged
+}
+
+// untrackedArtifacts names what is filed in the application here and not in the
+// tree, sorted.
+func untrackedArtifacts(appID string, man sourceManifest, drafts []draft, forms []form, refs []dmnRef) []string {
 	inTree := map[string]bool{}
 	for _, p := range man.Processes {
 		inTree["process:"+p.ID] = true
@@ -722,54 +952,49 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 	for _, d := range man.Decisions {
 		inTree["decision:"+d.ID] = true
 	}
+	out := []string{}
 	for _, d := range drafts {
-		if d.ProjectID == app.ID && !inTree["process:"+d.ProcessID] {
-			res.Untracked = append(res.Untracked, "process:"+d.ProcessID)
+		if d.ProjectID == appID && !inTree["process:"+d.ProcessID] {
+			out = append(out, "process:"+d.ProcessID)
 		}
 	}
 	for _, f := range forms {
-		if f.ProjectID == app.ID && !inTree["form:"+f.ID] {
-			res.Untracked = append(res.Untracked, "form:"+f.ID)
+		if f.ProjectID == appID && !inTree["form:"+f.ID] {
+			out = append(out, "form:"+f.ID)
 		}
 	}
 	for _, rec := range refs {
-		if rec.ProjectID == app.ID && !inTree["decision:"+rec.ID] {
-			res.Untracked = append(res.Untracked, "decision:"+rec.ID)
+		if rec.ProjectID == appID && !inTree["decision:"+rec.ID] {
+			out = append(out, "decision:"+rec.ID)
 		}
 	}
-	sort.Strings(res.Untracked)
-	return res, nil
+	sort.Strings(out)
+	return out
 }
 
-// sourceModelPlan is what an import does with the models a tree carries: which it
-// writes, how many are then under their handles, and which it leaves to a remote
-// service.
+// sourceModelPlan is how the models a tree carries compare with this server's.
 type sourceModelPlan struct {
 	dir     string
-	write   []sourceModel
-	inPlace int
+	models  []sourceModel
 	skipped []string
 }
 
 type sourceModel struct {
 	handle string
 	data   []byte
+	status string
 }
 
-// planSourceModels decides, before anything is written, what becomes of each model
-// the tree carries. A model already stored with the same bytes is left alone. A
-// different model under the handle is replaced only when every decision on this
-// server that resolves the handle is the application's or named by the tree: any
-// other would change without its author knowing, so the tree is refused.
+// planSourceModels compares each model the tree carries, by handle, with the model
+// stored under that handle. A server whose models come from a remote temis service
+// writes none, and names them as skipped.
 //
-// Runs on the run loop, beside the ownership checks it extends; it reads one local
-// file per model.
-func (s *Server) planSourceModels(man sourceManifest, byPath map[string][]byte, app project, refs []dmnRef) (sourceModelPlan, error) {
+// Runs on the run loop, beside the store reads it extends; it reads one local file
+// per model.
+func (s *Server) planSourceModels(man sourceManifest, byPath map[string][]byte) (sourceModelPlan, error) {
 	var handles []string
 	pathOf := map[string]string{}
-	inTree := map[string]bool{}
 	for _, d := range man.Decisions {
-		inTree[d.ID] = true
 		if d.Path == "" {
 			continue
 		}
@@ -790,25 +1015,16 @@ func (s *Server) planSourceModels(man sourceManifest, byPath map[string][]byte, 
 	}
 	plan.dir = dir
 	for _, h := range handles {
-		data := byPath[pathOf[h]]
+		m := sourceModel{handle: h, data: byPath[pathOf[h]], status: artifactNew}
 		existing, err := s.dmnResolver.Resolve(context.Background(), h)
 		switch {
 		case errors.Is(err, dmn.ErrNotFound):
 		case err != nil:
 			return sourceModelPlan{}, err
-		case bytes.Equal(existing, data):
-			plan.inPlace++
-			continue
 		default:
-			for _, rec := range refs {
-				if rec.ModelRef == h && !inTree[rec.ID] && rec.ProjectID != app.ID {
-					return sourceModelPlan{}, sourceRefusal{http.StatusConflict, fmt.Sprintf(
-						"decision model %q is stored here with other content, and a decision outside this application uses it; rename the model in the tree or on this server", h)}
-				}
-			}
+			m.status = compared(bytes.Equal(existing, m.data))
 		}
-		plan.write = append(plan.write, sourceModel{handle: h, data: data})
-		plan.inPlace++
+		plan.models = append(plan.models, m)
 	}
 	return plan, nil
 }

@@ -153,13 +153,22 @@ func cleanSourcePath(name string) (string, bool) {
 // point of the key being that a repository cloned into a server that has never
 // seen the application still knows what it is (ADR-0134).
 //
+// ?dryRun=true answers the plan and writes nothing. An artifact that differs from
+// this server's is written only when ?overwrite= names it, kept when ?keep= names
+// it, and stops the import with 409 and the plan when neither does.
+//
 // The archive is decoded and its decision models compiled off the run loop;
-// resolving the application, authorizing against it, and writing every artifact
-// happen together in one turn of the loop.
+// resolving the application, authorizing against it, planning and writing happen
+// together in one turn of the loop.
 func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, s.budgets().AppBundle)
 	defer r.Body.Close()
 
+	decide, err := parseImportDecisions(r.URL.Query())
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	files, err := s.readSourceArchive(r.Body)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
@@ -196,12 +205,19 @@ func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Re
 				msg = "no application with that key"
 			}
 			return code, msg
-		})
+		}, decide)
 	})
-	var refusal sourceRefusal
+	var (
+		refusal   sourceRefusal
+		undecided sourceUndecided
+	)
 	switch {
 	case errors.As(applyErr, &refusal):
 		httpapi.Error(w, refusal.status, refusal.msg)
+	case errors.As(applyErr, &undecided):
+		httpapi.JSON(w, http.StatusConflict, map[string]any{
+			"error": undecided.Error(), "undecided": undecided.refs, "plan": undecided.plan,
+		})
 	case applyErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "import source: "+applyErr.Error())
 	default:

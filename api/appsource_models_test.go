@@ -126,3 +126,115 @@ func TestApplicationSourceRefusesAModelThatDoesNotCompile(t *testing.T) {
 		t.Errorf("a refused tree created its application: %s", listed)
 	}
 }
+
+// TestApplicationSourceImportIsIdempotent: the same tree imported again is the
+// same application, and the second import writes nothing — no draft saved anew,
+// no second copy, however often it runs.
+func TestApplicationSourceImportIsIdempotent(t *testing.T) {
+	origin := newTestServer(t)
+	appID := mkApp(t, origin, "Freigaben")
+	saveDraftIn(t, origin, appID, "antrag", "Antrag")
+	saveFormIn(t, origin, appID, "antrag-form", "Antragsformular")
+	addDecisionIn(t, origin, appID, "Freigabestufe", uploadModel(t, origin, "freigabe", freigabeDMN))
+	archive := exportSource(t, origin, appID)
+
+	clone := newTestServer(t)
+	for run := 1; run <= 3; run++ {
+		code, res, body := importSource(t, clone, archive)
+		if code != http.StatusOK {
+			t.Fatalf("import %d: status=%d body=%s", run, code, body)
+		}
+		for ref, got := range res.outcomes() {
+			want := "new/created"
+			if run > 1 {
+				want = "unchanged/unchanged"
+			}
+			if got != want {
+				t.Errorf("import %d: %s = %s, want %s", run, ref, got, want)
+			}
+		}
+	}
+	_, listed := doReq(t, clone, http.MethodGet, "/api/v1/applications", "", "")
+	if apps := ownApplications(t, listed); len(apps) != 1 {
+		t.Fatalf("three imports left %d applications: %s", len(apps), listed)
+	}
+	_, drafts := doReq(t, clone, http.MethodGet, "/api/v1/drafts", "", "")
+	var saved []struct {
+		ProcessID string `json:"processId"`
+		SavedAt   int64  `json:"savedAt"`
+	}
+	if err := json.Unmarshal(drafts, &saved); err != nil || len(saved) != 1 {
+		t.Fatalf("drafts = %s (%v)", drafts, err)
+	}
+}
+
+// TestApplicationSourceImportAsksBeforeOverwriting: work done on this server is
+// not replaced by an import nobody looked at. An artifact that differs is listed
+// and decided — overwritten, or kept — one by one; one left undecided stops the
+// import before anything is written.
+func TestApplicationSourceImportAsksBeforeOverwriting(t *testing.T) {
+	ts := newTestServer(t)
+	appID := mkApp(t, ts, "Freigaben")
+	saveDraftIn(t, ts, appID, "antrag", "Antrag")
+	saveDraftIn(t, ts, appID, "pruefung", "Prüfung")
+	saveFormIn(t, ts, appID, "antrag-form", "Antragsformular")
+	archive := exportSource(t, ts, appID)
+
+	// Work done here after the export: both drafts and the form change.
+	saveDraftIn(t, ts, appID, "antrag", "Antrag, hier geändert")
+	saveDraftIn(t, ts, appID, "pruefung", "Prüfung, hier geändert")
+	saveFormIn(t, ts, appID, "antrag-form", "Formular, hier geändert")
+
+	code, res, body := importSourceWith(t, ts, archive, "?dryRun=true")
+	if code != http.StatusOK || !res.DryRun {
+		t.Fatalf("plan: status=%d body=%s", code, body)
+	}
+	want := map[string]string{
+		"application:freigaben": "unchanged/unchanged",
+		"process:antrag":        "changed/undecided",
+		"process:pruefung":      "changed/undecided",
+		"form:antrag-form":      "changed/undecided",
+	}
+	if got := res.outcomes(); len(got) != len(want) {
+		t.Fatalf("plan = %v, want %v", got, want)
+	} else {
+		for ref, w := range want {
+			if got[ref] != w {
+				t.Errorf("plan %s = %s, want %s", ref, got[ref], w)
+			}
+		}
+	}
+
+	code, _, body = importSourceWith(t, ts, archive, "?overwrite=process:antrag")
+	if code != http.StatusConflict || !strings.Contains(string(body), `"undecided":["process:pruefung","form:antrag-form"]`) {
+		t.Fatalf("partly decided: status=%d body=%s, want 409 naming the two left", code, body)
+	}
+	if _, xml := doReq(t, ts, http.MethodGet, "/api/v1/drafts/antrag/xml", "", ""); !strings.Contains(string(xml), "hier geändert") {
+		t.Fatalf("a refused import wrote the draft: %s", xml)
+	}
+
+	code, res, body = importSourceWith(t, ts, archive, "?overwrite=process:antrag&keep=process:pruefung,form:antrag-form")
+	if code != http.StatusOK {
+		t.Fatalf("decided: status=%d body=%s", code, body)
+	}
+	if got := res.outcomes(); got["process:antrag"] != "changed/updated" || got["process:pruefung"] != "changed/kept" || got["form:antrag-form"] != "changed/kept" {
+		t.Errorf("outcomes = %v", got)
+	}
+	if _, xml := doReq(t, ts, http.MethodGet, "/api/v1/drafts/antrag/xml", "", ""); strings.Contains(string(xml), "hier geändert") {
+		t.Errorf("the draft chosen for overwriting kept the local version: %s", xml)
+	}
+	if _, xml := doReq(t, ts, http.MethodGet, "/api/v1/drafts/pruefung/xml", "", ""); !strings.Contains(string(xml), "hier geändert") {
+		t.Errorf("the draft chosen for keeping was overwritten: %s", xml)
+	}
+
+	// * stands for every changed artifact the other list leaves out.
+	code, res, body = importSourceWith(t, ts, archive, "?keep=*&overwrite=form:antrag-form")
+	if code != http.StatusOK || res.outcomes()["form:antrag-form"] != "changed/updated" || res.outcomes()["process:pruefung"] != "changed/kept" {
+		t.Fatalf("keep=*: status=%d body=%s", code, body)
+	}
+	for _, q := range []string{"?overwrite=*&keep=*", "?overwrite=process:antrag&keep=process:antrag"} {
+		if code, _, body := importSourceWith(t, ts, archive, q); code != http.StatusBadRequest {
+			t.Errorf("%s: status=%d body=%s, want 400", q, code, body)
+		}
+	}
+}
