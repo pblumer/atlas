@@ -134,15 +134,21 @@ func (m *MockTenant) Do(_ context.Context, req Request) (map[string]any, error) 
 	case "remove-phone-number":
 		return m.removeNumbers(str("identity"), str("phoneNumber"))
 	case "remove-resource-account":
+		// The leaver path in one task, in the order the shipped PowerShell keeps: the
+		// account's numbers are released, the association removed, the account deleted.
 		id := str("resourceAccountId")
 		acc, ok := m.accounts[id]
 		if !ok {
-			return map[string]any{"removed": false, "objectId": id}, nil
+			return map[string]any{"removed": false, "objectId": id, "phoneNumbers": []string{}}, nil
+		}
+		released, err := m.removeNumbers(id, "")
+		if err != nil {
+			return nil, err
 		}
 		delete(m.associated, id)
 		delete(m.byUPN, strings.ToLower(acc.upn))
 		delete(m.accounts, id)
-		return map[string]any{"removed": true, "objectId": id}, nil
+		return map[string]any{"removed": true, "objectId": id, "phoneNumbers": released["phoneNumbers"]}, nil
 	}
 	return nil, fmt.Errorf("teamsphone: unknown operation %q (want %s)", req.Operation, strings.Join(OpNames(), ", "))
 }

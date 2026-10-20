@@ -4263,6 +4263,8 @@ const SERVICE_TASK_KINDS = [
               return "Required. =antwort.assigned says whether this run gave the number out — false when the holder had it already — and =antwort.previousNumber the number it replaced, empty when none.";
             case "remove-phone-number":
               return "Optional. =antwort.removed is false when the holder had nothing to remove; =antwort.phoneNumbers lists what was taken away.";
+            case "remove-resource-account":
+              return "Optional. =antwort.removed is false when the account was already gone; =antwort.phoneNumbers lists the numbers released with it — the account's numbers go first, then its association, then the account.";
             default:
               return "Optional. =antwort.removed is false when there was nothing left to remove, which a repeated leaver path meets.";
           }

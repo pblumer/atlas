@@ -21,7 +21,9 @@ _Changed_ / _Removed_ for each version.
   holds is replaced and reported as `previousNumber`. A number somebody else holds is
   refused (`TEAMSPHONE_NUMBER_IN_USE`), and so is a Calling Plan or Operator Connect number
   the tenant does not have (`TEAMSPHONE_NUMBER_NOT_FOUND`). A number is read as people write
-  one, spaces and dashes included; a `(0)` after the country code is refused. In mock mode,
+  one, spaces and dashes included; a `(0)` after the country code is refused.
+  `remove-resource-account` releases the account's numbers before it detaches and deletes
+  the account, and answers them as `phoneNumbers`, so a leaver path is one task. In mock mode,
   `ATLAS_TEAMSPHONE_MOCK_NUMBERS` names the tenant's numbers
   ([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendment 2026-10-20).
 - **A Teams Phone refusal can take an error boundary's path.** Eight refusals a process

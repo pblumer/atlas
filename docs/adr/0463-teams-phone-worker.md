@@ -354,12 +354,21 @@ makes no difference between the two assignments:
 - The mock keeps the same rules; `ATLAS_TEAMSPHONE_MOCK_NUMBERS` names its Calling Plan
   and Operator Connect inventory, every number when unset.
 
+- **The leaver path is one task.** `remove-resource-account` releases the account's numbers
+  first, then removes the association, then deletes the account, and answers the released
+  numbers as `phoneNumbers`. A number left on a deleted account is one nobody can give out
+  again until Teams notices, and a model that had to remember the order would sooner or
+  later not. The account is looked up in Entra first, so a repeat answers
+  `removed: false` before Teams is asked anything about an account that is gone. Voice
+  apps are not removed with their account: a queue or an attendant is the model's to take
+  away, by its own operation, because removing one is not implied by removing an account.
+
 **Consequences and what is not known.** Microsoft's list of cmdlets an app-only sign-in may
 not run does not name `Set-CsPhoneNumberAssignment` (checked 2026-10; the lookup and the
 removal were not checked). An absence from that list is not an affirmation, so the first
 installation confirms all three. The lookup of a number the tenant lacks is assumed to answer nothing rather
-than fail, as a filter does. Removing a number before deleting a resource account is the
-leaver path's step, not something `remove-resource-account` does on its own.
+than fail, as a filter does. A person's numbers are not released by anything but
+`remove-phone-number`: the worker deletes no user account.
 
 ## Pros and cons of the options
 

@@ -6716,8 +6716,8 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
               <td data-l="en"><code>removed</code>, <code>phoneNumbers</code> – what was removed. The result variable is optional.</td></tr>
             <tr><td><code>remove-resource-account</code><br><i>Remove resource account</i></td>
               <td><code>resourceAccountId</code></td><td>–</td>
-              <td data-l="de"><code>removed</code>, <code>objectId</code>. Die Ergebnisvariable ist freiwillig.</td>
-              <td data-l="en"><code>removed</code>, <code>objectId</code>. The result variable is optional.</td></tr>
+              <td data-l="de"><code>removed</code>, <code>objectId</code>, <code>phoneNumbers</code> – die Rufnummern, die mit dem Konto freigegeben wurden. Die Ergebnisvariable ist freiwillig.</td>
+              <td data-l="en"><code>removed</code>, <code>objectId</code>, <code>phoneNumbers</code> – the phone numbers released with the account. The result variable is optional.</td></tr>
           </tbody>
         </table>
         <p data-l="de"><b>Wiederholen ist sicher.</b> Jede <i>Ensure</i>-Operation sucht, bevor sie anlegt, und eine
@@ -6737,8 +6737,9 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           jemand anderes hält, wird nicht weggenommen (<code>TEAMSPHONE_NUMBER_IN_USE</code>), und eine Calling-Plan- oder
           Operator-Connect-Nummer, die der Tenant nicht hat, wird abgelehnt (<code>TEAMSPHONE_NUMBER_NOT_FOUND</code>).
           Fehlt die Lizenz noch, scheitert die Zuweisung wie jeder andere Fehler; warte darauf im Modell, etwa mit einer
-          Timer-Schleife um eine Entra-Abfrage von <code>assignedLicenses</code>. Beim Austritt entfernst du die Nummer
-          mit <i>Remove phone number</i>, bevor du das Ressourcenkonto löschst.</p>
+          Timer-Schleife um eine Entra-Abfrage von <code>assignedLicenses</code>. <i>Remove resource account</i> gibt die
+          Nummern eines Ressourcenkontos selbst frei, bevor es die Zuordnung löst und das Konto löscht; die Nummer einer Person
+          entfernst du beim Austritt mit <i>Remove phone number</i>.</p>
         <p data-l="en"><b>Phone numbers.</b> <i>Ensure phone number</i> gives a person or a resource account the number
           named – a queue's hotline and an employee's direct line are the same assignment to Teams. When the target has
           the number already nothing happens (<code>assigned: false</code>); when it has another primary number, that
@@ -6746,8 +6747,9 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           from them (<code>TEAMSPHONE_NUMBER_IN_USE</code>), and a Calling Plan or Operator Connect number the tenant does
           not have is refused (<code>TEAMSPHONE_NUMBER_NOT_FOUND</code>). While the licence is still missing, the
           assignment fails like any other error; wait for it in the model, with a timer loop around an Entra lookup of
-          <code>assignedLicenses</code>, say. On the way out, remove the number with <i>Remove phone number</i> before
-          you delete the resource account.</p>
+          <code>assignedLicenses</code>, say. <i>Remove resource account</i> releases a resource account's numbers itself
+          before it detaches and deletes the account; a person's number you remove with <i>Remove phone number</i> when
+          they leave.</p>
         <p data-l="de"><b>Eine bestehende Warteschlange abgleichen.</b> <i>Ensure call queue</i> bringt eine
           Warteschlange, die es schon gibt, auf das, was das Modell nennt – bei einem Personalwechsel lässt du denselben
           Task einfach erneut laufen.</p>

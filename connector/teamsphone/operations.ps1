@@ -436,35 +436,49 @@ function Set-PhoneNumber {
 }
 
 # Takes the number named — or, with none named, every number — away from its holder and
-# answers which it removed; a number the holder does not have is nothing to remove.
-function Remove-PhoneNumber {
-    $a = $Request.args
-    $identity = [string]$a.identity
-    $mine = @(Get-CsPhoneNumberAssignment -AssignedPstnTargetId $identity)
-    if ($a.phoneNumber) {
-        $key = Get-NumberKey ([string]$a.phoneNumber)
+# answers which it removed, sorted; a number the holder does not have is nothing to remove.
+function Remove-PhoneNumbers([string]$Identity, [string]$Number) {
+    $mine = @(Get-CsPhoneNumberAssignment -AssignedPstnTargetId $Identity)
+    if ($Number) {
+        $key = Get-NumberKey $Number
         $mine = @($mine | Where-Object { (Get-NumberKey $_.TelephoneNumber) -eq $key })
     }
     $removed = [System.Collections.Generic.List[string]]::new()
     foreach ($n in $mine) {
-        $null = Remove-CsPhoneNumberAssignment -Identity $identity -TelephoneNumber $n.TelephoneNumber -NumberType $n.NumberType
+        $null = Remove-CsPhoneNumberAssignment -Identity $Identity -TelephoneNumber $n.TelephoneNumber -NumberType $n.NumberType
         $removed.Add([string]$n.TelephoneNumber)
-        Write-Log "phone number $($n.TelephoneNumber) removed from $identity"
+        Write-Log "phone number $($n.TelephoneNumber) removed from $Identity"
     }
     [string[]]$sorted = $removed.ToArray()
     [Array]::Sort($sorted, [StringComparer]::Ordinal)
-    return [ordered]@{ removed = ($sorted.Count -gt 0); phoneNumbers = $sorted }
+    return $sorted
+}
+
+function Remove-PhoneNumber {
+    $a = $Request.args
+    $removed = @(Remove-PhoneNumbers ([string]$a.identity) ([string]$a.phoneNumber))
+    return [ordered]@{ removed = ($removed.Count -gt 0); phoneNumbers = $removed }
 }
 
 # A resource account is an Entra user: Teams has no cmdlet that deletes one. So the
-# association goes through Teams and the account through Graph.
+# association goes through Teams and the account through Graph. The leaver path is one
+# task: the account's phone numbers are released first — a number left on a deleted
+# account is one nobody can give out until Teams notices — then the association goes,
+# then the account. An account Entra no longer holds is answered removed=false before
+# Teams is asked anything, so a repeat does not depend on what Teams says about an
+# account that is gone.
 function Remove-ResourceAccount {
     $accountId = [string]$Request.args.resourceAccountId
+    $path = "/users/$([uri]::EscapeDataString($accountId))"
+    if (-not (Invoke-Graph 'GET' ($path + '?$select=id')).Found) {
+        return [ordered]@{ removed = $false; objectId = $accountId; phoneNumbers = @() }
+    }
+    $released = @(Remove-PhoneNumbers $accountId '')
     if (Get-Association $accountId) {
         $null = Remove-CsOnlineApplicationInstanceAssociation -Identities @($accountId)
     }
-    $deleted = Invoke-Graph 'DELETE' "/users/$([uri]::EscapeDataString($accountId))"
-    return [ordered]@{ removed = [bool]$deleted.Found; objectId = $accountId }
+    $deleted = Invoke-Graph 'DELETE' $path
+    return [ordered]@{ removed = [bool]$deleted.Found; objectId = $accountId; phoneNumbers = $released }
 }
 
 $envelope = $null

@@ -453,6 +453,11 @@ func TestTheShippedScriptProvisionsAndUnwinds(t *testing.T) {
 	if got := removeNumbers(map[string]any{"identity": cqID, "phoneNumber": "+41445550000"}); got["removed"] != true {
 		t.Errorf("remove-phone-number for the account's number = %v", got)
 	}
+	// The queue's account gets its number back, and the leaver path below takes it away
+	// with the account.
+	if got, err := number(cqID, "+41445550000", "direct-routing"); err != nil || got["assigned"] != true {
+		t.Errorf("the queue's number again = %v, %v", got, err)
+	}
 
 	// An attendant's account carries no queue, and a queue's remove does not take the
 	// attendant away: both are refusals a process can catch by their code.
@@ -467,15 +472,22 @@ func TestTheShippedScriptProvisionsAndUnwinds(t *testing.T) {
 		{"remove-auto-attendant", aaID}, {"remove-call-queue", cqID},
 		{"remove-resource-account", aaID}, {"remove-resource-account", cqID},
 	} {
-		if got := must(step.op, map[string]any{"resourceAccountId": step.account}); got["removed"] != true {
+		got := must(step.op, map[string]any{"resourceAccountId": step.account})
+		if got["removed"] != true {
 			t.Errorf("%s = %v, want removed", step.op, got)
+		}
+		if step.op == "remove-resource-account" && step.account == cqID {
+			if numbers, _ := got["phoneNumbers"].([]any); len(numbers) != 1 || numbers[0] != "+41445550000" {
+				t.Errorf("remove-resource-account for the queue's account = %v, want its number released with it", got)
+			}
 		}
 		if got := must(step.op, map[string]any{"resourceAccountId": step.account}); got["removed"] != false {
 			t.Errorf("%s repeated = %v, want removed=false", step.op, got)
 		}
 	}
-	if st := stub.load(); len(st.Apps) != 0 || len(st.Accounts) != 0 || len(st.Assoc) != 0 {
-		t.Errorf("the leaver path left %d voice apps, %d accounts and %d associations", len(st.Apps), len(st.Accounts), len(st.Assoc))
+	if st := stub.load(); len(st.Apps) != 0 || len(st.Accounts) != 0 || len(st.Assoc) != 0 || st.Numbers["+41445550000"] != nil {
+		t.Errorf("the leaver path left %d voice apps, %d accounts, %d associations and the number %v",
+			len(st.Apps), len(st.Accounts), len(st.Assoc), st.Numbers["+41445550000"])
 	}
 	if stub.tokens == 0 {
 		t.Error("the script never asked for a Graph token")

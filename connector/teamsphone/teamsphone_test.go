@@ -632,6 +632,35 @@ func TestPhoneNumbersFollowTheirTarget(t *testing.T) {
 	}
 }
 
+// A resource account that is deleted releases its phone numbers first: a number left on a
+// deleted account is a number nobody can give out again until Teams notices. So the
+// leaver path is one task, and the answer says which numbers went with the account.
+func TestRemovingAResourceAccountReleasesItsNumbers(t *testing.T) {
+	m := teamsphone.NewMockTenant("anna@contoso.example")
+	reg := teamsphone.NewRegistry()
+	reg.Register("contoso", m)
+	run := func(op string, args map[string]any) map[string]any {
+		t.Helper()
+		out, err := teamsphone.Run(context.Background(), teamsphone.Job{Connector: "contoso", Operation: op, Args: args, ResultVariable: "r"}, reg)
+		if err != nil {
+			t.Fatalf("%s: %v", op, err)
+		}
+		return out["r"].(map[string]any)
+	}
+	id := run("ensure-resource-account", map[string]any{"userPrincipalName": "cq_x@contoso.example", "displayName": "X", "accountType": "call-queue"})["objectId"].(string)
+	run("ensure-phone-number", map[string]any{"identity": id, "phoneNumber": "+41445550000", "numberType": "direct-routing"})
+	got := run("remove-resource-account", map[string]any{"resourceAccountId": id})
+	if want := map[string]any{"removed": true, "objectId": id, "phoneNumbers": []string{"+41445550000"}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("remove-resource-account = %v, want %v", got, want)
+	}
+	if again := run("remove-resource-account", map[string]any{"resourceAccountId": id}); again["removed"] != false || !reflect.DeepEqual(again["phoneNumbers"], []string{}) {
+		t.Errorf("remove-resource-account repeated = %v, want removed=false and no numbers", again)
+	}
+	if out := run("ensure-phone-number", map[string]any{"identity": "anna@contoso.example", "phoneNumber": "+41445550000", "numberType": "direct-routing"}); out["assigned"] != true {
+		t.Errorf("the released number could not be given out again: %v", out)
+	}
+}
+
 func attendant(holidays string) teamsphone.Job {
 	return teamsphone.Job{Operation: "ensure-auto-attendant", Args: map[string]any{
 		"name": "AA Support", "resourceAccountId": "r", "transferTarget": "q",
