@@ -5675,7 +5675,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         submitted fields become process variables.</p>
       <p data-l="de"><b>Vom Schritt ins Formular und zurück.</b> Unter der Auswahl <i>Linked form</i> am
         Start-Ereignis, am User-Task und beim <i>Repair form</i> eines Service-Tasks stehen zwei Knöpfe:
-        <b>Open form</b> öffnet das verknüpfte Formular im Formular-Editor, <b>＋ New form</b> legt ein neues an.
+        <b>Open form</b> öffnet das verknüpfte Formular im Formular-Editor, <b>＋ New form</b> legt ein neues an;
+        gehört der Prozess zu einer Applikation, wird das neue Formular dort abgelegt.
         Der Modeler speichert vorher den Entwurf (bei einer deployten Version fragt er, bevor Änderungen verloren
         gehen). Der Zurück-Link oben links im Formular-Editor trägt dann den Namen des Prozesses und führt zum
         Diagramm zurück; das Element ist wieder ausgewählt, und ein unterwegs gespeichertes Formular ist mit ihm
@@ -5688,7 +5689,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         Zurück-Link, bevor er sie verwirft.</p>
       <p data-l="en"><b>From the step to its form and back.</b> Under the <i>Linked form</i> picker on a start event,
         on a user task and on a service task's <i>Repair form</i> there are two buttons: <b>Open form</b> opens the
-        linked form in the form editor, <b>＋ New form</b> creates one. The Modeler saves the draft first (on a
+        linked form in the form editor, <b>＋ New form</b> creates one; when the process belongs to an application,
+        the new form is filed there. The Modeler saves the draft first (on a
         deployed version it asks before changes are lost). The back link at the top left of the form editor then
         names the process and returns to the diagram; the element is selected again, and a form saved on the way is
         linked to it &ndash; a new one as well as one saved under a new id. The link is an ordinary change to the
@@ -5696,6 +5698,19 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         meantime, it is left as it is. A Ctrl- or middle-click opens the form in a new tab instead and leaves the
         diagram open as it was. From a deployed version the form opens without a way back, since there is no draft
         to return to. When the form has unsaved changes, the back link asks before it discards them.</p>
+      <p data-l="de"><b>Dasselbe auf der Zeichenfläche.</b> Verknüpft ein Element ein Formular, steht in seinem
+        Kontextpad <b>Open form</b> (das Formular-Symbol neben Schraubenschlüssel und Papierkorb). In der Ansicht
+        <i>Implement</i> zeigen Start-Ereignisse und User-Tasks mit Formular ausserdem ein kleines Formular-Symbol;
+        ein Klick darauf öffnet das Formular. Beides funktioniert wie der Knopf im Panel, und mit Strg- oder
+        Mittelklick öffnet sich das Formular in einem neuen Tab. Gibt es das Formular auf dem Server nicht,
+        erscheint eine Meldung, und das Diagramm wird weder gespeichert noch verlassen. Ein <i>Repair form</i>
+        bekommt auf der Zeichenfläche kein Symbol, ist aber über Kontextpad und Panel erreichbar.</p>
+      <p data-l="en"><b>The same on the canvas.</b> When an element links a form, its context pad has
+        <b>Open form</b> (the form symbol beside the wrench and the bin). In the <i>Implement</i> view, start events
+        and user tasks with a form also show a small form symbol; a click on it opens the form. Both work like the
+        panel's button, and a Ctrl- or middle-click opens the form in a new tab. When the server does not hold the
+        form, a message appears, and the diagram is neither saved nor left. A <i>Repair form</i> gets no symbol on
+        the canvas, but the context pad and the panel reach it.</p>
       <p data-l="de"><b>Start-Formular und Startvariablen gemeinsam.</b> Deklariert der Prozess zusätzlich
         Startvariablen (Prozess-Panel, Tab <i>Implement</i>, <i>Start variables</i>), fragen <i>Deploy &amp; run</i>,
         <i>Start instance</i> und der Start in der Tasks-App unter dem Formular nach denjenigen, die das Formular

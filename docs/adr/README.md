@@ -550,7 +550,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0462](0462-exchange-worker.md) | A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises | Accepted | Landed |
 | [0463](0463-teams-phone-worker.md) | A Microsoft Teams Phone Worker Type for voice apps and their resource accounts | Accepted (amended) | Landed |
 | [0464](0464-windows-system-proxy.md) | Outbound HTTP follows the Windows proxy settings, the way .NET does | Accepted | Landed |
-| [0465](0465-form-doors.md) | A step's form is opened from the step, and the way back links it | Accepted | Landed |
+| [0465](0465-form-doors.md) | A step's form is opened from the step, and the way back links it | Accepted (amended) | Landed |
 
 ## The two states of a record
 

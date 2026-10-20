@@ -930,7 +930,11 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   }
 
   const rerender = wireProperties(root, modeler, api, projectId, toast, identity);
-  const refreshBadges = makeImplementBadges(root, modeler, api);
+  // The form mark is a door out of this diagram (ADR-0465),
+  // and so is the context pad's "Open form": both walk through leaveForForm, published
+  // further down this mount, which is what saves the diagram before it is left.
+  const refreshBadges = makeImplementBadges(root, modeler, api, (el) => openLinkedForm(api, toast, el));
+  registerFormContextPad(modeler, api, toast);
   refreshBadges(); // reflect the initial tab for the diagram just imported
   const refreshPoolCaptions = makePoolProcessCaptions(modeler);
   refreshPoolCaptions(); // name the process each pool runs, on the diagram just imported
@@ -1874,7 +1878,7 @@ function watchShopBadges(viewer, api) {
 // (ADR-0429 §6). It is asked for the first time the Implement tab shows, not before — the
 // Design view draws no badge, so it has no question to ask — and once for the diagram;
 // its answer redraws through this same refresh, so it too is gated on the tab.
-function makeImplementBadges(root, modeler, api) {
+function makeImplementBadges(root, modeler, api, openForm) {
   let ids = []; // overlay ids currently on the canvas, so we can remove ours only
 
   const clear = () => {
@@ -1888,7 +1892,7 @@ function makeImplementBadges(root, modeler, api) {
     clear();
     if (activeTab(root) !== "implement") return;
     loadShopOwners(modeler, api, refresh);
-    ids = drawImplBadges(modeler);
+    ids = drawImplBadges(modeler).concat(openForm ? drawFormBadges(modeler, openForm) : []);
   };
 
   // Keep badges in step with edits (language switched, task added/removed) while the
@@ -2459,7 +2463,7 @@ function owningProcessId(bo) {
   return "";
 }
 
-// newFormHref is the "Create a new form" link, carrying where it was pressed from
+// newFormHref is the "＋ New form" door, carrying where it was pressed from
 // (ADR-0260). Pressing it on a step is the author saying what the
 // form is for, and the form editor's generator opens on exactly that: the process and
 // the step for a user task, the process alone for a start event — which is the
@@ -2468,11 +2472,21 @@ function owningProcessId(bo) {
 //
 // A diagram whose element belongs to no identifiable process still gets the plain link:
 // a new form is a new form, and the generator simply opens with nothing preselected.
-function newFormHref(bo, forThisStep) {
+function newFormHref(bo, forThisStep, projectId) {
   const pid = owningProcessId(bo);
-  if (!pid) return "#/modeler/form/new";
-  const href = "#/modeler/form/new/for/" + encodeURIComponent(pid);
+  if (!pid) return newFormBase(projectId);
+  const href = newFormBase(projectId) + "/for/" + encodeURIComponent(pid);
   return forThisStep && bo.id ? href + "/" + encodeURIComponent(bo.id) : href;
+}
+
+// newFormBase is where every "＋ New form" door starts: the form editor's new form,
+// filed under the diagram's application when the diagram has one (ADR-0465,
+// amendment 2026-10-20). A form is written for the process it is created from, and an
+// application holds that process — so it holds the form too. Filed under none, the form
+// turned up as ungrouped, apart from its process, and an application release did not
+// carry it.
+function newFormBase(projectId) {
+  return "#/modeler/form/new" + (projectId ? "/p/" + encodeURIComponent(projectId) : "");
 }
 
 // formDoorsHTML is the row under a form picker: "＋ New form" and "Open form"
@@ -2498,7 +2512,7 @@ function formDoorsHTML(newHref) {
 function setFormOpen(door, formId, missing) {
   if (!door) return;
   if (formId && !missing) {
-    door.setAttribute("href", "#/modeler/form/e/" + encodeURIComponent(formId));
+    door.setAttribute("href", formEditHref(formId));
     door.removeAttribute("aria-disabled");
     door.title = "Open the linked form in the form editor";
     return;
@@ -2551,21 +2565,148 @@ function takesForm(bo) {
 // plainly, as the decision editor does from the same place.
 function wireFormDoors(body, element) {
   for (const door of body.querySelectorAll("#f-form-new, #f-form-open")) {
-    door.addEventListener("click", async (ev) => {
+    door.addEventListener("click", (ev) => {
       // A modified click is the browser opening the link in a new tab or window, and
       // the diagram stays open in this one: nothing to save and no way back to carry.
-      if (ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
+      if (modifiedClick(ev)) return;
       ev.preventDefault();
       const href = door.getAttribute("href");
       if (!href) return; // shut: nothing to open
-      const left = await leaveForForm();
-      if (!left.ok) return;
-      if (!left.processId) { location.hash = href; return; }
-      const fd = findExt(element.businessObject, "zeebe:FormDefinition");
-      beginFormTrip({ draftId: left.processId, elementId: element.id, linked: (fd && fd.formId) || "" });
-      location.hash = href + fromTail(left.processId, element.id);
+      walkFormDoor(element, href);
     });
   }
+}
+
+// modifiedClick is a click the browser answers itself — a new tab or window, a
+// download — rather than the page: the button other than the first, or a modifier held.
+const modifiedClick = (ev) => !!ev && (ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey);
+
+// walkFormDoor is what every form door does on a plain click, in the panel and on the
+// canvas alike (ADR-0465): this diagram's edits are saved
+// first (or the author is asked), the trip is recorded with what the element names
+// now, and the form editor opens with the way back in its address.
+async function walkFormDoor(element, href) {
+  const left = await leaveForForm();
+  if (!left.ok) return;
+  if (!left.processId) { location.hash = href; return; }
+  beginFormTrip({ draftId: left.processId, elementId: element.id, linked: linkedFormId(element) });
+  location.hash = href + fromTail(left.processId, element.id);
+}
+
+// linkedFormId is the form an element names, or "" — for the elements that take one.
+// A label shares its shape's business object, so it is asked about as its shape.
+function linkedFormId(element) {
+  const bo = element && element.businessObject;
+  if (!takesForm(bo)) return "";
+  const fd = findExt(bo, "zeebe:FormDefinition");
+  return (fd && fd.formId) || "";
+}
+
+const formEditHref = (formId) => "#/modeler/form/e/" + encodeURIComponent(formId);
+
+// openLinkedForm is the canvas's door to the form an element names: the context pad's
+// entry and the Implement view's form mark (ADR-0465,
+// amendment 2026-10-19). The panel knows from its forms list whether the form exists and
+// shuts its door when it does not; the canvas does not hold that list, so it asks the
+// server first — before the diagram is saved or left, so a door that would open on a
+// failure costs nothing.
+async function openLinkedForm(api, toast, element) {
+  const formId = linkedFormId(element);
+  if (!formId) return;
+  try {
+    await api("GET", "/api/v1/forms/" + encodeURIComponent(formId));
+  } catch (e) {
+    if (e && e.status === 404) {
+      if (toast) toast(`There is no form “${formId}” on this server — pick another in the panel, or create one.`, "err");
+      return;
+    }
+    // Anything else is the server failing to answer, not the form missing: the form
+    // editor says what it says when it tries.
+  }
+  await walkFormDoor(element, formEditHref(formId));
+}
+
+// registerFormContextPad adds "Open form" to the context pad of an element that names a
+// form (ADR-0465, amendment 2026-10-19). Only there: on an
+// element with no form there is nothing to open, and creating one is the panel's
+// "＋ New form", where the picker that links it is. A double-click stays the label
+// editor's — the reason the call activity's door is its marker, not the whole shape
+// (ADR-0245).
+function registerFormContextPad(modeler, api, toast) {
+  let pad;
+  try { pad = modeler.get("contextPad"); } catch { return; }
+  pad.registerProvider(500, {
+    getContextPadEntries(element) {
+      if (!element || element.labelTarget) return {};
+      const formId = linkedFormId(element);
+      if (!formId) return {};
+      return {
+        "atlas-open-form": {
+          group: "edit",
+          className: "atlas-cp-form",
+          title: `Open the form “${formId}”`,
+          action: {
+            click: (ev, el) => {
+              // A modified click opens the form where the browser would open a link,
+              // and leaves this diagram as it is.
+              if (modifiedClick(ev)) { window.open(formEditHref(formId), "_blank", "noopener"); return; }
+              openLinkedForm(api, toast, el);
+            },
+          },
+        },
+      };
+    },
+  });
+}
+
+// FORM_GLYPH is a form: a sheet with lines on it, drawn in the badge's colour.
+const FORM_GLYPH = `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="2.5" y="1.5" width="11" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5 5.5h6M5 8.5h6M5 11.5h3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
+
+// FORM_BADGE_SPOT is where the form mark sits: in a user task's top-right corner,
+// opposite the person bpmn-js draws at its top-left, and on a start event's upper left —
+// a start event has nothing coming in on that side, its label hangs below, and the
+// context pad opens on its right. The unsupported-element ⚠ sits on a shape's top-right
+// corner, and neither kind of element is one the compiler refuses.
+const FORM_BADGE_SPOT = {
+  "bpmn:UserTask": { top: 4, right: 24 },
+  "bpmn:StartEvent": { top: -12, left: -12 },
+};
+
+// drawFormBadges marks, in the Implement view, the start events and user tasks that
+// name a form, and returns the overlay ids it added (ADR-0465,
+// amendment 2026-10-19). A form is how a person takes part in the process, so it is worth
+// seeing on the drawing without selecting anything; the mark is a link, so a click on it
+// is the same door the context pad and the panel are, and a modified click opens the
+// form in a new tab. A repair form is not marked: it is an operator's aid for an
+// incident, not a step anybody fills in, and a mark on every such task would say
+// otherwise.
+function drawFormBadges(modeler, open) {
+  const ids = [];
+  let overlays, registry;
+  try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+  catch { return ids; } // modeler torn down mid-flight
+  registry.forEach((el) => {
+    if (el.labelTarget) return;
+    const bo = el.businessObject;
+    const spot = bo && FORM_BADGE_SPOT[bo.$type];
+    const formId = spot ? linkedFormId(el) : "";
+    if (!formId) return;
+    const name = (formFieldCache.get(formId) || {}).name || formId;
+    const a = document.createElement("a");
+    a.className = "form-badge";
+    a.href = formEditHref(formId);
+    a.title = `${bo.$type === "bpmn:StartEvent" ? "Start form" : "Form"}: ${name === formId ? `“${formId}”` : `${name} (“${formId}”)`} — click to open it`;
+    a.innerHTML = FORM_GLYPH;
+    a.addEventListener("click", (ev) => {
+      if (modifiedClick(ev)) return;
+      ev.preventDefault();
+      open(el);
+    });
+    try {
+      ids.push(overlays.add(el.id, "form-badge", { position: spot, html: a }));
+    } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+  });
+  return ids;
 }
 
 // ensureFormFields fetches the schema of each not-yet-cached form id, records its
@@ -2692,6 +2833,19 @@ function wireEditorVars(root, modeler, api) {
   let collapsedCats;
   try { collapsedCats = new Set(JSON.parse(localStorage.getItem(GKEY) || "[]")); } catch { collapsedCats = new Set(); }
   const saveCats = () => { try { localStorage.setItem(GKEY, JSON.stringify([...collapsedCats])); } catch { /* ignore */ } };
+  // The undeclared members below them start closed, the other way round: they are what
+  // the process could read, not what it does, and the count in their header says that
+  // they are there. So what is remembered for them is that the author opened them.
+  const AKEY = "atlas.vars.availableOpen";
+  let availOpen = false;
+  try { availOpen = localStorage.getItem(AKEY) === "1"; } catch { /* closed */ }
+  const saveAvail = () => { try { localStorage.setItem(AKEY, availOpen ? "1" : "0"); } catch { /* ignore */ } };
+  // While a filter is typed every group with a match is open: a filter is a search, and
+  // a match behind a closed header is not found. The choices stored above are for the
+  // unfiltered list and the filter leaves them alone; a group the author closes while
+  // filtering stays closed until the filter is cleared.
+  const AVAIL = "@available";
+  const filterClosed = new Set();
 
   // The values the variables actually held on the last run of this process, keyed by
   // name — {value, kind} as the instance list returns them. A diagram that was never
@@ -2799,6 +2953,7 @@ function wireEditorVars(root, modeler, api) {
     loadSample();
     renderSample();
     const q = (filter.value || "").trim().toLowerCase();
+    if (!q) filterClosed.clear();
     const vars = collectDiagramVariables(modeler).filter((v) =>
       !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q) ||
       (v.source || "").toLowerCase().includes(q));
@@ -2807,14 +2962,22 @@ function wireEditorVars(root, modeler, api) {
     // list, each with the one click that declares it (ADR-0456).
     let available = [];
     try { available = undeclaredMembers(rootProcess(modeler)).filter((m) => !q || m.path.toLowerCase().includes(q)); } catch { /* best-effort */ }
+    // A group like Form / Process, closed until the author opens it or a filter finds a
+    // member in it: an installation with many constants would otherwise push the
+    // process's own variables out of view.
+    const availCol = q ? filterClosed.has(AVAIL) : !availOpen;
     const availableHTML = available.length
-      ? `<div class="vars-available" id="vars-available">
-          <div class="vars-available-head">Available, not declared yet</div>
-          ${available.map((m) => `<div class="var-row var-row-available" data-avail="${esc(m.path)}">
+      ? `<div class="vars-group vars-available${availCol ? " collapsed" : ""}" id="vars-available">
+          <button type="button" class="vars-group-head" aria-expanded="${availCol ? "false" : "true"}">
+            <span class="vg-chevron" aria-hidden="true">▸</span>
+            <span class="vg-title">Available, not declared yet</span>
+            <span class="vg-count">${available.length}</span>
+          </button>
+          <div class="vars-group-body">${available.map((m) => `<div class="var-row var-row-available" data-avail="${esc(m.path)}">
             <div class="var-head"><div class="var-name">${esc(m.path)}</div><span class="vtag">${esc(m.type)}</span>
               <button type="button" class="btn neutral var-declare" data-declare="${esc(m.path)}"
                 title="Declare ${esc(m.path)} on this process, so its instances carry it">Declare</button></div>
-            <div class="var-meta">${esc(m.ns)} ${m.info ? "info" : "constant"}</div></div>`).join("")}
+            <div class="var-meta">${esc(m.ns)} ${m.info ? "info" : "constant"}</div></div>`).join("")}</div>
         </div>`
       : "";
     if (!vars.length) {
@@ -2837,7 +3000,7 @@ function wireEditorVars(root, modeler, api) {
     list.innerHTML = (cats.length === 1
       ? groups.get(cats[0]).map(rowHTML).join("")
       : cats.map((cat) => {
-          const col = collapsedCats.has(cat);
+          const col = q ? filterClosed.has(cat) : collapsedCats.has(cat);
           return `<div class="vars-group${col ? " collapsed" : ""}" data-cat="${esc(cat)}">
             <button type="button" class="vars-group-head" aria-expanded="${col ? "false" : "true"}">
               <span class="vg-chevron" aria-hidden="true">▸</span>
@@ -2916,12 +3079,20 @@ function wireEditorVars(root, modeler, api) {
     const gh = e.target.closest(".vars-group-head");
     if (gh) {
       const grp = gh.closest(".vars-group");
-      const cat = grp && grp.dataset.cat;
-      if (cat) {
+      const avail = !!grp && grp.id === "vars-available";
+      const key = avail ? AVAIL : grp && grp.dataset.cat;
+      if (key) {
         const col = grp.classList.toggle("collapsed");
         gh.setAttribute("aria-expanded", col ? "false" : "true");
-        if (col) collapsedCats.add(cat); else collapsedCats.delete(cat);
-        saveCats();
+        if ((filter.value || "").trim()) {
+          if (col) filterClosed.add(key); else filterClosed.delete(key);
+        } else if (avail) {
+          availOpen = !col;
+          saveAvail();
+        } else {
+          if (col) collapsedCats.add(key); else collapsedCats.delete(key);
+          saveCats();
+        }
       }
       return;
     }
@@ -5535,9 +5706,60 @@ function sendTaskKindHTML(modeler, bo) {
     stKindFieldsHTML(cur, ext);
 }
 
+// settleKindFields completes props — the values about to be written over a kind's
+// stored extension — so the extension states what the panel shows for the operation,
+// auth type or format they choose. A field that choice hides is dropped: the panel
+// neither shows nor saves it again, so a value left there could only be removed in the
+// XML source, and Teams Phone, Mail, Jira and Discord refuse to compile a task that
+// carries one. A select the choice shows starts on its first option when it holds
+// nothing, because that is the option the panel displays as chosen.
+//
+// A field is dropped only when the mode fields (the reRender ones) hide it, whatever its
+// siblings hold. Entra's inline attributes and its attributes variable hide each other
+// too, but they are alternatives the author is choosing between, not an operation's
+// leftovers: with both filled in, the compiler names the conflict.
+function settleKindFields(kind, stored, props) {
+  const value = (key) => (key in props ? props[key] : (stored ? stored[key] : undefined));
+  const firstOption = (f) => (f.options && f.options.length ? selectOption(f.options[0]).v : "");
+  for (const f of kind.fields) {
+    if (f.reRender && f.type === "select" && !value(f.key) && firstOption(f)) props[f.key] = firstOption(f);
+  }
+  const mode = {};
+  const all = {};
+  for (const f of kind.fields) {
+    if (f.group) continue;
+    all[f.key] = value(f.key);
+    if (f.reRender) mode[f.key] = all[f.key];
+  }
+  const shown = (f, values) => {
+    if (!f.showIf) return true;
+    try { return !!f.showIf(values); } catch { return true; }
+  };
+  // An attribute may be described more than once — CSV's columns are names for a
+  // delimited file and name:width for a fixed-width one — so it is unused only when
+  // every field that writes it is hidden.
+  const byKey = new Map();
+  for (const f of kind.fields) {
+    // A map field reads its rows from the panel, so a hidden one is already saved empty.
+    if (f.group || f.reRender || f.type === "map") continue;
+    if (!byKey.has(f.key)) byKey.set(f.key, []);
+    byKey.get(f.key).push(f);
+  }
+  for (const [key, fields] of byKey) {
+    if (!fields.some((f) => shown(f, mode) || shown(f, all))) {
+      if (value(key) !== undefined) props[key] = undefined;
+      continue;
+    }
+    const select = fields.find((f) => f.type === "select" && shown(f, all));
+    if (select && !value(key) && firstOption(select)) props[key] = firstOption(select);
+  }
+  return props;
+}
+
 // applyServiceTaskKind switches a service task to a catalog kind by writing that
-// kind's extension (seeding select defaults) and removing every other kind's
-// extension, so the compiler sees exactly one Worker Type (ADR-0067).
+// kind's extension (seeding the defaults of the selects its first operation shows) and
+// removing every other kind's extension, so the compiler sees exactly one Worker Type
+// (ADR-0067). Choosing the kind a task already has keeps what its extension states.
 function applyServiceTaskKind(modeler, element, kindId) {
   const kind = SERVICE_TASK_KINDS.find((k) => k.id === kindId) || SERVICE_TASK_KINDS[0];
   // The retry budget is a property of the task, not of the implementation it happens
@@ -5550,13 +5772,7 @@ function applyServiceTaskKind(modeler, element, kindId) {
   }
   const defaults = {};
   if (prev.retries && kind.fields.some((f) => f.key === "retries")) defaults.retries = prev.retries;
-  for (const f of kind.fields) {
-    if (f.type === "select" && f.options && f.options.length) {
-      const v = selectOption(f.options[0]).v;
-      if (v) defaults[f.key] = v;
-    }
-  }
-  upsertExt(modeler, element, kind.ext, defaults);
+  upsertExt(modeler, element, kind.ext, settleKindFields(kind, findExt(element.businessObject, kind.ext), defaults));
 }
 
 // applySendTaskKind switches a send task between its Message kind, its Shop kind (ADR-0429) and
@@ -5963,7 +6179,7 @@ const REPAIR_FORM_TYPES = new Set(["bpmn:ServiceTask", "bpmn:SendTask", "bpmn:Bu
 // instance's variables an operator corrects to get the task moving, and opening the
 // generator on this task would frame it as the task's work form — the very confusion
 // the paragraph below exists to prevent.
-function repairFormHTML(bo) {
+function repairFormHTML(bo, projectId) {
   if (!REPAIR_FORM_TYPES.has(bo.$type)) return "";
   const fd = findExt(bo, "zeebe:FormDefinition") || {};
   const cur = fd.formId || "";
@@ -5973,7 +6189,7 @@ function repairFormHTML(bo) {
         <option value="">&mdash; none &mdash;</option>
         ${cur ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : ""}
       </select></label>
-    ${formDoorsHTML("#/modeler/form/new")}
+    ${formDoorsHTML(newFormBase(projectId))}
     <p class="muted" style="font-size:12px">Shown to an operator when this task parks behind an incident, so they can correct
       the values that matter instead of editing the whole variable set as JSON. Only the form's own fields are written, and the
       change is audited like any other. Leave it unset and the raw editor is the only way — which is fine for a task with
@@ -8476,7 +8692,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
                 <option value="">— none —</option>
                 ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
               </select></label>
-            ${formDoorsHTML(newFormHref(bo, true))}
+            ${formDoorsHTML(newFormHref(bo, true, projectId))}
             <p class="muted" style="font-size:12px">The form the Tasks app renders for this task, submitted as its variables.
               <b>＋ New form</b> creates one; coming back to the draft links it to this task.</p>
             <h3>Assignment</h3>
@@ -8504,7 +8720,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // The repair form is offered on the task kinds that can park behind an incident
         // an operator repairs by correcting variables (ADR-0169); repairFormHTML itself
         // decides which those are, so the panel and the compiler agree on the set.
-        html += repairFormHTML(bo);
+        html += repairFormHTML(bo, projectId);
         // Every task kind can carry a loop marker (ADR-0077 multi-instance, ADR-0133
         // standard loop) — including the ones with no implementation of their own: an
         // undefined or manual task repeats its pass-through, a business rule task
@@ -8772,7 +8988,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
                 <option value="">— none —</option>
                 ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
               </select></label>
-            ${formDoorsHTML(newFormHref(bo, false))}
+            ${formDoorsHTML(newFormHref(bo, false, projectId))}
             <p class="muted" style="font-size:12px">Shown before the process starts — from the Tasks app's <b>Start</b> view — its data becomes the instance's start variables.
               <b>＋ New form</b> creates one; coming back to the draft links it to this start event.</p>
             <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> start event instead.</p>`;
@@ -9339,7 +9555,8 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       for (const f of stKind.fields) {
         if (f.group) continue;
         if (f.type === "map") { props[f.key] = readMapField(f); continue; }
-        // A showIf-hidden field isn't rendered; leave its stored value untouched.
+        // A showIf-hidden field isn't rendered; settleKindFields decides what becomes
+        // of its stored value.
         const el = body.querySelector("#f-st-" + f.key);
         if (!el) continue;
         const v = (el.value || "").trim();
@@ -9347,6 +9564,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // than write an empty one, so the exported XML says what the task means.
         props[f.key] = (f.type === "number" && v === "") ? undefined : v;
       }
+      // The panel on screen is the one the previous operation drew, so a change of
+      // operation reads that operation's fields; settling drops the ones the new
+      // operation does not use and starts the selects it brings.
+      settleKindFields(stKind, findExt(bo, stKind.ext), props);
       // Normalize mutually exclusive authored fields before the generic extension update.
       if (stKind.normalize) stKind.normalize(props);
       upsertExt(modeler, element, stKind.ext, props);
