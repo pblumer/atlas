@@ -355,7 +355,7 @@ type Server struct {
 	// zone, language (ADR-0459).
 	userPrefs *userprefs.Service
 	// startFavourites serves the processes each person starred on the Tasks app's
-	// Start view (ADR-draft-start-view-groups-and-favourites).
+	// Start view (ADR-0466).
 	startFavourites *startfavourites.Service
 	// formGen writes a form from a description and from the process it belongs to
 	// (ADR-0260). It is the one area service that holds no run

@@ -27,7 +27,7 @@ _Changed_ / _Removed_ for each version.
   see, are listed under **Other**. For this, `GET /api/v1/processes` names each row's
   application in `applicationName` — only where the caller may see that application, so a
   private application's name stays as hidden as the application
-  ([ADR-draft-start-view-groups-and-favourites](docs/adr/draft-start-view-groups-and-favourites.md)).
+  ([ADR-0466](docs/adr/0466-start-view-groups-and-favourites.md)).
 - **A step's form opens from the canvas too.** An element that names a form now has
   **Open form** in its context pad, and in the Implement view a start event or user task
   with a form carries a small form mark that opens it. Both take the way the panel's

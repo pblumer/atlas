@@ -95,7 +95,7 @@ type processResp struct {
 	// list. Absent where the caller may not see the application (ADR-0071): a private
 	// application's name stays as hidden as the application, and only its opaque id
 	// is listed. Absent, too, for a definition filed under no application or under
-	// one deleted since (ADR-draft-start-view-groups-and-favourites).
+	// one deleted since (ADR-0466).
 	ApplicationName string `json:"applicationName,omitempty"`
 	// CollaborationKey groups a collaboration's pools: when non-zero, this process
 	// is a pool of a collaboration and the value is the stable key the Operations

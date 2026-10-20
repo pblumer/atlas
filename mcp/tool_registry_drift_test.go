@@ -615,7 +615,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/me/preferences": "it configures a screen, and an assistant has none",
 	"PUT /api/v1/me/preferences": "an assistant acting as a person must not silently reformat that person's console",
 
-	// The start favourites (ADR-draft-start-view-groups-and-favourites): one
+	// The start favourites (ADR-0466): one
 	// person's shortcuts on the Start view, for the reason the diagram shortcuts below
 	// are omitted. An assistant starts a process by its id and needs no star to find it.
 	"GET /api/v1/me/start-favourites":                "a person's own shortcuts on the Start view, a navigation aid for somebody at a screen that an assistant does not need",

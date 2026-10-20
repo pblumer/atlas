@@ -1,6 +1,6 @@
 // Package startfavourites keeps the processes each person starred on the Tasks app's
 // Start view, so the list they start from most opens with those at the top on every
-// browser and device they sign in from (ADR-draft-start-view-groups-and-favourites).
+// browser and device they sign in from (ADR-0466).
 //
 // A mark stores a process id under a user id and nothing else. It is a bookmark,
 // never a grant — the shop's favourites (ADR-0348) and the diagram shortcuts
