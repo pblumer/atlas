@@ -125,6 +125,8 @@ function New-App([string]$Kind, [hashtable]$Params) {
         if ($k -in 'DefaultCallFlow', 'CallFlows', 'CallHandlingAssociations') { continue }
         $app.Params[$k] = $Params[$k]
     }
+    # A call queue answers with the agents named directly as Users, as Teams' does.
+    if ($Kind -eq 'CallQueue') { $app.Users = [string[]]@(foreach ($u in $Params.Users) { $u }) }
     if ($Params.CallHandlingAssociations) { $app.Params.Holidays = @($Params.CallHandlingAssociations).Count }
     $s.apps[$app.Identity] = $app
     Save-State $s
@@ -138,11 +140,26 @@ function Remove-App([string]$Kind, [string]$Identity) {
     Save-State $s
 }
 
+function Assert-Agents($Users) {
+    # Teams takes agents as ids; a blank one is a list the script assembled wrongly.
+    foreach ($u in $Users) { if (-not $u) { throw 'stub: an agent id is blank' } }
+}
+
 function Get-CsCallQueue { param([string]$Identity, [string]$NameFilter) Get-App 'CallQueue' $Identity $NameFilter }
 function New-CsCallQueue {
     param([string]$Name, [switch]$UseDefaultMusicOnHold, [string]$RoutingMethod, [bool]$PresenceBasedRouting,
         [bool]$ConferenceMode, [bool]$AllowOptOut, [string]$LanguageId, [string[]]$Users, [string[]]$AuthorizedUsers)
+    Assert-Agents $Users
     New-App 'CallQueue' $PSBoundParameters
+}
+function Set-CsCallQueue {
+    param([string]$Identity, [string[]]$Users)
+    Assert-Agents $Users
+    $s = Get-State
+    $app = $s.apps[$Identity]
+    if (-not $app -or $app.Kind -ne 'CallQueue') { throw "stub: no CallQueue $Identity" }
+    $app.Users = [string[]]@(foreach ($u in $Users) { $u })
+    Save-State $s
 }
 function Remove-CsCallQueue { param([string]$Identity) Remove-App 'CallQueue' $Identity }
 

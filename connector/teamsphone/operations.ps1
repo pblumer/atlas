@@ -194,6 +194,34 @@ function Set-ResourceAccount {
     return & $result ([string]$ra.ObjectId) $true 'created'
 }
 
+# The agents a model names are the queue's agents, so an existing queue is brought to
+# the list rather than returned as it is: a process run again after a change of staff
+# means the new list. Only agents named directly are compared — those a distribution list
+# or a channel brings are Teams' to keep — ids without regard to case, and the order
+# only where serial routing rings in it. A list that would take every agent away is
+# refused: a Resolve users that found nobody reads exactly like a queue nobody staffs.
+# The worker passes agents only when the model named them; not named is "leave them".
+function Sync-QueueAgents($Queue) {
+    $a = $Request.args
+    if (-not $a.Contains('agents')) { return $false }
+    $serial = [string]$a.routingMethod -eq 'serial'
+    $key = {
+        param($List)
+        $k = @(foreach ($u in $List) { ([string]$u).ToLowerInvariant() })
+        if (-not $serial) { $k = @($k | Sort-Object) }
+        $k -join ','
+    }
+    $want = @(foreach ($u in $a.agents) { [string]$u })
+    $have = @(foreach ($u in $Queue.Users) { [string]$u })
+    if ((& $key $want) -eq (& $key $have)) { return $false }
+    if ($want.Count -eq 0) {
+        throw "the empty list of agents would remove every agent from the call queue $($Queue.Name), which has $($have.Count); an ensure never empties a queue, because a Resolve users that found nobody reads the same: name at least one agent, or leave agents out to keep the ones it has"
+    }
+    $null = Set-CsCallQueue -Identity $Queue.Identity -Users $want
+    Write-Log "call queue $($Queue.Name): agents set to $($want.Count)"
+    return $true
+}
+
 function Set-CallQueue {
     $a = $Request.args
     $accountId = [string]$a.resourceAccountId
@@ -205,11 +233,16 @@ function Set-CallQueue {
             throw "the resource account $accountId is already associated with an auto attendant"
         }
         $queue = Get-CsCallQueue -Identity $assoc.ConfigurationId
-        return [ordered]@{ id = [string]$queue.Identity; name = [string]$queue.Name; created = $false }
+        $changed = Sync-QueueAgents $queue
+        return [ordered]@{ id = [string]$queue.Identity; name = [string]$queue.Name; created = $false; agentsChanged = $changed }
     }
     $created = $false
+    $changed = $false
     $queue = Get-CsCallQueue -NameFilter $name | Where-Object { $_.Name -eq $name } | Select-Object -First 1
-    if (-not $queue) {
+    if ($queue) {
+        # Before the association: a refused list leaves the queue as unattached as it was.
+        $changed = Sync-QueueAgents $queue
+    } else {
         $routing = @{ 'attendant' = 'Attendant'; 'serial' = 'Serial'; 'round-robin' = 'RoundRobin'; 'longest-idle' = 'LongestIdle' }
         $params = @{
             Name                  = $name
@@ -220,14 +253,17 @@ function Set-CallQueue {
             AllowOptOut           = [bool]$a.allowOptOut
         }
         if ($a.languageId) { $params.LanguageId = [string]$a.languageId }
-        if (@($a.agents).Count -gt 0) { $params.Users = @($a.agents) }
+        # Agents a model did not name arrive as no value at all, and @($null) is one
+        # element, not none; foreach takes neither a null nor an empty list for an agent.
+        $agents = @(foreach ($u in $a.agents) { [string]$u })
+        if ($agents.Count -gt 0) { $params.Users = $agents }
         if (@($a.authorizedUsers).Count -gt 0) { $params.AuthorizedUsers = @($a.authorizedUsers) }
         $queue = New-CsCallQueue @params
         $created = $true
         Write-Log "call queue $name created"
     }
     $null = New-CsOnlineApplicationInstanceAssociation -Identities @($accountId) -ConfigurationId $queue.Identity -ConfigurationType CallQueue
-    return [ordered]@{ id = [string]$queue.Identity; name = [string]$queue.Name; created = $created }
+    return [ordered]@{ id = [string]$queue.Identity; name = [string]$queue.Name; created = $created; agentsChanged = $changed }
 }
 
 function ConvertTo-TeamsDate([string]$IsoDate) {

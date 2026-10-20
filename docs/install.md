@@ -61,9 +61,9 @@ way: `/healthz` and `/readyz` answer whoever can reach the port. See
 If you only want to see it run, and will throw the directory away afterwards:
 
 ```bash
-curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.15.0/atlas_0.15.0_linux_amd64.tar.gz
-tar -xzf atlas_0.15.0_linux_amd64.tar.gz
-./atlas_0.15.0_linux_amd64/atlas serve
+curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.16.0/atlas_0.16.0_linux_amd64.tar.gz
+tar -xzf atlas_0.16.0_linux_amd64.tar.gz
+./atlas_0.16.0_linux_amd64/atlas serve
 ```
 
 Then open <http://127.0.0.1:8080/>. Authentication is off, so there is no login —
@@ -85,7 +85,7 @@ the transfer. Substitute the version and architecture you want — `linux_amd64`
 `linux_arm64`, or `linux_arm` (ARMv6, for a 32-bit Raspberry Pi OS).
 
 ```bash
-VERSION=0.15.0
+VERSION=0.16.0
 ARCH=linux_amd64
 BASE=https://github.com/pblumer/atlas/releases/download/v${VERSION}
 
@@ -94,7 +94,7 @@ curl -fsSLO ${BASE}/SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-`sha256sum` must print `atlas_0.15.0_linux_amd64.tar.gz: OK`. If it prints
+`sha256sum` must print `atlas_0.16.0_linux_amd64.tar.gz: OK`. If it prints
 anything else, stop — do not unpack the archive.
 
 ### 2. Put the binary on the system
@@ -706,7 +706,7 @@ Windows — Windows *containers* are not supported.
 In an elevated PowerShell:
 
 ```powershell
-$Version = '0.15.0'
+$Version = '0.16.0'
 $Base = "https://github.com/pblumer/atlas/releases/download/v$Version"
 Invoke-WebRequest "$Base/atlas_${Version}_windows_amd64.zip" -OutFile atlas.zip
 Invoke-WebRequest "$Base/SHA256SUMS" -OutFile SHA256SUMS
@@ -722,7 +722,7 @@ New-Item -ItemType Directory -Force -Path C:\Atlas\data | Out-Null
 ### 2. Try it in the foreground
 
 ```powershell
-C:\Atlas\atlas_0.15.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
+C:\Atlas\atlas_0.16.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
 ```
 
 ### 3. Run it as a Windows service
@@ -738,7 +738,7 @@ next to the wrapper executable:
   <id>atlas</id>
   <name>Atlas BPMN workflow engine</name>
   <description>Durable BPMN 2.x workflow engine.</description>
-  <executable>C:\Atlas\atlas_0.15.0_windows_amd64\atlas.exe</executable>
+  <executable>C:\Atlas\atlas_0.16.0_windows_amd64\atlas.exe</executable>
   <arguments>serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data --auth</arguments>
   <workingdirectory>C:\Atlas</workingdirectory>
   <onfailure action="restart" delay="5 sec"/>
@@ -761,6 +761,16 @@ only, give it a certificate (`--tls-cert`/`--tls-key`, PEM files — the Windows
 certificate store is not read) or put IIS in front as the TLS terminator, and set
 `ATLAS_ADMIN_USERNAME` / `ATLAS_ADMIN_PASSWORD` as machine-level environment
 variables before the first start with `--auth`.
+
+**Outbound proxy.** On Windows, `atlas serve` and every worker follow the proxy settings
+of the account they run as, the way PowerShell and every other .NET program do: a PAC
+script, automatic detection (WPAD), or a proxy and bypass list in Internet Options — which
+a group policy usually sets. A proxy variable (`HTTPS_PROXY`, `HTTP_PROXY`) set for the
+service still wins, and `ATLAS_SYSTEM_PROXY=off` makes Atlas read only the variables, as it
+did before. Loopback and the host's own addresses — and so the supervised workers' way
+back to their server — never go through a proxy. The startup line `outbound_proxy.selected` says which source a process
+follows. A proxy that demands Windows authentication (NTLM, Kerberos) is out of reach for
+the Go workers either way; give the server an exception there.
 
 **PowerShell script tasks** run through `pwsh` — that is PowerShell **Core** (7+),
 not the Windows PowerShell 5.1 that ships with the OS. Install it separately if

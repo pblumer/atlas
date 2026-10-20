@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"crypto"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -10,16 +12,23 @@ import (
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/oauth2"
+	"github.com/pblumer/atlas/internal/certstore"
 )
 
 // entraEnvPrefix is where an Entra worker's tenant credentials live.
 const entraEnvPrefix = "ATLAS_ENTRA_"
 
+// openStoreCertificate finds a certificate in the Windows certificate store by
+// thumbprint. A variable so the worker's half is testable on every platform.
+var openStoreCertificate = certstore.Open
+
 // entraRegistryFromEnv builds the Entra tenants this worker holds.
 // ATLAS_ENTRA_CONNECTORS lists the names; each name contributes
-// ATLAS_ENTRA_<NAME>_TENANT_ID and _CLIENT_ID, exactly one credential — _CLIENT_SECRET,
-// or _CLIENT_CERTIFICATE, a PEM text holding the app's certificate and its private key
-// (ADR-0172, amended) — plus the optional _BASE_URL (a national cloud) and _SCOPE.
+// ATLAS_ENTRA_<NAME>_TENANT_ID and _CLIENT_ID, exactly one credential — _CLIENT_SECRET;
+// _CLIENT_CERTIFICATE, a PEM text holding the app's certificate and its private key; or
+// _CLIENT_CERTIFICATE_THUMBPRINT, a certificate in this Windows host's store whose key
+// signs there and is never read (ADR-0172, amended) — plus the optional _BASE_URL (a
+// national cloud) and _SCOPE.
 //
 // The app credential comes from the environment and not from a flag because argv is
 // readable by anyone who can list processes — and an app registration with
@@ -46,13 +55,22 @@ func entraRegistryFromEnv(env func(string) string) (*entra.Registry, []string, e
 			}
 		}
 		secret, certPEM := env(key+"CLIENT_SECRET"), entraCertificatePEM(env(key+"CLIENT_CERTIFICATE"))
+		thumbprint := strings.TrimSpace(env(key + "CLIENT_CERTIFICATE_THUMBPRINT"))
+		var set []string
+		for _, c := range []struct{ name, value string }{
+			{"CLIENT_SECRET", secret}, {"CLIENT_CERTIFICATE", certPEM}, {"CLIENT_CERTIFICATE_THUMBPRINT", thumbprint},
+		} {
+			if c.value != "" {
+				set = append(set, key+c.name)
+			}
+		}
 		switch {
-		case secret == "" && certPEM == "":
-			return nil, nil, fmt.Errorf("worker: entra worker %q is missing its credential: set %sCLIENT_SECRET or %sCLIENT_CERTIFICATE", name, key, key)
-		case secret != "" && certPEM != "":
+		case len(set) == 0:
+			return nil, nil, fmt.Errorf("worker: entra worker %q is missing its credential: set %sCLIENT_SECRET, %sCLIENT_CERTIFICATE or %sCLIENT_CERTIFICATE_THUMBPRINT", name, key, key, key)
+		case len(set) > 1:
 			// Two credentials would leave the choice to an accident of precedence; an
 			// operator rotating from a secret to a certificate removes the secret.
-			return nil, nil, fmt.Errorf("worker: entra worker %q has both %sCLIENT_SECRET and %sCLIENT_CERTIFICATE: set exactly one", name, key, key)
+			return nil, nil, fmt.Errorf("worker: entra worker %q has %s: set exactly one", name, strings.Join(set, " and "))
 		}
 		scope := env(key + "SCOPE")
 		if scope == "" {
@@ -63,22 +81,34 @@ func entraRegistryFromEnv(env func(string) string) (*entra.Registry, []string, e
 		// unattended provisioning, so unlike mail and SharePoint this worker offers no
 		// choice of grant — only of how the client proves itself, by a secret or by a
 		// certificate.
-		var fetch oauth2.Fetcher
-		if certPEM != "" {
-			cert, priv, err := oauth2.ParseCertificateBundle("entra", certPEM)
-			if err != nil {
-				return nil, nil, fmt.Errorf("worker: entra worker %q: %w", name, err)
-			}
-			fetch = oauth2.ClientCertificate(oauth2.CertificateConfig{
+		certificate := func(cert *x509.Certificate, signer crypto.Signer) oauth2.Fetcher {
+			return oauth2.ClientCertificate(oauth2.CertificateConfig{
 				HTTPClient:  nettimeout.HTTPClient(),
 				Kind:        "entra",
 				TokenURL:    tokenURL,
 				ClientID:    clientID,
 				Certificate: cert,
-				PrivateKey:  priv,
+				PrivateKey:  signer,
 				Scope:       scope,
 			}, nil)
-		} else {
+		}
+		var fetch oauth2.Fetcher
+		switch {
+		case thumbprint != "":
+			// The store is asked once now, so a certificate that is missing or a key
+			// this account may not use is a startup error, not a failed token request.
+			cert, signer, err := openStoreCertificate(thumbprint)
+			if err != nil {
+				return nil, nil, fmt.Errorf("worker: entra worker %q: %w", name, err)
+			}
+			fetch = certificate(cert, signer)
+		case certPEM != "":
+			cert, priv, err := oauth2.ParseCertificateBundle("entra", certPEM)
+			if err != nil {
+				return nil, nil, fmt.Errorf("worker: entra worker %q: %w", name, err)
+			}
+			fetch = certificate(cert, priv)
+		default:
 			fetch = oauth2.ClientCredentials(oauth2.Config{
 				HTTPClient:   nettimeout.HTTPClient(),
 				Kind:         "entra",

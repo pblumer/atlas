@@ -12,6 +12,7 @@ import (
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/s3"
+	"github.com/pblumer/atlas/internal/certstore"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -300,7 +301,8 @@ func (s *Server) entraWorkerEnv() []string {
 			}
 			key := entraEnvPrefix + envKey + "_"
 			if strings.TrimSpace(os.Getenv(key+"CLIENT_SECRET")) != "" ||
-				strings.TrimSpace(os.Getenv(key+"CLIENT_CERTIFICATE")) != "" {
+				strings.TrimSpace(os.Getenv(key+"CLIENT_CERTIFICATE")) != "" ||
+				strings.TrimSpace(os.Getenv(key+"CLIENT_CERTIFICATE_THUMBPRINT")) != "" {
 				continue // the operator set the credential directly; nothing to resolve
 			}
 			for _, cred := range []string{"CLIENT_SECRET", "CLIENT_CERTIFICATE"} {
@@ -351,9 +353,12 @@ func (s *Server) entraWorkerEnv() []string {
 			taken[envKey] = c.Name
 			key := entraEnvPrefix + envKey + "_"
 			env = append(env, key+"TENANT_ID="+b.TenantID, key+"CLIENT_ID="+b.ClientID)
-			if b.Certificate != "" {
+			switch {
+			case b.CertificateThumbprint != "":
+				env = append(env, key+"CLIENT_CERTIFICATE_THUMBPRINT="+b.CertificateThumbprint)
+			case b.Certificate != "":
 				env = append(env, key+"CLIENT_CERTIFICATE="+b.Certificate)
-			} else {
+			default:
 				env = append(env, key+"CLIENT_SECRET="+b.ClientSecret)
 			}
 			if base := strings.TrimSpace(c.Endpoint); base != "" {
@@ -375,20 +380,31 @@ func (s *Server) entraWorkerEnv() []string {
 
 // entraBundle is the OAuth bundle an operator stores in the vault under an entra
 // worker's credentialsRef: the tenant id, client id and one credential together, so
-// the record itself holds no credential (ADR-0172). The credential is either a client
-// secret or a certificate — the app's certificate and its private key as one PEM text
-// (ADR-0172, amended). ok is false when the bundle is absent, missing a field, or
-// carries both credentials — the tenant is then left unconfigured rather than handed
-// over half-filled or with the choice left to precedence.
+// the record itself holds no credential (ADR-0172). The credential is a client secret;
+// or a certificate — the app's certificate and its private key as one PEM text; or the
+// thumbprint of a certificate in the Windows certificate store of the host the worker
+// runs on, whose key signs there and is never read (ADR-0172, amended). ok is false
+// when the bundle is absent, missing a field, or carries more than one credential — the
+// tenant is then left unconfigured rather than handed over half-filled or with the
+// choice left to precedence.
 type entraBundle struct {
-	TenantID     string `json:"tenantId"`
-	ClientID     string `json:"clientId"`
-	ClientSecret string `json:"clientSecret"`
-	Certificate  string `json:"certificate"`
+	TenantID              string `json:"tenantId"`
+	ClientID              string `json:"clientId"`
+	ClientSecret          string `json:"clientSecret"`
+	Certificate           string `json:"certificate"`
+	CertificateThumbprint string `json:"certificateThumbprint"`
 }
 
+// entraCertStoreSupported says whether a supervised Entra worker on this host has a
+// certificate store to find a thumbprint in. Only Windows has one; elsewhere a thumbprint
+// bundle is left out like any that does not resolve, because handing it over would make
+// the worker refuse to start — for every tenant it serves, not only this one. A variable
+// so both answers are testable on one platform.
+var entraCertStoreSupported = certstore.Supported
+
 // entraBundleParse parses a vault bundle value. An empty value, invalid JSON, a missing
-// field, or a secret and a certificate together yield ok=false.
+// field, more than one credential, or a thumbprint on a host without a certificate store
+// yield ok=false.
 func entraBundleParse(raw string) (entraBundle, bool) {
 	if strings.TrimSpace(raw) == "" {
 		return entraBundle{}, false
@@ -400,11 +416,20 @@ func entraBundleParse(raw string) (entraBundle, bool) {
 	if strings.TrimSpace(b.TenantID) == "" || strings.TrimSpace(b.ClientID) == "" {
 		return entraBundle{}, false
 	}
-	secret, cert := strings.TrimSpace(b.ClientSecret) != "", strings.TrimSpace(b.Certificate) != ""
-	if secret == cert {
-		return entraBundle{}, false // neither, or both
-	}
 	b.Certificate = strings.TrimSpace(b.Certificate)
+	b.CertificateThumbprint = strings.TrimSpace(b.CertificateThumbprint)
+	credentials := 0
+	for _, c := range []string{strings.TrimSpace(b.ClientSecret), b.Certificate, b.CertificateThumbprint} {
+		if c != "" {
+			credentials++
+		}
+	}
+	if credentials != 1 {
+		return entraBundle{}, false // none, or more than one
+	}
+	if b.CertificateThumbprint != "" && !entraCertStoreSupported {
+		return entraBundle{}, false
+	}
 	return b, true
 }
 

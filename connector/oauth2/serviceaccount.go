@@ -99,7 +99,15 @@ func (f *saFetcher) signAssertion() (string, error) {
 // signRS256 encodes and RS256-signs a JWT. It is the one signer every assertion grant
 // here shares — Google's service account and Microsoft's certificate credential differ
 // in their claims, not in how a JWT is put together.
-func signRS256(kind string, header map[string]string, claims map[string]any, key *rsa.PrivateKey) (string, error) {
+//
+// It takes a crypto.Signer rather than a key, because a key in the Windows certificate
+// store signs on request and is never handed over (ADR-0172, amended). An RSA key's
+// Sign with a plain hash is PKCS#1 v1.5, which is what RS256 is; any other key is
+// refused here, before a token endpoint sees a signature it cannot check.
+func signRS256(kind string, header map[string]string, claims map[string]any, key crypto.Signer) (string, error) {
+	if _, ok := key.Public().(*rsa.PublicKey); !ok {
+		return "", fmt.Errorf("%s: the signing key is not RSA; an RS256 assertion needs an RSA key", kind)
+	}
 	hb, err := json.Marshal(header)
 	if err != nil {
 		return "", fmt.Errorf("%s: encode JWT header: %w", kind, err)
@@ -110,7 +118,7 @@ func signRS256(kind string, header map[string]string, claims map[string]any, key
 	}
 	signingInput := base64.RawURLEncoding.EncodeToString(hb) + "." + base64.RawURLEncoding.EncodeToString(cb)
 	digest := sha256.Sum256([]byte(signingInput))
-	sig, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
+	sig, err := key.Sign(rand.Reader, digest[:], crypto.SHA256)
 	if err != nil {
 		return "", fmt.Errorf("%s: sign JWT assertion: %w", kind, err)
 	}

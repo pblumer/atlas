@@ -2,6 +2,7 @@ package oauth2
 
 import (
 	"context"
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
@@ -35,14 +36,16 @@ const certificateAssertionTTL = 10 * time.Minute
 const clientAssertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 
 // CertificateConfig configures the certificate grant. Certificate is the one registered
-// on the app; PrivateKey signs the assertion and must belong to it.
+// on the app; PrivateKey signs the assertion and must belong to it. It is a signer, not
+// a key: an *rsa.PrivateKey read from a PEM is one, and so is a key that stays in the
+// Windows certificate store and only signs on request (ADR-0172, amended).
 type CertificateConfig struct {
 	HTTPClient  *http.Client
 	Kind        string
 	TokenURL    string
 	ClientID    string
 	Certificate *x509.Certificate
-	PrivateKey  *rsa.PrivateKey
+	PrivateKey  crypto.Signer
 	Scope       string
 }
 

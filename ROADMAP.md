@@ -594,6 +594,24 @@ The control-flow basics most real models use.
   Exchange Server over Remote PowerShell from a pwsh on the worker host. Still open: the
   transport has not been exercised against a live tenant (the record's open question), and
   idempotent retries of grants and membership adds wait on confirmed error identities.
+  **Teams Phone is another Worker Type in the catalog**
+  ([ADR-0463](docs/adr/0463-teams-phone-worker.md)): a service task marked
+  `<atlas:teamsPhoneConnector connector operation …>` resolves users, ensures the resource
+  accounts, a call queue and the auto attendant in front of it, and removes all three
+  again — fixed PowerShell shipped with Atlas, run by `pwsh` and the MicrosoftTeams module
+  on the worker host with the app's certificate from the vault. Every ensure looks before
+  it creates, and `ensure-call-queue` brings an existing queue to the agents a model names,
+  without ever emptying it. Still open: a run against a live tenant, phone numbers,
+  business hours and menus, the settings of an existing queue other than its agents, and a
+  warm `pwsh` session per tenant.
+  **On Windows, the Go Workers take the route PowerShell takes**
+  ([ADR-0464](docs/adr/0464-windows-system-proxy.md)): outbound
+  HTTP follows a proxy variable when one is set and otherwise the account's PAC, WPAD or
+  Internet Options settings, by .NET's rules, so a group-policy proxy needs no
+  configuration; and the Entra Worker signs with a certificate from the Windows
+  certificate store by thumbprint, its key never read
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended). Still open: both are
+  exercised on the CI's Windows runner, not yet behind a real group-policy proxy.
   **The mail Worker reads its mailbox** ([ADR-0438](docs/adr/0438-mailbox-worker.md)):
   an inbound watch on a mail Worker publishes the new mail of one folder as an Atlas
   message — over IMAP for an SMTP Worker that names a `mailboxEndpoint`, through the Gmail
@@ -1819,6 +1837,11 @@ dataset of up to 50 000 cases":
 - ✅ **Into a call activity**: double-clicking its "+" opens the process it calls, on
   every surface that draws one, with a hover cue
   ([ADR-0245](docs/adr/0245-call-activity-drilldown.md)).
+- ✅ **Into a step's form and back**: **Open form** and **＋ New form** under the form
+  picker of a start event, a user task and a repair form save the diagram, open the form
+  editor with a way back, and link a form created or renamed on the way when the author
+  returns ([ADR-0465](docs/adr/0465-form-doors.md)). The canvas has no form
+  door yet.
 
 **Version history** ([ADR-0031](docs/adr/0031-diagram-version-history.md)):
 - 🔲 A **Versions** control: explicit named checkpoints (immutable snapshots)
