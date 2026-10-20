@@ -611,6 +611,20 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Rewrite the signed-in person's display preferences. The whole record is written, so a field sent empty is a field cleared back to the default — which is how the screen's reset works. A region outside the offered list, a language with no catalogue, or a time zone the IANA database does not know is refused rather than stored, because the browser is what formats with it", tag: "Preferences", role: RoleUser,
 			req:  jsonBody("Region, time zone and language", schemaObj(map[string]any{"region": tString(), "timeZone": tString(), "language": tString()})),
 			resp: jsonBody("The stored preferences", tObject())}},
+		// The processes the signed-in person starred on the Tasks app's Start view
+		// (ADR-0466). Keyed on the principal like the
+		// preferences above; the path names a process, never a person. roleAny rather than
+		// RoleUser, because roles do not nest and the people who start processes hold
+		// `operator`, which need not come with `user`.
+		{"GET", "/api/v1/me/start-favourites", s.startFavourites.HandleGet, apiOp{
+			summary: "The processes you starred on the Tasks app's Start view, by process id in the order you marked them. Always your own. A mark grants nothing: whether you may start the process is decided when you start it. On an instance without authentication there is no such resource and the answer is 404, which the console reads as \"keep these in the browser\"", tag: "Preferences", role: roleAny,
+			resp: jsonBody("Your start favourites", schemaObj(map[string]any{"processIds": tArray()}))}},
+		{"PUT", "/api/v1/me/start-favourites/{processId}", s.startFavourites.HandleMark, apiOp{
+			summary: "Star one process on the Start view. 404 for a process id with no deployed version; marking one already marked writes nothing; 422 past the StartFavourites budget. Answers the list as it now stands", tag: "Preferences", role: roleAny,
+			resp: jsonBody("Your start favourites", schemaObj(map[string]any{"processIds": tArray()}))}},
+		{"DELETE", "/api/v1/me/start-favourites/{processId}", s.startFavourites.HandleUnmark, apiOp{
+			summary: "Clear one star. Never checked against the engine, so a mark on a process deleted since can always be taken away. Answers the list as it now stands", tag: "Preferences", role: roleAny,
+			resp: jsonBody("Your start favourites", schemaObj(map[string]any{"processIds": tArray()}))}},
 
 		{"POST", "/api/v1/drafts", s.handleSaveDraft, apiOp{
 			summary: "Save a diagram draft, keyed by its process id. ?from=<draft id> names the draft being edited (empty for a never-saved diagram): a changed process id then renames the draft instead of leaving a second copy behind, and a save onto an id another draft already holds is refused with 409 (ADR-0222). Omit ?from= for the plain upsert-by-id an import or an agent wants", tag: "Drafts", role: RoleModeler, req: jsonBody("Draft", tObject()), resp: jsonBody("Saved draft", tObject())}},

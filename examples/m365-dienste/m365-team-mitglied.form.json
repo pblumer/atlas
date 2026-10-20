@@ -1,0 +1,41 @@
+{
+  "type": "default",
+  "id": "m365-team-mitglied",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Person aufnehmen · Add a person**"
+    },
+    {
+      "key": "person",
+      "type": "textfield",
+      "label": "Person (UPN)",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "rolle",
+      "type": "radio",
+      "label": "Rolle · Role",
+      "values": [
+        {
+          "label": "Mitglied · Member",
+          "value": "mitglied"
+        },
+        {
+          "label": "Besitzer · Owner",
+          "value": "besitzer"
+        }
+      ],
+      "defaultValue": "mitglied",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

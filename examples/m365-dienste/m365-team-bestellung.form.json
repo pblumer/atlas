@@ -1,0 +1,78 @@
+{
+  "type": "default",
+  "id": "m365-team-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Microsoft Teams: Team · Microsoft Teams: team**\n\nDer Name entsteht nach der Namensregel: TM-<BEREICH> <Bezeichnung>. · The name follows the naming rule: TM-<DEPT> <name>."
+    },
+    {
+      "key": "bereich",
+      "type": "textfield",
+      "label": "Bereichskürzel · Department code",
+      "description": "2 bis 5 Buchstaben, z.B. FIN, HR, IT. Bestimmt den Namen mit. · 2 to 5 letters; part of the name.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z]{2,5}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bezeichnung",
+      "type": "textfield",
+      "label": "Bezeichnung · Name",
+      "description": "Der Rest des Namens; Präfix und Bereich setzt die Namensregel davor. · The prefix and department are added by the naming rule.",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "zweck",
+      "type": "textarea",
+      "label": "Zweck · Purpose",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "sichtbarkeit",
+      "type": "radio",
+      "label": "Sichtbarkeit · Visibility",
+      "values": [
+        {
+          "label": "Privat · Private",
+          "value": "Private"
+        },
+        {
+          "label": "Öffentlich in der Organisation · Public within the organisation",
+          "value": "Public"
+        }
+      ],
+      "defaultValue": "Private",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "besitzer",
+      "type": "textfield",
+      "label": "Besitzerin oder Besitzer (UPN) · Owner (UPN)",
+      "description": "Verantwortlich für Mitglieder und Inhalt. · Responsible for members and content.",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    }
+  ]
+}

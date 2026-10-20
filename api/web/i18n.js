@@ -47,6 +47,18 @@ const CATALOGS = {
     "tasks.folders.shared": "Geteilt",
     "tasks.folders.new": "Neuer Ordner",
     "tasks.opened": "Eröffnet",
+
+    // The Start view groups the startable processes by the application they were
+    // deployed under; the ones under none, or under one the viewer may not see, sit
+    // together at the end.
+    "start.filter": "Prozesse filtern (Name, Anwendung)…",
+    "start.group.other": "Weitere",
+    "start.group.otherTitle": "Prozesse ohne Anwendung oder aus einer Anwendung, die du nicht sehen darfst",
+    "start.noMatch": "Kein Prozess passt zu «{q}».",
+    "start.group.favourites": "Favoriten",
+    "start.fav.add": "Zu den Favoriten hinzufügen",
+    "start.fav.remove": "Aus den Favoriten entfernen",
+    "start.fav.failed": "Favorit nicht gespeichert: {error}",
     "tasks.filter": "Tasks filtern (Name, Person, Inhalt)…",
     "tasks.folders.newTitle": "Neuer Ordner",
     "tasks.folders.editTitle": "Ordner bearbeiten",
@@ -429,6 +441,15 @@ const CATALOGS = {
     "tasks.folders.shared": "Shared",
     "tasks.folders.new": "New folder",
     "tasks.opened": "Opened",
+
+    "start.filter": "Filter processes (name, application)…",
+    "start.group.other": "Other",
+    "start.group.otherTitle": "Processes filed under no application, or under one you may not see",
+    "start.noMatch": "No process matches “{q}”.",
+    "start.group.favourites": "Favourites",
+    "start.fav.add": "Add to favourites",
+    "start.fav.remove": "Remove from favourites",
+    "start.fav.failed": "Favourite not saved: {error}",
     "tasks.filter": "Filter tasks (name, person, content)…",
     "tasks.folders.newTitle": "New folder",
     "tasks.folders.editTitle": "Edit folder",
