@@ -615,6 +615,13 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/me/preferences": "it configures a screen, and an assistant has none",
 	"PUT /api/v1/me/preferences": "an assistant acting as a person must not silently reformat that person's console",
 
+	// The start favourites (ADR-draft-start-view-groups-and-favourites): one
+	// person's shortcuts on the Start view, for the reason the diagram shortcuts below
+	// are omitted. An assistant starts a process by its id and needs no star to find it.
+	"GET /api/v1/me/start-favourites":                "a person's own shortcuts on the Start view, a navigation aid for somebody at a screen that an assistant does not need",
+	"PUT /api/v1/me/start-favourites/{processId}":    "starring a process on somebody's behalf sets a preference they did not choose",
+	"DELETE /api/v1/me/start-favourites/{processId}": "as above, and unstarring is the half somebody would notice only by missing it",
+
 	// The commissioning load (ADR-0333). The write half
 	// is omitted for a reason of its own rather than by analogy with the pair above:
 	// the load's entire safeguard is that several thousand permanent records are
