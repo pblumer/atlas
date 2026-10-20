@@ -369,3 +369,37 @@ func TestCheckSourceModelsRefusesWhatDoesNotCompile(t *testing.T) {
 		t.Fatal("the check changed the tree")
 	}
 }
+
+// TestABehindModelOthersUseIsStillRefused: a model the last import wrote and a newer
+// tree brings is taken without a question — unless a decision outside the
+// application resolves it, whose author would see it change unasked.
+func TestABehindModelOthersUseIsStillRefused(t *testing.T) {
+	s, dir := modelStoresFor(t)
+	man, byPath := modelTree("<v1/>")
+	res, err := s.applySourceTree(man, byPath, "", allow, importplan.Decisions{})
+	if err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+	newer, newerPath := modelTree("<v2/>")
+	if res, err = s.applySourceTree(newer, newerPath, "", allow, importplan.Decisions{DryRun: true}); err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if got := res.Artifacts[len(res.Artifacts)-1]; got.Ref != "model:freigabe" || got.Status != importplan.Behind || got.Outcome != importplan.Updated {
+		t.Fatalf("the model = %+v, want behind and taken", got)
+	}
+	if err := s.dmnrefs.Save(dmnRef{ID: "theirs", Name: "Fremd", ModelRef: "freigabe", ProjectID: "other"}); err != nil {
+		t.Fatalf("save ref: %v", err)
+	}
+	_, err = s.applySourceTree(newer, newerPath, "", allow, importplan.Decisions{})
+	var refusal sourceRefusal
+	if !errors.As(err, &refusal) || refusal.status != http.StatusConflict {
+		t.Fatalf("err = %v, want a 409", err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, "freigabe.dmn")); string(data) != "<v1/>" {
+		t.Errorf("the model was replaced anyway: %q", data)
+	}
+	// Keeping this server's model is the way through.
+	if _, err := s.applySourceTree(newer, newerPath, "", allow, importplan.Decisions{Keep: map[string]bool{"model:freigabe": true}}); err != nil {
+		t.Fatalf("keeping the model: %v", err)
+	}
+}

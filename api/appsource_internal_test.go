@@ -366,7 +366,8 @@ func pathsOf(files []sourceFile) []string {
 // only report. These use a bare Server holding just the stores under test — the
 // functions run inside the caller's do() and touch nothing else.
 
-// storesFor builds the four design-time stores over a temp dir.
+// storesFor builds the design-time stores an import reads and writes, and the
+// bases it remembers, over a temp dir.
 func storesFor(t *testing.T) *Server {
 	t.Helper()
 	dir := t.TempDir()
@@ -399,9 +400,13 @@ func storesFor(t *testing.T) *Server {
 	if err != nil {
 		t.Fatalf("capability.NewStreamStore: %v", err)
 	}
+	baselines, err := newImportBaselineStore(filepath.Join(dir, "import-baselines"))
+	if err != nil {
+		t.Fatalf("newImportBaselineStore: %v", err)
+	}
 	return &Server{
 		projects: projects, drafts: drafts, forms: forms, dmnrefs: refs,
-		capabilityRecords: caps, valueStreamRecords: streams,
+		capabilityRecords: caps, valueStreamRecords: streams, baselines: baselines,
 	}
 }
 

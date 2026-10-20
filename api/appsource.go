@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -676,11 +675,19 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 		}
 	}
 
-	// The plan: every artifact compared with this server's, and what the decisions
-	// make of it. writes holds what is to be written, by ref.
-	writes := map[string]bool{}
+	// The plan: every artifact compared with this server's and with the version the
+	// last import brought (its base), and what the decisions make of it. writes holds
+	// what is to be written, incoming the hash of each artifact as the tree has it —
+	// the base the next import compares with.
+	bases, err := s.importBaselines(applicationBaselineScope(app.ID))
+	if err != nil {
+		return sourceImportResult{}, err
+	}
+	writes, incoming := map[string]bool{}, map[string]string{}
 	var undecided []string
-	note := func(ref, name, status string, regroup bool) {
+	note := func(ref, name string, exists bool, local, in string, regroup bool) {
+		incoming[ref] = in
+		status := importplan.Classify(exists, local, in, bases[ref])
 		outcome := decide.Outcome(ref, status)
 		// An ungrouped artifact the tree names joins the application even when its
 		// content is already the tree's: that moves nobody's work, it files it.
@@ -692,34 +699,27 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 		}
 		res.Artifacts = append(res.Artifacts, importplan.Artifact{Ref: ref, Name: name, Status: status, Outcome: outcome})
 	}
-	appStatus := importplan.New
-	if found {
-		appStatus = importplan.Compare(app.Name == man.Name)
-	}
-	note("application:"+man.Key, man.Name, appStatus, false)
+	note("application:"+man.Key, man.Name, found, importplan.Hash([]byte(app.Name)), importplan.Hash([]byte(man.Name)), false)
+	// Text files compare newline-terminated on both sides, the way an export writes
+	// them: a hand-written file that ends without one is the same content, and must
+	// not read as changed on every import.
 	for _, p := range man.Processes {
 		d, ok := draftOwner[p.ID]
-		status := importplan.New
-		if ok {
-			status = importplan.Compare(d.Name == p.Name && bytes.Equal(newlineTerminated([]byte(d.XML)), byPath[p.Path]))
-		}
-		note("process:"+p.ID, p.Name, status, ok && d.ProjectID == "")
+		note("process:"+p.ID, p.Name, ok,
+			importplan.Hash([]byte(d.Name), newlineTerminated([]byte(d.XML))),
+			importplan.Hash([]byte(p.Name), newlineTerminated(byPath[p.Path])), ok && d.ProjectID == "")
 	}
 	for _, f := range man.Forms {
 		rec, ok := formOwner[f.ID]
-		status := importplan.New
-		if ok {
-			status = importplan.Compare(rec.Name == f.Name && bytes.Equal(newlineTerminated([]byte(rec.Schema)), byPath[f.Path]))
-		}
-		note("form:"+f.ID, f.Name, status, ok && rec.ProjectID == "")
+		note("form:"+f.ID, f.Name, ok,
+			importplan.Hash([]byte(rec.Name), newlineTerminated([]byte(rec.Schema))),
+			importplan.Hash([]byte(f.Name), newlineTerminated(byPath[f.Path])), ok && rec.ProjectID == "")
 	}
 	for _, d := range man.Decisions {
 		rec, ok := refOwner[d.ID]
-		status := importplan.New
-		if ok {
-			status = importplan.Compare(rec.Name == d.Name && rec.ModelRef == d.ModelRef)
-		}
-		note("decision:"+d.ID, d.Name, status, ok && rec.ProjectID == "")
+		note("decision:"+d.ID, d.Name, ok,
+			importplan.Hash([]byte(rec.Name), []byte(rec.ModelRef)),
+			importplan.Hash([]byte(d.Name), []byte(d.ModelRef)), ok && rec.ProjectID == "")
 	}
 	models, err := s.planSourceModels(man, byPath)
 	if err != nil {
@@ -727,7 +727,7 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 	}
 	res.ModelsSkipped = models.skipped
 	for _, m := range models.models {
-		note("model:"+m.handle, m.handle, m.status, false)
+		note("model:"+m.handle, m.handle, m.exists, m.local, importplan.Hash(m.data), false)
 		if outcome := res.Artifacts[len(res.Artifacts)-1].Outcome; outcome != importplan.Kept && outcome != importplan.Undecided {
 			res.Models++
 		}
@@ -747,7 +747,8 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 	res.Untracked = untrackedArtifacts(app.ID, man, drafts, forms, refs)
 
 	// A model replaced under a handle that a decision outside the application
-	// resolves would change that decision without its author knowing; only a model
+	// resolves would change that decision without its author knowing — whether the
+	// replacement was decided or follows from the model being behind. Only a model
 	// that is actually to be written is held to it, so keeping the local model is
 	// always a way through.
 	inTree := map[string]bool{}
@@ -755,7 +756,7 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 		inTree[d.ID] = true
 	}
 	for _, m := range models.models {
-		if m.status != importplan.Changed || !writes["model:"+m.handle] {
+		if !m.exists || m.local == importplan.Hash(m.data) || !writes["model:"+m.handle] {
 			continue
 		}
 		for _, rec := range refs {
@@ -834,6 +835,12 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 			return sourceImportResult{}, err
 		}
 	}
+	// What this import settled is the base the next one compares with: every
+	// artifact, written or kept, was reconciled with this tree. A kept one is then
+	// ahead of it, and is not asked about again until a tree brings it changed.
+	if err := s.recordImportBaselines(applicationBaselineScope(app.ID), incoming); err != nil {
+		return sourceImportResult{}, err
+	}
 	return res, nil
 }
 
@@ -880,12 +887,14 @@ type sourceModelPlan struct {
 type sourceModel struct {
 	handle string
 	data   []byte
-	status string
+	// exists says a model is stored under the handle; local is its hash.
+	exists bool
+	local  string
 }
 
-// planSourceModels compares each model the tree carries, by handle, with the model
-// stored under that handle. A server whose models come from a remote temis service
-// writes none, and names them as skipped.
+// planSourceModels reads, for each model the tree carries, the model stored under its
+// handle. A server whose models come from a remote temis service writes none, and
+// names them as skipped.
 //
 // Runs on the run loop, beside the store reads it extends; it reads one local file
 // per model.
@@ -913,14 +922,14 @@ func (s *Server) planSourceModels(man sourceManifest, byPath map[string][]byte) 
 	}
 	plan.dir = dir
 	for _, h := range handles {
-		m := sourceModel{handle: h, data: byPath[pathOf[h]], status: importplan.New}
+		m := sourceModel{handle: h, data: byPath[pathOf[h]]}
 		existing, err := s.dmnResolver.Resolve(context.Background(), h)
 		switch {
 		case errors.Is(err, dmn.ErrNotFound):
 		case err != nil:
 			return sourceModelPlan{}, err
 		default:
-			m.status = importplan.Compare(bytes.Equal(existing, m.data))
+			m.exists, m.local = true, importplan.Hash(existing)
 		}
 		plan.models = append(plan.models, m)
 	}

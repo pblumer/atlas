@@ -4,12 +4,22 @@
 // for those that differ, and what became of each.
 //
 // The rule it encodes is one sentence: an import writes what is new, leaves what is
-// unchanged, and writes over what differs only when the caller said so. Work done on
-// a server is not replaced by an import nobody looked at, and the same import run
-// twice changes nothing the second time.
+// unchanged, and writes over work done on the server only when the caller said so.
+// Work done on a server is not replaced by an import nobody looked at, and the same
+// import run twice changes nothing the second time.
+//
+// Telling work done on the server from an import that moved on takes a third
+// version: the one the last import brought, remembered per artifact as a hash (its
+// base). An artifact still as the last import left it, and different in this one,
+// is behind and simply taken; one edited here while the import still carries what
+// it carried last time is ahead and simply kept. Only an artifact both sides moved —
+// or one no import ever brought, so there is no base to tell by — is asked about.
 package importplan
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -20,8 +30,51 @@ import (
 const (
 	New       = "new"
 	Unchanged = "unchanged"
-	Changed   = "changed"
+	// Changed is an artifact both sides moved since the last import, or one this
+	// server holds otherwise and no import ever brought. It is decided.
+	Changed = "changed"
+	// Behind is an artifact this server still holds as the last import brought it,
+	// and that this import brings newer. It is taken unless the caller keeps it.
+	Behind = "behind"
+	// Ahead is an artifact edited on this server since the last import, which this
+	// import brings as it did last time. It is kept unless the caller replaces it.
+	Ahead = "ahead"
 )
+
+// Hash is the fingerprint an artifact is compared by: the parts that make it what it
+// is, each length-prefixed, so that two different splits never hash alike.
+func Hash(parts ...[]byte) string {
+	h := sha256.New()
+	var n [8]byte
+	for _, p := range parts {
+		binary.BigEndian.PutUint64(n[:], uint64(len(p)))
+		h.Write(n[:])
+		h.Write(p)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// Classify is how an artifact compares, from the hashes of this server's version,
+// the import's and the base — the version the last import brought, "" when none
+// did.
+func Classify(exists bool, local, incoming, base string) string {
+	switch {
+	case !exists:
+		return New
+	case local == incoming:
+		return Unchanged
+	case base == "":
+		return Changed
+	case local == base:
+		return Behind
+	case incoming == base:
+		return Ahead
+	}
+	return Changed
+}
+
+// Asks reports whether an artifact of a status needs a decision.
+func Asks(status string) bool { return status == Changed }
 
 // What became of an artifact, or would under the decisions given.
 const (
@@ -85,7 +138,9 @@ func Parse(q url.Values) (Decisions, error) {
 }
 
 // Outcome is what becomes of an artifact of a status under these decisions. A ref
-// named in a list wins over * in the other.
+// named in a list wins over everything else. Behind is taken and ahead kept without
+// one, and * decides only what is changed: overwrite=* never replaces work done
+// only here, and keep=* never holds back what only the import moved.
 func (d Decisions) Outcome(ref, status string) string {
 	switch {
 	case status == New:
@@ -95,6 +150,10 @@ func (d Decisions) Outcome(ref, status string) string {
 	case d.Overwrite[ref]:
 		return Updated
 	case d.Keep[ref]:
+		return Kept
+	case status == Behind:
+		return Updated
+	case status == Ahead:
 		return Kept
 	case d.OverwriteAll:
 		return Updated
