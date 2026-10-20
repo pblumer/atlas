@@ -12,7 +12,7 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
-## [0.16.0] — 2026-10-19
+## [0.16.0] — 2026-10-20
 
 **On Windows, Atlas takes the proxy and the certificate PowerShell takes.** The server's
 outbound HTTP and every Go Worker's follow the proxy the host is configured with — a PAC
