@@ -131,19 +131,9 @@
       "path": "m365-rufnummer-dienst.form.json"
     },
     {
-      "id": "m365-rufnummer-dienst-freigabe",
-      "name": "m365-rufnummer-dienst-freigabe",
-      "path": "m365-rufnummer-dienst-freigabe.form.json"
-    },
-    {
       "id": "m365-rufnummer-person",
       "name": "m365-rufnummer-person",
       "path": "m365-rufnummer-person.form.json"
-    },
-    {
-      "id": "m365-rufnummer-person-freigabe",
-      "name": "m365-rufnummer-person-freigabe",
-      "path": "m365-rufnummer-person-freigabe.form.json"
     },
     {
       "id": "m365-team-bestellung",

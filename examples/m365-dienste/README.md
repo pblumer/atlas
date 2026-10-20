@@ -14,7 +14,7 @@ verwendet, ersetzt sie in den `.bpmn`-Dateien (Attribut `connector`).
 
 | Datei | Inhalt |
 |---|---|
-| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 14 Prozesse, 23 Formulare, 5 Entscheidungsreferenzen |
+| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 14 Prozesse, 21 Formulare, 5 Entscheidungsreferenzen |
 | `katalog.json` | Das Katalogdokument: zwei Kataloge, neun Produkte, eine Beziehung |
 | `fragen.json` | Was jeder Platzhalter im Katalogdokument fragt (Zielgruppen, Genehmigende) |
 | `*.bpmn` | Die Prozesse, je mit Dokumentation an Prozess und Elementen |
@@ -39,27 +39,31 @@ Die Ränge müssen auf der Zielinstanz frei sein; sonst sind sie in `katalog.jso
 | Produkt | Worker | Genehmigung | Prozess | Aktionen nach der Bereitstellung |
 |---|---|---|---|---|
 | Microsoft 365: Lizenz mit Postfach (`m365-lizenz`), Varianten E3, E5, F3 | Entra, Exchange | vorgesetzte Person | `lizenz.bpmn` (Lebenszyklus) | Lizenz zurückgeben, Abwesenheitsnotiz setzen, Abwesenheitsnotiz beenden |
-| Teams-Telefonie mit eigener Rufnummer (`m365-telefonie`), setzt die Lizenz voraus | Entra, manuell | `{{telefonie-team}}` | `telefonie.bpmn` (Lebenszyklus) | Telefonie aufheben |
+| Teams-Telefonie mit eigener Rufnummer (`m365-telefonie`), setzt die Lizenz voraus | Entra, Teams Phone | `{{telefonie-team}}` | `telefonie.bpmn` (Lebenszyklus) | Telefonie aufheben |
 | Microsoft Teams: Team (`m365-team`) | Entra | vorgesetzte Person | `team.bpmn` (Lebenszyklus) | Team archivieren, Person aufnehmen, Kanal anlegen |
 | Funktionspostfach (`m365-funktionspostfach`) | Exchange | vorgesetzte Person | `funktionspostfach.bpmn` (Lebenszyklus) | entfernen, Zugriff erteilen, Zugriff entziehen |
 | Verteilerliste (`m365-verteiler`) | Exchange | keine | `verteiler.bpmn` (Lebenszyklus) | entfernen, Mitglied aufnehmen, Mitglied entfernen |
 | Zugriff auf ein Postfach (`m365-postfachzugriff`), 365 Tage befristet | Exchange | vorgesetzte Person, je nach Regel zusätzlich Informationssicherheit | `postfachzugriff-erteilen.bpmn`, `postfachzugriff-entziehen.bpmn` (getrennte Prozesse) | Rückgabe |
 | Sitzungszimmer (`m365-raum`) | Exchange | `{{facility-management}}` | `raum-einrichten.bpmn`, `raum-entfernen.bpmn` (getrennte Prozesse) | Rückgabe |
-| Anrufwarteschlange (`m365-warteschlange`) | Teams Phone, manuell | `{{telefonie-team}}` | `warteschlange.bpmn` (Lebenszyklus) | entfernen, Agenten ändern |
-| Telefonzentrale (`m365-telefonzentrale`) | Teams Phone, Entra, manuell | `{{telefonie-team}}` | `telefonzentrale.bpmn` (Lebenszyklus) | entfernen |
+| Anrufwarteschlange (`m365-warteschlange`) | Teams Phone, Entra | `{{telefonie-team}}` | `warteschlange.bpmn` (Lebenszyklus) | entfernen, Agenten ändern |
+| Telefonzentrale (`m365-telefonzentrale`) | Teams Phone, Entra | `{{telefonie-team}}` | `telefonzentrale.bpmn` (Lebenszyklus) | entfernen |
 
-«Manuell» bezeichnet die Rufnummer: Die Zuweisung ist in diesen Beispielen eine Aufgabe
-für die Gruppe `M365-Telefonie`, die das Cmdlet nennt. Der Teams-Phone-Worker kann
-Rufnummern inzwischen selbst zuweisen und freigeben (`ensure-phone-number`,
-`remove-phone-number`, für Ressourcenkonten und Benutzer); eine Service-Task mit dieser
-Operation ersetzt genau diese Aufgabe. Die Beispiele sind noch nicht umgestellt.
+Die Rufnummer wählt die Gruppe `M365-Telefonie` aus ihrem Nummernplan (Aufgabe «Rufnummer
+wählen»), weil Atlas keinen Nummernbestand führt. Zugewiesen wird sie danach vom
+Teams-Phone-Worker (`ensure-phone-number`, als Direct-Routing-Nummer); gehört sie schon
+jemandem, kommt die Aufgabe mit einem Hinweis zurück (Grenzereignis auf
+`TEAMSPHONE_NUMBER_IN_USE`). Bei der Rückgabe gibt `remove-phone-number` die persönliche
+Nummer frei, bevor die Lizenz geht, und `remove-resource-account` gibt die Nummer einer
+Warteschlange oder Telefonzentrale frei, bevor es das Konto löscht. Ein Ressourcenkonto
+nimmt eine Rufnummer nur mit Nutzungsort und der Lizenz *Microsoft Teams Phone Resource
+Account* an; beides gibt ihm der Entra-Worker gleich nach dem Anlegen.
 
 ## Die Entscheidungen
 
 | Modell (Handle) | Entscheidung | Wofür |
 |---|---|---|
 | `m365-namensregel` | `M365Namensregel` | Namenskonvention: Präfix je Objekttyp (TM, FP, VL, RM, CQ, AA), Sperrliste reservierter Bezeichnungen, Längengrenze, Begründung jeder Ablehnung |
-| `m365-lizenzprofil` | `M365Lizenzprofil` | Variante → SKU-ID der Lizenz |
+| `m365-lizenzprofil` | `M365Lizenzprofil` | Variante, Zusatzlizenz der Telefonie oder Lizenz eines Ressourcenkontos → SKU-ID |
 | `m365-postfachzugriff` | `M365PostfachzugriffFreigabe` | Postfachtyp und Zugriffsart → Zusatzfreigabe durch die Informationssicherheit ja/nein |
 | `m365-telefonie` | `M365TelefonieSprachregion` | Sprachregion → Sprache und Zeitzone der Teams-Telefonie |
 | `m365-verteiler-zuordnung` | `M365VerteilerZuordnung` | öffentliche Auswahl → interne Verteilerliste und Prüfpflicht |
@@ -205,11 +209,28 @@ Geprüft gegen einen lokalen Atlas-Server aus diesem Repository (Teams Phone im 
 Installation mit `atlas import` (zweimal), Veröffentlichung beider Kataloge, alle fünf
 Entscheidungen mit ihren Regeln, eine Bestellung der Anrufwarteschlange von der
 Genehmigung über Namensregel, Sprache, Ressourcenkonto, Warteschlange und
-Rufnummernaufgabe bis `done`, die Aktion «Agenten ändern» (`completed`), die Rückgabe
-(`returned`), die Ablehnung eines Verteilers mit reservierter Bezeichnung (`rejected` mit
-Begründung), beide öffentlichen Formulare ohne Anmeldung bis zum jeweiligen Entra- bzw.
-Exchange-Schritt, die Verschlüsselung der Personendaten und der Postfachzugriff mit
-Zusatzfreigabe.
+Rufnummernaufgabe bis `done` (damals noch mit der manuellen Zuweisung der Rufnummer),
+die Aktion «Agenten ändern» (`completed`), die Rückgabe (`returned`), die Ablehnung eines
+Verteilers mit reservierter Bezeichnung (`rejected` mit Begründung), beide öffentlichen
+Formulare ohne Anmeldung bis zum jeweiligen Entra- bzw. Exchange-Schritt, die
+Verschlüsselung der Personendaten und der Postfachzugriff mit Zusatzfreigabe.
+
+Nach der Umstellung auf `ensure-phone-number` geprüft gegen einen lokalen Atlas-Server,
+Teams Phone im Mock-Modus. Die Entra-Jobs wurden von Hand über `POST /api/v1/jobs/activate`
+und `…/complete` abgeschlossen, und die Prozesse liefen ohne `atlas:personal`, weil sie über
+eine Nachricht statt aus einer Bestellung starteten. Geprüft wurden:
+
+- zwei Warteschlangen und eine Telefonzentrale bis `done`, je mit Nutzungsort und Lizenz
+  des Ressourcenkontos (der Body von `assign-license` trägt die SKU `440eaaa8-…`);
+- eine schon vergebene Nummer, die über das Grenzereignis an «Rufnummer wählen»
+  zurückging (`nummerVergeben = true`, die alte Nummer im Feld); die zweite Wahl,
+  mit Leerzeichen geschrieben, wurde normalisiert zugewiesen;
+- die Rückgabe einer Warteschlange und der Telefonzentrale (`returned`); die Nummer liess
+  sich danach erneut zuweisen;
+- die persönliche Telefonie mit Zuweisung und Freigabe der Nummer.
+
+Dass das Formular bei `nummerVergeben = true` den Hinweis zeigt, ist nicht in der Oberfläche
+geprüft.
 
 Ebenso geprüft: `installieren.sh` gegen eine frische Instanz mit Anmeldung (Schritte 1–3
 mit einem Admin-Token, Schritt 4 abgelehnt und danach über eine angemeldete Sitzung
@@ -238,6 +259,17 @@ Worker gibt es keinen Mock), die Governance-Prüfung gegen echte Daten und
 - **Regeln der Zusatzfreigabe** in `m365-postfachzugriff.dmn` sind ein Vorschlag;
   massgebend ist die Weisung der eigenen Organisation.
 - **Verteilerlisten** in `m365-verteiler-zuordnung.dmn` sind Beispiele.
+- **Nummernart.** Die drei Telefonie-Prozesse weisen Direct-Routing-Nummern zu
+  (`numberType="direct-routing"` an der Service-Task «Rufnummer zuweisen»). Ein Tenant mit
+  Calling Plan oder Operator Connect ändert das Attribut dort. Der Worker lehnt dann eine
+  Nummer, die der Tenant nicht besitzt, mit `TEAMSPHONE_NUMBER_NOT_FOUND` ab; dafür haben
+  die Modelle kein Grenzereignis, die Ablehnung wird also zum Incident.
+- **Lizenz vor Nummer.** Teams nimmt eine Rufnummer nur für eine Person mit
+  Teams-Phone-Lizenz und für ein Ressourcenkonto mit der Lizenz *Microsoft Teams Phone
+  Resource Account* an, und Teams kennt eine eben zugewiesene Lizenz unter Umständen erst
+  nach einer Weile. Die Aufgabe «Rufnummer wählen» liegt dazwischen; scheitert die
+  Zuweisung trotzdem, wiederholt der Worker sie wie jede Störung. Der Tenant muss Lizenzen
+  dieser Art frei haben (`subscribedSkus`). An einem Tenant ist das nicht geprüft.
 
 ## Bekannte Grenzen
 
@@ -252,10 +284,11 @@ Worker gibt es keinen Mock), die Governance-Prüfung gegen echte Daten und
 - **Öffentliche Verteiler-Anmeldung ohne Double-Opt-in.** Ein öffentliches Formular kann
   jede Adresse eintragen. Eine Bestätigung durch die Adresse selbst braucht einen
   Mail-Worker und ist nicht modelliert; Listen mit Prüfpflicht sind davon ausgenommen.
-- **Abfangbare Teams-Phone-Ablehnungen.** Die Grenzereignisse für `TEAMSPHONE_UPN_TAKEN`
-  und `TEAMSPHONE_TOO_MANY_AGENTS` greifen erst, wenn der Teams-Phone-Worker diese
-  Ablehnungen als BPMN-Fehler meldet; bis dahin führt dieselbe Ablehnung zu einem
-  Incident.
+- **Abfangbare Teams-Phone-Ablehnungen.** Die Grenzereignisse für `TEAMSPHONE_UPN_TAKEN`,
+  `TEAMSPHONE_TOO_MANY_AGENTS` und `TEAMSPHONE_NUMBER_IN_USE` brauchen einen
+  Teams-Phone-Worker, der diese Ablehnungen als BPMN-Fehler meldet (CHANGELOG: «A Teams
+  Phone refusal can take an error boundary's path»); ein älterer Worker führt dieselbe
+  Ablehnung als Incident.
 - **Eine Rückgabe oder Aktion erhält `atlasApiBase` nicht**, nur die Bereitstellung. Die
   Prozesse fallen deshalb auf die Applikationskonstante `ATLAS_API_BASE` zurück, die auf
   jeder Instanz zu setzen ist, deren Server nicht unter `http://127.0.0.1:8080` erreichbar

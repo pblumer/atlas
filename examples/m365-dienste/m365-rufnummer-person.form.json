@@ -4,7 +4,14 @@
   "components": [
     {
       "type": "text",
-      "text": "**Rufnummer zuweisen · Assign a phone number**\n\nSet-CsPhoneNumberAssignment für die Person, dann hier die Nummer festhalten. · Set-CsPhoneNumberAssignment for the person, then record the number here."
+      "text": "**Rufnummer wählen · Choose a phone number**\n\nEine freie Rufnummer aus dem Nummernplan wählen und hier festhalten; der Teams-Phone-Worker weist sie der Person danach zu. · Choose a free number from the numbering plan and record it here; the Teams Phone worker then assigns it to the person."
+    },
+    {
+      "type": "text",
+      "text": "**Die zuletzt gewählte Nummer ist bereits vergeben.** Bitte eine andere wählen. · **The number chosen last is already assigned.** Please choose another one.",
+      "conditional": {
+        "hide": "=nummerVergeben != true"
+      }
     },
     {
       "key": "upn",

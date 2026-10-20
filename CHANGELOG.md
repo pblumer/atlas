@@ -54,14 +54,17 @@ _Changed_ / _Removed_ for each version.
   the Entra, Exchange and Teams Phone Worker Types: a licence with mailbox, Teams telephony,
   teams, shared mailboxes, distribution lists, access to a mailbox, meeting rooms, call
   queues and auto attendants, in two catalogues, with fourteen processes, five decision
-  tables and 23 forms, bilingual. A naming rule kept as a decision builds every name and
+  tables and 21 forms, bilingual. A naming rule kept as a decision builds every name and
   rejects reserved and overlong ones with a reason; every Exchange object is tagged with its
   order and owner, and returns and changes find it by that tag; a weekly process reports what
   exists outside the tag or the rule. Two public forms let externals request partner access
   and subscribe to a list, and nothing is created before a person has reviewed it. Install
   scripts for sh and PowerShell upload the decision models, import and publish the
   application and fill the catalogue's placeholders; the handbook's examples chapter has
-  its card.
+  its card. Telephony, call queue and auto attendant leave only the choice of a number to
+  the phone team: Entra licenses a queue's or auto attendant's resource account, the Teams
+  Phone Worker assigns the number, releases it on return, and hands a number somebody else
+  holds back to the team through an error boundary.
 - **The Start view groups its processes by application, filters them and keeps favourites.**
   The Tasks app's Start list was one alphabetical column of every process with a start form.
   It now sits under one heading per application the process was deployed under, sorted by

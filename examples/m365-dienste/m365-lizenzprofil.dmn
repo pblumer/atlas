@@ -2,7 +2,7 @@
 <!--
   M365Lizenzprofil: welche Microsoft-Lizenz (SKU) ein Lizenzprofil bedeutet.
 
-  Eingabe:  lizenzprofil  ("standard" | "erweitert" | "frontline" | "telefonie")
+  Eingabe:  lizenzprofil  ("standard" | "erweitert" | "frontline" | "telefonie" | "ressourcenkonto")
   Ausgaben: skuId         (GUID der SKU, wie Graph sie in assignLicense erwartet)
             produkt       (Bezeichnung, für Menschen)
 
@@ -43,6 +43,12 @@
         <inputEntry id="r4_i0"><text>"telefonie"</text></inputEntry>
         <outputEntry id="r4_o0"><text>"e43b5b99-8dfb-405f-9987-dc307f34bcbd"</text></outputEntry>
         <outputEntry id="r4_o1"><text>"Microsoft Teams Phone Standard"</text></outputEntry>
+      </rule>
+      <rule id="r5">
+        <description>Lizenz des Ressourcenkontos einer Warteschlange oder Telefonzentrale, ohne die Teams ihm keine Rufnummer zuweist</description>
+        <inputEntry id="r5_i0"><text>"ressourcenkonto"</text></inputEntry>
+        <outputEntry id="r5_o0"><text>"440eaaa8-b3e0-484b-a8be-62870b9ba70a"</text></outputEntry>
+        <outputEntry id="r5_o1"><text>"Microsoft Teams Phone Resource Account"</text></outputEntry>
       </rule>
     </decisionTable>
   </decision>
