@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -204,6 +205,8 @@ func normalize(name string, shape Shape, raw any) (any, error) {
 		return stringList(name, raw)
 	case Holidays:
 		return holidays(raw)
+	case PhoneNumber:
+		return phoneNumber(name, raw)
 	default:
 		s, err := text(name, raw)
 		return s, err
@@ -331,6 +334,35 @@ func holidays(raw any) ([]Holiday, error) {
 		out = append(out, h)
 	}
 	return out, nil
+}
+
+// phoneNumberRe is what Teams takes: digits with an optional leading + and an optional
+// ;ext= extension, which Direct Routing numbers may carry.
+var phoneNumberRe = regexp.MustCompile(`^\+?[0-9]{3,15}(;ext=[0-9]{1,10})?$`)
+
+// phoneNumber reads a telephone number as people write one and hands it on as Teams
+// takes it. A "(0)" after a country code is refused rather than dropped or kept: kept, it
+// dials a different number; dropped, it guesses at what the author meant.
+func phoneNumber(name string, raw any) (string, error) {
+	s, err := text(name, raw)
+	if err != nil || s == "" {
+		return s, err
+	}
+	if strings.Contains(s, "(0)") {
+		return "", fmt.Errorf("%s %q carries a (0), which is not dialled after a country code; write the number without it", name, s)
+	}
+	s = strings.TrimPrefix(strings.ToLower(s), "tel:")
+	s = strings.Map(func(r rune) rune {
+		switch r {
+		case ' ', '-', '.', '/', '(', ')', '\u00a0':
+			return -1
+		}
+		return r
+	}, s)
+	if !phoneNumberRe.MatchString(s) {
+		return "", fmt.Errorf("%s %q is no phone number Teams takes (digits with an optional leading + and an optional ;ext=)", name, s)
+	}
+	return s, nil
 }
 
 func contains(list []string, s string) bool {

@@ -22,6 +22,7 @@ $VerbosePreference = 'SilentlyContinue'
 $CallQueueApplicationId = '11cd3e2e-fccb-42ad-ad00-878b93575e07'
 $AutoAttendantApplicationId = 'ce933385-9390-45d1-9512-c8d228074e07'
 $RoutingNames = @{ 'attendant' = 'Attendant'; 'serial' = 'Serial'; 'round-robin' = 'RoundRobin'; 'longest-idle' = 'LongestIdle' }
+$NumberTypes = @{ 'direct-routing' = 'DirectRouting'; 'calling-plan' = 'CallingPlan'; 'operator-connect' = 'OperatorConnect' }
 # The two Microsoft endpoints. A request may name others, which only the worker's own
 # tests do, against a local stand-in.
 $GraphRoot = if ($Request.graphRoot) { [string]$Request.graphRoot } else { 'https://graph.microsoft.com/v1.0' }
@@ -393,6 +394,68 @@ function Remove-VoiceApp([string]$Kind) {
     return [ordered]@{ removed = $true; id = $id }
 }
 
+# Two spellings of one phone number compare equal: Teams answers with a leading +
+# whichever was written.
+function Get-NumberKey([string]$Number) { $Number.TrimStart('+').ToLowerInvariant() }
+
+# Gives a user or resource account the number named. Nothing to do when the holder has
+# it already; refused when somebody else holds it, or when the tenant lacks a Calling
+# Plan or Operator Connect number — a Direct Routing number is the operator's carrier's
+# and is in no inventory until it is assigned. The holder's primary number, if it has
+# another, is removed first: Microsoft does not say that an assignment replaces one, and
+# a retry after a failure between the two finds the holder without a number and simply
+# assigns.
+function Set-PhoneNumber {
+    $a = $Request.args
+    $identity = [string]$a.identity
+    $number = [string]$a.phoneNumber
+    $type = $NumberTypes[[string]$a.numberType]
+    $result = { param($assigned, $previous) [ordered]@{ phoneNumber = $number; identity = $identity; assigned = $assigned; previousNumber = $previous } }
+    $mine = @(Get-CsPhoneNumberAssignment -AssignedPstnTargetId $identity)
+    if (@($mine | Where-Object { (Get-NumberKey $_.TelephoneNumber) -eq (Get-NumberKey $number) }).Count -gt 0) {
+        return & $result $false ''
+    }
+    $entry = @(Get-CsPhoneNumberAssignment -TelephoneNumber $number) | Select-Object -First 1
+    if ($entry -and $entry.AssignedPstnTargetId) {
+        Stop-Refused 'TEAMSPHONE_NUMBER_IN_USE' "the phone number $number is assigned to another user or resource account; remove it there first"
+    }
+    if (-not $entry -and $type -ne 'DirectRouting') {
+        Stop-Refused 'TEAMSPHONE_NUMBER_NOT_FOUND' "the phone number $number is not one of the tenant's $($a.numberType) numbers; acquire or port it first"
+    }
+    $previous = ''
+    foreach ($old in @($mine | Where-Object { -not $_.AssignmentCategory -or [string]$_.AssignmentCategory -eq 'Primary' })) {
+        $null = Remove-CsPhoneNumberAssignment -Identity $identity -TelephoneNumber $old.TelephoneNumber -NumberType $old.NumberType
+        $previous = [string]$old.TelephoneNumber
+        Write-Log "phone number $previous removed from $identity"
+    }
+    $params = @{ Identity = $identity; TelephoneNumber = $number; NumberType = $type }
+    if ($a.locationId) { $params.LocationId = [string]$a.locationId }
+    $null = Set-CsPhoneNumberAssignment @params
+    Write-Log "phone number $number assigned to $identity"
+    return & $result $true $previous
+}
+
+# Takes the number named — or, with none named, every number — away from its holder and
+# answers which it removed; a number the holder does not have is nothing to remove.
+function Remove-PhoneNumber {
+    $a = $Request.args
+    $identity = [string]$a.identity
+    $mine = @(Get-CsPhoneNumberAssignment -AssignedPstnTargetId $identity)
+    if ($a.phoneNumber) {
+        $key = Get-NumberKey ([string]$a.phoneNumber)
+        $mine = @($mine | Where-Object { (Get-NumberKey $_.TelephoneNumber) -eq $key })
+    }
+    $removed = [System.Collections.Generic.List[string]]::new()
+    foreach ($n in $mine) {
+        $null = Remove-CsPhoneNumberAssignment -Identity $identity -TelephoneNumber $n.TelephoneNumber -NumberType $n.NumberType
+        $removed.Add([string]$n.TelephoneNumber)
+        Write-Log "phone number $($n.TelephoneNumber) removed from $identity"
+    }
+    [string[]]$sorted = $removed.ToArray()
+    [Array]::Sort($sorted, [StringComparer]::Ordinal)
+    return [ordered]@{ removed = ($sorted.Count -gt 0); phoneNumbers = $sorted }
+}
+
 # A resource account is an Entra user: Teams has no cmdlet that deletes one. So the
 # association goes through Teams and the account through Graph.
 function Remove-ResourceAccount {
@@ -416,6 +479,8 @@ try {
         'remove-call-queue' { Remove-VoiceApp 'CallQueue' }
         'remove-auto-attendant' { Remove-VoiceApp 'AutoAttendant' }
         'remove-resource-account' { Remove-ResourceAccount }
+        'ensure-phone-number' { Set-PhoneNumber }
+        'remove-phone-number' { Remove-PhoneNumber }
         default { throw "unknown operation $($Request.operation)" }
     }
     $envelope = [ordered]@{ ok = $true; result = $result }

@@ -6598,10 +6598,20 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             save.</li>
           <li data-l="de">Ohne Tenant üben: <code>ATLAS_TEAMSPHONE_MOCK=1</code> bedient dieselben Tasks aus einem
             Tenant im Speicher des Workers, mit denselben Regeln; <code>ATLAS_TEAMSPHONE_MOCK_USERS</code> nennt die
-            Personen, die <i>Resolve users</i> findet.</li>
+            Personen, die <i>Resolve users</i> findet, <code>ATLAS_TEAMSPHONE_MOCK_NUMBERS</code> die Calling-Plan- und
+            Operator-Connect-Nummern des Tenants.</li>
+          <li data-l="de"><b>Für Rufnummern:</b> Die Person braucht eine Teams-Phone-Lizenz, ein Ressourcenkonto die
+            Lizenz <i>Microsoft Teams Phone Resource Account</i>, beide einen Nutzungsstandort. Calling-Plan- und
+            Operator-Connect-Nummern müssen schon im Tenant sein; eine Direct-Routing-Nummer stellt dein eigener Carrier
+            über deinen SBC bereit.</li>
           <li data-l="en">Practise without a tenant: <code>ATLAS_TEAMSPHONE_MOCK=1</code> serves the same tasks from a
             tenant in the worker's memory, with the same rules; <code>ATLAS_TEAMSPHONE_MOCK_USERS</code> names the people
-            <i>Resolve users</i> finds.</li>
+            <i>Resolve users</i> finds, <code>ATLAS_TEAMSPHONE_MOCK_NUMBERS</code> the tenant's Calling Plan and Operator
+            Connect numbers.</li>
+          <li data-l="en"><b>For phone numbers:</b> a person needs a Teams Phone licence, a resource account the
+            <i>Microsoft Teams Phone Resource Account</i> licence, and both a usage location. Calling Plan and Operator
+            Connect numbers must already be the tenant's; a Direct Routing number is your own carrier's, through your
+            SBC.</li>
         </ol>
         <p data-l="de"><b>Was die Tasks können:</b> Jede Operation mit ihren Feldern, ihrem Ergebnis, dem Abgleich
           bestehender Warteschlangen und den Fehlercodes, die ein Error-Boundary-Event fangen kann, steht in
@@ -6631,7 +6641,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           (<code>users</code>, <code>agents</code>, <code>authorizedUsers</code>) ist eine FEEL-Liste oder ein Text,
           getrennt durch Komma, Semikolon oder Zeilenumbruch; leere und doppelte Einträge fallen weg. Die Einstellungen
           (<code>accountType</code>, <code>routingMethod</code>, <code>presenceBasedRouting</code>,
-          <code>conferenceMode</code>, <code>allowOptOut</code>) sind feste Werte, keine Ausdrücke; der Compiler prüft
+          <code>conferenceMode</code>, <code>allowOptOut</code>, <code>numberType</code>) sind feste Werte, keine Ausdrücke; der Compiler prüft
           sie und jedes andere Attribut schon beim Deployment.</p>
         <p data-l="en">A Teams Phone task performs exactly one operation. In the Modeler you pick it in the
           <i>Operation</i> field; in BPMN it is the <code>operation</code> attribute of the
@@ -6640,7 +6650,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           (<code>users</code>, <code>agents</code>, <code>authorizedUsers</code>) is a FEEL list or one text separated
           by commas, semicolons or line breaks; blank and repeated entries are dropped. The settings
           (<code>accountType</code>, <code>routingMethod</code>, <code>presenceBasedRouting</code>,
-          <code>conferenceMode</code>, <code>allowOptOut</code>) are fixed values, not expressions; the compiler checks
+          <code>conferenceMode</code>, <code>allowOptOut</code>, <code>numberType</code>) are fixed values, not expressions; the compiler checks
           them, and every other attribute, at deploy.</p>
         <table>
           <thead><tr>
@@ -6676,6 +6686,19 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
               <td data-l="en"><code>name</code> – finds the voice app again when an earlier run had already removed the association and then failed.</td>
               <td data-l="de"><code>removed</code>, <code>id</code>. Die Ergebnisvariable ist hier freiwillig.</td>
               <td data-l="en"><code>removed</code>, <code>id</code>. The result variable is optional here.</td></tr>
+            <tr><td><code>ensure-phone-number</code><br><i>Ensure phone number</i></td>
+              <td data-l="de"><code>identity</code> (UPN oder Objekt-ID einer Person oder eines Ressourcenkontos), <code>phoneNumber</code>, <code>numberType</code> (<code>direct-routing</code> | <code>calling-plan</code> | <code>operator-connect</code>)</td>
+              <td data-l="en"><code>identity</code> (a person's or a resource account's UPN or object id), <code>phoneNumber</code>, <code>numberType</code> (<code>direct-routing</code> | <code>calling-plan</code> | <code>operator-connect</code>)</td>
+              <td data-l="de"><code>locationId</code> – die Notfalladresse der Nummer (<code>Get-CsOnlineLisLocation</code>).</td>
+              <td data-l="en"><code>locationId</code> – the number's emergency address (<code>Get-CsOnlineLisLocation</code>).</td>
+              <td data-l="de"><code>phoneNumber</code>, <code>identity</code>, <code>assigned</code> – ob dieser Lauf die Nummer vergeben hat; <code>previousNumber</code> – die ersetzte Nummer, leer, wenn keine.</td>
+              <td data-l="en"><code>phoneNumber</code>, <code>identity</code>, <code>assigned</code> – whether this run gave the number out; <code>previousNumber</code> – the number it replaced, empty when none.</td></tr>
+            <tr><td><code>remove-phone-number</code><br><i>Remove phone number</i></td>
+              <td><code>identity</code></td>
+              <td data-l="de"><code>phoneNumber</code> – ohne sie werden alle Nummern der Person oder des Kontos entfernt.</td>
+              <td data-l="en"><code>phoneNumber</code> – without it, every number of the person or account is removed.</td>
+              <td data-l="de"><code>removed</code>, <code>phoneNumbers</code> – was entfernt wurde. Die Ergebnisvariable ist freiwillig.</td>
+              <td data-l="en"><code>removed</code>, <code>phoneNumbers</code> – what was removed. The result variable is optional.</td></tr>
             <tr><td><code>remove-resource-account</code><br><i>Remove resource account</i></td>
               <td><code>resourceAccountId</code></td><td>–</td>
               <td data-l="de"><code>removed</code>, <code>objectId</code>. Die Ergebnisvariable ist freiwillig.</td>
@@ -6692,6 +6715,24 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           creates no second queue and does not fail on its first run's success. The usual order when setting up:
           <i>Resolve users</i>, <i>Ensure resource account</i> twice, <i>Ensure call queue</i>, <i>Ensure auto
           attendant</i>; a leaver process removes in the reverse order.</p>
+        <p data-l="de"><b>Rufnummern.</b> <i>Ensure phone number</i> gibt einer Person oder einem Ressourcenkonto die
+          genannte Nummer – die Hotline einer Warteschlange und die Durchwahl einer Mitarbeiterin sind für Teams
+          dieselbe Zuweisung. Hat das Ziel die Nummer schon, geschieht nichts (<code>assigned: false</code>); hat es eine
+          andere Hauptnummer, wird diese zuerst entfernt und als <code>previousNumber</code> gemeldet. Eine Nummer, die
+          jemand anderes hält, wird nicht weggenommen (<code>TEAMSPHONE_NUMBER_IN_USE</code>), und eine Calling-Plan- oder
+          Operator-Connect-Nummer, die der Tenant nicht hat, wird abgelehnt (<code>TEAMSPHONE_NUMBER_NOT_FOUND</code>).
+          Fehlt die Lizenz noch, scheitert die Zuweisung wie jeder andere Fehler; warte darauf im Modell, etwa mit einer
+          Timer-Schleife um eine Entra-Abfrage von <code>assignedLicenses</code>. Beim Austritt entfernst du die Nummer
+          mit <i>Remove phone number</i>, bevor du das Ressourcenkonto löschst.</p>
+        <p data-l="en"><b>Phone numbers.</b> <i>Ensure phone number</i> gives a person or a resource account the number
+          named – a queue's hotline and an employee's direct line are the same assignment to Teams. When the target has
+          the number already nothing happens (<code>assigned: false</code>); when it has another primary number, that
+          one is removed first and reported as <code>previousNumber</code>. A number somebody else holds is not taken
+          from them (<code>TEAMSPHONE_NUMBER_IN_USE</code>), and a Calling Plan or Operator Connect number the tenant does
+          not have is refused (<code>TEAMSPHONE_NUMBER_NOT_FOUND</code>). While the licence is still missing, the
+          assignment fails like any other error; wait for it in the model, with a timer loop around an Entra lookup of
+          <code>assignedLicenses</code>, say. On the way out, remove the number with <i>Remove phone number</i> before
+          you delete the resource account.</p>
         <p data-l="de"><b>Eine bestehende Warteschlange abgleichen.</b> <i>Ensure call queue</i> bringt eine
           Warteschlange, die es schon gibt, auf das, was das Modell nennt – bei einem Personalwechsel lässt du denselben
           Task einfach erneut laufen.</p>
@@ -6788,6 +6829,16 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
               <td data-l="en">An empty list would remove every agent or every authorized user.</td>
               <td data-l="de">Eine Benutzeraufgabe: Soll die Warteschlange wirklich leer sein? Leeren geht nur im Teams Admin Center oder mit <code>remove-call-queue</code>.</td>
               <td data-l="en">A user task: should the queue really be empty? Emptying it is done only in the Teams admin center or with <code>remove-call-queue</code>.</td></tr>
+            <tr><td><code>TEAMSPHONE_NUMBER_IN_USE</code></td><td><code>ensure-phone-number</code></td>
+              <td data-l="de">Die Nummer gehört einer anderen Person oder einem anderen Ressourcenkonto.</td>
+              <td data-l="en">The number belongs to another person or resource account.</td>
+              <td data-l="de">Klären, wer sie hält; dort mit <code>remove-phone-number</code> entfernen und erneut versuchen.</td>
+              <td data-l="en">Find out who holds it; remove it there with <code>remove-phone-number</code> and try again.</td></tr>
+            <tr><td><code>TEAMSPHONE_NUMBER_NOT_FOUND</code></td><td><code>ensure-phone-number</code></td>
+              <td data-l="de">Eine Calling-Plan- oder Operator-Connect-Nummer, die der Tenant nicht hat.</td>
+              <td data-l="en">A Calling Plan or Operator Connect number the tenant does not have.</td>
+              <td data-l="de">Die Nummer beschaffen oder portieren lassen, oder eine andere wählen.</td>
+              <td data-l="en">Have the number acquired or ported, or choose another one.</td></tr>
             <tr><td><code>TEAMSPHONE_TOO_MANY_AGENTS</code></td><td><code>ensure-call-queue</code></td>
               <td data-l="de">Mehr als 20 Agenten; Teams nimmt direkt nicht mehr.</td>
               <td data-l="en">More than 20 agents; Teams takes no more directly.</td>

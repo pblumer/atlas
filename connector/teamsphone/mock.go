@@ -31,6 +31,15 @@ type MockTenant struct {
 	byUPN      map[string]string       // lower-case UPN -> object id
 	apps       map[string]*mockApp     // voice apps by id
 	associated map[string]string       // resource account object id -> voice app id
+	// numbers are the phone numbers held, by number, naming their holder's key (see
+	// target). inventory are the Calling Plan and Operator Connect numbers the tenant
+	// has; nil has every one.
+	numbers   map[string]mockNumber
+	inventory map[string]bool
+}
+
+type mockNumber struct {
+	holder, kind string
 }
 
 type mockAccount struct {
@@ -55,6 +64,7 @@ func NewMockTenant(users ...string) *MockTenant {
 		byUPN:      map[string]string{},
 		apps:       map[string]*mockApp{},
 		associated: map[string]string{},
+		numbers:    map[string]mockNumber{},
 	}
 	if len(users) > 0 {
 		m.users = map[string]bool{}
@@ -62,6 +72,23 @@ func NewMockTenant(users ...string) *MockTenant {
 			if u = strings.ToLower(strings.TrimSpace(u)); u != "" {
 				m.users[u] = true
 			}
+		}
+	}
+	return m
+}
+
+// WithNumbers names the Calling Plan and Operator Connect numbers the tenant has; with
+// none named, it has every number, which is what a model tried out with real numbers
+// expects. A Direct Routing number needs no inventory either way.
+func (m *MockTenant) WithNumbers(numbers ...string) *MockTenant {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, n := range numbers {
+		if p, err := phoneNumber("number", n); err == nil && p != "" {
+			if m.inventory == nil {
+				m.inventory = map[string]bool{}
+			}
+			m.inventory[numberKey(p)] = true
 		}
 	}
 	return m
@@ -102,6 +129,10 @@ func (m *MockTenant) Do(_ context.Context, req Request) (map[string]any, error) 
 		return m.removeApp(req.Operation, AccountCallQueue, str("resourceAccountId"), str("name"))
 	case "remove-auto-attendant":
 		return m.removeApp(req.Operation, AccountAutoAttendant, str("resourceAccountId"), str("name"))
+	case "ensure-phone-number":
+		return m.ensureNumber(str("identity"), str("phoneNumber"), str("numberType"))
+	case "remove-phone-number":
+		return m.removeNumbers(str("identity"), str("phoneNumber"))
 	case "remove-resource-account":
 		id := str("resourceAccountId")
 		acc, ok := m.accounts[id]
@@ -312,6 +343,79 @@ func (m *MockTenant) removeApp(op, kind, accountID, name string) (map[string]any
 		}
 	}
 	return map[string]any{"removed": false, "id": ""}, nil
+}
+
+// target is the key a phone number's holder is known by: a resource account's object id,
+// whether it is named by id or by address, and a person's lower-case name. Somebody the
+// tenant does not know cannot hold a number.
+func (m *MockTenant) target(identity string) (string, error) {
+	if _, ok := m.accounts[identity]; ok {
+		return identity, nil
+	}
+	if id, ok := m.byUPN[strings.ToLower(identity)]; ok {
+		return id, nil
+	}
+	if m.users == nil || m.users[strings.ToLower(identity)] {
+		return "user:" + strings.ToLower(identity), nil
+	}
+	return "", fmt.Errorf("teamsphone: no user or resource account %s in this tenant", identity)
+}
+
+// numberKey is what two spellings of one phone number are compared by: without the
+// leading + and in lower case, as Teams answers with one whichever was written.
+func numberKey(n string) string { return strings.ToLower(strings.TrimPrefix(n, "+")) }
+
+// ensureNumber gives a user or resource account the number named, by the rules the
+// shipped PowerShell keeps (Set-PhoneNumber in operations.ps1): nothing to do when the
+// holder has it already; refused when somebody else holds it, or when the tenant lacks a
+// Calling Plan or Operator Connect number; otherwise the holder's number, if any, is
+// replaced and answered as previousNumber.
+func (m *MockTenant) ensureNumber(identity, number, kind string) (map[string]any, error) {
+	const op = "ensure-phone-number"
+	holder, err := m.target(identity)
+	if err != nil {
+		return nil, err
+	}
+	result := func(assigned bool, previous string) map[string]any {
+		return map[string]any{"phoneNumber": number, "identity": identity, "assigned": assigned, "previousNumber": previous}
+	}
+	key := numberKey(number)
+	if held, ok := m.numbers[key]; ok {
+		if held.holder == holder {
+			return result(false, ""), nil
+		}
+		return nil, refused(CodeNumberInUse, op, "the phone number "+number+" is assigned to another user or resource account; remove it there first")
+	}
+	if kind != NumberDirectRouting && m.inventory != nil && !m.inventory[key] {
+		return nil, refused(CodeNumberNotFound, op, "the phone number "+number+" is not one of the tenant's "+kind+" numbers; acquire or port it first")
+	}
+	previous := ""
+	for n, held := range m.numbers {
+		if held.holder == holder {
+			delete(m.numbers, n)
+			previous = "+" + n
+		}
+	}
+	m.numbers[key] = mockNumber{holder: holder, kind: kind}
+	return result(true, previous), nil
+}
+
+// removeNumbers takes the number named — or, with none named, every number — away from
+// its holder, and answers which it removed.
+func (m *MockTenant) removeNumbers(identity, number string) (map[string]any, error) {
+	holder, err := m.target(identity)
+	if err != nil {
+		return nil, err
+	}
+	removed := []string{}
+	for n, held := range m.numbers {
+		if held.holder == holder && (number == "" || n == numberKey(number)) {
+			delete(m.numbers, n)
+			removed = append(removed, "+"+n)
+		}
+	}
+	sort.Strings(removed)
+	return map[string]any{"removed": len(removed) > 0, "phoneNumbers": removed}, nil
 }
 
 func (m *MockTenant) isAssociated(appID string) bool {

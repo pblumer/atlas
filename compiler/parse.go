@@ -3142,8 +3142,9 @@ type xmlS3Connector struct {
 // a list of {name, start, end} with ISO dates; the rest are single values. Each is
 // literal or, with a leading '=', a FEEL expression evaluated over the variables the
 // task sees at call time (the fx toggle, ADR-0067). accountType, routingMethod,
-// presenceBasedRouting, conferenceMode and allowOptOut are not: each decides the shape
-// of what is created, and a shape that could differ on every token is not a shape.
+// presenceBasedRouting, conferenceMode, allowOptOut and numberType are not: each decides
+// the shape of what is created, and a shape that could differ on every token is not a
+// shape.
 type xmlTeamsPhoneConnector struct {
 	Connector            string `xml:"connector,attr"`
 	Operation            string `xml:"operation,attr"`
@@ -3163,6 +3164,10 @@ type xmlTeamsPhoneConnector struct {
 	PresenceBasedRouting string `xml:"presenceBasedRouting,attr"`
 	ConferenceMode       string `xml:"conferenceMode,attr"`
 	AllowOptOut          string `xml:"allowOptOut,attr"`
+	Identity             string `xml:"identity,attr"`
+	PhoneNumber          string `xml:"phoneNumber,attr"`
+	NumberType           string `xml:"numberType,attr"`
+	LocationID           string `xml:"locationId,attr"`
 	ResultVariable       string `xml:"resultVariable,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
@@ -3191,6 +3196,10 @@ func (c *xmlTeamsPhoneConnector) values() []struct{ attr, raw string } {
 		{"presenceBasedRouting", c.PresenceBasedRouting},
 		{"conferenceMode", c.ConferenceMode},
 		{"allowOptOut", c.AllowOptOut},
+		{"identity", c.Identity},
+		{"phoneNumber", c.PhoneNumber},
+		{"numberType", c.NumberType},
+		{"locationId", c.LocationID},
 	}
 }
 

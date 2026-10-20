@@ -524,6 +524,10 @@
         { "name": "presenceBasedRouting", "type": "String", "isAttr": true },
         { "name": "conferenceMode", "type": "String", "isAttr": true },
         { "name": "allowOptOut", "type": "String", "isAttr": true },
+        { "name": "identity", "type": "String", "isAttr": true },
+        { "name": "phoneNumber", "type": "String", "isAttr": true },
+        { "name": "numberType", "type": "String", "isAttr": true },
+        { "name": "locationId", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]

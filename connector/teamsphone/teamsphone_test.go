@@ -445,7 +445,8 @@ func TestRefusalsCarryTheirCodes(t *testing.T) {
 		t.Errorf("remove-call-queue on an attendant's account: %v; want a refusal coded %s", err, teamsphone.CodeAccountInUse)
 	}
 	for _, code := range []string{teamsphone.CodeUPNTaken, teamsphone.CodeAccountTypeMismatch, teamsphone.CodeAccountInUse,
-		teamsphone.CodeAccountNotVisible, teamsphone.CodeWouldEmptyList, teamsphone.CodeTooManyAgents} {
+		teamsphone.CodeAccountNotVisible, teamsphone.CodeWouldEmptyList, teamsphone.CodeTooManyAgents,
+		teamsphone.CodeNumberInUse, teamsphone.CodeNumberNotFound} {
 		if !slices.Contains(teamsphone.Codes, code) {
 			t.Errorf("%s is missing from Codes, the list the handbook is held to", code)
 		}
@@ -496,6 +497,138 @@ func TestACaughtCodeIsThrownAndAnUncaughtOneFails(t *testing.T) {
 	_, err = teamsphone.Run(context.Background(), j, reg)
 	if errors.As(err, &thrown) || err == nil {
 		t.Errorf("a refusal the process does not catch: %v; want a failure, not a BPMN error", err)
+	}
+}
+
+// A phone number is read the way people write one — with spaces, dashes or brackets, or
+// as a tel: URI — and handed on as Teams takes it; something that is no number at all is
+// refused before any PowerShell starts.
+func TestPhoneNumbersAreNormalized(t *testing.T) {
+	job := func(number string) teamsphone.Job {
+		return teamsphone.Job{Operation: "ensure-phone-number", Args: map[string]any{
+			"identity": "anna@contoso.example", "phoneNumber": number, "numberType": "calling-plan"}}
+	}
+	for written, want := range map[string]string{
+		"+41 44 123 45 67":        "+41441234567",
+		"tel:+41-44-123-45-67":    "+41441234567",
+		"+1 (425) 555-1225":       "+14255551225",
+		"+41441234500;ext=12":     "+41441234500;ext=12",
+		"41441234567":             "41441234567",
+		" +41 (0)44 123 45 67":    "",
+		"Zentrale":                "",
+		"+41441234567;extension=": "",
+	} {
+		req, err := teamsphone.Prepare(job(written))
+		if want == "" {
+			if err == nil || !strings.Contains(err.Error(), "phoneNumber") {
+				t.Errorf("%q: %v, %v; want it refused, naming phoneNumber", written, req.Args["phoneNumber"], err)
+			}
+			continue
+		}
+		if err != nil || req.Args["phoneNumber"] != want {
+			t.Errorf("%q = %v, %v; want %q", written, req.Args["phoneNumber"], err, want)
+		}
+	}
+	if req, err := teamsphone.Prepare(job("+41441234567")); err != nil || req.Args["numberType"] != "calling-plan" {
+		t.Errorf("numberType = %v, %v; want the setting carried", req.Args["numberType"], err)
+	}
+}
+
+// A phone number belongs to one user or resource account. ensure-phone-number gives the
+// target the number it names — replacing the one it had, which the answer reports — and
+// answers assigned=false when the target has it already; it refuses a number somebody
+// else holds, and a Calling Plan or Operator Connect number the tenant does not have. A
+// Direct Routing number needs no inventory: the operator's own carrier serves it.
+func TestPhoneNumbersFollowTheirTarget(t *testing.T) {
+	m := teamsphone.NewMockTenant("anna@contoso.example", "beat@contoso.example").WithNumbers("+41441110000", "+41441110001")
+	reg := teamsphone.NewRegistry()
+	reg.Register("contoso", m)
+	run := func(op string, args map[string]any) (map[string]any, error) {
+		out, err := teamsphone.Run(context.Background(), teamsphone.Job{Connector: "contoso", Operation: op, Args: args, ResultVariable: "r"}, reg)
+		if err != nil {
+			return nil, err
+		}
+		return out["r"].(map[string]any), nil
+	}
+	ensure := func(identity, number, kind string) (map[string]any, error) {
+		return run("ensure-phone-number", map[string]any{"identity": identity, "phoneNumber": number, "numberType": kind})
+	}
+	acc, err := run("ensure-resource-account", map[string]any{"userPrincipalName": "cq_x@contoso.example", "displayName": "X", "accountType": "call-queue"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cq := acc["objectId"].(string)
+
+	steps := []struct {
+		name, identity, number, kind string
+		want                         map[string]any
+	}{
+		{"a Calling Plan number for a person", "anna@contoso.example", "+41 44 111 00 00", "calling-plan",
+			map[string]any{"phoneNumber": "+41441110000", "identity": "anna@contoso.example", "assigned": true, "previousNumber": ""}},
+		{"the same again, by another spelling", "ANNA@contoso.example", "+41-44-111-00-00", "calling-plan",
+			map[string]any{"phoneNumber": "+41441110000", "identity": "ANNA@contoso.example", "assigned": false, "previousNumber": ""}},
+		{"a Direct Routing number for a queue's account", cq, "+41445550000", "direct-routing",
+			map[string]any{"phoneNumber": "+41445550000", "identity": cq, "assigned": true, "previousNumber": ""}},
+		{"the account by its address", "cq_x@contoso.example", "+41445550000", "direct-routing",
+			map[string]any{"phoneNumber": "+41445550000", "identity": "cq_x@contoso.example", "assigned": false, "previousNumber": ""}},
+		{"a new number replaces the old one", "anna@contoso.example", "+41441110001", "calling-plan",
+			map[string]any{"phoneNumber": "+41441110001", "identity": "anna@contoso.example", "assigned": true, "previousNumber": "+41441110000"}},
+		{"the released number is free for somebody else", "beat@contoso.example", "+41441110000", "calling-plan",
+			map[string]any{"phoneNumber": "+41441110000", "identity": "beat@contoso.example", "assigned": true, "previousNumber": ""}},
+	}
+	for _, s := range steps {
+		got, err := ensure(s.identity, s.number, s.kind)
+		if err != nil || !reflect.DeepEqual(got, s.want) {
+			t.Errorf("%s: %v, %v; want %v", s.name, got, err, s.want)
+		}
+	}
+
+	refusals := []struct {
+		name, identity, number, kind, code string
+	}{
+		{"a number another person holds", "anna@contoso.example", "+41441110000", "calling-plan", teamsphone.CodeNumberInUse},
+		{"a number a queue's account holds", "beat@contoso.example", "+41445550000", "direct-routing", teamsphone.CodeNumberInUse},
+		{"a Calling Plan number the tenant lacks", "beat@contoso.example", "+41449999999", "calling-plan", teamsphone.CodeNumberNotFound},
+		{"an Operator Connect number the tenant lacks", "beat@contoso.example", "+41449999999", "operator-connect", teamsphone.CodeNumberNotFound},
+	}
+	for _, r := range refusals {
+		_, err := ensure(r.identity, r.number, r.kind)
+		var refusal *teamsphone.Refusal
+		if !errors.As(err, &refusal) || refusal.Code != r.code {
+			t.Errorf("%s: %v; want a refusal coded %s", r.name, err, r.code)
+		}
+	}
+	if got, _ := ensure("anna@contoso.example", "+41441110001", "calling-plan"); got["assigned"] != false {
+		t.Errorf("a refused request moved a number: anna now answers %v", got)
+	}
+
+	// The leaver path: a named number is taken away from its holder, all of them without a
+	// name, and a repeat answers removed=false.
+	removals := []struct {
+		name string
+		args map[string]any
+		want map[string]any
+	}{
+		{"a number its holder does not have", map[string]any{"identity": "anna@contoso.example", "phoneNumber": "+41441110000"},
+			map[string]any{"removed": false, "phoneNumbers": []string{}}},
+		{"the holder's number", map[string]any{"identity": "anna@contoso.example", "phoneNumber": "+41 44 111 00 01"},
+			map[string]any{"removed": true, "phoneNumbers": []string{"+41441110001"}}},
+		{"every number of an account", map[string]any{"identity": cq},
+			map[string]any{"removed": true, "phoneNumbers": []string{"+41445550000"}}},
+		{"again", map[string]any{"identity": cq},
+			map[string]any{"removed": false, "phoneNumbers": []string{}}},
+	}
+	for _, r := range removals {
+		got, err := run("remove-phone-number", r.args)
+		if err != nil || !reflect.DeepEqual(got, r.want) {
+			t.Errorf("remove-phone-number, %s: %v, %v; want %v", r.name, got, err, r.want)
+		}
+	}
+	if got, err := ensure("anna@contoso.example", "+41441110001", "calling-plan"); err != nil || got["assigned"] != true {
+		t.Errorf("a removed number could not be given out again: %v, %v", got, err)
+	}
+	if _, err := ensure("nobody@contoso.example", "+41445550001", "direct-routing"); err == nil {
+		t.Error("a number was given to somebody the tenant does not know")
 	}
 }
 
@@ -611,7 +744,7 @@ func TestARemoveFindsAnOrphanByName(t *testing.T) {
 // required value does not, every optional value and setting is accepted, and every
 // attribute the operation does not take is refused.
 func TestTeamsPhoneOpsMatchTheCompiler(t *testing.T) {
-	sample := map[teamsphone.Shape]string{teamsphone.Text: "x", teamsphone.List: "a,b", teamsphone.Holidays: `=[]`}
+	sample := map[teamsphone.Shape]string{teamsphone.Text: "x", teamsphone.List: "a,b", teamsphone.Holidays: `=[]`, teamsphone.PhoneNumber: "+41441234567"}
 	attrs := func(op string, spec teamsphone.Op, omit string, extra ...string) string {
 		parts := []string{`connector="c"`, `operation="` + op + `"`}
 		for _, name := range spec.Required {
@@ -696,9 +829,13 @@ func TestTheCompilersSettingsAreThisPackages(t *testing.T) {
 	for name, set := range teamsphone.Settings {
 		op := "ensure-call-queue"
 		base := `connector="c" operation="ensure-call-queue" name="n" resourceAccountId="r" resultVariable="q"`
-		if name == "accountType" {
+		switch name {
+		case "accountType":
 			op = "ensure-resource-account"
 			base = `connector="c" operation="ensure-resource-account" userPrincipalName="u" displayName="d" resultVariable="q"`
+		case "numberType":
+			op = "ensure-phone-number"
+			base = `connector="c" operation="ensure-phone-number" identity="u" phoneNumber="+41441234567" resultVariable="q"`
 		}
 		for _, v := range set.Values {
 			if _, _, _, err := compileTask(base + ` ` + name + `="` + v + `"`); err != nil {

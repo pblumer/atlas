@@ -4,7 +4,7 @@
   "kind": "connector",
   "title": "Microsoft Teams Phone voice apps",
   "author": "Atlas core",
-  "description": "Provision a Teams Phone call queue and the auto attendant in front of it, with the resource accounts that answer their calls — and remove them again — without authoring PowerShell. A model names the operation and supplies values; the worker runs fixed PowerShell shipped with Atlas on a host that has PowerShell 7 and the MicrosoftTeams module, signing in with the app's certificate from the vault (ADR-0463). Every ensure operation looks before it creates, so a retried job converges instead of creating a second queue; a resource account Entra already holds but Teams does not show yet is adopted rather than refused. Ensure call queue also brings an existing queue to the agents, authorized users and routing a model names. A refusal a process may have a path for carries a TEAMSPHONE_ code and is thrown as a BPMN error when the process catches that code. Licences and the employee id stay Entra operations.",
+  "description": "Provision a Teams Phone call queue and the auto attendant in front of it, with the resource accounts that answer their calls — and remove them again — without authoring PowerShell. A model names the operation and supplies values; the worker runs fixed PowerShell shipped with Atlas on a host that has PowerShell 7 and the MicrosoftTeams module, signing in with the app's certificate from the vault (ADR-0463). Every ensure operation looks before it creates, so a retried job converges instead of creating a second queue; a resource account Entra already holds but Teams does not show yet is adopted rather than refused. Ensure call queue also brings an existing queue to the agents, authorized users and routing a model names, and a phone number is given to a user or a resource account, replacing the one it had. A refusal a process may have a path for carries a TEAMSPHONE_ code and is thrown as a BPMN error when the process catches that code. Licences and the employee id stay Entra operations.",
   "engineCompat": ">=0.13",
   "template": {
     "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
@@ -22,7 +22,9 @@
           { "name": "Ensure auto attendant", "value": "ensure-auto-attendant" },
           { "name": "Remove auto attendant", "value": "remove-auto-attendant" },
           { "name": "Remove call queue", "value": "remove-call-queue" },
-          { "name": "Remove resource account", "value": "remove-resource-account" }
+          { "name": "Remove resource account", "value": "remove-resource-account" },
+          { "name": "Ensure phone number", "value": "ensure-phone-number" },
+          { "name": "Remove phone number", "value": "remove-phone-number" }
         ] },
       { "label": "Users (Resolve users)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:users" },
         "description": "The people to look up — a FEEL list, or one text separated by commas. They come back as ids, the form a queue's agents and authorized users take, and the ones not found are listed in notFound rather than failing the task." },
@@ -80,8 +82,21 @@
           { "name": "Yes", "value": "true" },
           { "name": "No", "value": "false" }
         ] },
+      { "label": "User or resource account (phone number)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:identity" },
+        "description": "Who holds the number: a person's or a resource account's user principal name or object id." },
+      { "label": "Phone number (Ensure / optional on Remove phone number)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:phoneNumber" },
+        "description": "Written as people write one; spaces, dashes and a tel: prefix are dropped, a (0) after the country code is refused. A number the holder has is left alone, another one it holds is replaced. On a remove, empty takes every number away." },
+      { "label": "Number type (Ensure phone number)", "type": "Dropdown", "value": "direct-routing", "binding": { "type": "property", "name": "atlas:numberType" },
+        "choices": [
+          { "name": "Direct Routing", "value": "direct-routing" },
+          { "name": "Calling Plan", "value": "calling-plan" },
+          { "name": "Operator Connect", "value": "operator-connect" }
+        ],
+        "description": "How the tenant reaches the telephone network for the number. Calling Plan and Operator Connect numbers must be the tenant's already." },
+      { "label": "Emergency location (Ensure phone number)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:locationId" },
+        "description": "Optional. The LocationId of the emergency address the number is registered at." },
       { "label": "Result variable", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:resultVariable" },
-        "description": "Receives the answer: ids and notFound; objectId, created and source; id, name, created and, for a call queue, changed; or removed. Required on every operation but the removes." }
+        "description": "Receives the answer: ids and notFound; objectId, created and source; id, name, created and, for a call queue, changed; assigned and previousNumber; or removed. Required on every operation but the removes." }
     ]
   }
 }

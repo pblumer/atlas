@@ -31,12 +31,19 @@ const (
 	CodeWouldEmptyList = "TEAMSPHONE_WOULD_EMPTY_LIST"
 	// CodeTooManyAgents: more agents than a call queue takes directly.
 	CodeTooManyAgents = "TEAMSPHONE_TOO_MANY_AGENTS"
+	// CodeNumberInUse: the phone number belongs to another user or resource account,
+	// which an ensure will not take it from.
+	CodeNumberInUse = "TEAMSPHONE_NUMBER_IN_USE"
+	// CodeNumberNotFound: a Calling Plan or Operator Connect number the tenant does not
+	// have; it has to be acquired or ported first.
+	CodeNumberNotFound = "TEAMSPHONE_NUMBER_NOT_FOUND"
 )
 
 // Codes lists every code a refusal carries, in the order the handbook explains them.
 var Codes = []string{
 	CodeUPNTaken, CodeAccountTypeMismatch, CodeAccountInUse,
 	CodeAccountNotVisible, CodeWouldEmptyList, CodeTooManyAgents,
+	CodeNumberInUse, CodeNumberNotFound,
 }
 
 // Refusal is an operation's refusal under one of [Codes]. Its message reads as every

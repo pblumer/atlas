@@ -14,11 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
-- **A Teams Phone refusal can take an error boundary's path.** Six refusals a process may
-  have a path for carry a fixed code: `TEAMSPHONE_UPN_TAKEN` (the address belongs to a
+- **Teams Phone gives out phone numbers.** `ensure-phone-number` gives a person or a
+  resource account a Direct Routing, Calling Plan or Operator Connect number — a queue's
+  hotline and an employee's direct line alike — and `remove-phone-number` takes one or all
+  of them away again. A holder that has the number already is left alone; another number it
+  holds is replaced and reported as `previousNumber`. A number somebody else holds is
+  refused (`TEAMSPHONE_NUMBER_IN_USE`), and so is a Calling Plan or Operator Connect number
+  the tenant does not have (`TEAMSPHONE_NUMBER_NOT_FOUND`). A number is read as people write
+  one, spaces and dashes included; a `(0)` after the country code is refused. In mock mode,
+  `ATLAS_TEAMSPHONE_MOCK_NUMBERS` names the tenant's numbers
+  ([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendment 2026-10-20).
+- **A Teams Phone refusal can take an error boundary's path.** Eight refusals a process
+  may have a path for carry a fixed code: `TEAMSPHONE_UPN_TAKEN` (the address belongs to a
   person), `TEAMSPHONE_ACCOUNT_TYPE_MISMATCH`, `TEAMSPHONE_ACCOUNT_IN_USE`,
-  `TEAMSPHONE_ACCOUNT_NOT_VISIBLE`, `TEAMSPHONE_WOULD_EMPTY_LIST` and
-  `TEAMSPHONE_TOO_MANY_AGENTS`. When the task's process catches the code with an error
+  `TEAMSPHONE_ACCOUNT_NOT_VISIBLE`, `TEAMSPHONE_WOULD_EMPTY_LIST`,
+  `TEAMSPHONE_TOO_MANY_AGENTS`, `TEAMSPHONE_NUMBER_IN_USE` and
+  `TEAMSPHONE_NUMBER_NOT_FOUND`. When the task's process catches the code with an error
   boundary or an error event subprocess, the instance takes that path at once, with no retry
   spent; a code the process does not catch fails and is retried as before. Until now an
   error boundary on a Teams Phone task never fired

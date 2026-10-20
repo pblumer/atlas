@@ -143,6 +143,33 @@ func TestATeamsPhoneRefusalTheProcessCatchesIsThrown(t *testing.T) {
 	}
 }
 
+// In mock mode the tenant's numbers are the ones ATLAS_TEAMSPHONE_MOCK_NUMBERS names, so a
+// model tries the refusal of a number the tenant lacks before any tenant exists.
+func TestATeamsPhoneMockTenantHasTheNumbersItIsGiven(t *testing.T) {
+	got, err := BuiltinConnectors(envMap(map[string]string{
+		"ATLAS_TEAMSPHONE_CONNECTORS":   "contoso",
+		"ATLAS_TEAMSPHONE_MOCK":         "true",
+		"ATLAS_TEAMSPHONE_MOCK_NUMBERS": "+41 44 111 00 00",
+	}), "teamsphone")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	h := got.Handlers[compiler.TeamsPhoneJobType].(ExecFunc)
+	assign := func(number string) error {
+		_, err := h(context.Background(), Job{Connector: &ConnectorPayload{Kind: "teamsphone", Fields: map[string]any{
+			"connector": "contoso", "operation": "ensure-phone-number", "resultVariable": "nummer",
+			"args": map[string]any{"identity": "anna@contoso.example", "phoneNumber": number, "numberType": "calling-plan"},
+		}}})
+		return err
+	}
+	if err := assign("+41441110000"); err != nil {
+		t.Errorf("a number the mock tenant has: %v", err)
+	}
+	if err := assign("+41449999999"); err == nil || !strings.Contains(err.Error(), "acquire or port it first") {
+		t.Errorf("a number the mock tenant lacks: %v; want it refused", err)
+	}
+}
+
 // A job from a server that resolves nothing says so instead of running an empty request.
 func TestATeamsPhoneJobWithoutDetailIsRefused(t *testing.T) {
 	if _, err := RunTeamsPhoneJob(context.Background(), Job{}, nil); err == nil || !strings.Contains(err.Error(), "no resolved worker detail") {

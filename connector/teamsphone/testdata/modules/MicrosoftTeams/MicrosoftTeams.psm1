@@ -11,7 +11,7 @@ function Get-State {
     if (Test-Path $script:StatePath) {
         return Get-Content -Raw -Encoding utf8 $script:StatePath | ConvertFrom-Json -AsHashtable
     }
-    return @{ connects = 0; sets = 0; users = @{}; accounts = @{}; apps = @{}; assoc = @{}; schedules = @(); entra = @{} }
+    return @{ connects = 0; sets = 0; users = @{}; accounts = @{}; apps = @{}; assoc = @{}; schedules = @(); entra = @{}; numbers = @{} }
 }
 
 function Save-State($State) {
@@ -211,6 +211,55 @@ function New-CsOnlineSchedule {
 function New-CsAutoAttendantCallHandlingAssociation {
     param([string]$Type, [string]$ScheduleId, [string]$CallFlowId)
     [pscustomobject]@{ Type = $Type; ScheduleId = $ScheduleId; CallFlowId = $CallFlowId }
+}
+
+# Phone numbers. The inventory is the state's numbers, keyed by number; a Direct Routing
+# number joins it when assigned and leaves it when removed, as the operator's carrier
+# serves it rather than Microsoft. A target is held by its object id, as Teams holds it.
+function Resolve-Target($State, [string]$Identity) {
+    $a = Find-Account $State $Identity
+    if ($a) { return [string]$a.ObjectId }
+    $u = $State.users[$Identity.ToLowerInvariant()]
+    if ($u) { return [string]$u }
+    if ($State.users.Values -contains $Identity) { return $Identity }
+    throw "stub: no user or resource account $Identity"
+}
+
+function Get-CsPhoneNumberAssignment {
+    param([string]$TelephoneNumber, [string]$AssignedPstnTargetId)
+    $s = Get-State
+    $target = if ($AssignedPstnTargetId) { Resolve-Target $s $AssignedPstnTargetId } else { $null }
+    foreach ($n in @($s.numbers.Values)) {
+        if ($TelephoneNumber -and $n.TelephoneNumber -ne $TelephoneNumber) { continue }
+        if ($target -and $n.AssignedPstnTargetId -ne $target) { continue }
+        [pscustomobject]$n
+    }
+}
+
+function Set-CsPhoneNumberAssignment {
+    param([string]$Identity, [string]$TelephoneNumber, [string]$NumberType, [string]$LocationId)
+    $s = Get-State
+    $target = Resolve-Target $s $Identity
+    $n = $s.numbers[$TelephoneNumber]
+    if ($n -and $n.AssignedPstnTargetId -and $n.AssignedPstnTargetId -ne $target) { throw "stub: $TelephoneNumber is assigned to $($n.AssignedPstnTargetId)" }
+    if (-not $n -and $NumberType -ne 'DirectRouting') { throw "stub: $TelephoneNumber is not in the tenant's inventory" }
+    foreach ($other in @($s.numbers.Values)) {
+        if ($other.AssignedPstnTargetId -eq $target -and $other.TelephoneNumber -ne $TelephoneNumber) {
+            throw "stub: $Identity already has the primary number $($other.TelephoneNumber)"
+        }
+    }
+    $s.numbers[$TelephoneNumber] = @{ TelephoneNumber = $TelephoneNumber; NumberType = $NumberType; AssignedPstnTargetId = $target; AssignmentCategory = 'Primary' }
+    Save-State $s
+}
+
+function Remove-CsPhoneNumberAssignment {
+    param([string]$Identity, [string]$TelephoneNumber, [string]$NumberType)
+    $s = Get-State
+    $target = Resolve-Target $s $Identity
+    $n = $s.numbers[$TelephoneNumber]
+    if (-not $n -or $n.AssignedPstnTargetId -ne $target) { throw "stub: $TelephoneNumber is not assigned to $Identity" }
+    if ($n.NumberType -eq 'DirectRouting') { $s.numbers.Remove($TelephoneNumber) } else { $n.AssignedPstnTargetId = '' }
+    Save-State $s
 }
 
 Export-ModuleMember -Function *-Cs*, Connect-MicrosoftTeams, Disconnect-MicrosoftTeams

@@ -1,6 +1,6 @@
 // Package teamsphone provisions Microsoft Teams Phone voice apps — call queues and auto
-// attendants — and the resource accounts that answer their calls, on behalf of a BPMN
-// service task (ADR-0463).
+// attendants — the resource accounts that answer their calls, and the phone numbers
+// people and voice apps are reached at, on behalf of a BPMN service task (ADR-0463).
 //
 // # Why PowerShell
 //

@@ -91,6 +91,7 @@ type stubState struct {
 	Apps      map[string]map[string]any `json:"apps"`
 	Assoc     map[string]map[string]any `json:"assoc"`
 	Schedules []map[string]any          `json:"schedules"`
+	Numbers   map[string]map[string]any `json:"numbers"`
 	Entra     map[string]map[string]any `json:"entra"`
 }
 
@@ -235,6 +236,10 @@ func TestTheShippedScriptProvisionsAndUnwinds(t *testing.T) {
 		Users:    map[string]string{"anna@contoso.example": "user-anna"},
 		Accounts: map[string]map[string]any{}, Apps: map[string]map[string]any{}, Assoc: map[string]map[string]any{},
 		Schedules: []map[string]any{},
+		// The tenant's Calling Plan inventory: one number, held by nobody yet.
+		Numbers: map[string]map[string]any{
+			"+41441110000": {"TelephoneNumber": "+41441110000", "NumberType": "CallingPlan", "AssignedPstnTargetId": "", "AssignmentCategory": "Primary"},
+		},
 		Entra: map[string]map[string]any{
 			"anna@contoso.example": {"id": "user-anna", "displayName": "Anna Muster", "accountEnabled": true},
 		},
@@ -408,6 +413,45 @@ func TestTheShippedScriptProvisionsAndUnwinds(t *testing.T) {
 	}
 	if len(st.Schedules) != 1 || st.Schedules[0]["Start"] != "25/12/2026" || st.Schedules[0]["End"] != "26/12/2026" {
 		t.Errorf("holiday schedules = %v, want Christmas Day in Teams' date form", st.Schedules)
+	}
+
+	// Phone numbers: a Direct Routing number for the queue's account, by id and then by
+	// address; a Calling Plan number from the inventory for a person, replaced by another
+	// — the stand-in refuses a second primary number, so the old one must go first — and
+	// the refusals a process can catch.
+	number := func(identity, phone, kind string) (map[string]any, error) {
+		return run("ensure-phone-number", map[string]any{"identity": identity, "phoneNumber": phone, "numberType": kind})
+	}
+	if got, err := number(cqID, "+41 44 555 00 00", "direct-routing"); err != nil || got["assigned"] != true || got["phoneNumber"] != "+41445550000" {
+		t.Errorf("a Direct Routing number for the queue's account = %v, %v", got, err)
+	}
+	if got, err := number("cq_zuerich@contoso.example", "+41445550000", "direct-routing"); err != nil || got["assigned"] != false {
+		t.Errorf("the same number for the account by its address = %v, %v; want nothing to do", got, err)
+	}
+	if got, err := number("anna@contoso.example", "+41441110000", "calling-plan"); err != nil || got["assigned"] != true {
+		t.Errorf("a Calling Plan number for a person = %v, %v", got, err)
+	}
+	if got, err := number("anna@contoso.example", "+41445550001", "direct-routing"); err != nil || got["assigned"] != true || got["previousNumber"] != "+41441110000" {
+		t.Errorf("a new number for the person = %v, %v; want the old one replaced and reported", got, err)
+	}
+	if n := stub.load().Numbers["+41441110000"]; n["AssignedPstnTargetId"] != "" {
+		t.Errorf("the replaced Calling Plan number is still held: %v", n)
+	}
+	if _, err := number("anna@contoso.example", "+41445550000", "direct-routing"); !coded(err, teamsphone.CodeNumberInUse) {
+		t.Errorf("the queue's number for a person: %v; want it refused as %s", err, teamsphone.CodeNumberInUse)
+	}
+	if _, err := number("anna@contoso.example", "+41449999999", "calling-plan"); !coded(err, teamsphone.CodeNumberNotFound) {
+		t.Errorf("a Calling Plan number the tenant lacks: %v; want it refused as %s", err, teamsphone.CodeNumberNotFound)
+	}
+	removeNumbers := func(args map[string]any) map[string]any { return must("remove-phone-number", args) }
+	if got := removeNumbers(map[string]any{"identity": "anna@contoso.example"}); got["removed"] != true || len(got["phoneNumbers"].([]any)) != 1 {
+		t.Errorf("remove-phone-number for the person = %v", got)
+	}
+	if got := removeNumbers(map[string]any{"identity": "anna@contoso.example"}); got["removed"] != false {
+		t.Errorf("remove-phone-number repeated = %v, want removed=false", got)
+	}
+	if got := removeNumbers(map[string]any{"identity": cqID, "phoneNumber": "+41445550000"}); got["removed"] != true {
+		t.Errorf("remove-phone-number for the account's number = %v", got)
 	}
 
 	// An attendant's account carries no queue, and a queue's remove does not take the

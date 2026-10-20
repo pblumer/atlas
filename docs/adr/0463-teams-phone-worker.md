@@ -1,6 +1,6 @@
 # ADR-0463: A Microsoft Teams Phone Worker Type for voice apps and their resource accounts
 
-- **Status:** Accepted (amended 2026-10-19: `ensure-call-queue` brings a queue it finds to the agents a model names — the directly assigned ones, in order under serial routing — and answers `agentsChanged`; agents not named are left as they are, a value that resolved to nothing is refused, and an empty list never empties a queue that has agents. Amended 2026-10-20: the queue's authorized users and routing settings are reconciled as its agents are — what a model names is set, what it leaves out is kept — so the compiler no longer writes a setting's default into the model; the answer lists what it set in `changed`; and six refusals carry `TEAMSPHONE_…` codes, thrown as BPMN errors when the process catches them)
+- **Status:** Accepted (amended 2026-10-19: `ensure-call-queue` brings a queue it finds to the agents a model names — the directly assigned ones, in order under serial routing — and answers `agentsChanged`; agents not named are left as they are, a value that resolved to nothing is refused, and an empty list never empties a queue that has agents. Amended 2026-10-20: the queue's authorized users and routing settings are reconciled as its agents are — what a model names is set, what it leaves out is kept — so the compiler no longer writes a setting's default into the model; the answer lists what it set in `changed`; and six refusals carry `TEAMSPHONE_…` codes, thrown as BPMN errors when the process catches them; and `ensure-phone-number` / `remove-phone-number` give a user or a resource account a phone number and take it away again)
 - **Implementation:** Landed
 - **Date:** 2026-10-17
 - **Deciders:** Atlas maintainers
@@ -308,6 +308,58 @@ where it answered `removed: false`; the shipped PowerShell always refused it.
   `changed` every time; the queue would still end up right.
 - The handbook gains a reference card for every operation (`#ref-teamsphone`), linked from
   the panel beside the setup card; a test holds it to the operation table and the codes.
+
+### Amendment (2026-10-20): phone numbers for users and resource accounts
+
+The record left phone numbers out and named them a follow-up "once Microsoft documents a
+stable path". That path exists: `Set-CsPhoneNumberAssignment`,
+`Remove-CsPhoneNumberAssignment` and `Get-CsPhoneNumberAssignment` are documented module
+cmdlets for users and resource accounts alike, with the number's type and its holder in
+what the lookup answers. Without them a queue the worker provisions is reachable from
+Teams but not from the telephone network, and the commonest Teams Phone process — giving
+a joiner a direct line — stayed a script task.
+
+**Decision.** Two operations, for a person and a resource account alike, because Teams
+makes no difference between the two assignments:
+
+| Operation | Needs | Returns |
+|---|---|---|
+| `ensure-phone-number` | `identity` (UPN or object id), `phoneNumber`, `numberType` *static* (`direct-routing` \| `calling-plan` \| `operator-connect`, no default); optional `locationId` | `{phoneNumber, identity, assigned, previousNumber}` |
+| `remove-phone-number` | `identity`; optional `phoneNumber` (without it, every number the identity holds) | `{removed, phoneNumbers}` |
+
+- **Safe to repeat.** The holder's numbers are read first (`-AssignedPstnTargetId`
+  takes the UPN or the object id); a holder that has the number is answered
+  `assigned: false`.
+- **Replace, not refuse.** A holder with another primary number has it removed first and
+  reported as `previousNumber`: what the model names is the holder's number, as with a
+  queue's agents. Removing first is a choice made for want of knowledge — Microsoft does not
+  say whether an assignment replaces a primary number — and a retry after a failure between
+  the two finds the holder without a number and simply assigns. Private and alternate lines
+  are left alone.
+- **Never taken from somebody else.** A number another holder has is refused
+  (`TEAMSPHONE_NUMBER_IN_USE`); a Calling Plan or Operator Connect number the tenant does not
+  have is refused (`TEAMSPHONE_NUMBER_NOT_FOUND`). A Direct Routing number is the operator's
+  own carrier's and is in no inventory until assigned, so its absence refuses nothing.
+- **The number type is static**, like `accountType`: the three ways a tenant reaches the
+  telephone network decide what Teams checks, and a guess would hand Teams a number under
+  the wrong one.
+- **A number is read as people write one.** Spaces, dashes, dots, slashes and brackets
+  and a `tel:` prefix are dropped; the result must be digits with an optional `+` and an
+  optional `;ext=`. A `(0)` after a country code is refused: kept, it dials another number;
+  dropped, it guesses.
+- **The licence is the model's to wait for**, as the record already says for a resource
+  account's: a holder without a Teams Phone licence and a usage location fails the
+  assignment as any other fault does, because the module's words for it are not known to
+  this record and a code built on guessed words would be a promise not kept.
+- The mock keeps the same rules; `ATLAS_TEAMSPHONE_MOCK_NUMBERS` names its Calling Plan
+  and Operator Connect inventory, every number when unset.
+
+**Consequences and what is not known.** Microsoft's list of cmdlets an app-only sign-in may
+not run does not name `Set-CsPhoneNumberAssignment` (checked 2026-10; the lookup and the
+removal were not checked). An absence from that list is not an affirmation, so the first
+installation confirms all three. The lookup of a number the tenant lacks is assumed to answer nothing rather
+than fail, as a filter does. Removing a number before deleting a resource account is the
+leaver path's step, not something `remove-resource-account` does on its own.
 
 ## Pros and cons of the options
 

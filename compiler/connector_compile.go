@@ -2730,6 +2730,13 @@ var teamsPhoneOps = map[string]teamsPhoneOp{
 	"remove-auto-attendant":   {required: []string{"resourceAccountId"}, optional: []string{"name"}},
 	"remove-call-queue":       {required: []string{"resourceAccountId"}, optional: []string{"name"}},
 	"remove-resource-account": {required: []string{"resourceAccountId"}},
+	"ensure-phone-number": {
+		required:    []string{"identity", "phoneNumber"},
+		optional:    []string{"locationId"},
+		settings:    []string{"numberType"},
+		needsResult: true,
+	},
+	"remove-phone-number": {required: []string{"identity"}, optional: []string{"phoneNumber"}},
 }
 
 // teamsPhoneSettings are the static values each setting may take, and whether a model
@@ -2744,6 +2751,7 @@ var teamsPhoneSettings = map[string]struct {
 	"presenceBasedRouting": {values: []string{"true", "false"}},
 	"conferenceMode":       {values: []string{"true", "false"}},
 	"allowOptOut":          {values: []string{"true", "false"}},
+	"numberType":           {values: []string{"direct-routing", "calling-plan", "operator-connect"}, required: true},
 }
 
 func teamsPhoneOpNames() []string {

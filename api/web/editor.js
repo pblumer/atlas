@@ -3924,7 +3924,7 @@ const SERVICE_TASK_KINDS = [
   },
   {
     id: "teamsphone", name: "Microsoft Teams Phone", group: "Directory & identity",
-    desc: "Provision a call queue and the auto attendant in front of it, with the resource accounts that answer their calls — and remove them again — without authoring PowerShell",
+    desc: "Provision a call queue and the auto attendant in front of it, with the resource accounts that answer their calls and the phone numbers people and voice apps are reached at — and remove them again — without authoring PowerShell",
     icon: "T",
     // A handset on Teams purple: a voice app is a telephone number's front door, and the
     // tile should read as Microsoft's next to Entra's blue.
@@ -3944,6 +3944,8 @@ const SERVICE_TASK_KINDS = [
           { v: "remove-auto-attendant", l: "Remove auto attendant" },
           { v: "remove-call-queue", l: "Remove call queue" },
           { v: "remove-resource-account", l: "Remove resource account" },
+          { v: "ensure-phone-number", l: "Ensure phone number" },
+          { v: "remove-phone-number", l: "Remove phone number" },
         ],
       },
       {
@@ -3976,7 +3978,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "resourceAccountId", label: "Resource account id", placeholder: "=konten.queue.objectId", fx: true,
-        showIf: (v) => v.operation && v.operation !== "resolve-users" && v.operation !== "ensure-resource-account",
+        showIf: (v) => v.operation && !["resolve-users", "ensure-resource-account", "ensure-phone-number", "remove-phone-number"].includes(v.operation),
         hint: "The object id an Ensure resource account answered with. Every voice-app operation is addressed by the account it is associated with.",
       },
       {
@@ -4012,6 +4014,33 @@ const SERVICE_TASK_KINDS = [
         key: "holidays", label: "Holidays", placeholder: "=[{name: \"Weihnachten\", start: \"2026-12-25\"}]", fx: true, rows: 3,
         showIf: (v) => v.operation === "ensure-auto-attendant",
         hint: "Optional. A list of {name, start, end} with dates as YYYY-MM-DD, on which calls are disconnected; end is the day after the last holiday and may be left out for a single day. Every other call goes to the queue.",
+      },
+      {
+        key: "identity", label: "User or resource account", placeholder: "=person.userPrincipalName", fx: true,
+        showIf: (v) => v.operation === "ensure-phone-number" || v.operation === "remove-phone-number",
+        hint: "Who holds the number: a person's or a resource account's user principal name or object id — =konten.queue.objectId for a queue's hotline.",
+      },
+      {
+        key: "phoneNumber", label: "Phone number", placeholder: "+41 44 123 45 67", fx: true,
+        showIf: (v) => v.operation === "ensure-phone-number" || v.operation === "remove-phone-number",
+        hint: (v) => (v.operation === "remove-phone-number"
+          ? "Optional. The number to take away; left empty, every number the user or account holds is removed."
+          : "The number, written as people write one — spaces, dashes and a tel: prefix are dropped; a (0) after the country code is refused. A Direct Routing number may carry ;ext=. One the person or account already has is left alone; another number they hold is replaced."),
+      },
+      {
+        key: "numberType", label: "Number type", type: "select",
+        options: [
+          { v: "direct-routing", l: "Direct Routing" },
+          { v: "calling-plan", l: "Calling Plan" },
+          { v: "operator-connect", l: "Operator Connect" },
+        ],
+        showIf: (v) => v.operation === "ensure-phone-number",
+        hint: "How this tenant reaches the telephone network for the number. Calling Plan and Operator Connect numbers must be the tenant's already; a Direct Routing number is your own carrier's.",
+      },
+      {
+        key: "locationId", label: "Emergency location", placeholder: "=standort.locationId", fx: true,
+        showIf: (v) => v.operation === "ensure-phone-number",
+        hint: "Optional. The LocationId of the emergency address the number is registered at (Get-CsOnlineLisLocation).",
       },
       // A setting chosen here is what the queue is, also one that already exists; the
       // first choice names nothing, so a new queue gets the default and an existing one
@@ -4059,6 +4088,10 @@ const SERVICE_TASK_KINDS = [
               return "Required. =antwort.id and =antwort.name identify the queue; =antwort.created says whether this run made it, and =antwort.changed lists what it set on an existing queue — agents, authorizedUsers, routingMethod and the like — empty when nothing differed; =antwort.agentsChanged says whether the agents were among them.";
             case "ensure-auto-attendant":
               return "Required. =antwort.id and =antwort.name identify the voice app; =antwort.created says whether this run made it.";
+            case "ensure-phone-number":
+              return "Required. =antwort.assigned says whether this run gave the number out — false when the holder had it already — and =antwort.previousNumber the number it replaced, empty when none.";
+            case "remove-phone-number":
+              return "Optional. =antwort.removed is false when the holder had nothing to remove; =antwort.phoneNumbers lists what was taken away.";
             default:
               return "Optional. =antwort.removed is false when there was nothing left to remove, which a repeated leaver path meets.";
           }

@@ -81,6 +81,24 @@ var Ops = map[string]Op{
 		Label:    "remove a resource account",
 		Required: []string{"resourceAccountId"},
 	},
+	// A phone number is given to a user or a resource account alike: a queue's hotline
+	// and a person's direct line are the same assignment to Teams. identity is either's
+	// user principal name or object id. The number type is the tenant's way of reaching
+	// the telephone network and decides what Teams checks, so it is fixed in the model.
+	"ensure-phone-number": {
+		Label:       "ensure a phone number",
+		Required:    []string{"identity", "phoneNumber"},
+		Optional:    []string{"locationId"},
+		Settings:    []string{"numberType"},
+		NeedsResult: true,
+	},
+	// Without a phoneNumber, every number the identity holds is removed: a leaver path
+	// should not have to know them.
+	"remove-phone-number": {
+		Label:    "remove a phone number",
+		Required: []string{"identity"},
+		Optional: []string{"phoneNumber"},
+	},
 }
 
 // OpNames lists the operations, sorted, for the messages that have to say what was
@@ -106,6 +124,10 @@ const (
 	// Holidays is a list of {name, start, end} objects with ISO dates, as a FEEL list
 	// of contexts or as the JSON text of one.
 	Holidays
+	// PhoneNumber is one telephone number, written as people write one — with spaces,
+	// dashes or brackets, or as a tel: URI — and handed on as Teams takes it: digits with
+	// an optional leading + and an optional ;ext= extension.
+	PhoneNumber
 )
 
 // Attributes are every authored value an operation can name, with the shape it is read
@@ -122,6 +144,9 @@ var Attributes = map[string]Shape{
 	"languageId":        Text,
 	"timeZone":          Text,
 	"holidays":          Holidays,
+	"identity":          Text,
+	"phoneNumber":       PhoneNumber,
+	"locationId":        Text,
 }
 
 // Setting is one static value: the values it may take, and the one an object the request
@@ -145,7 +170,20 @@ var Settings = map[string]Setting{
 	"presenceBasedRouting": {Values: []string{"true", "false"}, Default: "true"},
 	"conferenceMode":       {Values: []string{"true", "false"}, Default: "true"},
 	"allowOptOut":          {Values: []string{"true", "false"}, Default: "true"},
+	// numberType has no default: Direct Routing, a Calling Plan and Operator Connect are
+	// three ways a tenant reaches the telephone network, and a guess would hand Teams a
+	// number under the wrong one.
+	"numberType": {Values: []string{NumberDirectRouting, NumberCallingPlan, NumberOperatorConnect}},
 }
+
+// The three kinds of phone number, by how the tenant reaches the telephone network. A
+// Direct Routing number is the operator's own carrier's and needs no inventory in the
+// tenant; the other two must be numbers the tenant has.
+const (
+	NumberDirectRouting   = "direct-routing"
+	NumberCallingPlan     = "calling-plan"
+	NumberOperatorConnect = "operator-connect"
+)
 
 // The two kinds of resource account.
 const (
