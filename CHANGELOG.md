@@ -22,6 +22,22 @@ _Changed_ / _Removed_ for each version.
   A form the server does not hold is reported in a message, and the diagram is neither
   saved nor left ([ADR-0465](docs/adr/0465-form-doors.md), amended).
 
+### Changed
+
+- **The undeclared namespace members in the Variables panel collapse.** The Modeler's
+  Variables panel lists, under the process's own variables, what the process could read
+  from the `application` and `server` namespaces but does not declare yet. On an
+  installation with several constants that list was longer than the variables above it
+  and could not be put away. It is now a group like Form and Process, closed when the
+  panel first opens: its header shows how many members are on offer, a click opens or
+  closes it, and the panel remembers the choice across edits and reopening.
+- **Filtering the Variables panel opens the groups it finds something in.** A closed
+  group — Form, Process or the undeclared namespace members — hid what the filter found
+  in it behind its header and showed only the count. While a filter is typed, every group
+  with a match is now open; a group closed by hand while filtering stays closed until the
+  filter is cleared, and clearing it brings back what the author had chosen for the
+  unfiltered list.
+
 ### Fixed
 
 - **A form created from a step is filed under the process's application.** **＋ New form**

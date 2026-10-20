@@ -23,13 +23,15 @@ test("a linked start form's fields appear under a Form group", async ({ page }) 
   // The form schema loads asynchronously; wait for its fields to land.
   await expect(list.locator('.var-row[data-var="filename"]')).toBeVisible();
 
-  // Two groups, in order: the form's fields first, then the process's variables.
-  const heads = page.locator(".vars-group-head");
+  // Two groups, in order: the form's fields first, then the process's variables. The
+  // undeclared namespace members below them collapse the same way but are not variables
+  // of the process, so they are not counted here.
+  const heads = page.locator(".vars-group:not(.vars-available) > .vars-group-head");
   await expect(heads).toHaveCount(2);
   // The group header now also carries a collapse chevron and a member count, so read
   // the title span. innerText reflects the CSS text-transform:uppercase, so compare
   // case-insensitively.
-  const titles = page.locator(".vars-group-head .vg-title");
+  const titles = heads.locator(".vg-title");
   expect((await titles.allInnerTexts()).map((s) => s.toLowerCase())).toEqual(["form", "process"]);
 
   // Every input-bearing field is surfaced; layout-only components and a dynamic
@@ -41,6 +43,28 @@ test("a linked start form's fields appear under a Form group", async ({ page }) 
   // A form field names its form as the click-to-select origin.
   await expect(list.locator('.var-row[data-var="filename"] .var-meta')).toContainText("form field · CSV Upload");
 
+  expect(page.__errors).toEqual([]);
+});
+
+// A filter opens a group the author closed, for as long as it finds something there; the
+// author's choice comes back when the filter is cleared.
+test("filtering opens a closed variable group while it finds something there", async ({ page }) => {
+  const list = page.locator("#vars-list");
+  const row = list.locator('.var-row[data-var="delimiter"]');
+  await expect(row).toBeVisible();
+  const form = list.locator(".vars-group", { has: page.locator(".vg-title", { hasText: /^form$/i }) });
+  await form.locator(".vars-group-head").click();
+  await expect(row).toBeHidden();
+
+  // "er" finds delimiter and header in the form and orderId in the process, so both
+  // groups stay and keep their headers; a filter that finds one group's members only
+  // shows them as a plain list, the way a diagram with one group always has.
+  await page.locator("#vars-filter").fill("er");
+  await expect(row).toBeVisible();
+  await expect(form.locator(".vars-group-head")).toHaveAttribute("aria-expanded", "true");
+  await page.locator("#vars-filter").fill("");
+  await expect(row).toBeHidden();
+  await expect(form.locator(".vars-group-head")).toHaveAttribute("aria-expanded", "false");
   expect(page.__errors).toEqual([]);
 });
 

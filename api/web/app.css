@@ -3476,9 +3476,9 @@ tr[hidden] { display: none; }
 .vars-list { overflow: auto; padding: 0 6px 12px; }
 .var-row { padding: 8px; border-radius: 6px; }
 /* What a process could read from its namespaces but does not declare yet, under the
-   Variables list, each with its Declare button (ADR-0456). */
-.vars-available { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
-.vars-available-head { font-size: 12px; color: var(--muted); margin: 0 8px 4px; }
+   Variables list, each with its Declare button (ADR-0456). A collapsible group like
+   Form / Process; the extra gap sets it apart from the variables the process has. */
+.vars-group.vars-available { margin-top: 10px; }
 .var-row-available .var-name { color: var(--muted); }
 .var-row-available .var-declare { margin-left: auto; padding: 2px 8px; font-size: 12px; }
 .var-row:hover { background: var(--bg); }
