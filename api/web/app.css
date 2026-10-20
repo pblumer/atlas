@@ -7155,3 +7155,5 @@ button.im-problem:hover { background: var(--accent-soft); }
 .import-choices .import-bulk { display: flex; gap: 6px; }
 .import-choices .import-new { margin-top: 12px; }
 .import-choices .import-new ul { margin: 6px 0 0; max-height: 25vh; overflow: auto; }
+.import-choices .import-group { margin-top: 14px; }
+.import-choices .import-group h3 { font-size: 13px; margin: 0 0 2px; }

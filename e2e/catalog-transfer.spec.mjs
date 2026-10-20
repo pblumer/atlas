@@ -77,7 +77,7 @@ test("an import that would replace what changed here asks first, one box each", 
   await page.locator('.cat-transfer [name="productsFile"]').setInputFiles(aFile({ products: [] }));
   await page.locator('.cat-transfer [data-act="import-products"]').click();
   const dialog = page.locator(".import-choices");
-  await expect(dialog).toContainText("2 differ from this server");
+  await expect(dialog).toContainText("2 changed on both sides");
   await expect(dialog.locator(".import-pick")).toHaveCount(2);
   // Unticked is keep: nothing is replaced unless somebody ticks it.
   await dialog.locator('.import-pick[value="product:p2"]').check();
@@ -85,6 +85,30 @@ test("an import that would replace what changed here asks first, one box each", 
   await expect.poll(async () => (await sent(page, "POST")).length).toBe(2);
   const [, call] = await sent(page, "POST");
   expect(decodeURIComponent(call.url)).toBe("/api/v1/catalogs/import?into=c1&overwrite=product:p2&keep=product:p3");
+});
+
+test("what is newer in the file starts ticked, what changed here only does not", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => {
+    window.__importPlan = [
+      { ref: "product:p2", name: "Laptop", status: "changed", outcome: "undecided" },
+      { ref: "product:p3", name: "Monitor", status: "behind", outcome: "updated" },
+      { ref: "product:p4", name: "Maus", status: "behind", outcome: "updated" },
+      { ref: "product:p5", name: "Dock", status: "ahead", outcome: "kept" },
+    ];
+  });
+  await page.locator('.cat-transfer [name="productsFile"]').setInputFiles(aFile({ products: [] }));
+  await page.locator('.cat-transfer [data-act="import-products"]').click();
+  const dialog = page.locator(".import-choices");
+  await expect(dialog.locator('.import-pick[value="product:p3"]')).toBeChecked();
+  await expect(dialog.locator('.import-pick[value="product:p5"]')).not.toBeChecked();
+  await expect(dialog.locator('.import-group[data-status="ahead"]')).toContainText("Changed here only");
+  // Left as they start, behind and ahead are not named; a box moved is.
+  await dialog.locator('.import-pick[value="product:p4"]').uncheck();
+  await dialog.locator("[data-ok]").click();
+  await expect.poll(async () => (await sent(page, "POST")).length).toBe(2);
+  const [, call] = await sent(page, "POST");
+  expect(decodeURIComponent(call.url)).toBe("/api/v1/catalogs/import?into=c1&keep=product:p2,product:p4");
 });
 
 test("cancelling the choice imports nothing", async ({ page }) => {

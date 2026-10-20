@@ -355,9 +355,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   problem with its subject and names the processes deployed before the refusal; and the
   catalogue list posts a whole file, with `publish` when asked. Every import asks for the plan
   first ([ADR-0467](../docs/adr/0467-application-package-export.md)):
-  with nothing changed on the server it imports straight away; with products that differ it
-  shows one box each, unticked meaning keep, and posts the ticked ones under `overwrite` and the
-  rest under `keep`; cancelling imports nothing. Drives the real `viewCatalogDetail` and
+  with nothing to replace or keep it imports straight away; otherwise it shows one box per
+  product, in three groups — changed on both sides (unticked), newer in the file (ticked) and
+  changed here only (unticked) — and posts every changed one by name, behind and ahead only
+  where a box was moved; cancelling imports nothing. Drives the real `viewCatalogDetail` and
   `viewCatalogs` (and `api/web/importchoices.js` through them) via the editor harness, whose mock
   refuses an import when a spec sets `window.__importRefusal` and answers a dry run with
   `window.__importPlan`.

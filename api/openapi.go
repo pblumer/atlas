@@ -1447,6 +1447,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Replace the constants an application holds on this installation; each is {name, type, value}, the name in capitals (TENANT_ID) and the type string, number, boolean or json. Instances started afterwards take them; running ones keep theirs (ADR-0453)", tag: "Applications", role: RoleAdmin,
 			req:  jsonBody("Constants", schemaObj(map[string]any{"constants": tArray()}, "constants")),
 			resp: jsonBody("Constants and requirements", tObject())}},
+		{"POST", "/api/v1/applications/{id}/constants/import", s.handleImportApplicationConstants, apiOp{
+			summary: "Import the constants a package suggests, compared with what the application holds here and with what the last import suggested: a value this installation lacks is set, one still as the last import left it is updated, one an administrator set here while the package suggests what it did before is kept (ahead), and one both sides moved is decided with ?overwrite=/?keep= (refs constant:NAME, or *) — undecided stops the import with 409 and the plan. ?dryRun=true answers the plan alone. Setting a value is an administrator's: anyone else with an editor's role on the application gets the plan and `notSet`, the values an administrator still has to set, and nothing is written or remembered for them (ADR-0467)", tag: "Applications", role: RoleModeler,
+			req:  jsonBody("Constants", schemaObj(map[string]any{"constants": tArray()}, "constants")),
+			resp: jsonBody("The plan and what was set", tObject())}},
 		{"GET", "/api/v1/applications/{id}/deployments", s.handleApplicationDeployments, apiOp{
 			summary: "What this application currently has deployed on this server, with per-definition instance counts (ADR-0128)", tag: "Applications", role: roleAny, resp: jsonBody("Application deployments", tObject())}},
 

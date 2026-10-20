@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"sort"
 	"strings"
 
 	"github.com/pblumer/atlas/api/importplan"
@@ -104,6 +103,12 @@ func decisions(overwrite, keep *refFlag) (importplan.Decisions, error) {
 type planned struct {
 	importplan.Artifact
 	detail string
+	// decided says the outcome is the operator's — a flag naming the artifact, an
+	// "all" over what is changed, or an answer at the terminal — and is sent to the
+	// server by name. An outcome that follows from behind or ahead is left to the
+	// server, which settles it again where the write happens: an artifact edited
+	// in between is then refused rather than replaced.
+	decided bool
 }
 
 func (p planned) label() string {
@@ -148,30 +153,43 @@ func (c *importClient) plan(pkg importPackage, document []byte) (importPlan, err
 	return p, nil
 }
 
-// planConstants compares the package's constants with those the application holds
-// here. An application the import creates holds none. A constant the server holds
-// and the package does not name is not touched, and not listed.
+// planConstants asks the server how the package's constants compare with those the
+// application holds here and with what the last import suggested. An application the
+// import creates holds none, and has no plan to ask for: every constant is new. A
+// constant the server holds and the package does not name is not touched, and not
+// listed.
 func (c *importClient) planConstants(src sourceImportBody, consts []packageConstant) ([]planned, error) {
-	held := map[string]packageConstant{}
-	if src.ApplicationID != "" && !src.Created {
-		list, err := c.constants(src.ApplicationID)
-		if err != nil {
-			return nil, err
+	if src.ApplicationID == "" || src.Created {
+		out := make([]planned, 0, len(consts))
+		for _, k := range consts {
+			out = append(out, planned{Artifact: importplan.Artifact{Ref: "constant:" + k.Name, Name: k.Name, Status: importplan.New}})
 		}
-		for _, h := range list.Constants {
-			held[h.Name] = h
-		}
+		return out, nil
 	}
-	var out []planned
+	res, err := c.importConstants(src.ApplicationID, consts, "?dryRun=true")
+	if err != nil {
+		return nil, err
+	}
+	held, err := c.constants(src.ApplicationID)
+	if err != nil {
+		return nil, err
+	}
+	here := map[string]packageConstant{}
+	for _, h := range held.Constants {
+		here[h.Name] = h
+	}
+	suggested := map[string]packageConstant{}
 	for _, k := range consts {
-		a := planned{Artifact: importplan.Artifact{Ref: "constant:" + k.Name, Status: importplan.New}}
-		if h, ok := held[k.Name]; ok {
-			a.Status = importplan.Compare(h.Type == k.Type && h.Value == k.Value)
-			if a.Status == importplan.Changed {
-				a.detail = fmt.Sprintf("here %s %q, in the package %s %q", h.Type, h.Value, k.Type, k.Value)
-			}
+		suggested[k.Name] = k
+	}
+	out := make([]planned, 0, len(res.Artifacts))
+	for _, a := range res.Artifacts {
+		p := planned{Artifact: a}
+		if h, ok := here[a.Name]; ok && a.Status != importplan.Unchanged {
+			k := suggested[a.Name]
+			p.detail = fmt.Sprintf("here %s %q, in the package %s %q", h.Type, h.Value, k.Type, k.Value)
 		}
-		out = append(out, a)
+		out = append(out, p)
 	}
 	return out, nil
 }
@@ -179,25 +197,30 @@ func (c *importClient) planConstants(src sourceImportBody, consts []packageConst
 // decide settles each artifact's outcome as the flags decide it.
 func (p *importPlan) decide(d importplan.Decisions) {
 	for i := range p.artifacts {
-		p.artifacts[i].Outcome = d.Outcome(p.artifacts[i].Ref, p.artifacts[i].Status)
+		a := &p.artifacts[i]
+		a.Outcome = d.Outcome(a.Ref, a.Status)
+		a.decided = d.Overwrite[a.Ref] || d.Keep[a.Ref] || importplan.Asks(a.Status) && a.Outcome != importplan.Undecided
 	}
 }
 
-// show writes the plan: how many artifacts are new, unchanged and changed, and each
-// changed one with its outcome; with all, each new one too.
+// show writes the plan: how many artifacts are new, unchanged, behind, ahead and
+// changed, and each that is not new or unchanged with its outcome; with all, each
+// new one too.
 func (p importPlan) show(out io.Writer, all bool) {
 	count := map[string]int{}
 	for _, a := range p.artifacts {
 		count[a.Status]++
 	}
-	fmt.Fprintf(out, "plan: %d new, %d unchanged, %d changed\n", count[importplan.New], count[importplan.Unchanged], count[importplan.Changed])
+	fmt.Fprintf(out, "plan: %d new, %d unchanged, %d behind, %d ahead, %d changed\n", count[importplan.New],
+		count[importplan.Unchanged], count[importplan.Behind], count[importplan.Ahead], count[importplan.Changed])
 	for _, a := range p.artifacts {
-		if a.Status == importplan.Changed || all && a.Status == importplan.New {
+		moved := a.Status == importplan.Changed || a.Status == importplan.Behind || a.Status == importplan.Ahead
+		if moved || all && a.Status == importplan.New {
 			line := fmt.Sprintf("  %-9s %s", a.Status, a.label())
 			if a.detail != "" {
 				line += ": " + a.detail
 			}
-			if a.Status == importplan.Changed {
+			if moved {
 				line += " — " + a.Outcome
 			}
 			fmt.Fprintln(out, line)
@@ -244,6 +267,7 @@ func (p *importPlan) ask(out io.Writer) error {
 			fmt.Fprintln(out)
 			return errors.New("no answer was given; nothing was imported")
 		}
+		a.decided = true
 		switch strings.ToLower(strings.TrimSpace(sc.Text())) {
 		case "y", "yes", "j", "ja":
 			a.Outcome = importplan.Updated
@@ -254,14 +278,15 @@ func (p *importPlan) ask(out io.Writer) error {
 	return nil
 }
 
-// query is the decisions as the server takes them: every changed artifact named,
-// under overwrite or keep. They are named one by one rather than as *, so an
-// artifact that changed after the plan was shown is refused rather than replaced on
-// the strength of a decision about something else.
+// query is the decisions as the server takes them: every artifact the operator
+// decided, named under overwrite or keep. They are named one by one rather than as
+// *, and what follows from behind or ahead is not named at all, so an artifact that
+// changed after the plan was shown is refused rather than replaced on the strength
+// of a decision about something else.
 func (p importPlan) query() string {
 	var overwrite, keep []string
 	for _, a := range p.artifacts {
-		if a.Status != importplan.Changed {
+		if !a.decided {
 			continue
 		}
 		switch a.Outcome {
@@ -282,24 +307,6 @@ func (p importPlan) query() string {
 		return ""
 	}
 	return "?" + q.Encode()
-}
-
-// constantsToSet are the package's constants the plan writes: those the server does
-// not hold, and those it holds otherwise that the operator chose to replace.
-func (p importPlan) constantsToSet(consts []packageConstant) []packageConstant {
-	writes := map[string]bool{}
-	for _, a := range p.artifacts {
-		if strings.HasPrefix(a.Ref, "constant:") && importplan.Writes(a.Outcome) {
-			writes[strings.TrimPrefix(a.Ref, "constant:")] = true
-		}
-	}
-	var out []packageConstant
-	for _, k := range consts {
-		if writes[k.Name] {
-			out = append(out, k)
-		}
-	}
-	return out
 }
 
 // sourceChanged reports whether the source import wrote anything, so the
@@ -346,51 +353,60 @@ func (c *apiClient) constants(appID string) (constantsBody, error) {
 	return body, err
 }
 
-// setConstants writes the constants into what the application holds, leaving every
-// other constant as it is: the route replaces the whole list, so the list is read
-// and merged first. Setting a constant is an administrator's, and a token never
-// carries that role; a refusal for want of it is not a failure of the import, but
-// a list of what an administrator still has to set.
-func (c *importClient) setConstants(out io.Writer, appID string, set []packageConstant) error {
-	if len(set) == 0 {
+// constantsImportBody is what POST /api/v1/applications/{id}/constants/import
+// answers.
+type constantsImportBody struct {
+	Artifacts []importplan.Artifact `json:"artifacts"`
+	Set       []string              `json:"set"`
+	NotSet    []string              `json:"notSet"`
+}
+
+// importConstants sends the package's constants with a query: ?dryRun=true for the
+// plan, or the decisions.
+func (c *importClient) importConstants(appID string, consts []packageConstant, query string) (constantsImportBody, error) {
+	var res constantsImportBody
+	body, err := encodeJSON(constantsFile{Constants: consts})
+	if err != nil {
+		return res, err
+	}
+	err = c.do(http.MethodPost, "/api/v1/applications/"+url.PathEscape(appID)+"/constants/import"+query, body, &res)
+	return res, err
+}
+
+// installConstants imports the package's constants with the decisions the plan
+// settled. Setting a value is an administrator's, and a token never carries that
+// role: what the server did not set for that reason is not a failure of the import
+// but a list of what an administrator still has to set.
+func (c *importClient) installConstants(out io.Writer, appID string, consts []packageConstant, decided string) error {
+	if len(consts) == 0 {
 		return nil
 	}
-	held, err := c.constants(appID)
+	res, err := c.importConstants(appID, consts, decided)
 	if err != nil {
 		return err
 	}
-	merged := held.Constants
-	for _, k := range set {
-		replaced := false
-		for i := range merged {
-			if merged[i].Name == k.Name {
-				merged[i], replaced = k, true
-			}
+	byName := map[string]packageConstant{}
+	for _, k := range consts {
+		byName[k.Name] = k
+	}
+	describe := func(names []string) string {
+		parts := make([]string, 0, len(names))
+		for _, n := range names {
+			k := byName[n]
+			parts = append(parts, fmt.Sprintf("%s (%s) = %q", k.Name, k.Type, k.Value))
 		}
-		if !replaced {
-			merged = append(merged, k)
-		}
+		return strings.Join(parts, ", ")
 	}
-	sort.Slice(merged, func(i, j int) bool { return merged[i].Name < merged[j].Name })
-	body, err := encodeJSON(constantsFile{Constants: merged})
-	if err != nil {
-		return err
+	if len(res.Set) > 0 {
+		fmt.Fprintf(out, "constants set: %s\n", describe(res.Set))
 	}
-	names := make([]string, 0, len(set))
-	for _, k := range set {
-		names = append(names, fmt.Sprintf("%s (%s) = %q", k.Name, k.Type, k.Value))
-	}
-	err = c.do(http.MethodPut, "/api/v1/applications/"+url.PathEscape(appID)+"/constants", body, nil)
-	var refused *statusError
-	if errors.As(err, &refused) && (refused.status == http.StatusForbidden || refused.status == http.StatusUnauthorized) {
+	if len(res.NotSet) > 0 {
 		fmt.Fprintf(out, "  warning: constants not set — setting them is an administrator's, and a token never carries that role; set them in the Console under the application's constants: %s\n",
-			strings.Join(names, ", "))
-		return nil
+			describe(res.NotSet))
 	}
-	if err != nil {
-		return err
+	if k := kept(res.Artifacts); len(k) > 0 {
+		fmt.Fprintf(out, "  constants kept as the server holds them: %s\n", strings.Join(k, ", "))
 	}
-	fmt.Fprintf(out, "constants set: %s\n", strings.Join(names, ", "))
 	return nil
 }
 

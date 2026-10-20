@@ -237,7 +237,7 @@ func runImport(args []string, out io.Writer) error {
 			fmt.Fprintf(out, "  warning: %s\n", w)
 		}
 	}
-	if err := c.setConstants(out, src.ApplicationID, plan.constantsToSet(pkg.constants)); err != nil {
+	if err := c.installConstants(out, src.ApplicationID, pkg.constants, decided); err != nil {
 		return err
 	}
 
