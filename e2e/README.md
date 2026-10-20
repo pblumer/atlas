@@ -376,6 +376,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   to send it empty and sends its answers; and a product whose return only an operator gives
   is not offered for return. Loads the real `shop.html` with only the network replaced.
 
+- **`shop-config-answers.spec.mjs`** ([ADR-0358](../docs/adr/0358-order-line-configuration.md)):
+  the **answers an order carries**. An order form asks one question of each kind the form
+  editor offers — text, number, checkbox, one choice, several choices — and the order the
+  page sends carries every answer as text, saying what was entered (`"5"`, `"true"`, the
+  choices joined by a comma), because `POST /api/v1/orders` takes them as a map of strings
+  and refused the whole basket with 400 over a number. A correction of a held position
+  opens its form on the stored answers in each field's own kind — the number, the unticked
+  box, the earlier choices still chosen — and saves them as text again. Loads the real
+  `shop.html` and form runtime with only the network replaced.
+
 - **`worker-events-modeler.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
   the **Worker events in the message picker**. An element that waits for a message — a
   message start, a catch, a boundary event, a receive task — is offered the names the
