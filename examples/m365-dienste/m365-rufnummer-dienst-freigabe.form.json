@@ -1,0 +1,36 @@
+{
+  "type": "default",
+  "id": "m365-rufnummer-dienst-freigabe",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Dienstnummer freigeben · Release the service number**\n\nRemove-CsPhoneNumberAssignment für das Ressourcenkonto. · Remove-CsPhoneNumberAssignment for the resource account."
+    },
+    {
+      "key": "bezeichnung",
+      "type": "textfield",
+      "label": "Bezeichnung · Name",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "ressourcenkonto",
+      "type": "textfield",
+      "label": "Ressourcenkonto · Resource account",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "freigegeben",
+      "type": "checkbox",
+      "label": "Nummer freigegeben · Number released",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

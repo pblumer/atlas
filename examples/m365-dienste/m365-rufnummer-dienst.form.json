@@ -1,0 +1,40 @@
+{
+  "type": "default",
+  "id": "m365-rufnummer-dienst",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Dienstnummer zuweisen · Assign a service number**\n\nSet-CsPhoneNumberAssignment für das Ressourcenkonto, dann hier die Nummer festhalten. · Set-CsPhoneNumberAssignment for the resource account, then record the number here."
+    },
+    {
+      "key": "bezeichnung",
+      "type": "textfield",
+      "label": "Bezeichnung · Name",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "ressourcenkonto",
+      "type": "textfield",
+      "label": "Ressourcenkonto · Resource account",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "rufnummer",
+      "type": "textfield",
+      "label": "Rufnummer (E.164) · Phone number (E.164)",
+      "validate": {
+        "required": true,
+        "pattern": "^\\+[0-9]{8,15}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

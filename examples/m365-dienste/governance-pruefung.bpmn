@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Microsoft 365: Governance-Prüfung. Wöchentlicher Abgleich von Exchange und Entra mit Kennzeichnung und Namensregel.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_m365_governance_pruefung" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <process id="proc_m365_governance_pruefung" name="Microsoft 365: Governance-Prüfung" isExecutable="true">
+    <documentation>Prüft wöchentlich, ob in Exchange und Entra Objekte bestehen, die nicht über den Katalog entstanden sind oder die Namensregel verletzen, und legt den Befund M365-Administration zur Prüfung vor.
+
+Das ist der Mehrwert der Kennzeichnung: Jedes Objekt, das der Katalog anlegt, trägt CustomAttribute1 = atlas-katalog (Exchange) bzw. einen Alias nach der Namensregel (Teams). Was ohne beides existiert, wurde an Atlas vorbei angelegt, hat keine Position im Bestand, keine verantwortliche Person im Shop und keine Befristung. Der Befund nennt es; er entzieht nichts. Gehandelt wird bewusst durch Menschen: übernehmen (eine Bestellung nachführen), umbenennen oder entfernen.
+
+Geprüft werden:
+- Funktionspostfächer ohne Katalog-Kennzeichnung,
+- Verteilerlisten ohne Katalog-Kennzeichnung,
+- Microsoft-365-Gruppen (Teams), deren Alias nicht der Namensregel tm-&lt;bereich&gt;-… folgt.
+
+Die Exchange-Filter sind OPATH-Ausdrücke; vor dem ersten Einsatz im eigenen Tenant mit Get-Mailbox -Filter bzw. Get-DistributionGroup -Filter prüfen. Die Listen sind auf 1000 Einträge begrenzt und scheitern darüber, statt abzuschneiden: Ein abgeschnittener Befund würde eine saubere Umgebung vortäuschen.
+
+Worker: ucc_exchange, ucc_entra.</documentation>
+    <startEvent id="s" name="Wöchentlich"><documentation>Timer-Start R/P7D: einmal pro Woche.</documentation><outgoing>f_s__st_fp</outgoing><timerEventDefinition><timeCycle>R/P7D</timeCycle></timerEventDefinition></startEvent>
+    <serviceTask id="st_fp" name="Postfächer ohne Kennzeichnung"><documentation>list-mailboxes: geteilte Postfächer, deren CustomAttribute1 nicht atlas-katalog ist.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="list-mailboxes" parameters="{&quot;Filter&quot;: &quot;RecipientTypeDetails -eq 'SharedMailbox' -and -not(CustomAttribute1 -eq 'atlas-katalog')&quot;}" maxResults="1000" resultVariable="postfaecherOhne"/></extensionElements><incoming>f_s__st_fp</incoming><outgoing>f_st_fp__st_vl</outgoing></serviceTask>
+    <serviceTask id="st_vl" name="Verteiler ohne Kennzeichnung"><documentation>list-distribution-groups: Verteilerlisten, deren CustomAttribute1 nicht atlas-katalog ist.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="list-distribution-groups" parameters="{&quot;Filter&quot;: &quot;-not(CustomAttribute1 -eq 'atlas-katalog')&quot;}" maxResults="1000" resultVariable="verteilerOhne"/></extensionElements><incoming>f_st_fp__st_vl</incoming><outgoing>f_st_vl__st_gr</outgoing></serviceTask>
+    <serviceTask id="st_gr" name="Microsoft-365-Gruppen lesen"><documentation>list-groups: alle Microsoft-365-Gruppen (groupTypes Unified) mit Alias. Der Vergleich mit der Namensregel geschieht im nächsten Schritt.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="list-groups" filter="groupTypes/any(c:c eq 'Unified')" select="id,displayName,mailNickname,createdDateTime" maxUsers="1000" resultVariable="gruppen"/></extensionElements><incoming>f_st_vl__st_gr</incoming><outgoing>f_st_gr__sc_zahl</outgoing></serviceTask>
+    <scriptTask id="sc_zahl" name="Abweichungen zählen"><documentation>Summe der drei Befunde. Gruppen gelten als abweichend, wenn ihr Alias nicht mit tm-&lt;bereich&gt;- beginnt.</documentation><extensionElements><zeebe:script expression='=count(postfaecherOhne) + count(verteilerOhne) + count(gruppen[not(matches(mailNickname, "^tm-[a-z]{2,5}-"))])' resultVariable="anzahlAbweichungen"/></extensionElements><incoming>f_st_gr__sc_zahl</incoming><outgoing>f_sc_zahl__gw</outgoing></scriptTask>
+    <exclusiveGateway id="gw" name="Abweichungen?" default="f_gw__e_sauber"><incoming>f_sc_zahl__gw</incoming><outgoing>f_gw__sc_text</outgoing><outgoing>f_gw__e_sauber</outgoing></exclusiveGateway>
+    <scriptTask id="sc_text" name="Befund formulieren"><documentation>Ein lesbarer Bericht für die Aufgabe: je Kategorie die Objekte mit Anzeigename und Adresse.</documentation><extensionElements><zeebe:script expression='="Funktionspostfächer ohne Katalog-Kennzeichnung (" + string(count(postfaecherOhne)) + "):&#10;" + string join(for x in postfaecherOhne return "- " + x.DisplayName + " &lt;" + x.PrimarySmtpAddress + "&gt;", "&#10;") + "&#10;&#10;Verteilerlisten ohne Katalog-Kennzeichnung (" + string(count(verteilerOhne)) + "):&#10;" + string join(for x in verteilerOhne return "- " + x.DisplayName + " &lt;" + x.PrimarySmtpAddress + "&gt;", "&#10;") + "\n\nTeams ausserhalb der Namensregel (" + string(count(gruppen[not(matches(mailNickname, "^tm-[a-z]{2,5}-"))])) + "):\n" + string join(for g in gruppen[not(matches(mailNickname, "^tm-[a-z]{2,5}-"))] return "- " + g.displayName + " (" + g.mailNickname + ")", "\n")' resultVariable="befundText"/></extensionElements><incoming>f_gw__sc_text</incoming><outgoing>f_sc_text__ut</outgoing></scriptTask>
+    <userTask id="ut" name="Befund prüfen"><documentation>M365-Administration entscheidet je Objekt: übernehmen, umbenennen oder entfernen, und hält die Massnahmen fest.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="M365-Administration"/><zeebe:formDefinition formId="m365-governance-befund"/></extensionElements><incoming>f_sc_text__ut</incoming><outgoing>f_ut__e</outgoing></userTask>
+    <endEvent id="e" name="Befund geprüft"><incoming>f_ut__e</incoming></endEvent>
+    <endEvent id="e_sauber" name="Keine Abweichungen"><incoming>f_gw__e_sauber</incoming></endEvent>
+    <sequenceFlow id="f_s__st_fp" sourceRef="s" targetRef="st_fp"/>
+    <sequenceFlow id="f_st_fp__st_vl" sourceRef="st_fp" targetRef="st_vl"/>
+    <sequenceFlow id="f_st_vl__st_gr" sourceRef="st_vl" targetRef="st_gr"/>
+    <sequenceFlow id="f_st_gr__sc_zahl" sourceRef="st_gr" targetRef="sc_zahl"/>
+    <sequenceFlow id="f_sc_zahl__gw" sourceRef="sc_zahl" targetRef="gw"/>
+    <sequenceFlow id="f_gw__sc_text" sourceRef="gw" targetRef="sc_text" name="ja"><conditionExpression>=anzahlAbweichungen &gt; 0</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw__e_sauber" sourceRef="gw" targetRef="e_sauber" name="keine"/>
+    <sequenceFlow id="f_sc_text__ut" sourceRef="sc_text" targetRef="ut"/>
+    <sequenceFlow id="f_ut__e" sourceRef="ut" targetRef="e"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_m365_governance_pruefung_diagram">
+    <bpmndi:BPMNPlane id="proc_m365_governance_pruefung_plane" bpmnElement="proc_m365_governance_pruefung">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="162" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_fp_di" bpmnElement="st_fp"><omgdc:Bounds x="280" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_vl_di" bpmnElement="st_vl"><omgdc:Bounds x="430" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_gr_di" bpmnElement="st_gr"><omgdc:Bounds x="580" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_zahl_di" bpmnElement="sc_zahl"><omgdc:Bounds x="730" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_di" bpmnElement="gw" isMarkerVisible="true"><omgdc:Bounds x="905" y="105" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="833" y="74" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_text_di" bpmnElement="sc_text"><omgdc:Bounds x="1030" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_di" bpmnElement="ut"><omgdc:Bounds x="1180" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_di" bpmnElement="e"><omgdc:Bounds x="1362" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1330" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_sauber_di" bpmnElement="e_sauber"><omgdc:Bounds x="1062" y="252" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="292" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s__st_fp_di" bpmnElement="f_s__st_fp"><omgdi:waypoint x="198" y="130"/><omgdi:waypoint x="280" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_fp__st_vl_di" bpmnElement="f_st_fp__st_vl"><omgdi:waypoint x="380" y="130"/><omgdi:waypoint x="430" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_vl__st_gr_di" bpmnElement="f_st_vl__st_gr"><omgdi:waypoint x="530" y="130"/><omgdi:waypoint x="580" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_gr__sc_zahl_di" bpmnElement="f_st_gr__sc_zahl"><omgdi:waypoint x="680" y="130"/><omgdi:waypoint x="730" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_zahl__gw_di" bpmnElement="f_sc_zahl__gw"><omgdi:waypoint x="830" y="130"/><omgdi:waypoint x="905" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw__sc_text_di" bpmnElement="f_gw__sc_text"><omgdi:waypoint x="955" y="130"/><omgdi:waypoint x="1030" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="961" y="108" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw__e_sauber_di" bpmnElement="f_gw__e_sauber"><omgdi:waypoint x="930" y="155"/><omgdi:waypoint x="930" y="270"/><omgdi:waypoint x="1062" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="936" y="205" width="43" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_text__ut_di" bpmnElement="f_sc_text__ut"><omgdi:waypoint x="1130" y="130"/><omgdi:waypoint x="1180" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ut__e_di" bpmnElement="f_ut__e"><omgdi:waypoint x="1280" y="130"/><omgdi:waypoint x="1362" y="130"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

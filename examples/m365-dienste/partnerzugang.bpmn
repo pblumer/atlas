@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Partnerzugang (öffentliches Formular): Antrag, Prüfung, Konto, automatische Sperre nach Ablauf.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_m365_partnerzugang" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <process id="proc_m365_partnerzugang" name="Partnerzugang (öffentliches Formular)" isExecutable="true" atlas:personal="vorname,nachname,ansprechperson,begruendung,initialpasswort,konto" atlas:dataSubject="email" atlas:searchable="email">
+    <documentation>Öffentlicher Antrag auf einen Zugang für eine externe Partnerperson. Das Startformular m365-partnerzugang-antrag wird über einen öffentlichen Link veröffentlicht (ADR-0029): Wer den Link hat, kann einen Antrag stellen, ohne Konto.
+
+Ein öffentlicher Antrag legt nie direkt etwas an. M365-Administration prüft ihn, wählt die Gültigkeitsdauer und setzt das Initialpasswort; erst dann legt der Entra-Worker das Konto an. Nach Ablauf der Gültigkeit sperrt der Prozess das Konto selbst: Der Antrag ist zugleich der Lebenszyklus.
+
+Governance-Kennzeichnung des Kontos: UPN mit Präfix «ext.», employeeType «Partner» und companyName aus dem Antrag. So sind externe Konten in Entra filterbar und von Mitarbeitenden unterscheidbar.
+
+Personendaten: vorname, nachname, ansprechperson, begruendung, initialpasswort und das angelegte konto sind als Personendaten deklariert und unter dem Schlüssel der Adresse email verschlüsselt (atlas:dataSubject). email bleibt im Klartext, ist durchsuchbar (atlas:searchable) und benennt die Person bei einem Löschbegehren.
+
+Konstanten PARTNER_UPN_DOMAIN und USAGE_LOCATION (Applikation). Worker: ucc_entra.</documentation>
+    <extensionElements>
+      <atlas:constants>
+        <atlas:constant name="PARTNER_UPN_DOMAIN" type="string" source="application" value="contoso.onmicrosoft.com"/>
+        <atlas:constant name="USAGE_LOCATION" type="string" source="application" value="CH"/>
+      </atlas:constants>
+    </extensionElements>
+    <startEvent id="s" name="Antrag eingegangen"><documentation>Öffentlicher Start über das Formular m365-partnerzugang-antrag.</documentation><extensionElements><zeebe:formDefinition formId="m365-partnerzugang-antrag"/></extensionElements><outgoing>f_s__ut_pruefen</outgoing></startEvent>
+    <userTask id="ut_pruefen" name="Antrag prüfen"><documentation>M365-Administration prüft den Antrag, klärt ihn bei Bedarf mit der internen Ansprechperson, entscheidet, wählt die Gültigkeitsdauer und setzt das Initialpasswort.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="M365-Administration"/><zeebe:formDefinition formId="m365-partnerzugang-pruefung"/></extensionElements><incoming>f_s__ut_pruefen</incoming><outgoing>f_ut_pruefen__gw</outgoing></userTask>
+    <exclusiveGateway id="gw" name="Freigegeben?" default="f_gw__e_abgelehnt"><documentation>Nur «freigeben» legt ein Konto an (fail-closed).</documentation><incoming>f_ut_pruefen__gw</incoming><outgoing>f_gw__st_konto</outgoing><outgoing>f_gw__e_abgelehnt</outgoing></exclusiveGateway>
+    <serviceTask id="st_konto" name="Partnerkonto anlegen"><documentation>create-user. UPN und mailNickname bildet der Worker aus der Adresse: ext.&lt;lokaler Teil&gt;.&lt;Organisation&gt;@&lt;PARTNER_UPN_DOMAIN&gt;. employeeType Partner und companyName kennzeichnen das Konto; das Initialpasswort muss bei der ersten Anmeldung geändert werden.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="create-user" attributes='{"accountEnabled": true, "displayName": "=vorname + \" \" + nachname + \" (\" + firma + \")\"", "givenName": "=vorname", "surname": "=nachname", "companyName": "=firma", "employeeType": "Partner", "mailNickname": "=\"ext.\" + replace(lower case(substring before(email, \"@\")), \"[^a-z0-9]+\", \".\") + \".\" + replace(lower case(substring before(substring after(email, \"@\"), \".\")), \"[^a-z0-9]+\", \"-\")", "userPrincipalName": "=\"ext.\" + replace(lower case(substring before(email, \"@\")), \"[^a-z0-9]+\", \".\") + \".\" + replace(lower case(substring before(substring after(email, \"@\"), \".\")), \"[^a-z0-9]+\", \"-\") + \"@\" + application.PARTNER_UPN_DOMAIN", "usageLocation": "=application.USAGE_LOCATION", "passwordProfile": {"password": "=initialpasswort", "forceChangePasswordNextSignIn": true}}' resultVariable="konto"/></extensionElements><incoming>f_gw__st_konto</incoming><outgoing>f_st_konto__t_ablauf</outgoing></serviceTask>
+    <intermediateCatchEvent id="t_ablauf" name="Gültigkeit abgelaufen"><documentation>Wartet die in der Prüfung gewählte Dauer ab (gueltigkeit, z.B. P180D). Die Instanz bleibt so lange aktiv und zeigt in Operations, welche Partnerkonten wann ablaufen.</documentation><incoming>f_st_konto__t_ablauf</incoming><outgoing>f_t_ablauf__st_sperren</outgoing><timerEventDefinition><timeDuration>=gueltigkeit</timeDuration></timerEventDefinition></intermediateCatchEvent>
+    <serviceTask id="st_sperren" name="Konto sperren"><documentation>disable: Das Konto bleibt bestehen, die Anmeldung ist gesperrt. Löschen ist ein bewusster eigener Schritt.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="disable" userId="=konto.id"/></extensionElements><incoming>f_t_ablauf__st_sperren</incoming><outgoing>f_st_sperren__e_gesperrt</outgoing></serviceTask>
+    <endEvent id="e_gesperrt" name="Partnerkonto gesperrt"><incoming>f_st_sperren__e_gesperrt</incoming></endEvent>
+    <endEvent id="e_abgelehnt" name="Abgelehnt"><incoming>f_gw__e_abgelehnt</incoming></endEvent>
+    <sequenceFlow id="f_s__ut_pruefen" sourceRef="s" targetRef="ut_pruefen"/>
+    <sequenceFlow id="f_ut_pruefen__gw" sourceRef="ut_pruefen" targetRef="gw"/>
+    <sequenceFlow id="f_gw__st_konto" sourceRef="gw" targetRef="st_konto" name="freigeben"><conditionExpression>=entscheid = "freigeben"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw__e_abgelehnt" sourceRef="gw" targetRef="e_abgelehnt" name="ablehnen"/>
+    <sequenceFlow id="f_st_konto__t_ablauf" sourceRef="st_konto" targetRef="t_ablauf"/>
+    <sequenceFlow id="f_t_ablauf__st_sperren" sourceRef="t_ablauf" targetRef="st_sperren"/>
+    <sequenceFlow id="f_st_sperren__e_gesperrt" sourceRef="st_sperren" targetRef="e_gesperrt"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_m365_partnerzugang_diagram">
+    <bpmndi:BPMNPlane id="proc_m365_partnerzugang_plane" bpmnElement="proc_m365_partnerzugang">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="162" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_pruefen_di" bpmnElement="ut_pruefen"><omgdc:Bounds x="280" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_di" bpmnElement="gw" isMarkerVisible="true"><omgdc:Bounds x="455" y="105" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="383" y="74" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_konto_di" bpmnElement="st_konto"><omgdc:Bounds x="580" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_ablauf_di" bpmnElement="t_ablauf"><omgdc:Bounds x="762" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="730" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_sperren_di" bpmnElement="st_sperren"><omgdc:Bounds x="880" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_gesperrt_di" bpmnElement="e_gesperrt"><omgdc:Bounds x="1062" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_abgelehnt_di" bpmnElement="e_abgelehnt"><omgdc:Bounds x="612" y="252" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="292" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s__ut_pruefen_di" bpmnElement="f_s__ut_pruefen"><omgdi:waypoint x="198" y="130"/><omgdi:waypoint x="280" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ut_pruefen__gw_di" bpmnElement="f_ut_pruefen__gw"><omgdi:waypoint x="380" y="130"/><omgdi:waypoint x="455" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw__st_konto_di" bpmnElement="f_gw__st_konto"><omgdi:waypoint x="505" y="130"/><omgdi:waypoint x="580" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="511" y="108" width="66" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw__e_abgelehnt_di" bpmnElement="f_gw__e_abgelehnt"><omgdi:waypoint x="480" y="155"/><omgdi:waypoint x="480" y="270"/><omgdi:waypoint x="612" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="486" y="205" width="64" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_konto__t_ablauf_di" bpmnElement="f_st_konto__t_ablauf"><omgdi:waypoint x="680" y="130"/><omgdi:waypoint x="762" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_t_ablauf__st_sperren_di" bpmnElement="f_t_ablauf__st_sperren"><omgdi:waypoint x="798" y="130"/><omgdi:waypoint x="880" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_sperren__e_gesperrt_di" bpmnElement="f_st_sperren__e_gesperrt"><omgdi:waypoint x="980" y="130"/><omgdi:waypoint x="1062" y="130"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

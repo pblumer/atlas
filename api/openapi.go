@@ -612,7 +612,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Region, time zone and language", schemaObj(map[string]any{"region": tString(), "timeZone": tString(), "language": tString()})),
 			resp: jsonBody("The stored preferences", tObject())}},
 		// The processes the signed-in person starred on the Tasks app's Start view
-		// (ADR-draft-start-view-groups-and-favourites). Keyed on the principal like the
+		// (ADR-0466). Keyed on the principal like the
 		// preferences above; the path names a process, never a person. roleAny rather than
 		// RoleUser, because roles do not nest and the people who start processes hold
 		// `operator`, which need not come with `user`.

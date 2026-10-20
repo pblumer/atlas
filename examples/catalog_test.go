@@ -274,6 +274,12 @@ var catalogSources = []catalogSource{
 	{ID: "verwaltung-dienstleistungen", Dir: "verwaltung-dienstleistungen", NoInstall: true,
 		Main: "verwaltung-dienstleistungen/zutrittsbadge-lebenszyklus.bpmn",
 		Shop: true},
+	// A shop for Microsoft 365: nine products over the Entra, Exchange and Teams Phone
+	// Worker Types, five decisions, two public forms and a governance check. It installs
+	// with `atlas import` once its decision models are uploaded (its README says how).
+	{ID: "m365-dienste", Dir: "m365-dienste", NoInstall: true,
+		Main: "m365-dienste/funktionspostfach.bpmn",
+		Shop: true},
 }
 
 // formDisplayNames gives a form the name the Modeler and the Tasks inbox list it

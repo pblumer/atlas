@@ -1,0 +1,46 @@
+{
+  "zielgruppe": {
+    "kind": "group",
+    "label": {
+      "de": "Zielgruppe «Microsoft 365 für Mitarbeitende»: wer bestellt",
+      "en": "Audience of \"Microsoft 365 for staff\": who orders"
+    },
+    "hint": {
+      "de": "Meist alle Mitarbeitenden.",
+      "en": "Usually all staff."
+    }
+  },
+  "zielgruppe-ucc": {
+    "kind": "group",
+    "label": {
+      "de": "Zielgruppe «Kommunikation und Telefonie»",
+      "en": "Audience of \"Communication and telephony\""
+    },
+    "hint": {
+      "de": "Wer zusätzlich Räume, Warteschlangen und Telefonzentralen bestellt, z.B. Teamleitungen und UCC-Verantwortliche. Sie sehen diesen Katalog, weil sein Rang höher ist.",
+      "en": "Who also orders rooms, call queues and auto attendants, e.g. team leads. They see this catalogue because its rank is higher."
+    }
+  },
+  "telefonie-team": {
+    "kind": "group",
+    "label": {
+      "de": "Wer genehmigt Telefonie-Produkte",
+      "en": "Who approves telephony products"
+    },
+    "hint": {
+      "de": "Eine Gruppe; wer zuerst entscheidet, entscheidet. Die Aufgaben «Rufnummer zuweisen» gehen an die Gruppe M365-Telefonie.",
+      "en": "A group; whoever decides first decides. The \"assign a number\" tasks go to the group M365-Telefonie."
+    }
+  },
+  "facility-management": {
+    "kind": "group",
+    "label": {
+      "de": "Wer genehmigt Sitzungszimmer",
+      "en": "Who approves meeting rooms"
+    },
+    "hint": {
+      "de": "Eine Gruppe, meist das Facility Management.",
+      "en": "A group, usually facility management."
+    }
+  }
+}

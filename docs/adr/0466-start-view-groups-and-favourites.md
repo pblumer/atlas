@@ -1,4 +1,4 @@
-# ADR-DRAFT: The Start view groups by application and keeps favourites per person
+# ADR-0466: The Start view groups by application and keeps favourites per person
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -1,0 +1,66 @@
+{
+  "type": "default",
+  "id": "m365-verteiler-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Verteilerliste · Distribution list**\n\nName und Adresse entstehen nach der Namensregel: VL-<BEREICH> <Bezeichnung>. · Name and address follow the naming rule: VL-<DEPT> <name>."
+    },
+    {
+      "key": "bereich",
+      "type": "textfield",
+      "label": "Bereichskürzel · Department code",
+      "description": "2 bis 5 Buchstaben, z.B. FIN, HR, IT. Bestimmt den Namen mit. · 2 to 5 letters; part of the name.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z]{2,5}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bezeichnung",
+      "type": "textfield",
+      "label": "Bezeichnung · Name",
+      "description": "Der Rest des Namens; Präfix und Bereich setzt die Namensregel davor. · The prefix and department are added by the naming rule.",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "besitzer",
+      "type": "textfield",
+      "label": "Verwaltet von (UPN) · Managed by (UPN)",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "nurIntern",
+      "type": "radio",
+      "label": "Nur Mail aus der Organisation annehmen · Accept internal mail only",
+      "values": [
+        {
+          "label": "Ja · Yes",
+          "value": "true"
+        },
+        {
+          "label": "Nein · No",
+          "value": "false"
+        }
+      ],
+      "defaultValue": "true",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

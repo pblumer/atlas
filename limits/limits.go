@@ -301,7 +301,7 @@ type Limits struct {
 	DiagramFavourites int32
 
 	// StartFavourites is how many processes one account may star on the Tasks app's
-	// Start view (ADR-draft-start-view-groups-and-favourites).
+	// Start view (ADR-0466).
 	// Its own number for the reason DiagramFavourites has one: the people who start
 	// processes are not the people who model them.
 	StartFavourites int32
