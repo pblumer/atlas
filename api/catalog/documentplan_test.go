@@ -101,3 +101,15 @@ func TestRecordsCompareAsTheySay(t *testing.T) {
 		t.Error("textOf")
 	}
 }
+
+// TestTheNewestReleaseIsTheLatestMade: what a release is compared with is the one
+// made last, whatever order the store lists them in.
+func TestTheNewestReleaseIsTheLatestMade(t *testing.T) {
+	got := newest([]Release{{ID: "r1", CreatedAt: 5}, {ID: "r3", CreatedAt: 9}, {ID: "r2", CreatedAt: 7}})
+	if got.ID != "r3" {
+		t.Errorf("newest = %s, want r3", got.ID)
+	}
+	if canonical(func() {}) == nil {
+		t.Error("a value JSON cannot say is compared as nothing")
+	}
+}
