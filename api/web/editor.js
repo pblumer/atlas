@@ -2595,6 +2595,12 @@ function wireEditorVars(root, modeler, api) {
   let availOpen = false;
   try { availOpen = localStorage.getItem(AKEY) === "1"; } catch { /* closed */ }
   const saveAvail = () => { try { localStorage.setItem(AKEY, availOpen ? "1" : "0"); } catch { /* ignore */ } };
+  // While a filter is typed every group with a match is open: a filter is a search, and
+  // a match behind a closed header is not found. The choices stored above are for the
+  // unfiltered list and the filter leaves them alone; a group the author closes while
+  // filtering stays closed until the filter is cleared.
+  const AVAIL = "@available";
+  const filterClosed = new Set();
 
   // The values the variables actually held on the last run of this process, keyed by
   // name — {value, kind} as the instance list returns them. A diagram that was never
@@ -2702,6 +2708,7 @@ function wireEditorVars(root, modeler, api) {
     loadSample();
     renderSample();
     const q = (filter.value || "").trim().toLowerCase();
+    if (!q) filterClosed.clear();
     const vars = collectDiagramVariables(modeler).filter((v) =>
       !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q) ||
       (v.source || "").toLowerCase().includes(q));
@@ -2710,11 +2717,13 @@ function wireEditorVars(root, modeler, api) {
     // list, each with the one click that declares it (ADR-0456).
     let available = [];
     try { available = undeclaredMembers(rootProcess(modeler)).filter((m) => !q || m.path.toLowerCase().includes(q)); } catch { /* best-effort */ }
-    // A group like Form / Process, closed until the author opens it: an installation with
-    // many constants would otherwise push the process's own variables out of view.
+    // A group like Form / Process, closed until the author opens it or a filter finds a
+    // member in it: an installation with many constants would otherwise push the
+    // process's own variables out of view.
+    const availCol = q ? filterClosed.has(AVAIL) : !availOpen;
     const availableHTML = available.length
-      ? `<div class="vars-group vars-available${availOpen ? "" : " collapsed"}" id="vars-available">
-          <button type="button" class="vars-group-head" aria-expanded="${availOpen}">
+      ? `<div class="vars-group vars-available${availCol ? " collapsed" : ""}" id="vars-available">
+          <button type="button" class="vars-group-head" aria-expanded="${availCol ? "false" : "true"}">
             <span class="vg-chevron" aria-hidden="true">▸</span>
             <span class="vg-title">Available, not declared yet</span>
             <span class="vg-count">${available.length}</span>
@@ -2746,7 +2755,7 @@ function wireEditorVars(root, modeler, api) {
     list.innerHTML = (cats.length === 1
       ? groups.get(cats[0]).map(rowHTML).join("")
       : cats.map((cat) => {
-          const col = collapsedCats.has(cat);
+          const col = q ? filterClosed.has(cat) : collapsedCats.has(cat);
           return `<div class="vars-group${col ? " collapsed" : ""}" data-cat="${esc(cat)}">
             <button type="button" class="vars-group-head" aria-expanded="${col ? "false" : "true"}">
               <span class="vg-chevron" aria-hidden="true">▸</span>
@@ -2825,16 +2834,20 @@ function wireEditorVars(root, modeler, api) {
     const gh = e.target.closest(".vars-group-head");
     if (gh) {
       const grp = gh.closest(".vars-group");
-      const cat = grp && grp.dataset.cat;
-      if (grp && grp.id === "vars-available") {
-        availOpen = !grp.classList.toggle("collapsed");
-        gh.setAttribute("aria-expanded", String(availOpen));
-        saveAvail();
-      } else if (cat) {
+      const avail = !!grp && grp.id === "vars-available";
+      const key = avail ? AVAIL : grp && grp.dataset.cat;
+      if (key) {
         const col = grp.classList.toggle("collapsed");
         gh.setAttribute("aria-expanded", col ? "false" : "true");
-        if (col) collapsedCats.add(cat); else collapsedCats.delete(cat);
-        saveCats();
+        if ((filter.value || "").trim()) {
+          if (col) filterClosed.add(key); else filterClosed.delete(key);
+        } else if (avail) {
+          availOpen = !col;
+          saveAvail();
+        } else {
+          if (col) collapsedCats.add(key); else collapsedCats.delete(key);
+          saveCats();
+        }
       }
       return;
     }

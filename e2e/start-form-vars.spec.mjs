@@ -46,6 +46,28 @@ test("a linked start form's fields appear under a Form group", async ({ page }) 
   expect(page.__errors).toEqual([]);
 });
 
+// A filter opens a group the author closed, for as long as it finds something there; the
+// author's choice comes back when the filter is cleared.
+test("filtering opens a closed variable group while it finds something there", async ({ page }) => {
+  const list = page.locator("#vars-list");
+  const row = list.locator('.var-row[data-var="delimiter"]');
+  await expect(row).toBeVisible();
+  const form = list.locator(".vars-group", { has: page.locator(".vg-title", { hasText: /^form$/i }) });
+  await form.locator(".vars-group-head").click();
+  await expect(row).toBeHidden();
+
+  // "er" finds delimiter and header in the form and orderId in the process, so both
+  // groups stay and keep their headers; a filter that finds one group's members only
+  // shows them as a plain list, the way a diagram with one group always has.
+  await page.locator("#vars-filter").fill("er");
+  await expect(row).toBeVisible();
+  await expect(form.locator(".vars-group-head")).toHaveAttribute("aria-expanded", "true");
+  await page.locator("#vars-filter").fill("");
+  await expect(row).toBeHidden();
+  await expect(form.locator(".vars-group-head")).toHaveAttribute("aria-expanded", "false");
+  expect(page.__errors).toEqual([]);
+});
+
 test("variable rows are drag sources carrying the variable name", async ({ page }) => {
   const row = page.locator('#vars-list .var-row[data-var="filename"]');
   await expect(row).toBeVisible();

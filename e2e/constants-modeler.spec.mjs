@@ -248,6 +248,49 @@ test("the undeclared namespace members start closed and remember being opened", 
   expect(page.__errors).toEqual([]);
 });
 
+// A filter is a search: it opens the closed section while it finds something there, and
+// leaves the author's choice for the unfiltered list alone. Closed by hand while
+// filtering, the section stays closed until the filter is cleared.
+test("filtering opens the undeclared namespace members without changing the stored choice", async ({ page }) => {
+  await openConstants(page, "declared");
+  await page.locator("#vars-toggle").click();
+  const filter = page.locator("#vars-filter");
+  const avail = page.locator("#vars-available");
+  const head = avail.locator(".vars-group-head");
+  const row = avail.locator('[data-avail="application.CLIENT_ID"]');
+  await expect(row).toBeHidden();
+
+  await filter.fill("CLIENT");
+  await expect(row).toBeVisible();
+  await expect(head).toHaveAttribute("aria-expanded", "true");
+  await filter.fill("");
+  await expect(row).toBeHidden();
+
+  // Closed while filtering, it stays closed as the filter is refined.
+  await filter.fill("CLI");
+  await expect(row).toBeVisible();
+  await head.click();
+  await expect(row).toBeHidden();
+  await filter.fill("CLIENT");
+  await expect(row).toBeHidden();
+  // Cleared, the list is back to the stored choice, and the next filter opens it again.
+  await filter.fill("");
+  await expect(row).toBeHidden();
+  await filter.fill("CLIENT");
+  await expect(row).toBeVisible();
+
+  // Opened for the unfiltered list, it stays open after a filter closed it by hand.
+  await filter.fill("");
+  await head.click();
+  await expect(row).toBeVisible();
+  await filter.fill("CLIENT");
+  await head.click();
+  await expect(row).toBeHidden();
+  await filter.fill("");
+  await expect(row).toBeVisible();
+  expect(page.__errors).toEqual([]);
+});
+
 // Completion offers a namespace member the process does not read yet, and picking it
 // declares it — the model keeps saying what it reads without a trip to the process panel.
 test("picking an undeclared namespace member in completion declares it", async ({ page }) => {
