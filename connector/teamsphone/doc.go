@@ -29,7 +29,15 @@
 // A job may run twice. Every "ensure" operation looks for what it would create before it
 // creates it, and every "remove" operation answers removed=false for something already
 // gone, so a retried job converges instead of creating a second queue or failing on the
-// first run's success. ensure-call-queue also brings a queue it finds to the agents the
-// model names, so running it again after a change of staff changes the queue rather than
-// reporting success over the old list.
+// first run's success. ensure-call-queue also brings a queue it finds to the agents,
+// authorized users and routing settings the model names, so running it again after a
+// change changes the queue rather than reporting success over the old values; what the
+// model does not name stays as the queue has it.
+//
+// # Refusals a process can catch
+//
+// A refusal a process may have a path for — an address that belongs to a person, an
+// account of the other kind, a list that would be emptied — is a [Refusal] under one of
+// [Codes]. [Run] throws it as a BPMN error when the task's process catches that code, and
+// leaves it a failure otherwise, as ADR-0461 decided for script tasks.
 package teamsphone

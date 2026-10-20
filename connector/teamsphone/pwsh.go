@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf16"
@@ -106,6 +107,7 @@ func (p *Pwsh) Do(ctx context.Context, req Request) (map[string]any, error) {
 	request := map[string]any{
 		"operation":          req.Operation,
 		"args":               req.Args,
+		"reconcile":          req.Reconcile,
 		"tenantId":           p.Credential.TenantID,
 		"clientId":           p.Credential.ClientID,
 		"accountWaitSeconds": int(wait / time.Second),
@@ -154,7 +156,13 @@ func (p *Pwsh) Do(ctx context.Context, req Request) (map[string]any, error) {
 		return nil, fmt.Errorf("teamsphone: %s answered with no result%s", req.Operation, quote(stderr))
 	}
 	if !env.OK {
-		return nil, fmt.Errorf("teamsphone: %s: %s", req.Operation, strings.TrimSpace(env.Error))
+		msg := strings.TrimSpace(env.Error)
+		// A code the script names is one of the shipped refusals; one outside [Codes]
+		// is no promise a model can catch, so it fails like any other error.
+		if slices.Contains(Codes, env.Code) {
+			return nil, refused(env.Code, req.Operation, msg)
+		}
+		return nil, fmt.Errorf("teamsphone: %s: %s", req.Operation, msg)
 	}
 	if env.Result == nil {
 		return map[string]any{}, nil
@@ -166,6 +174,8 @@ type envelope struct {
 	OK     bool           `json:"ok"`
 	Result map[string]any `json:"result"`
 	Error  string         `json:"error"`
+	// Code names the refusal the error is, when it is one of [Codes].
+	Code string `json:"code,omitempty"`
 }
 
 // lastEnvelope finds the answer: the last line of stdout that decodes as one. A module

@@ -1,6 +1,6 @@
 # ADR-0463: A Microsoft Teams Phone Worker Type for voice apps and their resource accounts
 
-- **Status:** Accepted (amended 2026-10-19: `ensure-call-queue` brings a queue it finds to the agents a model names — the directly assigned ones, in order under serial routing — and answers `agentsChanged`; agents not named are left as they are, a value that resolved to nothing is refused, and an empty list never empties a queue that has agents)
+- **Status:** Accepted (amended 2026-10-19: `ensure-call-queue` brings a queue it finds to the agents a model names — the directly assigned ones, in order under serial routing — and answers `agentsChanged`; agents not named are left as they are, a value that resolved to nothing is refused, and an empty list never empties a queue that has agents. Amended 2026-10-20: the queue's authorized users and routing settings are reconciled as its agents are — what a model names is set, what it leaves out is kept — so the compiler no longer writes a setting's default into the model; the answer lists what it set in `changed`; and six refusals carry `TEAMSPHONE_…` codes, thrown as BPMN errors when the process catches them)
 - **Implementation:** Landed
 - **Date:** 2026-10-17
 - **Deciders:** Atlas maintainers
@@ -234,6 +234,80 @@ object `Get-CsCallQueue` returns; the script reads the directly assigned agents 
 non-empty list would be set again on every run — converging, but answering
 `agentsChanged: true` each time — and an empty one would never be refused. Like the rest
 of the script, this is found by the first installation that runs it against a tenant.
+
+### Amendment (2026-10-20): routing and authorized users reconciled; refusals a process can catch
+
+The 2026-10-19 amendment reconciled a queue's agents and named the rest as a follow-up:
+routing, presence-based routing, conference mode, opt-out and authorized users still
+applied only when a queue was created. And every refusal — an address that belongs to a
+person, an account of the other kind, a list that would be emptied — was retried and
+then parked on an incident. An author could draw an error boundary on the task, and
+nothing ever reached it; ADR-0461 had closed that gap for script tasks only.
+
+**Decision — reconciliation.**
+
+- `authorizedUsers`, `routingMethod`, `presenceBasedRouting`, `conferenceMode` and
+  `allowOptOut` join `agents` in `Op.Reconciled`. A queue the operation finds is brought
+  to every one of them the model names, in one `Set-CsCallQueue`.
+- **What the model leaves out is kept.** For the lists that was already absence. For the
+  settings it was not: the compiler wrote each setting's default into the compiled task, so
+  a setting the author never chose read exactly like one chosen. The compiler now leaves an
+  unauthored setting out; `Prepare` applies the default for a queue the request creates and
+  lists in `Request.Reconcile` only what the model named. The strongest case for enforcing
+  defaults is that a model then describes the whole queue. It loses to what it would do to
+  every model deployed so far: none of them could say "keep", so each would reset routing an
+  operator changed in the Teams admin center. The Modeler and the Repository template gain
+  an explicit choice for each default (*Attendant*, *On*, *Yes*) beside *Keep*.
+- **The agents' order** counts under the routing the queue has once the run is done: the
+  routing the model names, or the queue's own when it names none.
+- **Authorized users are never emptied either**, refused under the same code as agents: a
+  Resolve users that found nobody reads the same for both lists, and emptying either stays a
+  task for the admin center.
+- **The answer gains `changed`**, the sorted names the run set. `agentsChanged`, which
+  0.16.0 shipped, stays as whether `agents` is among them.
+- `languageId` and everything on an auto attendant are still applied only at creation.
+
+**Decision — codes.** A refusal a process may have a path for is a `teamsphone.Refusal`
+under one of six codes; the shipped PowerShell reports the code beside the error, and the
+mock refuses with the same code:
+
+| Code | Raised by | When |
+|---|---|---|
+| `TEAMSPHONE_UPN_TAKEN` | ensure-resource-account | the address belongs to an enabled user account |
+| `TEAMSPHONE_ACCOUNT_TYPE_MISMATCH` | ensure-resource-account, ensure-call-queue, ensure-auto-attendant | the account was made for the other kind of voice app |
+| `TEAMSPHONE_ACCOUNT_IN_USE` | ensure-call-queue, ensure-auto-attendant, remove-call-queue, remove-auto-attendant | the account is associated with the other kind of voice app |
+| `TEAMSPHONE_ACCOUNT_NOT_VISIBLE` | ensure-call-queue, ensure-auto-attendant | Teams still does not show the account after the wait |
+| `TEAMSPHONE_WOULD_EMPTY_LIST` | ensure-call-queue | an empty list would take every agent or authorized user away |
+| `TEAMSPHONE_TOO_MANY_AGENTS` | ensure-call-queue | more than 20 agents |
+
+ADR-0461's rule decides when a code is a BPMN error: when the task's process catches it.
+The codes the process catches travel with the job (`Job.ErrorCodes`, from
+`CompiledProcess.CaughtErrorCodes`), and `Run` throws a refusal under one of them as
+`job.BPMNError`; the instance takes the error path at once, spending no retry. Any other
+refusal stays a failure and keeps its retries, so a process that catches nothing behaves
+exactly as before. The worker accepts a code from the script only if it is one of the six;
+a malformed value, an unset required variable, a failed sign-in or a missing module have no
+code, because the model or the worker host is what has to change.
+
+The mock now refuses a remove of the other kind of voice app (`TEAMSPHONE_ACCOUNT_IN_USE`)
+where it answered `removed: false`; the shipped PowerShell always refused it.
+
+**Consequences.**
+
+- A deployed model whose task names a setting now sets it on an existing queue. That
+  includes models built from the Repository template before 1.2.0, which wrote
+  `routingMethod="attendant"` by default; such a model chooses *Keep* to leave the queue's
+  routing alone.
+- A job resolved before a server upgrades carries the compiled defaults, which read as
+  named; once, on an existing queue, it sets them. A job lives for minutes, so this is a
+  window at upgrade, not a state.
+- **Assumption, as for `Users`:** the script reads `RoutingMethod`,
+  `PresenceBasedRouting`, `ConferenceMode`, `AllowOptOut` and `AuthorizedUsers` from the
+  object `Get-CsCallQueue` returns, which Microsoft documents as parameters but not as
+  properties. Were one missing, a named value would be set again on every run and listed in
+  `changed` every time; the queue would still end up right.
+- The handbook gains a reference card for every operation (`#ref-teamsphone`), linked from
+  the panel beside the setup card; a test holds it to the operation table and the codes.
 
 ## Pros and cons of the options
 

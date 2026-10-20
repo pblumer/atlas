@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -28,6 +29,11 @@ type Job struct {
 	// ResultVariable names the process variable the operation's answer is written to;
 	// empty means the model discards it.
 	ResultVariable string `json:"resultVariable,omitempty"`
+	// ErrorCodes are the codes an error boundary or error event subprocess of the task's
+	// process catches. A refusal under one of them is thrown as a BPMN error; any other
+	// is a failure (ADR-0461). They travel with the job because a worker has no compiled
+	// process to ask.
+	ErrorCodes []string `json:"errorCodes,omitempty"`
 }
 
 // Resolve turns a compiled Teams Phone task into a [Job]: every authored value evaluated
@@ -51,6 +57,7 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		Operation:      cp.Intern(detail.TeamsPhoneOp),
 		Args:           args,
 		ResultVariable: cp.Intern(detail.ResultVar),
+		ErrorCodes:     cp.CaughtErrorCodes(),
 	}, nil
 }
 
@@ -69,7 +76,7 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 	}
 	req, err := Prepare(j)
 	if err != nil {
-		return nil, err
+		return nil, thrown(j, err)
 	}
 	var out map[string]any
 	if users, _ := req.Args["users"].([]string); req.Operation == "resolve-users" && len(users) == 0 {
@@ -80,7 +87,7 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 	} else {
 		out, err = client.Do(ctx, req)
 		if err != nil {
-			return nil, err
+			return nil, thrown(j, err)
 		}
 	}
 	if j.ResultVariable == "" {
@@ -95,6 +102,10 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 type Request struct {
 	Operation string         `json:"operation"`
 	Args      map[string]any `json:"args"`
+	// Reconcile names, sorted, the values of [Op.Reconciled] the model named: what an
+	// existing object is brought to. Any other value applies only to an object the
+	// request creates, and an existing one keeps what it has.
+	Reconcile []string `json:"reconcile,omitempty"`
 }
 
 // Holiday is one date range on which an auto attendant disconnects calls. Start is the
@@ -108,7 +119,9 @@ type Holiday struct {
 // Prepare normalizes a job into a [Request] and refuses one the operation cannot carry:
 // an unknown operation, a value the operation does not use, a required value that
 // resolved to nothing, a list or a holiday that is malformed. Every message names the
-// attribute, because the incident it becomes is read by whoever authored it.
+// attribute, because the incident it becomes is read by whoever authored it. It applies
+// the default of every setting the model left out, for an object the request creates,
+// and lists in [Request.Reconcile] what the model named of [Op.Reconciled].
 func Prepare(j Job) (Request, error) {
 	spec, ok := Ops[j.Operation]
 	if !ok {
@@ -126,6 +139,7 @@ func Prepare(j Job) (Request, error) {
 		}
 	}
 	args := map[string]any{}
+	var reconcile []string
 	for _, name := range append(append([]string{}, spec.Required...), spec.Optional...) {
 		if contains(spec.Reconciled, name) {
 			raw, named := j.Args[name]
@@ -133,6 +147,7 @@ func Prepare(j Job) (Request, error) {
 				// Not named is "leave it as it is", which only the value's absence says.
 				continue
 			}
+			reconcile = append(reconcile, name)
 			if raw == nil {
 				return Request{}, fmt.Errorf("teamsphone: %s: %s resolved to nothing, and %s sets an existing one's %s to it; set the variable it reads before this task, or leave %s out to keep them as they are", j.Operation, name, spec.Label, name, name)
 			}
@@ -160,6 +175,8 @@ func Prepare(j Job) (Request, error) {
 		set := Settings[name]
 		if raw == "" {
 			raw = set.Default
+		} else if contains(spec.Reconciled, name) {
+			reconcile = append(reconcile, name)
 		}
 		if !contains(set.Values, raw) {
 			return Request{}, fmt.Errorf("teamsphone: %s has %s %q (want %s)", j.Operation, name, raw, strings.Join(set.Values, ", "))
@@ -174,9 +191,10 @@ func Prepare(j Job) (Request, error) {
 		}
 	}
 	if agents, ok := args["agents"].([]string); ok && len(agents) > MaxAgents {
-		return Request{}, fmt.Errorf("teamsphone: %s names %d agents, and a call queue takes at most %d directly", j.Operation, len(agents), MaxAgents)
+		return Request{}, refused(CodeTooManyAgents, j.Operation, fmt.Sprintf("%d agents are named, and a call queue takes at most %d directly", len(agents), MaxAgents))
 	}
-	return Request{Operation: j.Operation, Args: args}, nil
+	sort.Strings(reconcile)
+	return Request{Operation: j.Operation, Args: args, Reconcile: reconcile}, nil
 }
 
 // normalize reads one resolved value in the shape its attribute takes.

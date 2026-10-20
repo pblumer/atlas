@@ -11,7 +11,7 @@ function Get-State {
     if (Test-Path $script:StatePath) {
         return Get-Content -Raw -Encoding utf8 $script:StatePath | ConvertFrom-Json -AsHashtable
     }
-    return @{ connects = 0; users = @{}; accounts = @{}; apps = @{}; assoc = @{}; schedules = @(); entra = @{} }
+    return @{ connects = 0; sets = 0; users = @{}; accounts = @{}; apps = @{}; assoc = @{}; schedules = @(); entra = @{} }
 }
 
 function Save-State($State) {
@@ -125,8 +125,16 @@ function New-App([string]$Kind, [hashtable]$Params) {
         if ($k -in 'DefaultCallFlow', 'CallFlows', 'CallHandlingAssociations') { continue }
         $app.Params[$k] = $Params[$k]
     }
-    # A call queue answers with the agents named directly as Users, as Teams' does.
-    if ($Kind -eq 'CallQueue') { $app.Users = [string[]]@(foreach ($u in $Params.Users) { $u }) }
+    # A call queue answers with its settings and with the agents named directly as Users,
+    # as Teams' does.
+    if ($Kind -eq 'CallQueue') {
+        $app.Users = [string[]]@(foreach ($u in $Params.Users) { $u })
+        $app.AuthorizedUsers = [string[]]@(foreach ($u in $Params.AuthorizedUsers) { $u })
+        $app.RoutingMethod = [string]$Params.RoutingMethod
+        $app.PresenceBasedRouting = [bool]$Params.PresenceBasedRouting
+        $app.ConferenceMode = [bool]$Params.ConferenceMode
+        $app.AllowOptOut = [bool]$Params.AllowOptOut
+    }
     if ($Params.CallHandlingAssociations) { $app.Params.Holidays = @($Params.CallHandlingAssociations).Count }
     $s.apps[$app.Identity] = $app
     Save-State $s
@@ -150,15 +158,26 @@ function New-CsCallQueue {
     param([string]$Name, [switch]$UseDefaultMusicOnHold, [string]$RoutingMethod, [bool]$PresenceBasedRouting,
         [bool]$ConferenceMode, [bool]$AllowOptOut, [string]$LanguageId, [string[]]$Users, [string[]]$AuthorizedUsers)
     Assert-Agents $Users
+    Assert-Agents $AuthorizedUsers
     New-App 'CallQueue' $PSBoundParameters
 }
+# Changes only what it is given, as Teams' does, and counts its calls so a test sees that
+# a run with nothing to change makes none.
 function Set-CsCallQueue {
-    param([string]$Identity, [string[]]$Users)
+    param([string]$Identity, [string[]]$Users, [string[]]$AuthorizedUsers, [string]$RoutingMethod,
+        [bool]$PresenceBasedRouting, [bool]$ConferenceMode, [bool]$AllowOptOut)
     Assert-Agents $Users
+    Assert-Agents $AuthorizedUsers
     $s = Get-State
     $app = $s.apps[$Identity]
     if (-not $app -or $app.Kind -ne 'CallQueue') { throw "stub: no CallQueue $Identity" }
-    $app.Users = [string[]]@(foreach ($u in $Users) { $u })
+    foreach ($k in $PSBoundParameters.Keys) {
+        if ($k -eq 'Identity') { continue }
+        $v = $PSBoundParameters[$k]
+        # Assigned in each branch: an if used as a value unrolls a one-element list.
+        if ($k -in 'Users', 'AuthorizedUsers') { $app[$k] = [string[]]@(foreach ($u in $v) { $u }) } else { $app[$k] = $v }
+    }
+    $s.sets = [int]$s.sets + 1
     Save-State $s
 }
 function Remove-CsCallQueue { param([string]$Identity) Remove-App 'CallQueue' $Identity }

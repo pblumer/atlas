@@ -2702,8 +2702,10 @@ func s3Count(taskID, op, attr, raw string, takes bool, def, max int32) (int32, e
 // test TestTeamsPhoneOpsMatchTheCompiler keeps the two from disagreeing.
 //
 // required and optional are authored values (literal-or-FEEL); settings are static
-// values validated against teamsPhoneSettings and defaulted here, so the worker never
-// has to guess one.
+// values validated against teamsPhoneSettings. A setting the model leaves out is not
+// compiled to its default: the worker applies the default to an object the task creates,
+// and an existing one keeps what it has, which only the setting's absence can say
+// (ADR-0463, amendment 2026-10-20).
 type teamsPhoneOp struct {
 	required    []string
 	optional    []string
@@ -2730,18 +2732,18 @@ var teamsPhoneOps = map[string]teamsPhoneOp{
 	"remove-resource-account": {required: []string{"resourceAccountId"}},
 }
 
-// teamsPhoneSettings are the static values and their defaults. An empty default makes a
-// setting required: an account type guessed wrong creates an account that cannot carry
-// the voice app it was meant for.
+// teamsPhoneSettings are the static values each setting may take, and whether a model
+// must author it: an account type guessed wrong creates an account that cannot carry the
+// voice app it was meant for. The defaults of the others are the worker's.
 var teamsPhoneSettings = map[string]struct {
-	values []string
-	def    string
+	values   []string
+	required bool
 }{
-	"accountType":          {values: []string{"call-queue", "auto-attendant"}},
-	"routingMethod":        {values: []string{"attendant", "serial", "round-robin", "longest-idle"}, def: "attendant"},
-	"presenceBasedRouting": {values: []string{"true", "false"}, def: "true"},
-	"conferenceMode":       {values: []string{"true", "false"}, def: "true"},
-	"allowOptOut":          {values: []string{"true", "false"}, def: "true"},
+	"accountType":          {values: []string{"call-queue", "auto-attendant"}, required: true},
+	"routingMethod":        {values: []string{"attendant", "serial", "round-robin", "longest-idle"}},
+	"presenceBasedRouting": {values: []string{"true", "false"}},
+	"conferenceMode":       {values: []string{"true", "false"}},
+	"allowOptOut":          {values: []string{"true", "false"}},
 }
 
 func teamsPhoneOpNames() []string {
@@ -2792,10 +2794,10 @@ func compileTeamsPhoneConnectorTask(b *Builder, st xmlServiceTask, retries int32
 				return 0, fmt.Errorf("compiler: teamsphone task %q: %s decides what is created and cannot be a FEEL expression (want %s)", st.Id, v.attr, strings.Join(setting.values, ", "))
 			}
 			if value == "" {
-				value = setting.def
-			}
-			if value == "" {
-				return 0, fmt.Errorf("compiler: teamsphone task %q operation %q needs %s (%s)", st.Id, op, v.attr, strings.Join(setting.values, ", "))
+				if setting.required {
+					return 0, fmt.Errorf("compiler: teamsphone task %q operation %q needs %s (%s)", st.Id, op, v.attr, strings.Join(setting.values, ", "))
+				}
+				continue
 			}
 			if !in(setting.values, value) {
 				return 0, fmt.Errorf("compiler: teamsphone task %q has %s %q (want %s)", st.Id, v.attr, v.raw, strings.Join(setting.values, ", "))

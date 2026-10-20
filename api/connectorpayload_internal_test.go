@@ -249,9 +249,10 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 			fields: map[string]any{"connector": "contoso", "operation": "list-users"},
 		},
 		{
-			// The operation and its values travel — a FEEL list stays a list, and the
-			// compiled settings arrive as the words the compiler defaulted them to —
-			// while the tenant's app certificate does not exist here to travel.
+			// The operation and its values travel — a FEEL list stays a list, and a
+			// setting the model left out does not travel, so the worker can tell it from
+			// one the model named — while the tenant's app certificate does not exist
+			// here to travel.
 			name:      "teamsphone",
 			variables: `{"variables":{"agentIds":["a-1","a-2"]}}`,
 			element:   `<atlas:teamsPhoneConnector connector="contoso" operation="ensure-call-queue" name="CQ Support" resourceAccountId="ra-1" agents="=agentIds" resultVariable="queue"/>`,
@@ -261,8 +262,6 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 				"connector": "contoso", "operation": "ensure-call-queue", "resultVariable": "queue",
 				"args": map[string]any{
 					"name": "CQ Support", "resourceAccountId": "ra-1", "agents": []any{"a-1", "a-2"},
-					"routingMethod": "attendant", "presenceBasedRouting": "true",
-					"conferenceMode": "true", "allowOptOut": "true",
 				},
 			},
 		},

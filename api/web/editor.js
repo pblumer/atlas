@@ -3987,12 +3987,14 @@ const SERVICE_TASK_KINDS = [
       {
         key: "agents", label: "Agents", placeholder: "=benutzer.ids", fx: true,
         showIf: (v) => v.operation === "ensure-call-queue",
-        hint: "Optional. Ids from Resolve users, at most 20. When set, a queue that already exists is brought to exactly this list — a change of staff is one more run of this task — but never emptied: an empty list for a queue with agents is refused, because a Resolve users that found nobody reads the same. Leave it empty to keep the agents a queue has. Larger queues are served from a group or a channel, which this Worker Type does not offer.",
+        hint: "Optional. Ids from Resolve users, at most 20. When set, a queue that already exists is brought to exactly this list — a change of staff is one more run of this task — but never emptied: an empty list for a queue with agents is refused (TEAMSPHONE_WOULD_EMPTY_LIST), because a Resolve users that found nobody reads the same. Leave it empty to keep the agents a queue has. Larger queues are served from a group or a channel, which this Worker Type does not offer.",
       },
       {
         key: "authorizedUsers", label: "Authorized users", placeholder: "=verantwortliche.ids", fx: true,
         showIf: (v) => v.operation === "ensure-call-queue" || v.operation === "ensure-auto-attendant",
-        hint: "Optional. Ids from Resolve users of the people allowed to change this voice app's settings in Teams.",
+        hint: (v) => (v.operation === "ensure-call-queue"
+          ? "Optional. Ids from Resolve users of the people allowed to change this queue's settings in Teams. When set, an existing queue is brought to exactly this list, never emptied; left empty, an existing queue keeps the ones it has."
+          : "Optional. Ids from Resolve users of the people allowed to change this auto attendant's settings in Teams. Applied when the auto attendant is created."),
       },
       {
         key: "languageId", label: "Language", placeholder: "de-CH", fx: true,
@@ -4011,30 +4013,35 @@ const SERVICE_TASK_KINDS = [
         showIf: (v) => v.operation === "ensure-auto-attendant",
         hint: "Optional. A list of {name, start, end} with dates as YYYY-MM-DD, on which calls are disconnected; end is the day after the last holiday and may be left out for a single day. Every other call goes to the queue.",
       },
+      // A setting chosen here is what the queue is, also one that already exists; the
+      // first choice names nothing, so a new queue gets the default and an existing one
+      // keeps what it has (ADR-0463, amendment 2026-10-20).
       {
         key: "routingMethod", label: "Routing", type: "select",
         options: [
-          { v: "", l: "Attendant — ring every agent (default)" },
+          { v: "", l: "Keep — attendant for a new queue" },
+          { v: "attendant", l: "Attendant — ring every agent" },
           { v: "serial", l: "Serial" },
           { v: "round-robin", l: "Round robin" },
           { v: "longest-idle", l: "Longest idle" },
         ],
         showIf: (v) => v.operation === "ensure-call-queue",
+        hint: "A routing chosen here is also set on a queue that already exists. Keep leaves an existing queue's routing as it is.",
       },
       {
         key: "presenceBasedRouting", label: "Presence-based routing", type: "select",
-        options: [{ v: "", l: "On (default)" }, { v: "false", l: "Off" }],
+        options: [{ v: "", l: "Keep — on for a new queue" }, { v: "true", l: "On" }, { v: "false", l: "Off" }],
         showIf: (v) => v.operation === "ensure-call-queue",
-        hint: "On: a call is offered only to agents whose presence is Available.",
+        hint: "On: a call is offered only to agents whose presence is Available. On or Off is also set on a queue that already exists.",
       },
       {
         key: "conferenceMode", label: "Conference mode", type: "select",
-        options: [{ v: "", l: "On (default)" }, { v: "false", l: "Off" }],
+        options: [{ v: "", l: "Keep — on for a new queue" }, { v: "true", l: "On" }, { v: "false", l: "Off" }],
         showIf: (v) => v.operation === "ensure-call-queue",
       },
       {
         key: "allowOptOut", label: "Agents may opt out", type: "select",
-        options: [{ v: "", l: "Yes (default)" }, { v: "false", l: "No" }],
+        options: [{ v: "", l: "Keep — yes for a new queue" }, { v: "true", l: "Yes" }, { v: "false", l: "No" }],
         showIf: (v) => v.operation === "ensure-call-queue",
       },
       { group: "Output" },
@@ -4049,7 +4056,7 @@ const SERVICE_TASK_KINDS = [
             case "ensure-resource-account":
               return "Required. =antwort.objectId is the account a voice app is associated with; =antwort.created says whether this run made it, and =antwort.source where it was found (created, entra or teams).";
             case "ensure-call-queue":
-              return "Required. =antwort.id and =antwort.name identify the queue; =antwort.created says whether this run made it, and =antwort.agentsChanged whether it set an existing queue's agents to the list named here.";
+              return "Required. =antwort.id and =antwort.name identify the queue; =antwort.created says whether this run made it, and =antwort.changed lists what it set on an existing queue — agents, authorizedUsers, routingMethod and the like — empty when nothing differed; =antwort.agentsChanged says whether the agents were among them.";
             case "ensure-auto-attendant":
               return "Required. =antwort.id and =antwort.name identify the voice app; =antwort.created says whether this run made it.";
             default:

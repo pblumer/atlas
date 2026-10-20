@@ -9,14 +9,15 @@ import "sort"
 //
 // Required and Optional name authored values: each is a literal or, with a leading '=',
 // a FEEL expression evaluated over the variables the task sees at call time. Settings
-// name static values the compiler validates against [Settings] and defaults, because
-// each decides the shape of what is created rather than its content.
+// name static values the compiler validates against [Settings], because each decides the
+// shape of what is created rather than its content.
 //
-// Reconciled names the optional values an operation also brings an existing object to,
-// not only a new one. For those, not naming the value and naming an empty one mean
-// different things — leave it as it is, and make it empty — so [Prepare] passes such a
-// value on only when the model named it, and refuses one that resolved to nothing rather
-// than reading a variable nobody set as "empty".
+// Reconciled names the optional values and settings an operation also brings an existing
+// object to, not only a new one. For those, not naming a value and naming an empty or a
+// default one mean different things — leave it as it is, and make it so — so [Prepare]
+// lists in [Request.Reconcile] only what the model named, passes a reconciled list on
+// only when the model named it, and refuses one that resolved to nothing rather than
+// reading a variable nobody set as "nobody".
 type Op struct {
 	Label       string
 	Required    []string
@@ -47,11 +48,12 @@ var Ops = map[string]Op{
 		Required: []string{"name", "resourceAccountId"},
 		Optional: []string{"agents", "authorizedUsers", "languageId"},
 		Settings: []string{"routingMethod", "presenceBasedRouting", "conferenceMode", "allowOptOut"},
-		// The agents a model names are the queue's agents: a process run again after a
-		// change of staff means the new list, and a queue that kept the old one while the
-		// task reported success would be the failure nobody sees (ADR-0463, amendment
-		// 2026-10-19).
-		Reconciled:  []string{"agents"},
+		// What a model names is what the queue is: a process run again after a change of
+		// staff or of routing means the new values, and a queue that kept the old ones
+		// while the task reported success would be the failure nobody sees (ADR-0463,
+		// amendments 2026-10-19 and 2026-10-20). The language is not reconciled: it only
+		// changes what the queue's announcements say.
+		Reconciled:  []string{"agents", "authorizedUsers", "routingMethod", "presenceBasedRouting", "conferenceMode", "allowOptOut"},
 		NeedsResult: true,
 	},
 	"ensure-auto-attendant": {
@@ -122,17 +124,18 @@ var Attributes = map[string]Shape{
 	"holidays":          Holidays,
 }
 
-// Setting is one static value: the values it may take, and the one a model that
-// authors none gets. An empty Default makes the setting required.
+// Setting is one static value: the values it may take, and the one an object the request
+// creates gets when the model authors none. An empty Default makes the setting required.
 type Setting struct {
 	Values  []string
 	Default string
 }
 
 // Settings are the static values an operation may carry. They are compiled structure,
-// not authored content: the compiler refuses a value outside Values and applies the
-// default, so a job always carries one of these words and the runtime interprets
-// nothing (I5).
+// not authored content: the compiler refuses a value outside Values (I5). It does not
+// apply the default — whether the model named a setting is what tells an existing
+// object's setting to change from one to keep — so [Prepare] applies it, for an object
+// the request creates.
 var Settings = map[string]Setting{
 	// accountType decides the application the resource account is created for, and so
 	// which kind of voice app it can later be associated with. It has no default: a

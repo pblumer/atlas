@@ -53,6 +53,9 @@ const WORKERS = `<i>Console &rsaquo; Workers</i>`;
 // - `needs`   one line, always visible: what must exist before a task of this type runs.
 // - `steps`   the ordered setup, provider first, Atlas second, proof last.
 // - `trap`    the failure this type is actually reported with — omitted where there is none.
+// - `reference` optional { anchor, title }: a handbook card on what the tasks *do* — every
+//             operation, its result, the error codes a boundary can catch — linked beside
+//             the setup card, for a type whose operations need more than the field hints.
 export const WORKER_TYPE_DOCS = {
   worker: {
     anchor: "runbook-jobworker", title: "Job worker",
@@ -187,6 +190,7 @@ export const WORKER_TYPE_DOCS = {
       `Practise without a tenant: <code>ATLAS_TEAMSPHONE_MOCK=1</code> serves the same tasks from a tenant in the worker's memory, and <code>ATLAS_TEAMSPHONE_MOCK_USERS</code> names the people Resolve users finds.`,
     ],
     trap: `Teams shows a new resource account only after a synchronization. A voice app waits up to two minutes for its account and is then refused before anything is created — give the model a pause between creating the accounts and the voice apps (waiting for licences is one), rather than reading the delay as a fault.`,
+    reference: { anchor: "ref-teamsphone", title: "Teams Phone operations and error codes" },
   },
 
   // The three database entries quote the connection string exactly as the Console's own
@@ -506,5 +510,7 @@ function renderDoc(doc) {
     </details>
     <a class="wtdoc-link" href="${handbookHref(doc)}" target="_blank" rel="noopener"
        title="The handbook this server serves itself — no internet needed">Handbook: ${doc.title} <span class="ext" aria-hidden="true">&#8599;</span></a>
+    ${doc.reference ? `<a class="wtdoc-link" href="${HANDBOOK_URL}#${doc.reference.anchor}" target="_blank" rel="noopener"
+       title="What each operation takes and answers, in the handbook this server serves itself">Handbook: ${doc.reference.title} <span class="ext" aria-hidden="true">&#8599;</span></a>` : ""}
   </div>`;
 }

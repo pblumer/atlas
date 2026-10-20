@@ -12,6 +12,35 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A Teams Phone refusal can take an error boundary's path.** Six refusals a process may
+  have a path for carry a fixed code: `TEAMSPHONE_UPN_TAKEN` (the address belongs to a
+  person), `TEAMSPHONE_ACCOUNT_TYPE_MISMATCH`, `TEAMSPHONE_ACCOUNT_IN_USE`,
+  `TEAMSPHONE_ACCOUNT_NOT_VISIBLE`, `TEAMSPHONE_WOULD_EMPTY_LIST` and
+  `TEAMSPHONE_TOO_MANY_AGENTS`. When the task's process catches the code with an error
+  boundary or an error event subprocess, the instance takes that path at once, with no retry
+  spent; a code the process does not catch fails and is retried as before. Until now an
+  error boundary on a Teams Phone task never fired
+  ([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendment 2026-10-20).
+- **The handbook explains every Teams Phone operation.** A reference card lists each
+  operation with what it needs, what it answers, how an existing queue is reconciled, the
+  error codes and what to do with each, and the BPMN attributes a model deployed over the
+  API or MCP writes. The properties panel links to it beside the setup card.
+
+### Changed
+
+- **Ensure call queue also reconciles routing and authorized users.** A queue that already
+  exists is brought to the authorized users, routing, presence-based routing, conference
+  mode and opt-out its task names, in one call to Teams, and the answer lists what it set in
+  `changed`; `agentsChanged` stays. What the task leaves out is kept: the Modeler's first
+  choice for each setting is now *Keep*, a default applies only to a new queue, and the
+  compiler no longer fills a default into the compiled task. An empty list of authorized users for a
+  queue that has some is refused like an empty list of agents, and one that resolved to
+  nothing is refused. A deployed model whose task names a setting now sets it on an existing
+  queue — also one built from the Repository template before 1.2.0, which named
+  `routingMethod="attendant"`; choose *Keep* there to leave the queue's routing alone.
+
 ### Fixed
 
 - **The handbook's German reads as German.** Much of it had been translated word for word

@@ -1,10 +1,10 @@
 {
   "id": "atlas.teams-phone",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "kind": "connector",
   "title": "Microsoft Teams Phone voice apps",
   "author": "Atlas core",
-  "description": "Provision a Teams Phone call queue and the auto attendant in front of it, with the resource accounts that answer their calls — and remove them again — without authoring PowerShell. A model names the operation and supplies values; the worker runs fixed PowerShell shipped with Atlas on a host that has PowerShell 7 and the MicrosoftTeams module, signing in with the app's certificate from the vault (ADR-0463). Every ensure operation looks before it creates, so a retried job converges instead of creating a second queue; a resource account Entra already holds but Teams does not show yet is adopted rather than refused. Licences and the employee id stay Entra operations.",
+  "description": "Provision a Teams Phone call queue and the auto attendant in front of it, with the resource accounts that answer their calls — and remove them again — without authoring PowerShell. A model names the operation and supplies values; the worker runs fixed PowerShell shipped with Atlas on a host that has PowerShell 7 and the MicrosoftTeams module, signing in with the app's certificate from the vault (ADR-0463). Every ensure operation looks before it creates, so a retried job converges instead of creating a second queue; a resource account Entra already holds but Teams does not show yet is adopted rather than refused. Ensure call queue also brings an existing queue to the agents, authorized users and routing a model names. A refusal a process may have a path for carries a TEAMSPHONE_ code and is thrown as a BPMN error when the process catches that code. Licences and the employee id stay Entra operations.",
   "engineCompat": ">=0.13",
   "template": {
     "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
@@ -43,24 +43,45 @@
       { "label": "Transfer to (Ensure auto attendant)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:transferTarget" },
         "description": "The resource account id of the call queue the auto attendant hands every call to." },
       { "label": "Agents (Ensure call queue)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:agents" },
-        "description": "Ids from Resolve users, at most 20. When set, an existing queue is brought to exactly this list, but never emptied: an empty list for a queue with agents is refused. Empty keeps the agents a queue has, and creates a new queue without agents." },
+        "description": "Ids from Resolve users, at most 20. When set, an existing queue is brought to exactly this list, but never emptied: an empty list for a queue with agents is refused (TEAMSPHONE_WOULD_EMPTY_LIST). Empty keeps the agents a queue has, and creates a new queue without agents." },
       { "label": "Authorized users (Ensure call queue / auto attendant)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:authorizedUsers" },
-        "description": "Ids from Resolve users of the people who may change the voice app's settings in Teams." },
+        "description": "Ids from Resolve users of the people who may change the voice app's settings in Teams. On a call queue, an existing queue is brought to exactly this list but never emptied, and empty keeps the ones it has; on an auto attendant, applied when it is created." },
       { "label": "Language (Ensure call queue optional / auto attendant)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:languageId" },
         "description": "A language tag Teams supports, e.g. de-CH or en-US. Required on an auto attendant, which speaks it." },
       { "label": "Time zone (Ensure auto attendant)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:timeZone" },
         "description": "A Windows time zone id, e.g. W. Europe Standard Time." },
       { "label": "Holidays (Ensure auto attendant)", "type": "Text", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:holidays" },
         "description": "Optional. A list of {name, start, end} with dates as YYYY-MM-DD, on which calls are disconnected; end is the day after the last holiday and may be left out for one day." },
-      { "label": "Routing (Ensure call queue)", "type": "Dropdown", "value": "attendant", "binding": { "type": "property", "name": "atlas:routingMethod" },
+      { "label": "Routing (Ensure call queue)", "type": "Dropdown", "value": "", "binding": { "type": "property", "name": "atlas:routingMethod" },
         "choices": [
+          { "name": "Keep — attendant for a new queue", "value": "" },
           { "name": "Attendant — ring every agent", "value": "attendant" },
           { "name": "Serial", "value": "serial" },
           { "name": "Round robin", "value": "round-robin" },
           { "name": "Longest idle", "value": "longest-idle" }
+        ],
+        "description": "A routing chosen here is also set on a queue that already exists; Keep leaves an existing queue's routing as it is." },
+      { "label": "Presence-based routing (Ensure call queue)", "type": "Dropdown", "value": "", "binding": { "type": "property", "name": "atlas:presenceBasedRouting" },
+        "choices": [
+          { "name": "Keep — on for a new queue", "value": "" },
+          { "name": "On", "value": "true" },
+          { "name": "Off", "value": "false" }
+        ],
+        "description": "On offers a call only to agents whose presence is Available. On or Off is also set on a queue that already exists." },
+      { "label": "Conference mode (Ensure call queue)", "type": "Dropdown", "value": "", "binding": { "type": "property", "name": "atlas:conferenceMode" },
+        "choices": [
+          { "name": "Keep — on for a new queue", "value": "" },
+          { "name": "On", "value": "true" },
+          { "name": "Off", "value": "false" }
+        ] },
+      { "label": "Agents may opt out (Ensure call queue)", "type": "Dropdown", "value": "", "binding": { "type": "property", "name": "atlas:allowOptOut" },
+        "choices": [
+          { "name": "Keep — yes for a new queue", "value": "" },
+          { "name": "Yes", "value": "true" },
+          { "name": "No", "value": "false" }
         ] },
       { "label": "Result variable", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:resultVariable" },
-        "description": "Receives the answer: ids and notFound; objectId, created and source; id, name and created; or removed. Required on every operation but the removes." }
+        "description": "Receives the answer: ids and notFound; objectId, created and source; id, name, created and, for a call queue, changed; or removed. Required on every operation but the removes." }
     ]
   }
 }

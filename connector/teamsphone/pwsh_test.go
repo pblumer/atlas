@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -84,6 +85,7 @@ type stubTenant struct {
 
 type stubState struct {
 	Connects  int                       `json:"connects"`
+	Sets      int                       `json:"sets"`
 	Users     map[string]string         `json:"users"`
 	Accounts  map[string]map[string]any `json:"accounts"`
 	Apps      map[string]map[string]any `json:"apps"`
@@ -266,6 +268,24 @@ func TestTheShippedScriptProvisionsAndUnwinds(t *testing.T) {
 		}
 		return out
 	}
+	coded := func(err error, code string) bool {
+		var refusal *teamsphone.Refusal
+		return errors.As(err, &refusal) && refusal.Code == code
+	}
+	// changed reports whether an ensure-call-queue answered that it changed exactly the
+	// named values, in the sorted order the answer lists them in.
+	changed := func(out map[string]any, names ...string) bool {
+		got, _ := out["changed"].([]any)
+		if len(got) != len(names) {
+			return false
+		}
+		for i, n := range names {
+			if got[i] != n {
+				return false
+			}
+		}
+		return true
+	}
 
 	users := must("resolve-users", map[string]any{"users": "anna@contoso.example, ghost@contoso.example"})
 	if ids, _ := users["ids"].([]any); len(ids) != 1 || ids[0] != "user-anna" {
@@ -287,7 +307,7 @@ func TestTheShippedScriptProvisionsAndUnwinds(t *testing.T) {
 	// Teams does not show the new account yet: a queue for it is refused before anything
 	// is created, and a repeated ensure adopts the account from Entra.
 	if _, err := run("ensure-call-queue", map[string]any{"name": "CQ Zürich", "resourceAccountId": cqID}); err == nil ||
-		!strings.Contains(err.Error(), "not visible to Teams yet") {
+		!strings.Contains(err.Error(), "not visible to Teams yet") || !coded(err, teamsphone.CodeAccountNotVisible) {
 		t.Errorf("a queue for an account Teams does not show yet: %v", err)
 	}
 	if again := must("ensure-resource-account", cqArgs); again["created"] != false || again["source"] != "entra" || again["objectId"] != cqID {
@@ -297,54 +317,82 @@ func TestTheShippedScriptProvisionsAndUnwinds(t *testing.T) {
 		t.Errorf("third ensure-resource-account = %v, want it found in Teams", third)
 	}
 	if _, err := run("ensure-resource-account", map[string]any{"userPrincipalName": "anna@contoso.example", "displayName": "Zürich Empfang", "accountType": "call-queue"}); err == nil ||
-		!strings.Contains(err.Error(), "enabled user account") {
+		!strings.Contains(err.Error(), "enabled user account") || !coded(err, teamsphone.CodeUPNTaken) {
 		t.Errorf("an enabled user's address as a resource account: %v", err)
 	}
 	aaID := must("ensure-resource-account", map[string]any{"userPrincipalName": "aa_zuerich@contoso.example", "displayName": "Zürich Empfang", "accountType": "auto-attendant"})["objectId"].(string)
 	must("ensure-resource-account", map[string]any{"userPrincipalName": "aa_zuerich@contoso.example", "displayName": "Zürich Empfang", "accountType": "auto-attendant"})
 
-	// A queue made without naming its agents gets none — not one blank agent.
+	// A queue made without naming its lists gets none — not one blank entry each — and
+	// the default settings, which a repeat leaves without a single change.
 	queueArgs := map[string]any{"name": "CQ Zürich", "resourceAccountId": cqID, "routingMethod": "serial", "languageId": "de-CH"}
 	queue := must("ensure-call-queue", queueArgs)
-	if again := must("ensure-call-queue", queueArgs); queue["created"] != true || again["id"] != queue["id"] || again["agentsChanged"] != false {
+	if again := must("ensure-call-queue", queueArgs); queue["created"] != true || again["id"] != queue["id"] || !changed(again) {
 		t.Errorf("ensure-call-queue did not converge: %v, then %v", queue, again)
 	}
 	queueID := queue["id"].(string)
-	if params := stub.load().Apps[queueID]["Params"].(map[string]any); params["RoutingMethod"] != "Serial" || params["ConferenceMode"] != true {
+	app := func(id string) map[string]any { return stub.load().Apps[id] }
+	listOf := func(id, name string) []any { l, _ := app(id)[name].([]any); return l }
+	if params := app(queueID)["Params"].(map[string]any); params["RoutingMethod"] != "Serial" || params["ConferenceMode"] != true || params["AllowOptOut"] != true {
 		t.Errorf("queue created with %v", params)
 	}
-	agentsOf := func(id string) []any { users, _ := stub.load().Apps[id]["Users"].([]any); return users }
-	agentsNow := func() []any { return agentsOf(queueID) }
-	if users := agentsNow(); len(users) != 0 {
-		t.Errorf("a queue made without agents has the agents %v", users)
+	if users, owners := listOf(queueID, "Users"), listOf(queueID, "AuthorizedUsers"); len(users) != 0 || len(owners) != 0 {
+		t.Errorf("a queue made without lists has the agents %v and the authorized users %v", users, owners)
 	}
-	// A change of staff reaches the existing queue, in the order serial routing rings
-	// in, and a repeat of it changes nothing more.
-	staffed := map[string]any{"name": "CQ Zürich", "resourceAccountId": cqID, "agents": []any{"user-beat", "USER-ANNA"}, "routingMethod": "serial"}
-	if got := must("ensure-call-queue", staffed); got["created"] != false || got["agentsChanged"] != true {
-		t.Errorf("ensure-call-queue with new agents = %v, want them set on the existing queue", got)
+	if n := stub.load().Sets; n != 0 {
+		t.Errorf("a repeat with nothing to change called Set-CsCallQueue %d times", n)
 	}
-	if users := agentsNow(); len(users) != 2 || users[0] != "user-beat" || users[1] != "USER-ANNA" {
+	// A change of staff and of routing reaches the existing queue in one Set-CsCallQueue,
+	// the agents in the order serial routing rings them in, and a repeat changes nothing.
+	staffed := map[string]any{"name": "CQ Zürich", "resourceAccountId": cqID, "agents": []any{"user-beat", "USER-ANNA"},
+		"authorizedUsers": "owner-1", "routingMethod": "serial", "presenceBasedRouting": "false"}
+	if got := must("ensure-call-queue", staffed); got["created"] != false || !changed(got, "agents", "authorizedUsers", "presenceBasedRouting") || got["agentsChanged"] != true {
+		t.Errorf("ensure-call-queue with new agents and routing = %v, want them set on the existing queue", got)
+	}
+	st := stub.load()
+	if users := listOf(queueID, "Users"); len(users) != 2 || users[0] != "user-beat" || users[1] != "USER-ANNA" {
 		t.Errorf("the queue's agents are %v, want [user-beat USER-ANNA]", users)
 	}
-	if got := must("ensure-call-queue", staffed); got["agentsChanged"] != false {
-		t.Errorf("a repeated change of staff = %v, want nothing left to change", got)
+	if owners := listOf(queueID, "AuthorizedUsers"); len(owners) != 1 || owners[0] != "owner-1" {
+		t.Errorf("the queue's authorized users are %v, want [owner-1]", owners)
 	}
-	if got := must("ensure-call-queue", map[string]any{"name": "CQ Zürich", "resourceAccountId": cqID}); got["agentsChanged"] != false || len(agentsNow()) != 2 {
-		t.Errorf("ensure-call-queue without agents = %v and left %v; want the agents as they were", got, agentsNow())
+	if q := st.Apps[queueID]; q["PresenceBasedRouting"] != false || q["RoutingMethod"] != "Serial" || q["ConferenceMode"] != true || st.Sets != 1 {
+		t.Errorf("the queue reads %v after %d Set-CsCallQueue calls; want presence-based routing off in one call, the rest as it was", q, st.Sets)
 	}
-	if _, err := run("ensure-call-queue", map[string]any{"name": "CQ Zürich", "resourceAccountId": cqID, "agents": []any{}}); err == nil ||
-		!strings.Contains(err.Error(), "would remove every agent") {
-		t.Errorf("an empty list for a staffed queue: %v; want it refused", err)
+	if got := must("ensure-call-queue", staffed); !changed(got) || stub.load().Sets != 1 {
+		t.Errorf("a repeated change = %v, want nothing left to change and no further call", got)
 	}
-	if len(agentsNow()) != 2 {
-		t.Errorf("a refused reconciliation left the agents %v", agentsNow())
+	// Authorized users named in another case are no change, but on a serial queue another
+	// order of agents is, even with the routing left out; the settings the model leaves
+	// out stay as the queue has them.
+	same := map[string]any{"name": "CQ Zürich", "resourceAccountId": cqID, "agents": "user-anna, user-beat", "authorizedUsers": "OWNER-1"}
+	if got := must("ensure-call-queue", same); !changed(got, "agents") {
+		t.Errorf("the same agents in another order on a serial queue = %v, want the order set", got)
 	}
-	// A queue made with its agents carries them from the start.
+	if got := must("ensure-call-queue", map[string]any{"name": "CQ Zürich", "resourceAccountId": cqID, "routingMethod": "round-robin", "agents": "USER-ANNA, user-beat"}); !changed(got, "routingMethod") {
+		t.Errorf("round-robin with the agents in another order = %v, want only the routing changed", got)
+	}
+	if q := app(queueID); q["RoutingMethod"] != "RoundRobin" || q["PresenceBasedRouting"] != false {
+		t.Errorf("the queue reads %v, want round-robin with presence-based routing still off", q)
+	}
+	for _, list := range []string{"agents", "authorizedUsers"} {
+		before := stub.load().Sets
+		_, err := run("ensure-call-queue", map[string]any{"name": "CQ Zürich", "resourceAccountId": cqID, list: []any{}, "conferenceMode": "false"})
+		if err == nil || !strings.Contains(err.Error(), "would remove every") || !coded(err, teamsphone.CodeWouldEmptyList) {
+			t.Errorf("an empty %s for a queue that has some: %v; want it refused", list, err)
+		}
+		if stub.load().Sets != before || app(queueID)["ConferenceMode"] != true {
+			t.Errorf("a refused reconciliation of %s still changed the queue", list)
+		}
+	}
+	// A queue made with its lists carries them from the start.
 	must("remove-call-queue", map[string]any{"resourceAccountId": cqID})
 	remade := must("ensure-call-queue", staffed)
-	if users := agentsOf(remade["id"].(string)); remade["created"] != true || remade["agentsChanged"] != false || len(users) != 2 || users[0] != "user-beat" {
+	if users := listOf(remade["id"].(string), "Users"); remade["created"] != true || !changed(remade) || len(users) != 2 || users[0] != "user-beat" {
 		t.Errorf("ensure-call-queue with agents = %v carrying %v, want a new queue with [user-beat USER-ANNA]", remade, users)
+	}
+	if owners := listOf(remade["id"].(string), "AuthorizedUsers"); len(owners) != 1 {
+		t.Errorf("the new queue's authorized users are %v, want [owner-1]", owners)
 	}
 	attendantArgs := map[string]any{
 		"name": "AA Zürich", "resourceAccountId": aaID, "transferTarget": cqID, "languageId": "de-CH",
@@ -354,12 +402,21 @@ func TestTheShippedScriptProvisionsAndUnwinds(t *testing.T) {
 	if attendant["created"] != true || must("ensure-auto-attendant", attendantArgs)["created"] != false {
 		t.Errorf("ensure-auto-attendant did not converge: %v", attendant)
 	}
-	st := stub.load()
+	st = stub.load()
 	if params := st.Apps[attendant["id"].(string)]["Params"].(map[string]any); params["TransferTarget"] != cqID || params["Holidays"] != float64(1) {
 		t.Errorf("auto attendant created with %v", params)
 	}
 	if len(st.Schedules) != 1 || st.Schedules[0]["Start"] != "25/12/2026" || st.Schedules[0]["End"] != "26/12/2026" {
 		t.Errorf("holiday schedules = %v, want Christmas Day in Teams' date form", st.Schedules)
+	}
+
+	// An attendant's account carries no queue, and a queue's remove does not take the
+	// attendant away: both are refusals a process can catch by their code.
+	if _, err := run("ensure-call-queue", map[string]any{"name": "CQ Falsch", "resourceAccountId": aaID}); !coded(err, teamsphone.CodeAccountTypeMismatch) {
+		t.Errorf("a queue on an attendant's account: %v; want it refused as %s", err, teamsphone.CodeAccountTypeMismatch)
+	}
+	if _, err := run("remove-call-queue", map[string]any{"resourceAccountId": aaID}); !coded(err, teamsphone.CodeAccountInUse) {
+		t.Errorf("remove-call-queue on an attendant's account: %v; want it refused as %s", err, teamsphone.CodeAccountInUse)
 	}
 
 	for _, step := range []struct{ op, account string }{
