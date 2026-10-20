@@ -1288,14 +1288,12 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 // handleListProcesses lists deployed definitions in registration order.
 func (s *Server) handleListProcesses(w http.ResponseWriter, r *http.Request) {
 	list := []processResp{}
-	var loadErr error
 	s.do(func() {
 		// The application names are a convenience on a list every view reads, so an
-		// application store that cannot be read costs the names, not the list.
-		projs, err := s.projectsByID()
-		if err != nil {
-			loadErr = err
-		}
+		// application store that cannot be read costs the names, not the list. The
+		// failure is not lost by being swallowed here: every application route reads
+		// the same store and answers it with a 500.
+		projs, _ := s.projectsByID()
 		principal := httpapi.PrincipalFrom(r.Context())
 		for _, key := range s.order {
 			d := s.deployments[key]
@@ -1325,9 +1323,6 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	})
-	if loadErr != nil {
-		slog.Warn("list processes: application names left out", slog.String("reason", loadErr.Error()))
-	}
 	// The people are named after the writer's turn, for the reason handleListDrafts
 	// gives.
 	name := s.principalNamer()
