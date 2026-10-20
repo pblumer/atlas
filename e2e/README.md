@@ -504,6 +504,15 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   applied document and Save keeps it, a document of another DMN version is refused naming both
   versions, and a collaborator's change waits for an applied source and for an auto-layout. The form editor's schema tab says
   **Source**, and an edit there is what Save writes.
+- **`start-groups.spec.mjs`**: the Tasks app's **Start** view against a stubbed API — the
+  startable processes sit under one heading per application, named by the listing's
+  `applicationName`, sorted by name, with a process under no application or under one the
+  viewer may not see in **Other** at the end; a closed heading stays closed across a reload;
+  the filter matches a process's name, its id and its application's name, every word has to
+  match, and while it is in use every group with a match is open; with nothing filed under a
+  visible application the list has no headings; a star puts a process into **Favourites** at the
+  top without opening it and without taking it out of its application, and the mark follows the
+  process id across a new version.
 
 ## Rendering a conformance gallery diagram
 

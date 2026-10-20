@@ -9780,12 +9780,21 @@ async function viewTasks(preselectKey) {
 
 // ---------- Start a process via its start form (ADR-0028) ----------
 async function viewStartProcess() {
-  const state = { procs: [], selected: null, form: null, links: [] };
+  const state = {
+    procs: [], selected: null, form: null, links: [], query: "",
+    collapsed: loadStartSet(START_COLLAPSED_KEY), favourites: loadStartSet(START_FAVOURITES_KEY),
+  };
   view.innerHTML = `
     <div class="tasks" id="start-grid">
       <section class="tasks-list-pane">
         <header class="tasks-list-head"><h2>Start a process</h2>
           <button class="btn ghost small" id="start-refresh" title="Reload the list of startable processes">Refresh</button></header>
+        <div class="tasks-toolbar">
+          <span class="tasks-search">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+            <input id="start-q" type="text" placeholder="${esc(tr("start.filter"))}" aria-label="${esc(tr("start.filter"))}" spellcheck="false"/>
+          </span>
+        </div>
         <ul class="tasks-list" id="start-list"><li class="tasks-empty muted">Loading&hellip;</li></ul>
       </section>
       <section class="tasks-detail" id="start-detail"></section>
@@ -9933,20 +9942,77 @@ async function viewStartProcess() {
     });
   }
 
+  // renderList draws the startable processes grouped by the application each was
+  // deployed under, so a growing list stays one a person can find their way down.
+  // The filter box narrows it first: every word has to match the process's name, its
+  // id or its application's name. While it is in use every group is open, because a
+  // match hidden in a closed group would read as no match at all.
   function renderList() {
     if (!state.procs.length) {
       listEl.innerHTML = `<li class="tasks-empty muted">No process has a start form. Link one on a start event in the Modeler's Implement tab.</li>`;
       return;
     }
-    listEl.innerHTML = state.procs.map((p) => {
+    const q = state.query.trim().toLowerCase();
+    const words = q.split(/\s+/).filter(Boolean);
+    const shown = state.procs.filter((p) => {
+      const hay = [p.name, p.processId, p.applicationName].filter(Boolean).join(" ").toLowerCase();
+      return words.every((w) => hay.includes(w));
+    });
+    if (!shown.length) {
+      listEl.innerHTML = `<li class="tasks-empty muted">${esc(tr("start.noMatch", { q: state.query.trim() }))}</li>`;
+      return;
+    }
+    const groups = startGroups(shown, state.favourites);
+    const item = (p) => {
       const sel = p.key === state.selected ? " selected" : "";
+      const fav = state.favourites.has(p.processId);
+      const favLabel = esc(tr(fav ? "start.fav.remove" : "start.fav.add"));
+      // The star leads the row: the row clips at its right edge when a name is long,
+      // and a control that can be clipped away is one somebody cannot reach.
       return `<li class="tasks-item${sel}" data-key="${p.key}">
+        <button class="start-fav${fav ? " on" : ""}" data-fav="${esc(p.processId)}" aria-pressed="${fav}" title="${favLabel}" aria-label="${favLabel}">
+          <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.6l1.9 4.1 4.5.5-3.4 3 1 4.4L8 11.3l-4 2.3 1-4.4-3.4-3 4.5-.5z"/></svg>
+        </button>
         <div class="tasks-item-top"><span class="tasks-item-title">${esc(p.name || p.processId)}</span>
           <span class="chip">v${p.version}</span></div>
         <div class="tasks-item-sub muted">${esc(p.processId)}</div></li>`;
-    }).join("");
+    };
+    // Nothing is filed under an application this viewer may see: a heading over the
+    // one group would only push the list down.
+    if (groups.length === 1 && groups[0].id === "other") {
+      listEl.innerHTML = groups[0].procs.map(item).join("");
+    } else {
+      listEl.innerHTML = groups.map((g) => {
+        const open = words.length > 0 || !state.collapsed.has(g.id);
+        const title = g.id === "other" ? ` title="${esc(tr("start.group.otherTitle"))}"` : "";
+        return `<li class="start-group">
+          <button class="start-group-head" data-group="${esc(g.id)}" aria-expanded="${open}"${title}>
+            <span class="start-group-label">${esc(g.label)}</span><span class="tasks-count">${g.procs.length}</span>
+          </button></li>${open ? g.procs.map(item).join("") : ""}`;
+      }).join("");
+    }
     listEl.querySelectorAll(".tasks-item").forEach((li) =>
       li.addEventListener("click", () => { state.selected = Number(li.dataset.key); renderList(); renderDetail(); }));
+    listEl.querySelectorAll(".start-group-head").forEach((b) =>
+      b.addEventListener("click", () => {
+        // While filtering every group is held open, so a click there changes nothing
+        // the viewer could see; it is not taken as a wish to close the group later.
+        if (words.length) return;
+        const id = b.dataset.group;
+        if (state.collapsed.has(id)) state.collapsed.delete(id); else state.collapsed.add(id);
+        saveStartSet(START_COLLAPSED_KEY, state.collapsed);
+        renderList();
+      }));
+    // The star marks the process, not the version: a favourite follows the process
+    // id, so deploying v2 keeps it starred. It does not open the process it sits on.
+    listEl.querySelectorAll(".start-fav").forEach((b) =>
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = b.dataset.fav;
+        if (state.favourites.has(id)) state.favourites.delete(id); else state.favourites.add(id);
+        saveStartSet(START_FAVOURITES_KEY, state.favourites);
+        renderList();
+      }));
   }
 
   async function load() {
@@ -9974,7 +10040,48 @@ async function viewStartProcess() {
     }
   }
   view.querySelector("#start-refresh").addEventListener("click", load);
+  view.querySelector("#start-q").addEventListener("input", (e) => { state.query = e.target.value; renderList(); });
   await load();
+}
+
+// startGroups buckets the Start view's processes by the application each was
+// deployed under, named as the listing names it (applicationName). A process filed
+// under no application, or under one the viewer may not see — the listing then
+// leaves the name out — goes to "other", which comes last. Applications sort by
+// name, since that is what a person scans for; the processes keep the order given.
+//
+// The viewer's favourites (process ids) come first, as a group of their own. A
+// favourite stays in its application's group too: the favourites are a shortcut, and
+// an application's group that lost a process whenever somebody starred it would
+// no longer say what the application offers.
+function startGroups(procs, favourites) {
+  const byId = new Map();
+  for (const p of procs) {
+    const id = p.applicationName && p.projectId ? "app:" + p.projectId : "other";
+    if (!byId.has(id)) byId.set(id, { id, label: id === "other" ? tr("start.group.other") : p.applicationName, procs: [] });
+    byId.get(id).procs.push(p);
+  }
+  const groups = [...byId.values()].sort((a, b) =>
+    (a.id === "other") - (b.id === "other") || a.label.localeCompare(b.label));
+  const favs = procs.filter((p) => favourites && favourites.has(p.processId));
+  return favs.length ? [{ id: "fav", label: tr("start.group.favourites"), procs: favs }, ...groups] : groups;
+}
+
+// The groups a viewer closed and the processes they starred on the Start view,
+// remembered in this browser like the inbox's list width. Both are sets of strings —
+// group ids and process ids — kept as a JSON array under one key each.
+const START_COLLAPSED_KEY = "atlas.start.collapsed";
+const START_FAVOURITES_KEY = "atlas.start.favourites";
+
+function loadStartSet(key) {
+  try {
+    const ids = JSON.parse(localStorage.getItem(key) || "[]");
+    return new Set(Array.isArray(ids) ? ids.filter((x) => typeof x === "string") : []);
+  } catch { return new Set(); }
+}
+
+function saveStartSet(key, ids) {
+  try { localStorage.setItem(key, JSON.stringify([...ids])); } catch { /* nothing to remember it with */ }
 }
 
 // viewSwitchedOff is what a bookmark into the catalogue's views opens on a server that

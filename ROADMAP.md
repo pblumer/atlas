@@ -1694,6 +1694,10 @@ the hand-written Details panel one vertical slice at a time:
 - ✅ **Task folders** in the Tasks app: saved filters stored as structured rules and
   generated into FEEL, evaluated on the server off the run loop
   ([ADR-0268](docs/adr/0268-task-folders-are-saved-filters.md)).
+- ✅ The Tasks app's **Start** list grouped by application, with a filter and favourites;
+  the process listing names each row's application where the caller may see it.
+- 🔲 Start favourites kept per person on the server, so they follow somebody across
+  browsers and devices (today they are kept in the browser).
 
 **Publication** ([ADR-0029](docs/adr/0029-public-process-start-links.md)):
 - ✅ Opt-in, revocable public start links: a scoped, unauthenticated

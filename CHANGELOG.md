@@ -14,6 +14,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Start view groups its processes by application, filters them and keeps favourites.**
+  The Tasks app's Start list was one alphabetical column of every process with a start form.
+  It now sits under one heading per application the process was deployed under, sorted by
+  name, each with its count, and a heading opens and closes the processes beneath it; the
+  browser remembers which are closed. A filter box above the list narrows it by the process's
+  name, its id and its application's name. A star on a row adds the process to **Favourites**
+  at the top of the list; the mark follows the process id, so a new version keeps it, and is
+  kept in this browser. Processes under no application, or under one you may not see, are
+  listed under **Other**. For this, `GET /api/v1/processes` names each row's application in
+  `applicationName` — only where the caller may see that application, so a private
+  application's name stays as hidden as the application.
 - **A step's form opens from the canvas too.** An element that names a form now has
   **Open form** in its context pad, and in the Implement view a start event or user task
   with a form carries a small form mark that opens it. Both take the way the panel's

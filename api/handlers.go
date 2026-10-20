@@ -90,6 +90,13 @@ type processResp struct {
 	// design-time artifacts (ADR-0034). Empty for a definition deployed outside a
 	// project, which the UI shows under "Ungrouped".
 	ProjectID string `json:"projectId,omitempty"`
+	// ApplicationName is the name of that application, so the Tasks app's Start view
+	// can group the startable processes under it without reading the application
+	// list. Absent where the caller may not see the application (ADR-0071): a private
+	// application's name stays as hidden as the application, and only its opaque id
+	// is listed. Absent, too, for a definition filed under no application or under
+	// one deleted since.
+	ApplicationName string `json:"applicationName,omitempty"`
 	// CollaborationKey groups a collaboration's pools: when non-zero, this process
 	// is a pool of a collaboration and the value is the stable key the Operations
 	// replay view is opened with (#/operations/c/{collaborationKey}). Zero for a
@@ -1279,11 +1286,23 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 }
 
 // handleListProcesses lists deployed definitions in registration order.
-func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleListProcesses(w http.ResponseWriter, r *http.Request) {
 	list := []processResp{}
+	var loadErr error
 	s.do(func() {
+		// The application names are a convenience on a list every view reads, so an
+		// application store that cannot be read costs the names, not the list.
+		projs, err := s.projectsByID()
+		if err != nil {
+			loadErr = err
+		}
+		principal := httpapi.PrincipalFrom(r.Context())
 		for _, key := range s.order {
 			d := s.deployments[key]
+			appName := ""
+			if p, ok := projs[d.ProjectID]; ok && scopeRank(p.effectiveRole(principal, s.authEnabled)) > 0 {
+				appName = p.Name
+			}
 			list = append(list, processResp{
 				Key:              d.Key,
 				ProcessID:        d.ProcessID,
@@ -1291,6 +1310,7 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				Version:          d.Version,
 				DeployedAt:       d.DeployedAt,
 				ProjectID:        d.ProjectID,
+				ApplicationName:  appName,
 				CollaborationKey: s.collaborationKeyOf(d),
 				StartFormID:      d.cp.StartFormId(),
 				StartVariables:   startVariablesOf(d.cp),
@@ -1305,6 +1325,9 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 			})
 		}
 	})
+	if loadErr != nil {
+		slog.Warn("list processes: application names left out", slog.String("reason", loadErr.Error()))
+	}
 	// The people are named after the writer's turn, for the reason handleListDrafts
 	// gives.
 	name := s.principalNamer()
