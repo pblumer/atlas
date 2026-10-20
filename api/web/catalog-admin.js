@@ -26,6 +26,9 @@
 // what replaced the window.prompt pickers elsewhere, and it is covered by an
 // end-to-end test against exactly the list length a prompt could not show.
 import { openPickModal } from "./pickmodal.js";
+// The plan, and a box for every catalogue, product and process the file would
+// replace (ADR-draft-application-package-export).
+import { importAsking } from "./importchoices.js";
 import { fmtDateTime } from "./datefmt.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
@@ -1349,6 +1352,8 @@ function importRefusal(err) {
 function importSummary(res) {
   const n = (list) => (list || []).length;
   const parts = [`${n(res.created)} created`, `${n(res.updated)} updated`];
+  const kept = (res.artifacts || []).filter((a) => a.outcome === "kept").length;
+  if (kept) parts.push(`${kept} kept as they were`);
   if (n(res.deployed)) parts.push(`${n(res.deployed)} processes deployed`);
   if (n(res.unchanged)) parts.push(`${n(res.unchanged)} processes unchanged`);
   if (n(res.releases)) parts.push(`${n(res.releases)} published`);
@@ -1400,11 +1405,14 @@ function wireTransfer({ api, toast, view }, cat) {
         const doc = await readDocument(card.querySelector('[name="productsFile"]'));
         let res;
         try {
-          res = await api("POST", `/api/v1/catalogs/import?into=${enc(cat.id)}`, doc);
+          res = await importAsking((query) => api("POST",
+            `/api/v1/catalogs/import?into=${enc(cat.id)}${query ? "&" + query : ""}`, doc),
+          { title: "Import products" });
         } catch (err) {
           report.innerHTML = importRefusal(err);
           return;
         }
+        if (!res) return;
         toast(importSummary(res));
         redraw();
       }
@@ -1432,11 +1440,13 @@ function wireImport({ api, toast, view }) {
     if (card.querySelector('[name="publish"]').checked) doc.publish = true;
     let res;
     try {
-      res = await api("POST", "/api/v1/catalogs/import", doc);
+      res = await importAsking((query) => api("POST", `/api/v1/catalogs/import${query ? "?" + query : ""}`, doc),
+        { title: "Import a shop" });
     } catch (err) {
       report.innerHTML = importRefusal(err);
       return;
     }
+    if (!res) return;
     toast(importSummary(res));
     redraw();
   });

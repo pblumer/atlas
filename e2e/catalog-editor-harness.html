@@ -82,11 +82,17 @@
       // refusal, problems and all. null lets every import through.
       window.__importRefusal = null;
 
+      // The plan an import's dry run answers (ADR-draft-application-package-export):
+      // its artifacts, each new, unchanged or changed. A spec sets changed ones to
+      // see the page ask; the default asks nothing.
+      window.__importPlan = [{ ref: "product:p1", name: "P1", status: "new", outcome: "created" }];
+
       const api = async (method, url, body) => {
         window.__sent.push({ method, url, body });
         if (/\/catalogs\/import/.test(url) && window.__importRefusal) {
           throw Object.assign(new Error("refused"), { status: 422, body: window.__importRefusal });
         }
+        if (/\/catalogs\/import.*dryRun=true/.test(url)) return { dryRun: true, created: [], updated: [], artifacts: window.__importPlan };
         if (/\/catalogs\/import/.test(url)) return { created: ["product:p1"], updated: [], deployed: ["prov"] };
         if (/\/catalogs$/.test(url)) return [CAT];
         if (/approver-report/.test(url)) return { problems: [] };

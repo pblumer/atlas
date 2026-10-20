@@ -13,6 +13,7 @@ import { enhanceTable } from "./table.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { renderDrgSvg, openDecisionGraph } from "./decision-graph.js";
 import { copyText } from "./clipboard.js";
+import { importAsking, outcomeSummary } from "./importchoices.js";
 import { installFeelAssistant } from "./feel-assistant.js";
 import { restoreSummary } from "./restore-report.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
@@ -5935,7 +5936,9 @@ function downloadApplicationSource(id) {
 // in is not this dialog's choice: the tree's manifest carries the portable key, so
 // the server updates the application that key names or creates it when this server
 // has never seen it (ADR-0134). An import never deletes — artifacts the tree omits
-// are reported back and left alone.
+// are reported back and left alone — and never replaces unasked: the plan comes
+// first, and whatever differs from this server's is listed to tick or leave
+// (ADR-draft-application-package-export).
 function importApplicationSource(reload) {
   const picker = document.createElement("input");
   picker.type = "file";
@@ -5943,17 +5946,21 @@ function importApplicationSource(reload) {
   picker.addEventListener("change", async () => {
     const file = picker.files[0];
     if (!file) return;
-    try {
-      const res = await fetch("/api/v1/applications/source", {
+    const send = async (query) => {
+      const res = await fetch("/api/v1/applications/source" + (query ? "?" + query : ""), {
         method: "POST",
         headers: { "Content-Type": "application/gzip" },
         body: file,
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error((data && data.error) || res.statusText);
-      const n = (data.processes || 0) + (data.forms || 0) + (data.decisions || 0);
+      return data;
+    };
+    try {
+      const data = await importAsking(send, { title: "Import source tree" });
+      if (!data) return;
       toast(
-        `${data.created ? "Created" : "Updated"} ${data.name} — ${n} artifact${n === 1 ? "" : "s"}` +
+        `${data.created ? "Created" : "Imported"} ${data.name} — ${outcomeSummary(data.artifacts)}` +
         (data.untracked && data.untracked.length
           ? ` · ${data.untracked.length} local artifact${data.untracked.length === 1 ? "" : "s"} not in the tree, kept`
           : ""),
