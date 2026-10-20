@@ -153,6 +153,12 @@ func Prepare(j Job) (Request, error) {
 				return Request{}, fmt.Errorf("teamsphone: %s: %s resolved to nothing, and %s sets an existing one's %s to it; set the variable it reads before this task, or leave %s out to keep them as they are", j.Operation, name, spec.Label, name, name)
 			}
 		}
+		if raw := j.Args[name]; raw == nil && Attributes[name] == List && contains(spec.Required, name) {
+			// An empty list is an answer, but a required list that resolved to nothing is a
+			// variable the task read before anybody set it; read as empty, it would make a
+			// leaver path report success having removed nothing.
+			return Request{}, fmt.Errorf("teamsphone: %s needs %s, and it resolved to nothing; set the variable it reads before this task", j.Operation, name)
+		}
 		v, err := normalize(name, Attributes[name], j.Args[name])
 		if err != nil {
 			return Request{}, fmt.Errorf("teamsphone: %s: %w", j.Operation, err)

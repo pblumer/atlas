@@ -3137,11 +3137,11 @@ type xmlS3Connector struct {
 // siblings carry, which the moddle drift guard recognizes.
 //
 // Which of the remaining attributes apply is decided by the operation, and only by it;
-// the compiler refuses one the operation does not use. users, agents and
-// authorizedUsers are lists — a FEEL list, or one text separated by commas; holidays is
-// a list of {name, start, end} with ISO dates; the rest are single values. Each is
-// literal or, with a leading '=', a FEEL expression evaluated over the variables the
-// task sees at call time (the fx toggle, ADR-0067). accountType, routingMethod,
+// the compiler refuses one the operation does not use. users, agents, authorizedUsers,
+// resourceAccountIds and names are lists — a FEEL list, or one text separated by
+// commas; holidays is a list of {name, start, end} with ISO dates; the rest are single
+// values. Each is literal or, with a leading '=', a FEEL expression evaluated over the
+// variables the task sees at call time (the fx toggle, ADR-0067). accountType, routingMethod,
 // presenceBasedRouting, conferenceMode, allowOptOut and numberType are not: each decides
 // the shape of what is created, and a shape that could differ on every token is not a
 // shape.
@@ -3168,6 +3168,8 @@ type xmlTeamsPhoneConnector struct {
 	PhoneNumber          string `xml:"phoneNumber,attr"`
 	NumberType           string `xml:"numberType,attr"`
 	LocationID           string `xml:"locationId,attr"`
+	ResourceAccountIDs   string `xml:"resourceAccountIds,attr"`
+	Names                string `xml:"names,attr"`
 	ResultVariable       string `xml:"resultVariable,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
@@ -3200,6 +3202,8 @@ func (c *xmlTeamsPhoneConnector) values() []struct{ attr, raw string } {
 		{"phoneNumber", c.PhoneNumber},
 		{"numberType", c.NumberType},
 		{"locationId", c.LocationID},
+		{"resourceAccountIds", c.ResourceAccountIDs},
+		{"names", c.Names},
 	}
 }
 

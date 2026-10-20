@@ -2737,6 +2737,7 @@ var teamsPhoneOps = map[string]teamsPhoneOp{
 		needsResult: true,
 	},
 	"remove-phone-number": {required: []string{"identity"}, optional: []string{"phoneNumber"}},
+	"remove-hotline":      {required: []string{"resourceAccountIds"}, optional: []string{"names"}},
 }
 
 // teamsPhoneSettings are the static values each setting may take, and whether a model

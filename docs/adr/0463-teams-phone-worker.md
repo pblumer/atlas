@@ -1,6 +1,6 @@
 # ADR-0463: A Microsoft Teams Phone Worker Type for voice apps and their resource accounts
 
-- **Status:** Accepted (amended 2026-10-19: `ensure-call-queue` brings a queue it finds to the agents a model names — the directly assigned ones, in order under serial routing — and answers `agentsChanged`; agents not named are left as they are, a value that resolved to nothing is refused, and an empty list never empties a queue that has agents. Amended 2026-10-20: the queue's authorized users and routing settings are reconciled as its agents are — what a model names is set, what it leaves out is kept — so the compiler no longer writes a setting's default into the model; the answer lists what it set in `changed`; and six refusals carry `TEAMSPHONE_…` codes, thrown as BPMN errors when the process catches them; and `ensure-phone-number` / `remove-phone-number` give a user or a resource account a phone number and take it away again)
+- **Status:** Accepted (amended 2026-10-19: `ensure-call-queue` brings a queue it finds to the agents a model names — the directly assigned ones, in order under serial routing — and answers `agentsChanged`; agents not named are left as they are, a value that resolved to nothing is refused, and an empty list never empties a queue that has agents. Amended 2026-10-20: the queue's authorized users and routing settings are reconciled as its agents are — what a model names is set, what it leaves out is kept — so the compiler no longer writes a setting's default into the model; the answer lists what it set in `changed`; and six refusals carry `TEAMSPHONE_…` codes, thrown as BPMN errors when the process catches them; and `ensure-phone-number` / `remove-phone-number` give a user or a resource account a phone number and take it away again; and `remove-hotline` takes a whole hotline away in one task)
 - **Implementation:** Landed
 - **Date:** 2026-10-17
 - **Deciders:** Atlas maintainers
@@ -369,6 +369,32 @@ removal were not checked). An absence from that list is not an affirmation, so t
 installation confirms all three. The lookup of a number the tenant lacks is assumed to answer nothing rather
 than fail, as a filter does. A person's numbers are not released by anything but
 `remove-phone-number`: the worker deletes no user account.
+
+### Amendment (2026-10-20): a hotline removed in one task
+
+Taking a hotline down took five tasks in an order a model had to know: the auto attendant,
+the queue, then each account — and, since the phone-number amendment, each account's
+numbers before it. A model that got the order wrong left a caller ringing into a queue
+that was gone, or a number on a deleted account.
+
+**Decision.** `remove-hotline` takes `resourceAccountIds` (the hotline's accounts, a list)
+and optionally `names` (the voice apps'), and answers
+`{removed, attendants, queues, accounts, phoneNumbers}`:
+
+- **Auto attendants first, then queues, then accounts.** An attendant hands its calls to
+  a queue's account; removed first, it stops taking calls before the queue goes. Each
+  account then releases its numbers and is deleted, as `remove-resource-account` does.
+- **Refused before anything changes** when a voice app the accounts carry also answers for
+  an account the request does not name (`TEAMSPHONE_ACCOUNT_IN_USE`): that voice app is
+  another hotline's too. The check reads the voice app's `ApplicationInstances`, which
+  the orphan lookup of the single removes already relies on.
+- **Safe to repeat.** Each step is the single operation's own, and `names` finds a voice
+  app an earlier run left without its account, as the single removes' `name` does.
+- The single removes stay, for taking down part of a hotline.
+
+A required list that resolves to nothing is refused, for every operation: read as empty,
+it would make a leaver path report success having removed nothing. That also refuses a
+`resolve-users` whose `users` variable nobody set, which until now answered with no ids.
 
 ## Pros and cons of the options
 

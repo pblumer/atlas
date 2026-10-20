@@ -468,22 +468,42 @@ func TestTheShippedScriptProvisionsAndUnwinds(t *testing.T) {
 		t.Errorf("remove-call-queue on an attendant's account: %v; want it refused as %s", err, teamsphone.CodeAccountInUse)
 	}
 
+	// The leaver path: the attendant and its account one operation at a time, the queue
+	// with its account and number as one hotline.
 	for _, step := range []struct{ op, account string }{
-		{"remove-auto-attendant", aaID}, {"remove-call-queue", cqID},
-		{"remove-resource-account", aaID}, {"remove-resource-account", cqID},
+		{"remove-auto-attendant", aaID}, {"remove-resource-account", aaID},
 	} {
-		got := must(step.op, map[string]any{"resourceAccountId": step.account})
-		if got["removed"] != true {
+		if got := must(step.op, map[string]any{"resourceAccountId": step.account}); got["removed"] != true {
 			t.Errorf("%s = %v, want removed", step.op, got)
-		}
-		if step.op == "remove-resource-account" && step.account == cqID {
-			if numbers, _ := got["phoneNumbers"].([]any); len(numbers) != 1 || numbers[0] != "+41445550000" {
-				t.Errorf("remove-resource-account for the queue's account = %v, want its number released with it", got)
-			}
 		}
 		if got := must(step.op, map[string]any{"resourceAccountId": step.account}); got["removed"] != false {
 			t.Errorf("%s repeated = %v, want removed=false", step.op, got)
 		}
+	}
+	// A queue that also answers for an account the hotline does not name is refused
+	// before anything changes.
+	st = stub.load()
+	st.Assoc["someone-else"] = map[string]any{"ConfigurationId": remade["id"], "ConfigurationType": "CallQueue"}
+	stub.save(st)
+	if _, err := run("remove-hotline", map[string]any{"resourceAccountIds": []any{cqID}}); !coded(err, teamsphone.CodeAccountInUse) ||
+		!strings.Contains(err.Error(), "someone-else") {
+		t.Errorf("a hotline whose queue also answers for another account: %v; want it refused as %s", err, teamsphone.CodeAccountInUse)
+	}
+	st = stub.load()
+	if len(st.Apps) != 1 || len(st.Accounts) != 1 {
+		t.Errorf("a refused remove-hotline changed the tenant: %d voice apps, %d accounts", len(st.Apps), len(st.Accounts))
+	}
+	delete(st.Assoc, "someone-else")
+	stub.save(st)
+	hotline := must("remove-hotline", map[string]any{"resourceAccountIds": []any{cqID}})
+	if queues, _ := hotline["queues"].([]any); hotline["removed"] != true || len(queues) != 1 || queues[0] != remade["id"] {
+		t.Errorf("remove-hotline = %v, want the queue %v removed", hotline, remade["id"])
+	}
+	if numbers, _ := hotline["phoneNumbers"].([]any); len(numbers) != 1 || numbers[0] != "+41445550000" {
+		t.Errorf("remove-hotline = %v, want the queue's number released with its account", hotline)
+	}
+	if again := must("remove-hotline", map[string]any{"resourceAccountIds": []any{cqID}}); again["removed"] != false {
+		t.Errorf("remove-hotline repeated = %v, want removed=false", again)
 	}
 	if st := stub.load(); len(st.Apps) != 0 || len(st.Accounts) != 0 || len(st.Assoc) != 0 || st.Numbers["+41445550000"] != nil {
 		t.Errorf("the leaver path left %d voice apps, %d accounts, %d associations and the number %v",

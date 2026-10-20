@@ -129,6 +129,10 @@ func (m *MockTenant) Do(_ context.Context, req Request) (map[string]any, error) 
 		return m.removeApp(req.Operation, AccountCallQueue, str("resourceAccountId"), str("name"))
 	case "remove-auto-attendant":
 		return m.removeApp(req.Operation, AccountAutoAttendant, str("resourceAccountId"), str("name"))
+	case "remove-hotline":
+		ids, _ := a["resourceAccountIds"].([]string)
+		names, _ := a["names"].([]string)
+		return m.removeHotline(ids, names)
 	case "ensure-phone-number":
 		return m.ensureNumber(str("identity"), str("phoneNumber"), str("numberType"))
 	case "remove-phone-number":
@@ -349,6 +353,69 @@ func (m *MockTenant) removeApp(op, kind, accountID, name string) (map[string]any
 		}
 	}
 	return map[string]any{"removed": false, "id": ""}, nil
+}
+
+// removeHotline takes a hotline away by the rules the shipped PowerShell keeps
+// (Remove-Hotline in operations.ps1): nothing changes when a voice app also answers for
+// an account the hotline does not name; otherwise the auto attendants go first, then the
+// queues — each found through its account, or by name when an earlier run left it without
+// one — then each account's numbers and the account.
+func (m *MockTenant) removeHotline(ids, names []string) (map[string]any, error) {
+	const op = "remove-hotline"
+	named := map[string]bool{}
+	for _, id := range ids {
+		named[id] = true
+	}
+	for _, id := range ids {
+		appID, ok := m.associated[id]
+		if !ok {
+			continue
+		}
+		for acc, other := range m.associated {
+			if other == appID && !named[acc] {
+				return nil, refused(CodeAccountInUse, op, fmt.Sprintf("the voice app %s also answers for the resource account %s, which this hotline does not name; nothing was removed", m.apps[appID].name, acc))
+			}
+		}
+	}
+	removedApps := map[string][]string{AccountAutoAttendant: {}, AccountCallQueue: {}}
+	for _, kind := range []string{AccountAutoAttendant, AccountCallQueue} {
+		for _, id := range ids {
+			if appID, ok := m.associated[id]; ok && m.apps[appID].kind == kind {
+				out, err := m.removeApp(op, kind, id, "")
+				if err != nil {
+					return nil, err
+				}
+				removedApps[kind] = append(removedApps[kind], out["id"].(string))
+			}
+		}
+		for _, name := range names {
+			if out, err := m.removeApp(op, kind, "", name); err == nil && out["removed"] == true {
+				removedApps[kind] = append(removedApps[kind], out["id"].(string))
+			}
+		}
+	}
+	accounts, numbers := []string{}, []string{}
+	for _, id := range ids {
+		acc, ok := m.accounts[id]
+		if !ok {
+			continue
+		}
+		released, err := m.removeNumbers(id, "")
+		if err != nil {
+			return nil, err
+		}
+		numbers = append(numbers, released["phoneNumbers"].([]string)...)
+		delete(m.associated, id)
+		delete(m.byUPN, strings.ToLower(acc.upn))
+		delete(m.accounts, id)
+		accounts = append(accounts, id)
+	}
+	for _, l := range [][]string{removedApps[AccountAutoAttendant], removedApps[AccountCallQueue], accounts, numbers} {
+		sort.Strings(l)
+	}
+	removed := len(accounts)+len(numbers)+len(removedApps[AccountAutoAttendant])+len(removedApps[AccountCallQueue]) > 0
+	return map[string]any{"removed": removed, "attendants": removedApps[AccountAutoAttendant], "queues": removedApps[AccountCallQueue],
+		"accounts": accounts, "phoneNumbers": numbers}, nil
 }
 
 // target is the key a phone number's holder is known by: a resource account's object id,

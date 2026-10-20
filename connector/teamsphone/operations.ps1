@@ -370,13 +370,16 @@ function Set-AutoAttendant {
 # then the voice app. A run that failed between the two leaves a voice app no account
 # points at, which the optional name finds again.
 function Remove-VoiceApp([string]$Kind) {
-    $a = $Request.args
-    $accountId = [string]$a.resourceAccountId
-    $name = [string]$a.name
+    Remove-VoiceAppOf $Kind ([string]$Request.args.resourceAccountId) ([string]$Request.args.name)
+}
+
+function Remove-VoiceAppOf([string]$Kind, [string]$AccountId, [string]$Name) {
+    $accountId = $AccountId
+    $name = $Name
     $get = if ($Kind -eq 'CallQueue') { 'Get-CsCallQueue' } else { 'Get-CsAutoAttendant' }
     $remove = if ($Kind -eq 'CallQueue') { 'Remove-CsCallQueue' } else { 'Remove-CsAutoAttendant' }
     $id = $null
-    $assoc = Get-Association $accountId
+    $assoc = if ($accountId) { Get-Association $accountId } else { $null }
     if ($assoc) {
         if ($assoc.ConfigurationType -and ([string]$assoc.ConfigurationType) -ne $Kind) {
             $label = if ($Kind -eq 'CallQueue') { 'a call queue' } else { 'an auto attendant' }
@@ -468,7 +471,11 @@ function Remove-PhoneNumber {
 # Teams is asked anything, so a repeat does not depend on what Teams says about an
 # account that is gone.
 function Remove-ResourceAccount {
-    $accountId = [string]$Request.args.resourceAccountId
+    Remove-Account ([string]$Request.args.resourceAccountId)
+}
+
+function Remove-Account([string]$AccountId) {
+    $accountId = $AccountId
     $path = "/users/$([uri]::EscapeDataString($accountId))"
     if (-not (Invoke-Graph 'GET' ($path + '?$select=id')).Found) {
         return [ordered]@{ removed = $false; objectId = $accountId; phoneNumbers = @() }
@@ -479,6 +486,64 @@ function Remove-ResourceAccount {
     }
     $deleted = Invoke-Graph 'DELETE' $path
     return [ordered]@{ removed = [bool]$deleted.Found; objectId = $accountId; phoneNumbers = $released }
+}
+
+# The ids of a list, sorted as the worker's mock sorts them.
+function Get-SortedIds($List) {
+    [string[]]$sorted = @(foreach ($i in $List) { [string]$i })
+    [Array]::Sort($sorted, [StringComparer]::Ordinal)
+    return $sorted
+}
+
+# A whole hotline in one task, in the one order that never leaves a caller ringing into
+# nothing: the auto attendants first, then the queues they hand calls to, then each
+# account's numbers and the account. Before anything changes, every voice app the
+# accounts carry is checked for an account the hotline does not name: such a voice app
+# answers for somebody else too, and the whole request is refused. names finds a voice
+# app an earlier run left without its account.
+function Remove-Hotline {
+    $a = $Request.args
+    $ids = @(foreach ($u in $a.resourceAccountIds) { [string]$u })
+    $names = @(foreach ($n in $a.names) { [string]$n })
+    $getters = @{ 'AutoAttendant' = 'Get-CsAutoAttendant'; 'CallQueue' = 'Get-CsCallQueue' }
+    foreach ($id in $ids) {
+        $assoc = Get-Association $id
+        if (-not $assoc) { continue }
+        $app = & $getters[[string]$assoc.ConfigurationType] -Identity $assoc.ConfigurationId
+        foreach ($other in @($app.ApplicationInstances)) {
+            if ($other -and $ids -notcontains [string]$other) {
+                Stop-Refused 'TEAMSPHONE_ACCOUNT_IN_USE' "the voice app $($app.Name) also answers for the resource account $other, which this hotline does not name; nothing was removed"
+            }
+        }
+    }
+    $apps = @{ 'AutoAttendant' = [System.Collections.Generic.List[string]]::new(); 'CallQueue' = [System.Collections.Generic.List[string]]::new() }
+    foreach ($kind in 'AutoAttendant', 'CallQueue') {
+        foreach ($id in $ids) {
+            $assoc = Get-Association $id
+            if ($assoc -and [string]$assoc.ConfigurationType -eq $kind) {
+                $r = Remove-VoiceAppOf $kind $id ''
+                if ($r.removed) { $apps[$kind].Add([string]$r.id) }
+            }
+        }
+        foreach ($name in $names) {
+            $r = Remove-VoiceAppOf $kind '' $name
+            if ($r.removed) { $apps[$kind].Add([string]$r.id) }
+        }
+    }
+    $accounts = [System.Collections.Generic.List[string]]::new()
+    $numbers = [System.Collections.Generic.List[string]]::new()
+    foreach ($id in $ids) {
+        $r = Remove-Account $id
+        if (-not $r.removed) { continue }
+        $accounts.Add($id)
+        foreach ($n in $r.phoneNumbers) { $numbers.Add([string]$n) }
+    }
+    $total = $apps['AutoAttendant'].Count + $apps['CallQueue'].Count + $accounts.Count + $numbers.Count
+    return [ordered]@{
+        removed = ($total -gt 0)
+        attendants = @(Get-SortedIds $apps['AutoAttendant']); queues = @(Get-SortedIds $apps['CallQueue'])
+        accounts = @(Get-SortedIds $accounts); phoneNumbers = @(Get-SortedIds $numbers)
+    }
 }
 
 $envelope = $null
@@ -495,6 +560,7 @@ try {
         'remove-resource-account' { Remove-ResourceAccount }
         'ensure-phone-number' { Set-PhoneNumber }
         'remove-phone-number' { Remove-PhoneNumber }
+        'remove-hotline' { Remove-Hotline }
         default { throw "unknown operation $($Request.operation)" }
     }
     $envelope = [ordered]@{ ok = $true; result = $result }

@@ -4117,6 +4117,7 @@ const SERVICE_TASK_KINDS = [
           { v: "remove-resource-account", l: "Remove resource account" },
           { v: "ensure-phone-number", l: "Ensure phone number" },
           { v: "remove-phone-number", l: "Remove phone number" },
+          { v: "remove-hotline", l: "Remove hotline (everything)" },
         ],
       },
       {
@@ -4149,7 +4150,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "resourceAccountId", label: "Resource account id", placeholder: "=konten.queue.objectId", fx: true,
-        showIf: (v) => v.operation && !["resolve-users", "ensure-resource-account", "ensure-phone-number", "remove-phone-number"].includes(v.operation),
+        showIf: (v) => v.operation && !["resolve-users", "ensure-resource-account", "ensure-phone-number", "remove-phone-number", "remove-hotline"].includes(v.operation),
         hint: "The object id an Ensure resource account answered with. Every voice-app operation is addressed by the account it is associated with.",
       },
       {
@@ -4185,6 +4186,16 @@ const SERVICE_TASK_KINDS = [
         key: "holidays", label: "Holidays", placeholder: "=[{name: \"Weihnachten\", start: \"2026-12-25\"}]", fx: true, rows: 3,
         showIf: (v) => v.operation === "ensure-auto-attendant",
         hint: "Optional. A list of {name, start, end} with dates as YYYY-MM-DD, on which calls are disconnected; end is the day after the last holiday and may be left out for a single day. Every other call goes to the queue.",
+      },
+      {
+        key: "resourceAccountIds", label: "Resource accounts", placeholder: "=[konten.attendant.objectId, konten.queue.objectId]", fx: true,
+        showIf: (v) => v.operation === "remove-hotline",
+        hint: "The hotline's resource accounts, usually the auto attendant's and the queue's. Everything goes: the auto attendants first, then the queues, then each account's numbers and the account. Refused before anything changes when a voice app also answers for an account not named here.",
+      },
+      {
+        key: "names", label: "Voice app names", placeholder: "=[\"AA \" + team, \"CQ \" + team]", fx: true,
+        showIf: (v) => v.operation === "remove-hotline",
+        hint: "Optional. The voice apps' names, which find one again that an earlier run already left without its account.",
       },
       {
         key: "identity", label: "User or resource account", placeholder: "=person.userPrincipalName", fx: true,
@@ -4263,6 +4274,8 @@ const SERVICE_TASK_KINDS = [
               return "Required. =antwort.assigned says whether this run gave the number out — false when the holder had it already — and =antwort.previousNumber the number it replaced, empty when none.";
             case "remove-phone-number":
               return "Optional. =antwort.removed is false when the holder had nothing to remove; =antwort.phoneNumbers lists what was taken away.";
+            case "remove-hotline":
+              return "Optional. =antwort.removed is false when nothing was left; =antwort.attendants, =antwort.queues, =antwort.accounts and =antwort.phoneNumbers list what was taken away.";
             case "remove-resource-account":
               return "Optional. =antwort.removed is false when the account was already gone; =antwort.phoneNumbers lists the numbers released with it — the account's numbers go first, then its association, then the account.";
             default:

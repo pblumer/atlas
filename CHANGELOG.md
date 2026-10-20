@@ -14,6 +14,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A Teams Phone hotline comes down in one task.** `remove-hotline` takes the hotline's
+  resource accounts and removes everything in the order that never leaves a caller ringing
+  into nothing: the auto attendants, then the queues, then each account's phone numbers
+  and the account. When one of its voice apps also answers for an account the task does
+  not name, it is refused before anything changes (`TEAMSPHONE_ACCOUNT_IN_USE`); optional
+  `names` find a voice app an earlier run left without its account, and a repeat answers
+  `removed: false`. A required list that resolves to nothing is now refused for every Teams
+  Phone operation, so a `resolve-users` whose variable nobody set no longer answers with no
+  ids ([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendment 2026-10-20).
 - **Teams Phone gives out phone numbers.** `ensure-phone-number` gives a person or a
   resource account a Direct Routing, Calling Plan or Operator Connect number — a queue's
   hotline and an employee's direct line alike — and `remove-phone-number` takes one or all

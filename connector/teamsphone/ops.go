@@ -99,6 +99,14 @@ var Ops = map[string]Op{
 		Required: []string{"identity"},
 		Optional: []string{"phoneNumber"},
 	},
+	// A whole hotline in one task, in the one order that never leaves a caller ringing
+	// into nothing: auto attendants, then queues, then each account's numbers and the
+	// account. names finds a voice app an earlier run left without its account.
+	"remove-hotline": {
+		Label:    "remove a hotline",
+		Required: []string{"resourceAccountIds"},
+		Optional: []string{"names"},
+	},
 }
 
 // OpNames lists the operations, sorted, for the messages that have to say what was
@@ -133,20 +141,22 @@ const (
 // Attributes are every authored value an operation can name, with the shape it is read
 // as. An attribute absent here cannot be authored at all.
 var Attributes = map[string]Shape{
-	"users":             List,
-	"userPrincipalName": Text,
-	"displayName":       Text,
-	"name":              Text,
-	"resourceAccountId": Text,
-	"transferTarget":    Text,
-	"agents":            List,
-	"authorizedUsers":   List,
-	"languageId":        Text,
-	"timeZone":          Text,
-	"holidays":          Holidays,
-	"identity":          Text,
-	"phoneNumber":       PhoneNumber,
-	"locationId":        Text,
+	"users":              List,
+	"userPrincipalName":  Text,
+	"displayName":        Text,
+	"name":               Text,
+	"resourceAccountId":  Text,
+	"transferTarget":     Text,
+	"agents":             List,
+	"authorizedUsers":    List,
+	"languageId":         Text,
+	"timeZone":           Text,
+	"holidays":           Holidays,
+	"identity":           Text,
+	"phoneNumber":        PhoneNumber,
+	"locationId":         Text,
+	"resourceAccountIds": List,
+	"names":              List,
 }
 
 // Setting is one static value: the values it may take, and the one an object the request

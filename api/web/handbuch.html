@@ -6714,6 +6714,13 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
               <td data-l="en"><code>phoneNumber</code> – without it, every number of the person or account is removed.</td>
               <td data-l="de"><code>removed</code>, <code>phoneNumbers</code> – was entfernt wurde. Die Ergebnisvariable ist freiwillig.</td>
               <td data-l="en"><code>removed</code>, <code>phoneNumbers</code> – what was removed. The result variable is optional.</td></tr>
+            <tr><td><code>remove-hotline</code><br><i>Remove hotline (everything)</i></td>
+              <td data-l="de"><code>resourceAccountIds</code> – die Ressourcenkonten der Hotline, meist das der Telefonzentrale und das der Warteschlange</td>
+              <td data-l="en"><code>resourceAccountIds</code> – the hotline's resource accounts, usually the auto attendant's and the queue's</td>
+              <td data-l="de"><code>names</code> – die Namen der Voice-Apps; finden eine wieder, die ein früherer Lauf ohne Konto zurückliess.</td>
+              <td data-l="en"><code>names</code> – the voice apps' names; they find one again that an earlier run left without its account.</td>
+              <td data-l="de"><code>removed</code>, <code>attendants</code>, <code>queues</code>, <code>accounts</code>, <code>phoneNumbers</code> – was entfernt wurde. Die Ergebnisvariable ist freiwillig.</td>
+              <td data-l="en"><code>removed</code>, <code>attendants</code>, <code>queues</code>, <code>accounts</code>, <code>phoneNumbers</code> – what was removed. The result variable is optional.</td></tr>
             <tr><td><code>remove-resource-account</code><br><i>Remove resource account</i></td>
               <td><code>resourceAccountId</code></td><td>–</td>
               <td data-l="de"><code>removed</code>, <code>objectId</code>, <code>phoneNumbers</code> – die Rufnummern, die mit dem Konto freigegeben wurden. Die Ergebnisvariable ist freiwillig.</td>
@@ -6724,12 +6731,21 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           <i>Remove</i>-Operation antwortet mit <code>removed: false</code>, wenn nichts mehr da ist. Ein wiederholter
           Job legt deshalb keine zweite Warteschlange an und scheitert nicht am Erfolg seines ersten Laufs. Die übliche
           Reihenfolge beim Einrichten: <i>Resolve users</i>, zweimal <i>Ensure resource account</i>, <i>Ensure call
-          queue</i>, <i>Ensure auto attendant</i>; ein Austrittsprozess entfernt in umgekehrter Reihenfolge.</p>
+          queue</i>, <i>Ensure auto attendant</i>. Abgebaut wird eine ganze Hotline mit einem Task, <i>Remove hotline</i>:
+          zuerst die Telefonzentralen, damit kein Anruf mehr an eine Warteschlange geht, die es gleich nicht mehr gibt,
+          dann die Warteschlangen, zuletzt je Konto die Rufnummern und das Konto. Antwortet eine der Voice-Apps auch für
+          ein Konto, das nicht genannt ist, wird der Abbau abgelehnt (<code>TEAMSPHONE_ACCOUNT_IN_USE</code>), bevor sich
+          etwas ändert – sie gehört dann auch zu einer anderen Hotline. Die einzelnen <i>Remove</i>-Operationen bleiben
+          für einen Teilabbau.</p>
         <p data-l="en"><b>Repeating is safe.</b> Every <i>Ensure</i> operation looks before it creates, and a
           <i>Remove</i> operation answers <code>removed: false</code> when nothing is left. A repeated job therefore
           creates no second queue and does not fail on its first run's success. The usual order when setting up:
           <i>Resolve users</i>, <i>Ensure resource account</i> twice, <i>Ensure call queue</i>, <i>Ensure auto
-          attendant</i>; a leaver process removes in the reverse order.</p>
+          attendant</i>. A whole hotline is taken down with one task, <i>Remove hotline</i>: the auto attendants first,
+          so that no call goes to a queue about to disappear, then the queues, and last each account's numbers and the
+          account. When one of the voice apps also answers for an account not named, the request is refused
+          (<code>TEAMSPHONE_ACCOUNT_IN_USE</code>) before anything changes – the voice app then belongs to another hotline
+          too. The single <i>Remove</i> operations remain for taking down part of one.</p>
         <p data-l="de"><b>Rufnummern.</b> <i>Ensure phone number</i> gibt einer Person oder einem Ressourcenkonto die
           genannte Nummer – die Hotline einer Warteschlange und die Durchwahl einer Mitarbeiterin sind für Teams
           dieselbe Zuweisung. Hat das Ziel die Nummer schon, geschieht nichts (<code>assigned: false</code>); hat es eine
@@ -6831,9 +6847,9 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
               <td data-l="en">The resource account was made for the other kind of voice app.</td>
               <td data-l="de">Ein Konto des passenden Typs verwenden oder anlegen.</td>
               <td data-l="en">Use or create an account of the right kind.</td></tr>
-            <tr><td><code>TEAMSPHONE_ACCOUNT_IN_USE</code></td><td><code>ensure-call-queue</code>, <code>ensure-auto-attendant</code>, <code>remove-call-queue</code>, <code>remove-auto-attendant</code></td>
-              <td data-l="de">Das Konto ist schon mit der anderen Art Voice-App verbunden.</td>
-              <td data-l="en">The account is already associated with the other kind of voice app.</td>
+            <tr><td><code>TEAMSPHONE_ACCOUNT_IN_USE</code></td><td><code>ensure-call-queue</code>, <code>ensure-auto-attendant</code>, <code>remove-call-queue</code>, <code>remove-auto-attendant</code>, <code>remove-hotline</code></td>
+              <td data-l="de">Das Konto ist schon mit der anderen Art Voice-App verbunden – oder, beim Hotline-Abbau, eine Voice-App antwortet auch für ein Konto, das nicht genannt ist.</td>
+              <td data-l="en">The account is already associated with the other kind of voice app – or, when a hotline is removed, a voice app also answers for an account not named.</td>
               <td data-l="de">Klären, welche Voice-App das Konto trägt, und die passende Operation verwenden.</td>
               <td data-l="en">Find out which voice app the account carries and use the matching operation.</td></tr>
             <tr><td><code>TEAMSPHONE_ACCOUNT_NOT_VISIBLE</code></td><td><code>ensure-call-queue</code>, <code>ensure-auto-attendant</code></td>

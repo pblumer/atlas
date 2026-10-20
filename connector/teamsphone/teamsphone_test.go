@@ -176,18 +176,19 @@ func TestPrepareRefusals(t *testing.T) {
 		job  teamsphone.Job
 		want string
 	}{
-		"unknown operation": {teamsphone.Job{Operation: "create-phone"}, "unknown operation"},
-		"value not used":    {teamsphone.Job{Operation: "resolve-users", Args: map[string]any{"users": "a", "timeZone": "UTC"}}, `does not use "timeZone"`},
-		"empty required":    {teamsphone.Job{Operation: "ensure-call-queue", Args: map[string]any{"name": nil, "resourceAccountId": "r"}}, "needs name"},
-		"list as a name":    {teamsphone.Job{Operation: "remove-call-queue", Args: map[string]any{"resourceAccountId": []any{"a", "b"}}}, "must be one value"},
-		"too many agents":   {teamsphone.Job{Operation: "ensure-call-queue", Args: map[string]any{"name": "n", "resourceAccountId": "r", "agents": agents}}, "at most 20"},
-		"agents unset":      {teamsphone.Job{Operation: "ensure-call-queue", Args: map[string]any{"name": "n", "resourceAccountId": "r", "agents": nil}}, "agents resolved to nothing"},
-		"unknown setting":   {teamsphone.Job{Operation: "ensure-resource-account", Args: map[string]any{"userPrincipalName": "u", "displayName": "d", "accountType": "queue"}}, `accountType "queue"`},
-		"no account type":   {teamsphone.Job{Operation: "ensure-resource-account", Args: map[string]any{"userPrincipalName": "u", "displayName": "d"}}, `accountType ""`},
-		"holiday no date":   {attendant(`[{"name":"Weihnachten","start":"25.12.2026"}]`), "YYYY-MM-DD"},
-		"holiday backwards": {attendant(`[{"name":"Weihnachten","start":"2026-12-25","end":"2026-12-25"}]`), "not after its start"},
-		"holiday twice":     {attendant(`[{"name":"A","start":"2026-12-25"},{"name":"a","start":"2026-12-26"}]`), "named twice"},
-		"holiday not list":  {attendant(`{"name":"A"}`), "list of {name, start, end}"},
+		"unknown operation":   {teamsphone.Job{Operation: "create-phone"}, "unknown operation"},
+		"value not used":      {teamsphone.Job{Operation: "resolve-users", Args: map[string]any{"users": "a", "timeZone": "UTC"}}, `does not use "timeZone"`},
+		"empty required":      {teamsphone.Job{Operation: "ensure-call-queue", Args: map[string]any{"name": nil, "resourceAccountId": "r"}}, "needs name"},
+		"list as a name":      {teamsphone.Job{Operation: "remove-call-queue", Args: map[string]any{"resourceAccountId": []any{"a", "b"}}}, "must be one value"},
+		"too many agents":     {teamsphone.Job{Operation: "ensure-call-queue", Args: map[string]any{"name": "n", "resourceAccountId": "r", "agents": agents}}, "at most 20"},
+		"agents unset":        {teamsphone.Job{Operation: "ensure-call-queue", Args: map[string]any{"name": "n", "resourceAccountId": "r", "agents": nil}}, "agents resolved to nothing"},
+		"required list unset": {teamsphone.Job{Operation: "remove-hotline", Args: map[string]any{"resourceAccountIds": nil}}, "needs resourceAccountIds"},
+		"unknown setting":     {teamsphone.Job{Operation: "ensure-resource-account", Args: map[string]any{"userPrincipalName": "u", "displayName": "d", "accountType": "queue"}}, `accountType "queue"`},
+		"no account type":     {teamsphone.Job{Operation: "ensure-resource-account", Args: map[string]any{"userPrincipalName": "u", "displayName": "d"}}, `accountType ""`},
+		"holiday no date":     {attendant(`[{"name":"Weihnachten","start":"25.12.2026"}]`), "YYYY-MM-DD"},
+		"holiday backwards":   {attendant(`[{"name":"Weihnachten","start":"2026-12-25","end":"2026-12-25"}]`), "not after its start"},
+		"holiday twice":       {attendant(`[{"name":"A","start":"2026-12-25"},{"name":"a","start":"2026-12-26"}]`), "named twice"},
+		"holiday not list":    {attendant(`{"name":"A"}`), "list of {name, start, end}"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -659,6 +660,92 @@ func TestRemovingAResourceAccountReleasesItsNumbers(t *testing.T) {
 	if out := run("ensure-phone-number", map[string]any{"identity": "anna@contoso.example", "phoneNumber": "+41445550000", "numberType": "direct-routing"}); out["assigned"] != true {
 		t.Errorf("the released number could not be given out again: %v", out)
 	}
+}
+
+// remove-hotline takes a whole hotline away in one task, in the one order that never
+// leaves a caller ringing into nothing: the auto attendants first, then the queues they
+// hand calls to, then each account's numbers and the account itself. It refuses before
+// changing anything when a voice app also answers for an account the hotline does not
+// name, finds a voice app an earlier run left without its account by name, and answers
+// removed=false the second time.
+func TestRemoveHotlineTakesTheWholeHotlineAway(t *testing.T) {
+	m := teamsphone.NewMockTenant("anna@contoso.example")
+	reg := teamsphone.NewRegistry()
+	reg.Register("contoso", m)
+	run := func(op string, args map[string]any) (map[string]any, error) {
+		out, err := teamsphone.Run(context.Background(), teamsphone.Job{Connector: "contoso", Operation: op, Args: args, ResultVariable: "r"}, reg)
+		if err != nil {
+			return nil, err
+		}
+		return out["r"].(map[string]any), nil
+	}
+	must := func(op string, args map[string]any) map[string]any {
+		t.Helper()
+		out, err := run(op, args)
+		if err != nil {
+			t.Fatalf("%s: %v", op, err)
+		}
+		return out
+	}
+	account := func(upn, kind string) string {
+		return must("ensure-resource-account", map[string]any{"userPrincipalName": upn, "displayName": "Support", "accountType": kind})["objectId"].(string)
+	}
+	hotline := func(suffix string) (cq, aa, queue, attendant string) {
+		cq, aa = account("cq_"+suffix+"@contoso.example", "call-queue"), account("aa_"+suffix+"@contoso.example", "auto-attendant")
+		queue = must("ensure-call-queue", map[string]any{"name": "CQ " + suffix, "resourceAccountId": cq, "agents": "anna@contoso.example"})["id"].(string)
+		attendant = must("ensure-auto-attendant", map[string]any{"name": "AA " + suffix, "resourceAccountId": aa, "transferTarget": cq,
+			"languageId": "de-CH", "timeZone": "W. Europe Standard Time"})["id"].(string)
+		must("ensure-phone-number", map[string]any{"identity": aa, "phoneNumber": "+4144555" + suffix, "numberType": "direct-routing"})
+		return
+	}
+	cq, aa, queue, attendant := hotline("0001")
+
+	// A queue that also answers for an account the hotline does not name is somebody
+	// else's too: nothing is removed.
+	other := account("cq_other@contoso.example", "call-queue")
+	must("ensure-call-queue", map[string]any{"name": "CQ 0001", "resourceAccountId": other})
+	_, err := run("remove-hotline", map[string]any{"resourceAccountIds": []any{aa, cq}})
+	var refusal *teamsphone.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != teamsphone.CodeAccountInUse || !strings.Contains(err.Error(), other) {
+		t.Errorf("a hotline whose queue also answers for another account: %v; want it refused as %s, naming that account", err, teamsphone.CodeAccountInUse)
+	}
+	if got := must("ensure-auto-attendant", map[string]any{"name": "AA 0001", "resourceAccountId": aa, "transferTarget": cq,
+		"languageId": "de-CH", "timeZone": "W. Europe Standard Time"}); got["created"] != false {
+		t.Errorf("a refused remove-hotline took the auto attendant away: %v", got)
+	}
+	must("remove-resource-account", map[string]any{"resourceAccountId": other})
+
+	got := must("remove-hotline", map[string]any{"resourceAccountIds": []any{cq, aa}})
+	want := map[string]any{
+		"removed": true, "attendants": []string{attendant}, "queues": []string{queue},
+		"accounts": sorted(cq, aa), "phoneNumbers": []string{"+41445550001"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("remove-hotline = %v, want %v", got, want)
+	}
+	again := must("remove-hotline", map[string]any{"resourceAccountIds": []any{cq, aa}})
+	if want := map[string]any{"removed": false, "attendants": []string{}, "queues": []string{}, "accounts": []string{}, "phoneNumbers": []string{}}; !reflect.DeepEqual(again, want) {
+		t.Errorf("remove-hotline repeated = %v, want %v", again, want)
+	}
+	if out := must("ensure-phone-number", map[string]any{"identity": "anna@contoso.example", "phoneNumber": "+41445550001", "numberType": "direct-routing"}); out["assigned"] != true {
+		t.Errorf("the hotline's number was not released: %v", out)
+	}
+
+	// An earlier run removed the attendant's account and then failed: the attendant is
+	// left without an account, and only its name finds it again.
+	cq2, aa2, queue2, attendant2 := hotline("0002")
+	must("remove-resource-account", map[string]any{"resourceAccountId": aa2})
+	got = must("remove-hotline", map[string]any{"resourceAccountIds": []any{cq2, aa2}, "names": "AA 0002, CQ 0002"})
+	if got["removed"] != true || !reflect.DeepEqual(got["attendants"], []string{attendant2}) || !reflect.DeepEqual(got["queues"], []string{queue2}) ||
+		!reflect.DeepEqual(got["accounts"], []string{cq2}) {
+		t.Errorf("remove-hotline after a failed run = %v, want the orphaned attendant %s, the queue %s and the account %s", got, attendant2, queue2, cq2)
+	}
+}
+
+func sorted(ids ...string) []string {
+	out := append([]string(nil), ids...)
+	sort.Strings(out)
+	return out
 }
 
 func attendant(holidays string) teamsphone.Job {
