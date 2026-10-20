@@ -12,6 +12,85 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The handbook's German reads as German.** Much of it had been translated word for word
+  from the English and carried English idioms over: «Der Lehrsatz ist …» for *the lesson
+  is*, «Dasselbe Muster trägt …» for *the same pattern carries*, «das ist der Punkt»,
+  «rot sehen» for *go red*, «Umbau auf echt». Some renderings said something else than
+  the English: «bw- vor allem» for *in front of everything*, «sonst nichts» for *nothing
+  else is forgiven*, «Rückhalt» for a subscription on *hold*, «gut laufend» for *busy*, a
+  tool that «sperrt sich selbst aus» where the English has it lock the company out. About
+  seventy places are rewritten, among them the 35 a review rated hardest to read; where
+  the English was a riddle as well ("plan the rotation before it plans you", "the clock
+  belongs to the run, not to the wall", "user is a floor, not a grant"), both languages
+  now say it plainly. The *Darstellung* section addressed the reader as *Sie* and now uses
+  *du* like the rest; an unexplained English fragment in the German now names the Modeler
+  option it quotes, and a *ß*, a wrong gender and two sentences without a verb are
+  corrected. `AGENTS.md` gains a short writing guideline so new text does not repeat the
+  pattern.
+
+## [0.16.0] — 2026-10-20
+
+**On Windows, Atlas takes the proxy and the certificate PowerShell takes.** The server's
+outbound HTTP and every Go Worker's follow the proxy the host is configured with — a PAC
+script, automatic detection or the proxy in Internet Options — where 0.15.0 read only the
+proxy variables, so on a server whose proxy a group policy sets, a Go Worker no longer goes
+direct and times out while a PowerShell beside it finds the proxy
+([ADR-0464](docs/adr/0464-windows-system-proxy.md)). The Entra ID worker signs with a
+certificate in the Windows certificate store, named by its thumbprint, so a key that cannot
+be exported serves it as it serves PowerShell
+([ADR-0172](docs/adr/0172-entra-id-connector.md), amended). Both are tested on the Windows
+CI runner, the store with a non-exportable key and the proxy against a PAC script; the
+proxy has not yet met a server whose proxy a group policy sets, which ADR-0464 leaves
+open, and there `HTTPS_PROXY` still wins. Teams Phone's `ensure-call-queue` brings an
+existing queue to the agents a model names, where it reported success on a queue it had
+left as it was ([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendment 2026-10-19); its
+script is still tested against a stand-in module, not a tenant. In the Modeler, a step's
+form opens from the step, and a form created for it comes back linked: a plain click saves
+the diagram and opens the form editor with a way back, where the old link opened a second
+tab and left the linking to the author ([ADR-0465](docs/adr/0465-form-doors.md)). Among the
+fixes, a required constant's reference sits on its own line, and the handbook's runbook
+cards and the setup steps beside a Worker Type close with a plain caveat.
+
+**Read this before upgrading from 0.15.0.** These act on an existing installation:
+
+- On a Windows host where no proxy variable is set and the account has proxy settings,
+  the server and every Go Worker now send their outbound HTTP through the proxy those
+  settings name: auto-configuration first, a PAC script or automatic detection, whose
+  answer is final; when it cannot answer, the manual proxy with its bypass list. A request
+  that went direct under 0.15.0, to an internal endpoint among them, now goes through the
+  proxy unless the PAC script or the bypass list exempts it — as a PowerShell on that host
+  already does. Loopback and the host's own addresses stay direct. The startup line `outbound_proxy.selected` says which source a process follows,
+  and `ATLAS_SYSTEM_PROXY=off` restores 0.15.0's behaviour. A process with `HTTPS_PROXY`
+  or `HTTP_PROXY` set, and every process off Windows, is unchanged.
+- A Teams Phone model that names `agents` on `ensure-call-queue` now sets an existing
+  queue's directly assigned agents to that list on every run, overwriting agents
+  maintained in the Teams admin center since. Leave `agents` empty where the admin center
+  keeps them. `agents` that resolve to nothing, such as a variable nobody set, now fail the
+  task, also for a new queue, which 0.15.0 created without agents; so does an empty list
+  for a queue that has agents. The change is the worker's: a Teams Phone worker you run
+  yourself with `atlas worker` behaves so once it runs 0.16.0, and a worker the server
+  supervises is the server's own binary.
+- The certificate store changes nothing until somebody names a thumbprint. Secret and PEM
+  credentials work as before. A Console tenant whose Entra bundle carries
+  `certificateThumbprint` is used on a Windows server only and left unconfigured
+  elsewhere; one that carries it beside a `clientSecret` or a `certificate`, which 0.15.0
+  read by the other credential, is now left unconfigured as ambiguous. On Windows the
+  worker opens the certificate at startup, so a thumbprint the store does not hold, or a
+  key its account may not use, keeps that worker from starting, and with it every tenant
+  and Worker Type it serves.
+- 0.16.0 reads the data directory 0.15.0 wrote: nothing under the log, the state or the
+  record format changed, no store or route was added, and no system process changed, so
+  the first start deploys nothing new. Nothing under `mcp/` changed, so the tool count
+  stays.
+- Going back to 0.15.0 starts on the same directory: the compiler is unchanged, so every
+  model deployed under 0.16.0 reloads. An Entra tenant that signs by thumbprint does not
+  work there — a Console bundle carrying only `certificateThumbprint` is left
+  unconfigured, and a worker given `ATLAS_ENTRA_<NAME>_CLIENT_CERTIFICATE_THUMBPRINT`
+  alone does not start — and `ensure-call-queue` again leaves an existing queue's agents
+  as they are.
+
 ### Added
 
 - **A step's form opens from the step, and a form created for it comes back linked.** The
@@ -63,27 +142,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
-- **The handbook's German reads as German.** Much of it had been translated word for word
-  from the English and carried English idioms over: «Der Lehrsatz ist …» for *the lesson
-  is*, «Dasselbe Muster trägt …» for *the same pattern carries*, «das ist der Punkt»,
-  «rot sehen» for *go red*, «Umbau auf echt». Some renderings said something else than
-  the English: «bw- vor allem» for *in front of everything*, «sonst nichts» for *nothing
-  else is forgiven*, «Rückhalt» for a subscription on *hold*, «gut laufend» for *busy*, a
-  tool that «sperrt sich selbst aus» where the English has it lock the company out. About
-  seventy places are rewritten, among them the 35 a review rated hardest to read; where
-  the English was a riddle as well ("plan the rotation before it plans you", "the clock
-  belongs to the run, not to the wall", "user is a floor, not a grant"), both languages
-  now say it plainly. The *Darstellung* section addressed the reader as *Sie* and now uses
-  *du* like the rest; an unexplained English fragment in the German now names the Modeler
-  option it quotes, and a *ß*, a wrong gender and two sentences without a verb are
-  corrected. `AGENTS.md` gains a short writing guideline so
-  new text does not repeat the pattern.
 - **A required constant's reference sits on its own line.** On an application's and the
   server's Constants page, the table of constants the deployed processes require showed
   the reference a process reads, such as `application.CLIENT_ID`, after the name on the
   same line, and the browser broke it onto a second line only where the name was long, so
   the rows did not line up. The reference now always sits under the name, smaller and in
   a monospace font, as the identifier a process writes.
+- **The handbook's runbook cards and the panel's setup steps close with a plain caveat.**
+  The line under each of the 27 runbook cards that names the month it was last checked
+  went on to say that, where the text no longer matched what the reader saw, "this
+  section is out of date, not you" — a sentence readers took for a riddle rather than
+  the reassurance it was meant to be. The setup steps beside a Worker Type said the same
+  in other words ("the provider is right and this is out of date"). Both now say what
+  can have changed and what to follow: menu paths and labels may have moved since, and
+  where they differ the current interface takes precedence. They are one instruction at
+  two lengths and now close with one sentence. The dates and their freshness checks are
+  unchanged (ADR-0289).
 
 ## [0.15.0] — 2026-10-17
 
@@ -205,16 +279,6 @@ Windows.
 
 ### Fixed
 
-- **The handbook's runbook cards and the panel's setup steps close with a plain caveat.**
-  The line under each of the 27 runbook cards that names the month it was last checked
-  went on to say that, where the text no longer matched what the reader saw, "this
-  section is out of date, not you" — a sentence readers took for a riddle rather than
-  the reassurance it was meant to be. The setup steps beside a Worker Type said the same
-  in other words ("the provider is right and this is out of date"). Both now say what
-  can have changed and what to follow: menu paths and labels may have moved since, and
-  where they differ the current interface takes precedence. They are one instruction at
-  two lengths and now close with one sentence. The dates and their freshness checks are
-  unchanged (ADR-0289).
 - **A selection in a code field lies on the text it selects.** The script, FEEL, JSON
   and Developer View editors draw a transparent text area over a coloured copy of the
   text and a line-number gutter. The copy and the gutter also spanned the text area's
@@ -15154,7 +15218,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/pblumer/atlas/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/pblumer/atlas/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/pblumer/atlas/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/pblumer/atlas/compare/v0.12.0...v0.13.0
