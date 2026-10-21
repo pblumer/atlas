@@ -30,6 +30,8 @@ type purgePreview struct {
 	Drafts             []struct{ ID string } `json:"drafts"`
 	DecisionReferences []struct{ ID string } `json:"decisionReferences"`
 	Forms              []struct{ ID string } `json:"forms"`
+	DecisionDrafts     []struct{ ID string } `json:"decisionDrafts"`
+	Scenarios          []struct{ ID string } `json:"scenarios"`
 	DependentProcesses []struct {
 		ProcessID string `json:"processId"`
 	} `json:"dependentProcesses"`
@@ -65,6 +67,15 @@ func TestPurgeRemovesEverythingTheApplicationOwns(t *testing.T) {
 		`{"id":"purge-form","name":"Purge form","projectId":"`+appID+`","schema":{"type":"default"}}`); code != http.StatusOK {
 		t.Fatalf("save form: %d %s", code, b)
 	}
+	draftBody, _ := json.Marshal(map[string]string{"projectId": appID, "xml": eligibilityDMN("work in progress")})
+	if code, b := x.do(http.MethodPost, "/api/v1/dmn-drafts", string(draftBody)); code != http.StatusOK {
+		t.Fatalf("save decision draft: %d %s", code, b)
+	}
+	if code, b := x.do(http.MethodPost, "/api/v1/playground/scenarios",
+		`{"id":"purge-scenario","name":"Purge scenario","processId":"purge-proc","projectId":"`+appID+`",`+
+			`"spec":{"open":{"source":"draft","ref":"purge-proc"},"run":{"cases":[{"n":1}]}}}`); code != http.StatusOK {
+		t.Fatalf("save scenario: %d %s", code, b)
+	}
 	publishApp(t, x, appID)
 
 	var procKey uint64
@@ -89,8 +100,9 @@ func TestPurgeRemovesEverythingTheApplicationOwns(t *testing.T) {
 	if len(p.Processes) != 1 || p.Processes[0].ProcessID != "purge-proc" || p.RunningInstances != 1 {
 		t.Fatalf("preview processes = %+v running = %d, want purge-proc with 1 running", p.Processes, p.RunningInstances)
 	}
-	if len(p.DecisionDeployments) == 0 || len(p.Drafts) != 1 || len(p.Forms) != 1 || len(p.DecisionReferences) != 1 {
-		t.Fatalf("preview = %+v, want decision deployments, one draft, one form, one reference", p)
+	if len(p.DecisionDeployments) == 0 || len(p.Drafts) != 1 || len(p.Forms) != 1 || len(p.DecisionReferences) != 1 ||
+		len(p.DecisionDrafts) != 1 || len(p.Scenarios) != 1 {
+		t.Fatalf("preview = %+v, want decision deployments and one draft, form, reference, decision draft and scenario", p)
 	}
 	if p.Refusal != "" {
 		t.Fatalf("preview refuses: %s", p.Refusal)
@@ -123,6 +135,15 @@ func TestPurgeRemovesEverythingTheApplicationOwns(t *testing.T) {
 			if _, ok, _ := st.srv.forms.Get("purge-form"); ok {
 				t.Errorf("%s: the form is still there", when)
 			}
+			if _, ok, _ := st.srv.playgroundScenarios.Get("purge-scenario"); ok {
+				t.Errorf("%s: the scenario is still there", when)
+			}
+			dmnDrafts, _ := st.srv.dmnDrafts.LoadAll()
+			for _, d := range dmnDrafts {
+				if d.ProjectID == appID {
+					t.Errorf("%s: decision draft %s is still there", when, d.ID)
+				}
+			}
 			refs, _ := st.srv.dmnrefs.LoadAll()
 			for _, rec := range refs {
 				if rec.ProjectID == appID {
@@ -147,6 +168,35 @@ func TestPurgeRemovesEverythingTheApplicationOwns(t *testing.T) {
 	again := bootDecisionStack(t, dir)
 	defer again.shutdown()
 	assertGone(again, "after a restart")
+}
+
+// TestPurgeEndsOnlyTheProcessesItTakesTheLastVersionOf: an order starts the newest
+// surviving version of a process id, so the preview counts what the catalogue binds
+// to a process as stopping only when every deployed version of it goes. A version
+// outside the set keeps the process startable. (Every version of a process id is
+// filed under one application, so the set here is built by hand, the way records
+// written before that rule can still leave it.)
+func TestPurgeEndsOnlyTheProcessesItTakesTheLastVersionOf(t *testing.T) {
+	st := bootDecisionStack(t, t.TempDir())
+	defer st.shutdown()
+	first := deployProcess(t, st.x, deployableBPMN)
+	second := deployProcess(t, st.x, deployableBPMN)
+
+	st.srv.do(func() {
+		one := applicationInventory{versions: []*deployment{st.srv.deployments[first]}}
+		if ending := st.srv.lastVersionsOnLoop(one); len(ending) != 0 {
+			t.Errorf("with a version left, ending = %v, want none", ending)
+		}
+		both := applicationInventory{versions: []*deployment{st.srv.deployments[first], st.srv.deployments[second]}}
+		if ending := st.srv.lastVersionsOnLoop(both); !ending["approve"] {
+			t.Errorf("with every version going, ending = %v, want approve", ending)
+		}
+	})
+
+	// A key already gone by the time the removal runs is what was asked for.
+	if n, err := st.srv.removeDeployments([]uint64{987654321}, true); n != 0 || err != nil {
+		t.Fatalf("removing an absent key = (%d, %v), want (0, nil)", n, err)
+	}
 }
 
 // TestPurgeNamesTheProcessesOutsideThatDependOnIt: a process of no application

@@ -135,3 +135,34 @@ func TestPurgeAndPreviewRefusedWhenAStoreCannotBeRead(t *testing.T) {
 		t.Errorf("preview of an unknown application: %d %s, want 404", code, b)
 	}
 }
+
+// TestPurgePreviewRefusesWhatItCannotAskOutside: what outside the application depends
+// on its processes is read from the catalogue and the order stores, and a store that
+// cannot answer fails the preview rather than reporting that nothing depends on them.
+func TestPurgePreviewRefusesWhatItCannotAskOutside(t *testing.T) {
+	for _, tc := range []struct{ store, want string }{
+		{"catalog", "read application"},
+		{"orders", "check orders"},
+	} {
+		t.Run(tc.store, func(t *testing.T) {
+			dir := t.TempDir()
+			s := boot(t, dir)
+			defer s.shutdown()
+			app := mkApp(t, s.ts, "Outside "+tc.store)
+			if code, b := doReq(t, s.ts, http.MethodPost, "/api/v1/drafts?projectId="+app, releasableBPMN("outside"), "application/xml"); code != http.StatusOK {
+				t.Fatalf("draft: %d %s", code, b)
+			}
+			if code, res := publishApp(t, s.ts, app, ""); code != http.StatusOK || !res.Deployed {
+				t.Fatalf("publish: %d %+v", code, res)
+			}
+			path := filepath.Join(dir, tc.store)
+			if err := os.RemoveAll(path); err != nil {
+				t.Fatal(err)
+			}
+			handlersWrite(t, dir, tc.store, "not a directory")
+
+			code, body := doReq(t, s.ts, http.MethodGet, "/api/v1/applications/"+app+"/deletion-preview", "", "")
+			handlersRefusal(t, "preview", code, body, http.StatusInternalServerError, tc.want)
+		})
+	}
+}

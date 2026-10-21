@@ -89,6 +89,10 @@ func TestPurgePreviewNamesTheCatalogueProducts(t *testing.T) {
 		t.Fatalf("catalogue: %d (%s)", code, body)
 	}
 	cat := idOf(t, body)
+	// A catalogue never published binds nothing an order could freeze.
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/catalogs", `{"rank":2,"languages":["de"],"texts":{"de":"B"}}`); code != http.StatusCreated {
+		t.Fatalf("second catalogue: %d (%s)", code, b)
+	}
 	if code, b := cReq(t, admin, ts, "POST", "/api/v1/catalog-products",
 		`{"id":"zentrale","homeCatalog":"`+cat+`","state":"active","texts":{"de":"Zentrale"},`+
 			`"approval":{"kind":"none"},"provisionProcess":"zentrale","deprovisionProcess":"zentrale"}`); code != http.StatusOK {
@@ -96,6 +100,10 @@ func TestPurgePreviewNamesTheCatalogueProducts(t *testing.T) {
 	}
 	if code, b := cReq(t, admin, ts, "PATCH", "/api/v1/catalogs/"+cat, `{"items":["zentrale"]}`); code != http.StatusOK {
 		t.Fatalf("offer: %d (%s)", code, b)
+	}
+	// Published twice: only the newest release says what an order placed now freezes.
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/catalogs/"+cat+"/releases", ""); code != http.StatusCreated {
+		t.Fatalf("first release: %d (%s)", code, b)
 	}
 	code, body = cReq(t, admin, ts, "POST", "/api/v1/catalogs/"+cat+"/releases", "")
 	if code != http.StatusCreated {
