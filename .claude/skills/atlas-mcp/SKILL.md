@@ -48,7 +48,7 @@ Bearer` header.
 | `atlas_cancel_instance` | `key` | terminates one active instance |
 | `atlas_cancel_instances` | `key`, `limit?` | bounded bulk termination (by definition key) |
 | `atlas_terminate_instances` | `keys?` \| `processDefKey?`, `q?`, `limit?` | terminate an explicit key set, or a definition's matching instances |
-| `atlas_delete_process` | `key` | deletes one deployed definition |
+| `atlas_delete_process` | `key`, `force?` | deletes one deployed definition; `force` cancels its running instances and overrides the order and catalogue guards |
 | `atlas_stats` | none | engine-wide active counts |
 | `atlas_publish_message` | `name`, `correlationKey?`, `variables?`, `timeToLiveMs?`, `messageId?` | correlates a message to waiting instances; with `timeToLiveMs` keeps an unmatched one for an instance that waits later (ADR-0370); returns stats |
 | `atlas_buffered_messages` | `name?`, `correlationKey?`, `limit?`, `after?` | lists the messages waiting in the buffer, with payload and expiry; returns `{messages, total, nextCursor}` |
@@ -153,13 +153,20 @@ from that draft keeps running. Drafts are not versioned, so the diagram is gone;
 read it back with `atlas_get_draft_xml` first if it may be wanted again. Use this
 to clear away a scratch or throwaway diagram rather than leaving it for a human.
 
-Deleting a *project* to get rid of its drafts does not work and is destructive in
-the wrong direction — the folder goes, every draft in it stays. Delete the drafts
-you mean, by id.
+Deleting a *project* or *application* plainly does not get rid of its drafts — the
+folder goes, every draft in it stays. Delete the drafts you mean, by id. To remove
+an application together with everything it owns (deployed versions and their running
+instances, decision deployments, drafts, forms, references, models), read
+`atlas_application_deletion_preview {id}` first, show the person you work for what it
+lists — above all what outside the application stops working — and only on their
+decision call `atlas_delete_application {id, purge: true}`. It is irreversible.
 
-To delete a deployed process definition, first terminate every active instance
-of that definition and then call `atlas_delete_process`. The API rejects process
-deletion while active instances remain.
+To delete a deployed process definition, call `atlas_delete_process`. The API
+refuses while instances run, while an order line could still start the process, or
+while the current catalogue release binds it, and the error says which. Terminate
+the instances you mean to end and delete again; `force: true` does both at once and
+overrides the order and catalogue guards — use it only when the person you work for
+has decided the process is to go.
 
 ## Keys and execution behaviour
 

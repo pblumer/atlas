@@ -36,6 +36,7 @@ import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWor
 import { workerKindDocHTML } from "./workertypedocs.js";
 import { migrateProcessFlow, runningByDefinition } from "./migrationdialog.js";
 import { openPickModal } from "./pickmodal.js";
+import { openApplicationDeleteDialog, forceReason } from "./deletedialog.js";
 import { refDeleteWarning } from "./dmnref-impact.js";
 import { versionDeleteState, holderNote } from "./decision-cleanup.js";
 import { frozenMark } from "./frozen-decisions.js";
@@ -4055,18 +4056,40 @@ async function deleteDraft(processId, reload) {
   await reload();
 }
 
+// deleteProcess removes every deployed version of a process. A version the server
+// refuses keeps the server's reason — it used to be replaced by a guess ("running
+// instances?") that was wrong for a process a catalogue release binds. A 409 is a
+// guard the forced delete overrides, so it is offered, with what it does, before
+// anything is forced (ADR-draft-deleting-an-application-with-its-contents).
 async function deleteProcess(processId, groups, reload) {
   const group = groups.find((g) => g.processId === processId);
   if (!group) return;
   const n = group.versions.length;
-  if (!window.confirm(`Delete process "${processId}"${n > 1 ? ` and all ${n} versions` : ""}?`)) return;
-  let failed = 0;
+  if (!window.confirm(`Delete process "${processId}"${n > 1 ? ` and all ${n} versions` : ""}? This cannot be undone.`)) return;
+  let refused = [];
   for (const v of group.versions) {
     try { await api("DELETE", `/api/v1/processes/${v.key}`); }
-    catch (e) { failed++; }
+    catch (e) { refused.push({ v, e }); }
   }
-  if (failed) toast(`Could not delete ${failed} version(s) — running instances?`, "err");
-  else toast(`Deleted "${processId}"`, "ok");
+  const forcible = refused.filter((r) => r.e.status === 409);
+  if (forcible.length) {
+    const reasons = [...new Set(forcible.map((r) => forceReason(r.e.message)))].join("\n\n");
+    const ask = `The server refused to delete ${forcible.length === 1 ? "a version" : `${forcible.length} versions`} of "${processId}":\n\n${reasons}\n\n` +
+      "Delete anyway? Its running instances are cancelled, and it is removed even if a catalogue product or an order still needs it. This cannot be undone.";
+    if (window.confirm(ask)) {
+      const still = [];
+      for (const r of forcible) {
+        try { await api("DELETE", `/api/v1/processes/${r.v.key}?force=true`); }
+        catch (e) { still.push({ v: r.v, e }); }
+      }
+      refused = refused.filter((r) => r.e.status !== 409).concat(still);
+    }
+  }
+  if (refused.length) {
+    toast(`Could not delete ${refused.length} version(s) of "${processId}": ${forceReason(refused[0].e.message)}`, "err");
+  } else {
+    toast(`Deleted "${processId}"`, "ok");
+  }
   await reload();
 }
 
@@ -4114,11 +4137,20 @@ async function renameProject(id, current, reload) {
   await reload();
 }
 
+// deleteProject deletes an application either way
+// ADR-draft-deleting-an-application-with-its-contents allows: keeping its contents
+// as Not assigned, or with everything it owns after the server's preview of what
+// that removes.
 async function deleteProject(id, name, reload) {
-  if (!window.confirm(`Delete application "${name}"? BPMN, DMN, and form artifacts are kept and become Not assigned. Panorama models must be deleted first.`)) return;
+  const path = `/api/v1/applications/${encodeURIComponent(id)}`;
+  const mode = await openApplicationDeleteDialog({
+    name,
+    loadPreview: () => api("GET", `${path}/deletion-preview`),
+  });
+  if (!mode) return;
   try {
-    await api("DELETE", `/api/v1/applications/${encodeURIComponent(id)}`);
-    toast(`Deleted application "${name}"`, "ok");
+    await api("DELETE", mode === "purge" ? `${path}?purge=true` : path);
+    toast(mode === "purge" ? `Deleted application "${name}" and everything in it` : `Deleted application "${name}"`, "ok");
   } catch (e) { toast("could not delete application: " + e.message, "err"); }
   await reload();
 }

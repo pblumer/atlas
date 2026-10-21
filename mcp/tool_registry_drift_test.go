@@ -110,6 +110,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_publish_application":          "POST /api/v1/applications/{id}/publish",
 	"atlas_application_releases":         "GET /api/v1/applications/{id}/releases",
 	"atlas_application_deployments":      "GET /api/v1/applications/{id}/deployments",
+	"atlas_application_deletion_preview": "GET /api/v1/applications/{id}/deletion-preview",
 	"atlas_application_constants":        "GET /api/v1/applications/{id}/constants",
 	"atlas_server_constants":             "GET /api/v1/server/constants",
 	"atlas_list_tasks":                   "GET /api/v1/tasks",

@@ -9640,6 +9640,44 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         active regardless. In the Console the paused version carries an <i>Inactive</i> badge in the Modeler and an
         <i>Activate</i> / <i>Deactivate</i> button.</p>
 
+      <h3 data-l="de">Eine Version oder eine ganze Applikation löschen</h3><h3 data-l="en">Deleting a version or a whole application</h3>
+      <p data-l="de">Eine deployte Version löschst du mit <code>DELETE /api/v1/processes/{key}</code> (Rolle
+        <code>modeler</code>). Atlas lehnt das ab, solange Instanzen der Version laufen, solange eine Bestellposition
+        den Prozess noch starten kann oder solange das aktuelle Katalog-Release ihn bindet – und sagt jeweils, welcher
+        dieser Gründe zutrifft. Mit <code>?force=true</code> bricht Atlas die laufenden Instanzen ab und löscht die
+        Version trotzdem; dafür brauchst du zusätzlich <code>operator</code>, sobald Instanzen laufen. Ein
+        Katalogprodukt, das den Prozess bindet, lässt sich danach nicht mehr bestellen, und die Rückgabe einer
+        bestehenden Position schlägt fehl, bis der Prozess wieder deployt ist. Ein geschützter Systemprozess lässt
+        sich nie löschen. Im Modeler zeigt <i>Delete</i> den Grund der Ablehnung und bietet das erzwungene Löschen an.</p>
+      <p data-l="en">You delete a deployed version with <code>DELETE /api/v1/processes/{key}</code> (role
+        <code>modeler</code>). Atlas refuses while instances of the version are running, while an order line can
+        still start the process, or while the current catalogue release binds it – and says which of these applies.
+        With <code>?force=true</code> Atlas cancels the running instances and deletes the version anyway; that also
+        needs <code>operator</code> as soon as instances are running. A catalogue product that binds the process can
+        no longer be ordered afterwards, and returning an existing line fails until the process is deployed again. A
+        protected system process can never be deleted. In the Modeler, <i>Delete</i> shows the reason for a refusal
+        and offers the forced delete.</p>
+      <p data-l="de">Beim Löschen einer Applikation wählst du: Entweder bleibt ihr Inhalt erhalten und erscheint
+        unter <i>Not assigned</i>, oder alles, was ihr auf diesem Server gehört, wird mitgelöscht – deployte Versionen
+        samt laufenden Instanzen, Entscheidungs-Deployments, BPMN- und Entscheidungsentwürfe, DMN-Referenzen mit ihren
+        gespeicherten Modellen, Formulare, Testszenarien, Panorama- und Informationsmodelle
+        (<code>DELETE /api/v1/applications/{id}?purge=true</code>, nur für die Besitzerin oder den Besitzer der
+        Applikation). Vorher zeigt der Dialog, was <code>GET /api/v1/applications/{id}/deletion-preview</code>
+        meldet: was gelöscht wird und was ausserhalb der Applikation danach nicht mehr funktioniert. Erst wenn du den
+        Namen der Applikation eintippst, lässt er sich bestätigen. Das Löschen ist endgültig. Abgelehnt wird es nur,
+        wenn dabei eine Entscheidungsversion verschwände, deren ältere Versionen in einer anderen Applikation
+        weiterbestehen: Das nächste Deployment würde sonst eine Versionsnummer ein zweites Mal vergeben.</p>
+      <p data-l="en">When you delete an application you choose: either its contents are kept and appear under
+        <i>Not assigned</i>, or everything it owns on this server is deleted with it – deployed versions together with
+        their running instances, decision deployments, BPMN and decision drafts, DMN references with their stored
+        models, forms, test scenarios, Panorama and information models
+        (<code>DELETE /api/v1/applications/{id}?purge=true</code>, for the application's owner only). Before that,
+        the dialog shows what <code>GET /api/v1/applications/{id}/deletion-preview</code> reports: what is deleted
+        and what outside the application stops working afterwards. It can be confirmed only once you have typed the
+        application's name. The deletion is final. It is refused only when it would remove a decision version whose
+        older versions survive in another application: the next deployment would otherwise hand out a version
+        number a second time.</p>
+
       <h3 data-l="de">Entscheidungen weiterentwickeln</h3><h3 data-l="en">Evolving decisions</h3>
       <p data-l="de">Eine DMN-Entscheidung wird für sich deployt (<code>POST /api/v1/decision-deployments</code>
         mit dem DMN-XML, Rolle <code>modeler</code>) und ist je Entscheidungs-Id versioniert; auch hier erhöht jeder
@@ -9657,10 +9695,13 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
       <p data-l="de">Ein Entscheidungs-Deployment, an das ein deployter Prozess gebunden ist, lässt sich
         <b>nicht löschen</b>: <code>DELETE /api/v1/decision-deployments/{key}</code> antwortet mit 409 und nennt die
         Definition, die daran hängt – erst die Definition entfernen. Eine Version, an die nichts gebunden ist, lässt
-        sich löschen.</p>
+        sich löschen. Löschst du die Applikation, aus der die Entscheidung veröffentlicht wurde, mit ihrem ganzen
+        Inhalt, gilt diese Sperre nicht; die Vorschau nennt dann die Prozesse, die daran hängen.</p>
       <p data-l="en">A decision deployment a deployed process is bound to <b>cannot be deleted</b>:
         <code>DELETE /api/v1/decision-deployments/{key}</code> answers 409 and names the definition that hangs off
-        it – remove the definition first. A version nothing is bound to can be deleted.</p>
+        it – remove the definition first. A version nothing is bound to can be deleted. When you delete the
+        application the decision was published from together with its contents, this refusal does not apply; the
+        preview then names the processes that depend on it.</p>
 
       <h3 data-l="de">Die Aufrufe im Überblick</h3><h3 data-l="en">The calls at a glance</h3>
       <p data-l="de">Migration und Fork verlangen <code>admin</code>; das Pausieren <code>operator</code>; Deploy und
@@ -9692,6 +9733,15 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
           <tr><td><code>PUT /api/v1/processes/{key}/active</code></td><td><code>operator</code></td>
             <td data-l="de">eine Version pausieren oder wieder aktivieren</td>
             <td data-l="en">pause or reactivate a version</td></tr>
+          <tr><td><code>DELETE /api/v1/processes/{key}</code></td><td><code>modeler</code></td>
+            <td data-l="de">eine Version löschen; mit <code>?force=true</code> auch gegen laufende Instanzen (dann zusätzlich <code>operator</code>), Bestellungen und Katalog</td>
+            <td data-l="en">delete a version; with <code>?force=true</code> also over running instances (then <code>operator</code> as well), orders and the catalogue</td></tr>
+          <tr><td><code>GET /api/v1/applications/{id}/deletion-preview</code></td><td><code>modeler</code></td>
+            <td data-l="de">anzeigen, was das Löschen einer Applikation mit ihrem Inhalt entfernt und was danach nicht mehr funktioniert</td>
+            <td data-l="en">show what deleting an application with its contents removes and what stops working</td></tr>
+          <tr><td><code>DELETE /api/v1/applications/{id}</code></td><td><code>modeler</code></td>
+            <td data-l="de">eine Applikation löschen; mit <code>?purge=true</code> samt allem, was ihr gehört (bei laufenden Instanzen zusätzlich <code>operator</code>)</td>
+            <td data-l="en">delete an application; with <code>?purge=true</code> together with everything it owns (with running instances, <code>operator</code> as well)</td></tr>
           <tr><td><code>POST /api/v1/decision-deployments</code></td><td><code>modeler</code></td>
             <td data-l="de">eine DMN-Entscheidung deployen</td>
             <td data-l="en">deploy a DMN decision</td></tr>

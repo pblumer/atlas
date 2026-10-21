@@ -14,6 +14,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An application can be deleted with everything it owns.** Deleting an application now asks
+  how: keep its contents, which then read as Not assigned (as before), or delete everything it owns
+  on this server — its deployed versions after cancelling their running instances, its decision
+  deployments, BPMN drafts, decision drafts, DMN references and their stored models, forms, test
+  scenarios, Panorama and information models. Before the second runs, the dialog shows the server's
+  preview of what goes and what outside the application stops working — catalogue products whose
+  current release binds one of its processes, order lines that could still start one, other
+  applications' processes that evaluate one of its decisions — says that it cannot be undone, and
+  asks for the application's name to be typed. Cancelling instances needs the operator or admin role.
+  `DELETE /api/v1/applications/{id}?purge=true`, `GET /api/v1/applications/{id}/deletion-preview`;
+  MCP: `atlas_delete_application` takes `purge`, `atlas_application_deletion_preview` reads the
+  preview ([ADR-draft-deleting-an-application-with-its-contents](docs/adr/draft-deleting-an-application-with-its-contents.md)).
+
+- **A deployed process can be deleted whatever holds it.** `DELETE /api/v1/processes/{key}?force=true`
+  cancels the version's running instances and removes it even while an order line or the current
+  catalogue release still needs it, overriding the ADR-0427 guard; a protected system process stays
+  protected. The Modeler offers it after a refused delete, with the server's reason and what forcing
+  does. MCP: `atlas_delete_process` takes `force`
+  ([ADR-draft-deleting-an-application-with-its-contents](docs/adr/draft-deleting-an-application-with-its-contents.md)).
+
 - **An installation remembers what another's names mean.** When a package names a group, a
   person or an approver the target does not carry by that name, the choice made on import — in
   the Console's dialog, or with `atlas import --set` — is kept on the target once the catalogues
@@ -23,6 +43,7 @@ _Changed_ / _Removed_ for each version.
   reads a package's `antworten.json`, so an exported package installs without `--answers`
   wherever its names are found or remembered
   ([ADR-0467](docs/adr/0467-application-package-export.md), amendment 2026-10-21).
+
 - **An API token about to expire is flagged before it stops working.** A token with less
   than 30 days left is marked in **Console → Administration → API tokens** with the days it has, listed
   above the tokens, and named on the Console's dashboard to administrators, with the vault
@@ -68,6 +89,11 @@ _Changed_ / _Removed_ for each version.
   **Operations → Diagnostics → …**.
 
 ### Fixed
+
+- **A refused process delete says why.** The Modeler threw away the server's refusal and showed
+  *"Could not delete 1 version(s) — running instances?"* — also for a process that had never been
+  started and was refused because a catalogue release binds it. It now shows the server's reason,
+  and every refusal of a plain delete names the forced delete as the way through.
 
 - **The menu bar no longer wraps its names or cuts off its buttons.** In a window narrower
   than about 1300 pixels an administrator's Console bar broke two-word names onto two lines,

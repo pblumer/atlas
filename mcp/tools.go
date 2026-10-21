@@ -492,14 +492,31 @@ func runtimeTools() []Tool {
 			Name: "atlas_delete_process",
 			Description: "Delete a deployed process definition by its key, removing it from the engine " +
 				"and from disk. Refused with a conflict error if the definition still has running " +
-				"instances — cancel them with atlas_cancel_instance first. Returns a confirmation.",
-			InputSchema: keyArg("The process definition key (from atlas_list_processes) to delete."),
+				"instances, if an order line could still start it, or if the current catalogue release " +
+				"binds it — the error says which. force=true overrides all three: it cancels the running " +
+				"instances (that needs the operator or admin role) and removes the definition even though " +
+				"an order or a catalogue product still needs it, irreversibly. Use it only when the person " +
+				"you work for has decided the process is to go. A protected system process is never " +
+				"deleted. Returns a confirmation.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key": map[string]any{"type": "integer", "description": "The process definition key (from atlas_list_processes) to delete."},
+					"force": map[string]any{"type": "boolean",
+						"description": "Cancel its running instances and override the order and catalogue guards. Irreversible."},
+				},
+				"required": []any{"key"},
+			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				key, err := argUint(args, "key")
 				if err != nil {
 					return "", err
 				}
-				body, err := c.del("/api/v1/processes/" + strconv.FormatUint(key, 10))
+				path := "/api/v1/processes/" + strconv.FormatUint(key, 10)
+				if args["force"] == true {
+					path += "?force=true"
+				}
+				body, err := c.del(path)
 				if err != nil {
 					return "", err
 				}

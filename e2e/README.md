@@ -27,6 +27,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`application-delete.spec.mjs`**
+  ([ADR-draft-deleting-an-application-with-its-contents](../docs/adr/draft-deleting-an-application-with-its-contents.md)):
+  the application delete dialog against previews of its own — the default keeps the contents and
+  reads no preview; deleting everything lists what goes (the running instances it cancels
+  included) and what outside the application stops working, and is armed only once the
+  application's name is typed; a refusal in the preview, or a caller who may not cancel
+  instances, keeps it disarmed; Escape cancels.
 - **`capabilities.spec.mjs`** ([ADR-0305](../docs/adr/0305-business-capabilities-and-value-streams.md),
   roadmap B8): the business-architecture screens against a stubbed API — the landing view
   is the gap report, one card per finding kind in the server's order, each sentence composed
