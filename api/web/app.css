@@ -190,6 +190,13 @@ b { font-weight: 600; }
   .topbar .org { display: none; }
   .topnav > a, .topnav-group-btn { padding: 0 8px; }
 }
+/* On a phone the app's name gives its room to the view names. Logo, name and six
+   buttons were wider than the screen: the view names had no width left at all, and in
+   Operations, the longer name, the account button was pushed off the right edge. The
+   mark beside it and the app drawer, which marks the open app, still say where one is. */
+@media (max-width: 520px) {
+  .topbar #app-name { display: none; }
+}
 /* Count on a nav entry — today the parked tokens on Operations › Incidents
    (ADR-0151). Red and always legible, including on the muted inactive entry: an
    operator should see it without first landing on the view it belongs to. */

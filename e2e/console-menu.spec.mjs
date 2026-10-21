@@ -69,6 +69,7 @@ const layout = (page) => page.evaluate(() => {
     }).map((el) => el.getAttribute("aria-label") || el.title || el.className),
     barOverflows: bar.scrollWidth > bar.clientWidth + 1,
     navScrolls: nav.scrollWidth > nav.clientWidth + 1,
+    navWidth: nav.clientWidth,
     controls: controls.length,
   };
 });
@@ -91,14 +92,19 @@ for (const [who, user, hash] of [["an administrator's Console", ADMIN, ""], ["an
 }
 
 // Below the width the names fit in, they still never wrap and never cost the icons
-// their place: the bar scrolls within itself. A phone has the narrowest window.
-for (const [width, hash] of [[900, ""], [700, ""], [390, ""], [900, "#/operations"], [390, "#/operations"]]) {
+// their place: the bar scrolls within itself. A phone has the narrowest window, and
+// there the bar must keep room of its own: logo, app name and six buttons once left it
+// none at all, and in Operations pushed the account button off the screen. At 360px
+// the room is about one short name, partly shown and scrolled to the open one; more
+// would mean dropping buttons on a phone, which is a decision of its own.
+for (const [width, hash] of [[900, ""], [700, ""], [390, ""], [360, ""], [900, "#/operations"], [390, "#/operations"], [360, "#/operations"]]) {
   test(`at ${width}px ${hash || "#/console"} wraps no name and clips no button`, async ({ page }) => {
     await boot(page, ADMIN, { width, hash });
     const l = await layout(page);
     expect(l.wrapped).toEqual([]);
     expect(l.clipped).toEqual([]);
     expect(l.barOverflows).toBe(false);
+    expect(l.navWidth, "the bar of view names keeps room of its own rather than none").toBeGreaterThan(40);
   });
 }
 

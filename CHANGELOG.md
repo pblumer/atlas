@@ -64,7 +64,9 @@ _Changed_ / _Removed_ for each version.
   than about 1300 pixels an administrator's Console bar broke two-word names onto two lines,
   shortened the organisation's name to «A…» and clipped the account button. Names now stay
   on one line at every width, the bar scrolls within itself where they do not fit, and the
-  organisation's name gives way first; an end-to-end test measures the Console's and the
+  organisation's name gives way first. On a phone the app's name beside the logo gives way
+  too: there the view names had no room left at all, and in Operations the account button
+  was pushed off the screen. An end-to-end test measures the Console's and the
   Operations bar at 1440, 1280 and 1024 pixels, for an administrator and an operator, and on
   a phone.
 
