@@ -87,6 +87,13 @@ type apiToken struct {
 
 	CreatedAt int64  `json:"createdAt"`
 	CreatedBy string `json:"createdBy,omitempty"`
+
+	// VaultSecret is the vault secret this token was sealed as when it was minted, or
+	// empty when the secret went to the caller instead (ADR-0194, amendment
+	// 2026-10-21). It records where the token went, not where it is now: the secret
+	// can have been overwritten since, by hand or by the next token minted under the
+	// same name, which is how a token is rotated.
+	VaultSecret string `json:"vaultSecret,omitempty"`
 }
 
 // scope returns the token's effective scope, resolving the empty default.
@@ -125,12 +132,16 @@ type apiTokenView struct {
 	ExpiresAt int64    `json:"expiresAt,omitempty"`
 	CreatedAt int64    `json:"createdAt"`
 	CreatedBy string   `json:"createdBy,omitempty"`
+	// VaultSecret says which vault secret the token was sealed as, so an operator
+	// rotating the one behind authSecret="atlas" can tell which token that was.
+	VaultSecret string `json:"vaultSecret,omitempty"`
 }
 
 func (t apiToken) view() apiTokenView {
 	return apiTokenView{
 		ID: t.ID, Name: t.Name, Scope: t.scope(), Reach: t.Reach, Roles: t.roles(),
 		ExpiresAt: t.ExpiresAt, CreatedAt: t.CreatedAt, CreatedBy: t.CreatedBy,
+		VaultSecret: t.VaultSecret,
 	}
 }
 

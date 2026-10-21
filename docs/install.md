@@ -1045,7 +1045,7 @@ of them carries a password, a hash or a token. Ship them with `--log-format=json
 | `auth.user_created`, `auth.user_updated`, `auth.user_deleted` | INFO | The account lifecycle, naming both the actor and the subject; the update line carries the `roles` and `disabled` state that resulted |
 | `auth.password_set` | INFO | An administrator replaced a user's password (that it happened and for whom — never the password) |
 | `feed.subscription_changed` | INFO | An administrator created, changed or deleted a push subscription of the event feed, by `subscription_id`; a create names the `worker_id` and every change the `reach` |
-| `auth.token_minted`, `auth.token_revoked` | INFO | A machine credential — an API token or a deploy token — was issued or revoked, by `token_id` and `token_name`; a mint also records its `scope` and `expires_at` |
+| `auth.token_minted`, `auth.token_revoked` | INFO | A machine credential — an API token or a deploy token — was issued or revoked, by `token_id` and `token_name`; a mint also records its `scope` and `expires_at`, and `vault_secret` — the name, never the value — when the token was sealed in the vault |
 | `auth.worker_token_unknown` | WARN | `ATLAS_TOKEN` is set to a value this server does not accept. Supervised workers are handed it instead of the server's own token and will be refused at every poll — mint an API token with scope `worker`, or unset the variable |
 
 Event names are treated as an API: renaming one is a breaking change and appears under
@@ -1056,8 +1056,17 @@ shipper extracts and keeps.
 ### Credentials for machines
 
 A person signs in; a machine presents an **API token**. Mint one as an
-administrator — the secret comes back exactly once, because the server stores only
-its SHA-256:
+administrator in **Console → API tokens**: name the machine, choose a scope — the page
+says in one sentence what each reaches and which roles the token will carry — and a
+lifetime in days (365 by default, at most 1825; 0 never expires and asks you to
+confirm it). The secret is shown exactly once, with a copy button, because the server
+stores only its SHA-256; the page drops it when you press *Done* or leave it.
+
+The same page lists every token with its scope, roles, reach, expiry and who minted it
+when, marks an expired one, and revokes one after asking.
+
+Without the Console — from a script, say — the route is the same one the page uses, sent
+with an administrator's session cookie:
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8080/api/v1/api-tokens \
@@ -1070,8 +1079,21 @@ curl -sS -X POST http://127.0.0.1:8080/api/v1/api-tokens \
 |-------|---------|
 | `worker` | Only what `atlas worker` does: lease a batch of jobs, settle each one, and post a preview mail back to the outbox. Nothing else — the right scope for a worker running in another network zone |
 | `metrics` | Only `GET /metrics`. The narrowest scope there is, for a Prometheus scraper |
+| `status` | Only `GET /api/v1/node`, this server's descriptor — for another Atlas asking who this server is |
 | `events` | Only `GET /api/v1/events`, the event feed of action outcomes and granted and revoked rights. The token carries the `feedreader` role and no other, so it reads the feed and nothing else — the right scope for a CMDB or a billing system that follows the feed. Without a `reach` it reads the whole feed; with `"reach":["<catalogue id>", …]` it reads only the events about products those catalogues maintain (each event names that catalogue as `homeCatalog`). Name only catalogues you maintain |
+| `landscape` | Only the derived landscape — `GET /api/v1/panorama/mesh`, its ArchiMate projection, and the descriptor — for another Atlas asking for its picture. It **must** state `"reach":["<application id>", …]`, the applications it may see, and you can name only applications you can see yourself |
+| `directory` | Only `GET` and `POST /api/v1/directory-sync`, for the scheduled process that mirrors accounts from a directory. It cannot deploy |
+| `inventory` | Only `GET` and `POST /api/v1/inventory-load` and `POST /api/v1/reconciliation`, for the process that loads a target system's holdings and compares them |
 | `full` | Everything a signed-in non-admin reaches, for a CI job or an MCP adapter whose calls cannot be enumerated in advance. Broad by design, and never an admin: user management, secrets and backups stay refused. It does **not** read the event feed, which needs `feedreader` |
+
+**A token for the server's own processes goes straight into the vault.** The shop's
+system processes call Atlas with the vault secret `atlas` (ADR-0411), which needs a
+`full` token — it carries `operator`. Tick *Seal it in the vault directly* on the
+Console page, or add `"vaultSecret":"atlas"` to the request: the server seals the secret
+under that name and the response carries no `token` at all, so it never leaves the
+server. An existing secret of that name is replaced — mint the new token, then revoke
+the old one, and that is a rotation. Without a vault (`--vault=false`) the request is
+refused with `503` and no token is minted.
 
 Then hand it over as `--token` or `ATLAS_TOKEN`:
 
@@ -1101,10 +1123,11 @@ scrape_configs:
       - targets: ['atlas.example.com:8080']
 ```
 
-`GET /api/v1/api-tokens` lists what exists (identity, scope, lifetime — never a
-secret) and `DELETE /api/v1/api-tokens/{id}` revokes one, effective on the next
-request. An expired token is refused exactly like an unknown one, and its record
-stays listed so you can see what needs reissuing.
+`GET /api/v1/api-tokens` lists what exists (identity, scope, lifetime, and the vault
+secret a token was sealed as — never a secret) and `DELETE /api/v1/api-tokens/{id}`
+revokes one, effective on the next request; the Console page is a front for both. An
+expired token is refused exactly like an unknown one, and its record stays listed so you
+can see what needs reissuing.
 
 A **deploy token** (`atlasat_` vs `atlasdt_`) is the separate, narrower credential
 a peer atlas uses to publish a bundle here; see

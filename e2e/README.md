@@ -548,6 +548,22 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   process id across a new version. Signed in, the stars are read from and written to
   `/api/v1/me/start-favourites` and nothing is kept in the browser; a write the server refuses
   puts the star back and shows the reason. With authentication off (404) they are the browser's.
+- **`console-api-tokens.spec.mjs`** ([ADR-0194](../docs/adr/0194-api-tokens.md), amendment
+  2026-10-21): the Console's **API tokens** page against a stubbed `fetch`, in the manner of
+  `shop-config-answers.spec.mjs`; the stub keeps the tokens as the server would.
+  - **Minting:** the form shows the scope's sentence and the roles the token will carry before
+    it is sent — feedreader alone for `events`, modeler, operator and user otherwise. A
+    `landscape` token is not sent without an application, an `events` token may name catalogues,
+    and no other scope asks for a reach. More than 1825 days is refused, and 0 needs a
+    confirmation beside its warning.
+  - **The secret:** shown once, in the document once, and copied from the panel. It never
+    reaches storage, the URL or the console. Done removes it, and leaving the view empties the
+    node it was in. Sealed in the vault, it is never sent to the page.
+  - **Revoking:** asks first, saying it is immediate and that callers fail from their next
+    request on; a dismissed dialog sends nothing.
+  - **The listing:** an expired token stays listed and is marked expired.
+  - **Who sees it:** a non-administrator is not offered the page, and reaching it anyway shows
+    a refusal instead of the form. It reads in English when the reader chose English.
 
 ## Rendering a conformance gallery diagram
 

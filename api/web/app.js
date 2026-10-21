@@ -702,6 +702,9 @@ const TOPNAV = {
     // administrator also sees who listens now.
     { name: "Events", route: "#/console/events", role: "modeler" },
     { name: "AI access", route: "#/console/ai-access", role: "any" },
+    // The credentials machines sign in with (ADR-0194). Admin, like the three routes
+    // behind it: issuing one is the same class of act as creating an account.
+    { name: "API tokens", route: "#/console/api-tokens", role: "admin" },
     { name: "Audit log", route: "#/console/audit", role: "admin" },
     // How this person reads: number format, time zone, language. Role "any",
     // because it configures the reader rather than the server
@@ -1138,6 +1141,7 @@ function handbookHelp(path) {
   // chapter of its own: how a person reads the console is not a quick-start topic.
   if (path.startsWith("#/console/settings")) return H("darstellung", "Display settings");
   if (path.startsWith("#/console/ai-access")) return H("konten", "Connecting an AI assistant");
+  if (path.startsWith("#/console/api-tokens")) return H("konten", "API tokens for machines");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
   if (path.startsWith("#/console/events")) return H("ereignisse", "Events");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
@@ -11130,6 +11134,7 @@ function routeTitle(path) {
     [/^#\/console\/org$/, "Organization · Console"],
     [/^#\/console\/workers$/, "Workers · Console"],
     [/^#\/console\/events$/, "Events · Console"],
+    [/^#\/console\/api-tokens$/, "API tokens · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
     [/^#\/modeler\/form\//, "Form · Modeler"],
@@ -11229,6 +11234,11 @@ async function route() {
     if (path === "#/console/ai-access") {
       const gen = navGen;
       return await viewAIAccess({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
+    if (path === "#/console/api-tokens") {
+      const gen = navGen;
+      const { viewAPITokens } = await import("./apitokens.js");
+      return await viewAPITokens({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
     if (path === "#/console/settings") return await renderDisplaySettings(view, { api, toast });

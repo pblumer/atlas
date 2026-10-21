@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **API tokens are minted, listed and revoked in the Console.** **Console → API tokens**,
+  offered to administrators only, lists every token with its scope, roles, reach, expiry
+  and who minted it when, and marks an expired one rather than hiding it. The form says
+  what each scope reaches and which roles the token will carry before it is minted, asks
+  for a confirmation before a token that never expires, shows the secret once with a copy
+  button and takes it off the page when the reader leaves; revoking asks first and says it
+  is immediate. `POST /api/v1/api-tokens` takes an optional `vaultSecret`: the server seals
+  the secret in its vault under that name — `atlas`, for the shop's system processes — and
+  returns none, so it never leaves the server; without a vault, or when the vault refuses
+  the write, no token is minted
+  ([ADR-0194](docs/adr/0194-api-tokens.md), amendment 2026-10-21).
+
 - **The Console moves an application with its catalogues.** **Export application…** (formerly
   Download source…) offers the catalogues you maintain, those selling the application ticked, and
   downloads the same package `atlas export` writes: the source tree, the constants when asked, and
