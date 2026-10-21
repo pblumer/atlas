@@ -4657,6 +4657,20 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 }
 .warn-note code { font-family: ui-monospace, monospace; font-size: 12px; }
 
+/* The API-token page (ADR-0194). The scope picker wears the inputs' look; the
+   result panel is set off from the form it answers; and an expired token keeps its
+   row — the listing is where somebody sees what to reissue — but reads as one. */
+#api-tokens .field select {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 5px;
+  padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px;
+  font: inherit; color: var(--text); background: var(--surface);
+}
+#api-tokens .tok-roles { margin-top: 14px; }
+#api-tokens .tok-reach { margin: 4px 0 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+#api-tokens .tok-result { margin-top: 16px; padding: 14px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg); }
+#api-tokens tr.tok-expired > td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+#api-tokens tr.tok-expired b { text-decoration: line-through; text-decoration-color: var(--danger); }
+
 /* Worker ownership (ADR-0205): who else may configure one, inline in its row. */
 .conn-share { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
 .conn-share-head { font-size: 13px; font-weight: 600; }
