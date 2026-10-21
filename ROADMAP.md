@@ -2213,6 +2213,10 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   application… answers the questions from the target's directory, asks for the rest, and installs
   the application, its constants and its catalogues in `atlas import`'s order. A fixed approver
   travels as an account by username (ADR-0467, amended 2026-10-21).
+- ✅ **A target remembers what a package's names mean.** A name chosen once on import — in the
+  Console or with `atlas import --set` — is kept in the target's table of names, shown and
+  corrected on the catalogue list, and answers the same question on every later import
+  (ADR-0467, amended 2026-10-21).
 
 **The shop & ordering**
 - ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per

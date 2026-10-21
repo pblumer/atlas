@@ -29,6 +29,7 @@ import { openPickModal } from "./pickmodal.js";
 // The plan, and a box for every catalogue, product and process the file would
 // replace (ADR-0467).
 import { importAsking } from "./importchoices.js";
+import { mappingsCard, wireMappings } from "./packagemappings.js";
 import { fmtDateTime } from "./datefmt.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
@@ -168,6 +169,8 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
   let cats = [];
   let report = null;
   let translation = null;
+  let mappings = null;
+  let accounts = null;
   // null means the directory could not be read, which is different from an empty
   // one: the first degrades to typed ids, the second says there are no groups yet.
   let dir = null;
@@ -184,6 +187,10 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
     // reason removing the refusal is safe: a gap nothing says out loud is a gap
     // that surfaces months later as "the French shop reads oddly".
     translation = await api("GET", "/api/v1/catalog-products/translation-gaps").catch(() => null);
+    // What other installations' names mean here, as package imports chose them
+    // (ADR-0467), and the accounts a fixed approver may name.
+    mappings = await api("GET", "/api/v1/catalogs/import/mappings").catch(() => null);
+    accounts = await api("GET", "/api/v1/users/assignable").catch(() => null);
   } catch (e) {
     if (isSuperseded()) return;
     throw e;
@@ -235,10 +242,12 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
     </div>
 
     ${importCard()}
+    ${mappingsCard(mappings, dir, accounts)}
     ${approverCard(report)}
     ${translationCard(translation)}`;
 
   wireImport({ api, toast, view });
+  wireMappings({ api, toast, view, dir, accounts, redraw });
 
   view.querySelector(".cat-new").addEventListener("submit", async (e) => {
     e.preventDefault();
