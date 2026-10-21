@@ -32,7 +32,9 @@
 // first run's success. ensure-call-queue also brings a queue it finds to the agents,
 // authorized users and routing settings the model names, so running it again after a
 // change changes the queue rather than reporting success over the old values; what the
-// model does not name stays as the queue has it.
+// model does not name stays as the queue has it. list-free-phone-numbers changes nothing:
+// it reads the numbers in the tenant's inventory nobody holds, for a person or a process
+// to choose from before ensure-phone-number gives one out.
 //
 // # Refusals a process can catch
 //

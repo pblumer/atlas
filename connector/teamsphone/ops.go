@@ -107,6 +107,16 @@ var Ops = map[string]Op{
 		Required: []string{"resourceAccountIds"},
 		Optional: []string{"names"},
 	},
+	// The numbers in the tenant's inventory nobody holds, that Teams would give to the
+	// kind of holder named — what a person choosing a number for ensure-phone-number
+	// picks from. The type is the one that ensure-phone-number will assign under, so it
+	// is fixed in the model like there.
+	"list-free-phone-numbers": {
+		Label:       "list free phone numbers",
+		Optional:    []string{"numberPrefix", "max"},
+		Settings:    []string{"numberType", "assignableTo"},
+		NeedsResult: true,
+	},
 }
 
 // OpNames lists the operations, sorted, for the messages that have to say what was
@@ -136,6 +146,9 @@ const (
 	// dashes or brackets, or as a tel: URI — and handed on as Teams takes it: digits with
 	// an optional leading + and an optional ;ext= extension.
 	PhoneNumber
+	// Limit is how many entries an answer may hold: a whole number from 1 to
+	// MaxFreeNumbers, DefaultFreeNumbers when the model names none.
+	Limit
 )
 
 // Attributes are every authored value an operation can name, with the shape it is read
@@ -157,6 +170,8 @@ var Attributes = map[string]Shape{
 	"locationId":         Text,
 	"resourceAccountIds": List,
 	"names":              List,
+	"numberPrefix":       PhoneNumber,
+	"max":                Limit,
 }
 
 // Setting is one static value: the values it may take, and the one an object the request
@@ -184,7 +199,26 @@ var Settings = map[string]Setting{
 	// three ways a tenant reaches the telephone network, and a guess would hand Teams a
 	// number under the wrong one.
 	"numberType": {Values: []string{NumberDirectRouting, NumberCallingPlan, NumberOperatorConnect}},
+	// assignableTo has no default either: Teams gives a number to a person or to a voice
+	// app's account only when the number carries that capability, and a list for the
+	// wrong kind of holder offers numbers that are then refused.
+	"assignableTo": {Values: []string{AssignableToUser, AssignableToResourceAccount}},
 }
+
+// The two kinds of holder a free number is listed for, and the capability Teams names
+// each by.
+const (
+	AssignableToUser            = "user"
+	AssignableToResourceAccount = "resource-account"
+)
+
+// How many free numbers one list-free-phone-numbers answers: a person choosing one
+// needs a page, not the inventory, and Teams answers 500 at a time unless told
+// otherwise. An answer that stopped short says so in truncated.
+const (
+	DefaultFreeNumbers = 100
+	MaxFreeNumbers     = 500
+)
 
 // The three kinds of phone number, by how the tenant reaches the telephone network. A
 // Direct Routing number is the operator's own carrier's and needs no inventory in the

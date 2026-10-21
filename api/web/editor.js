@@ -4115,6 +4115,7 @@ const SERVICE_TASK_KINDS = [
           { v: "remove-auto-attendant", l: "Remove auto attendant" },
           { v: "remove-call-queue", l: "Remove call queue" },
           { v: "remove-resource-account", l: "Remove resource account" },
+          { v: "list-free-phone-numbers", l: "List free phone numbers" },
           { v: "ensure-phone-number", l: "Ensure phone number" },
           { v: "remove-phone-number", l: "Remove phone number" },
           { v: "remove-hotline", l: "Remove hotline (everything)" },
@@ -4150,7 +4151,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "resourceAccountId", label: "Resource account id", placeholder: "=konten.queue.objectId", fx: true,
-        showIf: (v) => v.operation && !["resolve-users", "ensure-resource-account", "ensure-phone-number", "remove-phone-number", "remove-hotline"].includes(v.operation),
+        showIf: (v) => v.operation && !["resolve-users", "ensure-resource-account", "list-free-phone-numbers", "ensure-phone-number", "remove-phone-number", "remove-hotline"].includes(v.operation),
         hint: "The object id an Ensure resource account answered with. Every voice-app operation is addressed by the account it is associated with.",
       },
       {
@@ -4216,8 +4217,26 @@ const SERVICE_TASK_KINDS = [
           { v: "calling-plan", l: "Calling Plan" },
           { v: "operator-connect", l: "Operator Connect" },
         ],
-        showIf: (v) => v.operation === "ensure-phone-number",
-        hint: "How this tenant reaches the telephone network for the number. Calling Plan and Operator Connect numbers must be the tenant's already; a Direct Routing number is your own carrier's.",
+        showIf: (v) => v.operation === "ensure-phone-number" || v.operation === "list-free-phone-numbers",
+        hint: (v) => (v.operation === "list-free-phone-numbers"
+          ? "The type the listed numbers are of — the one Ensure phone number will give them out under. A Direct Routing number is in the tenant's inventory only once it has been uploaded to it (New-CsOnlineDirectRoutingTelephoneNumberUploadOrder)."
+          : "How this tenant reaches the telephone network for the number. Calling Plan and Operator Connect numbers must be the tenant's already; a Direct Routing number is your own carrier's."),
+      },
+      {
+        key: "assignableTo", label: "Numbers for", type: "select",
+        options: [{ v: "user", l: "a person" }, { v: "resource-account", l: "a resource account (voice app)" }],
+        showIf: (v) => v.operation === "list-free-phone-numbers",
+        hint: "Teams gives a number to a person or to a voice app's resource account only when the number carries that capability, so only those are listed.",
+      },
+      {
+        key: "numberPrefix", label: "Starting with", placeholder: "+41 44 555", fx: true,
+        showIf: (v) => v.operation === "list-free-phone-numbers",
+        hint: "Optional. Only numbers that start with this, written as people write one — a site's or a department's range.",
+      },
+      {
+        key: "max", label: "At most", placeholder: "100", fx: true,
+        showIf: (v) => v.operation === "list-free-phone-numbers",
+        hint: "Optional. How many numbers to answer, from 1 to 500; 100 when empty. =antwort.truncated says when there were more.",
       },
       {
         key: "locationId", label: "Emergency location", placeholder: "=standort.locationId", fx: true,
@@ -4270,6 +4289,8 @@ const SERVICE_TASK_KINDS = [
               return "Required. =antwort.id and =antwort.name identify the queue; =antwort.created says whether this run made it, and =antwort.changed lists what it set on an existing queue — agents, authorizedUsers, routingMethod and the like — empty when nothing differed; =antwort.agentsChanged says whether the agents were among them.";
             case "ensure-auto-attendant":
               return "Required. =antwort.id and =antwort.name identify the voice app; =antwort.created says whether this run made it.";
+            case "list-free-phone-numbers":
+              return "Required. =antwort.numbers are the free numbers, sorted, in the form Ensure phone number takes; =antwort.entries the same with numberType, city and isoCountryCode each; =antwort.count how many; =antwort.truncated whether there were more than were answered.";
             case "ensure-phone-number":
               return "Required. =antwort.assigned says whether this run gave the number out — false when the holder had it already — and =antwort.previousNumber the number it replaced, empty when none.";
             case "remove-phone-number":

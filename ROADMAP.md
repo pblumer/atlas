@@ -597,10 +597,11 @@ The control-flow basics most real models use.
   **Teams Phone is another Worker Type in the catalog**
   ([ADR-0463](docs/adr/0463-teams-phone-worker.md)): a service task marked
   `<atlas:teamsPhoneConnector connector operation …>` resolves users, ensures the resource
-  accounts, a call queue and the auto attendant in front of it, gives a person or a
-  resource account a phone number, and removes all of it again, a whole hotline in one
-  task if need be — fixed PowerShell shipped with Atlas, run by `pwsh` and the
-  MicrosoftTeams module on the worker host with the app's certificate from the vault.
+  accounts, a call queue and the auto attendant in front of it, lists the free phone
+  numbers, gives a person or a resource account one, and removes all of it again, a
+  whole hotline in one task if need be — fixed PowerShell shipped with Atlas, run by
+  `pwsh` and the MicrosoftTeams module on the worker host with the app's certificate from
+  the vault.
   Every ensure looks before it creates, and
   `ensure-call-queue` brings an existing queue to the agents, authorized users and routing
   settings a model names, without ever emptying a list. Eight refusals carry

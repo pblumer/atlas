@@ -88,6 +88,16 @@ only the fields its operation uses.
 
 ### Added
 
+- **Teams Phone lists the free phone numbers to choose from.** `list-free-phone-numbers`
+  answers the numbers in the tenant's inventory that nobody holds, that are activated and
+  not blocked, of the type named and assignable to a person or to a voice app's resource
+  account (`assignableTo`), sorted, at most `max` (1–500, 100 by default), optionally under
+  a `numberPrefix`; `truncated` says when there were more, and `entries` add each number's
+  city and country. Nothing is reserved: `ensure-phone-number` still refuses a number given
+  out in the meantime with `TEAMSPHONE_NUMBER_IN_USE`. A Direct Routing number is listed
+  only once it has been uploaded to the tenant's inventory. In mock mode, the free numbers
+  are those `ATLAS_TEAMSPHONE_MOCK_NUMBERS` names that nobody holds
+  ([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendment 2026-10-21).
 - **A Teams Phone hotline comes down in one task.** `remove-hotline` takes the hotline's
   resource accounts and removes everything in the order that never leaves a caller ringing
   into nothing: the auto attendants, then the queues, then each account's phone numbers
