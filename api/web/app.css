@@ -159,14 +159,44 @@ b { font-weight: 600; }
 .mark.has-logo { background: transparent; }
 .mark .mark-img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .divider { width: 1px; height: 24px; background: var(--border); margin: 0 6px; }
-.topnav { display: flex; align-items: center; gap: 2px; height: 100%; }
-.topnav a {
-  display: inline-flex; align-items: center; height: 100%;
-  padding: 0 12px; color: var(--muted); font-weight: 500;
+/* The view names never wrap and never push the icons off the bar. Two-word names
+   broke onto two lines and the account button was cut off at the right edge as soon as
+   the names outgrew the window — at every width, not only on a phone. So the bar takes
+   what is left beside the icons and scrolls sideways within it when that is not
+   enough, which is what it already did below 860px. */
+.topnav {
+  display: flex; align-items: center; gap: 2px; height: 100%;
+  flex: 0 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+}
+.topnav::-webkit-scrollbar { display: none; }
+.topnav > a, .topnav-group-btn {
+  display: inline-flex; align-items: center; height: 100%; flex: 0 0 auto;
+  padding: 0 12px; color: var(--muted); font-weight: 500; white-space: nowrap;
   border-bottom: 2px solid transparent;
 }
-.topnav a:hover { color: var(--text); text-decoration: none; }
-.topnav a.active { color: var(--text); border-bottom-color: var(--accent); }
+.topnav > a:hover, .topnav-group-btn:hover { color: var(--text); text-decoration: none; }
+.topnav > a.active, .topnav-group-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+/* A group of pages behind one entry (Console › Administration). Its menu is the shared
+   dropdown, position:fixed, so the bar's sideways scroll cannot clip it. */
+.topnav-group { display: flex; height: 100%; flex: 0 0 auto; }
+.topnav-group-btn { gap: 4px; background: none; border-top: 0; border-left: 0; border-right: 0; font: inherit; font-weight: 500; cursor: pointer; }
+.topnav-caret { font-size: 10px; }
+.topnav-group .dropdown-menu a.active { font-weight: 600; background: var(--bg); }
+/* Everything else on the bar keeps its size; the organisation's name gives way first,
+   and goes altogether where the names need its room. */
+.topbar > :not(.topnav):not(.spacer):not(.org) { flex: 0 0 auto; }
+.topbar .org { flex: 0 1 auto; min-width: 0; }
+@media (max-width: 1100px) {
+  .topbar .org { display: none; }
+  .topnav > a, .topnav-group-btn { padding: 0 8px; }
+}
+/* On a phone the app's name gives its room to the view names. Logo, name and six
+   buttons were wider than the screen: the view names had no width left at all, and in
+   Operations, the longer name, the account button was pushed off the right edge. The
+   mark beside it and the app drawer, which marks the open app, still say where one is. */
+@media (max-width: 520px) {
+  .topbar #app-name { display: none; }
+}
 /* Count on a nav entry — today the parked tokens on Operations › Incidents
    (ADR-0151). Red and always legible, including on the muted inactive entry: an
    operator should see it without first landing on the view it belongs to. */
@@ -6920,9 +6950,8 @@ button.im-problem:hover { background: var(--accent-soft); }
      not need to be used, gives its place up. */
   .topbar { gap: 2px; padding: 0 6px; }
   .topbar .org, .topbar .divider { display: none; }
-  .topnav { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-  .topnav::-webkit-scrollbar { display: none; }
-  .topnav a { padding: 0 8px; white-space: nowrap; }
+  .topnav { flex: 1 1 auto; }
+  .topnav > a, .topnav-group-btn { padding: 0 8px; }
   .topbar .spacer { display: none; }
   .icon-btn { width: 36px; height: 36px; flex: 0 0 auto; }
   main { padding: 12px; }

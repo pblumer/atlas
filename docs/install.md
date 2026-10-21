@@ -1056,7 +1056,7 @@ shipper extracts and keeps.
 ### Credentials for machines
 
 A person signs in; a machine presents an **API token**. Mint one as an
-administrator in **Console → API tokens**: name the machine, choose a scope — the page
+administrator in **Console → Administration → API tokens**: name the machine, choose a scope — the page
 says in one sentence what each reaches and which roles the token will carry — and a
 lifetime in days (365 by default, at most 1825; 0 never expires and asks you to
 confirm it). The secret is shown exactly once, with a copy button, because the server

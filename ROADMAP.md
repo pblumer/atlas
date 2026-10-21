@@ -990,7 +990,7 @@ Composition and reuse.
 What it takes to run this for real.
 
 - 🚧 Public API surface (deploy, create instance, publish message, complete job, queries): every route is in the served OpenAPI document with its role (`api/openapi.go`), with scoped API tokens ([ADR-0194](docs/adr/0194-api-tokens.md)) and a stated runtime contract ([ADR-0176](docs/adr/0176-standards-boundary-and-runtime-contract.md)). Deploy is still a sidecar store, not an event-sourced command ([ADR-0019](docs/adr/0019-durable-deployments.md))
-- ✅ API tokens are minted, listed and revoked in the Console (**Console → API tokens**, admin
+- ✅ API tokens are minted, listed and revoked in the Console (**Console → Administration → API tokens**, admin
   only): the roles a token will carry are shown before it is minted, the secret once, and an
   expired token stays listed and marked; one with less than 30 days left is flagged there and
   on the dashboard. A token can be sealed straight into the vault
