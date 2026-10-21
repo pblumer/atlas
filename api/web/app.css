@@ -730,9 +730,10 @@ textarea::placeholder {
 .deploy-warnings li + li { margin-top: 4px; }
 /* What switching the catalogue off strands, on an administrator's dashboard
    (ADR-0434): processes still working orders that will fail at the order routes. */
-.catalogue-stranded { border: 1px solid var(--warn); background: var(--warn-soft); margin-bottom: 18px; }
-.catalogue-stranded h2 { color: var(--warn); }
-.catalogue-stranded ul { margin: 6px 0 10px; padding-left: 18px; }
+.catalogue-stranded, .tokens-expiring { border: 1px solid var(--warn); background: var(--warn-soft); margin-bottom: 18px; }
+.catalogue-stranded h2, .tokens-expiring h2 { color: var(--warn); }
+.catalogue-stranded ul, .tokens-expiring ul { margin: 6px 0 10px; padding-left: 18px; }
+#api-tokens #tok-soon ul { margin: 6px 0; padding-left: 18px; }
 /* The variable editor inside the incident's fix dialog (ADR-0158). */
 .inc-vars-modal { max-width: 620px; width: 92vw; }
 .inc-vars-json {

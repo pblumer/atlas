@@ -1555,6 +1555,7 @@ function paintReleaseNotes(slot, lang) {
 async function viewConsoleDashboard() {
   view.innerHTML = `
     <div id="catalogue-stranded-slot"></div>
+    <div id="api-tokens-expiring-slot"></div>
     <div class="card">
       <div class="welcome-head">
         <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
@@ -1599,6 +1600,12 @@ async function viewConsoleDashboard() {
   // an answer — the catalogue off, and an administrator looking — so nobody else pays a
   // request for it. Fills its own slot, and is silent when nothing is stranded.
   if (!FEATURES.catalogue && mayUse("admin")) renderCatalogueStranded(document.getElementById("catalogue-stranded-slot"));
+  // API tokens about to expire (ADR-0194): asked only by an administrator, the one
+  // person who may read the list and mint the replacement. Silent otherwise.
+  if (mayUse("admin")) {
+    import("./apitokens.js").then((m) => m.renderExpiringTokens(document.getElementById("api-tokens-expiring-slot"), { api }))
+      .catch(() => {});
+  }
   renderReleaseNotes(document.getElementById("release-notes-slot")); // fills its own slot; safe if it fails
   // The key-features tile sits below the dashboard's own tiles: what Atlas is, for
   // someone who arrived here without having read the README. Fills its own slot,

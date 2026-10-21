@@ -10089,6 +10089,14 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
           das Token nie abläuft; die Seite warnt davor und verlangt eine Bestätigung.</li>
         <li data-l="en"><b>Lifetime:</b> 365 days unless you change it, five years at most. 0 means the token never
           expires; the page warns about that and asks you to confirm it.</li>
+        <li data-l="de"><b>Bald ablaufende Tokens</b> – weniger als 30 Tage – sind gelb markiert und sagen, wie viele
+          Tage ihnen bleiben. Über der Liste und auf dem Dashboard der Console steht dann ein Hinweis, den nur
+          Admins sehen. Erzeuge rechtzeitig ein neues Token, übergib es der Maschine und widerrufe danach das alte;
+          damit verschwindet der Hinweis.</li>
+        <li data-l="en"><b>Tokens about to expire</b> – in less than 30 days – are marked in yellow and say how many
+          days they have left. A notice then appears above the list and on the Console's dashboard, for
+          administrators only. Create a new token in time, hand it to the machine and then revoke the old one; that
+          clears the notice.</li>
         <li data-l="de"><b>Abgelaufene Tokens</b> bleiben in der Liste und sind rot markiert. Angenommen werden sie
           nicht mehr – die Liste zeigt dir, was neu ausgestellt werden muss.</li>
         <li data-l="en"><b>Expired tokens</b> stay in the list, marked in red. They are no longer accepted – the list
