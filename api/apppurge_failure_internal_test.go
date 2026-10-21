@@ -35,7 +35,7 @@ func breakStore(t *testing.T, dataDir, store string) {
 // application whose forms cannot be listed is not an application without forms.
 func TestPurgePreviewRefusesAStoreItCannotRead(t *testing.T) {
 	for _, store := range []string{
-		"decisions", "drafts", "dmn-drafts", "dmnrefs", "forms",
+		"projects", "decisions", "drafts", "dmn-drafts", "dmnrefs", "forms",
 		"playground-scenarios", "panorama-models", "information-models",
 	} {
 		t.Run(store, func(t *testing.T) {
@@ -51,9 +51,42 @@ func TestPurgePreviewRefusesAStoreItCannotRead(t *testing.T) {
 			if code, b := st.x.do(http.MethodDelete, "/api/v1/applications/"+app+"?purge=true", ""); code != http.StatusInternalServerError {
 				t.Errorf("purge: %d %s, want 500", code, b)
 			}
+			if store == "projects" {
+				return // the record cannot be read back from a broken store either
+			}
 			st.srv.do(func() {
 				if _, ok, _ := st.srv.projects.Get(app); !ok {
 					t.Error("a purge that could not read the application deleted it")
+				}
+			})
+		})
+	}
+}
+
+// TestDeletingTheApplicationRecordStopsAtTheStepThatFails: the metadata reachable only
+// through the application's id goes before the record itself, so a failure on the way
+// leaves the record for the request that finishes the work — the order a plain delete
+// and the last step of a purge share.
+func TestDeletingTheApplicationRecordStopsAtTheStepThatFails(t *testing.T) {
+	for _, store := range []string{"releases", "grant-audit", "application-constants", "projects"} {
+		t.Run(store, func(t *testing.T) {
+			dir := t.TempDir()
+			st := bootDecisionStack(t, dir)
+			defer st.shutdown()
+			id := st.x.mkProject("Record " + store)
+			breakStore(t, dir, store)
+
+			var err error
+			st.srv.do(func() { err = st.srv.deleteApplicationRecordOnLoop(id) })
+			if err == nil {
+				t.Fatalf("deleting the record with %s broken reported success", store)
+			}
+			if store == "projects" {
+				return
+			}
+			st.srv.do(func() {
+				if _, ok, _ := st.srv.projects.Get(id); !ok {
+					t.Error("the record went although the metadata before it could not be removed")
 				}
 			})
 		})
