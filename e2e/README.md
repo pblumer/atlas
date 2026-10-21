@@ -140,7 +140,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 - **`multi-instance.spec.mjs`** (ADR-0097 / ADR-0100): a modelled **loop cardinality** drives
   the instance count and ticks down; a **data-driven** activity falls back to the
   toolbar-configurable default.
-- **`backup.spec.mjs`** (ADR-0107 / ADR-0109): the **Console → Backup** view — the nav entry
+- **`backup.spec.mjs`** (ADR-0107 / ADR-0109): the **Console → Administration → Backup** view — the nav entry
   opens it, both the design-time backup and the whole-instance **full snapshot** expose their
   `.tar.gz` download links and restore controls, and each restore flow validates an empty
   selection, then reports the file count and restart note on a (mocked) successful upload.
@@ -570,6 +570,18 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
     non-administrator's dashboard does not ask for the tokens at all.
   - **Who sees it:** a non-administrator is not offered the page, and reaching it anyway shows
     a refusal instead of the form. It reads in English when the reader chose English.
+
+- **`console-menu.spec.mjs`**: the **bar of view names** under the top bar, against a stubbed
+  API. It measures, not eyeballs, at 1440, 1280 and 1024 pixels for an administrator:
+  - no name takes two lines;
+  - every button on the top bar lies wholly inside the window;
+  - the Console's entries need no sideways scroll.
+
+  At 900 and 700 pixels, on a phone and on the long Operations bar, names still never wrap
+  and no button is clipped; the bar scrolls within itself. The administrator's pages sit
+  behind **Administration**: the menu opens unclipped, marks the open page, and the group is
+  the entry marked while one of its pages is open. A modeller and a task worker see no
+  group; with enforcement off it is offered.
 
 ## Rendering a conformance gallery diagram
 

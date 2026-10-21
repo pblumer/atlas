@@ -15,13 +15,13 @@ _Changed_ / _Removed_ for each version.
 ### Added
 
 - **An API token about to expire is flagged before it stops working.** A token with less
-  than 30 days left is marked in **Console → API tokens** with the days it has, listed
+  than 30 days left is marked in **Console → Administration → API tokens** with the days it has, listed
   above the tokens, and named on the Console's dashboard to administrators, with the vault
   secret it was sealed as — until it is replaced and revoked. An expired token is refused
   like an unknown one, so without the warning the first sign was a machine failing
   ([ADR-0194](docs/adr/0194-api-tokens.md), amendment 2026-10-21).
 
-- **API tokens are minted, listed and revoked in the Console.** **Console → API tokens**,
+- **API tokens are minted, listed and revoked in the Console.** **Console → Administration → API tokens**,
   offered to administrators only, lists every token with its scope, roles, reach, expiry
   and who minted it when, and marks an expired one rather than hiding it. The form says
   what each scope reaches and which roles the token will carry before it is minted, asks
@@ -46,7 +46,23 @@ _Changed_ / _Removed_ for each version.
   command and the server ([ADR-0467](docs/adr/0467-application-package-export.md), amendment
   2026-10-21).
 
+### Changed
+
+- **The Console's administrator pages sit under Administration.** Engine, Logs, Backup,
+  Organization, API tokens and Audit log moved from the Console's bar into one entry,
+  **Administration ▾**, which only administrators see; Dashboard, Workers, Events, AI access
+  and Display stay on the bar. The pages keep their addresses, so bookmarks and the
+  handbook's links still open them, and the handbook and the docs now say
+  **Console → Administration → …**.
+
 ### Fixed
+
+- **The menu bar no longer wraps its names or cuts off its buttons.** In a window narrower
+  than about 1300 pixels an administrator's Console bar broke two-word names onto two lines,
+  shortened the organisation's name to «A…» and clipped the account button. Names now stay
+  on one line at every width, the bar scrolls within itself where they do not fit, and the
+  organisation's name gives way first; an end-to-end test measures the bar at 1440, 1280 and
+  1024 pixels and on a phone.
 
 - **A fixed approver in a package is assigned by username.** A `fixed` approval is a task
   assigned to a username, but `atlas import`, the example's `facility-management` question and the

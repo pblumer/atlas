@@ -439,7 +439,7 @@ function audienceField(dir, chosen) {
   if (!boxes.length) {
     return `<div class="field">Audience
       <p class="muted" style="margin:6px 0 0">No group exists yet, so this catalogue can reach
-        nobody. An administrator creates groups under Console → Organization.</p></div>`;
+        nobody. An administrator creates groups under Console → Administration → Organization.</p></div>`;
   }
   return `<div class="field">Audience (none chosen reaches nobody)
     <div class="audience-boxes" style="display:grid; gap:4px; margin-top:6px">
@@ -788,7 +788,7 @@ function eligibleField(dir, chosen) {
     return `<div class="field wide">Who may receive it
       <span class="muted" style="display:block; margin:2px 0 6px">${hint}</span>
       <p class="muted" style="margin:0">No group exists yet, so there is nothing to
-        narrow to. An administrator creates groups under Console → Organization.</p></div>`;
+        narrow to. An administrator creates groups under Console → Administration → Organization.</p></div>`;
   }
   return `<div class="field wide">Who may receive it (none chosen narrows nothing)
     <span class="muted" style="display:block; margin:2px 0 6px">${hint}</span>

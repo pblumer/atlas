@@ -809,11 +809,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p data-l="de" style="margin:.3em 0 0">Atlas speichert <b>jeden</b> Zustandsübergang als Ereignis in einem
           append-only Log und baut den Zustand daraus wieder auf. Darum ist jede Instanz vollständig nachvollziehbar
           und übersteht Neustarts ohne Datenverlust. Neugierig aufs Warum? Siehe
-          <a href="/#/console/engine">Console → Engine</a> und die Architektur-Doku im Repository.</p>
+          <a href="/#/console/engine">Console → Administration → Engine</a> und die Architektur-Doku im Repository.</p>
         <p data-l="en" style="margin:.3em 0 0">Atlas records <b>every</b> state transition as an event in an
           append-only log and rebuilds state from it. That's why every instance is fully traceable and survives
           restarts without data loss. Curious about the why? See
-          <a href="/#/console/engine">Console → Engine</a> and the architecture docs in the repository.</p>
+          <a href="/#/console/engine">Console → Administration → Engine</a> and the architecture docs in the repository.</p>
       </div>
     </section>
 
@@ -8978,7 +8978,7 @@ curl -H "Authorization: Bearer $ATLAS_METRICS_TOKEN" https://atlas.example.com/m
         mit den laufenden Instanzen, die Konten und den Vault-Schlüssel –; <code>POST /api/v1/restore/full</code>
         wird beim nächsten Neustart angewandt und ersetzt alles, dann wird der Zustand aus dem WAL neu aufgebaut.
         Alle vier verlangen die Rolle <code>admin</code>. In der Konsole liegt beides unter
-        <b>Backup</b>.</p>
+        <b>Administration → Backup</b>.</p>
       <p data-l="en">Two backups, for two questions. <code>GET /api/v1/backup</code> downloads the
         <b>design-time data</b> as a <code>tar.gz</code> – deployments, drafts, forms, decisions, applications,
         workers, settings –, <b>without</b> accounts, the vault key, or runtime state;
@@ -8986,7 +8986,7 @@ curl -H "Authorization: Bearer $ATLAS_METRICS_TOKEN" https://atlas.example.com/m
         into effect). <code>GET /api/v1/backup/full</code> downloads the <b>whole instance</b> – with the WAL and
         its running instances, the accounts, and the vault key –; <code>POST /api/v1/restore/full</code> is applied
         on the next restart and replaces everything, then the state is rebuilt from the WAL. All four need the
-        <code>admin</code> role. In the Console both sit under <b>Backup</b>.</p>
+        <code>admin</code> role. In the Console both sit under <b>Administration → Backup</b>.</p>
 
       <table id="monitor-routes">
         <thead><tr>
@@ -9726,9 +9726,9 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
     <section id="konten">
       <h2 data-l="de">Konten, Rollen &amp; Anmeldung</h2><h2 data-l="en">Accounts, roles &amp; sign-in</h2>
       <p class="lead" data-l="de">Wer sich anmelden kann – und was er danach darf. Beides wird unter
-        <a href="/#/console/org">Console&nbsp;→&nbsp;Organization</a> verwaltet.</p>
+        <a href="/#/console/org">Console&nbsp;→&nbsp;Administration&nbsp;→&nbsp;Organization</a> verwaltet.</p>
       <p class="lead" data-l="en">Who can sign in – and what they may do afterwards. Both are managed under
-        <a href="/#/console/org">Console&nbsp;→&nbsp;Organization</a>.</p>
+        <a href="/#/console/org">Console&nbsp;→&nbsp;Administration&nbsp;→&nbsp;Organization</a>.</p>
 
       <h3 data-l="de">Die Rollen</h3><h3 data-l="en">The roles</h3>
       <p data-l="de">Jeder Endpunkt nennt die Rolle, die ihn erreicht, und der Server prüft sie, bevor die Anfrage
@@ -9778,7 +9778,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
               und sonst nichts. Für ein Umsystem
               wie eine CMDB oder die Verrechnung stellt ein Administrator einen API-Token mit dem Scope
               <code>events</code> aus; er trägt genau diese Rolle und erreicht genau diese eine Route. Das geht unter
-              <a href="/#/console/api-tokens">Console&nbsp;→&nbsp;API tokens</a> oder mit
+              <a href="/#/console/api-tokens">Console&nbsp;→&nbsp;Administration&nbsp;→&nbsp;API tokens</a> oder mit
               <code>POST /api/v1/api-tokens</code> und <code>{"name":"cmdb","scope":"events","expiresInDays":365}</code>.
               Mit <code>"reach":["&lt;Katalog-ID&gt;"]</code> liest der Token nur, was die Produkte betrifft, die diese
               Kataloge pflegen; jedes Ereignis nennt diesen Katalog als <code>homeCatalog</code>.
@@ -9788,7 +9788,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
               For a system beyond atlas such as
               a CMDB or billing, an administrator mints an API token with the <code>events</code> scope; it carries
               exactly this role and reaches exactly that one route. That is done under
-              <a href="/#/console/api-tokens">Console&nbsp;→&nbsp;API tokens</a> or with
+              <a href="/#/console/api-tokens">Console&nbsp;→&nbsp;Administration&nbsp;→&nbsp;API tokens</a> or with
               <code>POST /api/v1/api-tokens</code> and <code>{"name":"cmdb","scope":"events","expiresInDays":365}</code>. With
               <code>"reach":["&lt;catalogue id&gt;"]</code> the token reads only what concerns the products those
               catalogues maintain; every event names that catalogue as <code>homeCatalog</code>. Deliberately not part
@@ -9976,11 +9976,11 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
       <h3 data-l="de">Zugang für Maschinen: API-Tokens</h3><h3 data-l="en">Access for machines: API tokens</h3>
       <p data-l="de">Eine Person meldet sich an, eine Maschine legt ein <b>API-Token</b> vor: ein Worker auf einem
         anderen Host, ein CI-Job, ein MCP-Adapter, ein Prometheus-Scraper oder ein anderes Atlas. Erzeugt, angezeigt
-        und widerrufen werden Tokens unter <a href="/#/console/api-tokens">Console&nbsp;→&nbsp;API tokens</a>. Den
+        und widerrufen werden Tokens unter <a href="/#/console/api-tokens">Console&nbsp;→&nbsp;Administration&nbsp;→&nbsp;API tokens</a>. Den
         Menüpunkt sieht nur, wer die Rolle <code>admin</code> hat.</p>
       <p data-l="en">A person signs in; a machine presents an <b>API token</b>: a worker on another host, a CI job,
         an MCP adapter, a Prometheus scraper or another Atlas. Tokens are created, listed and revoked under
-        <a href="/#/console/api-tokens">Console&nbsp;→&nbsp;API tokens</a>. Only an account with the
+        <a href="/#/console/api-tokens">Console&nbsp;→&nbsp;Administration&nbsp;→&nbsp;API tokens</a>. Only an account with the
         <code>admin</code> role sees that menu entry.</p>
       <p data-l="de">Du gibst dem Token einen Namen und wählst Scope und Gültigkeit. Bevor du es erzeugst, zeigt
         die Seite, welche Rollen es tragen wird. <code>admin</code> trägt ein Token nie: Erzeugt es ein Admin,
@@ -10075,11 +10075,11 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
       <h3 data-l="de">Das Revisionsprotokoll</h3><h3 data-l="en">The audit log</h3>
       <p data-l="de">Wer eine Applikation für wen freigibt, ist die Zugriffskontrolle des Produkts &ndash; und
         früher hinterliess sie keine Spur: Ein Mitglied erschien oder verschwand, und niemand konnte sagen, wer das
-        wann getan hatte. <a href="/#/console/audit">Console&nbsp;→&nbsp;Audit log</a> zeigt diese Änderungen über
+        wann getan hatte. <a href="/#/console/audit">Console&nbsp;→&nbsp;Administration&nbsp;→&nbsp;Audit log</a> zeigt diese Änderungen über
         <b>alle</b> Applikationen hinweg, die neuesten zuerst (die letzten 200).</p>
       <p data-l="en">Who shares an application with whom is the product's access-control surface &ndash; and it
         used to leave no trace: a member appeared or disappeared and nobody could say who did it, or when.
-        <a href="/#/console/audit">Console&nbsp;→&nbsp;Audit log</a> shows those changes across <b>every</b>
+        <a href="/#/console/audit">Console&nbsp;→&nbsp;Administration&nbsp;→&nbsp;Audit log</a> shows those changes across <b>every</b>
         application, newest first (the 200 most recent).</p>
       <table>
         <thead><tr>

@@ -44,8 +44,10 @@ test("the Console nav exposes a Backup entry that opens the backup view", async 
   installMock(page);
   await bootApp(page);
 
-  const backupNav = page.locator("#topnav a", { hasText: "Backup" });
+  // Backup is one of the administrator's pages, behind Administration.
+  const backupNav = page.locator("#topnav .topnav-group a", { hasText: "Backup" });
   await expect(backupNav).toHaveAttribute("href", "#/console/backup");
+  await page.locator("#topnav .topnav-group-btn", { hasText: "Administration" }).click();
   await backupNav.click();
   await expect(page.locator("#view h1").first()).toHaveText("Backup & restore");
 });

@@ -693,23 +693,32 @@ const APPS = [
 const TOPNAV = {
   console: [
     { name: "Dashboard", route: "#/console", role: "any" },
-    { name: "Engine", route: "#/console/engine", role: "admin" },
-    { name: "Logs", route: "#/console/logs", role: "admin" },
-    { name: "Backup", route: "#/console/backup", role: "admin" },
-    { name: "Organization", route: "#/console/org", role: "admin" },
     { name: "Workers", route: "#/console/workers", role: "any" },
     // What atlas emits (ADR-0435): a modeler chooses an event to listen to here; an
     // administrator also sees who listens now.
     { name: "Events", route: "#/console/events", role: "modeler" },
     { name: "AI access", route: "#/console/ai-access", role: "any" },
-    // The credentials machines sign in with (ADR-0194). Admin, like the three routes
-    // behind it: issuing one is the same class of act as creating an account.
-    { name: "API tokens", route: "#/console/api-tokens", role: "admin" },
-    { name: "Audit log", route: "#/console/audit", role: "admin" },
     // How this person reads: number format, time zone, language. Role "any",
     // because it configures the reader rather than the server
     // (ADR-0459).
     { name: "Display", route: "#/console/settings", role: "any" },
+    // The administrator's pages, behind one entry. Eleven side by side no longer fitted
+    // a laptop's window: the bar wrapped two-word names onto two lines and cut off the
+    // account button. These six are what only an administrator opens, and seldom, so
+    // they cost one click more and the bar holds its place for everybody else. A group
+    // rather than an overflow menu that fills with whatever does not fit, because then
+    // where a page is would depend on the width of the window, and "Console →
+    // Administration → API tokens" has to be true on every screen.
+    { name: "Administration", role: "admin", items: [
+      { name: "Engine", route: "#/console/engine", role: "admin" },
+      { name: "Logs", route: "#/console/logs", role: "admin" },
+      { name: "Backup", route: "#/console/backup", role: "admin" },
+      { name: "Organization", route: "#/console/org", role: "admin" },
+      // The credentials machines sign in with (ADR-0194). Admin, like the three routes
+      // behind it: issuing one is the same class of act as creating an account.
+      { name: "API tokens", route: "#/console/api-tokens", role: "admin" },
+      { name: "Audit log", route: "#/console/audit", role: "admin" },
+    ] },
   ],
   modeler: [
     { name: "Home", route: "#/modeler", role: "modeler" },
@@ -1322,18 +1331,32 @@ function setChrome(appId, route) {
     (APPS.find((a) => a.id === appId) || {}).name || "atlas";
   paintApps();
   const topnav = document.getElementById("topnav");
-  topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => offered(t)).map((t) =>
+  topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => offered(t)).map((t) => {
+    // A group is one entry that opens its pages in a menu (the shared dropdown, which
+    // is position:fixed, so the bar scrolling sideways cannot clip it). It is marked
+    // active while one of its pages is open, so the bar still says where one is.
+    if (t.items) {
+      const pages = t.items.filter((i) => offered(i));
+      if (!pages.length) return "";
+      const here = pages.some((i) => i.route === route);
+      return `<div class="dropdown topnav-group" data-group="${t.name}">` +
+        `<button type="button" class="topnav-group-btn dropdown-toggle${here ? " active" : ""}" aria-haspopup="menu">` +
+        `${t.name}<span class="topnav-caret" aria-hidden="true">▾</span></button>` +
+        `<div class="dropdown-menu" role="menu" hidden>` +
+        pages.map((i) => `<a href="${i.route}" role="menuitem"${i.route === route ? ` class="active" aria-current="page"` : ""}>${i.name}</a>`).join("") +
+        `</div></div>`;
+    }
     // A `separate` entry is a page of its own and opens in one, exactly as the
     // drawer opens it. Rendered as a plain link it would replace the console in the
     // same tab, which is the behaviour the note above APPS argues against: the only
     // way back is one small link, and somebody in the middle of something loses it.
-    `<a href="${t.route}"${t.separate ? ` target="_blank" rel="noopener"` : ""} ` +
-    `class="${t.route === route ? "active" : ""}">${t.name}` +
-    (t.badge ? `<span class="nav-badge" data-badge="${t.badge}" hidden></span>` : "") + `</a>`
-  ).join("");
-  // On a narrow screen the view names scroll sideways within the bar, and the one
+    return `<a href="${t.route}"${t.separate ? ` target="_blank" rel="noopener"` : ""} ` +
+      `class="${t.route === route ? "active" : ""}">${t.name}` +
+      (t.badge ? `<span class="nav-badge" data-badge="${t.badge}" hidden></span>` : "") + `</a>`;
+  }).join("");
+  // When the view names do not fit they scroll sideways within the bar, and the one
   // open may be past its edge; bring it into view so the bar says where one is.
-  const current = topnav.querySelector("a.active");
+  const current = topnav.querySelector(":scope > a.active, .topnav-group-btn.active");
   if (current && topnav.scrollWidth > topnav.clientWidth) {
     const bar = topnav.getBoundingClientRect(), link = current.getBoundingClientRect();
     topnav.scrollLeft += link.left - bar.left - (bar.width - link.width) / 2;
