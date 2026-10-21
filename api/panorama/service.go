@@ -105,7 +105,7 @@ func (s *Service) ModelsForApplicationOnLoop(applicationID string) ([]Summary, e
 
 // DeleteForApplicationOnLoop removes every model one application owns — the purge
 // of that application
-// (ADR-draft-deleting-an-application-with-its-contents). A model is owned
+// (ADR-0468). A model is owned
 // strictly (ADR-0189), so it goes with its application rather than being left
 // without one. Same run-loop precondition as CountForApplicationOnLoop; idempotent.
 func (s *Service) DeleteForApplicationOnLoop(applicationID string) error {

@@ -1913,7 +1913,7 @@ dataset of up to 50 000 cases":
 - 🔲 Element comments / annotations.
 - 🚧 Projects/folders to organize diagrams (draft/deployment listing grows a tree): projects exist ([ADR-0034](docs/adr/0034-projects-and-artifacts.md), [ADR-0128](docs/adr/0128-process-applications.md)); nested folders do not.
 - ✅ **Deleting an application with everything it owns**
-  ([ADR-draft-deleting-an-application-with-its-contents](docs/adr/draft-deleting-an-application-with-its-contents.md)):
+  ([ADR-0468](docs/adr/0468-deleting-an-application-with-its-contents.md)):
   the delete dialog offers to keep the contents (Not assigned) or to remove every deployed version
   with its running instances, the decision deployments, drafts, forms, references, models and
   scenarios, after a preview of what goes and what outside the application stops working

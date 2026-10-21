@@ -436,7 +436,7 @@ var (
 	DeploymentDiagramUpdated = newEvent("deployment.diagram_updated")
 
 	// DeploymentForceDeleted reports a deployed version removed with force=true
-	// (ADR-draft-deleting-an-application-with-its-contents): its running instances
+	// (ADR-0468): its running instances
 	// were cancelled and the guards that protect a process still needed by an order or
 	// a catalogue release were overridden. Audited because it ends work other people
 	// may be waiting on, and "who stopped my instance" must have an answer.

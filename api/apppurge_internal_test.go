@@ -9,7 +9,7 @@ import (
 )
 
 // Purging an application deletes everything it owns on this server
-// (ADR-draft-deleting-an-application-with-its-contents). These tests need the
+// (ADR-0468). These tests need the
 // decision store and a restart, so they drive the whole stack from inside the
 // package.
 

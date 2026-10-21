@@ -12,7 +12,7 @@ import (
 )
 
 // What a purge and a forced delete do when a step cannot be taken
-// (ADR-draft-deleting-an-application-with-its-contents). A store whose directory
+// (ADR-0468). A store whose directory
 // has been replaced by a file refuses every read and every removal on every OS
 // (sidecar.Store's brokenDir), which is the lever here: each step is made to fail in
 // turn, and each failure has to be reported — never read as "nothing there" — with

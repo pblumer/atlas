@@ -242,7 +242,7 @@ func TestDeleteSystemProcessRefused(t *testing.T) {
 		t.Fatal("system process not deployed")
 	}
 	// force overrides the order and catalogue guards, never this one
-	// (ADR-draft-deleting-an-application-with-its-contents).
+	// (ADR-0468).
 	for _, query := range []string{"", "?force=true"} {
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/processes/"+strconv.FormatUint(key, 10)+query, nil)
 		rec := httptest.NewRecorder()

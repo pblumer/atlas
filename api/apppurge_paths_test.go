@@ -10,7 +10,7 @@ import (
 )
 
 // The failure paths of a forced delete and a purge
-// (ADR-draft-deleting-an-application-with-its-contents), in the shape the other
+// (ADR-0468), in the shape the other
 // handler-path tests use: a directory where a record is expected, which no OS will
 // remove, and a record cut short, which no store can read. What these hold is the
 // order of the steps — a failure leaves the application in place, and the same request

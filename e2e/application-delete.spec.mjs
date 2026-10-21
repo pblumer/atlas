@@ -1,5 +1,5 @@
 // End-to-end coverage for the application delete dialog (api/web/deletedialog.js,
-// ADR-draft-deleting-an-application-with-its-contents).
+// ADR-0468).
 //
 // The case behind it: deleting the Microsoft 365 example kept fourteen processes and
 // their forms under Not assigned, because keeping them was the only thing the delete

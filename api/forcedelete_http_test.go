@@ -9,7 +9,7 @@ import (
 )
 
 // A forced delete removes a deployed version whatever holds it
-// (ADR-draft-deleting-an-application-with-its-contents): it cancels the version's
+// (ADR-0468): it cancels the version's
 // running instances and overrides ADR-0427's guard. Without force nothing changes.
 
 // TestForcedDeleteCancelsTheRunningInstances: a version with instances parked at a

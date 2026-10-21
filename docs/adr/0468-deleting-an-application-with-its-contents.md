@@ -1,4 +1,4 @@
-# ADR-DRAFT: Deleting an application with everything it owns
+# ADR-0468: Deleting an application with everything it owns
 
 - **Status:** Accepted
 - **Implementation:** Landed

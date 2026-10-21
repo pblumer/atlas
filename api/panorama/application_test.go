@@ -6,7 +6,7 @@ import (
 )
 
 // TestApplicationModelsOnLoop covers the two hooks an application purge uses
-// (ADR-draft-deleting-an-application-with-its-contents): listing one application's
+// (ADR-0468): listing one application's
 // models for the preview, and removing them with it — only its own, idempotently, and
 // with a store that cannot be read reported rather than read as empty.
 func TestApplicationModelsOnLoop(t *testing.T) {

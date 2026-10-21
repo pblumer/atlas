@@ -517,7 +517,7 @@ func (s *Service) ModelsForApplicationOnLoop(applicationID string) ([]Model, err
 
 // DeleteForApplicationOnLoop removes every model one application owns — the purge
 // of that application
-// (ADR-draft-deleting-an-application-with-its-contents). Like
+// (ADR-0468). Like
 // VocabularyOnLoop it runs inside an existing loop turn; idempotent.
 func (s *Service) DeleteForApplicationOnLoop(applicationID string) error {
 	models, err := s.store.ForApplication(applicationID)

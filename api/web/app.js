@@ -4060,7 +4060,7 @@ async function deleteDraft(processId, reload) {
 // refuses keeps the server's reason — it used to be replaced by a guess ("running
 // instances?") that was wrong for a process a catalogue release binds. A 409 is a
 // guard the forced delete overrides, so it is offered, with what it does, before
-// anything is forced (ADR-draft-deleting-an-application-with-its-contents).
+// anything is forced (ADR-0468).
 async function deleteProcess(processId, groups, reload) {
   const group = groups.find((g) => g.processId === processId);
   if (!group) return;
@@ -4138,7 +4138,7 @@ async function renameProject(id, current, reload) {
 }
 
 // deleteProject deletes an application either way
-// ADR-draft-deleting-an-application-with-its-contents allows: keeping its contents
+// ADR-0468 allows: keeping its contents
 // as Not assigned, or with everything it owns after the server's preview of what
 // that removes.
 async function deleteProject(id, name, reload) {

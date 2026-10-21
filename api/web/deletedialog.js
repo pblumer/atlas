@@ -1,5 +1,5 @@
 // The dialog behind deleting an application
-// (ADR-draft-deleting-an-application-with-its-contents).
+// (ADR-0468).
 //
 // Deleting an application used to be a window.confirm that said its artifacts would
 // be kept — and that was the only thing it could do. Somebody who wanted the

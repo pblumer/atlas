@@ -15,7 +15,7 @@ import (
 )
 
 // Purging an application: deleting it together with everything it owns on this
-// server (ADR-draft-deleting-an-application-with-its-contents).
+// server (ADR-0468).
 //
 // A plain delete keeps the application's artifacts and lets them fall back to Not
 // assigned (ADR-0034). A purge is the explicit other choice, and it is preceded by a

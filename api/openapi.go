@@ -317,7 +317,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Move", tObject()),
 			resp: jsonBody("What moved", tObject())}},
 		{"DELETE", "/api/v1/processes/{key}", s.handleDeleteProcess, apiOp{
-			summary: "Delete a deployment. Refused while it has running instances, while an order line could still start it, or while the current catalogue release binds it (ADR-0427) — unless ?force=true, which cancels its running instances (that needs the operator or admin role) and removes it anyway; a protected system process is never deleted (ADR-draft-deleting-an-application-with-its-contents)", tag: "Processes", role: RoleModeler,
+			summary: "Delete a deployment. Refused while it has running instances, while an order line could still start it, or while the current catalogue release binds it (ADR-0427) — unless ?force=true, which cancels its running instances (that needs the operator or admin role) and removes it anyway; a protected system process is never deleted (ADR-0468)", tag: "Processes", role: RoleModeler,
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/processes/{key}/runtime", s.handleProcessRuntime, apiOp{
 			summary: "Read a process's live runtime state", tag: "Processes", role: roleAny, resp: jsonBody("Runtime state", tObject())}},
@@ -1434,9 +1434,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Update", schemaObj(map[string]any{"name": tString(), "visibility": tString(), "ownerId": tString()})),
 			resp: jsonBody("Updated application", tObject())}},
 		{"DELETE", "/api/v1/applications/{id}", s.handleDeleteProject, apiOp{
-			summary: "Delete a process application. Its artifacts are kept and become Not assigned (ADR-0034); with ?purge=true everything it owns goes with it — deployed versions after cancelling their running instances, decision deployments, drafts, forms, decision references and models — irreversibly (ADR-draft-deleting-an-application-with-its-contents). Read GET .../deletion-preview first", tag: "Applications", role: RoleModeler, status: http.StatusNoContent}},
+			summary: "Delete a process application. Its artifacts are kept and become Not assigned (ADR-0034); with ?purge=true everything it owns goes with it — deployed versions after cancelling their running instances, decision deployments, drafts, forms, decision references and models — irreversibly (ADR-0468). Read GET .../deletion-preview first", tag: "Applications", role: RoleModeler, status: http.StatusNoContent}},
 		{"GET", "/api/v1/applications/{id}/deletion-preview", s.handleApplicationDeletionPreview, apiOp{
-			summary: "What deleting an application with ?purge=true would remove — every deployed version with its running instances, decision deployments, drafts, forms, references and models — and what outside it would stop working: catalogue products binding its processes, order lines that could still start them, other applications' processes evaluating its decisions. Owner only (ADR-draft-deleting-an-application-with-its-contents)", tag: "Applications", role: RoleModeler,
+			summary: "What deleting an application with ?purge=true would remove — every deployed version with its running instances, decision deployments, drafts, forms, references and models — and what outside it would stop working: catalogue products binding its processes, order lines that could still start them, other applications' processes evaluating its decisions. Owner only (ADR-0468)", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Deletion preview", tObject())}},
 		{"PUT", "/api/v1/applications/{id}/members/{userId}", s.handleSetProjectMember, apiOp{
 			summary: "Share an application with a user, or change their role (ADR-0071)", tag: "Applications", role: RoleModeler,

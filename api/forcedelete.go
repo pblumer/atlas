@@ -13,7 +13,7 @@ import (
 )
 
 // Forced deletion of a deployed version
-// (ADR-draft-deleting-an-application-with-its-contents).
+// (ADR-0468).
 //
 // A plain delete refuses while a version has running instances, while an order line
 // could still start it, and while the current catalogue release binds it

@@ -9,7 +9,7 @@ import (
 )
 
 // The HTTP side of purging an application
-// (ADR-draft-deleting-an-application-with-its-contents): the default delete keeps
+// (ADR-0468): the default delete keeps
 // its contents as before, a purge removes them — Panorama and information models
 // included — and the preview and the purge answer who may cancel instances.
 

@@ -145,7 +145,7 @@ func TestCompareDraftNamesAVersionOnlyWhenGiven(t *testing.T) {
 
 // TestDeletesForceAndPurgeOnlyWhenAsked: force and purge are irreversible, so each
 // travels only when the agent sets it to true — an omitted or false flag is the plain
-// delete (ADR-draft-deleting-an-application-with-its-contents).
+// delete (ADR-0468).
 func TestDeletesForceAndPurgeOnlyWhenAsked(t *testing.T) {
 	rec := newAPIRecorder(t, http.StatusNoContent, "")
 	for _, tc := range []struct {

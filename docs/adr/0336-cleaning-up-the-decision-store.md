@@ -158,7 +158,7 @@ inside a cleanup slice would be worse than naming it.
 
 Deleting a decision deployment on its own keeps every refusal above. Purging the
 application it was published from
-([ADR-draft-deleting-an-application-with-its-contents](draft-deleting-an-application-with-its-contents.md))
+([ADR-0468](0468-deleting-an-application-with-its-contents.md))
 removes the application's whole decision history in one turn and overrides the two
 refusals that protect *other* deployed processes — the pin and the stranded latest
 binding — after its preview has named those processes. It keeps the version-counter
