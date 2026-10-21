@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas source-transfer e2e harness</title>
+    <!-- Drives the real api/web/sourceneeds.js: the dialog a source download asks
+         through, and the one an import shows when the target lacks what the processes
+         need (ADR-0467). The page scaffolding is the test's own, because app.js boots
+         the whole console on import and cannot be loaded here. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="card" style="padding: 18px; max-width: 720px">
+      <pre id="result">—</pre>
+    </div>
+    <script type="module">
+      import { openSourceDownload, needsReport, showImportNeeds } from "/sourceneeds.js";
+
+      // What GET /api/v1/applications/{id}/needs answers for an application whose
+      // process reads TENANT_ID from its application, MAIL_DOMAIN and LANGUAGE from the
+      // installation, and sends mail through Postausgang.
+      window.NEEDS = {
+        applicationId: "a1",
+        constants: 1,
+        unread: ["halb"],
+        needs: [
+          { kind: "server-constant", name: "LANGUAGE", type: "string", processes: ["bedarf"], fallback: true, state: "fallback" },
+          { kind: "server-constant", name: "MAIL_DOMAIN", type: "string", processes: ["bedarf"], state: "set" },
+          { kind: "application-constant", name: "TENANT_ID", type: "string", processes: ["bedarf"], state: "set" },
+          { kind: "worker", name: "Postausgang", type: "mail", processes: ["bedarf"], state: "configured" },
+        ],
+      };
+
+      const result = document.getElementById("result");
+      window.__download = async (info) => {
+        const url = await openSourceDownload({ id: "a 1", info });
+        result.textContent = url == null ? "cancelled" : url;
+      };
+      window.__report = (answer) => needsReport(answer);
+      window.__importNeeds = async (answer) => {
+        await showImportNeeds(answer);
+        result.textContent = "closed";
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

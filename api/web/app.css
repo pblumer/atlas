@@ -7157,3 +7157,16 @@ button.im-problem:hover { background: var(--accent-soft); }
 .import-choices .import-new ul { margin: 6px 0 0; max-height: 25vh; overflow: auto; }
 .import-choices .import-group { margin-top: 14px; }
 .import-choices .import-group h3 { font-size: 13px; margin: 0 0 2px; }
+
+/* What an application's processes need from the installation and no source download
+   carries, before the download and after an import (ADR-0467). */
+.source-download .source-constants { display: flex; gap: 8px; align-items: baseline; margin-top: 10px; cursor: pointer; }
+.source-download .needs-title { font-size: 14px; margin: 16px 0 0; }
+.source-download .need-group, .import-needs .need-group { margin-top: 12px; }
+.source-download .need-group h3, .import-needs .need-group h3 { font-size: 13px; margin: 0 0 2px; }
+.source-download .need-group ul, .import-needs .need-group ul { margin: 6px 0 0; padding-left: 18px; max-height: 30vh; overflow: auto; }
+.source-download .need-group li, .import-needs .need-group li { padding: 2px 0; }
+.need-state { margin-left: 6px; font-size: 12px; color: var(--warn); }
+.need-state[data-state="set"], .need-state[data-state="configured"] { color: var(--ok); }
+.need-state[data-state="fallback"] { color: var(--muted); }
+.need-carried { margin-left: 6px; font-size: 12px; color: var(--muted); }

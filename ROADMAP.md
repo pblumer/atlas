@@ -2198,6 +2198,11 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   (ADR-0467, amended).
   Information models, Playground scenarios and Panorama models do not travel yet, and the shop
   handbook's browser installer does not use the plan.
+- ✅ **A download says what the target needs.** The Console's source download carries the
+  application's constants when that is ticked, and the source import offers them with the same
+  plan; the tree names the server constants, application constants and workers its processes
+  need, and the import, `atlas export` and `atlas import` say what the target still lacks before
+  anything is published (ADR-0467, amended 2026-10-21).
 
 **The shop & ordering**
 - ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per

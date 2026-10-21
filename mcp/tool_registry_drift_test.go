@@ -837,6 +837,7 @@ var mcpOmittedRoutes = map[string]string{
 	// application at once is neither reviewable nor something an agent needs.
 	"GET /api/v1/applications/{id}/source": "bulk source-tree download; an agent reads artifacts individually via atlas_get_draft_xml / atlas_get_form",
 	"POST /api/v1/applications/source":     "bulk source-tree upload that rewrites a whole application; an agent authors via atlas_save_draft / atlas_save_form",
+	"GET /api/v1/applications/{id}/needs":  "the list the Console's source download names before it downloads; an agent reads the same facts through atlas_application_constants, atlas_server_constants and atlas_workers",
 
 	// Process documentation (ADR-0138): the document is *produced in the browser*,
 	// where bpmn-js holds the authoritative picture — an agent has no rendered

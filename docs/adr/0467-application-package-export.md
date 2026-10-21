@@ -1,6 +1,6 @@
 # ADR-0467: An application and its shop move as a package, and an import asks before it replaces
 
-- **Status:** Accepted (amended 2026-10-20: an import remembers, per artifact, the version the last import brought, and asks only about what both sides moved — see "The plan remembers the last import"; constants are imported through `POST /api/v1/applications/{id}/constants/import`)
+- **Status:** Accepted (amended 2026-10-20: an import remembers, per artifact, the version the last import brought, and asks only about what both sides moved — see "The plan remembers the last import"; constants are imported through `POST /api/v1/applications/{id}/constants/import`. Amended 2026-10-21: a source download carries the constants when asked, and the tree names what its processes need from the installation — see "The download carries the constants when asked, and names what the target needs")
 - **Implementation:** Landed
 - **Date:** 2026-10-20
 - **Deciders:** Atlas maintainers
@@ -184,6 +184,9 @@ does not hold.
 This departs from ADR-0453's "the portable design-time export does not" carry values. It does
 so in the package, not in the source tree. The tree stays design source. The package is the
 unit that crosses installations, and a person decides each value that would replace one.
+(Amended 2026-10-21: a source download asked for with its constants carries them too, for a
+person moving an application without a terminal; a tree written for a repository still does
+not. See below.)
 
 ### The plan remembers the last import (amended 2026-10-20)
 
@@ -247,6 +250,77 @@ Considered and set aside:
 - **Storing whole base versions** would allow a merge, which this record refuses. A hash
   answers the only question asked: is this the version the last import brought?
 
+### The download carries the constants when asked, and names what the target needs (amended 2026-10-21)
+
+Moving an application through the Console — **Download source…** on one installation,
+**Import source tree…** on the other — lost its constants: they travelled only in the package
+`atlas export` writes. And neither way said what the processes read from the installation that
+no export carries: the server constants (ADR-0456) and the configured workers they name
+(ADR-0041). The first anybody heard of a missing one was a publish warning on the target, or a
+token parked at a worker that was never created.
+
+**Constants travel in the tree when asked for.**
+
+- `GET /api/v1/applications/{id}/source?constants=true` adds `constants.json` — the shape the
+  constants PUT takes — and the manifest names it under `constants`. Without the query nothing
+  changes, so a tree written for a repository carries no installation's values.
+- **The tree is format version 3** when it carries constants. A tree is written in the lowest
+  version that holds it whole, so a server that reads only 1 or 2 refuses a tree with constants
+  rather than importing it without them.
+- **The source import plans them** like the constants route, with the same rule
+  (`planConstantImport`), the same base and the same ref, `constant:NAME`: new set, behind
+  updated, ahead kept, changed asked. It sets them only for an administrator; anyone else gets
+  `constantsNotSet`, and nothing is remembered for them.
+- **A constant changed by an import is no reason to publish.** An instance reads it where it
+  starts, and a release would deploy nothing new for it.
+- The Console's download dialog has a box for it, ticked when the application holds values.
+  An application holding none offers no box.
+
+**The tree names what its processes need.**
+
+- The manifest lists under `needs` every server constant and application constant the drafts
+  read (a fact Atlas fills itself excepted) and every configured worker they name (a worker
+  written as a FEEL expression excepted, as `connectorWarnings` skips it). Each entry carries its
+  type or Worker Type, the processes that read it, and whether every one of them declares a
+  fallback.
+- **An import never trusts that list.** It compiles the tree's processes and reads the needs
+  again, because a process edited by hand in a repository would otherwise bring a need the copy
+  does not mention. A process that does not compile is named under `needsUnread`, not guessed
+  at.
+- **The import answers each need as this server will stand once it is in:**
+  - for a constant `set`, `missing`, `fallback` or `type-mismatch`, as on the Constants pages, with
+    an application constant the import is about to set counted as set;
+  - for a worker `configured`, `missing`, `other-type` or `unusable`, as the publish warning
+    derives it.
+- **`GET /api/v1/applications/{id}/needs`** answers the same for an application's drafts on this
+  server, and how many constant values it holds. It is what the download dialog shows before
+  anything is downloaded.
+
+**What the clients do with it.**
+
+- The Console lists the needs before a download, grouped by kind with where an installation sets
+  each up. After an import it shows only what this server still lacks, and the constants it did
+  not set for want of the administrator role.
+- `atlas export` prints what the target needs and the package does not carry; a constant whose
+  value is in `konstanten.json` is not listed.
+- `atlas import` shows in its plan, before anything is written, what the target lacks. It now
+  sets the constants **before** it publishes, so the publish warns only about what is really
+  missing. It also sends a tree's own `constants.json` when the manifest names it, so a Console
+  download, unpacked, installs from a terminal too.
+
+Considered and set aside:
+
+- **Carrying server constants and workers as suggestions**, as constants are. A server constant
+  is read by every application on the installation, so an import of one application must not
+  change it. A worker's endpoint differs between INT and PROD almost always, and a carried one
+  would quietly point production at a test system. Its secret cannot travel at all, because the
+  vault encrypts it with this installation's key (ADR-0069). The names travel, the values do not.
+- **Refusing a publish while a need is open.** ADR-0158 deploys a model before its world
+  exists, and that holds here: the list says what is missing, and the person decides when.
+- **Job types served by an external worker process** (`atlas worker`) are not listed. Whether
+  one is connected is a runtime fact, not configuration the target holds, and a worker that
+  polls later is not missing.
+
 ### Why not the others
 
 **A server route for the whole package** would serve the Console without a terminal, which is
@@ -287,7 +361,12 @@ silently wrong. ADR-0134 refused to merge for that reason, and it holds here.
     documentation, Workers, server constants, and a catalogue's theme, logo and pictures.
     Each either belongs to the installation or needs an idempotent import it does not have
     yet. Information models are the likeliest next step: they are design source, and their
-    import mints a new id on every run.
+    import mints a new id on every run. Server constants and workers are named, by name,
+    under `needs` (amended 2026-10-21).
+  - **Two ways to carry constants.** The package carries them in `konstanten.json` beside the
+    tree, and a Console download in the tree's `constants.json`. Both reach the same plan and
+    base. Folding the package onto the tree's file would change a package format that is
+    already in use.
 - **Follow-ups:**
   - Carry information models, once their import can find what an earlier one created.
   - Let the shop handbook's installer use the plan, or `atlas import`'s steps.
@@ -303,5 +382,9 @@ silently wrong. ADR-0134 refused to merge for that reason, and it holds here.
   `atlas import`, whose "every run publishes" this removes.
 - [ADR-0453](0453-application-values-per-installation.md): constants per installation, which
   now travel as a suggestion.
+- [ADR-0456](0456-constant-namespaces.md): server constants, which an export names and never
+  carries.
+- [ADR-0158](0158-a-connector-reference-that-explains-itself.md): the publish warning for a
+  worker nobody configured, which the import's needs bring forward.
 - [ADR-0321](0321-decision-drafts.md): decision models written into the server's own folder
   under a handle.

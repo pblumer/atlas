@@ -47,6 +47,71 @@ type constantsFile struct {
 	Constants []packageConstant `json:"constants"`
 }
 
+// packageNeed is one thing the application's processes need from a server and no
+// package carries, as the manifest lists it and the source import answers it: a
+// server constant, an application constant, a configured worker (ADR-0467).
+type packageNeed struct {
+	Kind      string   `json:"kind"`
+	Name      string   `json:"name"`
+	Type      string   `json:"type"`
+	Processes []string `json:"processes"`
+	Fallback  bool     `json:"fallback"`
+	State     string   `json:"state"`
+	Detail    string   `json:"detail"`
+}
+
+// what names the need as an operator reads it.
+func (n packageNeed) what() string {
+	fallback := ""
+	if n.Fallback {
+		fallback = ", has a fallback"
+	}
+	switch n.Kind {
+	case "server-constant":
+		return fmt.Sprintf("server constant %s (%s%s)", n.Name, n.Type, fallback)
+	case "application-constant":
+		return fmt.Sprintf("application constant %s (%s%s)", n.Name, n.Type, fallback)
+	case "worker":
+		return fmt.Sprintf("worker %q (%s)", n.Name, n.Type)
+	}
+	return n.Kind + " " + n.Name
+}
+
+// where says where a server sets the need up.
+func (n packageNeed) where() string {
+	switch n.Kind {
+	case "server-constant":
+		return "set it in the Console under Admin → Engine → Server constants"
+	case "application-constant":
+		return "set it on the application's Constants tab"
+	}
+	return "create a worker of that name and Worker Type under Workers"
+}
+
+// open says the server does not answer the need: the value is missing or held with
+// another type, the worker is missing, configured as another Worker Type or not
+// usable. A fallback that covers a missing constant answers it.
+func (n packageNeed) open() bool {
+	switch n.State {
+	case "missing", "type-mismatch", "other-type", "unusable":
+		return true
+	}
+	return false
+}
+
+// how is the state as a phrase, with what the server holds instead.
+func (n packageNeed) how() string {
+	switch n.State {
+	case "type-mismatch":
+		return "held here as " + n.Detail
+	case "other-type":
+		return "configured here as a " + n.Detail + " worker"
+	case "unusable":
+		return "configured here, not usable: " + n.Detail
+	}
+	return n.State + " here"
+}
+
 // decisionPrompt is where a decision about a changed artifact is asked: standard
 // input when it is a terminal, and nobody in a pipeline, where a question would
 // hang the job instead of failing it.
@@ -118,11 +183,16 @@ func (p planned) label() string {
 	return p.Ref
 }
 
-// importPlan is everything the package would do to the server.
+// importPlan is everything the package would do to the server, and what the
+// server lacks that the application needs.
 type importPlan struct {
 	source    sourceImportBody
 	catalogue catalogueImportBody
 	artifacts []planned
+	// needs are those the server does not answer, less the application constants
+	// the package carries a value for: whether those are set is the constants'
+	// import to say.
+	needs []packageNeed
 }
 
 // plan asks the server for its two plans and compares the constants.
@@ -134,6 +204,15 @@ func (c *importClient) plan(pkg importPackage, document []byte) (importPlan, err
 	}
 	for _, a := range p.source.Artifacts {
 		p.artifacts = append(p.artifacts, planned{Artifact: a})
+	}
+	carried := map[string]bool{}
+	for _, k := range pkg.constants {
+		carried[k.Name] = true
+	}
+	for _, n := range p.source.Needs {
+		if n.open() && !(n.Kind == "application-constant" && carried[n.Name]) {
+			p.needs = append(p.needs, n)
+		}
 	}
 	if pkg.constants != nil {
 		consts, err := c.planConstants(p.source, pkg.constants)
@@ -226,6 +305,15 @@ func (p importPlan) show(out io.Writer, all bool) {
 			fmt.Fprintln(out, line)
 		}
 	}
+	if len(p.needs) > 0 {
+		fmt.Fprintln(out, "this server lacks what the application needs; publishing warns about it, and an instance runs without it:")
+		for _, n := range p.needs {
+			fmt.Fprintf(out, "  %s, %s: %s\n", n.what(), n.how(), n.where())
+		}
+	}
+	if len(p.source.NeedsUnread) > 0 {
+		fmt.Fprintf(out, "  not read for what they need, because they do not compile: %s\n", strings.Join(p.source.NeedsUnread, ", "))
+	}
 }
 
 // ask settles what the flags left undecided: at a terminal, one question per
@@ -310,13 +398,14 @@ func (p importPlan) query() string {
 }
 
 // sourceChanged reports whether the source import wrote anything, so the
-// application has something to publish.
+// application has something to publish. A constant the tree carried is no reason:
+// an instance reads it where it starts, and a release deploys nothing new for it.
 func sourceChanged(src sourceImportBody) bool {
 	if src.Created {
 		return true
 	}
 	for _, a := range src.Artifacts {
-		if importplan.Writes(a.Outcome) {
+		if importplan.Writes(a.Outcome) && !strings.HasPrefix(a.Ref, "constant:") {
 			return true
 		}
 	}

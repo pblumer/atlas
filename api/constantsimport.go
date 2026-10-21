@@ -75,64 +75,21 @@ func (s *Server) handleImportApplicationConstants(w http.ResponseWriter, r *http
 			opErr = err
 			return
 		}
-		held := map[string]heldConstant{}
-		for _, c := range prev.Constants {
-			held[c.Name] = c
-		}
-		reconciled := map[string]string{}
-		var toSet []heldConstant
-		for _, c := range offered {
-			ref := "constant:" + c.Name
-			h, ok := held[c.Name]
-			in := importplan.Hash([]byte(c.Type), []byte(c.Value))
-			status := importplan.Classify(ok, importplan.Hash([]byte(h.Type), []byte(h.Value)), in, bases[ref])
-			outcome := decide.Outcome(ref, status)
-			resp.Artifacts = append(resp.Artifacts, importplan.Artifact{Ref: ref, Name: c.Name, Status: status, Outcome: outcome})
-			switch {
-			case outcome == importplan.Undecided:
-				undecided = append(undecided, ref)
-			case importplan.Writes(outcome) && !admin:
-				resp.NotSet = append(resp.NotSet, c.Name)
-			case importplan.Writes(outcome):
-				toSet = append(toSet, c)
-				reconciled[ref] = in
-			default:
-				reconciled[ref] = in
-			}
-		}
+		plan := planConstantImport(offered, prev.Constants, bases, decide, admin)
+		resp.Artifacts = append(resp.Artifacts, plan.artifacts...)
+		resp.NotSet, undecided = plan.notSet, plan.undecided
 		if decide.DryRun || len(undecided) > 0 {
 			return
 		}
-		if len(toSet) > 0 {
-			merged := append([]heldConstant(nil), prev.Constants...)
-			for _, c := range toSet {
-				replaced := false
-				for i := range merged {
-					if merged[i].Name == c.Name {
-						merged[i], replaced = c, true
-					}
-				}
-				if !replaced {
-					merged = append(merged, c)
-				}
-				resp.Set = append(resp.Set, c.Name)
-			}
-			sort.Slice(merged, func(i, j int) bool { return merged[i].Name < merged[j].Name })
-			list, vals, err := cleanHeldConstants(merged)
-			if err != nil {
-				opErr = err
-				return
-			}
-			rec := applicationConstants{ApplicationID: id, Constants: list, UpdatedAt: time.Now().Unix(), UpdatedBy: updatedBy}
-			if opErr = s.appConstants.Save(rec); opErr != nil {
-				return
-			}
-			s.proc.SetApplicationConstants(id, vals)
-			if opErr = s.recordConstantChanges(r, id, diffHeldConstants(prev.Constants, list)); opErr != nil {
-				return
-			}
+		set, err := s.setImportedConstants(id, prev.Constants, plan.toSet, updatedBy, func(appID string, changes []constantChange) error {
+			return s.recordConstantChanges(r, appID, changes)
+		})
+		if err != nil {
+			opErr = err
+			return
 		}
-		opErr = s.recordImportBaselines(applicationBaselineScope(id), reconciled)
+		resp.Set = append(resp.Set, set...)
+		opErr = s.recordImportBaselines(applicationBaselineScope(id), plan.reconciled)
 	})
 	switch {
 	case opErr != nil:
@@ -145,4 +102,98 @@ func (s *Server) handleImportApplicationConstants(w http.ResponseWriter, r *http
 	default:
 		httpapi.JSON(w, http.StatusOK, resp)
 	}
+}
+
+// constantImportPlan is how the constants an import offers compare with those the
+// application holds here and with what the last import offered, and what the
+// decisions make of each. The constants route and the source import, whose tree may
+// carry constants.json, plan alike, so a value is settled by one rule whichever way
+// it travelled.
+type constantImportPlan struct {
+	artifacts []importplan.Artifact
+	undecided []string
+	// toSet is what is to be written: the outcome writes, and the caller is an
+	// administrator.
+	toSet []heldConstant
+	// notSet names what would be written for an administrator and is not, because
+	// the caller is not one.
+	notSet []string
+	// reconciled is the hash of each constant the import settled, written or kept:
+	// the base the next import compares with. A value left unset for want of the
+	// role is not among them, so it is offered again.
+	reconciled map[string]string
+}
+
+// planConstantImport compares each offered constant (ref constant:NAME) with the one
+// held under its name and with its base. A constant held here that the import does not
+// offer is not touched, and not listed.
+func planConstantImport(offered, held []heldConstant, bases map[string]string, decide importplan.Decisions, admin bool) constantImportPlan {
+	byName := make(map[string]heldConstant, len(held))
+	for _, c := range held {
+		byName[c.Name] = c
+	}
+	plan := constantImportPlan{artifacts: []importplan.Artifact{}, reconciled: map[string]string{}}
+	for _, c := range offered {
+		ref := "constant:" + c.Name
+		h, ok := byName[c.Name]
+		in := importplan.Hash([]byte(c.Type), []byte(c.Value))
+		status := importplan.Classify(ok, importplan.Hash([]byte(h.Type), []byte(h.Value)), in, bases[ref])
+		outcome := decide.Outcome(ref, status)
+		plan.artifacts = append(plan.artifacts, importplan.Artifact{Ref: ref, Name: c.Name, Status: status, Outcome: outcome})
+		switch {
+		case outcome == importplan.Undecided:
+			plan.undecided = append(plan.undecided, ref)
+		case importplan.Writes(outcome) && !admin:
+			plan.notSet = append(plan.notSet, c.Name)
+		case importplan.Writes(outcome):
+			plan.toSet = append(plan.toSet, c)
+			plan.reconciled[ref] = in
+		default:
+			plan.reconciled[ref] = in
+		}
+	}
+	return plan
+}
+
+// setImportedConstants writes what an import settled into the constants the
+// application holds: each one replaces the value of its name or joins the set, the
+// set is checked and persisted, and only then handed to the processor (I2), with the
+// change recorded through audit as a PUT records it. It names what it set, nothing
+// when toSet is empty. Run loop only.
+func (s *Server) setImportedConstants(appID string, held, toSet []heldConstant, updatedBy string, audit func(string, []constantChange) error) ([]string, error) {
+	if len(toSet) == 0 {
+		return nil, nil
+	}
+	merged := append([]heldConstant(nil), held...)
+	set := make([]string, 0, len(toSet))
+	for _, c := range toSet {
+		replaced := false
+		for i := range merged {
+			if merged[i].Name == c.Name {
+				merged[i], replaced = c, true
+			}
+		}
+		if !replaced {
+			merged = append(merged, c)
+		}
+		set = append(set, c.Name)
+	}
+	sort.Slice(merged, func(i, j int) bool { return merged[i].Name < merged[j].Name })
+	list, vals, err := cleanHeldConstants(merged)
+	if err != nil {
+		return nil, err
+	}
+	rec := applicationConstants{ApplicationID: appID, Constants: list, UpdatedAt: time.Now().Unix(), UpdatedBy: updatedBy}
+	if err := s.appConstants.Save(rec); err != nil {
+		return nil, err
+	}
+	if s.proc != nil {
+		s.proc.SetApplicationConstants(appID, vals)
+	}
+	if audit != nil {
+		if err := audit(appID, diffHeldConstants(held, list)); err != nil {
+			return nil, err
+		}
+	}
+	return set, nil
 }

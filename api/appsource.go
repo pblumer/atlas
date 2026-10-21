@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"path"
 	"sort"
@@ -26,6 +27,7 @@ import (
 //	processes/mitarbeiter-onboarding.bpmn     # the draft's XML, verbatim
 //	forms/neuer-mitarbeiter.form.json         # the form-js schema, verbatim
 //	decisions/freigabe.dmn                    # a model this server keeps, verbatim
+//	constants.json                            # optional: the application's values here
 //
 // Two things are worth stating because they refine the illustrative tree in
 // ADR-0134:
@@ -46,6 +48,16 @@ import (
 //     travels as `decisions/<handle>.dmn`, once however many of its decisions the
 //     application references (ADR-0467).
 //
+//   - **Constants travel only when asked for.** The values an application holds
+//     belong to an installation, and DEV, INT and PROD rightly differ (ADR-0453).
+//     A download asked for with its constants carries them as constants.json, a
+//     suggestion an import compares and asks about like any other artifact; one
+//     that is not — a tree kept in a repository — carries none (ADR-0467).
+//   - **The manifest names what the processes need.** The server constants and
+//     application constants they read and the workers they name are listed under
+//     needs, for whoever reads the tree. An import reads them from the processes
+//     again rather than from that list (appneeds.go).
+//
 // Deployments and releases deliberately do not travel: they are records of what
 // happened on one server, not source an author edits (ADR-0134).
 //
@@ -58,13 +70,16 @@ import (
 // (ADR-0134).
 const (
 	// sourceFormatVersion is the newest version this server writes and reads.
-	// Version 2 carries the decision models this server keeps as files.
-	sourceFormatVersion = 2
+	// Version 3 carries the application's constants as constants.json.
+	sourceFormatVersion = 3
+	// sourceFormatVersionModels is version 2, which carries the decision models this
+	// server keeps as files.
+	sourceFormatVersionModels = 2
 	// sourceFormatVersionReferencesOnly is version 1, in which decisions are
-	// references alone. A tree that carries no model is still written in it: a
-	// server that reads only version 1 reads such a tree whole, and would read a
-	// version-2 tree by ignoring its models, which is the silent misreading the
-	// version exists to prevent.
+	// references alone. A tree is written in the lowest version that holds it whole:
+	// a server that reads only version 1 reads a tree without models or constants
+	// whole, and would read a newer one by ignoring what it does not know, which is
+	// the silent misreading the version exists to prevent.
 	sourceFormatVersionReferencesOnly = 1
 )
 
@@ -78,6 +93,18 @@ type sourceManifest struct {
 	Processes []sourceProcess  `json:"processes"`
 	Forms     []sourceForm     `json:"forms"`
 	Decisions []sourceDecision `json:"decisions"`
+	// Constants names the file that carries the application's constants, when the
+	// tree carries them.
+	Constants string `json:"constants,omitempty"`
+	// Needs is what the processes read from the installation and no tree carries,
+	// as the exporting server read them from its drafts (appneeds.go).
+	Needs []sourceNeed `json:"needs,omitempty"`
+}
+
+// sourceConstants is constants.json: the shape PUT /api/v1/applications/{id}/constants
+// takes, so the file reads like what an administrator would send.
+type sourceConstants struct {
+	Constants []heldConstant `json:"constants"`
 }
 
 // sourceProcess indexes one BPMN draft. ID is the BPMN process id — the key the
@@ -114,8 +141,12 @@ type sourceFile struct {
 	Data []byte
 }
 
-// manifestPath is the fixed name of the manifest at the root of the tree.
-const manifestPath = "atlas.json"
+// manifestPath is the fixed name of the manifest at the root of the tree, and
+// constantsPath that of the constants beside it.
+const (
+	manifestPath  = "atlas.json"
+	constantsPath = "constants.json"
+)
 
 // buildSourceTree renders an application and its artifacts as the curated source
 // layout. It is a pure function of the records handed to it — no store, no clock,
@@ -124,8 +155,11 @@ const manifestPath = "atlas.json"
 //
 // The caller passes only artifacts belonging to the application; filtering is the
 // loader's job, not the serializer's. models holds, by handle, the models the tree
-// carries; a reference whose handle it lacks travels as a reference alone.
-func buildSourceTree(app project, drafts []draft, forms []form, refs []dmnRef, models map[string][]byte) ([]sourceFile, error) {
+// carries; a reference whose handle it lacks travels as a reference alone. constants
+// are the values the tree carries, none when nil or empty.
+//
+// It compiles the drafts to name what they need, so it runs off the run loop.
+func buildSourceTree(app project, drafts []draft, forms []form, refs []dmnRef, models map[string][]byte, constants []heldConstant) ([]sourceFile, error) {
 	man := sourceManifest{
 		FormatVersion: sourceFormatVersionReferencesOnly,
 		Key:           app.Key,
@@ -148,8 +182,16 @@ func buildSourceTree(app project, drafts []draft, forms []form, refs []dmnRef, m
 	sortedRefs := append([]dmnRef(nil), refs...)
 	sort.Slice(sortedRefs, func(i, j int) bool { return sortedRefs[i].ID < sortedRefs[j].ID })
 
-	taken := map[string]bool{manifestPath: true}
+	taken := map[string]bool{manifestPath: true, constantsPath: true}
 	files := []sourceFile{}
+
+	sources := make([]needSource, 0, len(sorted))
+	for _, d := range sorted {
+		sources = append(sources, needSource{ID: d.ProcessID, XML: []byte(d.XML)})
+	}
+	if needs, _ := needsOf(sources); len(needs) > 0 {
+		man.Needs = needs
+	}
 
 	for _, d := range sorted {
 		p := uniquePath(taken, "processes/"+slugify(d.Name, d.ProcessID)+".bpmn")
@@ -179,7 +221,17 @@ func buildSourceTree(app project, drafts []draft, forms []form, refs []dmnRef, m
 		man.Decisions = append(man.Decisions, entry)
 	}
 	if len(modelPaths) > 0 {
-		man.FormatVersion = sourceFormatVersion
+		man.FormatVersion = sourceFormatVersionModels
+	}
+	if len(constants) > 0 {
+		sortedConstants := append([]heldConstant(nil), constants...)
+		sort.Slice(sortedConstants, func(i, j int) bool { return sortedConstants[i].Name < sortedConstants[j].Name })
+		data, err := json.MarshalIndent(sourceConstants{Constants: sortedConstants}, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("render constants: %w", err)
+		}
+		man.Constants, man.FormatVersion = constantsPath, sourceFormatVersion
+		files = append(files, sourceFile{Path: constantsPath, Data: newlineTerminated(data)})
 	}
 
 	// Indented, newline-terminated: the manifest is read in a diff like every other
@@ -344,7 +396,32 @@ func parseSourceTree(files []sourceFile) (sourceManifest, map[string][]byte, err
 		}
 		modelPaths[d.ModelRef] = d.Path
 	}
+	if _, err := treeConstants(man, byPath); err != nil {
+		return sourceManifest{}, nil, err
+	}
 	return man, byPath, nil
+}
+
+// treeConstants reads the constants a tree carries, checked as a PUT checks them:
+// every name in capitals, none twice, every value a literal of its type. None when
+// the tree carries none.
+func treeConstants(man sourceManifest, byPath map[string][]byte) ([]heldConstant, error) {
+	if man.Constants == "" {
+		return nil, nil
+	}
+	raw, ok := byPath[man.Constants]
+	if !ok {
+		return nil, fmt.Errorf("%s names constants in %q, which is not in the tree", manifestPath, man.Constants)
+	}
+	var file sourceConstants
+	if err := json.Unmarshal(raw, &file); err != nil {
+		return nil, fmt.Errorf("invalid %s: %w", man.Constants, err)
+	}
+	list, _, err := cleanHeldConstants(file.Constants)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", man.Constants, err)
+	}
+	return list, nil
 }
 
 // modelHandleSafe reports whether a handle names exactly one file in the model
@@ -414,26 +491,54 @@ func (s *Server) applicationKeyFor(app project) (string, error) {
 	return key, nil
 }
 
-// exportApplicationSource loads an application's artifacts and renders the tree.
-// Runs on the run loop.
+// sourceRecords is what a tree is rendered from: the application and its artifacts
+// as the stores hold them, and its constants when the tree is to carry them.
+type sourceRecords struct {
+	app       project
+	drafts    []draft
+	forms     []form
+	refs      []dmnRef
+	models    map[string][]byte
+	constants []heldConstant
+}
+
+// tree renders the records. It compiles the drafts, so it runs off the run loop.
+func (rec sourceRecords) tree() ([]sourceFile, error) {
+	return buildSourceTree(rec.app, rec.drafts, rec.forms, rec.refs, rec.models, rec.constants)
+}
+
+// exportApplicationSource loads an application's artifacts and renders the tree,
+// without its constants. Runs on the run loop; the HTTP export loads on the loop and
+// renders off it.
 func (s *Server) exportApplicationSource(app project) ([]sourceFile, error) {
-	key, err := s.applicationKeyFor(app)
+	rec, err := s.loadApplicationSource(app, false)
 	if err != nil {
 		return nil, err
+	}
+	return rec.tree()
+}
+
+// loadApplicationSource reads what an application's tree is rendered from: its
+// drafts, forms and decision references, the models this server keeps for them, and,
+// when withConstants, the constants the application holds here. Runs on the run loop.
+func (s *Server) loadApplicationSource(app project, withConstants bool) (sourceRecords, error) {
+	key, err := s.applicationKeyFor(app)
+	if err != nil {
+		return sourceRecords{}, err
 	}
 	app.Key = key
 
 	drafts, err := s.drafts.LoadAll()
 	if err != nil {
-		return nil, err
+		return sourceRecords{}, err
 	}
 	forms, err := s.forms.LoadAll()
 	if err != nil {
-		return nil, err
+		return sourceRecords{}, err
 	}
 	refs, err := s.dmnrefs.LoadAll()
 	if err != nil {
-		return nil, err
+		return sourceRecords{}, err
 	}
 	mine := []draft{}
 	for _, d := range drafts {
@@ -455,9 +560,17 @@ func (s *Server) exportApplicationSource(app project) ([]sourceFile, error) {
 	}
 	models, err := s.localDecisionModels(myRefs)
 	if err != nil {
-		return nil, err
+		return sourceRecords{}, err
 	}
-	return buildSourceTree(app, mine, myForms, myRefs, models)
+	rec := sourceRecords{app: app, drafts: mine, forms: myForms, refs: myRefs, models: models}
+	if withConstants {
+		held, _, err := s.appConstants.Get(app.ID)
+		if err != nil {
+			return sourceRecords{}, err
+		}
+		rec.constants = held.Constants
+	}
+	return rec, nil
 }
 
 // localDecisionModels reads, by handle, the model behind each reference when this
@@ -533,6 +646,19 @@ type sourceImportResult struct {
 	// how it compares to this server's and what the import did with it. A ref is
 	// application:<key>, process:<id>, form:<id>, decision:<id> or model:<handle>.
 	Artifacts []importplan.Artifact `json:"artifacts"`
+	// ConstantsSet names the constants the import wrote; ConstantsNotSet those it
+	// would have written for an administrator and did not, because the caller is not
+	// one. Setting a value is an administrator's (PUT …/constants), and an import is
+	// no way around that.
+	ConstantsSet    []string `json:"constantsSet,omitempty"`
+	ConstantsNotSet []string `json:"constantsNotSet,omitempty"`
+	// Needs is what the tree's processes read from the installation and no tree
+	// carries — server constants, application constants, configured workers — with
+	// how this server answers each once the import is in (appneeds.go).
+	Needs []sourceNeed `json:"needs"`
+	// NeedsUnread names processes whose needs could not be read, because they do not
+	// compile.
+	NeedsUnread []string `json:"needsUnread,omitempty"`
 	// Untracked names local artifacts that stayed behind because the tree does not
 	// mention them. An import never deletes: a tree is not proof that an artifact
 	// was removed on purpose (it may simply have been written by an older server),
@@ -551,6 +677,21 @@ type sourceRefusal struct {
 }
 
 func (e sourceRefusal) Error() string { return e.msg }
+
+// sourceCaller is who imports a tree, as applySourceTree needs to know it.
+type sourceCaller struct {
+	// ownerID owns an application the import creates, and is recorded as the author
+	// of what it writes.
+	ownerID string
+	// authorize answers whether the caller may write an application this server
+	// already has: 0 when it may, else the status and message to refuse with.
+	authorize func(project) (int, string)
+	// admin says the caller may set the application's constants.
+	admin bool
+	// audit records a change to the application's constants, as a PUT records it;
+	// nil records nothing.
+	audit func(applicationID string, changes []constantChange) error
+}
 
 // sourceUndecided is an import stopped because artifacts it would change were
 // decided neither way. It carries the plan, so the caller can show it and ask.
@@ -598,7 +739,8 @@ func (e sourceUndecided) Error() string {
 // a concurrent request then changed is the gap a two-step version would leave.
 //
 // Runs on the run loop.
-func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, ownerID string, authorize func(project) (int, string), decide importplan.Decisions) (sourceImportResult, error) {
+func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, caller sourceCaller, decide importplan.Decisions) (sourceImportResult, error) {
+	ownerID := caller.ownerID
 	all, err := s.projects.LoadAll()
 	if err != nil {
 		return sourceImportResult{}, err
@@ -627,7 +769,7 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 		if app.Protected {
 			return sourceImportResult{}, sourceRefusal{http.StatusForbidden, "protected system project cannot be modified"}
 		}
-		if code, msg := authorize(app); code != 0 {
+		if code, msg := caller.authorize(app); code != 0 {
 			return sourceImportResult{}, sourceRefusal{code, msg}
 		}
 	}
@@ -732,6 +874,24 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 			res.Models++
 		}
 	}
+	// The constants the tree carries are planned like the constants route plans
+	// them, against the same bases, and are written only for an administrator.
+	offered, err := treeConstants(man, byPath)
+	if err != nil {
+		return sourceImportResult{}, err
+	}
+	var heldConstants []heldConstant
+	if found && len(offered) > 0 {
+		rec, _, err := s.appConstants.Get(app.ID)
+		if err != nil {
+			return sourceImportResult{}, err
+		}
+		heldConstants = rec.Constants
+	}
+	consts := planConstantImport(offered, heldConstants, bases, decide, caller.admin)
+	res.Artifacts = append(res.Artifacts, consts.artifacts...)
+	undecided = append(undecided, consts.undecided...)
+	res.ConstantsNotSet = consts.notSet
 	res.Processes, res.Forms, res.Decisions = len(man.Processes), len(man.Forms), len(man.Decisions)
 	res.ApplicationID, res.Name = app.ID, man.Name
 	if found && !writes["application:"+man.Key] {
@@ -835,9 +995,13 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 			return sourceImportResult{}, err
 		}
 	}
+	if res.ConstantsSet, err = s.setImportedConstants(app.ID, heldConstants, consts.toSet, ownerID, caller.audit); err != nil {
+		return sourceImportResult{}, err
+	}
 	// What this import settled is the base the next one compares with: every
 	// artifact, written or kept, was reconciled with this tree. A kept one is then
 	// ahead of it, and is not asked about again until a tree brings it changed.
+	maps.Copy(incoming, consts.reconciled)
 	if err := s.recordImportBaselines(applicationBaselineScope(app.ID), incoming); err != nil {
 		return sourceImportResult{}, err
 	}
