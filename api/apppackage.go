@@ -238,12 +238,13 @@ func (s *Server) packageDirectory() ([]apppkg.DirectoryEntry, error) {
 }
 
 // packageAnswersReq is what POST /api/v1/catalogs/import/answers takes: a package's
-// katalog.json, its fragen.json and the answers — antworten.json as it came, with
-// whatever the person importing chose instead.
+// katalog.json, its fragen.json, its answers — antworten.json as it came — and what
+// the person importing chose instead.
 type packageAnswersReq struct {
 	Document  json.RawMessage            `json:"document"`
 	Questions map[string]apppkg.Question `json:"questions"`
 	Answers   map[string]string          `json:"answers"`
+	Chosen    map[string]string          `json:"chosen"`
 }
 
 // packageAnswersResp is its answer: the document with every question answered, and
@@ -253,15 +254,22 @@ type packageAnswersResp struct {
 	Resolved map[string]string `json:"resolved,omitempty"`
 	Notes    []string          `json:"notes"`
 	Problems []apppkg.Problem  `json:"problems,omitempty"`
+	// Learned are the choices worth adding to the table of names
+	// (POST /api/v1/catalogs/import/mappings) once the import went through;
+	// Remembered names the questions the table answered.
+	Learned    []apppkg.Mapping `json:"learned"`
+	Remembered []string         `json:"remembered"`
 }
 
 // handlePackageAnswers serves POST /api/v1/catalogs/import/answers: it answers a
-// package's questions from this server's directory — a group or a person by id, or
-// by a name exactly one of them carries — and puts the answers in place, the way
-// `atlas import` does before it imports a catalogue. Nothing is written: the filled
-// document is what the person then imports, through the catalogue import and its
-// plan. A question it cannot answer is named with why, and the ids an ambiguous name
-// matches, so the Console can ask the person instead.
+// package's questions — the person's choice first, then this server's table of names
+// for the packaged answer, then its directory, a group or a person by id or by a name
+// exactly one of them carries — and puts the answers in place, the way `atlas import`
+// does before it imports a catalogue. Nothing is written: the filled document is what
+// the person then imports, through the catalogue import and its plan, and the choices
+// worth remembering are answered for the caller to record once that went through. A
+// question it cannot answer is named with why, and the ids an ambiguous name matches,
+// so the Console can ask the person instead.
 func (s *Server) handlePackageAnswers(w http.ResponseWriter, r *http.Request) {
 	raw, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().AppBundle))
 	if err != nil {
@@ -283,26 +291,37 @@ func (s *Server) handlePackageAnswers(w http.ResponseWriter, r *http.Request) {
 	if json.Unmarshal(doc, &text) == nil {
 		doc = []byte(text)
 	}
-	resolved, notes, problems, err := apppkg.Resolve(doc, req.Questions, req.Answers, s.packageDirectory)
+	mappings, err := s.packageMappings()
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read the table: "+err.Error())
+		return
+	}
+	res, err := apppkg.Resolve(doc, req.Questions, apppkg.Answers{Packaged: req.Answers, Chosen: req.Chosen, Mappings: mappings}, s.packageDirectory)
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read the directory: "+err.Error())
 		return
 	}
-	resp := packageAnswersResp{Notes: notes}
+	resp := packageAnswersResp{Notes: res.Notes, Learned: res.Learned, Remembered: res.Remembered}
 	if resp.Notes == nil {
 		resp.Notes = []string{}
 	}
-	if len(problems) > 0 {
-		resp.Problems = problems
+	if resp.Learned == nil {
+		resp.Learned = []apppkg.Mapping{}
+	}
+	if resp.Remembered == nil {
+		resp.Remembered = []string{}
+	}
+	if len(res.Problems) > 0 {
+		resp.Problems = res.Problems
 		httpapi.JSON(w, http.StatusUnprocessableEntity, resp)
 		return
 	}
-	filled, err := apppkg.Fill(doc, resolved)
+	filled, err := apppkg.Fill(doc, res.Values)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	resp.Document, resp.Resolved = filled, resolved
+	resp.Document, resp.Resolved = filled, res.Values
 	httpapi.JSON(w, http.StatusOK, resp)
 }
 

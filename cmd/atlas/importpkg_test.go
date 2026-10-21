@@ -267,11 +267,11 @@ func TestAnAnswerCannotBreakTheDocument(t *testing.T) {
 		catalogue: []byte(`{"x":"{{free}}","y":"{{de-only}}"}`),
 		questions: map[string]packageQuestion{"de-only": {Label: map[string]string{"de": "Nur Deutsch"}}},
 	}
-	_, _, err = resolveAnswers(pkg, map[string]string{"free": "anything"}, nil)
+	_, _, _, err = resolveAnswers(pkg, map[string]string{"free": "anything"}, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "de-only is not answered: Nur Deutsch") {
 		t.Fatalf("err = %v", err)
 	}
-	resolved, notes, err := resolveAnswers(pkg, map[string]string{"free": "anything", "de-only": "ja", "extra": "1"}, nil)
+	resolved, notes, _, err := resolveAnswers(pkg, map[string]string{"free": "anything", "de-only": "ja", "extra": "1"}, nil, nil)
 	if err != nil || resolved["free"] != "anything" || len(notes) != 1 || !strings.Contains(notes[0], "does not ask for extra") {
 		t.Fatalf("resolved = %v, notes = %v, err = %v", resolved, notes, err)
 	}
@@ -291,6 +291,7 @@ func TestImportSaysWhatTheServerRefused(t *testing.T) {
 		answers["/api/v1/info"] = ok(`{"version":"test"}`)
 		answers["/api/v1/principals"] = ok(`[{"type":"group","id":"g1","name":"G"},{"type":"user","id":"u1","name":"U"}]`)
 		answers["/api/v1/users/assignable"] = ok(`[{"username":"u1","displayName":"U"}]`)
+		answers["/api/v1/catalogs/import/mappings"] = ok(`[]`)
 		answers["/api/v1/applications/source"] = ok(`{"applicationId":"app1","key":"k","name":"n","untracked":["old-form"]}`)
 		answers["/api/v1/applications/app1/publish"] = ok(`{"deployed":true,"definitions":[{}],"warnings":["worker verzeichnis is not configured"],"release":{"version":4}}`)
 		answers["/api/v1/catalogs/import"] = ok(`{"created":[],"updated":["catalog:c"],"releases":[{}],

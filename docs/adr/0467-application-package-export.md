@@ -1,6 +1,6 @@
 # ADR-0467: An application and its shop move as a package, and an import asks before it replaces
 
-- **Status:** Accepted (amended 2026-10-20: an import remembers, per artifact, the version the last import brought, and asks only about what both sides moved — see "The plan remembers the last import"; constants are imported through `POST /api/v1/applications/{id}/constants/import`. Amended 2026-10-21: a source download carries the constants when asked, and the tree names what its processes need from the installation — see "The download carries the constants when asked, and names what the target needs". Amended again 2026-10-21: the Console writes and installs the whole package, catalogues included, and a fixed approver travels as an account by username — see "The Console writes and installs the package")
+- **Status:** Accepted (amended 2026-10-20: an import remembers, per artifact, the version the last import brought, and asks only about what both sides moved — see "The plan remembers the last import"; constants are imported through `POST /api/v1/applications/{id}/constants/import`. Amended 2026-10-21: a source download carries the constants when asked, and the tree names what its processes need from the installation — see "The download carries the constants when asked, and names what the target needs". Amended again 2026-10-21: the Console writes and installs the whole package, catalogues included, and a fixed approver travels as an account by username — see "The Console writes and installs the package"; and a target keeps a table of what another installation's names mean there — see "The target remembers what a name means")
 - **Implementation:** Landed
 - **Date:** 2026-10-20
 - **Deciders:** Atlas maintainers
@@ -371,6 +371,44 @@ Considered and set aside:
 - **Answering the questions in the browser.** It would need no route, and would copy the rule —
   by id, then by a name exactly one principal carries, an account ignoring case — into a second
   language, where the two would drift.
+
+### The target remembers what a name means (amended 2026-10-21)
+
+Answering a package's questions by name works where both installations name their groups and
+people alike. Where INT says "Fachbereich Bau" and PROD says "FB Bau", nothing is found, and
+every import of every later version asks again: in the Console a dialog, in a pipeline a
+`--set` that somebody has to keep in step by hand.
+
+**PROD keeps a table.** Each entry is a kind (group, user, account), a name as the package gives
+it, and the principal it means here: a group's or user's id, an account's username. It lives on
+the target, in a store of this installation (`package-mappings`, class instance, like the bases),
+because only the target knows what another's names mean there; it never travels.
+
+- **It is read before the directory.** A question is answered, in this order, by the person's
+  choice, by the table's entry for the packaged answer while the principal it names still
+  exists, and by the packaged answer in the directory. The table wins over a name match: an
+  entry is a decision somebody made. An entry whose principal was deleted is skipped, said so,
+  and the name is looked up again.
+- **It is filled from choices.** `POST /api/v1/catalogs/import/answers` takes the person's
+  choices beside the package's answers (`chosen`) and answers which are worth keeping
+  (`learned`): a choice for a packaged name the directory did not answer the same way. The
+  Console records them, and `atlas import` records what `--answers`/`--set` chose, **only after
+  the catalogue import went through**, so a cancelled or refused import teaches nothing.
+  `atlas import` now also reads the package's `antworten.json` as its answers, so an exported
+  package installs without `--answers` wherever its names are found or remembered.
+- **It is visible and correctable.** `GET`, `POST` and `DELETE /api/v1/catalogs/import/mappings`
+  (productmanager), and the catalogue list shows the table, with a mark on an entry whose
+  principal is gone, a button to remove one, and a form to add one before the first import. An
+  entry is checked when written: one naming nobody here is refused.
+
+Considered and set aside:
+
+- **Keying the table by the exporting installation.** Two sources could, in principle, use one
+  name for two things. A package carries no identity of its source today, names are labels
+  people chose to mean something, and the person importing sees and corrects the table. If that
+  case appears, the key can gain the source without changing what an entry means.
+- **Remembering every answer, found or chosen.** A name found by itself needs no entry, and an
+  entry for it would keep the old principal after somebody renamed the group here.
 
 ### Why not the others
 

@@ -158,3 +158,33 @@ test("the catalogue list imports a whole file, published when asked", async ({ p
   expect(call.url).toBe("/api/v1/catalogs/import");
   expect(call.body).toEqual({ ...doc, publish: true });
 });
+
+test("the catalogue list shows the table of names package imports keep, to remove from and add to", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto("/catalog-editor-harness.html");
+  await page.waitForFunction(() => window.__ready === true);
+  await page.evaluate(() => {
+    window.__mappings = [
+      { kind: "group", answer: "Fachbereich Bau", id: "grp_all", name: "Everybody", here: true },
+      { kind: "account", answer: "Fabienne Meier", id: "weg", name: "", here: false },
+    ];
+    return window.__mountList();
+  });
+  const card = page.locator(".cat-mappings");
+  await expect(card.locator("tbody tr")).toHaveCount(2);
+  await expect(card.locator('tr[data-answer="Fabienne Meier"]')).toContainText("no longer here");
+  await page.evaluate(() => { window.__sent.length = 0; });
+
+  await card.locator('tr[data-answer="Fachbereich Bau"] [data-act="mapping-remove"]').click();
+  await expect.poll(() => sent(page, "DELETE")).toHaveLength(1);
+  expect((await sent(page, "DELETE"))[0].url).toBe("/api/v1/catalogs/import/mappings?kind=group&answer=Fachbereich+Bau");
+
+  // An approver is chosen among the accounts, by username.
+  await card.locator('.mapping-add [name="kind"]').selectOption("account");
+  await expect(card.locator('.mapping-add [name="id"] option')).toHaveText(["Arno"]);
+  await card.locator('.mapping-add [name="answer"]').fill("Arno Muster");
+  await card.locator(".mapping-add button[type=submit]").click();
+  await expect.poll(async () => (await sent(page, "POST")).filter((c) => c.url.endsWith("/mappings"))).toHaveLength(1);
+  const [post] = (await sent(page, "POST")).filter((c) => c.url.endsWith("/mappings"));
+  expect(post.body).toEqual({ mappings: [{ kind: "account", answer: "Arno Muster", id: "arno" }] });
+});
