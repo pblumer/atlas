@@ -18,17 +18,21 @@ _Changed_ / _Removed_ for each version.
 asks before it replaces work done on the server.** `atlas export --application` writes an
 application with its constants and its catalogues as a directory `atlas import` installs
 elsewhere; the groups and people a catalogue names become questions answered by name,
-and the decision models the server keeps travel with the source. Every import — the
-source import, the catalogue import, `atlas import` and the Console's — compares each
+and the decision models the server keeps travel with the source. The Console's source
+download carries the constants when asked, and the Console's download and import,
+`atlas export` and `atlas import` name what the target still lacks: the server constants
+and application constants the processes read and the workers they name. Every import —
+the source import, the catalogue import, `atlas import` and the Console's — compares each
 artifact with the server's version and with the one the last import brought: what is
 still as the last import left it is updated, what was edited here since is kept, and only
 what both sides moved is asked about, so the same package installed twice changes nothing
 ([ADR-0467](docs/adr/0467-application-package-export.md)). Teams Phone gives out phone
-numbers (`ensure-phone-number`, `remove-phone-number`), removes a whole hotline in one
-task (`remove-hotline`), reconciles an existing queue's routing and authorized users, and
-gives eight refusals a code an error boundary can catch; the script is still tested
-against a stand-in module, not a tenant
-([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendments 2026-10-20).
+numbers (`ensure-phone-number`, `remove-phone-number`), lists the free ones
+(`list-free-phone-numbers`), removes a whole hotline in one task (`remove-hotline`),
+reconciles an existing queue's routing and authorized users, and gives eight refusals a
+code an error boundary can catch; the script is still tested against a stand-in module,
+not a tenant
+([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendments 2026-10-20 and 2026-10-21).
 `examples/m365-dienste/` is a shop for Microsoft 365 services built on the Entra, Exchange
 and Teams Phone Worker Types. The Tasks app's Start view groups its processes by
 application, filters them and keeps favourites
@@ -61,7 +65,7 @@ only the fields its operation uses.
   set, now fails the task instead of answering with no ids, and `remove-resource-account`
   releases the account's phone numbers before it deletes the account. These are the
   worker's: a Teams Phone worker you run yourself with `atlas worker` behaves so once it
-  runs 0.17.0, and until then it does not know the three new operations and does not
+  runs 0.17.0, and until then it does not know the four new operations and does not
   throw the new codes. Upgrade the server first, or both together: a 0.16.0 server writes
   every setting's default into an `ensure-call-queue` task, and a 0.17.0 worker would set
   those defaults on every existing queue it ensures.
@@ -74,17 +78,20 @@ only the fields its operation uses.
 - 0.17.0 reads the data directory 0.16.0 wrote: nothing under the log, the state or the
   record format changed. Two stores are added on the first start, `import-baselines` and
   `start-favourites`; both travel with a whole-instance snapshot and neither with an
-  export. The routes added are `/api/v1/me/start-favourites` and
-  `POST /api/v1/applications/{id}/constants/import`, and `GET /api/v1/processes` names
-  each row's application in `applicationName`. The `StartFavourites` budget (100) is new.
-  No MCP tool was added or removed, so the tool count stays.
+  export. The routes added are `/api/v1/me/start-favourites`,
+  `POST /api/v1/applications/{id}/constants/import` and
+  `GET /api/v1/applications/{id}/needs`; the source download takes `?constants=true`, and
+  `GET /api/v1/processes` names each row's application in `applicationName`. The
+  `StartFavourites` budget (100) is new. No MCP tool was added or removed, so the tool
+  count stays.
 - Going back to 0.16.0 starts on the same directory unless a model that uses
-  `ensure-phone-number`, `remove-phone-number` or `remove-hotline` is deployed: 0.16.0's
-  compiler does not know the operation, and a stored model that does not compile stops
-  its start. Delete those deployments before going back; the `examples/m365-dienste/`
-  package installs some. A source tree or package that carries decision models (format
-  version 2) is refused by 0.16.0, an import made under 0.16.0 is not remembered when
-  you come back, and the Start view's favourites are not shown there.
+  `ensure-phone-number`, `remove-phone-number`, `list-free-phone-numbers` or
+  `remove-hotline` is deployed: 0.16.0's compiler does not know the operation, and a
+  stored model that does not compile stops its start. Delete those deployments before
+  going back; the `examples/m365-dienste/` package installs some. A source tree that
+  carries decision models or constants (format version 2 or 3) is refused by 0.16.0, an
+  import made under 0.16.0 is not remembered when you come back, and the Start view's
+  favourites are not shown there.
 
 ### Added
 
