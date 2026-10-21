@@ -391,7 +391,7 @@ const CATALOGS = {
     "display.notSaved": "Nicht gespeichert: {reason}",
     "display.savedToast": "Darstellung gespeichert",
 
-    // Console → API tokens (ADR-0194). Each scope's sentence says what a token of it
+    // Console → Administration → API tokens (ADR-0194). Each scope's sentence says what a token of it
     // reaches, as the table in docs/install.md does; apitokens_page_test.go holds the
     // scope keys to apiMintableScopes.
     "apitokens.title": "API-Tokens",

@@ -24,12 +24,13 @@ _Changed_ / _Removed_ for each version.
   wherever its names are found or remembered
   ([ADR-0467](docs/adr/0467-application-package-export.md), amendment 2026-10-21).
 - **An API token about to expire is flagged before it stops working.** A token with less
-  than 30 days left is marked in **Console → API tokens** with the days it has, listed
+  than 30 days left is marked in **Console → Administration → API tokens** with the days it has, listed
   above the tokens, and named on the Console's dashboard to administrators, with the vault
   secret it was sealed as — until it is replaced and revoked. An expired token is refused
   like an unknown one, so without the warning the first sign was a machine failing
   ([ADR-0194](docs/adr/0194-api-tokens.md), amendment 2026-10-21).
-- **API tokens are minted, listed and revoked in the Console.** **Console → API tokens**,
+
+- **API tokens are minted, listed and revoked in the Console.** **Console → Administration → API tokens**,
   offered to administrators only, lists every token with its scope, roles, reach, expiry
   and who minted it when, and marks an expired one rather than hiding it. The form says
   what each scope reaches and which roles the token will carry before it is minted, asks
@@ -54,7 +55,29 @@ _Changed_ / _Removed_ for each version.
   command and the server ([ADR-0467](docs/adr/0467-application-package-export.md), amendment
   2026-10-21).
 
+### Changed
+
+- **The Console and Operations put their seldom-opened pages behind one entry.** In the
+  Console, Engine, Logs, Backup, Organization, API tokens and Audit log moved into
+  **Administration ▾**, which only administrators see; Dashboard, Workers, Events, AI access
+  and Display stay on the bar. In Operations, Messages, Outbox and Call activities — and, for
+  administrators, Mock directory and Mock database — moved into **Diagnostics ▾**; Instances,
+  Incidents with its count, Workers, Decisions and Reconciliation stay. The pages keep their
+  addresses, so bookmarks and the handbook's links still open them, and the handbook, the
+  docs and the worker dialogs now say **Console → Administration → …** and
+  **Operations → Diagnostics → …**.
+
 ### Fixed
+
+- **The menu bar no longer wraps its names or cuts off its buttons.** In a window narrower
+  than about 1300 pixels an administrator's Console bar broke two-word names onto two lines,
+  shortened the organisation's name to «A…» and clipped the account button. Names now stay
+  on one line at every width, the bar scrolls within itself where they do not fit, and the
+  organisation's name gives way first. On a phone the app's name beside the logo gives way
+  too: there the view names had no room left at all, and in Operations the account button
+  was pushed off the screen. An end-to-end test measures the Console's and the
+  Operations bar at 1440, 1280 and 1024 pixels, for an administrator and an operator, and on
+  a phone.
 
 - **A fixed approver in a package is assigned by username.** A `fixed` approval is a task
   assigned to a username, but `atlas import`, the example's `facility-management` question and the

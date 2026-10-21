@@ -114,7 +114,10 @@ async function open(page, { me = ADMIN, tokens = LISTED, secrets = ["atlas"], vi
   await page.addInitScript(installFixture, { me, tokens, secrets, secret: SECRET });
   await page.goto("/index.html");
   await page.waitForFunction(() => document.querySelector("#view")?.children.length > 0, null, { timeout: 15000 });
-  if (viaMenu) await page.locator("#topnav a", { hasText: "API tokens" }).click();
+  if (viaMenu) {
+    await page.locator("#topnav .topnav-group-btn", { hasText: "Administration" }).click();
+    await page.locator("#topnav .topnav-group a", { hasText: "API tokens" }).click();
+  }
   else await page.evaluate(() => { location.hash = "#/console/api-tokens"; });
   await expect(page.locator("#view h1").first()).toHaveText(/API-Tokens|API tokens/);
 }

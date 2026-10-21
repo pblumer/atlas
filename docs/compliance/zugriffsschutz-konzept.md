@@ -967,7 +967,7 @@ Drei Dinge kamen beim Bauen dazu:
 **Stand: Schritt 2 ist ebenfalls umgesetzt** (`api/oidcmapping.go`). Eine
 Administratorin benennt **einen** Claim und eine Liste **exakter Werte**, und jeder
 Wert benennt die Rollen, die er vergibt, und die Atlas-Gruppen, in die er die Person
-setzt. Bearbeitet wird das unter Console → Organization → Single sign-on
+setzt. Bearbeitet wird das unter Console → Administration → Organization → Single sign-on
 (`GET`/`PUT /api/v1/settings/oidc-mapping`, in beide Richtungen `admin` — die Regeln
 nennen die Gruppenkennungen des Anbieters, und die Anmeldemaske braucht sie nicht).
 
