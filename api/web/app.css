@@ -7170,3 +7170,10 @@ button.im-problem:hover { background: var(--accent-soft); }
 .need-state[data-state="set"], .need-state[data-state="configured"] { color: var(--ok); }
 .need-state[data-state="fallback"] { color: var(--muted); }
 .need-carried { margin-left: 6px; font-size: 12px; color: var(--muted); }
+.source-download .package-catalogs { list-style: none; padding: 0; margin: 6px 0 0; max-height: 25vh; overflow: auto; }
+.source-download .package-catalogs li { padding: 3px 0; }
+.source-download .package-catalogs label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+.source-download .package-warnings { margin-top: 12px; }
+.package-answers .package-question { margin-top: 12px; }
+.package-answers .package-question label { display: grid; gap: 4px; }
+.package-answers .package-answer { max-width: 100%; }

@@ -9,16 +9,15 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
 
+	"github.com/pblumer/atlas/api/apppkg"
 	"github.com/pblumer/atlas/api/importplan"
 )
 
@@ -45,13 +44,13 @@ import (
 // Package file names, beside the manifest.
 const (
 	packageManifest  = "atlas.json"
-	packageCatalogue = "katalog.json"
-	packageQuestions = "fragen.json"
+	packageCatalogue = apppkg.CatalogueFile
+	packageQuestions = apppkg.QuestionsFile
 )
 
 // packagePlaceholder is a value a catalogue document leaves to the installation it
 // is imported into: an audience group, an approver.
-var packagePlaceholder = regexp.MustCompile(`\{\{([a-z0-9-]+)\}\}`)
+var packagePlaceholder = apppkg.Placeholder
 
 // packageManifestFile is the part of atlas.json the command reads: which files
 // travel. The server reads the whole manifest and checks it.
@@ -72,25 +71,8 @@ type packageManifestFile struct {
 	Constants string `json:"constants"`
 }
 
-// packageQuestion is one entry of fragen.json. Kind says where an answer must be
-// found: "group" and "user" in the server's directory, anything else is taken as
-// written.
-type packageQuestion struct {
-	Kind  string            `json:"kind"`
-	Label map[string]string `json:"label"`
-	Hint  map[string]string `json:"hint"`
-}
-
-// text is the question in English when it has English, else in whatever it has.
-func (q packageQuestion) text(name string) string {
-	if t := q.Label["en"]; t != "" {
-		return t
-	}
-	for _, lang := range slices.Sorted(maps.Keys(q.Label)) {
-		return q.Label[lang]
-	}
-	return name
-}
+// packageQuestion is one entry of fragen.json.
+type packageQuestion = apppkg.Question
 
 // importPackage is a package read from disk and ready to send.
 type importPackage struct {
@@ -413,115 +395,34 @@ func readAnswers(file string, set answerFlags) (map[string]string, error) {
 }
 
 // directoryEntry is one principal GET /api/v1/principals lists.
-type directoryEntry struct {
-	Type string `json:"type"`
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
+type directoryEntry = apppkg.DirectoryEntry
 
-// resolveAnswers answers every placeholder the catalogue document leaves. An answer
-// to a group or person question must be one the server's directory has, given by
-// its id or by its name: an audience group that does not exist reaches nobody, and
-// the import would succeed without saying so. Names are accepted because ids are
-// minted per server, so an answers file that names "Alle Mitarbeitenden" serves the
-// test installation and the production one alike. Every problem is reported at once.
+// resolveAnswers answers every placeholder the catalogue document leaves
+// (apppkg.Resolve), and says each problem in the terms of this command: an
+// unanswered question with the flag that answers it.
 func resolveAnswers(pkg importPackage, answers map[string]string, directory func() ([]directoryEntry, error)) (map[string]string, []string, error) {
-	var names []string
-	seen := map[string]bool{}
-	for _, m := range packagePlaceholder.FindAllSubmatch(pkg.catalogue, -1) {
-		if name := string(m[1]); !seen[name] {
-			seen[name] = true
-			names = append(names, name)
-		}
-	}
-	var (
-		problems []string
-		notes    []string
-		dir      []directoryEntry
-		dirRead  bool
-	)
-	resolved := map[string]string{}
-	for _, name := range names {
-		q := pkg.questions[name]
-		value := strings.TrimSpace(answers[name])
-		if value == "" {
-			problems = append(problems, fmt.Sprintf("%s is not answered: %s (--set %s=...)", name, q.text(name), name))
-			continue
-		}
-		if q.Kind != "group" && q.Kind != "user" {
-			resolved[name] = value
-			continue
-		}
-		if !dirRead {
-			var err error
-			if dir, err = directory(); err != nil {
-				return nil, nil, err
-			}
-			dirRead = true
-		}
-		id, why := findPrincipal(dir, q.Kind, value)
-		if why != "" {
-			problems = append(problems, name+": "+why)
-			continue
-		}
-		if id != value {
-			notes = append(notes, fmt.Sprintf("%s: %q is %s %s", name, value, q.Kind, id))
-		}
-		resolved[name] = id
-	}
-	for _, k := range slices.Sorted(maps.Keys(answers)) {
-		if !seen[k] {
-			notes = append(notes, fmt.Sprintf("note: the package does not ask for %s; that answer is not used", k))
-		}
+	resolved, notes, problems, err := apppkg.Resolve(pkg.catalogue, pkg.questions, answers, directory)
+	if err != nil {
+		return nil, nil, err
 	}
 	if len(problems) > 0 {
+		lines := make([]string, 0, len(problems))
+		for _, p := range problems {
+			if p.Reason == apppkg.ProblemUnanswered {
+				lines = append(lines, fmt.Sprintf("%s is not answered: %s (--set %s=...)", p.Name, p.Question, p.Name))
+				continue
+			}
+			lines = append(lines, p.Name+": "+p.Detail)
+		}
 		return nil, nil, fmt.Errorf("the package's questions are not all answered; nothing was imported:\n  %s",
-			strings.Join(problems, "\n  "))
+			strings.Join(lines, "\n  "))
 	}
 	return resolved, notes, nil
 }
 
-// findPrincipal finds a principal of a kind by id, then by name. A name two
-// principals share is refused rather than guessed.
-func findPrincipal(dir []directoryEntry, kind, value string) (string, string) {
-	var byName []directoryEntry
-	for _, e := range dir {
-		if e.Type != kind {
-			continue
-		}
-		if e.ID == value {
-			return e.ID, ""
-		}
-		if e.Name == value {
-			byName = append(byName, e)
-		}
-	}
-	switch len(byName) {
-	case 1:
-		return byName[0].ID, ""
-	case 0:
-		return "", fmt.Sprintf("no %s with the id or name %q on this server", kind, value)
-	default:
-		ids := make([]string, 0, len(byName))
-		for _, e := range byName {
-			ids = append(ids, e.ID)
-		}
-		return "", fmt.Sprintf("%d %ss are named %q; answer with the id of one: %s", len(byName), kind, value, strings.Join(ids, ", "))
-	}
-}
-
-// fillDocument puts the answers in place of the placeholders. Each goes in escaped
-// as a JSON string, so an answer cannot break the document it is put in.
+// fillDocument puts the answers in place of the placeholders (apppkg.Fill).
 func fillDocument(doc []byte, answers map[string]string) ([]byte, error) {
-	filled := packagePlaceholder.ReplaceAllFunc(doc, func(m []byte) []byte {
-		name := string(packagePlaceholder.FindSubmatch(m)[1])
-		quoted, _ := json.Marshal(answers[name])
-		return quoted[1 : len(quoted)-1]
-	})
-	if !json.Valid(filled) {
-		return nil, fmt.Errorf("%s is not JSON", packageCatalogue)
-	}
-	return filled, nil
+	return apppkg.Fill(doc, answers)
 }
 
 // --- the client ---------------------------------------------------------------
@@ -586,11 +487,7 @@ func (c *importClient) catalogueOff() (bool, error) {
 	return info.Catalogue != nil && !*info.Catalogue, nil
 }
 
-func (c *importClient) directory() ([]directoryEntry, error) {
-	var dir []directoryEntry
-	err := c.do(http.MethodGet, "/api/v1/principals", nil, &dir)
-	return dir, err
-}
+func (c *importClient) directory() ([]directoryEntry, error) { return c.apiClient.directory() }
 
 // importSource sends the application's source with a query: ?dryRun=true for the
 // plan, or the decisions.

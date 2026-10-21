@@ -835,9 +835,11 @@ var mcpOmittedRoutes = map[string]string{
 	// atlas_save_form, atlas_register_decision), where each change is one legible
 	// step; handing it an archive that silently rewrites every artifact of an
 	// application at once is neither reviewable nor something an agent needs.
-	"GET /api/v1/applications/{id}/source": "bulk source-tree download; an agent reads artifacts individually via atlas_get_draft_xml / atlas_get_form",
-	"POST /api/v1/applications/source":     "bulk source-tree upload that rewrites a whole application; an agent authors via atlas_save_draft / atlas_save_form",
-	"GET /api/v1/applications/{id}/needs":  "the list the Console's source download names before it downloads; an agent reads the same facts through atlas_application_constants, atlas_server_constants and atlas_workers",
+	"GET /api/v1/applications/{id}/source":  "bulk source-tree download; an agent reads artifacts individually via atlas_get_draft_xml / atlas_get_form",
+	"POST /api/v1/applications/source":      "bulk source-tree upload that rewrites a whole application; an agent authors via atlas_save_draft / atlas_save_form",
+	"GET /api/v1/applications/{id}/needs":   "the list the Console's source download names before it downloads; an agent reads the same facts through atlas_application_constants, atlas_server_constants and atlas_workers",
+	"GET /api/v1/applications/{id}/package": "bulk package download, the source tree and its shop in one archive; an agent reads the application through the source tools and a catalogue through atlas_export_catalog",
+	"POST /api/v1/catalogs/import/answers":  "the Console's half of installing a package: it answers the package's questions from the directory so a person can import the filled catalogue; an agent imports a catalogue document with its own ids through atlas_import_catalog",
 
 	// Process documentation (ADR-0138): the document is *produced in the browser*,
 	// where bpmn-js holds the authoritative picture — an agent has no rendered

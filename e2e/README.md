@@ -364,16 +364,21 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   `window.__importPlan`.
 
 - **`source-transfer.spec.mjs`** ([ADR-0467](../docs/adr/0467-application-package-export.md)):
-  **moving an application's source** from the Console. The download dialog lists what the
+  **moving an application and its catalogues** from the Console. The export dialog lists what the
   processes need from the target and no download carries — server constants, application
   constants, workers, each with the processes that read it, and the drafts it could not read —
-  and carries the application's constant values (`?constants=true`) only while that box is
-  ticked, which it is by default when the application holds any; an application holding none
-  offers no box, and cancelling downloads nothing. After an import, the report names only
-  what the target still lacks (missing, held with another type, configured as another Worker
-  Type, not usable) and the constants it did not set for want of the administrator role; a
-  need the target answers or a fallback covers is left out. Drives the real
-  `api/web/sourceneeds.js` through its own harness.
+  carries the application's constant values (`?constants=true`) only while that box is ticked,
+  and offers the catalogues the person maintains, those selling the application ticked; with one
+  ticked it asks `…/package` for a preview first and shows its warnings before "Download anyway",
+  with none it downloads the source tree. The import reads a package archive in the browser,
+  answers its questions through `/api/v1/catalogs/import/answers`, asks the person for any the
+  directory cannot answer (a fixed approver among usernames), shows one plan for the application
+  and the catalogues, then imports the application, publishes it and imports the catalogues in
+  that order; a source tree without a shop asks nothing and publishes nothing; cancelling a
+  question installs nothing. After an import the report names only what the target still lacks
+  and the constants it did not set. Drives the real `api/web/sourceneeds.js` and
+  `api/web/packageimport.js` through their own harness, whose mock answers each route as the spec
+  gives it.
 
 - **`catalog-commanded-by.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md) §10):
   **which process applications may command a product** in the catalogue editor. The

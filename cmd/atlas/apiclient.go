@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/pblumer/atlas/api/apppkg"
+
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -121,4 +123,30 @@ func serverMessage(raw []byte) string {
 		}
 	}
 	return strings.TrimSpace(string(raw))
+}
+
+// directory is the server's directory in a package's terms (apppkg.DirectoryEntry):
+// its groups and users by id, as GET /api/v1/principals lists them, and its accounts
+// by username, as GET /api/v1/users/assignable lists them — a fixed approver is an
+// account, because the approval becomes a task assigned to that username.
+func (c *apiClient) directory() ([]directoryEntry, error) {
+	var dir []directoryEntry
+	if err := c.do(http.MethodGet, "/api/v1/principals", nil, &dir); err != nil {
+		return nil, err
+	}
+	var accounts []struct {
+		Username    string `json:"username"`
+		DisplayName string `json:"displayName"`
+	}
+	if err := c.do(http.MethodGet, "/api/v1/users/assignable", nil, &accounts); err != nil {
+		return nil, err
+	}
+	for _, a := range accounts {
+		name := a.DisplayName
+		if name == "" {
+			name = a.Username
+		}
+		dir = append(dir, directoryEntry{Type: apppkg.KindAccount, ID: a.Username, Name: name})
+	}
+	return dir, nil
 }
