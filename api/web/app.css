@@ -7200,6 +7200,9 @@ button.im-problem:hover { background: var(--accent-soft); }
 .source-download .package-catalogs li { padding: 3px 0; }
 .source-download .package-catalogs label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
 .source-download .package-warnings { margin-top: 12px; }
+.cat-mappings .mapping-add { display: grid; grid-template-columns: minmax(140px, 1fr) 2fr 2fr auto; gap: 10px; align-items: end; margin-top: 14px; }
+.cat-mappings .mapping-add .field { margin: 0; }
+@media (max-width: 720px) { .cat-mappings .mapping-add { grid-template-columns: 1fr; } }
 .package-answers .package-question { margin-top: 12px; }
 .package-answers .package-question label { display: grid; gap: 4px; }
 .package-answers .package-answer { max-width: 100%; }

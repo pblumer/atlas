@@ -381,3 +381,61 @@ func TestAConsoleDownloadInstallsWithItsConstants(t *testing.T) {
 		t.Errorf("constants on the target = %v", got)
 	}
 }
+
+// TestATargetRemembersWhatANameMeans: INT calls the audience "Fachbereich Bau",
+// PROD calls it "FB Bau". The first import is answered once with --set, and PROD
+// remembers it; the next import of the same package needs no answer at all.
+func TestATargetRemembersWhatANameMeans(t *testing.T) {
+	src, _ := liveServer(t)
+	group := createdID(t, src, "/api/v1/groups", `{"name":"Fachbereich Bau"}`)
+	code, raw := apiCall(t, src, http.MethodPost, "/api/v1/applications", `{"name":"Bau"}`)
+	var app struct {
+		ID string `json:"id"`
+	}
+	if code != http.StatusOK || json.Unmarshal(raw, &app) != nil {
+		t.Fatalf("create the application = %d %s", code, raw)
+	}
+	req, _ := http.NewRequest(http.MethodPost, src.URL+"/api/v1/drafts?projectId="+app.ID, strings.NewReader(needyBPMN))
+	req.Header.Set("Content-Type", "application/xml")
+	resp, err := src.Client().Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("save the draft: %v %v", resp, err)
+	}
+	_ = resp.Body.Close()
+	doc := `{"catalogs":[{"id":"cat-bau","texts":{"de":"Bau"},"rank":4,"languages":["de"],"items":["helm"],"groups":["` + group + `"]}],
+	  "products":[{"id":"helm","homeCatalog":"cat-bau","state":"active","texts":{"de":"Helm"},"approval":{"kind":"none"},"provisionProcess":"bedarf"}]}`
+	if code, raw := apiCall(t, src, http.MethodPost, "/api/v1/catalogs/import", doc); code != http.StatusOK {
+		t.Fatalf("set up the catalogue = %d %s", code, raw)
+	}
+	dir := filepath.Join(t.TempDir(), "paket")
+	var out bytes.Buffer
+	if err := runExport([]string{"--server", src.URL, "--application", app.ID, "--catalog", "cat-bau", dir}, &out); err != nil {
+		t.Fatalf("export: %v\n%s", err, out.String())
+	}
+
+	dst, _ := liveServer(t)
+	here := createdID(t, dst, "/api/v1/groups", `{"name":"FB Bau"}`)
+	out.Reset()
+	if err := runImport([]string{"--server", dst.URL, dir}, &out); err == nil || !strings.Contains(err.Error(), `fachbereich-bau: no group with the id or name "Fachbereich Bau"`) {
+		t.Fatalf("a name the target does not carry = %v\n%s", err, out.String())
+	}
+	out.Reset()
+	if err := runImport([]string{"--server", dst.URL, "--set", "fachbereich-bau=FB Bau", dir}, &out); err != nil {
+		t.Fatalf("answered once: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), `remembered on this server: group "Fachbereich Bau" is `+here) {
+		t.Errorf("output:\n%s", out.String())
+	}
+	out.Reset()
+	if err := runImport([]string{"--server", dst.URL, dir}, &out); err != nil {
+		t.Fatalf("the next import, unanswered: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), `fachbereich-bau: "Fachbereich Bau" is group `+here+`, as this server remembers`) ||
+		strings.Contains(out.String(), "remembered on this server") {
+		t.Errorf("output:\n%s", out.String())
+	}
+	_, cat := apiCall(t, dst, http.MethodGet, "/api/v1/catalogs/cat-bau", "")
+	if !strings.Contains(string(cat), here) {
+		t.Errorf("the catalogue on the target = %s, want its audience %s", cat, here)
+	}
+}

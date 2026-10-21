@@ -368,7 +368,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   where a box was moved; cancelling imports nothing. Drives the real `viewCatalogDetail` and
   `viewCatalogs` (and `api/web/importchoices.js` through them) via the editor harness, whose mock
   refuses an import when a spec sets `window.__importRefusal` and answers a dry run with
-  `window.__importPlan`.
+  `window.__importPlan`. The catalogue list also shows the **table of names** package imports
+  keep: each entry with what it means here, one whose principal is gone marked as such, a
+  remove button that sends `DELETE …/import/mappings?kind=&answer=`, and a form that adds an
+  approver among the accounts by username (`window.__mappings` sets the entries).
 
 - **`source-transfer.spec.mjs`** ([ADR-0467](../docs/adr/0467-application-package-export.md)):
   **moving an application and its catalogues** from the Console. The export dialog lists what the
@@ -378,10 +381,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   and offers the catalogues the person maintains, those selling the application ticked; with one
   ticked it asks `…/package` for a preview first and shows its warnings before "Download anyway",
   with none it downloads the source tree. The import reads a package archive in the browser,
-  answers its questions through `/api/v1/catalogs/import/answers`, asks the person for any the
-  directory cannot answer (a fixed approver among usernames), shows one plan for the application
-  and the catalogues, then imports the application, publishes it and imports the catalogues in
-  that order; a source tree without a shop asks nothing and publishes nothing; cancelling a
+  answers its questions through `/api/v1/catalogs/import/answers` — the package's answers and
+  the person's choices sent apart — asks the person for any the directory cannot answer (a fixed
+  approver among usernames), shows one plan for the application and the catalogues, then imports
+  the application, publishes it, imports the catalogues and only then keeps the choices the server
+  calls learned in the target's table of names, in that order; a source tree without a shop asks nothing and publishes nothing; cancelling a
   question installs nothing. After an import the report names only what the target still lacks
   and the constants it did not set. Drives the real `api/web/sourceneeds.js` and
   `api/web/packageimport.js` through their own harness, whose mock answers each route as the spec
