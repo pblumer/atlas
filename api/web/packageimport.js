@@ -148,14 +148,22 @@ export async function importPackage(file, { call, title = "Import application" }
   }
   let filled = null;
   let shopPlan = null;
+  // The person's choices go beside the package's answers, not over them: the server
+  // remembers a choice against the name the package gave (ADR-0467), and answers
+  // which choices are worth remembering (learned) and which questions its table of
+  // names answered (remembered).
+  const chosen = {};
+  let learned = [];
+  let remembered = [];
   if (shop) {
-    const answers = { ...shop.answers };
     let directory = null;
     for (;;) {
       const res = await call("POST", "/api/v1/catalogs/import/answers",
-        { document: shop.document, questions: shop.questions, answers });
+        { document: shop.document, questions: shop.questions, answers: shop.answers, chosen });
       if (res.status === 200) {
         filled = res.data.document;
+        learned = res.data.learned || [];
+        remembered = res.data.remembered || [];
         break;
       }
       if (res.status !== 422) ok(res, "the package's questions");
@@ -164,9 +172,9 @@ export async function importPackage(file, { call, title = "Import application" }
           ({ type: "account", id: u.username, name: u.displayName || u.username }));
         directory = [...ok(await call("GET", "/api/v1/principals"), "the directory"), ...accounts];
       }
-      const chosen = await openAnswers(res.data.problems || [], directory);
-      if (!chosen) return null;
-      Object.assign(answers, chosen);
+      const picked = await openAnswers(res.data.problems || [], directory);
+      if (!picked) return null;
+      Object.assign(chosen, picked);
     }
     shopPlan = ok(await call("POST", "/api/v1/catalogs/import?dryRun=true", filled), "the catalogues");
   }
@@ -182,7 +190,8 @@ export async function importPackage(file, { call, title = "Import application" }
   }
 
   // The steps, in the order `atlas import` takes them.
-  const out = { source: await source(query), constants: null, published: null, catalogue: null, warnings: [] };
+  const out = { source: await source(query), constants: null, published: null, catalogue: null, warnings: [],
+    remembered, learned: [] };
   const appId = out.source.applicationId;
   if (constantsPlan) {
     out.constants = ok(await call("POST", constantsPath(appId, query), constants), "the constants");
@@ -202,6 +211,11 @@ export async function importPackage(file, { call, title = "Import application" }
       out.warnings.push(...(pub.warnings || []));
     }
     out.catalogue = ok(await call("POST", "/api/v1/catalogs/import" + q(query), filled), "the catalogues");
+    // Only now, with the catalogues in, are the choices kept for the next import.
+    if (learned.length) {
+      ok(await call("POST", "/api/v1/catalogs/import/mappings", { mappings: learned }), "the table of names");
+      out.learned = learned;
+    }
     out.warnings.push(...(out.catalogue.warnings || []).map((w) => (w.subject ? `${w.subject}: ${w.problem}` : String(w.problem || w))));
   }
   return out;
@@ -215,5 +229,7 @@ export function packageSummary(out) {
     const n = (k) => (out.catalogue[k] || []).length;
     parts.push(`shop: ${n("created")} new, ${n("updated")} updated, ${n("releases")} published`);
   }
+  if ((out.remembered || []).length) parts.push(`${out.remembered.length} answered as this server remembers`);
+  if ((out.learned || []).length) parts.push(`${out.learned.length} kept for the next import`);
   return parts.join(" · ");
 }

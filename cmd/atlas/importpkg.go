@@ -79,6 +79,9 @@ type importPackage struct {
 	archive   []byte
 	catalogue []byte
 	questions map[string]packageQuestion
+	// answers are antworten.json's: the names the exporting server gives, answering
+	// every question this server's directory or its table of names knows them by.
+	answers map[string]string
 	// constants are konstanten.json's, nil when the package carries none.
 	constants []packageConstant
 }
@@ -135,7 +138,10 @@ func runImport(args []string, out io.Writer) error {
 	// Everything that can be refused without writing is refused before the first
 	// write: the answers are resolved and the document filled now, not after the
 	// application is already in.
-	var document []byte
+	var (
+		document []byte
+		remember []apppkg.Mapping
+	)
 	if pkg.catalogue != nil {
 		// A server started with --catalogue=false has no catalogue to import into
 		// (ADR-0434). Asked first, so the application is not published for a shop
@@ -145,13 +151,18 @@ func runImport(args []string, out io.Writer) error {
 		} else if off {
 			return fmt.Errorf("%s carries a shop, and this server has its catalogue switched off (--catalogue=false); nothing was imported", fs.Arg(0))
 		}
-		resolved, notes, err := resolveAnswers(pkg, answers, c.directory)
+		mappings, err := c.mappings()
+		if err != nil {
+			return err
+		}
+		resolved, notes, learned, err := resolveAnswers(pkg, answers, mappings, c.directory)
 		if err != nil {
 			return err
 		}
 		for _, n := range notes {
 			fmt.Fprintln(out, n)
 		}
+		remember = learned
 		if document, err = fillDocument(pkg.catalogue, resolved); err != nil {
 			return err
 		}
@@ -238,6 +249,16 @@ func runImport(args []string, out io.Writer) error {
 		if err := c.installShop(out, document, decided); err != nil {
 			return err
 		}
+		// What an answer chose differently from the names is remembered on this
+		// server once the shop is in, so the next import needs no --set for it.
+		if len(remember) > 0 {
+			if err := c.rememberMappings(remember); err != nil {
+				return err
+			}
+			for _, m := range remember {
+				fmt.Fprintf(out, "remembered on this server: %s %q is %s\n", m.Kind, m.Answer, m.ID)
+			}
+		}
 	}
 	return c.reportConstants(out, src.ApplicationID)
 }
@@ -319,6 +340,13 @@ func readImportPackage(dir string) (importPackage, error) {
 	if pkg.catalogue, err = readOptional(filepath.Join(dir, packageCatalogue)); err != nil {
 		return importPackage{}, err
 	}
+	if a, err := readOptional(filepath.Join(dir, apppkg.AnswersFile)); err != nil {
+		return importPackage{}, err
+	} else if a != nil {
+		if err := json.Unmarshal(a, &pkg.answers); err != nil {
+			return importPackage{}, fmt.Errorf("%s: %w", filepath.Join(dir, apppkg.AnswersFile), err)
+		}
+	}
 	if q, err := readOptional(filepath.Join(dir, packageQuestions)); err != nil {
 		return importPackage{}, err
 	} else if q != nil {
@@ -398,14 +426,16 @@ func readAnswers(file string, set answerFlags) (map[string]string, error) {
 type directoryEntry = apppkg.DirectoryEntry
 
 // resolveAnswers answers every placeholder the catalogue document leaves
-// (apppkg.Resolve), and says each problem in the terms of this command: an
-// unanswered question with the flag that answers it.
-func resolveAnswers(pkg importPackage, answers map[string]string, directory func() ([]directoryEntry, error)) (map[string]string, []string, error) {
-	resolved, notes, problems, err := apppkg.Resolve(pkg.catalogue, pkg.questions, answers, directory)
+// (apppkg.Resolve): what --answers and --set give, else what this server's table of
+// names remembers for the package's own answer, else that answer in the directory. It
+// says each problem in the terms of this command, an unanswered question with the flag
+// that answers it, and names the answers worth remembering.
+func resolveAnswers(pkg importPackage, answers map[string]string, mappings []apppkg.Mapping, directory func() ([]directoryEntry, error)) (map[string]string, []string, []apppkg.Mapping, error) {
+	res, err := apppkg.Resolve(pkg.catalogue, pkg.questions, apppkg.Answers{Packaged: pkg.answers, Chosen: answers, Mappings: mappings}, directory)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	if len(problems) > 0 {
+	if problems := res.Problems; len(problems) > 0 {
 		lines := make([]string, 0, len(problems))
 		for _, p := range problems {
 			if p.Reason == apppkg.ProblemUnanswered {
@@ -414,10 +444,10 @@ func resolveAnswers(pkg importPackage, answers map[string]string, directory func
 			}
 			lines = append(lines, p.Name+": "+p.Detail)
 		}
-		return nil, nil, fmt.Errorf("the package's questions are not all answered; nothing was imported:\n  %s",
+		return nil, nil, nil, fmt.Errorf("the package's questions are not all answered; nothing was imported:\n  %s",
 			strings.Join(lines, "\n  "))
 	}
-	return resolved, notes, nil
+	return res.Values, res.Notes, res.Learned, nil
 }
 
 // fillDocument puts the answers in place of the placeholders (apppkg.Fill).
@@ -488,6 +518,27 @@ func (c *importClient) catalogueOff() (bool, error) {
 }
 
 func (c *importClient) directory() ([]directoryEntry, error) { return c.apiClient.directory() }
+
+// mappings reads this server's table of names. A server from before the table has
+// none to read, and answers 404 for it.
+func (c *importClient) mappings() ([]apppkg.Mapping, error) {
+	var table []apppkg.Mapping
+	err := c.do(http.MethodGet, "/api/v1/catalogs/import/mappings", nil, &table)
+	var status *statusError
+	if errors.As(err, &status) && status.status == http.StatusNotFound {
+		return nil, nil
+	}
+	return table, err
+}
+
+// rememberMappings adds entries to this server's table of names.
+func (c *importClient) rememberMappings(entries []apppkg.Mapping) error {
+	body, err := json.Marshal(map[string]any{"mappings": entries})
+	if err != nil {
+		return err
+	}
+	return c.do(http.MethodPost, "/api/v1/catalogs/import/mappings", body, nil)
+}
 
 // importSource sends the application's source with a query: ?dryRun=true for the
 // plan, or the decisions.

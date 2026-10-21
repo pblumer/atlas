@@ -157,7 +157,8 @@ test("a package asks what the directory cannot answer, plans everything at once,
     "POST /api/v1/catalogs/import/answers": [
       { status: 422, data: { problems: [{ name: "fm", kind: "account", question: "approves Badge", answer: "Fabienne Meier",
         reason: "unknown", detail: 'no account with the id or name "Fabienne Meier" on this server' }] } },
-      { status: 200, data: { document: { catalogs: [{ id: "c", groups: ["g1"] }], products: [{ id: "badge", approval: { kind: "fixed", ref: "fmm" } }] } } },
+      { status: 200, data: { document: { catalogs: [{ id: "c", groups: ["g1"] }], products: [{ id: "badge", approval: { kind: "fixed", ref: "fmm" } }] },
+        learned: [{ kind: "account", answer: "Fabienne Meier", id: "fmm", name: "Fabienne Meier-Muster" }], remembered: ["alle"] } },
     ],
     "GET /api/v1/users/assignable": { status: 200, data: [{ username: "otto" }, { username: "fmm", displayName: "Fabienne Meier-Muster" }] },
     "GET /api/v1/principals": { status: 200, data: [{ type: "user", id: "u1", name: "Otto" }, { type: "user", id: "u2", name: "Fabienne Meier-Muster" }, { type: "group", id: "g1", name: "Alle" }] },
@@ -168,6 +169,7 @@ test("a package asks what the directory cannot answer, plans everything at once,
     "POST /api/v1/applications/a1/publish": { status: 200, data: { deployed: true, release: { version: 1 }, warnings: ["worker x is not configured"] } },
     "POST /api/v1/catalogs/import?keep=catalog%3Ac": { status: 200, data: { created: ["catalog:c"], updated: [], releases: [],
       warnings: [{ subject: "badge", problem: "an answer reaches a process in the clear" }] } },
+    "POST /api/v1/catalogs/import/mappings": { status: 200, data: [] },
   };
   page.evaluate(([b, r]) => window.__importPackage(b, r), [shopPackage, routes]);
 
@@ -183,7 +185,7 @@ test("a package asks what the directory cannot answer, plans everything at once,
   const choices = page.locator(".import-choices");
   await expect(choices.locator('.import-pick[value="catalog:c"]')).not.toBeChecked();
   await choices.locator("[data-ok]").click();
-  await expect(result(page)).toHaveText("done: published as release 1 · shop: 1 new, 0 updated, 0 published");
+  await expect(result(page)).toHaveText("done: published as release 1 · shop: 1 new, 0 updated, 0 published · 1 answered as this server remembers · 1 kept for the next import");
 
   const calls = await page.evaluate(() => window.__calls);
   expect(calls.map((c) => c.key)).toEqual([
@@ -197,10 +199,15 @@ test("a package asks what the directory cannot answer, plans everything at once,
     "GET /api/v1/applications/a1/releases",
     "POST /api/v1/applications/a1/publish",
     "POST /api/v1/catalogs/import?keep=catalog%3Ac",
+    "POST /api/v1/catalogs/import/mappings",
   ]);
-  // The answers go as the package has them, with the person's choice in place of the one not found.
+  // The answers go as the package has them, and the person's choice beside them: the
+  // server remembers it against the name the package gave, once the catalogues are in.
   expect(calls[1].body.answers).toEqual({ alle: "Alle", fm: "Fabienne Meier" });
-  expect(calls[4].body.answers).toEqual({ alle: "Alle", fm: "fmm" });
+  expect(calls[1].body.chosen).toEqual({});
+  expect(calls[4].body.answers).toEqual({ alle: "Alle", fm: "Fabienne Meier" });
+  expect(calls[4].body.chosen).toEqual({ fm: "fmm" });
+  expect(calls[10].body).toEqual({ mappings: [{ kind: "account", answer: "Fabienne Meier", id: "fmm", name: "Fabienne Meier-Muster" }] });
   expect(calls[5].body).toEqual({ catalogs: [{ id: "c", groups: ["g1"] }], products: [{ id: "badge", approval: { kind: "fixed", ref: "fmm" } }] });
   expect(await page.evaluate(() => window.__out.warnings)).toEqual(
     ["worker x is not configured", "badge: an answer reaches a process in the clear"]);

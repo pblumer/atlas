@@ -40,43 +40,110 @@ func Asked(document []byte) []string {
 	return names
 }
 
-// Resolve answers every question a catalogue document leaves. An answer to a group
-// or person question must be one the server's directory has, given by its id or by
-// its name: an audience group that does not exist reaches nobody, and the import
-// would succeed without saying so. Names are accepted because ids are minted per
-// server, so an answer that names "Alle Mitarbeitenden" serves the test installation
-// and the production one alike. Every problem is reported at once; the directory is
-// read only when a question needs it.
+// Mapping is one entry of a target's table of names (ADR-0467, amended): what a
+// package's answer of a kind — a group, a person or an account as the exporting
+// server names it — means on this server. The table is the target's own, because
+// only the target knows that INT's "Fachbereich Bau" is its "FB Bau"; it is filled
+// from the choices people make when a name is not found, and read before the
+// directory, so the same question is not asked twice.
+type Mapping struct {
+	Kind   string `json:"kind"`
+	Answer string `json:"answer"`
+	// ID is the principal it means here: a group's or a user's id, an account's
+	// username. Name is that principal's name here, for whoever reads the table.
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
+}
+
+// Answers are what an import answers a package's questions with.
+type Answers struct {
+	// Packaged are antworten.json's: the names the exporting server gives.
+	Packaged map[string]string
+	// Chosen are the person's, and win: an answers file or --set in a terminal, a
+	// choice in the Console's dialog.
+	Chosen map[string]string
+	// Mappings are this server's table, read for a packaged answer before the
+	// directory is.
+	Mappings []Mapping
+}
+
+// Resolution is how the questions were answered.
+type Resolution struct {
+	// Values are the answers by question, ready to fill: ids, usernames, text.
+	Values map[string]string
+	// Notes say how an answer was taken: a name found as an id, a remembered
+	// answer, an answer nothing asks for.
+	Notes    []string
+	Problems []Problem
+	// Learned are the choices worth remembering: a packaged answer the directory
+	// did not answer by name as the person did. Recorded in the table once the import
+	// went through, they answer the same question next time without asking.
+	Learned []Mapping
+	// Remembered names the questions the table answered.
+	Remembered []string
+}
+
+// Resolve answers every question a catalogue document leaves. An answer to a group,
+// person or account question must be one the server's directory has, given by its
+// id (an account's username) or by its name: an audience group that does not exist
+// reaches nobody, and the import would succeed without saying so. Names are accepted
+// because ids are minted per server, so an answer that names "Alle Mitarbeitenden"
+// serves the test installation and the production one alike.
 //
-// It answers the resolved values by question, notes on how an answer was taken (a
-// name found as an id, an answer nothing asks for), and the problems.
-func Resolve(document []byte, questions map[string]Question, answers map[string]string, directory func() ([]DirectoryEntry, error)) (map[string]string, []string, []Problem, error) {
+// For each question, in this order: the person's choice; for the packaged answer,
+// the table's entry, while the principal it names still exists here; the packaged
+// answer found in the directory. Every problem is reported at once; the directory is
+// read only when a question needs it.
+func Resolve(document []byte, questions map[string]Question, given Answers, directory func() ([]DirectoryEntry, error)) (Resolution, error) {
 	names := Asked(document)
+	res := Resolution{Values: map[string]string{}}
 	var (
-		problems []Problem
-		notes    []string
-		dir      []DirectoryEntry
-		dirRead  bool
+		dir     []DirectoryEntry
+		dirRead bool
 	)
-	resolved := map[string]string{}
+	readDir := func() error {
+		if dirRead {
+			return nil
+		}
+		var err error
+		dir, err = directory()
+		dirRead = err == nil
+		return err
+	}
+	remembered := map[string]Mapping{}
+	for _, m := range given.Mappings {
+		remembered[m.Kind+"\x00"+m.Answer] = m
+	}
 	for _, name := range names {
 		q := questions[name]
-		value := strings.TrimSpace(answers[name])
+		packaged := strings.TrimSpace(given.Packaged[name])
+		chosen := strings.TrimSpace(given.Chosen[name])
+		value := chosen
 		if value == "" {
-			problems = append(problems, Problem{Name: name, Kind: q.Kind, Question: q.Text(name),
+			value = packaged
+		}
+		if value == "" {
+			res.Problems = append(res.Problems, Problem{Name: name, Kind: q.Kind, Question: q.Text(name),
 				Reason: ProblemUnanswered, Detail: "is not answered"})
 			continue
 		}
 		if !directoryKind(q.Kind) {
-			resolved[name] = value
+			res.Values[name] = value
 			continue
 		}
-		if !dirRead {
-			var err error
-			if dir, err = directory(); err != nil {
-				return nil, nil, nil, err
+		if err := readDir(); err != nil {
+			return Resolution{}, err
+		}
+		if chosen == "" {
+			if m, ok := remembered[q.Kind+"\x00"+packaged]; ok {
+				if entry, found := findByID(dir, q.Kind, m.ID); found && entry.Type == q.Kind {
+					res.Values[name] = m.ID
+					res.Remembered = append(res.Remembered, name)
+					res.Notes = append(res.Notes, fmt.Sprintf("%s: %q is %s %s, as this server remembers", name, packaged, q.Kind, m.ID))
+					continue
+				}
+				res.Notes = append(res.Notes, fmt.Sprintf("%s: this server remembers %q as %s %s, which is no longer here; it is looked up by name", name, packaged, q.Kind, m.ID))
 			}
-			dirRead = true
 		}
 		id, candidates, why := FindPrincipal(dir, q.Kind, value)
 		if why != "" {
@@ -84,21 +151,29 @@ func Resolve(document []byte, questions map[string]Question, answers map[string]
 			if len(candidates) > 0 {
 				reason = ProblemAmbiguous
 			}
-			problems = append(problems, Problem{Name: name, Kind: q.Kind, Question: q.Text(name), Answer: value,
+			res.Problems = append(res.Problems, Problem{Name: name, Kind: q.Kind, Question: q.Text(name), Answer: value,
 				Reason: reason, Detail: why, Candidates: candidates})
 			continue
 		}
 		if id != value {
-			notes = append(notes, fmt.Sprintf("%s: %q is %s %s", name, value, q.Kind, id))
+			res.Notes = append(res.Notes, fmt.Sprintf("%s: %q is %s %s", name, value, q.Kind, id))
 		}
-		resolved[name] = id
+		res.Values[name] = id
+		// A choice that answers the packaged name differently from the directory —
+		// or answers what the directory could not — is worth remembering.
+		if chosen != "" && packaged != "" {
+			if byName, _, _ := FindPrincipal(dir, q.Kind, packaged); byName != id {
+				entry, _ := findByID(dir, q.Kind, id)
+				res.Learned = append(res.Learned, Mapping{Kind: q.Kind, Answer: packaged, ID: id, Name: entry.Name})
+			}
+		}
 	}
-	for _, k := range slices.Sorted(maps.Keys(answers)) {
+	for _, k := range slices.Sorted(maps.Keys(given.Chosen)) {
 		if !slices.Contains(names, k) {
-			notes = append(notes, fmt.Sprintf("note: the package does not ask for %s; that answer is not used", k))
+			res.Notes = append(res.Notes, fmt.Sprintf("note: the package does not ask for %s; that answer is not used", k))
 		}
 	}
-	return resolved, notes, problems, nil
+	return res, nil
 }
 
 // FindPrincipal finds a principal of a kind by id, then by name: a group or a user

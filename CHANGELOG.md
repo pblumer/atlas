@@ -14,13 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An installation remembers what another's names mean.** When a package names a group, a
+  person or an approver the target does not carry by that name, the choice made on import — in
+  the Console's dialog, or with `atlas import --set` — is kept on the target once the catalogues
+  are in, and the next import takes it without asking. The table is read before the directory,
+  shown on the catalogue list with entries to correct, remove or add before the first import,
+  and served at `GET`/`POST`/`DELETE /api/v1/catalogs/import/mappings`. `atlas import` now also
+  reads a package's `antworten.json`, so an exported package installs without `--answers`
+  wherever its names are found or remembered
+  ([ADR-0467](docs/adr/0467-application-package-export.md), amendment 2026-10-21).
 - **An API token about to expire is flagged before it stops working.** A token with less
   than 30 days left is marked in **Console → API tokens** with the days it has, listed
   above the tokens, and named on the Console's dashboard to administrators, with the vault
   secret it was sealed as — until it is replaced and revoked. An expired token is refused
   like an unknown one, so without the warning the first sign was a machine failing
   ([ADR-0194](docs/adr/0194-api-tokens.md), amendment 2026-10-21).
-
 - **API tokens are minted, listed and revoked in the Console.** **Console → API tokens**,
   offered to administrators only, lists every token with its scope, roles, reach, expiry
   and who minted it when, and marks an expired one rather than hiding it. The form says
