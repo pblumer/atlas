@@ -12,12 +12,14 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -236,9 +238,16 @@ func TestTheShippedScriptProvisionsAndUnwinds(t *testing.T) {
 		Users:    map[string]string{"anna@contoso.example": "user-anna"},
 		Accounts: map[string]map[string]any{}, Apps: map[string]map[string]any{}, Assoc: map[string]map[string]any{},
 		Schedules: []map[string]any{},
-		// The tenant's Calling Plan inventory: one number, held by nobody yet.
+		// The tenant's inventory, held by nobody yet: a Calling Plan number given out below,
+		// and beside it the ones list-free-phone-numbers must tell apart — one only a person
+		// can hold, one blocked, one not activated yet, and one of another type.
 		Numbers: map[string]map[string]any{
 			"+41441110000": {"TelephoneNumber": "+41441110000", "NumberType": "CallingPlan", "AssignedPstnTargetId": "", "AssignmentCategory": "Primary"},
+			"+41441110001": {"TelephoneNumber": "+41441110001", "NumberType": "CallingPlan", "AssignedPstnTargetId": "", "Capability": []string{"UserAssignment"}, "City": "Zürich", "IsoCountryCode": "CH"},
+			"+41441110002": {"TelephoneNumber": "+41441110002", "NumberType": "CallingPlan", "AssignedPstnTargetId": "", "AssignmentBlockedState": "BlockedForever"},
+			"+41441110003": {"TelephoneNumber": "+41441110003", "NumberType": "CallingPlan", "AssignedPstnTargetId": "", "ActivationState": "AssignmentPending"},
+			"+41441110004": {"TelephoneNumber": "+41441110004", "NumberType": "CallingPlan", "AssignedPstnTargetId": ""},
+			"+41449990000": {"TelephoneNumber": "+41449990000", "NumberType": "OperatorConnect", "AssignedPstnTargetId": ""},
 		},
 		Entra: map[string]map[string]any{
 			"anna@contoso.example": {"id": "user-anna", "displayName": "Anna Muster", "accountEnabled": true},
@@ -457,6 +466,41 @@ func TestTheShippedScriptProvisionsAndUnwinds(t *testing.T) {
 	// with the account.
 	if got, err := number(cqID, "+41445550000", "direct-routing"); err != nil || got["assigned"] != true {
 		t.Errorf("the queue's number again = %v, %v", got, err)
+	}
+
+	// The free numbers: Teams filters by status, activation, type, capability and prefix,
+	// the script drops a blocked one and sorts; one more than max is asked for, so a
+	// page that stopped short says so. The number Anna gave back is free again.
+	free := func(assignable string, extra map[string]any) map[string]any {
+		args := map[string]any{"numberType": "calling-plan", "assignableTo": assignable, "numberPrefix": "+41 44 111"}
+		for k, v := range extra {
+			args[k] = v
+		}
+		return must("list-free-phone-numbers", args)
+	}
+	listed := func(got map[string]any) []string {
+		out := []string{}
+		for _, n := range got["numbers"].([]any) {
+			out = append(out, n.(string))
+		}
+		return out
+	}
+	if got := free("user", nil); !slices.Equal(listed(got), []string{"+41441110000", "+41441110001", "+41441110004"}) || fmt.Sprint(got["count"]) != "3" || got["truncated"] != false {
+		t.Errorf("free Calling Plan numbers for a person = %v; want the free, activated, unblocked ones", got)
+	} else if entry := got["entries"].([]any)[1].(map[string]any); entry["phoneNumber"] != "+41441110001" || entry["city"] != "Zürich" || entry["isoCountryCode"] != "CH" || entry["numberType"] != "calling-plan" {
+		t.Errorf("entry = %v; want the number with its city, country and type", entry)
+	}
+	if got := free("resource-account", nil); !slices.Equal(listed(got), []string{"+41441110000", "+41441110004"}) {
+		t.Errorf("free numbers for a resource account = %v; want none that only a person can hold", got)
+	}
+	if got := free("user", map[string]any{"max": json.Number("1")}); !slices.Equal(listed(got), []string{"+41441110000"}) || got["truncated"] != true {
+		t.Errorf("one free number = %v; want the first and truncated", got)
+	}
+	if got := must("list-free-phone-numbers", map[string]any{"numberType": "operator-connect", "assignableTo": "user"}); !slices.Equal(listed(got), []string{"+41449990000"}) {
+		t.Errorf("free Operator Connect numbers = %v", got)
+	}
+	if got := free("user", map[string]any{"numberPrefix": "+41 44 777"}); len(listed(got)) != 0 || fmt.Sprint(got["count"]) != "0" {
+		t.Errorf("free numbers under a prefix nobody has = %v; want an empty list", got)
 	}
 
 	// An attendant's account carries no queue, and a queue's remove does not take the

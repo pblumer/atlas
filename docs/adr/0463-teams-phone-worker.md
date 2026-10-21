@@ -1,6 +1,6 @@
 # ADR-0463: A Microsoft Teams Phone Worker Type for voice apps and their resource accounts
 
-- **Status:** Accepted (amended 2026-10-19: `ensure-call-queue` brings a queue it finds to the agents a model names — the directly assigned ones, in order under serial routing — and answers `agentsChanged`; agents not named are left as they are, a value that resolved to nothing is refused, and an empty list never empties a queue that has agents. Amended 2026-10-20: the queue's authorized users and routing settings are reconciled as its agents are — what a model names is set, what it leaves out is kept — so the compiler no longer writes a setting's default into the model; the answer lists what it set in `changed`; and six refusals carry `TEAMSPHONE_…` codes, thrown as BPMN errors when the process catches them; and `ensure-phone-number` / `remove-phone-number` give a user or a resource account a phone number and take it away again; and `remove-hotline` takes a whole hotline away in one task)
+- **Status:** Accepted (amended 2026-10-19: `ensure-call-queue` brings a queue it finds to the agents a model names — the directly assigned ones, in order under serial routing — and answers `agentsChanged`; agents not named are left as they are, a value that resolved to nothing is refused, and an empty list never empties a queue that has agents. Amended 2026-10-20: the queue's authorized users and routing settings are reconciled as its agents are — what a model names is set, what it leaves out is kept — so the compiler no longer writes a setting's default into the model; the answer lists what it set in `changed`; and six refusals carry `TEAMSPHONE_…` codes, thrown as BPMN errors when the process catches them; and `ensure-phone-number` / `remove-phone-number` give a user or a resource account a phone number and take it away again; and `remove-hotline` takes a whole hotline away in one task. Amended 2026-10-21: `list-free-phone-numbers` lists the inventory's numbers nobody holds, for the type and the kind of holder a model names)
 - **Implementation:** Landed
 - **Date:** 2026-10-17
 - **Deciders:** Atlas maintainers
@@ -395,6 +395,47 @@ and optionally `names` (the voice apps'), and answers
 A required list that resolves to nothing is refused, for every operation: read as empty,
 it would make a leaver path report success having removed nothing. That also refuses a
 `resolve-users` whose `users` variable nobody set, which until now answered with no ids.
+
+### Amendment (2026-10-21): the free numbers to choose from
+
+`ensure-phone-number` gives out the number a model names, and a model had no way to
+learn which numbers were free: a person picked one from a numbering plan kept elsewhere,
+and a number somebody already held showed up only as `TEAMSPHONE_NUMBER_IN_USE` at
+assignment.
+
+**Decision.** `list-free-phone-numbers` reads the tenant's inventory with
+`Get-CsPhoneNumberAssignment` and answers `{numbers, entries, count, truncated}`:
+
+- **Free means what Teams will give out:** unassigned (`-PstnAssignmentStatus
+  Unassigned`), activated (`-ActivationState Activated`), of the type named, carrying the
+  capability of the holder named, and not blocked for assignment. Teams lists a blocked
+  number as unassigned and then refuses to give it out, and has no filter for the block,
+  so the script drops a number whose `AssignmentBlockedState` is anything but
+  `NotBlocked` or empty.
+- **Both settings are required.** `numberType` is the type `ensure-phone-number` will
+  assign under, fixed for the same reason. `assignableTo` (`user` | `resource-account`)
+  maps to the capability `UserAssignment` or `VoiceApplicationAssignment`: a number
+  listed for the wrong kind of holder is one Teams then refuses.
+- **A page, not the inventory.** `max` (1–500, 100 when unset) bounds the answer;
+  `numberPrefix`, read like a number, narrows it to a range. One more than `max` is asked
+  for, so `truncated` says whether Teams had more; with blocked numbers dropped, a page
+  that says `truncated` may hold fewer than `max`. Teams answers 500 at a time and sorts
+  by number; the script sorts again, ordinally, as the mock does.
+- **Nothing is reserved.** The answer is a choice, not a claim: a number listed now may be
+  given to somebody else before `ensure-phone-number` runs, which then refuses it with
+  `TEAMSPHONE_NUMBER_IN_USE` — the path a model already has.
+- **Direct Routing numbers are listed only once uploaded.** Microsoft's inventory holds a
+  Direct Routing number after `New-CsOnlineDirectRoutingTelephoneNumberUploadOrder` has
+  uploaded it; one that never was is the carrier's alone, and no Teams query finds it
+  free. A tenant that does not upload them keeps its numbering plan elsewhere.
+- **The mock** lists the numbers `ATLAS_TEAMSPHONE_MOCK_NUMBERS` names that nobody holds,
+  for every type and holder, since its inventory knows neither; with none named it has
+  every number and lists none.
+
+What Microsoft does not state, and this amendment assumes: that an uploaded Direct
+Routing number without `AcquiredCapability` carries the user and voice-app capabilities,
+as every Direct Routing number in the cmdlet's examples does. If it carries none, the
+capability filter lists none of them.
 
 ## Pros and cons of the options
 

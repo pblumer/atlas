@@ -530,6 +530,9 @@
         { "name": "locationId", "type": "String", "isAttr": true },
         { "name": "resourceAccountIds", "type": "String", "isAttr": true },
         { "name": "names", "type": "String", "isAttr": true },
+        { "name": "numberPrefix", "type": "String", "isAttr": true },
+        { "name": "max", "type": "String", "isAttr": true },
+        { "name": "assignableTo", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]

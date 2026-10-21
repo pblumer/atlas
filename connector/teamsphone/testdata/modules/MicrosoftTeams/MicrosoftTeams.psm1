@@ -225,15 +225,31 @@ function Resolve-Target($State, [string]$Identity) {
     throw "stub: no user or resource account $Identity"
 }
 
+# Answers as Teams does: sorted by number, at most Top (500 unless told), with the
+# filters the shipped script uses applied here rather than left to it. A number the
+# state does not describe further is activated, assignable to anyone and not blocked.
 function Get-CsPhoneNumberAssignment {
-    param([string]$TelephoneNumber, [string]$AssignedPstnTargetId)
+    param([string]$TelephoneNumber, [string]$AssignedPstnTargetId, [string]$PstnAssignmentStatus, [string]$ActivationState,
+        [string]$NumberType, [string]$CapabilitiesContain, [string]$TelephoneNumberStartsWith, [int]$Top = 500)
+    if ($PstnAssignmentStatus -and $PstnAssignmentStatus -ne 'Unassigned') { throw "stub: PstnAssignmentStatus $PstnAssignmentStatus is not modelled" }
     $s = Get-State
     $target = if ($AssignedPstnTargetId) { Resolve-Target $s $AssignedPstnTargetId } else { $null }
-    foreach ($n in @($s.numbers.Values)) {
-        if ($TelephoneNumber -and $n.TelephoneNumber -ne $TelephoneNumber) { continue }
-        if ($target -and $n.AssignedPstnTargetId -ne $target) { continue }
-        [pscustomobject]$n
+    $out = foreach ($n in @($s.numbers.Values)) {
+        $row = @{ ActivationState = 'Activated'; Capability = @('ConferenceAssignment', 'VoiceApplicationAssignment', 'UserAssignment'); AssignmentBlockedState = ''; City = ''; IsoCountryCode = '' }
+        foreach ($k in $n.Keys) { $row[$k] = $n[$k] }
+        if ($TelephoneNumber -and $row.TelephoneNumber -ne $TelephoneNumber) { continue }
+        if ($target -and $row.AssignedPstnTargetId -ne $target) { continue }
+        if ($PstnAssignmentStatus -and $row.AssignedPstnTargetId) { continue }
+        if ($ActivationState -and $row.ActivationState -ne $ActivationState) { continue }
+        if ($NumberType -and $row.NumberType -ne $NumberType) { continue }
+        if ($TelephoneNumberStartsWith -and -not ([string]$row.TelephoneNumber).StartsWith($TelephoneNumberStartsWith, [StringComparison]::Ordinal)) { continue }
+        if ($CapabilitiesContain -and @($CapabilitiesContain.Split(',') | Where-Object { @($row.Capability) -notcontains $_.Trim() }).Count -gt 0) { continue }
+        [pscustomobject]$row
     }
+    [object[]]$sorted = @($out)
+    [string[]]$keys = @(foreach ($r in $sorted) { [string]$r.TelephoneNumber })
+    [Array]::Sort($keys, $sorted, [StringComparer]::Ordinal)
+    $sorted | Select-Object -First $Top
 }
 
 function Set-CsPhoneNumberAssignment {

@@ -6715,7 +6715,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           (<code>users</code>, <code>agents</code>, <code>authorizedUsers</code>) ist eine FEEL-Liste oder ein Text,
           getrennt durch Komma, Semikolon oder Zeilenumbruch; leere und doppelte Einträge fallen weg. Die Einstellungen
           (<code>accountType</code>, <code>routingMethod</code>, <code>presenceBasedRouting</code>,
-          <code>conferenceMode</code>, <code>allowOptOut</code>, <code>numberType</code>) sind feste Werte, keine Ausdrücke; der Compiler prüft
+          <code>conferenceMode</code>, <code>allowOptOut</code>, <code>numberType</code>, <code>assignableTo</code>) sind feste Werte, keine Ausdrücke; der Compiler prüft
           sie und jedes andere Attribut schon beim Deployment.</p>
         <p data-l="en">A Teams Phone task performs exactly one operation. In the Modeler you pick it in the
           <i>Operation</i> field; in BPMN it is the <code>operation</code> attribute of the
@@ -6724,7 +6724,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           (<code>users</code>, <code>agents</code>, <code>authorizedUsers</code>) is a FEEL list or one text separated
           by commas, semicolons or line breaks; blank and repeated entries are dropped. The settings
           (<code>accountType</code>, <code>routingMethod</code>, <code>presenceBasedRouting</code>,
-          <code>conferenceMode</code>, <code>allowOptOut</code>, <code>numberType</code>) are fixed values, not expressions; the compiler checks
+          <code>conferenceMode</code>, <code>allowOptOut</code>, <code>numberType</code>, <code>assignableTo</code>) are fixed values, not expressions; the compiler checks
           them, and every other attribute, at deploy.</p>
         <table>
           <thead><tr>
@@ -6760,6 +6760,13 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
               <td data-l="en"><code>name</code> – finds the voice app again when an earlier run had already removed the association and then failed.</td>
               <td data-l="de"><code>removed</code>, <code>id</code>. Die Ergebnisvariable ist hier freiwillig.</td>
               <td data-l="en"><code>removed</code>, <code>id</code>. The result variable is optional here.</td></tr>
+            <tr><td><code>list-free-phone-numbers</code><br><i>List free phone numbers</i></td>
+              <td data-l="de"><code>numberType</code> (<code>direct-routing</code> | <code>calling-plan</code> | <code>operator-connect</code>), <code>assignableTo</code> (<code>user</code> | <code>resource-account</code>)</td>
+              <td data-l="en"><code>numberType</code> (<code>direct-routing</code> | <code>calling-plan</code> | <code>operator-connect</code>), <code>assignableTo</code> (<code>user</code> | <code>resource-account</code>)</td>
+              <td data-l="de"><code>numberPrefix</code> – nur Nummern, die so beginnen; <code>max</code> – höchstens so viele, 1 bis 500, sonst 100.</td>
+              <td data-l="en"><code>numberPrefix</code> – only numbers that start with this; <code>max</code> – at most this many, 1 to 500, otherwise 100.</td>
+              <td data-l="de"><code>numbers</code> – die freien Nummern, sortiert; <code>entries</code> – dieselben mit <code>numberType</code>, <code>city</code> und <code>isoCountryCode</code>; <code>count</code>; <code>truncated</code> – ob es mehr gab.</td>
+              <td data-l="en"><code>numbers</code> – the free numbers, sorted; <code>entries</code> – the same with <code>numberType</code>, <code>city</code> and <code>isoCountryCode</code>; <code>count</code>; <code>truncated</code> – whether there were more.</td></tr>
             <tr><td><code>ensure-phone-number</code><br><i>Ensure phone number</i></td>
               <td data-l="de"><code>identity</code> (UPN oder Objekt-ID einer Person oder eines Ressourcenkontos), <code>phoneNumber</code>, <code>numberType</code> (<code>direct-routing</code> | <code>calling-plan</code> | <code>operator-connect</code>)</td>
               <td data-l="en"><code>identity</code> (a person's or a resource account's UPN or object id), <code>phoneNumber</code>, <code>numberType</code> (<code>direct-routing</code> | <code>calling-plan</code> | <code>operator-connect</code>)</td>
@@ -6815,6 +6822,20 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           Timer-Schleife um eine Entra-Abfrage von <code>assignedLicenses</code>. <i>Remove resource account</i> gibt die
           Nummern eines Ressourcenkontos selbst frei, bevor es die Zuordnung löst und das Konto löscht; die Nummer einer Person
           entfernst du beim Austritt mit <i>Remove phone number</i>.</p>
+        <p data-l="de"><b>Freie Rufnummern.</b> <i>List free phone numbers</i> liest aus dem Nummernbestand des Tenants
+          die Nummern, die niemand hält, die aktiviert und nicht gesperrt sind und die Teams der genannten Art von Inhaber
+          gibt (<code>assignableTo</code>): einer Person oder dem Ressourcenkonto einer Voice-App. Die Antwort ist eine
+          Auswahl für eine Person oder einen späteren Schritt; zugewiesen wird erst mit <i>Ensure phone number</i>, und
+          eine Nummer, die inzwischen jemand anderes erhalten hat, lehnt diese mit <code>TEAMSPHONE_NUMBER_IN_USE</code>
+          ab. Eine Direct-Routing-Nummer steht erst im Bestand, wenn sie hochgeladen ist
+          (<code>New-CsOnlineDirectRoutingTelephoneNumberUploadOrder</code>); vorher listet die Operation sie nicht.</p>
+        <p data-l="en"><b>Free phone numbers.</b> <i>List free phone numbers</i> reads from the tenant's number
+          inventory the numbers nobody holds that are activated, not blocked, and that Teams gives to the kind of holder
+          named (<code>assignableTo</code>): a person, or a voice app's resource account. The answer is a choice for a
+          person or a later step; the number is only assigned with <i>Ensure phone number</i>, which refuses one somebody
+          else has received in the meantime with <code>TEAMSPHONE_NUMBER_IN_USE</code>. A Direct Routing number is in the
+          inventory only once it has been uploaded (<code>New-CsOnlineDirectRoutingTelephoneNumberUploadOrder</code>);
+          until then the operation does not list it.</p>
         <p data-l="en"><b>Phone numbers.</b> <i>Ensure phone number</i> gives a person or a resource account the number
           named – a queue's hotline and an employee's direct line are the same assignment to Teams. When the target has
           the number already nothing happens (<code>assigned: false</code>); when it has another primary number, that

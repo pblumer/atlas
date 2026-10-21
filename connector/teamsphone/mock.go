@@ -79,7 +79,9 @@ func NewMockTenant(users ...string) *MockTenant {
 
 // WithNumbers names the Calling Plan and Operator Connect numbers the tenant has; with
 // none named, it has every number, which is what a model tried out with real numbers
-// expects. A Direct Routing number needs no inventory either way.
+// expects. A Direct Routing number needs no inventory to be assigned. The numbers named
+// are also the inventory list-free-phone-numbers offers from, as if Direct Routing
+// numbers had been uploaded to it.
 func (m *MockTenant) WithNumbers(numbers ...string) *MockTenant {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -137,6 +139,9 @@ func (m *MockTenant) Do(_ context.Context, req Request) (map[string]any, error) 
 		return m.ensureNumber(str("identity"), str("phoneNumber"), str("numberType"))
 	case "remove-phone-number":
 		return m.removeNumbers(str("identity"), str("phoneNumber"))
+	case "list-free-phone-numbers":
+		most, _ := a["max"].(int)
+		return m.freeNumbers(str("numberPrefix"), str("numberType"), most), nil
 	case "remove-resource-account":
 		// The leaver path in one task, in the order the shipped PowerShell keeps: the
 		// account's numbers are released, the association removed, the account deleted.
@@ -489,6 +494,30 @@ func (m *MockTenant) removeNumbers(identity, number string) (map[string]any, err
 	}
 	sort.Strings(removed)
 	return map[string]any{"removed": len(removed) > 0, "phoneNumbers": removed}, nil
+}
+
+// freeNumbers lists the inventory's numbers nobody holds, sorted, no more than most. The
+// mock's inventory knows no type and no capability, so each of its numbers is offered for
+// every type and every kind of holder; a tenant that has every number lists none, since
+// "every number" has no page to show.
+func (m *MockTenant) freeNumbers(prefix, kind string, most int) map[string]any {
+	keys := []string{}
+	for key := range m.inventory {
+		if _, held := m.numbers[key]; !held && strings.HasPrefix(key, numberKey(prefix)) {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	truncated := len(keys) > most
+	if truncated {
+		keys = keys[:most]
+	}
+	numbers, entries := []string{}, []map[string]any{}
+	for _, key := range keys {
+		numbers = append(numbers, "+"+key)
+		entries = append(entries, map[string]any{"phoneNumber": "+" + key, "numberType": kind, "city": "", "isoCountryCode": ""})
+	}
+	return map[string]any{"numbers": numbers, "entries": entries, "count": len(numbers), "truncated": truncated}
 }
 
 func (m *MockTenant) isAssociated(appID string) bool {
