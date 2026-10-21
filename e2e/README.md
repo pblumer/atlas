@@ -561,7 +561,13 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
     node it was in. Sealed in the vault, it is never sent to the page.
   - **Revoking:** asks first, saying it is immediate and that callers fail from their next
     request on; a dismissed dialog sends nothing.
-  - **The listing:** an expired token stays listed and is marked expired.
+  - **The listing:** an expired token stays listed and is marked expired. A token with less than
+    30 days left — and not one with thirty days and an hour — is marked with its days left and
+    named above the list, a token minted for less than that at once, and revoking it clears the
+    notice.
+  - **The dashboard:** names those tokens to an administrator, with the vault secret each was
+    sealed as and a link to the page; says nothing when none is about to expire; and a
+    non-administrator's dashboard does not ask for the tokens at all.
   - **Who sees it:** a non-administrator is not offered the page, and reaching it anyway shows
     a refusal instead of the form. It reads in English when the reader chose English.
 
