@@ -1506,11 +1506,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/api-tokens", s.handleCreateAPIToken, apiOp{
-			summary: "Mint an API token for a machine — a worker on another host, a stdio MCP adapter, a CI job. The secret is returned once and never again; the scope bounds what it may reach and the lifetime when it stops working (admin-only, ADR-0194)", tag: "API tokens", role: RoleAdmin,
-			req: jsonBody("Token name, scope (full, worker, metrics, status, directory, inventory, landscape or events), as reach the projects a landscape token may see (required) or the catalogues whose products an events token reads (optional; none reads the whole feed), and lifetime in days (0 = never expires). A token carries its minter's non-admin roles, except an events token, which carries feedreader and nothing else", schemaObj(map[string]any{
-				"name": tString(), "scope": tString(), "reach": tArray(), "expiresInDays": tInteger(),
+			summary: "Mint an API token for a machine — a worker on another host, a stdio MCP adapter, a CI job. The secret is returned once and never again — or, with vaultSecret, sealed in this server's vault under that name and not returned at all; the scope bounds what it may reach and the lifetime when it stops working (admin-only, ADR-0194)", tag: "API tokens", role: RoleAdmin,
+			req: jsonBody("Token name, scope (full, worker, metrics, status, directory, inventory, landscape or events), as reach the projects a landscape token may see (required) or the catalogues whose products an events token reads (optional; none reads the whole feed), and lifetime in days (0 = never expires). A token carries its minter's non-admin roles, except an events token, which carries feedreader and nothing else. vaultSecret (optional) names the vault secret to seal the token as — e.g. atlas, which the shop's system processes present (ADR-0411); an existing secret of that name is replaced, and without a vault (503) or when the vault refuses the write no token is minted", schemaObj(map[string]any{
+				"name": tString(), "scope": tString(), "reach": tArray(), "expiresInDays": tInteger(), "vaultSecret": tString(),
 			}, "name", "scope")),
-			resp: jsonBody("Minted token, including its one-time secret", tObject())}},
+			resp: jsonBody("Minted token: its one-time secret as token, or, when sealed in the vault, vaultSecret and no secret", tObject())}},
 		{"GET", "/api/v1/api-tokens", s.handleListAPITokens, apiOp{
 			summary: "List API tokens by identity, scope, lifetime and provenance; secrets are not stored and never returned (admin-only, ADR-0194)", tag: "API tokens", role: RoleAdmin,
 			resp: jsonBody("API tokens", tArray())}},
