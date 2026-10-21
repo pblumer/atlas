@@ -129,9 +129,9 @@ the test with a float64 round trip in it, and that round trip is kept in
 **Amended by [ADR-draft-catalogue-purge](draft-catalogue-purge.md).** This record left
 open whether a catalogue ever needs a delete. It does, on a development or test
 installation that orders from a catalogue to try it and then has to start over. That
-delete is an administrator's purge, refused unless the server was started with
-`--catalogue-purge`, with its own four tools. What follows still holds for every
-server started without it, and for every product manager on any server.
+delete is an administrator's purge with its own four tools, refused by a server started
+with `--catalogue-purge=false`. What follows still holds for every server started with
+that flag, and for every product manager on any server.
 
 `state: "withdrawn"` on the ordinary save. No `atlas_delete_catalog_product` exists,
 because there is nothing for it to call and inventing a route would mean deciding, in

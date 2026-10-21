@@ -796,13 +796,13 @@ type Server struct {
 	// tests build a Server as a literal and expect the whole surface. Set once before
 	// Handler is mounted; read-only thereafter.
 	catalogueOff bool
-	// cataloguePurge is the administrator's permanent delete of a catalogue or a
-	// product allowed with --catalogue-purge / WithCataloguePurge
-	// (ADR-draft-catalogue-purge). Off by default, the opposite of catalogueOff,
-	// because the zero value has to be the safe one: a purge deletes orders and takes
-	// holds out of the inventory, and a production server must not be able to do that
-	// because somebody forgot a flag. Set once before Handler is mounted.
-	cataloguePurge bool
+	// cataloguePurgeOff is the administrator's permanent delete of a catalogue or a
+	// product switched off with --catalogue-purge=false / WithoutCataloguePurge
+	// (ADR-draft-catalogue-purge). Spelled as "off" for catalogueOff's reason: the
+	// zero value is the shipped default, and the default is opt-out — an installation
+	// that must not be able to delete orders and holds says so. Set once before
+	// Handler is mounted.
+	cataloguePurgeOff bool
 	// catalogueReporting is every process id that calls the order routes, read once
 	// at start when the catalogue is off (processesReportingToOrders); nil otherwise.
 	catalogueReporting map[string]bool

@@ -136,7 +136,7 @@ var wantAdminRoutes = []string{
 	// Deleting a catalogue or a product for good, and reading what that would take
 	// with it (ADR-draft-catalogue-purge). It deletes orders and takes holds out of the
 	// inventory — the evidence a product manager maintains a catalogue around, not
-	// something one may remove — and the server has to be started to allow it at all.
+	// something one may remove — and a production server switches it off altogether.
 	"GET /api/v1/catalogs/{id}/deletion",
 	"DELETE /api/v1/catalogs/{id}",
 	"GET /api/v1/catalog-products/{id}/deletion",

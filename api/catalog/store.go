@@ -98,10 +98,10 @@ func (s *Store) Items() ([]Item, error) { return s.items.LoadAll() }
 
 // DeleteCatalog removes a catalogue's record, and DeleteItem and DeleteRelease the
 // same for a product and a release. ADR-0312 gave the catalogue no delete; these
-// exist only for the administrator's purge a server has to be started to allow
-// (ADR-draft-catalogue-purge), which decides beforehand what else has to go with
-// them. A record already gone is not an error, so a purge that stopped halfway can
-// be run again.
+// exist only for the administrator's purge (ADR-draft-catalogue-purge), which a
+// server started with --catalogue-purge=false refuses, and which decides beforehand
+// what else has to go with them. A record already gone is not an error, so a purge
+// that stopped halfway can be run again.
 func (s *Store) DeleteCatalog(id string) error { return s.catalogs.Delete(id) }
 
 // DeleteItem removes a product's record. See [Store.DeleteCatalog].

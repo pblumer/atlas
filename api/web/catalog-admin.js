@@ -1266,14 +1266,14 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
 // right still held resolve through it (ADR-0312), and a product is withdrawn instead.
 // A development installation is the exception — somebody imports a catalogue, orders
 // from it to watch the fulfilment run, and must be able to start over — so an
-// administrator can purge one there (ADR-draft-catalogue-purge), on a server started
-// with --catalogue-purge.
+// administrator can purge one (ADR-draft-catalogue-purge). It is on unless the server
+// was started with --catalogue-purge=false, which a production installation should be.
 //
 // The card never deletes on the first click. It asks the server what would go and
 // shows the whole answer — the orders, the running work, the holds, the warnings —
-// and the button stays disabled until the id is typed again. On a server that does
-// not allow the purge it shows the same preview and says how it is switched on,
-// because "what would this remove" is how somebody decides to switch it on.
+// and the button stays disabled until the id is typed again. On a server that switched
+// the purge off it shows the same preview and says so, because "what would this
+// remove" is still worth knowing where it cannot be done.
 
 // purgeCard is the administrator's panel for deleting this catalogue, or one of the
 // products whose home it is, for good.
@@ -1311,9 +1311,9 @@ export function purgePlanHTML(plan) {
   if (plan.instances) counts.push(`${plan.instances} running process instance(s) are cancelled`);
   if (plan.entitlements) counts.push(`${plan.entitlements} right(s) of ${plan.holders} person(s) leave the inventory`);
   return `<div style="margin-top:12px">
-    ${plan.enabled ? "" : `<p><b>This server does not allow deleting for good.</b> An operator
-      switches it on with <code>--catalogue-purge</code> (or <code>ATLAS_CATALOGUE_PURGE=true</code>)
-      — on a development or test installation only.</p>`}
+    ${plan.enabled ? "" : `<p><b>Deleting for good is switched off on this server.</b> It was
+      started with <code>--catalogue-purge=false</code> (or <code>ATLAS_CATALOGUE_PURGE=false</code>),
+      as a production installation should be.</p>`}
     <p style="margin:0 0 4px">Deleting ${esc(what)} <b>${esc(plan.id)}</b> would remove:</p>
     ${purgeList("Catalogue", plan.catalogs)}
     ${purgeList("Releases", plan.releases)}
@@ -1326,7 +1326,7 @@ export function purgePlanHTML(plan) {
     ${counts.length ? `<p style="margin:8px 0 0">${esc(counts.join("; "))}.</p>` : ""}
     ${purgeList("Processes that stay deployed", plan.processes)}
     ${(plan.warnings || []).length ? `<div class="card" style="margin-top:10px; border-color:var(--warn)">
-      <b>Read this before you confirm</b>
+      <b>${plan.enabled ? "Read this before you confirm" : "What deleting would mean"}</b>
       <ul style="margin:6px 0 0">${plan.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>` : ""}
     ${plan.enabled ? `<label class="field" style="margin-top:12px">Type <code>${esc(plan.confirm)}</code> to confirm
         <input name="purgeConfirm" autocomplete="off" spellcheck="false"></label>

@@ -8,10 +8,11 @@ import (
 )
 
 // The purge tools (ADR-draft-catalogue-purge): the preview answers on any server,
-// the delete only on one started to allow it, and only with the id repeated.
+// the delete on every server not started with --catalogue-purge=false, and only
+// with the id repeated.
 
 func TestThePurgeToolsPreviewAndThenDelete(t *testing.T) {
-	ts := newAtlasWith(t, api.WithCataloguePurge())
+	ts := newAtlas(t)
 	text, isErr := callText(t, ts, "atlas_create_catalog", map[string]any{
 		"texts": map[string]any{"de": "Test"}, "rank": 1, "languages": []any{"de"},
 	})
@@ -53,8 +54,8 @@ func TestThePurgeToolsPreviewAndThenDelete(t *testing.T) {
 	}
 }
 
-func TestThePurgeToolsAreRefusedWhereTheServerDoesNotAllowIt(t *testing.T) {
-	ts := newAtlas(t)
+func TestThePurgeToolsAreRefusedWhereTheServerSwitchedItOff(t *testing.T) {
+	ts := newAtlasWith(t, api.WithoutCataloguePurge())
 	text, isErr := callText(t, ts, "atlas_create_catalog", map[string]any{
 		"texts": map[string]any{"de": "Test"}, "rank": 1, "languages": []any{"de"},
 	})
@@ -68,7 +69,7 @@ func TestThePurgeToolsAreRefusedWhereTheServerDoesNotAllowIt(t *testing.T) {
 		t.Fatalf("preview = (%q, isErr=%v), want enabled false", text, isErr)
 	}
 	text, isErr = callText(t, ts, "atlas_delete_catalog", map[string]any{"id": cat, "confirm": cat})
-	if !isErr || !strings.Contains(text, "--catalogue-purge") {
+	if !isErr || !strings.Contains(text, "--catalogue-purge=false") {
 		t.Fatalf("delete = (%q, isErr=%v), want a refusal naming the switch", text, isErr)
 	}
 	if text, isErr = callText(t, ts, "atlas_get_catalog", map[string]any{"id": cat}); isErr {

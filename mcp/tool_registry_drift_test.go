@@ -35,8 +35,8 @@ var mcpToolRoutes = map[string]string{
 	// The portal catalogue an agent maintains as a product manager
 	// (ADR-0376). A product is withdrawn through the ordinary save, because an
 	// order placed years ago still resolves through it; the one delete is the
-	// administrator's purge for a development installation, refused by any server
-	// not started with --catalogue-purge (ADR-draft-catalogue-purge).
+	// administrator's purge for a development installation, refused by a server
+	// started with --catalogue-purge=false (ADR-draft-catalogue-purge).
 	"atlas_list_catalogs":             "GET /api/v1/catalogs",
 	"atlas_get_catalog":               "GET /api/v1/catalogs/{id}",
 	"atlas_create_catalog":            "POST /api/v1/catalogs",

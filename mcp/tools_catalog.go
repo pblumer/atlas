@@ -30,8 +30,8 @@ import (
 // removed, because an order placed years ago and an entitlement still held both
 // resolve through it; withdrawal is a state on the ordinary save. The one delete
 // there is, the administrator's purge (ADR-draft-catalogue-purge), exists for a
-// development installation and is refused by any server not started to allow it,
-// so its tools say so before they say anything else.
+// development installation and is refused by a server started with
+// --catalogue-purge=false, so its tools say so before they say anything else.
 //
 // **Nothing is orderable until it is published.** Editing a catalogue changes
 // what the *next* release will contain and changes nothing the shop shows.
@@ -851,9 +851,9 @@ func catalogTools() []Tool {
 				"deleted and those that stay with lines withdrawn; how many running instances " +
 				"would be cancelled and how many holds of how many people would leave the " +
 				"inventory; the processes that stay deployed; and `warnings` to read. `enabled` " +
-				"says whether this server allows the purge at all — it is off unless the server " +
-				"was started with --catalogue-purge, which is for development and test " +
-				"installations only. Administrators only. Call it before atlas_delete_catalog and " +
+				"says whether this server allows the purge — it is on unless the server was " +
+				"started with --catalogue-purge=false, which a production installation should " +
+				"be. Administrators only. Call it before atlas_delete_catalog and " +
 				"show the person the warnings.",
 			InputSchema: catalogIDArg("The catalogue whose deletion to preview."),
 			Handler: func(c *Client, args map[string]any) (string, error) {
@@ -870,8 +870,8 @@ func catalogTools() []Tool {
 				"names: releases, its own products, the orders placed from it, the running " +
 				"instances working them (cancelled — what they did in a target system is NOT " +
 				"undone) and the holds they granted (taken out of the inventory with NO " +
-				"deprovisioning). There is no undo. Refused with 403 unless the server was started " +
-				"with --catalogue-purge, which exists for development and test installations; on " +
+				"deprovisioning). There is no undo. Meant for development and test installations; " +
+				"refused with 403 on a server started with --catalogue-purge=false, and on " +
 				"production a product is withdrawn instead. Administrators only. `confirm` must " +
 				"repeat the catalogue id. Only call this when the person asked for this catalogue " +
 				"to be deleted and has seen the preview.",
@@ -902,8 +902,8 @@ func catalogTools() []Tool {
 				"it, the orders that stay with its lines withdrawn, how many running instances " +
 				"would be cancelled and holds removed, the catalogues whose published release " +
 				"still offers it until they are published again, and `warnings`. `enabled` says " +
-				"whether this server allows the purge (--catalogue-purge, development and test " +
-				"installations only). Administrators only. To take a product off sale on " +
+				"whether this server allows the purge (refused after --catalogue-purge=false; " +
+				"meant for development and test installations). Administrators only. To take a product off sale on " +
 				"production, save it with state \"withdrawn\" instead.",
 			InputSchema: map[string]any{
 				"type":       "object",
@@ -921,9 +921,9 @@ func catalogTools() []Tool {
 		{
 			Name: "atlas_delete_catalog_product",
 			Description: "Delete a product FOR GOOD, with everything " +
-				"atlas_catalog_product_deletion names. There is no undo. Refused with 403 unless " +
-				"the server was started with --catalogue-purge (development and test " +
-				"installations only); on production withdraw it with atlas_save_catalog_product " +
+				"atlas_catalog_product_deletion names. There is no undo. Meant for development and " +
+				"test installations; refused with 403 on a server started with " +
+				"--catalogue-purge=false. On production withdraw it with atlas_save_catalog_product " +
 				"and state \"withdrawn\". Administrators only. `confirm` must repeat the product " +
 				"id. Only call this when the person asked for this product to be deleted and has " +
 				"seen the preview.",

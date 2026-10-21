@@ -22,12 +22,13 @@ import (
 // to see the fulfilment run, and then cannot start over, because every test leaves
 // a catalogue, its products, its orders and its holds behind for good.
 //
-// So the purge exists, and everything about it is built to keep it where it
-// belongs: it is the administrator's, the server has to be started with
-// --catalogue-purge to allow it at all, the route answers what it would remove
-// before it removes anything, and the delete itself has to repeat the id it
-// deletes. What it removes is the evidence ADR-0312 protects — that is the point
-// of it, and the preview says so rather than hiding it.
+// So the purge exists. It is on unless the server is started with
+// --catalogue-purge=false — an opt-out, so a development installation needs no
+// configuration, and a production one has to say that it must not delete. Within
+// that, it is the administrator's, the route answers what it would remove before
+// it removes anything, and the delete itself has to repeat the id it deletes. What
+// it removes is the evidence ADR-0312 protects — that is the point of it, and the
+// preview says so rather than hiding it.
 //
 // # What goes, what changes, what stays
 //
@@ -55,11 +56,11 @@ import (
 // do. With the catalogue deleted last, a purge that stopped is simply run again:
 // every step is idempotent, and what is already gone is not found twice.
 
-// WithCataloguePurge allows an administrator to delete a catalogue or a product for
-// good (--catalogue-purge). Without it the preview is still answered and the delete
-// is refused, so the switch is the one thing standing between a production server
-// and the purge.
-func WithCataloguePurge() Option { return func(s *Server) { s.cataloguePurge = true } }
+// WithoutCataloguePurge refuses an administrator's delete of a catalogue or a
+// product for good (--catalogue-purge=false). The preview is still answered, and
+// says the purge is switched off. A production installation, whose orders and held
+// rights are evidence, is started with it.
+func WithoutCataloguePurge() Option { return func(s *Server) { s.cataloguePurgeOff = true } }
 
 // purgeKind is what a purge was asked to delete.
 type purgeKind string
@@ -381,12 +382,12 @@ func (p *purgePlan) explain(w purgeWork) {
 
 	warn := func(format string, args ...any) { p.Warnings = append(p.Warnings, fmt.Sprintf(format, args...)) }
 	if !p.Enabled {
-		warn("This server does not allow deleting catalogues and products for good. Start it " +
-			"with --catalogue-purge (ATLAS_CATALOGUE_PURGE=true) to allow it, and only on a " +
-			"development or test installation.")
+		warn("This server was started with --catalogue-purge=false (ATLAS_CATALOGUE_PURGE=false), " +
+			"so it does not delete catalogues and products for good.")
 	}
 	warn("Deleting is permanent: there is no undo and no recycle bin. Take a backup first " +
-		"(GET /api/v1/backup/full) if any of it may be needed again.")
+		"(GET /api/v1/backup/full) if any of it may be needed again. On a production " +
+		"installation, withdraw a product instead and start the server with --catalogue-purge=false.")
 	if n := len(p.Orders); n > 0 {
 		warn("%d order(s) are deleted with their approvals and decisions; nobody can look them up again.", n)
 	}
@@ -444,7 +445,7 @@ func (s *Server) loadPurgeScope(kind purgeKind, id string) (purgeScope, bool, er
 		}
 		sc, found = scopePurge(kind, id, cats, items, rels, orders)
 	})
-	sc.plan.Enabled = s.cataloguePurge
+	sc.plan.Enabled = !s.cataloguePurgeOff
 	return sc, found, err
 }
 
@@ -490,12 +491,11 @@ func (s *Server) previewPurge(w http.ResponseWriter, r *http.Request, kind purge
 
 func (s *Server) purge(w http.ResponseWriter, r *http.Request, kind purgeKind) {
 	id := r.PathValue("id")
-	if !s.cataloguePurge {
-		// Refused before anything is read: on a server that does not allow it, the
+	if s.cataloguePurgeOff {
+		// Refused before anything is read: on a server that switched it off, the
 		// answer must not depend on what exists.
-		httpapi.Error(w, http.StatusForbidden, "deleting a "+string(kind)+" for good is not "+
-			"allowed on this server: start it with --catalogue-purge (ATLAS_CATALOGUE_PURGE=true), "+
-			"and only on a development or test installation")
+		httpapi.Error(w, http.StatusForbidden, "deleting a "+string(kind)+" for good is switched "+
+			"off on this server: it was started with --catalogue-purge=false (ATLAS_CATALOGUE_PURGE=false)")
 		return
 	}
 	if r.URL.Query().Get("confirm") != id {

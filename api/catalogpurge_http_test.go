@@ -12,8 +12,8 @@ import (
 )
 
 // Deleting a catalogue or a product for good (ADR-draft-catalogue-purge), through
-// the whole stack: refused on a server that does not allow it, refused to anybody
-// but an administrator, refused without the id repeated — and, once allowed, the
+// the whole stack: refused on a server started with --catalogue-purge=false, refused
+// to anybody but an administrator, refused without the id repeated — and otherwise the
 // catalogue, its products, its orders, the work running for them and the holds
 // they granted all gone, with an import of the same document afterwards starting
 // from nothing.
@@ -147,13 +147,13 @@ func (sh purgeShop) aliceHolds(t *testing.T) []string {
 	return out
 }
 
-// TestThePurgeIsRefusedOnAServerThatDoesNotAllowIt.
+// TestThePurgeIsRefusedOnAServerThatSwitchedItOff.
 //
-// The switch is what stands between a production server and the purge, so a server
-// started without it refuses the delete — and still answers the preview, because
-// knowing what a purge would remove is how an operator decides to allow one.
-func TestThePurgeIsRefusedOnAServerThatDoesNotAllowIt(t *testing.T) {
-	sh := aShopToPurge(t)
+// The purge is an opt-out, so the switch is what a production server sets to keep
+// its orders and holds: started with it, the server refuses the delete — and still
+// answers the preview, which says why.
+func TestThePurgeIsRefusedOnAServerThatSwitchedItOff(t *testing.T) {
+	sh := aShopToPurge(t, api.WithoutCataloguePurge())
 	sh.order(t, "vpn")
 
 	code, plan, body := sh.plan(t, sh.admin, "GET", "/api/v1/catalogs/"+sh.cat+"/deletion")
@@ -161,17 +161,17 @@ func TestThePurgeIsRefusedOnAServerThatDoesNotAllowIt(t *testing.T) {
 		t.Fatalf("preview = %d (%s), want 200", code, body)
 	}
 	if plan.Enabled {
-		t.Error("the preview says the purge is allowed on a server started without --catalogue-purge")
+		t.Error("the preview says the purge is allowed on a server started with --catalogue-purge=false")
 	}
-	if !strings.Contains(strings.Join(plan.Warnings, " "), "--catalogue-purge") {
-		t.Errorf("the warnings do not say how to allow it: %v", plan.Warnings)
+	if !strings.Contains(strings.Join(plan.Warnings, " "), "--catalogue-purge=false") {
+		t.Errorf("the warnings do not say why it is refused: %v", plan.Warnings)
 	}
 
 	code, body = cReq(t, sh.admin, sh.ts, "DELETE", "/api/v1/catalogs/"+sh.cat+"?confirm="+sh.cat, "")
 	if code != http.StatusForbidden {
 		t.Fatalf("delete = %d (%s), want 403", code, body)
 	}
-	if !strings.Contains(string(body), "--catalogue-purge") {
+	if !strings.Contains(string(body), "--catalogue-purge=false") {
 		t.Errorf("the refusal does not name the switch: %s", body)
 	}
 	if code, b := cReq(t, sh.admin, sh.ts, "DELETE", "/api/v1/catalog-products/vpn?confirm=vpn", ""); code != http.StatusForbidden {
@@ -185,7 +185,7 @@ func TestThePurgeIsRefusedOnAServerThatDoesNotAllowIt(t *testing.T) {
 // TestThePurgeNeedsTheIdRepeated: a delete that does not repeat what it deletes
 // deletes nothing.
 func TestThePurgeNeedsTheIdRepeated(t *testing.T) {
-	sh := aShopToPurge(t, api.WithCataloguePurge())
+	sh := aShopToPurge(t)
 	for _, path := range []string{
 		"/api/v1/catalogs/" + sh.cat,
 		"/api/v1/catalogs/" + sh.cat + "?confirm=",
@@ -205,9 +205,9 @@ func TestThePurgeNeedsTheIdRepeated(t *testing.T) {
 }
 
 // TestThePurgeIsTheAdministrators: nobody else reads the plan or carries it out,
-// on a server that allows it.
+// on a server that allows it, which is every server not switched off.
 func TestThePurgeIsTheAdministrators(t *testing.T) {
-	sh := aShopToPurge(t, api.WithCataloguePurge())
+	sh := aShopToPurge(t)
 	for _, req := range []struct{ method, path string }{
 		{"GET", "/api/v1/catalogs/" + sh.cat + "/deletion"},
 		{"DELETE", "/api/v1/catalogs/" + sh.cat + "?confirm=" + sh.cat},
@@ -225,7 +225,7 @@ func TestThePurgeIsTheAdministrators(t *testing.T) {
 
 // TestAnUnknownTargetIsNotFound: there is nothing to preview or delete.
 func TestAnUnknownTargetIsNotFound(t *testing.T) {
-	sh := aShopToPurge(t, api.WithCataloguePurge())
+	sh := aShopToPurge(t)
 	for _, req := range []struct{ method, path string }{
 		{"GET", "/api/v1/catalogs/cat-nirgends/deletion"},
 		{"DELETE", "/api/v1/catalogs/cat-nirgends?confirm=cat-nirgends"},
@@ -245,7 +245,7 @@ func TestAnUnknownTargetIsNotFound(t *testing.T) {
 // the provisioning still working the order is cancelled, alice holds nothing, and
 // the other catalogue that offered one of the products no longer does.
 func TestPurgingACatalogueRemovesItsOrdersTheirWorkAndTheirHolds(t *testing.T) {
-	sh := aShopToPurge(t, api.WithCataloguePurge(), api.WithSystemProcesses())
+	sh := aShopToPurge(t, api.WithSystemProcesses())
 	ord := sh.order(t, "vpn", "laptop")
 
 	code, body := cReq(t, sh.admin, sh.ts, "POST", "/api/v1/catalogs",
@@ -280,8 +280,10 @@ func TestPurgingACatalogueRemovesItsOrdersTheirWorkAndTheirHolds(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("preview = %d (%s)", code, body)
 	}
+	// A server started with no option allows it: the purge is an opt-out.
 	if !plan.Enabled || plan.Done || plan.Confirm != sh.cat {
-		t.Errorf("enabled/done/confirm = %v/%v/%q", plan.Enabled, plan.Done, plan.Confirm)
+		t.Errorf("enabled/done/confirm = %v/%v/%q, want a default server to allow the purge",
+			plan.Enabled, plan.Done, plan.Confirm)
 	}
 	if !slices.Equal(plan.Catalogs, []string{sh.cat}) || !slices.Equal(plan.Releases, []string{sh.rel}) {
 		t.Errorf("catalogs %v, releases %v", plan.Catalogs, plan.Releases)
@@ -365,7 +367,7 @@ func TestPurgingACatalogueRemovesItsOrdersTheirWorkAndTheirHolds(t *testing.T) {
 // An order with another product is somebody's order of that other product too, so
 // it stays; the line on the deleted product is withdrawn, saying why.
 func TestPurgingAProductKeepsTheOrdersThatCarryOthers(t *testing.T) {
-	sh := aShopToPurge(t, api.WithCataloguePurge())
+	sh := aShopToPurge(t)
 	both := sh.order(t, "vpn", "laptop")
 	only := sh.order(t, "laptop")
 
@@ -433,7 +435,7 @@ func TestPurgingAProductKeepsTheOrdersThatCarryOthers(t *testing.T) {
 // product this server no longer has, and the import's memory of the first must not
 // make it ask whether they were deleted on purpose.
 func TestAPurgedCatalogueImportsAgainAsNew(t *testing.T) {
-	sh := aShopToPurge(t, api.WithCataloguePurge())
+	sh := aShopToPurge(t)
 	doc := `{"publish":true,
 	  "catalogs":[{"id":"cat-test","texts":{"de":"Test"},"rank":7,"languages":["de"],"items":["badge"]}],
 	  "products":[{"id":"badge","homeCatalog":"cat-test","state":"active","texts":{"de":"Badge"},
@@ -472,7 +474,7 @@ func TestAPurgedCatalogueImportsAgainAsNew(t *testing.T) {
 // under the same id, look like an edit of the imported one — and the next import
 // would keep it without asking. Forgotten, the import asks.
 func TestAPurgeForgetsWhatTheImportBrought(t *testing.T) {
-	sh := aShopToPurge(t, api.WithCataloguePurge())
+	sh := aShopToPurge(t)
 	doc := `{"catalogs":[{"id":"cat-test","texts":{"de":"Test"},"rank":7,"languages":["de"],"items":["badge"]}],
 	  "products":[{"id":"badge","homeCatalog":"cat-test","state":"active","texts":{"de":"Badge"},
 	    "approval":{"kind":"none"},"provisionProcess":"p","deprovisionProcess":"d"}]}`

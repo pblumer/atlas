@@ -1,4 +1,4 @@
-# ADR-DRAFT: An administrator can delete a catalogue for good, on a server started to allow it
+# ADR-DRAFT: An administrator can delete a catalogue for good, unless the server opts out
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -26,13 +26,17 @@ can be deleted again; the catalogue cannot.
 
 The rule of ADR-0312 is right for what it was written for: records an order and an
 access review resolve through. It is wrong on an installation whose orders are tests.
-The question: **how can the catalogue be deleted where that is wanted, without making
-the delete reachable where the evidence matters?**
+The question: **how can the catalogue be deleted where that is wanted, and how does an
+installation where the evidence matters keep it from being deleted?**
 
 ## Decision drivers
 
-- A production installation must not be able to delete orders and held rights because
-  somebody pressed a button, nor because somebody forgot a flag.
+- A production installation must be able to refuse the delete of orders and held
+  rights altogether, not merely put it behind a role.
+- A development installation, where the purge is wanted, should need no configuration
+  for it. This is the driver the switch's default was decided on: the people who asked
+  for the purge run development installations, and asked not to have to define anything
+  there — only where they do not want it.
 - "Delete" has to mean everything the import and the test created, or the next round
   starts on leftovers: the catalogue, its products, the orders, the work still running
   for them and the holds they granted.
@@ -47,28 +51,37 @@ the delete reachable where the evidence matters?**
 1. **Keep the rule.** Withdraw products, empty the catalogue, take its audience away.
 2. **A conditional delete for everybody who maintains the catalogue:** allowed only
    while nothing resolves through it — no order, no hold.
-3. **An administrator's purge behind a start flag**, off by default, that deletes the
-   catalogue with its orders, cancels their running instances and takes their holds out
-   of the inventory, after a preview and a confirmation by id.
+3. **An administrator's purge behind a start flag** that deletes the catalogue with its
+   orders, cancels their running instances and takes their holds out of the inventory,
+   after a preview and a confirmation by id — with the flag either
+   - **3a. opt-in**, off by default, or
+   - **3b. opt-out**, on by default.
 4. **Option 3 that also erases the inventory's history** of the removed holds.
 
 ## Decision outcome
 
-Chosen option: **3, an administrator's purge behind a start flag**, because it is the
-only one that serves the case that asked for it — import, order, start over — while
-leaving a production server exactly as ADR-0312 describes it.
+Chosen option: **3b, an administrator's purge behind an opt-out start flag**, because
+it is the only one that serves the case that asked for it — import, order, start over —
+with nothing to configure where it is wanted, while a server started with the flag stays
+exactly as ADR-0312 describes it.
 
-- **The switch.** `--catalogue-purge` (`ATLAS_CATALOGUE_PURGE=true`, Helm
-  `atlas.catalogue.purge: true`, `api.WithCataloguePurge()`), **off by default** — the
-  opposite of `--catalogue` ([ADR-0434](0434-the-catalogue-can-be-switched-off.md)),
-  because here the safe reading of a missing flag is the server that cannot delete.
-  The environment variable is read as strictly as `ATLAS_CATALOGUE`.
+- **The switch.** `--catalogue-purge=false` (`ATLAS_CATALOGUE_PURGE=false`, Helm
+  `atlas.catalogue.purge: false`, `api.WithoutCataloguePurge()`) switches the purge off;
+  **without it the purge is on**, the same direction as `--catalogue`
+  ([ADR-0434](0434-the-catalogue-can-be-switched-off.md)). The first implementation was
+  opt-in (3a), on the argument that the safe reading of a missing flag is the server
+  that cannot delete. The requester decided for opt-out: they run the installations that
+  want the purge, and would rather state the exception than the rule. That moves the
+  burden onto every production installation, which has to set the flag, and the record
+  says so wherever the flag is described. The environment variable is read as strictly
+  as `ATLAS_CATALOGUE`, so a mistyped `false` stops the start instead of leaving the
+  purge on.
 - **The routes.** `GET /api/v1/catalogs/{id}/deletion` and
   `GET /api/v1/catalog-products/{id}/deletion` answer the plan and change nothing, on
   any server, with `enabled` saying whether this one allows the purge.
   `DELETE /api/v1/catalogs/{id}?confirm={id}` and
-  `DELETE /api/v1/catalog-products/{id}?confirm={id}` carry it out: 403 without the
-  switch, 400 unless `confirm` repeats the id. All four are the administrator's, carry
+  `DELETE /api/v1/catalog-products/{id}?confirm={id}` carry it out: 403 with the
+  switch off, 400 unless `confirm` repeats the id. All four are the administrator's, carry
   the `Catalogue` tag, and go with the area when `--catalogue=false`.
 - **What goes.** A catalogue takes its releases, its brand mark and every product whose
   home it is. A product that goes is stripped from every catalogue that stays, items and
@@ -101,15 +114,21 @@ leaving a production server exactly as ADR-0312 describes it.
 
 - **Positive:**
   - A development installation can be cleared of a test catalogue and everything its
-    orders produced, and the same document imported again starts from nothing.
-  - A production installation is unchanged: without the switch nothing can be deleted,
-    and the preview is all anybody learns.
+    orders produced, and the same document imported again starts from nothing — with
+    nothing to configure.
+  - A production installation started with `--catalogue-purge=false` is unchanged:
+    nothing can be deleted, and the preview is all anybody learns.
   - No change to the log, the engine or `applyToState`: the purge uses commands that
     already exist, so recovery is the recovery that already holds.
 - **Negative / trade-offs accepted:**
   - The purge deletes evidence ADR-0312 protects. That is its purpose on the
     installations it is for; the switch, the role and the confirmation are what keep it
     there.
+  - **Opt-out puts the burden on production.** An installation upgraded into this record
+    without setting the flag lets every administrator — and an agent calling the MCP
+    tools with an administrator's credential — delete a catalogue with its orders and
+    holds. The role and the confirmation by id remain; the switch is the only thing that
+    takes the possibility away, and it has to be set.
   - The inventory's history keeps a *corrected* row for every hold removed, and the
     event feed announces every removal to its subscribers. Erasing those would need a
     new engine event (option 4) and is not done.
@@ -121,7 +140,8 @@ leaving a production server exactly as ADR-0312 describes it.
     left running. The purge is meant for an installation nobody is ordering on.
   - A line that is running when its product is deleted from an order that stays keeps
     its status; only a line that had not started can be withdrawn.
-- **Follow-ups / risks to watch:** Whether anybody needs the history erased too
+- **Follow-ups / risks to watch:** Production installations that upgrade without
+  setting `--catalogue-purge=false`. Whether anybody needs the history erased too
   (option 4). Whether the confirmation by id is enough for an agent, which can repeat an
   id as easily as read one; the switch is the real guard there.
 
@@ -140,8 +160,20 @@ leaving a production server exactly as ADR-0312 describes it.
 ### Option 3 — an administrator's purge behind a start flag
 - Good: does what was asked, on the installations it was asked for; no new event; the
   preview makes the cost visible before it is paid.
-- Bad: a flag somebody may set on the wrong server. The role and the confirmation are
-  the second and third line, not a substitute.
+- Bad: a flag somebody may set wrongly. The role and the confirmation are the second and
+  third line, not a substitute.
+
+#### 3a — opt-in
+- Good: a forgotten flag leaves a server that cannot delete, which is the safe mistake;
+  an upgrade changes nothing on production.
+- Bad: every development installation has to set it, and the people asking for the
+  purge are the ones who run those.
+
+#### 3b — opt-out (chosen)
+- Good: a development installation needs nothing; the flag says the exception, the way
+  `--catalogue=false` does.
+- Bad: a forgotten flag leaves a production server that can delete orders and holds, and
+  an upgrade grants that to every administrator until the flag is set.
 
 ### Option 4 — option 3 plus erasing the history
 - Good: nothing at all left behind.
@@ -152,7 +184,7 @@ leaving a production server exactly as ADR-0312 describes it.
 ## Links
 
 - amends [ADR-0312](0312-portal-catalogue-order-inventory.md) — "nothing is ever deleted
-  from a catalogue" now holds on every server not started with `--catalogue-purge`
+  from a catalogue" now holds on a server started with `--catalogue-purge=false`
 - answers the open question of [ADR-0376](0376-catalogue-maintenance-over-mcp.md)
 - relates to [ADR-0434](0434-the-catalogue-can-be-switched-off.md) (the other catalogue
   start flag), [ADR-0346](0346-entitlement-history.md) (the history a revocation writes),

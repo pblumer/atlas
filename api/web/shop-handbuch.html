@@ -380,14 +380,14 @@ th{color:var(--muted);font-weight:600}
     would delete the record of who received what under whose approval.</p>
   <p data-l="de">Auf einer Entwicklungs- oder Testinstallation willst du dagegen einen Katalog importieren, daraus
     bestellen, die Abwicklung beobachten und danach von vorne beginnen. Dafür gibt es das endgültige Löschen. Es ist
-    ausgeschaltet, bis der Server mit <code>--catalogue-purge</code> (oder <code>ATLAS_CATALOGUE_PURGE=true</code>,
-    im Helm-Chart <code>atlas.catalogue.purge: true</code>) gestartet wird, und nur Administratoren dürfen es
-    ausführen. Schalte es auf einer produktiven Installation nicht ein.</p>
+    eingeschaltet, und nur Administratoren dürfen es ausführen. <b>Auf einer produktiven Installation schaltest du es
+    aus:</b> Starte den Server mit <code>--catalogue-purge=false</code> (oder <code>ATLAS_CATALOGUE_PURGE=false</code>,
+    im Helm-Chart <code>atlas.catalogue.purge: false</code>). Dann lehnt atlas das Löschen ab.</p>
   <p data-l="en">On a development or test installation, though, you want to import a catalogue, order from it, watch
-    the fulfilment and then start over. That is what deleting for good is for. It is switched off until the server is
-    started with <code>--catalogue-purge</code> (or <code>ATLAS_CATALOGUE_PURGE=true</code>, in the Helm chart
-    <code>atlas.catalogue.purge: true</code>), and only administrators may run it. Do not switch it on for a
-    production installation.</p>
+    the fulfilment and then start over. That is what deleting for good is for. It is switched on, and only
+    administrators may run it. <b>Switch it off on a production installation:</b> start the server with
+    <code>--catalogue-purge=false</code> (or <code>ATLAS_CATALOGUE_PURGE=false</code>, in the Helm chart
+    <code>atlas.catalogue.purge: false</code>), and atlas refuses the delete.</p>
   <p data-l="de">In der Console findest du es auf der Seite eines Katalogs unter <b>Delete for good</b>. Zuerst zeigt
     atlas, was alles verschwinden würde, und erst wenn du die ID des Katalogs oder Produkts noch einmal eintippst,
     lässt sich der Knopf drücken. Mit einem Katalog werden gelöscht:</p>

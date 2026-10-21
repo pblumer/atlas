@@ -327,16 +327,17 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
-	// Deleting a catalogue or a product for good (ADR-draft-catalogue-purge): off by
-	// default and the other way round from the switch above, because the safe reading
-	// of a forgotten flag is the server that cannot delete orders and holds. Read as
-	// strictly as ATLAS_CATALOGUE, so "ATLAS_CATALOGUE_PURGE=yes please" stops the
-	// start instead of being read as anything.
-	purgeDefault, err := envSwitch("ATLAS_CATALOGUE_PURGE", false)
+	// Deleting a catalogue or a product for good (ADR-draft-catalogue-purge): on by
+	// default, like the switch above, so a development installation needs nothing; a
+	// production installation whose orders and holds are evidence switches it off.
+	// Read as strictly as ATLAS_CATALOGUE, because the typo that matters here is the
+	// one in "ATLAS_CATALOGUE_PURGE=flase", and it must stop the start rather than
+	// leave the purge on where its operator believes it is off.
+	purgeDefault, err := envSwitch("ATLAS_CATALOGUE_PURGE", true)
 	if err != nil {
 		return err
 	}
-	cataloguePurge := fs.Bool("catalogue-purge", purgeDefault, "allow an administrator to delete a catalogue or a product for good, with its releases, its orders, the instances working them and the holds they granted (ADR-draft-catalogue-purge). Off by default and meant for a development or test installation only: on a production installation a product is withdrawn and a catalogue is kept, because orders and held rights resolve through them. The Console and GET /api/v1/catalogs/{id}/deletion show what a purge would remove either way (or ATLAS_CATALOGUE_PURGE=true)")
+	cataloguePurge := fs.Bool("catalogue-purge", purgeDefault, "let an administrator delete a catalogue or a product for good, with its releases, its own products, the orders placed from it, the instances working them and the holds they granted (ADR-draft-catalogue-purge); on by default (opt-out), --catalogue-purge=false to refuse it. Switch it off on a production installation: there a product is withdrawn and a catalogue kept, because orders and held rights resolve through them. GET /api/v1/catalogs/{id}/deletion shows what a purge would remove either way (or ATLAS_CATALOGUE_PURGE=false)")
 	catalogue := fs.Bool("catalogue", catalogueDefault, "serve the shop, the catalogue, the orders and the inventory — their routes, the shop page, their Console menus and MCP tools (ADR-0312); on by default (opt-out), --catalogue=false to switch the whole area off. Nothing stored is removed, deployed processes run unchanged, and turning it back on is a restart (or ATLAS_CATALOGUE=false)")
 	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. With --auth on (the default) it sits behind the boundary like every other route: a scraper needs an API token of scope metrics (ADR-0198)")
 	// The read side of the exposition above, and a different server: this is where
@@ -691,8 +692,8 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	if !metricsOn {
 		apiOpts = append(apiOpts, api.WithoutMetrics())
 	}
-	if cataloguePurge {
-		apiOpts = append(apiOpts, api.WithCataloguePurge())
+	if !cataloguePurge {
+		apiOpts = append(apiOpts, api.WithoutCataloguePurge())
 	}
 	if !catalogue {
 		apiOpts = append(apiOpts, api.WithoutCatalogue())

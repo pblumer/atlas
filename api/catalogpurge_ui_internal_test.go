@@ -41,7 +41,7 @@ func TestThePurgeButtonStartsDisabledAndNeedsTheID(t *testing.T) {
 		t.Error("the confirmation button is not drawn disabled")
 	}
 	if !strings.Contains(plan, "plan.enabled ?") {
-		t.Error("the confirmation is drawn on a server that does not allow the purge")
+		t.Error("the confirmation is drawn on a server that switched the purge off")
 	}
 	if !strings.Contains(plan, "plan.warnings") {
 		t.Error("the warnings the server sends are not shown before the confirmation")

@@ -119,7 +119,7 @@ func TestThePlanSaysWhatItMeansBeforeAnybodyConfirms(t *testing.T) {
 		t.Errorf("instances/entitlements/holders = %d/%d/%d", sc.plan.Instances, sc.plan.Entitlements, sc.plan.Holders)
 	}
 	all := strings.Join(sc.plan.Warnings, "\n")
-	for _, want := range []string{"--catalogue-purge", "permanent", "not undone", "deprovisioning",
+	for _, want := range []string{"--catalogue-purge=false", "permanent", "not undone", "deprovisioning",
 		"corrected", "rel-other-new", "stay deployed: deprov, life, prov."} {
 		if !strings.Contains(all, want) {
 			t.Errorf("the warnings do not mention %q:\n%s", want, all)
