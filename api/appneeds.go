@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/compiler"
 )
@@ -200,6 +201,11 @@ type applicationNeedsResp struct {
 	Unread []string `json:"unread"`
 	// Constants counts the values the application holds here.
 	Constants int `json:"constants"`
+	// Catalogs are the catalogues the caller may put in the application's package
+	// (GET …/package?catalog=), each marked bound when one of its products runs on a
+	// process of the application. Empty without the productmanager role, and on a
+	// server with its catalogue switched off.
+	Catalogs []catalog.ExportChoice `json:"catalogs"`
 }
 
 // handleApplicationNeeds serves GET /api/v1/applications/{id}/needs: the list a
@@ -214,7 +220,7 @@ func (s *Server) handleApplicationNeeds(w http.ResponseWriter, r *http.Request) 
 	}
 	var (
 		sources []needSource
-		resp    = applicationNeedsResp{ApplicationID: id, Unread: []string{}}
+		resp    = applicationNeedsResp{ApplicationID: id, Unread: []string{}, Catalogs: []catalog.ExportChoice{}}
 		readErr error
 	)
 	s.do(func() {
@@ -244,5 +250,17 @@ func (s *Server) handleApplicationNeeds(w http.ResponseWriter, r *http.Request) 
 		resp.Unread = unread
 	}
 	s.do(func() { resp.Needs = s.answerNeedsOnLoop(id, needs, nil) })
+	if p := httpapi.PrincipalFrom(r.Context()); !s.catalogueOff && mayReach(p, RoleProductManager) {
+		processes := make([]string, 0, len(sources))
+		for _, src := range sources {
+			processes = append(processes, src.ID)
+		}
+		choices, err := s.catalogs.ExportChoices(p, processes)
+		if err != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "read catalogues: "+err.Error())
+			return
+		}
+		resp.Catalogs = choices
+	}
 	httpapi.JSON(w, http.StatusOK, resp)
 }

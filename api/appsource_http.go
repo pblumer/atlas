@@ -43,13 +43,9 @@ func (s *Server) handleExportApplicationSource(w http.ResponseWriter, r *http.Re
 		httpapi.Error(w, code, msg)
 		return
 	}
-	var withConstants bool
-	switch v := r.URL.Query().Get("constants"); v {
-	case "", "false":
-	case "true":
-		withConstants = true
-	default:
-		httpapi.Error(w, http.StatusBadRequest, fmt.Sprintf("constants takes true or false, not %q", v))
+	withConstants, err := boolQuery(r.URL.Query().Get("constants"), "constants")
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	var (

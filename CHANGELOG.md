@@ -12,6 +12,29 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The Console moves an application with its catalogues.** **Export application…** (formerly
+  Download source…) offers the catalogues you maintain, those selling the application ticked, and
+  downloads the same package `atlas export` writes: the source tree, the constants when asked, and
+  the catalogues as `katalog.json` with their groups and people as questions answered by name
+  (`GET /api/v1/applications/{id}/package`, `?preview=true` for what it would hold and warn about).
+  **Import application…** (formerly Import source tree…) reads such a package or a plain source
+  tree: it answers the questions from this server's directory and asks only for what it cannot find
+  (`POST /api/v1/catalogs/import/answers`), shows one plan for the application, its constants and
+  the catalogues, then imports the application, publishes it and imports the catalogues, as
+  `atlas import` does. What turns catalogues into a package is now one implementation for the
+  command and the server ([ADR-0467](docs/adr/0467-application-package-export.md), amendment
+  2026-10-21).
+
+### Fixed
+
+- **A fixed approver in a package is assigned by username.** A `fixed` approval is a task
+  assigned to a username, but `atlas import`, the example's `facility-management` question and the
+  shop handbook's installer answered it with a user id, so the approval reached nobody. The package
+  now asks for an account: answered by a username or by a display name one account carries, and
+  filled with the username ([ADR-0467](docs/adr/0467-application-package-export.md)).
+
 ## [0.17.0] — 2026-10-21
 
 **An application and its shop move between installations as a package, and an import

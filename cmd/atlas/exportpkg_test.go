@@ -161,7 +161,7 @@ func TestExportThenImportMovesTheShopToAnotherServer(t *testing.T) {
 	if err := json.Unmarshal([]byte(pkg[packageQuestions]), &questions); err != nil {
 		t.Fatalf("fragen.json: %v", err)
 	}
-	if q := questions["fabienne-meier"]; q.Kind != "user" || !strings.Contains(q.Label["de"], "genehmigt «Parkplatz»") ||
+	if q := questions["fabienne-meier"]; q.Kind != "account" || !strings.Contains(q.Label["de"], "genehmigt «Parkplatz»") ||
 		!strings.Contains(q.Label["en"], `approves "Parking space"`) {
 		t.Errorf("the approver's question = %+v", q)
 	}
@@ -231,7 +231,7 @@ func TestExportThenImportMovesTheShopToAnotherServer(t *testing.T) {
 	if err := json.Unmarshal([]byte(readPackage(t, dir)[packageQuestions]), &reworded); err != nil {
 		t.Fatalf("fragen.json: %v", err)
 	}
-	if reworded["alle-mitarbeitenden"].Label["de"] != "Wer bestellt?" || reworded["fabienne-meier"].Kind != "user" {
+	if reworded["alle-mitarbeitenden"].Label["de"] != "Wer bestellt?" || reworded["fabienne-meier"].Kind != "account" {
 		t.Errorf("questions after a second export = %+v", reworded)
 	}
 }

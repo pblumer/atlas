@@ -104,14 +104,21 @@ function mountModal(className, title, body, foot) {
   return { ov, done, finish };
 }
 
-// openSourceDownload asks what a download of the application's source carries and
-// shows what the target needs. info is GET /api/v1/applications/{id}/needs. Resolves
-// to the download's URL, or null on cancel.
-export function openSourceDownload({ id, info }) {
+// catalogueLabel is a catalogue as a person reads it: its name, else its id.
+const catalogueLabel = (c) => (c.texts && (c.texts.en || c.texts.de || Object.values(c.texts)[0])) || c.id;
+
+// openSourceDownload asks what the application's package carries — its constant
+// values, and the catalogues that sell it — and shows what the target needs. info is
+// GET /api/v1/applications/{id}/needs. With catalogues ticked the download is the
+// package (GET …/package), asked first for a preview whose warnings are shown before
+// anything is downloaded; preview(url) answers it. Resolves to the download's URL, or
+// null on cancel.
+export function openSourceDownload({ id, info, preview }) {
   const held = (info && info.constants) || 0;
   const needs = (info && info.needs) || [];
   const unread = (info && info.unread) || [];
-  const base = `/api/v1/applications/${encodeURIComponent(id)}/source`;
+  const catalogs = (info && info.catalogs) || [];
+  const app = encodeURIComponent(id);
   const appConstantNote = (n, carried) => {
     if (n.kind !== "application-constant") return "";
     return n.state === "set" && carried
@@ -121,6 +128,12 @@ export function openSourceDownload({ id, info }) {
   const list = (carried) => needs.length
     ? needGroups(needs, (n) => needLine(n, { state: false, note: appConstantNote(n, carried) }))
     : `<p class="muted">The processes read nothing from the installation and name no worker.</p>`;
+  const catalogList = catalogs.length
+    ? `<ul class="package-catalogs">${catalogs.map((c) => `
+        <li><label><input type="checkbox" name="catalog" value="${esc(c.id)}"${c.bound ? " checked" : ""}>
+          ${esc(catalogueLabel(c))} <code>${esc(c.id)}</code>${c.bound
+            ? ` <span class="need-carried">sells this application</span>` : ""}</label></li>`).join("")}</ul>`
+    : `<p class="muted small">No catalogue to choose: you maintain none here, or this server has none.</p>`;
   const body = `
     <p>The download carries the application's processes, forms and decisions.</p>
     <label class="source-constants"><input type="checkbox" name="withConstants"${held ? " checked" : " disabled"}>
@@ -129,34 +142,76 @@ export function openSourceDownload({ id, info }) {
     <p class="muted small">The target offers them like any other artifact: a value it lacks is set, one an
       administrator set there is kept unless somebody ticks it. Leave this off for a tree kept in a
       repository; the values belong to this installation.</p>
+    <h3 class="needs-title">Catalogues</h3>
+    <p class="muted small">Ticked ones travel with the application. Their groups and people travel by name,
+      and the target finds them in its own directory; it asks for any it cannot find.</p>
+    ${catalogList}
+    <div class="package-warnings" hidden></div>
     <h3 class="needs-title">What the target needs, and no download carries</h3>
     <div class="source-needs">${list(held > 0)}</div>
     ${unread.length ? `<p class="muted small source-unread">Not read, because ${unread.length === 1 ? "it does" : "they do"} not compile yet:
       ${unread.map((u) => `<code>${esc(u)}</code>`).join(", ")}.</p>` : ""}`;
   const foot = `<button type="button" class="btn ghost" data-cancel>Cancel</button>
     <button type="button" class="btn" data-ok>Download</button>`;
-  const { ov, done, finish } = mountModal("source-download", "Download source", body, foot);
+  const { ov, done, finish } = mountModal("source-download", "Export application", body, foot);
   const box = ov.querySelector('[name="withConstants"]');
+  const ok = ov.querySelector("[data-ok]");
+  const warnings = ov.querySelector(".package-warnings");
+  // A selection the warnings were shown for; downloading it again needs no second look.
+  let warned = null;
+  const url = () => {
+    const ticked = [...ov.querySelectorAll('[name="catalog"]:checked')].map((b) => b.value);
+    const q = new URLSearchParams();
+    if (box.checked) q.set("constants", "true");
+    ticked.forEach((c) => q.append("catalog", c));
+    const query = q.toString();
+    return `/api/v1/applications/${app}/${ticked.length ? "package" : "source"}${query ? "?" + query : ""}`;
+  };
+  const reset = () => {
+    warned = null;
+    warnings.hidden = true;
+    ok.textContent = "Download";
+  };
   box.addEventListener("change", () => {
     ov.querySelector(".source-needs").innerHTML = list(box.checked);
   });
-  ov.querySelector("[data-ok]").addEventListener("click", () => {
-    finish(box.checked ? `${base}?constants=true` : base);
+  ov.querySelectorAll('[name="catalog"]').forEach((b) => b.addEventListener("change", reset));
+  ok.addEventListener("click", async () => {
+    const target = url();
+    if (!target.includes("/package") || !preview || warned === target) return finish(target);
+    ok.disabled = true;
+    let p;
+    try {
+      p = await preview(target + "&preview=true");
+    } catch (e) {
+      warnings.hidden = false;
+      warnings.innerHTML = `<div class="deploy-warnings"><b>&#9888; The package cannot be written:</b>
+        <ul><li>${esc((e && e.message) || e)}</li></ul></div>`;
+      ok.disabled = false;
+      return;
+    }
+    ok.disabled = false;
+    if (!(p.warnings || []).length) return finish(target);
+    warned = target;
+    warnings.hidden = false;
+    warnings.innerHTML = `<div class="deploy-warnings"><b>&#9888; On the target, this will not work as it does here:</b>
+      <ul>${p.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>`;
+    ok.textContent = "Download anyway";
   });
-  ov.querySelector("[data-ok]").focus();
+  ok.focus();
   return done;
 }
 
 // needsReport says whether an import answer has anything for showImportNeeds.
 export function needsReport(result) {
-  return !!result && (openNeeds(result.needs).length > 0 ||
-    (result.constantsNotSet || []).length > 0 || (result.needsUnread || []).length > 0);
+  return !!result && (openNeeds(result.needs).length > 0 || (result.constantsNotSet || []).length > 0 ||
+    (result.needsUnread || []).length > 0 || (result.warnings || []).length > 0);
 }
 
 // showImportNeeds tells what an import left for this installation to set up: the needs
 // it does not answer, the constants it did not set because the caller is not an
-// administrator, and the processes whose needs it could not read. Resolves when it is
-// closed.
+// administrator, the processes whose needs it could not read, and what the publish
+// and the catalogue import warned about (warnings). Resolves when it is closed.
 export function showImportNeeds(result) {
   const open = openNeeds(result.needs);
   const notSet = result.constantsNotSet || [];
@@ -172,6 +227,10 @@ export function showImportNeeds(result) {
       </section>` : ""}
     ${unread.length ? `<p class="muted small source-unread">Not read, because ${unread.length === 1 ? "it does" : "they do"} not compile:
       ${unread.map((u) => `<code>${esc(u)}</code>`).join(", ")}.</p>` : ""}
+    ${(result.warnings || []).length ? `<section class="need-group" data-kind="warnings">
+        <h3>Warnings <span class="muted">(${result.warnings.length})</span></h3>
+        <ul>${result.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>
+      </section>` : ""}
     <p class="muted small">Publishing does not wait for them; it warns about each, and an instance started
       without them runs without the value or parks at the worker.</p>`;
   const { ov, done, finish } = mountModal("import-needs", `Before ${result.name || "it"} runs here`, body,

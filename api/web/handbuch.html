@@ -8589,21 +8589,24 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/releases/1/
       <h3 data-l="de">Der Quellbaum: die Quelle bewegen, nicht das Deployment</h3>
       <h3 data-l="en">The source tree: moving the source, not the deployment</h3>
       <p data-l="de">Promotion bewegt, <i>was deployt ist</i>. Der <b>Quellbaum</b> bewegt, <i>was ein Mensch
-        bearbeitet</i>: Entwürfe, Formulare und Entscheidungsreferenzen als lesbare Dateien. <i>Download source…</i>
+        bearbeitet</i>: Entwürfe, Formulare und Entscheidungsreferenzen als lesbare Dateien. <i>Export application…</i>
         lädt ein <code>tar.gz</code> mit einem Manifest <code>atlas.json</code> (Format-Version, Schlüssel, Name)
         und je einer Datei unter <code>processes/</code> und <code>forms/</code>; Entscheidungen stehen als Verweis
-        im Manifest, ohne eigene Datei. Der Export ist <b>Byte für Byte reproduzierbar</b>. Beim Import wird die
-        Applikation über den <b>Schlüssel</b> gefunden; fehlt sie, wird sie angelegt. Der Import <b>überschreibt</b>
-        die genannten Artefakte und <b>löscht nie</b>; er schreibt Entwürfe und deployt nicht. Ein eingebautes Git
-        gibt es nicht – der Quellbaum ist ein Archiv, das man selbst versionieren kann.</p>
+        im Manifest, DMN-Modelle dieses Servers als Datei. Auf Wunsch kommen die Konstanten-Werte und die Kataloge
+        mit, die die Applikation verkaufen (siehe Shop-Handbuch). Der Export ist <b>Byte für Byte reproduzierbar</b>.
+        Beim Import (<i>Import application…</i>) wird die Applikation über den <b>Schlüssel</b> gefunden; fehlt sie,
+        wird sie angelegt. Der Import <b>ersetzt nichts ungefragt</b> und <b>löscht nie</b>; was hier anders ist,
+        listet er zur Entscheidung auf. Ein eingebautes Git gibt es nicht – der Quellbaum ist ein Archiv, das man
+        selbst versionieren kann.</p>
       <p data-l="en">Promotion moves <i>what is deployed</i>. The <b>source tree</b> moves <i>what a person
-        edits</i>: drafts, forms and decision references as readable files. <i>Download source…</i> downloads a
+        edits</i>: drafts, forms and decision references as readable files. <i>Export application…</i> downloads a
         <code>tar.gz</code> with a manifest <code>atlas.json</code> (format version, key, name) and one file each
-        under <code>processes/</code> and <code>forms/</code>; decisions appear as a reference in the manifest,
-        with no file of their own. The export is <b>byte-for-byte reproducible</b>. On import the application is
-        found by its <b>key</b>; if it is missing it is created. The import <b>overwrites</b> the listed artifacts
-        and <b>never deletes</b>; it writes drafts and does not deploy. There is no built-in git – the source tree
-        is an archive you can keep under version control yourself.</p>
+        under <code>processes/</code> and <code>forms/</code>; decisions appear as a reference in the manifest, this
+        server's DMN models as files. The constant values and the catalogues that sell the application can come along
+        (see the shop handbook). The export is <b>byte-for-byte reproducible</b>. On import
+        (<i>Import application…</i>) the application is found by its <b>key</b>; if it is missing it is created. The
+        import <b>replaces nothing unasked</b> and <b>never deletes</b>; what differs here is listed for a decision.
+        There is no built-in git – the source tree is an archive you can keep under version control yourself.</p>
       <pre><code># Quellbaum herunterladen …  ·  Download the source tree …
 curl https://atlas-test.example.com/api/v1/applications/$APP/source -o berechtigungen-source.tar.gz
 # … und in einen Server einlesen (Zuordnung über den Schlüssel)  ·  … and read it into a server (matched by key)

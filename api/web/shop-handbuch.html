@@ -247,7 +247,7 @@ th{color:var(--muted);font-weight:600}
   <table>
     <tr><th data-l="de">Art</th><th data-l="en">Kind</th><th data-l="de">Wer genehmigt</th><th data-l="en">Who approves</th></tr>
     <tr><td><code>none</code></td><td data-l="de">Niemand – die Position startet sofort.</td><td data-l="en">Nobody – the position starts at once.</td></tr>
-    <tr><td><code>fixed</code></td><td data-l="de">Eine bestimmte Person (<code>ref</code> = ihre ID). Im Beispiel: der Parkplatz, durch das Facility Management.</td><td data-l="en">One named person (<code>ref</code> = their id). In the example: the parking space, by facility management.</td></tr>
+    <tr><td><code>fixed</code></td><td data-l="de">Eine bestimmte Person (<code>ref</code> = ihr Benutzername, dem die Genehmigung als Aufgabe zugewiesen wird). Im Beispiel: der Parkplatz, durch das Facility Management.</td><td data-l="en">One named person (<code>ref</code> = their username, to whom the approval is assigned as a task). In the example: the parking space, by facility management.</td></tr>
     <tr><td><code>role</code></td><td data-l="de">Ein Mitglied einer Gruppe (<code>ref</code> = Gruppen-ID); wer zuerst entscheidet, entscheidet. Im Beispiel: das Geoportal.</td><td data-l="en">A member of a group (<code>ref</code> = group id); whoever decides first decides. In the example: the geoportal.</td></tr>
     <tr><td><code>superior</code></td><td data-l="de">Die vorgesetzte Person der bestellenden, aus dem Verzeichnis. Braucht einen Verzeichnis-Worker namens <code>verzeichnis</code>; zum Ausprobieren genügt der AD-Mock. Im Beispiel: der Badge.</td><td data-l="en">The orderer's line manager, from the directory. Needs a directory worker named <code>verzeichnis</code>; the AD mock is enough to try it. In the example: the badge.</td></tr>
     <tr><td data-l="de">eigener Prozess</td><td data-l="en">own process</td><td data-l="de">Jeder andere Wert ist die ID eines eigenen Genehmigungsprozesses.</td><td data-l="en">Any other value is the id of an approval process of your own.</td></tr>
@@ -406,12 +406,12 @@ th{color:var(--muted);font-weight:600}
   <h2 data-l="de">Im Terminal: <code>atlas import</code></h2><h2 data-l="en">From a terminal: <code>atlas import</code></h2>
   <p data-l="de">Dasselbe Paket lässt sich ohne Browser installieren – im Terminal oder in einem CI-Job, etwa um eine
     Test- und eine Produktionsinstanz gleich auszustatten. Ein <b>Paket</b> ist ein Verzeichnis: <code>atlas.json</code>,
-    das Manifest der Applikation im selben Format, das <i>Download source…</i> liefert; die Prozesse und Formulare,
+    das Manifest der Applikation im selben Format, das <i>Export application…</i> in der Console liefert; die Prozesse und Formulare,
     die es nennt; und auf Wunsch <code>katalog.json</code> mit dem Shop und <code>fragen.json</code> mit den Fragen zu
     seinen Platzhaltern. Der Befehl geht vor wie der Installer: Applikation, Veröffentlichen, Katalog.</p>
   <p data-l="en">The same package installs without a browser – in a terminal or a CI job, say to equip a test and a
     production instance alike. A <b>package</b> is a directory: <code>atlas.json</code>, the application's manifest in
-    the format <i>Download source…</i> produces; the processes and forms it names; and optionally <code>katalog.json</code>
+    the format the Console's <i>Export application…</i> produces; the processes and forms it names; and optionally <code>katalog.json</code>
     with the shop and <code>fragen.json</code> with the questions its placeholders ask. The command goes about it like
     the installer: application, publish, catalogue.</p>
 <pre>atlas import --server https://atlas-test.example.com --answers antworten.json examples/verwaltung-dienstleistungen
@@ -591,16 +591,24 @@ atlas import --server https://atlas.example.com --answers paket/antworten.json p
     application constants the processes read and the workers they name, each with the processes that need it. A
     constant whose value is in <code>konstanten.json</code> is left out. The same list is under <code>needs</code> in
     <code>atlas.json</code>.</p>
-  <p data-l="de"><b>Ohne Terminal.</b> In der Console schreibt <i>Download source…</i> die Applikation als Archiv.
-    Der Dialog fragt vorher, ob die Konstanten-Werte mitkommen, und zeigt dieselbe Liste. <i>Import source tree…</i>
-    auf der anderen Instanz bietet die Konstanten an wie jedes andere Artefakt und nennt danach, was dort noch fehlt.
-    Ein entpacktes Archiv installiert auch <code>atlas import</code>. Den Shop bringt dieser Weg nicht mit; er reist
-    über den Katalog-Export.</p>
-  <p data-l="en"><b>Without a terminal.</b> In the Console, <i>Download source…</i> writes the application as an
-    archive. The dialog first asks whether the constant values come along, and shows the same list.
-    <i>Import source tree…</i> on the other instance offers the constants like any other artifact and then names what
-    is still missing there. <code>atlas import</code> installs an unpacked archive too. This way does not bring the
-    shop; that travels through the catalogue export.</p>
+  <p data-l="de"><b>Ohne Terminal.</b> In der Console schreibt <i>Export application…</i> (im Menü <b>⋯</b> der
+    Applikation) dasselbe Paket als Archiv. Der Dialog fragt, ob die Konstanten-Werte mitkommen, und bietet die
+    Kataloge an, die du pflegst; die, deren Produkte an Prozesse dieser Applikation gebunden sind, sind
+    vorgewählt. Ihre Gruppen und Personen werden zu Fragen, beantwortet mit den Namen dieser Instanz. Was auf dem
+    Ziel nicht wie hier funktionieren wird, zeigt der Dialog vor dem Herunterladen. Auf der anderen Instanz liest
+    <i>Create new → Import application…</i> das Archiv: Die Fragen beantwortet sie aus ihrem eigenen Verzeichnis
+    und fragt nur nach, was sie dort nicht findet. Dann zeigt sie einen Plan für Applikation, Konstanten und
+    Kataloge, importiert die Applikation, veröffentlicht sie, importiert die Kataloge und nennt, was noch fehlt.
+    Ein solches Archiv installiert auch <code>atlas import</code>, entpackt, und umgekehrt.</p>
+  <p data-l="en"><b>Without a terminal.</b> In the Console, <i>Export application…</i> (in the application's
+    <b>⋯</b> menu) writes the same package as an archive. The dialog asks whether the constant values come along and
+    offers the catalogues you maintain; those whose products are bound to the application's processes start
+    ticked. Their groups and people become questions, answered with this instance's names. What will not work on the
+    target as it does here is shown before anything is downloaded. On the other instance,
+    <i>Create new → Import application…</i> reads the archive: it answers the questions from its own directory and
+    asks only about what it cannot find there. It then shows one plan for the application, its constants and the
+    catalogues, imports the application, publishes it, imports the catalogues and names what is still missing.
+    <code>atlas import</code> installs such an archive too, unpacked, and the other way round.</p>
 </section>
 
 </main>
@@ -681,15 +689,19 @@ document.getElementById("lang-en").addEventListener("click", () => setLang("en")
     const principals = (await tryList("/api/v1/principals")) || [];
     const groups = principals.filter((p) => p.type === "group");
     const people = principals.filter((p) => p.type === "user");
+    // A fixed approver is an account: the approval is a task assigned to its username.
+    const accounts = ((await tryList("/api/v1/users/assignable")) || [])
+      .map((u) => ({ id: u.username, name: u.displayName ? u.displayName + " (" + u.username + ")" : u.username }));
     qbox.innerHTML = names.map((name) => {
       const q = QUESTIONS[name] || { kind: "text" };
       const label = (q.label && (q.label[root.dataset.lang] || q.label.de || q.label.en)) || name;
       const hint = (q.hint && (q.hint[root.dataset.lang] || q.hint.de || q.hint.en)) || "";
-      const list = q.kind === "group" ? groups : q.kind === "user" ? people : null;
+      const list = q.kind === "group" ? groups : q.kind === "user" ? people : q.kind === "account" ? accounts : null;
+      const placeholder = { group: T("Gruppen-ID", "group id"), user: T("Benutzer-ID", "user id"), account: T("Benutzername", "username") }[q.kind] || "";
       const field = list && list.length
         ? '<select data-ph="' + esc(name) + '">' + list.map((g) =>
             '<option value="' + esc(g.id) + '">' + esc(g.name || g.displayName || g.username || g.id) + "</option>").join("") + "</select>"
-        : '<input data-ph="' + esc(name) + '" placeholder="' + esc(q.kind === "group" ? T("Gruppen-ID", "group id") : T("Benutzer-ID", "user id")) + '">';
+        : '<input data-ph="' + esc(name) + '" placeholder="' + esc(placeholder) + '">';
       return "<label>" + esc(label) + "</label>" + field + '<p class="hint">' + esc(hint) + "</p>";
     }).join("");
     go.disabled = false;

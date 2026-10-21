@@ -30,36 +30,44 @@ type principalDirEntry struct {
 // open when auth is off. It only reads the user sidecar on the run loop, so it
 // touches none of the six invariants.
 func (s *Server) handleListPrincipals(w http.ResponseWriter, _ *http.Request) {
-	list := []principalDirEntry{}
-	var loadErr error
-	s.do(func() {
-		var users []User
-		if users, loadErr = s.users.LoadAll(); loadErr != nil {
-			return
-		}
-		for _, u := range users {
-			if u.Disabled {
-				continue
-			}
-			name := u.DisplayName
-			if name == "" {
-				name = u.Username
-			}
-			list = append(list, principalDirEntry{Type: PrincipalTypeUser, ID: u.ID, Name: name})
-		}
-		// Groups join the same directory (ADR-0180) so a picker
-		// can offer a whole team, not only individuals.
-		var groups []group
-		if groups, loadErr = s.groups.LoadAll(); loadErr != nil {
-			return
-		}
-		for _, g := range groups {
-			list = append(list, principalDirEntry{Type: PrincipalTypeGroup, ID: g.ID, Name: g.Name})
-		}
-	})
+	var (
+		list    []principalDirEntry
+		loadErr error
+	)
+	s.do(func() { list, loadErr = s.principalDirectoryOnLoop() })
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list principals: "+loadErr.Error())
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, list)
+}
+
+// principalDirectoryOnLoop is the directory GET /api/v1/principals lists: every
+// enabled user by display name (else username), then every group. Run loop only.
+func (s *Server) principalDirectoryOnLoop() ([]principalDirEntry, error) {
+	list := []principalDirEntry{}
+	users, err := s.users.LoadAll()
+	if err != nil {
+		return nil, err
+	}
+	for _, u := range users {
+		if u.Disabled {
+			continue
+		}
+		name := u.DisplayName
+		if name == "" {
+			name = u.Username
+		}
+		list = append(list, principalDirEntry{Type: PrincipalTypeUser, ID: u.ID, Name: name})
+	}
+	// Groups join the same directory (ADR-0180) so a picker
+	// can offer a whole team, not only individuals.
+	groups, err := s.groups.LoadAll()
+	if err != nil {
+		return nil, err
+	}
+	for _, g := range groups {
+		list = append(list, principalDirEntry{Type: PrincipalTypeGroup, ID: g.ID, Name: g.Name})
+	}
+	return list, nil
 }
