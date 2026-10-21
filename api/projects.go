@@ -331,9 +331,19 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 // (ADR-0071); it stays idempotent, so deleting an absent project — one a caller
 // cannot see is indistinguishable from one that is gone — still succeeds.
 // Artifacts tagged with the id are intentionally left in place; they read as
-// Ungrouped once the project is gone (ADR-0034).
+// Ungrouped once the project is gone (ADR-0034). With purge=true they go with it,
+// running instances included (purgeApplication).
 func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	purge, err := boolQuery(r.URL.Query().Get("purge"), "purge")
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if purge {
+		s.purgeApplication(w, r, id)
+		return
+	}
 	var (
 		notFound        bool
 		panoramaBlocked bool
@@ -373,38 +383,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 			panoramaBlocked = true
 			return
 		}
-		// Drop the application's release history *before* the application itself
-		// (ADR-0128). Unlike the artifacts — which deliberately survive and fall back
-		// to Ungrouped — a release is metadata *about* this application, reachable
-		// only through its id, so leaving the records behind would accumulate
-		// unreachable files. The deployed definitions themselves are untouched.
-		//
-		// The order matters for the failure case: releases first means a failed
-		// cleanup leaves the application intact, so a retry deletes both and
-		// self-heals. Deleting the application first would make the very orphans
-		// this cleanup exists to prevent, permanently — the retry would take the
-		// idempotent "already gone" path and never revisit the records.
-		if delErr = s.releases.deleteForApplication(id); delErr != nil {
-			return
-		}
-		// The access-control history is metadata about this application, reachable only
-		// through its id, so it is cleaned up with the application like its releases
-		// (ADR-0184). Same ordering rationale: audit before the
-		// application, so a failed cleanup self-heals on retry.
-		if delErr = s.grantAudit.deleteForApplication(id); delErr != nil {
-			return
-		}
-		// Its constants on this installation are configuration of this application alone
-		// (ADR-0453): gone with it, before it, for the
-		// same self-healing order.
-		if delErr = s.appConstants.Delete(id); delErr != nil {
-			return
-		}
-		s.forgetApplication(id)
-		if delErr = s.projects.Delete(id); delErr != nil {
-			return
-		}
-		delete(s.appVersions, id)
+		delErr = s.deleteApplicationRecordOnLoop(id)
 	})
 	switch {
 	case getErr != nil:
@@ -420,6 +399,45 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// deleteApplicationRecordOnLoop removes an application and the metadata reachable
+// only through its id — what a plain delete removes, and the last step of a purge.
+// Must be called on the run loop.
+func (s *Server) deleteApplicationRecordOnLoop(id string) error {
+	// Drop the application's release history *before* the application itself
+	// (ADR-0128). Unlike the artifacts — which deliberately survive and fall back
+	// to Ungrouped — a release is metadata *about* this application, reachable
+	// only through its id, so leaving the records behind would accumulate
+	// unreachable files. The deployed definitions themselves are untouched.
+	//
+	// The order matters for the failure case: releases first means a failed
+	// cleanup leaves the application intact, so a retry deletes both and
+	// self-heals. Deleting the application first would make the very orphans
+	// this cleanup exists to prevent, permanently — the retry would take the
+	// idempotent "already gone" path and never revisit the records.
+	if err := s.releases.deleteForApplication(id); err != nil {
+		return err
+	}
+	// The access-control history is metadata about this application, reachable only
+	// through its id, so it is cleaned up with the application like its releases
+	// (ADR-0184). Same ordering rationale: audit before the
+	// application, so a failed cleanup self-heals on retry.
+	if err := s.grantAudit.deleteForApplication(id); err != nil {
+		return err
+	}
+	// Its constants on this installation are configuration of this application alone
+	// (ADR-0453): gone with it, before it, for the
+	// same self-healing order.
+	if err := s.appConstants.Delete(id); err != nil {
+		return err
+	}
+	s.forgetApplication(id)
+	if err := s.projects.Delete(id); err != nil {
+		return err
+	}
+	delete(s.appVersions, id)
+	return nil
 }
 
 // countArtifactsInProject counts the design-time artifacts tagged with a project

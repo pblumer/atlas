@@ -455,12 +455,53 @@ func authoringTools() []Tool {
 		},
 		{
 			Name: "atlas_delete_application",
-			Description: "Delete a design-time process application by id. The operation is idempotent. It " +
-				"removes only the application container; tagged drafts and decision references remain and " +
-				"become unassigned. When authentication is enabled, the caller must have the owner role (ADR-0128).",
+			Description: "Delete a design-time process application by id. The operation is idempotent. " +
+				"By default it removes only the application container; its drafts, forms, decision " +
+				"references and deployments remain and become unassigned. purge=true deletes everything " +
+				"the application owns on this server as well — deployed versions after cancelling their " +
+				"running instances (that needs the operator or admin role), decision deployments, drafts, " +
+				"forms, references and models — irreversibly, even where a catalogue product, an order or " +
+				"another application's process still needs them. Read atlas_application_deletion_preview " +
+				"first and purge only when the person you work for has decided to. When authentication is " +
+				"enabled, the caller must have the owner role (ADR-0128).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id": stringProp("The application id from atlas_create_application or atlas_list_applications."),
+					"purge": map[string]any{"type": "boolean",
+						"description": "Delete everything the application owns on this server too, running instances included. Irreversible."},
+				},
+				"required": []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				path := "/api/v1/applications/" + url.PathEscape(id)
+				purge := args["purge"] == true
+				if purge {
+					path += "?purge=true"
+				}
+				if _, err := c.del(path); err != nil {
+					return "", err
+				}
+				confirmation, _ := json.Marshal(map[string]any{"deleted": true, "id": id, "purged": purge})
+				return string(confirmation), nil
+			},
+		},
+		{
+			Name: "atlas_application_deletion_preview",
+			Description: "Read what deleting a process application with purge=true would remove — every " +
+				"deployed version with its running instances, decision deployments, drafts, forms, " +
+				"decision references, Panorama and information models — and what outside the application " +
+				"would stop working: catalogue products binding its processes, order lines that could still " +
+				"start them, other applications' processes evaluating its decisions. Also says whether the " +
+				"purge would be refused, and whether the caller lacks the operator role the cancellations " +
+				"need. Read-only; owner only.",
 			InputSchema: map[string]any{
 				"type":       "object",
-				"properties": map[string]any{"id": stringProp("The application id from atlas_create_application or atlas_list_applications.")},
+				"properties": map[string]any{"id": stringProp("The application id whose deletion to preview.")},
 				"required":   []any{"id"},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
@@ -468,11 +509,7 @@ func authoringTools() []Tool {
 				if err != nil {
 					return "", err
 				}
-				if _, err := c.del("/api/v1/applications/" + url.PathEscape(id)); err != nil {
-					return "", err
-				}
-				confirmation, _ := json.Marshal(map[string]any{"deleted": true, "id": id})
-				return string(confirmation), nil
+				return asText(c.get("/api/v1/applications/" + url.PathEscape(id) + "/deletion-preview"))
 			},
 		},
 		{

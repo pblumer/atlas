@@ -435,6 +435,18 @@ var (
 	// week" is exactly the question an audit line answers.
 	DeploymentDiagramUpdated = newEvent("deployment.diagram_updated")
 
+	// DeploymentForceDeleted reports a deployed version removed with force=true
+	// (ADR-draft-deleting-an-application-with-its-contents): its running instances
+	// were cancelled and the guards that protect a process still needed by an order or
+	// a catalogue release were overridden. Audited because it ends work other people
+	// may be waiting on, and "who stopped my instance" must have an answer.
+	DeploymentForceDeleted = newEvent("deployment.force_deleted")
+
+	// ApplicationPurged reports an application deleted together with everything it
+	// owned on this server: deployed versions and their instances, decision
+	// deployments, drafts, forms and models (same record).
+	ApplicationPurged = newEvent("application.purged")
+
 	ScriptWorkerEnabled      = newEvent("script_worker.enabled")
 	ScriptWorkerMissing      = newEvent("script_worker.binary_missing")
 	CallOverrideSkipped      = newEvent("call_override.skipped")

@@ -1911,6 +1911,13 @@ dataset of up to 50 000 cases":
 - 🚧 Minimap, align/distribute, element color/appearance: align and distribute are on the bpmn-js context menu; a minimap and element colour are not built.
 - 🔲 Element comments / annotations.
 - 🚧 Projects/folders to organize diagrams (draft/deployment listing grows a tree): projects exist ([ADR-0034](docs/adr/0034-projects-and-artifacts.md), [ADR-0128](docs/adr/0128-process-applications.md)); nested folders do not.
+- ✅ **Deleting an application with everything it owns**
+  ([ADR-draft-deleting-an-application-with-its-contents](docs/adr/draft-deleting-an-application-with-its-contents.md)):
+  the delete dialog offers to keep the contents (Not assigned) or to remove every deployed version
+  with its running instances, the decision deployments, drafts, forms, references, models and
+  scenarios, after a preview of what goes and what outside the application stops working
+  (`?purge=true`, `GET .../deletion-preview`). A single version can be deleted with `?force=true`
+  over running instances and the ADR-0427 guard, and a refused delete shows the server's reason.
 - ✅ **The editor says which version it shows** ([ADR-0452](docs/adr/0452-modeler-shows-its-version.md)):
   a chip beside the breadcrumbs names the open record — the draft, or version N of M — and how it
   stands against the other (`Draft = v7`, `Draft · v7 + changes`, `Draft ≠ v7` when a newer

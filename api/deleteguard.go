@@ -2,7 +2,6 @@ package api
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/pblumer/atlas/api/catalog"
@@ -52,42 +51,14 @@ func (s *Server) processStillNeeded(processID string) (string, error) {
 // processID, sorted; an order placed now would freeze that binding. Reads the
 // catalogue store, so it runs on the run loop.
 func (s *Server) releaseBindsOnLoop(processID string) ([]string, error) {
-	if s.catalogStore == nil {
-		return nil, nil
-	}
-	cats, err := s.catalogStore.Catalogs()
+	bindings, err := s.releaseBindingsOnLoop(map[string]bool{processID: true})
 	if err != nil {
 		return nil, err
 	}
-	seen := map[string]bool{}
-	for _, c := range cats {
-		rels, err := s.catalogStore.ReleasesOf(c.ID)
-		if err != nil {
-			return nil, err
-		}
-		if len(rels) == 0 {
-			continue
-		}
-		newest := rels[0]
-		for _, r := range rels[1:] {
-			if r.CreatedAt > newest.CreatedAt {
-				newest = r
-			}
-		}
-		for _, it := range newest.Items {
-			for _, op := range []string{catalog.OpProvision, catalog.OpDeprovision, catalog.OpChange} {
-				if it.BindingFor(op).Process == processID {
-					seen[it.ID] = true
-				}
-			}
-		}
+	if bindings[processID] == nil {
+		return []string{}, nil
 	}
-	out := make([]string, 0, len(seen))
-	for id := range seen {
-		out = append(out, id)
-	}
-	sort.Strings(out)
-	return out, nil
+	return bindings[processID], nil
 }
 
 // onlyVersionOnLoop reports whether key is the only deployed version of processID.
