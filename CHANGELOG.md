@@ -14,6 +14,13 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An API token about to expire is flagged before it stops working.** A token with less
+  than 30 days left is marked in **Console → API tokens** with the days it has, listed
+  above the tokens, and named on the Console's dashboard to administrators, with the vault
+  secret it was sealed as — until it is replaced and revoked. An expired token is refused
+  like an unknown one, so without the warning the first sign was a machine failing
+  ([ADR-0194](docs/adr/0194-api-tokens.md), amendment 2026-10-21).
+
 - **API tokens are minted, listed and revoked in the Console.** **Console → API tokens**,
   offered to administrators only, lists every token with its scope, roles, reach, expiry
   and who minted it when, and marks an expired one rather than hiding it. The form says

@@ -184,8 +184,11 @@ the answer to "how do I give a machine a credential" was the `curl` in the insta
 guide, run with a session cookie copied out of a browser. The page shows each token's
 scope, roles, reach, expiry and provenance, marks an expired one, shows before minting
 which roles the token will carry, shows the secret once with a copy button and drops it
-from the page when the reader leaves, and asks before revoking. It adds nothing the
-three routes did not already do.
+from the page when the reader leaves, and asks before revoking. A token with less than 30
+days left is flagged on the page and, for administrators, on the dashboard, because an
+expiry is otherwise silent until the machine holding the token starts failing. The
+threshold is the Console's, computed from `expiresAt`; the server has no notion of
+"soon". It adds nothing the three routes did not already do.
 
 **`POST /api/v1/api-tokens` takes an optional `vaultSecret`.** The shop's system
 processes call Atlas with `authSecret="atlas"` (ADR-0411), so the token they need has to

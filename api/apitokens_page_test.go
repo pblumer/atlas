@@ -146,6 +146,14 @@ func TestEveryMessageTheAPITokenPageAsksForExists(t *testing.T) {
 	for _, m := range regexp.MustCompile(`\? "(apitokens\.[A-Za-z0-9.-]+)" : "(apitokens\.[A-Za-z0-9.-]+)"`).FindAllStringSubmatch(src, -1) {
 		keys[m[1]], keys[m[2]] = true, true
 	}
+	// A counted message is two keys, its one and its other form (i18n.js plural).
+	plurals := regexp.MustCompile(`\bplural\("(apitokens\.[A-Za-z0-9.-]+)"`).FindAllStringSubmatch(src, -1)
+	if len(plurals) < 3 {
+		t.Fatalf("found only %d counted messages in web/apitokens.js; the scan no longer matches how the module counts", len(plurals))
+	}
+	for _, m := range plurals {
+		keys[m[1]+".one"], keys[m[1]+".other"] = true, true
+	}
 	if len(keys) < 40 {
 		t.Fatalf("found only %d message keys in web/apitokens.js; the scan no longer matches how the module looks them up", len(keys))
 	}
