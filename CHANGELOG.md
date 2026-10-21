@@ -14,6 +14,41 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A Teams Phone hotline comes down in one task.** `remove-hotline` takes the hotline's
+  resource accounts and removes everything in the order that never leaves a caller ringing
+  into nothing: the auto attendants, then the queues, then each account's phone numbers
+  and the account. When one of its voice apps also answers for an account the task does
+  not name, it is refused before anything changes (`TEAMSPHONE_ACCOUNT_IN_USE`); optional
+  `names` find a voice app an earlier run left without its account, and a repeat answers
+  `removed: false`. A required list that resolves to nothing is now refused for every Teams
+  Phone operation, so a `resolve-users` whose variable nobody set no longer answers with no
+  ids ([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendment 2026-10-20).
+- **Teams Phone gives out phone numbers.** `ensure-phone-number` gives a person or a
+  resource account a Direct Routing, Calling Plan or Operator Connect number — a queue's
+  hotline and an employee's direct line alike — and `remove-phone-number` takes one or all
+  of them away again. A holder that has the number already is left alone; another number it
+  holds is replaced and reported as `previousNumber`. A number somebody else holds is
+  refused (`TEAMSPHONE_NUMBER_IN_USE`), and so is a Calling Plan or Operator Connect number
+  the tenant does not have (`TEAMSPHONE_NUMBER_NOT_FOUND`). A number is read as people write
+  one, spaces and dashes included; a `(0)` after the country code is refused.
+  `remove-resource-account` releases the account's numbers before it detaches and deletes
+  the account, and answers them as `phoneNumbers`, so a leaver path is one task. In mock mode,
+  `ATLAS_TEAMSPHONE_MOCK_NUMBERS` names the tenant's numbers
+  ([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendment 2026-10-20).
+- **A Teams Phone refusal can take an error boundary's path.** Eight refusals a process
+  may have a path for carry a fixed code: `TEAMSPHONE_UPN_TAKEN` (the address belongs to a
+  person), `TEAMSPHONE_ACCOUNT_TYPE_MISMATCH`, `TEAMSPHONE_ACCOUNT_IN_USE`,
+  `TEAMSPHONE_ACCOUNT_NOT_VISIBLE`, `TEAMSPHONE_WOULD_EMPTY_LIST`,
+  `TEAMSPHONE_TOO_MANY_AGENTS`, `TEAMSPHONE_NUMBER_IN_USE` and
+  `TEAMSPHONE_NUMBER_NOT_FOUND`. When the task's process catches the code with an error
+  boundary or an error event subprocess, the instance takes that path at once, with no retry
+  spent; a code the process does not catch fails and is retried as before. Until now an
+  error boundary on a Teams Phone task never fired
+  ([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendment 2026-10-20).
+- **The handbook explains every Teams Phone operation.** A reference card lists each
+  operation with what it needs, what it answers, how an existing queue is reconciled, the
+  error codes and what to do with each, and the BPMN attributes a model deployed over the
+  API or MCP writes. The properties panel links to it beside the setup card.
 - **An application and its shop are written as a package.** `atlas export --application KEY
   [--catalog ID]... DIR` writes the directory `atlas import` installs on another installation:
   the application's processes, forms, decisions and the decision models this server keeps,
@@ -38,14 +73,17 @@ _Changed_ / _Removed_ for each version.
   the Entra, Exchange and Teams Phone Worker Types: a licence with mailbox, Teams telephony,
   teams, shared mailboxes, distribution lists, access to a mailbox, meeting rooms, call
   queues and auto attendants, in two catalogues, with fourteen processes, five decision
-  tables and 23 forms, bilingual. A naming rule kept as a decision builds every name and
+  tables and 21 forms, bilingual. A naming rule kept as a decision builds every name and
   rejects reserved and overlong ones with a reason; every Exchange object is tagged with its
   order and owner, and returns and changes find it by that tag; a weekly process reports what
   exists outside the tag or the rule. Two public forms let externals request partner access
   and subscribe to a list, and nothing is created before a person has reviewed it. Install
   scripts for sh and PowerShell upload the decision models, import and publish the
   application and fill the catalogue's placeholders; the handbook's examples chapter has
-  its card.
+  its card. Telephony, call queue and auto attendant leave only the choice of a number to
+  the phone team: Entra licenses a queue's or auto attendant's resource account, the Teams
+  Phone Worker assigns the number, releases it on return, and hands a number somebody else
+  holds back to the team through an error boundary.
 - **The Start view groups its processes by application, filters them and keeps favourites.**
   The Tasks app's Start list was one alphabetical column of every process with a start form.
   It now sits under one heading per application the process was deployed under, sorted by
@@ -70,6 +108,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Ensure call queue also reconciles routing and authorized users.** A queue that already
+  exists is brought to the authorized users, routing, presence-based routing, conference
+  mode and opt-out its task names, in one call to Teams, and the answer lists what it set in
+  `changed`; `agentsChanged` stays. What the task leaves out is kept: the Modeler's first
+  choice for each setting is now *Keep*, a default applies only to a new queue, and the
+  compiler no longer fills a default into the compiled task. An empty list of authorized users for a
+  queue that has some is refused like an empty list of agents, and one that resolved to
+  nothing is refused. A deployed model whose task names a setting now sets it on an existing
+  queue — also one built from the Repository template before 1.2.0, which named
+  `routingMethod="attendant"`; choose *Keep* there to leave the queue's routing alone.
 - **An import tells an update from an edit made here.** Every import remembers, per artifact,
   the version it brought, and compares the next one with that as well as with the server. A
   process, form, decision, model, catalogue, product or constant the server still holds as the

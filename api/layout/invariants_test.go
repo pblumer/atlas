@@ -636,7 +636,7 @@ func newLayoutModel(t *testing.T, src, di string) *layoutModel {
 	for _, p := range defs.Processes {
 		m.collect(p)
 	}
-	m.backEdge = findBackEdges(m.nodeIDs, m.flows)
+	m.backEdge = findBackEdges(m.nodeIDs, m.flows, m.host)
 	return m
 }
 
@@ -1111,12 +1111,20 @@ func mini(a, b int) int {
 
 // findBackEdges marks the sequence flows that close a cycle, via a DFS colouring:
 // an edge to a node currently on the recursion stack is a back edge. Nodes are
-// visited in declaration order so the result is deterministic.
-func findBackEdges(nodeIDs []string, flows []layoutFlow) map[string]bool {
+// visited in declaration order so the result is deterministic. A boundary event is
+// reached from the activity it rides, though no sequence flow says so: a path that
+// leaves a boundary and returns to the activity before its host — a refused task
+// handing the choice back to a person — is a loop like any other.
+func findBackEdges(nodeIDs []string, flows []layoutFlow, host map[string]string) map[string]bool {
 	out := map[string]bool{}
 	adj := map[string][]layoutFlow{}
 	for _, f := range flows {
 		adj[f.SourceRef] = append(adj[f.SourceRef], f)
+	}
+	for _, be := range sortedKeys(host) {
+		// The attachment has no id, so it is never itself reported: its boundary has
+		// no other way in and cannot be on the stack when the attachment is walked.
+		adj[host[be]] = append(adj[host[be]], layoutFlow{SourceRef: host[be], TargetRef: be})
 	}
 	const (
 		white = 0
@@ -1143,6 +1151,26 @@ func findBackEdges(nodeIDs []string, flows []layoutFlow) map[string]bool {
 		}
 	}
 	return out
+}
+
+// TestABoundaryLoopIsALoop: a refusal caught on Assign goes back to Choose through
+// Hint. Only the attachment of Taken to Assign closes that cycle, so without it the
+// returning flow f5 counted as forward and had to be drawn running right.
+func TestABoundaryLoopIsALoop(t *testing.T) {
+	nodes := []string{"Start", "End", "Choose", "Assign", "Hint", "Taken"}
+	flows := []layoutFlow{
+		{Id: "f1", SourceRef: "Start", TargetRef: "Choose"},
+		{Id: "f2", SourceRef: "Choose", TargetRef: "Assign"},
+		{Id: "f3", SourceRef: "Assign", TargetRef: "End"},
+		{Id: "f4", SourceRef: "Taken", TargetRef: "Hint"},
+		{Id: "f5", SourceRef: "Hint", TargetRef: "Choose"},
+	}
+	if got := findBackEdges(nodes, flows, map[string]string{"Taken": "Assign"}); !got["f5"] || len(got) != 1 {
+		t.Errorf("back edges = %v, want only f5", got)
+	}
+	if got := findBackEdges(nodes, flows, nil); len(got) != 0 {
+		t.Errorf("back edges without the attachment = %v, want none: no sequence flow closes the loop", got)
+	}
 }
 
 // parseLabels extracts the explicit BPMNLabel bounds per element, for the shapes

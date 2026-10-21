@@ -4095,7 +4095,7 @@ const SERVICE_TASK_KINDS = [
   },
   {
     id: "teamsphone", name: "Microsoft Teams Phone", group: "Directory & identity",
-    desc: "Provision a call queue and the auto attendant in front of it, with the resource accounts that answer their calls — and remove them again — without authoring PowerShell",
+    desc: "Provision a call queue and the auto attendant in front of it, with the resource accounts that answer their calls and the phone numbers people and voice apps are reached at — and remove them again — without authoring PowerShell",
     icon: "T",
     // A handset on Teams purple: a voice app is a telephone number's front door, and the
     // tile should read as Microsoft's next to Entra's blue.
@@ -4115,6 +4115,9 @@ const SERVICE_TASK_KINDS = [
           { v: "remove-auto-attendant", l: "Remove auto attendant" },
           { v: "remove-call-queue", l: "Remove call queue" },
           { v: "remove-resource-account", l: "Remove resource account" },
+          { v: "ensure-phone-number", l: "Ensure phone number" },
+          { v: "remove-phone-number", l: "Remove phone number" },
+          { v: "remove-hotline", l: "Remove hotline (everything)" },
         ],
       },
       {
@@ -4147,7 +4150,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "resourceAccountId", label: "Resource account id", placeholder: "=konten.queue.objectId", fx: true,
-        showIf: (v) => v.operation && v.operation !== "resolve-users" && v.operation !== "ensure-resource-account",
+        showIf: (v) => v.operation && !["resolve-users", "ensure-resource-account", "ensure-phone-number", "remove-phone-number", "remove-hotline"].includes(v.operation),
         hint: "The object id an Ensure resource account answered with. Every voice-app operation is addressed by the account it is associated with.",
       },
       {
@@ -4158,12 +4161,14 @@ const SERVICE_TASK_KINDS = [
       {
         key: "agents", label: "Agents", placeholder: "=benutzer.ids", fx: true,
         showIf: (v) => v.operation === "ensure-call-queue",
-        hint: "Optional. Ids from Resolve users, at most 20. When set, a queue that already exists is brought to exactly this list — a change of staff is one more run of this task — but never emptied: an empty list for a queue with agents is refused, because a Resolve users that found nobody reads the same. Leave it empty to keep the agents a queue has. Larger queues are served from a group or a channel, which this Worker Type does not offer.",
+        hint: "Optional. Ids from Resolve users, at most 20. When set, a queue that already exists is brought to exactly this list — a change of staff is one more run of this task — but never emptied: an empty list for a queue with agents is refused (TEAMSPHONE_WOULD_EMPTY_LIST), because a Resolve users that found nobody reads the same. Leave it empty to keep the agents a queue has. Larger queues are served from a group or a channel, which this Worker Type does not offer.",
       },
       {
         key: "authorizedUsers", label: "Authorized users", placeholder: "=verantwortliche.ids", fx: true,
         showIf: (v) => v.operation === "ensure-call-queue" || v.operation === "ensure-auto-attendant",
-        hint: "Optional. Ids from Resolve users of the people allowed to change this voice app's settings in Teams.",
+        hint: (v) => (v.operation === "ensure-call-queue"
+          ? "Optional. Ids from Resolve users of the people allowed to change this queue's settings in Teams. When set, an existing queue is brought to exactly this list, never emptied; left empty, an existing queue keeps the ones it has."
+          : "Optional. Ids from Resolve users of the people allowed to change this auto attendant's settings in Teams. Applied when the auto attendant is created."),
       },
       {
         key: "languageId", label: "Language", placeholder: "de-CH", fx: true,
@@ -4183,29 +4188,71 @@ const SERVICE_TASK_KINDS = [
         hint: "Optional. A list of {name, start, end} with dates as YYYY-MM-DD, on which calls are disconnected; end is the day after the last holiday and may be left out for a single day. Every other call goes to the queue.",
       },
       {
+        key: "resourceAccountIds", label: "Resource accounts", placeholder: "=[konten.attendant.objectId, konten.queue.objectId]", fx: true,
+        showIf: (v) => v.operation === "remove-hotline",
+        hint: "The hotline's resource accounts, usually the auto attendant's and the queue's. Everything goes: the auto attendants first, then the queues, then each account's numbers and the account. Refused before anything changes when a voice app also answers for an account not named here.",
+      },
+      {
+        key: "names", label: "Voice app names", placeholder: "=[\"AA \" + team, \"CQ \" + team]", fx: true,
+        showIf: (v) => v.operation === "remove-hotline",
+        hint: "Optional. The voice apps' names, which find one again that an earlier run already left without its account.",
+      },
+      {
+        key: "identity", label: "User or resource account", placeholder: "=person.userPrincipalName", fx: true,
+        showIf: (v) => v.operation === "ensure-phone-number" || v.operation === "remove-phone-number",
+        hint: "Who holds the number: a person's or a resource account's user principal name or object id — =konten.queue.objectId for a queue's hotline.",
+      },
+      {
+        key: "phoneNumber", label: "Phone number", placeholder: "+41 44 123 45 67", fx: true,
+        showIf: (v) => v.operation === "ensure-phone-number" || v.operation === "remove-phone-number",
+        hint: (v) => (v.operation === "remove-phone-number"
+          ? "Optional. The number to take away; left empty, every number the user or account holds is removed."
+          : "The number, written as people write one — spaces, dashes and a tel: prefix are dropped; a (0) after the country code is refused. A Direct Routing number may carry ;ext=. One the person or account already has is left alone; another number they hold is replaced."),
+      },
+      {
+        key: "numberType", label: "Number type", type: "select",
+        options: [
+          { v: "direct-routing", l: "Direct Routing" },
+          { v: "calling-plan", l: "Calling Plan" },
+          { v: "operator-connect", l: "Operator Connect" },
+        ],
+        showIf: (v) => v.operation === "ensure-phone-number",
+        hint: "How this tenant reaches the telephone network for the number. Calling Plan and Operator Connect numbers must be the tenant's already; a Direct Routing number is your own carrier's.",
+      },
+      {
+        key: "locationId", label: "Emergency location", placeholder: "=standort.locationId", fx: true,
+        showIf: (v) => v.operation === "ensure-phone-number",
+        hint: "Optional. The LocationId of the emergency address the number is registered at (Get-CsOnlineLisLocation).",
+      },
+      // A setting chosen here is what the queue is, also one that already exists; the
+      // first choice names nothing, so a new queue gets the default and an existing one
+      // keeps what it has (ADR-0463, amendment 2026-10-20).
+      {
         key: "routingMethod", label: "Routing", type: "select",
         options: [
-          { v: "", l: "Attendant — ring every agent (default)" },
+          { v: "", l: "Keep — attendant for a new queue" },
+          { v: "attendant", l: "Attendant — ring every agent" },
           { v: "serial", l: "Serial" },
           { v: "round-robin", l: "Round robin" },
           { v: "longest-idle", l: "Longest idle" },
         ],
         showIf: (v) => v.operation === "ensure-call-queue",
+        hint: "A routing chosen here is also set on a queue that already exists. Keep leaves an existing queue's routing as it is.",
       },
       {
         key: "presenceBasedRouting", label: "Presence-based routing", type: "select",
-        options: [{ v: "", l: "On (default)" }, { v: "false", l: "Off" }],
+        options: [{ v: "", l: "Keep — on for a new queue" }, { v: "true", l: "On" }, { v: "false", l: "Off" }],
         showIf: (v) => v.operation === "ensure-call-queue",
-        hint: "On: a call is offered only to agents whose presence is Available.",
+        hint: "On: a call is offered only to agents whose presence is Available. On or Off is also set on a queue that already exists.",
       },
       {
         key: "conferenceMode", label: "Conference mode", type: "select",
-        options: [{ v: "", l: "On (default)" }, { v: "false", l: "Off" }],
+        options: [{ v: "", l: "Keep — on for a new queue" }, { v: "true", l: "On" }, { v: "false", l: "Off" }],
         showIf: (v) => v.operation === "ensure-call-queue",
       },
       {
         key: "allowOptOut", label: "Agents may opt out", type: "select",
-        options: [{ v: "", l: "Yes (default)" }, { v: "false", l: "No" }],
+        options: [{ v: "", l: "Keep — yes for a new queue" }, { v: "true", l: "Yes" }, { v: "false", l: "No" }],
         showIf: (v) => v.operation === "ensure-call-queue",
       },
       { group: "Output" },
@@ -4220,9 +4267,17 @@ const SERVICE_TASK_KINDS = [
             case "ensure-resource-account":
               return "Required. =antwort.objectId is the account a voice app is associated with; =antwort.created says whether this run made it, and =antwort.source where it was found (created, entra or teams).";
             case "ensure-call-queue":
-              return "Required. =antwort.id and =antwort.name identify the queue; =antwort.created says whether this run made it, and =antwort.agentsChanged whether it set an existing queue's agents to the list named here.";
+              return "Required. =antwort.id and =antwort.name identify the queue; =antwort.created says whether this run made it, and =antwort.changed lists what it set on an existing queue — agents, authorizedUsers, routingMethod and the like — empty when nothing differed; =antwort.agentsChanged says whether the agents were among them.";
             case "ensure-auto-attendant":
               return "Required. =antwort.id and =antwort.name identify the voice app; =antwort.created says whether this run made it.";
+            case "ensure-phone-number":
+              return "Required. =antwort.assigned says whether this run gave the number out — false when the holder had it already — and =antwort.previousNumber the number it replaced, empty when none.";
+            case "remove-phone-number":
+              return "Optional. =antwort.removed is false when the holder had nothing to remove; =antwort.phoneNumbers lists what was taken away.";
+            case "remove-hotline":
+              return "Optional. =antwort.removed is false when nothing was left; =antwort.attendants, =antwort.queues, =antwort.accounts and =antwort.phoneNumbers list what was taken away.";
+            case "remove-resource-account":
+              return "Optional. =antwort.removed is false when the account was already gone; =antwort.phoneNumbers lists the numbers released with it — the account's numbers go first, then its association, then the account.";
             default:
               return "Optional. =antwort.removed is false when there was nothing left to remove, which a repeated leaver path meets.";
           }

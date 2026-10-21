@@ -7012,14 +7012,17 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		}}
 	case compiler.TeamsPhoneJobTypeIndex:
 		// The operation and its values travel; the tenant's app certificate does not
-		// exist here to travel. Worker-only, like Entra (ADR-0463).
+		// exist here to travel. Worker-only, like Entra (ADR-0463). The codes the process
+		// catches travel too, for the reason a script task's do: they are what makes a
+		// refusal a BPMN error rather than a failure, and a worker has no compiled process
+		// to ask (ADR-0461).
 		j, err := teamsphone.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
 		return &connectorPayload{Kind: "teamsphone", Fields: map[string]any{
 			"connector": j.Connector, "operation": j.Operation, "args": j.Args,
-			"resultVariable": j.ResultVariable,
+			"resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
 		}}
 	case compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex:
 		// One arm for the three clio operations: the resolved job says which it is, so

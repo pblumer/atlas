@@ -11,7 +11,7 @@ function Get-State {
     if (Test-Path $script:StatePath) {
         return Get-Content -Raw -Encoding utf8 $script:StatePath | ConvertFrom-Json -AsHashtable
     }
-    return @{ connects = 0; users = @{}; accounts = @{}; apps = @{}; assoc = @{}; schedules = @(); entra = @{} }
+    return @{ connects = 0; sets = 0; users = @{}; accounts = @{}; apps = @{}; assoc = @{}; schedules = @(); entra = @{}; numbers = @{} }
 }
 
 function Save-State($State) {
@@ -125,8 +125,16 @@ function New-App([string]$Kind, [hashtable]$Params) {
         if ($k -in 'DefaultCallFlow', 'CallFlows', 'CallHandlingAssociations') { continue }
         $app.Params[$k] = $Params[$k]
     }
-    # A call queue answers with the agents named directly as Users, as Teams' does.
-    if ($Kind -eq 'CallQueue') { $app.Users = [string[]]@(foreach ($u in $Params.Users) { $u }) }
+    # A call queue answers with its settings and with the agents named directly as Users,
+    # as Teams' does.
+    if ($Kind -eq 'CallQueue') {
+        $app.Users = [string[]]@(foreach ($u in $Params.Users) { $u })
+        $app.AuthorizedUsers = [string[]]@(foreach ($u in $Params.AuthorizedUsers) { $u })
+        $app.RoutingMethod = [string]$Params.RoutingMethod
+        $app.PresenceBasedRouting = [bool]$Params.PresenceBasedRouting
+        $app.ConferenceMode = [bool]$Params.ConferenceMode
+        $app.AllowOptOut = [bool]$Params.AllowOptOut
+    }
     if ($Params.CallHandlingAssociations) { $app.Params.Holidays = @($Params.CallHandlingAssociations).Count }
     $s.apps[$app.Identity] = $app
     Save-State $s
@@ -150,15 +158,26 @@ function New-CsCallQueue {
     param([string]$Name, [switch]$UseDefaultMusicOnHold, [string]$RoutingMethod, [bool]$PresenceBasedRouting,
         [bool]$ConferenceMode, [bool]$AllowOptOut, [string]$LanguageId, [string[]]$Users, [string[]]$AuthorizedUsers)
     Assert-Agents $Users
+    Assert-Agents $AuthorizedUsers
     New-App 'CallQueue' $PSBoundParameters
 }
+# Changes only what it is given, as Teams' does, and counts its calls so a test sees that
+# a run with nothing to change makes none.
 function Set-CsCallQueue {
-    param([string]$Identity, [string[]]$Users)
+    param([string]$Identity, [string[]]$Users, [string[]]$AuthorizedUsers, [string]$RoutingMethod,
+        [bool]$PresenceBasedRouting, [bool]$ConferenceMode, [bool]$AllowOptOut)
     Assert-Agents $Users
+    Assert-Agents $AuthorizedUsers
     $s = Get-State
     $app = $s.apps[$Identity]
     if (-not $app -or $app.Kind -ne 'CallQueue') { throw "stub: no CallQueue $Identity" }
-    $app.Users = [string[]]@(foreach ($u in $Users) { $u })
+    foreach ($k in $PSBoundParameters.Keys) {
+        if ($k -eq 'Identity') { continue }
+        $v = $PSBoundParameters[$k]
+        # Assigned in each branch: an if used as a value unrolls a one-element list.
+        if ($k -in 'Users', 'AuthorizedUsers') { $app[$k] = [string[]]@(foreach ($u in $v) { $u }) } else { $app[$k] = $v }
+    }
+    $s.sets = [int]$s.sets + 1
     Save-State $s
 }
 function Remove-CsCallQueue { param([string]$Identity) Remove-App 'CallQueue' $Identity }
@@ -192,6 +211,55 @@ function New-CsOnlineSchedule {
 function New-CsAutoAttendantCallHandlingAssociation {
     param([string]$Type, [string]$ScheduleId, [string]$CallFlowId)
     [pscustomobject]@{ Type = $Type; ScheduleId = $ScheduleId; CallFlowId = $CallFlowId }
+}
+
+# Phone numbers. The inventory is the state's numbers, keyed by number; a Direct Routing
+# number joins it when assigned and leaves it when removed, as the operator's carrier
+# serves it rather than Microsoft. A target is held by its object id, as Teams holds it.
+function Resolve-Target($State, [string]$Identity) {
+    $a = Find-Account $State $Identity
+    if ($a) { return [string]$a.ObjectId }
+    $u = $State.users[$Identity.ToLowerInvariant()]
+    if ($u) { return [string]$u }
+    if ($State.users.Values -contains $Identity) { return $Identity }
+    throw "stub: no user or resource account $Identity"
+}
+
+function Get-CsPhoneNumberAssignment {
+    param([string]$TelephoneNumber, [string]$AssignedPstnTargetId)
+    $s = Get-State
+    $target = if ($AssignedPstnTargetId) { Resolve-Target $s $AssignedPstnTargetId } else { $null }
+    foreach ($n in @($s.numbers.Values)) {
+        if ($TelephoneNumber -and $n.TelephoneNumber -ne $TelephoneNumber) { continue }
+        if ($target -and $n.AssignedPstnTargetId -ne $target) { continue }
+        [pscustomobject]$n
+    }
+}
+
+function Set-CsPhoneNumberAssignment {
+    param([string]$Identity, [string]$TelephoneNumber, [string]$NumberType, [string]$LocationId)
+    $s = Get-State
+    $target = Resolve-Target $s $Identity
+    $n = $s.numbers[$TelephoneNumber]
+    if ($n -and $n.AssignedPstnTargetId -and $n.AssignedPstnTargetId -ne $target) { throw "stub: $TelephoneNumber is assigned to $($n.AssignedPstnTargetId)" }
+    if (-not $n -and $NumberType -ne 'DirectRouting') { throw "stub: $TelephoneNumber is not in the tenant's inventory" }
+    foreach ($other in @($s.numbers.Values)) {
+        if ($other.AssignedPstnTargetId -eq $target -and $other.TelephoneNumber -ne $TelephoneNumber) {
+            throw "stub: $Identity already has the primary number $($other.TelephoneNumber)"
+        }
+    }
+    $s.numbers[$TelephoneNumber] = @{ TelephoneNumber = $TelephoneNumber; NumberType = $NumberType; AssignedPstnTargetId = $target; AssignmentCategory = 'Primary' }
+    Save-State $s
+}
+
+function Remove-CsPhoneNumberAssignment {
+    param([string]$Identity, [string]$TelephoneNumber, [string]$NumberType)
+    $s = Get-State
+    $target = Resolve-Target $s $Identity
+    $n = $s.numbers[$TelephoneNumber]
+    if (-not $n -or $n.AssignedPstnTargetId -ne $target) { throw "stub: $TelephoneNumber is not assigned to $Identity" }
+    if ($n.NumberType -eq 'DirectRouting') { $s.numbers.Remove($TelephoneNumber) } else { $n.AssignedPstnTargetId = '' }
+    Save-State $s
 }
 
 Export-ModuleMember -Function *-Cs*, Connect-MicrosoftTeams, Disconnect-MicrosoftTeams

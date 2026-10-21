@@ -4,7 +4,14 @@
   "components": [
     {
       "type": "text",
-      "text": "**Dienstnummer zuweisen · Assign a service number**\n\nSet-CsPhoneNumberAssignment für das Ressourcenkonto, dann hier die Nummer festhalten. · Set-CsPhoneNumberAssignment for the resource account, then record the number here."
+      "text": "**Dienstnummer wählen · Choose a service number**\n\nEine freie Dienstnummer aus dem Nummernplan wählen und hier festhalten; der Teams-Phone-Worker weist sie dem Ressourcenkonto danach zu. · Choose a free service number from the numbering plan and record it here; the Teams Phone worker then assigns it to the resource account."
+    },
+    {
+      "type": "text",
+      "text": "**Die zuletzt gewählte Nummer ist bereits vergeben.** Bitte eine andere wählen. · **The number chosen last is already assigned.** Please choose another one.",
+      "conditional": {
+        "hide": "=nummerVergeben != true"
+      }
     },
     {
       "key": "bezeichnung",

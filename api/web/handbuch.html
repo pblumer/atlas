@@ -1659,7 +1659,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de">Ein Worker kann einen <b>BPMN-Fehler</b> mit Code <code>DECLINED</code> werfen; das passende <code>errorEventDefinition</code> am Rand der Aufgabe fängt ihn und lenkt auf einen Fehlerpfad. Das ist erwartbares Verhalten – kein Incident. Ein Skript-Task wirft ihn, indem er seinem Fehler einen Code gibt, den der Prozess fängt (siehe <a href="#runbook-script">Skript</a>).</span><span data-l="en">A worker can throw a <b>BPMN error</b> with code <code>DECLINED</code>; the matching <code>errorEventDefinition</code> on the task's edge catches it and diverts to an error path. That's expected behaviour – not an incident. A script task throws one by giving its error a code the process catches (see <a href="#runbook-script">Script</a>).</span></p>
+        <p class="rz-how"><span data-l="de">Ein Worker kann einen <b>BPMN-Fehler</b> mit Code <code>DECLINED</code> werfen; das passende <code>errorEventDefinition</code> am Rand der Aufgabe fängt ihn und lenkt auf einen Fehlerpfad. Das ist erwartbares Verhalten – kein Incident. Ein Skript-Task wirft ihn, indem er seinem Fehler einen Code gibt, den der Prozess fängt (siehe <a href="#runbook-script">Skript</a>); ein Teams-Phone-Task wirft die Codes seiner fachlichen Abweisungen (siehe <a href="#ref-teamsphone">Teams Phone – alle Operationen</a>).</span><span data-l="en">A worker can throw a <b>BPMN error</b> with code <code>DECLINED</code>; the matching <code>errorEventDefinition</code> on the task's edge catches it and diverts to an error path. That's expected behaviour – not an incident. A script task throws one by giving its error a code the process catches (see <a href="#runbook-script">Script</a>); a Teams Phone task throws the codes of its business refusals (see <a href="#ref-teamsphone">Teams Phone – every operation</a>).</span></p>
       </div>
       <div class="recipe" id="rz-escalation" data-proc="recipe-escalation">
         <h4><span class="rz-emoji" aria-hidden="true">📣</span>
@@ -5453,11 +5453,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
             <p data-l="de">Vierzehn Prozesse über die Worker-Typen Entra, Exchange und Teams Phone, fünf
-              Entscheidungstabellen und 23 Formulare. Ein Produkt darf mehrere Worker verwenden: Die Lizenz weist Entra
+              Entscheidungstabellen und 21 Formulare. Ein Produkt darf mehrere Worker verwenden: Die Lizenz weist Entra
               zu, die Abwesenheitsnotiz am selben Produkt setzt Exchange. Die Worker heissen <code>ucc_entra</code>,
               <code>ucc_exchange</code> und <code>ucc_teams</code>.</p>
             <p data-l="en">Fourteen processes over the Entra, Exchange and Teams Phone Worker Types, five decision tables
-              and 23 forms. One product may use several Workers: Entra assigns the licence, Exchange sets the automatic
+              and 21 forms. One product may use several Workers: Entra assigns the licence, Exchange sets the automatic
               reply on the same product. The Workers are called <code>ucc_entra</code>, <code>ucc_exchange</code> and
               <code>ucc_teams</code>.</p>
           </div>
@@ -6672,26 +6672,27 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             save.</li>
           <li data-l="de">Ohne Tenant üben: <code>ATLAS_TEAMSPHONE_MOCK=1</code> bedient dieselben Tasks aus einem
             Tenant im Speicher des Workers, mit denselben Regeln; <code>ATLAS_TEAMSPHONE_MOCK_USERS</code> nennt die
-            Personen, die <i>Resolve users</i> findet.</li>
+            Personen, die <i>Resolve users</i> findet, <code>ATLAS_TEAMSPHONE_MOCK_NUMBERS</code> die Calling-Plan- und
+            Operator-Connect-Nummern des Tenants.</li>
+          <li data-l="de"><b>Für Rufnummern:</b> Die Person braucht eine Teams-Phone-Lizenz, ein Ressourcenkonto die
+            Lizenz <i>Microsoft Teams Phone Resource Account</i>, beide einen Nutzungsstandort. Calling-Plan- und
+            Operator-Connect-Nummern müssen schon im Tenant sein; eine Direct-Routing-Nummer stellt dein eigener Carrier
+            über deinen SBC bereit.</li>
           <li data-l="en">Practise without a tenant: <code>ATLAS_TEAMSPHONE_MOCK=1</code> serves the same tasks from a
             tenant in the worker's memory, with the same rules; <code>ATLAS_TEAMSPHONE_MOCK_USERS</code> names the people
-            <i>Resolve users</i> finds.</li>
+            <i>Resolve users</i> finds, <code>ATLAS_TEAMSPHONE_MOCK_NUMBERS</code> the tenant's Calling Plan and Operator
+            Connect numbers.</li>
+          <li data-l="en"><b>For phone numbers:</b> a person needs a Teams Phone licence, a resource account the
+            <i>Microsoft Teams Phone Resource Account</i> licence, and both a usage location. Calling Plan and Operator
+            Connect numbers must already be the tenant's; a Direct Routing number is your own carrier's, through your
+            SBC.</li>
         </ol>
-        <p data-l="de"><b>Agenten:</b> <i>Ensure call queue</i> bringt eine bestehende Warteschlange auf genau die
-          Agenten, die das Modell nennt – bei einem Personalwechsel lässt du denselben Task einfach erneut laufen, und
-          <code>agentsChanged</code> im Ergebnis sagt, ob er etwas geändert hat. Verglichen werden nur direkt zugewiesene
-          Agenten (nicht die einer Verteilerliste oder eines Kanals), bei serieller Verteilung auch ihre Reihenfolge.
-          Nennt das Modell keine Agenten, bleiben sie, wie sie sind. Eine leere Liste leert eine Warteschlange mit
-          Agenten nie, sondern wird abgelehnt: Ein <i>Resolve users</i>, das während einer Störung niemanden fand, sähe
-          genau so aus. Prüfe <code>notFound</code> deshalb im Modell, bevor die Liste die Warteschlange erreicht – auch
-          ein einzelner Agent, der nur vorübergehend nicht gefunden wurde, fiele sonst aus der Warteschlange.</p>
-        <p data-l="en"><b>Agents:</b> <i>Ensure call queue</i> brings an existing queue to exactly the agents the model
-          names – a change of staff is one more run of the same task, and <code>agentsChanged</code> in the result says
-          whether it changed anything. Only agents assigned directly are compared (not those of a distribution list or a
-          channel), and under serial routing their order too. A model that names no agents leaves them as they are. An
-          empty list never empties a queue with agents; it is refused, because a <i>Resolve users</i> that found nobody
-          during an outage would look the same. So check <code>notFound</code> in the model before the list reaches the
-          queue – otherwise a single agent who was only briefly not found would drop out of the queue.</p>
+        <p data-l="de"><b>Was die Tasks können:</b> Jede Operation mit ihren Feldern, ihrem Ergebnis, dem Abgleich
+          bestehender Warteschlangen und den Fehlercodes, die ein Error-Boundary-Event fangen kann, steht in
+          <a href="#ref-teamsphone">Microsoft Teams Phone – alle Operationen</a>.</p>
+        <p data-l="en"><b>What the tasks do:</b> every operation with its fields, its result, how an existing queue is
+          reconciled and the error codes an error boundary can catch is in
+          <a href="#ref-teamsphone">Microsoft Teams Phone – every operation</a>.</p>
         <p data-l="de"><b>Die Falle:</b> Teams zeigt ein neues Ressourcenkonto erst nach einer Synchronisation. Eine
           Warteschlange oder Telefonzentrale wartet darauf bis zu zwei Minuten und wird danach abgelehnt, <i>bevor</i>
           etwas angelegt ist. Liegt im Modell zwischen dem Anlegen der Konten und der Warteschlange keine Wartezeit
@@ -6703,6 +6704,260 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           rather than reading the delay as a fault. A job takes about ten seconds for the module import and the sign-in;
           <code>ATLAS_TEAMSPHONE_TIMEOUT</code> (default 4m) bounds it.</p>
         <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked October 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
+      </div>
+
+      <div class="card" id="ref-teamsphone">
+        <h4><span data-l="de">Microsoft Teams Phone – alle Operationen</span><span data-l="en">Microsoft Teams Phone – every operation</span></h4>
+        <p data-l="de">Ein Teams-Phone-Task führt genau eine Operation aus. Im Modeler wählst du sie im Feld
+          <i>Operation</i>; im BPMN steht sie im Attribut <code>operation</code> des Elements
+          <code>&lt;atlas:teamsPhoneConnector&gt;</code> – so schreibst du sie auch, wenn du ein Modell über die API
+          oder MCP deployst. Ein Wert ist Text oder, mit führendem <code>=</code>, ein FEEL-Ausdruck. Eine Liste
+          (<code>users</code>, <code>agents</code>, <code>authorizedUsers</code>) ist eine FEEL-Liste oder ein Text,
+          getrennt durch Komma, Semikolon oder Zeilenumbruch; leere und doppelte Einträge fallen weg. Die Einstellungen
+          (<code>accountType</code>, <code>routingMethod</code>, <code>presenceBasedRouting</code>,
+          <code>conferenceMode</code>, <code>allowOptOut</code>, <code>numberType</code>) sind feste Werte, keine Ausdrücke; der Compiler prüft
+          sie und jedes andere Attribut schon beim Deployment.</p>
+        <p data-l="en">A Teams Phone task performs exactly one operation. In the Modeler you pick it in the
+          <i>Operation</i> field; in BPMN it is the <code>operation</code> attribute of the
+          <code>&lt;atlas:teamsPhoneConnector&gt;</code> element – which is also how you write it when you deploy a
+          model over the API or MCP. A value is text or, with a leading <code>=</code>, a FEEL expression. A list
+          (<code>users</code>, <code>agents</code>, <code>authorizedUsers</code>) is a FEEL list or one text separated
+          by commas, semicolons or line breaks; blank and repeated entries are dropped. The settings
+          (<code>accountType</code>, <code>routingMethod</code>, <code>presenceBasedRouting</code>,
+          <code>conferenceMode</code>, <code>allowOptOut</code>, <code>numberType</code>) are fixed values, not expressions; the compiler checks
+          them, and every other attribute, at deploy.</p>
+        <table>
+          <thead><tr>
+            <th data-l="de">Operation</th><th data-l="en">Operation</th>
+            <th data-l="de">Braucht</th><th data-l="en">Needs</th>
+            <th data-l="de">Optional</th><th data-l="en">Optional</th>
+            <th data-l="de">Ergebnis (<code>resultVariable</code>)</th><th data-l="en">Result (<code>resultVariable</code>)</th>
+          </tr></thead>
+          <tbody>
+            <tr><td><code>resolve-users</code><br><i>Resolve users</i></td>
+              <td><code>users</code></td><td>–</td>
+              <td data-l="de"><code>ids</code> – die Teams-IDs der gefundenen Personen, in der Form, die <code>agents</code> und <code>authorizedUsers</code> nehmen; <code>notFound</code> – die Einträge, die nicht gefunden wurden, aus welchem Grund auch immer. Eine leere Liste antwortet sofort, ohne Anmeldung.</td>
+              <td data-l="en"><code>ids</code> – the Teams ids of the people found, in the form <code>agents</code> and <code>authorizedUsers</code> take; <code>notFound</code> – the entries not found, for whatever reason. An empty list answers at once, without signing in.</td></tr>
+            <tr><td><code>ensure-resource-account</code><br><i>Ensure resource account</i></td>
+              <td><code>userPrincipalName</code>, <code>displayName</code>, <code>accountType</code> (<code>call-queue</code> | <code>auto-attendant</code>)</td><td>–</td>
+              <td data-l="de"><code>objectId</code>, <code>userPrincipalName</code>, <code>created</code>, <code>source</code> (<code>created</code>, <code>entra</code> oder <code>teams</code> – wo das Konto gefunden wurde).</td>
+              <td data-l="en"><code>objectId</code>, <code>userPrincipalName</code>, <code>created</code>, <code>source</code> (<code>created</code>, <code>entra</code> or <code>teams</code> – where the account was found).</td></tr>
+            <tr><td><code>ensure-call-queue</code><br><i>Ensure call queue</i></td>
+              <td><code>name</code>, <code>resourceAccountId</code></td>
+              <td data-l="de"><code>agents</code> (höchstens 20), <code>authorizedUsers</code>, <code>languageId</code>; <code>routingMethod</code> (<code>attendant</code> | <code>serial</code> | <code>round-robin</code> | <code>longest-idle</code>), <code>presenceBasedRouting</code>, <code>conferenceMode</code>, <code>allowOptOut</code> (<code>true</code> | <code>false</code>). Für eine neue Warteschlange gelten <code>attendant</code> und dreimal <code>true</code>.</td>
+              <td data-l="en"><code>agents</code> (at most 20), <code>authorizedUsers</code>, <code>languageId</code>; <code>routingMethod</code> (<code>attendant</code> | <code>serial</code> | <code>round-robin</code> | <code>longest-idle</code>), <code>presenceBasedRouting</code>, <code>conferenceMode</code>, <code>allowOptOut</code> (<code>true</code> | <code>false</code>). A new queue gets <code>attendant</code> and <code>true</code> three times.</td>
+              <td data-l="de"><code>id</code>, <code>name</code>, <code>created</code>, <code>changed</code> – was dieser Lauf an einer bestehenden Warteschlange gesetzt hat, z.&nbsp;B. <code>["agents"]</code>; leer, wenn nichts abwich. <code>agentsChanged</code> sagt, ob die Agenten dabei waren.</td>
+              <td data-l="en"><code>id</code>, <code>name</code>, <code>created</code>, <code>changed</code> – what this run set on an existing queue, e.g. <code>["agents"]</code>; empty when nothing differed. <code>agentsChanged</code> says whether the agents were among them.</td></tr>
+            <tr><td><code>ensure-auto-attendant</code><br><i>Ensure auto attendant</i></td>
+              <td data-l="de"><code>name</code>, <code>resourceAccountId</code>, <code>transferTarget</code> (das Ressourcenkonto der Warteschlange), <code>languageId</code>, <code>timeZone</code> (Windows-Zeitzone)</td>
+              <td data-l="en"><code>name</code>, <code>resourceAccountId</code>, <code>transferTarget</code> (the queue's resource account), <code>languageId</code>, <code>timeZone</code> (a Windows time zone)</td>
+              <td data-l="de"><code>authorizedUsers</code>, <code>holidays</code> – eine Liste von <code>{name, start, end}</code> mit Datum <code>JJJJ-MM-TT</code>, an denen Anrufe getrennt werden; <code>end</code> ist der Tag nach dem letzten Feiertag und darf für einen einzelnen Tag fehlen.</td>
+              <td data-l="en"><code>authorizedUsers</code>, <code>holidays</code> – a list of <code>{name, start, end}</code> with dates as <code>YYYY-MM-DD</code> on which calls are disconnected; <code>end</code> is the day after the last holiday and may be left out for a single day.</td>
+              <td><code>id</code>, <code>name</code>, <code>created</code></td></tr>
+            <tr><td><code>remove-auto-attendant</code>, <code>remove-call-queue</code><br><i>Remove …</i></td>
+              <td><code>resourceAccountId</code></td>
+              <td data-l="de"><code>name</code> – findet die Voice-App wieder, wenn ein früherer Lauf die Zuordnung schon gelöst hatte und dann scheiterte.</td>
+              <td data-l="en"><code>name</code> – finds the voice app again when an earlier run had already removed the association and then failed.</td>
+              <td data-l="de"><code>removed</code>, <code>id</code>. Die Ergebnisvariable ist hier freiwillig.</td>
+              <td data-l="en"><code>removed</code>, <code>id</code>. The result variable is optional here.</td></tr>
+            <tr><td><code>ensure-phone-number</code><br><i>Ensure phone number</i></td>
+              <td data-l="de"><code>identity</code> (UPN oder Objekt-ID einer Person oder eines Ressourcenkontos), <code>phoneNumber</code>, <code>numberType</code> (<code>direct-routing</code> | <code>calling-plan</code> | <code>operator-connect</code>)</td>
+              <td data-l="en"><code>identity</code> (a person's or a resource account's UPN or object id), <code>phoneNumber</code>, <code>numberType</code> (<code>direct-routing</code> | <code>calling-plan</code> | <code>operator-connect</code>)</td>
+              <td data-l="de"><code>locationId</code> – die Notfalladresse der Nummer (<code>Get-CsOnlineLisLocation</code>).</td>
+              <td data-l="en"><code>locationId</code> – the number's emergency address (<code>Get-CsOnlineLisLocation</code>).</td>
+              <td data-l="de"><code>phoneNumber</code>, <code>identity</code>, <code>assigned</code> – ob dieser Lauf die Nummer vergeben hat; <code>previousNumber</code> – die ersetzte Nummer, leer, wenn keine.</td>
+              <td data-l="en"><code>phoneNumber</code>, <code>identity</code>, <code>assigned</code> – whether this run gave the number out; <code>previousNumber</code> – the number it replaced, empty when none.</td></tr>
+            <tr><td><code>remove-phone-number</code><br><i>Remove phone number</i></td>
+              <td><code>identity</code></td>
+              <td data-l="de"><code>phoneNumber</code> – ohne sie werden alle Nummern der Person oder des Kontos entfernt.</td>
+              <td data-l="en"><code>phoneNumber</code> – without it, every number of the person or account is removed.</td>
+              <td data-l="de"><code>removed</code>, <code>phoneNumbers</code> – was entfernt wurde. Die Ergebnisvariable ist freiwillig.</td>
+              <td data-l="en"><code>removed</code>, <code>phoneNumbers</code> – what was removed. The result variable is optional.</td></tr>
+            <tr><td><code>remove-hotline</code><br><i>Remove hotline (everything)</i></td>
+              <td data-l="de"><code>resourceAccountIds</code> – die Ressourcenkonten der Hotline, meist das der Telefonzentrale und das der Warteschlange</td>
+              <td data-l="en"><code>resourceAccountIds</code> – the hotline's resource accounts, usually the auto attendant's and the queue's</td>
+              <td data-l="de"><code>names</code> – die Namen der Voice-Apps; finden eine wieder, die ein früherer Lauf ohne Konto zurückliess.</td>
+              <td data-l="en"><code>names</code> – the voice apps' names; they find one again that an earlier run left without its account.</td>
+              <td data-l="de"><code>removed</code>, <code>attendants</code>, <code>queues</code>, <code>accounts</code>, <code>phoneNumbers</code> – was entfernt wurde. Die Ergebnisvariable ist freiwillig.</td>
+              <td data-l="en"><code>removed</code>, <code>attendants</code>, <code>queues</code>, <code>accounts</code>, <code>phoneNumbers</code> – what was removed. The result variable is optional.</td></tr>
+            <tr><td><code>remove-resource-account</code><br><i>Remove resource account</i></td>
+              <td><code>resourceAccountId</code></td><td>–</td>
+              <td data-l="de"><code>removed</code>, <code>objectId</code>, <code>phoneNumbers</code> – die Rufnummern, die mit dem Konto freigegeben wurden. Die Ergebnisvariable ist freiwillig.</td>
+              <td data-l="en"><code>removed</code>, <code>objectId</code>, <code>phoneNumbers</code> – the phone numbers released with the account. The result variable is optional.</td></tr>
+          </tbody>
+        </table>
+        <p data-l="de"><b>Wiederholen ist sicher.</b> Jede <i>Ensure</i>-Operation sucht, bevor sie anlegt, und eine
+          <i>Remove</i>-Operation antwortet mit <code>removed: false</code>, wenn nichts mehr da ist. Ein wiederholter
+          Job legt deshalb keine zweite Warteschlange an und scheitert nicht am Erfolg seines ersten Laufs. Die übliche
+          Reihenfolge beim Einrichten: <i>Resolve users</i>, zweimal <i>Ensure resource account</i>, <i>Ensure call
+          queue</i>, <i>Ensure auto attendant</i>. Abgebaut wird eine ganze Hotline mit einem Task, <i>Remove hotline</i>:
+          zuerst die Telefonzentralen, damit kein Anruf mehr an eine Warteschlange geht, die es gleich nicht mehr gibt,
+          dann die Warteschlangen, zuletzt je Konto die Rufnummern und das Konto. Antwortet eine der Voice-Apps auch für
+          ein Konto, das nicht genannt ist, wird der Abbau abgelehnt (<code>TEAMSPHONE_ACCOUNT_IN_USE</code>), bevor sich
+          etwas ändert – sie gehört dann auch zu einer anderen Hotline. Die einzelnen <i>Remove</i>-Operationen bleiben
+          für einen Teilabbau.</p>
+        <p data-l="en"><b>Repeating is safe.</b> Every <i>Ensure</i> operation looks before it creates, and a
+          <i>Remove</i> operation answers <code>removed: false</code> when nothing is left. A repeated job therefore
+          creates no second queue and does not fail on its first run's success. The usual order when setting up:
+          <i>Resolve users</i>, <i>Ensure resource account</i> twice, <i>Ensure call queue</i>, <i>Ensure auto
+          attendant</i>. A whole hotline is taken down with one task, <i>Remove hotline</i>: the auto attendants first,
+          so that no call goes to a queue about to disappear, then the queues, and last each account's numbers and the
+          account. When one of the voice apps also answers for an account not named, the request is refused
+          (<code>TEAMSPHONE_ACCOUNT_IN_USE</code>) before anything changes – the voice app then belongs to another hotline
+          too. The single <i>Remove</i> operations remain for taking down part of one.</p>
+        <p data-l="de"><b>Rufnummern.</b> <i>Ensure phone number</i> gibt einer Person oder einem Ressourcenkonto die
+          genannte Nummer – die Hotline einer Warteschlange und die Durchwahl einer Mitarbeiterin sind für Teams
+          dieselbe Zuweisung. Hat das Ziel die Nummer schon, geschieht nichts (<code>assigned: false</code>); hat es eine
+          andere Hauptnummer, wird diese zuerst entfernt und als <code>previousNumber</code> gemeldet. Eine Nummer, die
+          jemand anderes hält, wird nicht weggenommen (<code>TEAMSPHONE_NUMBER_IN_USE</code>), und eine Calling-Plan- oder
+          Operator-Connect-Nummer, die der Tenant nicht hat, wird abgelehnt (<code>TEAMSPHONE_NUMBER_NOT_FOUND</code>).
+          Fehlt die Lizenz noch, scheitert die Zuweisung wie jeder andere Fehler; warte darauf im Modell, etwa mit einer
+          Timer-Schleife um eine Entra-Abfrage von <code>assignedLicenses</code>. <i>Remove resource account</i> gibt die
+          Nummern eines Ressourcenkontos selbst frei, bevor es die Zuordnung löst und das Konto löscht; die Nummer einer Person
+          entfernst du beim Austritt mit <i>Remove phone number</i>.</p>
+        <p data-l="en"><b>Phone numbers.</b> <i>Ensure phone number</i> gives a person or a resource account the number
+          named – a queue's hotline and an employee's direct line are the same assignment to Teams. When the target has
+          the number already nothing happens (<code>assigned: false</code>); when it has another primary number, that
+          one is removed first and reported as <code>previousNumber</code>. A number somebody else holds is not taken
+          from them (<code>TEAMSPHONE_NUMBER_IN_USE</code>), and a Calling Plan or Operator Connect number the tenant does
+          not have is refused (<code>TEAMSPHONE_NUMBER_NOT_FOUND</code>). While the licence is still missing, the
+          assignment fails like any other error; wait for it in the model, with a timer loop around an Entra lookup of
+          <code>assignedLicenses</code>, say. <i>Remove resource account</i> releases a resource account's numbers itself
+          before it detaches and deletes the account; a person's number you remove with <i>Remove phone number</i> when
+          they leave.</p>
+        <p data-l="de"><b>Eine bestehende Warteschlange abgleichen.</b> <i>Ensure call queue</i> bringt eine
+          Warteschlange, die es schon gibt, auf das, was das Modell nennt – bei einem Personalwechsel lässt du denselben
+          Task einfach erneut laufen.</p>
+        <ul data-l="de">
+          <li>Abgeglichen wird, was im Modell <b>gesetzt</b> ist: <code>agents</code>, <code>authorizedUsers</code>,
+            <code>routingMethod</code>, <code>presenceBasedRouting</code>, <code>conferenceMode</code>,
+            <code>allowOptOut</code>. Alle Änderungen gehen in einem Aufruf an Teams.</li>
+          <li>Was <b>nicht gesetzt</b> ist, bleibt, wie die Warteschlange es hat. Bei den Einstellungen heisst das die
+            Auswahl <i>Keep</i>; ihre Standardwerte gelten nur für eine neue Warteschlange.</li>
+          <li>IDs werden ohne Rücksicht auf Gross- und Kleinschreibung verglichen. Die Reihenfolge der Agenten zählt nur,
+            wo die Warteschlange nach diesem Lauf seriell verteilt.</li>
+          <li>Nur direkt zugewiesene Agenten werden abgeglichen; die einer Verteilerliste oder eines Kanals bleiben
+            unberührt.</li>
+          <li>Eine Liste wird <b>nie geleert</b>: Eine leere Liste für eine Warteschlange, die Agenten oder berechtigte
+            Benutzer hat, wird abgelehnt (<code>TEAMSPHONE_WOULD_EMPTY_LIST</code>), bevor sich etwas ändert. Ein
+            <i>Resolve users</i>, das während einer Störung niemanden fand, sähe genau so aus. Prüfe
+            <code>notFound</code> deshalb vor dem Abgleich – auch eine einzelne Person, die nur vorübergehend nicht
+            gefunden wurde, fiele sonst heraus.</li>
+          <li>Ein Wert, der zu nichts ausgewertet wird – eine Variable, die niemand gesetzt hat –, wird abgelehnt, statt
+            als «niemand» gelesen zu werden.</li>
+          <li>Nicht abgeglichen werden <code>languageId</code> und alles an <i>Ensure auto attendant</i>; diese Werte
+            gelten nur beim Anlegen.</li>
+        </ul>
+        <p data-l="en"><b>Reconciling an existing queue.</b> <i>Ensure call queue</i> brings a queue that already
+          exists to what the model names – a change of staff is one more run of the same task.</p>
+        <ul data-l="en">
+          <li>What the model <b>sets</b> is reconciled: <code>agents</code>, <code>authorizedUsers</code>,
+            <code>routingMethod</code>, <code>presenceBasedRouting</code>, <code>conferenceMode</code>,
+            <code>allowOptOut</code>. All changes go to Teams in one call.</li>
+          <li>What it <b>does not set</b> stays as the queue has it. For the settings that is the <i>Keep</i> choice;
+            their defaults apply only to a new queue.</li>
+          <li>Ids are compared without regard to case. The agents' order counts only where the queue rings serially
+            once this run is done.</li>
+          <li>Only agents assigned directly are reconciled; those of a distribution list or a channel are left
+            alone.</li>
+          <li>A list is <b>never emptied</b>: an empty list for a queue that has agents or authorized users is refused
+            (<code>TEAMSPHONE_WOULD_EMPTY_LIST</code>) before anything changes. A <i>Resolve users</i> that found nobody
+            during an outage would look the same. So check <code>notFound</code> before reconciling – otherwise even a
+            single person who was only briefly not found would drop out.</li>
+          <li>A value that resolves to nothing – a variable nobody set – is refused rather than read as
+            "nobody".</li>
+          <li><code>languageId</code> and everything on <i>Ensure auto attendant</i> are not reconciled; they apply only
+            when the object is created.</li>
+        </ul>
+        <p data-l="de"><b>Fehler, Incidents und Error-Events.</b> Scheitert ein Task, wird der Job wiederholt und
+          wartet danach als Incident – das gilt für alles, was am Modell oder am Worker-Host zu korrigieren ist: ein
+          ungültiger Wert, eine leere Pflichtvariable, eine fehlgeschlagene Anmeldung, ein fehlendes Modul. Für die
+          folgenden fachlichen Abweisungen hat ein Prozess dagegen oft einen eigenen Weg. Jede trägt einen festen Code,
+          und du kannst sie mit einem <b>Error-Boundary-Event</b> am Task oder einem Error-Event-Subprozess darum
+          fangen. Der Worker wirft den Code nur, wenn der Prozess genau diesen Code fängt; dann nimmt die Instanz den
+          Fehlerpfad sofort, ohne einen Wiederholungsversuch zu verbrauchen. Ein Error-Boundary-Event <i>ohne</i> Code
+          reicht dafür nicht: Es fängt zwar jeden geworfenen Fehler, bewirkt aber nicht, dass der Worker einen wirft.
+          Fängt der Prozess den Code irgendwo, aber nicht um diesen Task herum, wird er geworfen und wartet ohne
+          Wiederholung als Incident. Die Fehlermeldung ist der Text, den sonst der Incident zeigt.</p>
+        <p data-l="en"><b>Errors, incidents and error events.</b> When a task fails, its job is retried and then waits
+          on an incident – for everything that is fixed in the model or on the worker host: an invalid value, an empty
+          required variable, a failed sign-in, a missing module. For the business refusals below, though, a process
+          often has a path of its own. Each carries a fixed code, and you catch it with an <b>error boundary event</b> on
+          the task or an error event subprocess around it. The worker throws a code only when the process catches
+          exactly that code; the instance then takes the error path at once, spending no retry. An error boundary
+          <i>without</i> a code is not enough: it catches any error that is thrown, but does not make the worker throw
+          one. A code the process catches somewhere, but not around this task, is thrown and waits on an incident without
+          a retry. The error's message is the text the incident would otherwise show.</p>
+        <table>
+          <thead><tr>
+            <th>Code</th>
+            <th data-l="de">Bei</th><th data-l="en">On</th>
+            <th data-l="de">Bedeutet</th><th data-l="en">Means</th>
+            <th data-l="de">Typischer Weg im Modell</th><th data-l="en">Typical path in the model</th>
+          </tr></thead>
+          <tbody>
+            <tr><td><code>TEAMSPHONE_UPN_TAKEN</code></td><td><code>ensure-resource-account</code></td>
+              <td data-l="de">Die Adresse gehört einem aktiven Benutzerkonto, also einer Person.</td>
+              <td data-l="en">The address belongs to an enabled user account, that is, to a person.</td>
+              <td data-l="de">Eine andere Adresse wählen lassen und den Task erneut durchlaufen.</td>
+              <td data-l="en">Have another address chosen and run the task again.</td></tr>
+            <tr><td><code>TEAMSPHONE_ACCOUNT_TYPE_MISMATCH</code></td><td><code>ensure-resource-account</code>, <code>ensure-call-queue</code>, <code>ensure-auto-attendant</code></td>
+              <td data-l="de">Das Ressourcenkonto wurde für die andere Art Voice-App angelegt.</td>
+              <td data-l="en">The resource account was made for the other kind of voice app.</td>
+              <td data-l="de">Ein Konto des passenden Typs verwenden oder anlegen.</td>
+              <td data-l="en">Use or create an account of the right kind.</td></tr>
+            <tr><td><code>TEAMSPHONE_ACCOUNT_IN_USE</code></td><td><code>ensure-call-queue</code>, <code>ensure-auto-attendant</code>, <code>remove-call-queue</code>, <code>remove-auto-attendant</code>, <code>remove-hotline</code></td>
+              <td data-l="de">Das Konto ist schon mit der anderen Art Voice-App verbunden – oder, beim Hotline-Abbau, eine Voice-App antwortet auch für ein Konto, das nicht genannt ist.</td>
+              <td data-l="en">The account is already associated with the other kind of voice app – or, when a hotline is removed, a voice app also answers for an account not named.</td>
+              <td data-l="de">Klären, welche Voice-App das Konto trägt, und die passende Operation verwenden.</td>
+              <td data-l="en">Find out which voice app the account carries and use the matching operation.</td></tr>
+            <tr><td><code>TEAMSPHONE_ACCOUNT_NOT_VISIBLE</code></td><td><code>ensure-call-queue</code>, <code>ensure-auto-attendant</code></td>
+              <td data-l="de">Teams zeigt das Konto auch nach zwei Minuten Warten noch nicht.</td>
+              <td data-l="en">Teams still does not show the account after two minutes of waiting.</td>
+              <td data-l="de">Ein Timer (etwa zehn Minuten) und zurück zum Task, statt die Wiederholungen zu verbrauchen.</td>
+              <td data-l="en">A timer (ten minutes, say) and back to the task, rather than spending the retries.</td></tr>
+            <tr><td><code>TEAMSPHONE_WOULD_EMPTY_LIST</code></td><td><code>ensure-call-queue</code></td>
+              <td data-l="de">Eine leere Liste würde alle Agenten oder alle berechtigten Benutzer entfernen.</td>
+              <td data-l="en">An empty list would remove every agent or every authorized user.</td>
+              <td data-l="de">Eine Benutzeraufgabe: Soll die Warteschlange wirklich leer sein? Leeren geht nur im Teams Admin Center oder mit <code>remove-call-queue</code>.</td>
+              <td data-l="en">A user task: should the queue really be empty? Emptying it is done only in the Teams admin center or with <code>remove-call-queue</code>.</td></tr>
+            <tr><td><code>TEAMSPHONE_NUMBER_IN_USE</code></td><td><code>ensure-phone-number</code></td>
+              <td data-l="de">Die Nummer gehört einer anderen Person oder einem anderen Ressourcenkonto.</td>
+              <td data-l="en">The number belongs to another person or resource account.</td>
+              <td data-l="de">Klären, wer sie hält; dort mit <code>remove-phone-number</code> entfernen und erneut versuchen.</td>
+              <td data-l="en">Find out who holds it; remove it there with <code>remove-phone-number</code> and try again.</td></tr>
+            <tr><td><code>TEAMSPHONE_NUMBER_NOT_FOUND</code></td><td><code>ensure-phone-number</code></td>
+              <td data-l="de">Eine Calling-Plan- oder Operator-Connect-Nummer, die der Tenant nicht hat.</td>
+              <td data-l="en">A Calling Plan or Operator Connect number the tenant does not have.</td>
+              <td data-l="de">Die Nummer beschaffen oder portieren lassen, oder eine andere wählen.</td>
+              <td data-l="en">Have the number acquired or ported, or choose another one.</td></tr>
+            <tr><td><code>TEAMSPHONE_TOO_MANY_AGENTS</code></td><td><code>ensure-call-queue</code></td>
+              <td data-l="de">Mehr als 20 Agenten; Teams nimmt direkt nicht mehr.</td>
+              <td data-l="en">More than 20 agents; Teams takes no more directly.</td>
+              <td data-l="de">Die Liste kürzen. Grössere Warteschlangen bedient Teams über eine Gruppe oder einen Kanal, die dieser Worker nicht anbietet.</td>
+              <td data-l="en">Shorten the list. Teams serves larger queues from a group or a channel, which this worker does not offer.</td></tr>
+          </tbody>
+        </table>
+        <pre><code>&lt;bpmn:error id=&quot;Err_Leer&quot; errorCode=&quot;TEAMSPHONE_WOULD_EMPTY_LIST&quot;/&gt;
+&lt;bpmn:serviceTask id=&quot;queue&quot; name=&quot;Warteschlange sicherstellen&quot;&gt;
+  &lt;bpmn:extensionElements&gt;
+    &lt;atlas:teamsPhoneConnector connector=&quot;contoso&quot; operation=&quot;ensure-call-queue&quot;
+      name=&quot;=&amp;quot;CQ &amp;quot; + team&quot; resourceAccountId=&quot;=konten.queue.objectId&quot;
+      agents=&quot;=benutzer.ids&quot; routingMethod=&quot;serial&quot; resultVariable=&quot;queue&quot;/&gt;
+  &lt;/bpmn:extensionElements&gt;
+&lt;/bpmn:serviceTask&gt;
+&lt;bpmn:boundaryEvent id=&quot;leer&quot; attachedToRef=&quot;queue&quot;&gt;
+  &lt;bpmn:errorEventDefinition errorRef=&quot;Err_Leer&quot;/&gt;
+&lt;/bpmn:boundaryEvent&gt;</code></pre>
+        <p data-l="de"><b>Ereignisse vom Worker.</b> Der Teams-Phone-Worker liefert keine eingehenden Ereignisse:
+          Teams meldet Atlas nichts, und es gibt keinen Watch, der einen Prozess starten könnte. Was ein Task
+          herausfindet, steht in seiner Ergebnisvariable – <code>created</code>, <code>changed</code>,
+          <code>notFound</code>, <code>removed</code> –, und darauf reagierst du mit einem Gateway. Ein Job ist durch
+          <code>ATLAS_TEAMSPHONE_TIMEOUT</code> begrenzt (Standard 4m).</p>
+        <p data-l="en"><b>Events from the worker.</b> The Teams Phone worker delivers no inbound events: Teams tells Atlas
+          nothing, and there is no watch that could start a process. What a task finds out is in its result variable –
+          <code>created</code>, <code>changed</code>, <code>notFound</code>, <code>removed</code> – and you react to it
+          with a gateway. A job is bounded by <code>ATLAS_TEAMSPHONE_TIMEOUT</code> (default 4m).</p>
       </div>
 
       <div class="card" id="runbook-jira">
