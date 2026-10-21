@@ -572,16 +572,19 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
     a refusal instead of the form. It reads in English when the reader chose English.
 
 - **`console-menu.spec.mjs`**: the **bar of view names** under the top bar, against a stubbed
-  API. It measures, not eyeballs, at 1440, 1280 and 1024 pixels for an administrator:
+  API. It measures, not eyeballs, at 1440, 1280 and 1024 pixels — the Console's and the
+  Operations bar for an administrator, the Operations bar for an operator:
   - no name takes two lines;
   - every button on the top bar lies wholly inside the window;
-  - the Console's entries need no sideways scroll.
+  - the entries need no sideways scroll.
 
-  At 900 and 700 pixels, on a phone and on the long Operations bar, names still never wrap
-  and no button is clipped; the bar scrolls within itself. The administrator's pages sit
-  behind **Administration**: the menu opens unclipped, marks the open page, and the group is
-  the entry marked while one of its pages is open. A modeller and a task worker see no
-  group; with enforcement off it is offered.
+  At 900 and 700 pixels and on a phone, names still never wrap and no button is clipped;
+  the bar scrolls within itself. The administrator's Console pages sit behind
+  **Administration**: the menu opens unclipped, marks the open page, and the group is the
+  entry marked while one of its pages is open. A modeller and a task worker see no group;
+  with enforcement off it is offered. Operations keeps its working pages and the incident
+  count on the bar and puts the rest behind **Diagnostics**, whose mock tools only an
+  administrator sees.
 
 ## Rendering a conformance gallery diagram
 

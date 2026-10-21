@@ -8,8 +8,9 @@
 //
 // Two changes answer it and both are held here: the bar never wraps a name and never
 // pushes the icons off (it scrolls sideways within itself when it must, at every
-// width), and the administrator's pages sit behind one entry, Administration, so the
-// Console's bar fits a laptop again. The layout half is measured rather than eyeballed
+// width), and the pages opened seldom sit behind one entry — Administration in the
+// Console, Diagnostics in Operations, which had ten entries of its own — so both bars
+// fit a laptop again. The layout half is measured rather than eyeballed
 // — the line boxes of each name, the rectangles of the icons — because a wrapped name
 // is a rendering fact no DOM query sees.
 import { test, expect } from "@playwright/test";
@@ -17,6 +18,7 @@ import { test, expect } from "@playwright/test";
 const ADMIN = { id: "usr_root", username: "root", roles: ["admin"] };
 const MODELLER = { id: "usr_mona", username: "mona", roles: ["modeler", "operator", "user"] };
 const WORKER = { id: "usr_tina", username: "tina", roles: ["user"] };
+const OPERATOR = { id: "usr_otto", username: "otto", roles: ["operator", "user"] };
 const ADMIN_PAGES = ["Engine", "Logs", "Backup", "Organization", "API tokens", "Audit log"];
 
 // stubAPI answers /auth/me as the given account and everything else benignly. The
@@ -31,10 +33,11 @@ async function boot(page, user, { width = 1280, hash = "" } = {}) {
   await page.waitForFunction(() => document.querySelector("#topnav")?.children.length > 0, null, { timeout: 15000 });
 }
 
-// The names on the bar itself, without the group's caret.
+// The names on the bar itself: the leading text of each entry, without the group's
+// caret or the incident count that rides on its entry.
 const barNames = (page) => page.evaluate(() =>
   [...document.querySelectorAll("#topnav > a, #topnav .topnav-group-btn")]
-    .map((el) => el.textContent.replace("▾", "").trim()));
+    .map((el) => el.firstChild.textContent.trim()));
 
 // layout measures what a reader sees: how many lines each name takes, whether every
 // control on the top bar lies wholly inside the window, and whether the names need to
@@ -70,22 +73,26 @@ const layout = (page) => page.evaluate(() => {
   };
 });
 
-for (const width of [1440, 1280, 1024]) {
-  test(`an administrator's Console bar fits a ${width}px window: no wrapped name, nothing clipped, nothing to scroll`, async ({ page }) => {
-    await boot(page, ADMIN, { width });
-    const l = await layout(page);
-    expect(l.controls, "the measurement found the top bar's buttons").toBeGreaterThan(3);
-    expect(l.wrapped).toEqual([]);
-    expect(l.clipped).toEqual([]);
-    expect(l.barOverflows).toBe(false);
-    expect(l.navScrolls, "every Console entry is visible without scrolling the bar").toBe(false);
-  });
+// The two longest bars, for the accounts that see the most of them: an administrator
+// sees every page, an operator every Operations page but the two mock tools.
+for (const [who, user, hash] of [["an administrator's Console", ADMIN, ""], ["an administrator's Operations", ADMIN, "#/operations"],
+  ["an operator's Operations", OPERATOR, "#/operations"]]) {
+  for (const width of [1440, 1280, 1024]) {
+    test(`${who} bar fits a ${width}px window: no wrapped name, nothing clipped, nothing to scroll`, async ({ page }) => {
+      await boot(page, user, { width, hash });
+      const l = await layout(page);
+      expect(l.controls, "the measurement found the top bar's buttons").toBeGreaterThan(3);
+      expect(l.wrapped).toEqual([]);
+      expect(l.clipped).toEqual([]);
+      expect(l.barOverflows).toBe(false);
+      expect(l.navScrolls, "every entry is visible without scrolling the bar").toBe(false);
+    });
+  }
 }
 
 // Below the width the names fit in, they still never wrap and never cost the icons
-// their place: the bar scrolls within itself. Operations has the longest bar of all,
-// and a phone the narrowest window.
-for (const [width, hash] of [[900, ""], [700, ""], [390, ""], [1024, "#/operations"], [1280, "#/operations"]]) {
+// their place: the bar scrolls within itself. A phone has the narrowest window.
+for (const [width, hash] of [[900, ""], [700, ""], [390, ""], [900, "#/operations"], [390, "#/operations"]]) {
   test(`at ${width}px ${hash || "#/console"} wraps no name and clips no button`, async ({ page }) => {
     await boot(page, ADMIN, { width, hash });
     const l = await layout(page);
@@ -143,4 +150,25 @@ test("a task worker's bar has what the user role reaches", async ({ page }) => {
 test("with enforcement off nobody has a role, so Administration is offered too", async ({ page }) => {
   await boot(page, null);
   expect(await barNames(page)).toContain("Administration");
+});
+
+test("the Operations pages for looking into something sit behind Diagnostics", async ({ page }) => {
+  await boot(page, ADMIN, { hash: "#/operations" });
+  expect(await barNames(page)).toEqual(["Instances", "Incidents", "Workers", "Decisions", "Reconciliation", "Diagnostics"]);
+  await page.locator("#topnav .topnav-group-btn", { hasText: "Diagnostics" }).click();
+  const menu = page.locator("#topnav .topnav-group .dropdown-menu");
+  await expect(menu).toBeVisible();
+  await expect(menu.locator("a")).toHaveText(["Messages", "Outbox", "Call activities", "Mock directory", "Mock database"]);
+  await menu.locator("a", { hasText: "Outbox" }).click();
+  await expect(page).toHaveURL(/#\/operations\/outbox$/);
+  await expect(page.locator("#topnav .topnav-group-btn")).toHaveClass(/active/);
+  // The incident count stays on the bar, where an operator sees it without opening anything.
+  await expect(page.locator('#topnav > a .nav-badge[data-badge="incidents"]')).toHaveCount(1);
+});
+
+test("an operator's Diagnostics has no mock tools, which are an administrator's", async ({ page }) => {
+  await boot(page, OPERATOR, { hash: "#/operations" });
+  expect(await barNames(page)).toEqual(["Instances", "Incidents", "Workers", "Decisions", "Reconciliation", "Diagnostics"]);
+  await page.locator("#topnav .topnav-group-btn").click();
+  await expect(page.locator("#topnav .topnav-group .dropdown-menu a")).toHaveText(["Messages", "Outbox", "Call activities"]);
 });

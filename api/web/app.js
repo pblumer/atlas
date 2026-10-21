@@ -728,19 +728,27 @@ const TOPNAV = {
     { name: "Instances", route: "#/operations", role: "operator" },
     { name: "Incidents", route: "#/operations/incidents", badge: "incidents", role: "operator" },
     { name: "Workers", route: "#/operations/workers", role: "operator" },
-    // What waits in the message buffer for a subscription that has not opened yet
-    // (ADR-0370): the one place a message "from the past" can be seen before it arrives.
-    { name: "Messages", route: "#/operations/messages", role: "operator" },
-    { name: "Outbox", route: "#/operations/outbox", role: "operator" },
-    { name: "Mock directory", route: "#/operations/ad-mock", role: "admin" },
-    { name: "Mock database", route: "#/operations/sql-mock", role: "admin" },
     { name: "Decisions", route: "#/operations/decisions", role: "operator" },
     // Where Atlas and the target systems disagree about who holds what
     // (ADR-0334). Operations rather than Catalogue: maintaining a
     // catalogue is authoring, and acting on a finding is repair — the three acts
     // are the operator's role on the server too.
     { name: "Reconciliation", route: "#/operations/reconciliation", role: "operator", feature: "catalogue" },
-    { name: "Call activities", route: "#/operations/call-activities", role: "any" },
+    // The pages an operator opens to look into something rather than to work a case:
+    // what waits, what was sent, who calls whom, and — for an administrator — what the
+    // mock workers recorded. Behind one entry for the reason Console › Administration
+    // is: ten side by side did not fit a laptop's window. The group is offered to
+    // anybody and shows each page to whoever its own role admits, so Call activities
+    // stays where it was for everybody who could reach it before.
+    { name: "Diagnostics", role: "any", items: [
+      // What waits in the message buffer for a subscription that has not opened yet
+      // (ADR-0370): the one place a message "from the past" can be seen before it arrives.
+      { name: "Messages", route: "#/operations/messages", role: "operator" },
+      { name: "Outbox", route: "#/operations/outbox", role: "operator" },
+      { name: "Call activities", route: "#/operations/call-activities", role: "any" },
+      { name: "Mock directory", route: "#/operations/ad-mock", role: "admin" },
+      { name: "Mock database", route: "#/operations/sql-mock", role: "admin" },
+    ] },
   ],
   tasks: [
     { name: "Inbox", route: "#/tasks", role: "user" },
@@ -2513,7 +2521,7 @@ async function viewConsoleWorkers() {
         a leaver has nothing to disable in an empty directory. Atlas keeps this and hands it to the
         worker, so there is no file path to type and nothing to place on the worker's host.
         This is where every forest <i>starts</i> and is never written back: what a mockup run has
-        actually put in one is under <a href="#/operations/ad-mock">Operations &rsaquo; Mock directory</a>.</div>
+        actually put in one is under <a href="#/operations/ad-mock">Operations &rsaquo; Diagnostics &rsaquo; Mock directory</a>.</div>
         <div class="between" style="gap:10px; flex-wrap:wrap">
           <span id="admock-seed-state" data-seed-name="${esc(adMock.seedName || "")}" style="font-size:13px">${
             adMock.hasSeed

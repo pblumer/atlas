@@ -48,12 +48,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
-- **The Console's administrator pages sit under Administration.** Engine, Logs, Backup,
-  Organization, API tokens and Audit log moved from the Console's bar into one entry,
+- **The Console and Operations put their seldom-opened pages behind one entry.** In the
+  Console, Engine, Logs, Backup, Organization, API tokens and Audit log moved into
   **Administration ▾**, which only administrators see; Dashboard, Workers, Events, AI access
-  and Display stay on the bar. The pages keep their addresses, so bookmarks and the
-  handbook's links still open them, and the handbook and the docs now say
-  **Console → Administration → …**.
+  and Display stay on the bar. In Operations, Messages, Outbox and Call activities — and, for
+  administrators, Mock directory and Mock database — moved into **Diagnostics ▾**; Instances,
+  Incidents with its count, Workers, Decisions and Reconciliation stay. The pages keep their
+  addresses, so bookmarks and the handbook's links still open them, and the handbook, the
+  docs and the worker dialogs now say **Console → Administration → …** and
+  **Operations → Diagnostics → …**.
 
 ### Fixed
 
@@ -61,8 +64,9 @@ _Changed_ / _Removed_ for each version.
   than about 1300 pixels an administrator's Console bar broke two-word names onto two lines,
   shortened the organisation's name to «A…» and clipped the account button. Names now stay
   on one line at every width, the bar scrolls within itself where they do not fit, and the
-  organisation's name gives way first; an end-to-end test measures the bar at 1440, 1280 and
-  1024 pixels and on a phone.
+  organisation's name gives way first; an end-to-end test measures the Console's and the
+  Operations bar at 1440, 1280 and 1024 pixels, for an administrator and an operator, and on
+  a phone.
 
 - **A fixed approver in a package is assigned by username.** A `fixed` approval is a task
   assigned to a username, but `atlas import`, the example's `facility-management` question and the
