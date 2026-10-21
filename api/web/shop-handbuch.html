@@ -81,6 +81,7 @@ th{color:var(--muted);font-weight:600}
   <a href="#prozesse"><span data-l="de">Die Prozesse zum Produkt</span><span data-l="en">The product's processes</span></a>
   <a href="#betrieb"><span data-l="de">Im Betrieb</span><span data-l="en">In operation</span></a>
   <a href="#dokument"><span data-l="de">Ein Shop als Dokument</span><span data-l="en">A shop as a document</span></a>
+  <a href="#loeschen"><span data-l="de">Ausprobieren und wieder löschen</span><span data-l="en">Trying out and deleting again</span></a>
   <a href="#beispiel"><span data-l="de">Das Beispiel installieren</span><span data-l="en">Installing the example</span></a>
   <a href="#terminal"><span data-l="de">Im Terminal: atlas import</span><span data-l="en">From a terminal: atlas import</span></a>
   <a href="#export"><span data-l="de">Ein Paket schreiben: atlas export</span><span data-l="en">Writing a package: atlas export</span></a>
@@ -367,6 +368,65 @@ th{color:var(--muted);font-weight:600}
     <code>examples/verwaltung-dienstleistungen/katalog.json</code>.</p>
   <p data-l="en">Over MCP the tool is <code>atlas_import_catalog</code>. The example's document is in
     <code>examples/verwaltung-dienstleistungen/katalog.json</code>.</p>
+</section>
+
+<section id="loeschen">
+  <h2 data-l="de">Ausprobieren und wieder löschen</h2><h2 data-l="en">Trying out and deleting again</h2>
+  <p data-l="de">Im Betrieb wird nichts aus einem Katalog gelöscht: Ein Produkt nimmst du aus dem Angebot, indem du es
+    auf <b>zurückgezogen</b> setzt. Bestellungen von vor Jahren und Rechte, die jemand noch hält, verweisen auf das
+    Produkt, und mit ihm verschwände der Nachweis, wer was mit wessen Genehmigung erhalten hat.</p>
+  <p data-l="en">In operation nothing is deleted from a catalogue: you take a product off sale by setting it to
+    <b>withdrawn</b>. Orders placed years ago and rights somebody still holds point at the product, and deleting it
+    would delete the record of who received what under whose approval.</p>
+  <p data-l="de">Auf einer Entwicklungs- oder Testinstallation willst du dagegen einen Katalog importieren, daraus
+    bestellen, die Abwicklung beobachten und danach von vorne beginnen. Dafür gibt es das endgültige Löschen. Es ist
+    ausgeschaltet, bis der Server mit <code>--catalogue-purge</code> (oder <code>ATLAS_CATALOGUE_PURGE=true</code>,
+    im Helm-Chart <code>atlas.catalogue.purge: true</code>) gestartet wird, und nur Administratoren dürfen es
+    ausführen. Schalte es auf einer produktiven Installation nicht ein.</p>
+  <p data-l="en">On a development or test installation, though, you want to import a catalogue, order from it, watch
+    the fulfilment and then start over. That is what deleting for good is for. It is switched off until the server is
+    started with <code>--catalogue-purge</code> (or <code>ATLAS_CATALOGUE_PURGE=true</code>, in the Helm chart
+    <code>atlas.catalogue.purge: true</code>), and only administrators may run it. Do not switch it on for a
+    production installation.</p>
+  <p data-l="de">In der Console findest du es auf der Seite eines Katalogs unter <b>Delete for good</b>. Zuerst zeigt
+    atlas, was alles verschwinden würde, und erst wenn du die ID des Katalogs oder Produkts noch einmal eintippst,
+    lässt sich der Knopf drücken. Mit einem Katalog werden gelöscht:</p>
+  <p data-l="en">In the Console you find it on a catalogue's page under <b>Delete for good</b>. atlas first shows
+    everything that would go, and the button can only be pressed once you type the id of the catalogue or product
+    again. Deleting a catalogue removes:</p>
+  <ul>
+    <li data-l="de">seine Releases, sein Logo und alle Produkte, deren Heimat er ist; andere Kataloge, die eines dieser
+      Produkte anbieten, verlieren es;</li>
+    <li data-l="en">its releases, its logo and every product whose home it is; other catalogues offering one of those
+      products lose it;</li>
+    <li data-l="de">alle Bestellungen aus seinen Releases und alle Bestellungen, die nur seine Produkte enthalten.
+      Eine Bestellung mit weiteren Produkten bleibt, ihre Positionen auf gelöschten Produkten werden zurückgezogen,
+      sofern sie noch nicht begonnen haben;</li>
+    <li data-l="en">every order placed from its releases and every order holding nothing but its products. An order
+      with other products stays; its positions on deleted products are withdrawn if they had not started;</li>
+    <li data-l="de">die laufenden Prozessinstanzen dieser Bestellungen. Sie werden abgebrochen, aber was sie in einem
+      Zielsystem schon getan haben, wird nicht rückgängig gemacht;</li>
+    <li data-l="en">the running process instances of those orders. They are cancelled, but what they already did in a
+      target system is not undone;</li>
+    <li data-l="de">die Rechte im Bestand, die diese Produkte oder Bestellungen betreffen. Im Zielsystem bleibt der
+      Zugriff bestehen, denn es läuft kein Deprovisionierungsprozess.</li>
+    <li data-l="en">the rights in the inventory that concern those products or orders. Access in the target system
+      remains, because no deprovisioning process runs.</li>
+  </ul>
+  <p data-l="de">Bestehen bleiben die Prozesse, an die die Produkte gebunden waren (lösche sie bei Bedarf separat),
+    ein Eintrag «korrigiert» in der Bestandshistorie für jedes entfernte Recht, und ein Release eines anderen
+    Katalogs, das ein gelöschtes Produkt noch anbietet, bis dieser Katalog neu veröffentlicht wird. Ein Produkt allein
+    löschst du auf dieselbe Weise. Einen Papierkorb gibt es nicht; wer etwas davon noch brauchen könnte, macht vorher
+    eine Sicherung (<code>GET /api/v1/backup/full</code>). Über die API heissen die Schritte
+    <code>GET /api/v1/catalogs/{id}/deletion</code> und <code>DELETE /api/v1/catalogs/{id}?confirm={id}</code>, über
+    MCP <code>atlas_catalog_deletion</code> und <code>atlas_delete_catalog</code>.</p>
+  <p data-l="en">What stays: the processes the products were bound to (delete them separately if you need to), a
+    "corrected" entry in the inventory's history for every right removed, and another catalogue's release that still
+    offers a deleted product until that catalogue is published again. You delete a single product the same way. There
+    is no recycle bin; if anything may be needed again, take a backup first (<code>GET /api/v1/backup/full</code>).
+    Over the API the steps are <code>GET /api/v1/catalogs/{id}/deletion</code> and
+    <code>DELETE /api/v1/catalogs/{id}?confirm={id}</code>, over MCP <code>atlas_catalog_deletion</code> and
+    <code>atlas_delete_catalog</code>.</p>
 </section>
 
 <section id="beispiel">

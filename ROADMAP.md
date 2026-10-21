@@ -2213,6 +2213,13 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   application… answers the questions from the target's directory, asks for the rest, and installs
   the application, its constants and its catalogues in `atlas import`'s order. A fixed approver
   travels as an account by username (ADR-0467, amended 2026-10-21).
+- ✅ **A catalogue can be deleted for good on a development installation.** On a server started
+  with `--catalogue-purge`, an administrator deletes a catalogue or a product with its releases,
+  own products, orders, the instances working them and the holds they granted, after a preview
+  and a confirmation by id — in the Console, over HTTP and over MCP. Off by default; on every
+  other server a product is withdrawn and a catalogue kept
+  ([ADR-draft-catalogue-purge](docs/adr/draft-catalogue-purge.md)). The inventory's history of
+  the removed holds is kept; erasing it would need an engine event of its own.
 
 **The shop & ordering**
 - ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per

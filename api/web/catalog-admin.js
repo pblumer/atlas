@@ -1250,11 +1250,128 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
       <thead><tr><th>Release</th><th>Published</th><th>Products</th></tr></thead>
       <tbody>${releases.map((r) => `<tr><td>${esc(r.id)}</td><td>${fmtTime(r.createdAt)}</td>
         <td>${(r.items || []).length}</td></tr>`).join("")}</tbody></table>`
-    : `<p class="muted">Never published. Until it is, the shop shows this catalogue to nobody.</p>`}`;
+    : `<p class="muted">Never published. Until it is, the shop shows this catalogue to nobody.</p>`}
+
+    ${mayTheme(me, enforced) ? purgeCard(cat, items, langs) : ""}`;
 
   wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList,
     mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people, apps);
   wireTransfer({ api, toast, view }, cat);
+  wirePurge({ api, toast, view }, cat);
+}
+
+// ---------- Deleting for good ----------
+//
+// A catalogue has no delete on a production server: an order placed years ago and a
+// right still held resolve through it (ADR-0312), and a product is withdrawn instead.
+// A development installation is the exception — somebody imports a catalogue, orders
+// from it to watch the fulfilment run, and must be able to start over — so an
+// administrator can purge one there (ADR-draft-catalogue-purge), on a server started
+// with --catalogue-purge.
+//
+// The card never deletes on the first click. It asks the server what would go and
+// shows the whole answer — the orders, the running work, the holds, the warnings —
+// and the button stays disabled until the id is typed again. On a server that does
+// not allow the purge it shows the same preview and says how it is switched on,
+// because "what would this remove" is how somebody decides to switch it on.
+
+// purgeCard is the administrator's panel for deleting this catalogue, or one of the
+// products whose home it is, for good.
+function purgeCard(cat, items, langs) {
+  const own = items.filter((it) => it.homeCatalog === cat.id);
+  return `<h3 style="margin-top:26px">Delete for good</h3>
+    <p class="muted" style="max-width:62ch">For a development or test installation only.
+      Deletes the catalogue, or one of its own products, with every order placed from it,
+      the process instances still working those orders and the rights they granted — with
+      no undo. On a production installation withdraw a product instead.</p>
+    <div class="card cat-purge" style="max-width:62ch; border-color:var(--danger)">
+      <div class="row">
+        <button class="btn danger" type="button" data-act="purge-catalog">Delete this catalogue…</button>
+      </div>
+      ${own.length ? `<label class="field" style="margin-top:12px">Or one of its own products
+        <select name="purgeProduct">${own.map((it) => `<option value="${esc(it.id)}">${
+    esc(textOf(it.texts, langs, it.id))} (${esc(it.id)})</option>`).join("")}</select></label>
+      <div class="row"><button class="btn ghost danger" type="button" data-act="purge-product">Delete this product…</button></div>` : ""}
+      <div class="purge-report"></div>
+    </div>`;
+}
+
+// purgeList renders one list of the plan, or nothing when it is empty.
+function purgeList(title, ids) {
+  if (!ids || !ids.length) return "";
+  return `<p style="margin:8px 0 2px"><b>${esc(title)}</b></p>
+    <ul style="margin:0">${ids.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
+}
+
+// purgePlanHTML renders what the server says a purge would remove, and the
+// confirmation it needs.
+export function purgePlanHTML(plan) {
+  const what = plan.kind === "catalog" ? "catalogue" : "product";
+  const counts = [];
+  if (plan.instances) counts.push(`${plan.instances} running process instance(s) are cancelled`);
+  if (plan.entitlements) counts.push(`${plan.entitlements} right(s) of ${plan.holders} person(s) leave the inventory`);
+  return `<div style="margin-top:12px">
+    ${plan.enabled ? "" : `<p><b>This server does not allow deleting for good.</b> An operator
+      switches it on with <code>--catalogue-purge</code> (or <code>ATLAS_CATALOGUE_PURGE=true</code>)
+      — on a development or test installation only.</p>`}
+    <p style="margin:0 0 4px">Deleting ${esc(what)} <b>${esc(plan.id)}</b> would remove:</p>
+    ${purgeList("Catalogue", plan.catalogs)}
+    ${purgeList("Releases", plan.releases)}
+    ${purgeList("Products", plan.products)}
+    ${purgeList("Orders", plan.orders)}
+    ${purgeList("Orders that stay, with these lines withdrawn",
+    (plan.keptOrders || []).map((k) => `${k.order}: ${k.products.join(", ")}`))}
+    ${purgeList("Catalogues that stop offering",
+    (plan.strippedFrom || []).map((s) => `${s.catalog}: ${s.products.join(", ")}`))}
+    ${counts.length ? `<p style="margin:8px 0 0">${esc(counts.join("; "))}.</p>` : ""}
+    ${purgeList("Processes that stay deployed", plan.processes)}
+    ${(plan.warnings || []).length ? `<div class="card" style="margin-top:10px; border-color:var(--warn)">
+      <b>Read this before you confirm</b>
+      <ul style="margin:6px 0 0">${plan.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>` : ""}
+    ${plan.enabled ? `<label class="field" style="margin-top:12px">Type <code>${esc(plan.confirm)}</code> to confirm
+        <input name="purgeConfirm" autocomplete="off" spellcheck="false"></label>
+      <div class="row"><button class="btn danger" type="button" data-act="purge-confirm"
+        data-kind="${esc(plan.kind)}" data-id="${esc(plan.id)}" disabled>Delete ${esc(what)} for good</button></div>` : ""}
+  </div>`;
+}
+
+function wirePurge({ api, toast, view }, cat) {
+  const card = view.querySelector(".cat-purge");
+  if (!card) return;
+  const report = card.querySelector(".purge-report");
+  const enc = encodeURIComponent;
+  const base = (kind, id) => kind === "catalog"
+    ? `/api/v1/catalogs/${enc(id)}` : `/api/v1/catalog-products/${enc(id)}`;
+
+  card.addEventListener("input", (e) => {
+    if (e.target.name !== "purgeConfirm") return;
+    const b = card.querySelector('[data-act="purge-confirm"]');
+    if (b) b.disabled = e.target.value !== b.dataset.id;
+  });
+  card.addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-act]");
+    if (!b) return;
+    const act = b.dataset.act;
+    try {
+      if (act === "purge-catalog" || act === "purge-product") {
+        const kind = act === "purge-catalog" ? "catalog" : "product";
+        const id = kind === "catalog" ? cat.id : card.querySelector('[name="purgeProduct"]').value;
+        report.innerHTML = purgePlanHTML(await api("GET", `${base(kind, id)}/deletion`));
+        return;
+      }
+      if (act === "purge-confirm") {
+        const { kind, id } = b.dataset;
+        if (card.querySelector('[name="purgeConfirm"]').value !== id) return;
+        b.disabled = true;
+        await api("DELETE", `${base(kind, id)}?confirm=${enc(id)}`);
+        toast(`${kind === "catalog" ? "Catalogue" : "Product"} ${id} deleted for good.`);
+        if (kind === "catalog") location.hash = "#/catalog";
+        else redraw();
+      }
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  });
 }
 
 // ---------- Moving a catalogue between installations ----------

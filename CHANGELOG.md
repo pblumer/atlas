@@ -14,6 +14,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A catalogue can be deleted for good on a development installation.** An administrator
+  deletes a catalogue, or a single product, with its releases, its own products, the orders
+  placed from it, the process instances still working them and the rights they granted —
+  so a catalogue imported, ordered from and tried out can be cleared and imported again.
+  Off by default: the server has to be started with `--catalogue-purge`
+  (`ATLAS_CATALOGUE_PURGE=true`, Helm `atlas.catalogue.purge`), and without it the delete
+  answers 403. `GET /api/v1/catalogs/{id}/deletion` and
+  `GET /api/v1/catalog-products/{id}/deletion` show what would go and what it means —
+  cancelled instances do not undo what they did in a target system, and rights leave the
+  inventory without any deprovisioning — and `DELETE /api/v1/catalogs/{id}` and
+  `DELETE /api/v1/catalog-products/{id}` carry it out only with `?confirm=` repeating the
+  id. The Console's catalogue page has a **Delete for good** card for administrators, and
+  MCP four tools (`atlas_catalog_deletion`, `atlas_delete_catalog`,
+  `atlas_catalog_product_deletion`, `atlas_delete_catalog_product`). On every server
+  started without the flag nothing changes: a product is withdrawn and a catalogue kept
+  ([ADR-draft-catalogue-purge](docs/adr/draft-catalogue-purge.md), amending ADR-0312 and
+  answering ADR-0376's open question).
+
 - **API tokens are minted, listed and revoked in the Console.** **Console → API tokens**,
   offered to administrators only, lists every token with its scope, roles, reach, expiry
   and who minted it when, and marks an expired one rather than hiding it. The form says
