@@ -88,6 +88,18 @@ only the fields its operation uses.
 
 ### Added
 
+- **A source download carries its constants when asked, and names what the target needs.**
+  In the Console, **Download source…** asks whether the application's constant values travel
+  (`GET /api/v1/applications/{id}/source?constants=true` writes them as `constants.json`, source
+  format 3) and lists what the processes read from the installation and no download carries:
+  server constants, application constants and configured workers, each with the processes that
+  read it (`GET /api/v1/applications/{id}/needs`; the manifest names them under `needs`).
+  **Import source tree…** offers the constants like any other artifact — new set, behind
+  updated, ahead kept, changed asked — and sets them only for an administrator; afterwards it
+  names what this server still lacks, before anybody publishes. `atlas export` prints the list,
+  and `atlas import` shows in its plan what the target lacks and sets the constants before it
+  publishes, so the publish warns only about what is really missing
+  ([ADR-0467](docs/adr/0467-application-package-export.md), amendment 2026-10-21).
 - **Teams Phone lists the free phone numbers to choose from.** `list-free-phone-numbers`
   answers the numbers in the tenant's inventory that nobody holds, that are activated and
   not blocked, of the type named and assignable to a person or to a voice app's resource

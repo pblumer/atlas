@@ -508,13 +508,26 @@ th{color:var(--muted);font-weight:600}
     solange das Paket vorschlägt, was es schon beim letzten Mal vorgeschlagen hat. Gefragt wird nur, wenn sich auch
     der Vorschlag geändert hat. Konstanten setzen darf nur, wer die Rolle <code>admin</code> hat, und ein Token trägt
     sie nie. Mit Token nennt der Befehl deshalb, was jemand mit dieser Rolle noch setzen muss, und importiert den
-    Rest. Am Ende meldet er jede Konstante, die die Applikation liest und dieser Server nicht hält.</p>
+    Rest. Er setzt die Konstanten vor dem Veröffentlichen, damit dessen Warnungen nur nennen, was wirklich fehlt. Am
+    Ende meldet er jede Konstante, die die Applikation liest und dieser Server nicht hält.</p>
+  <p data-l="de"><b>Was der Server noch braucht.</b> Server-Konstanten und konfigurierte Worker reisen nie mit: Eine
+    Server-Konstante lesen alle Applikationen der Instanz, und Endpunkt und Geheimnis eines Workers gehören zur
+    Instanz. Der Plan nennt deshalb, bevor etwas geschrieben wird, was die Prozesse davon lesen und dieser Server nicht
+    hat – eine fehlende Server- oder Applikations-Konstante, eine mit anderem Typ, einen fehlenden, anders
+    konfigurierten oder nicht nutzbaren Worker – und wo er es einrichtet. Eine Konstante mit Rückfallwert fehlt nicht.
+    Der Import läuft trotzdem durch: Eine Applikation darf veröffentlicht werden, bevor ihre Umgebung steht.</p>
   <p data-l="en"><b>Constants</b> (<code>konstanten.json</code>) are a suggestion: the command sets missing values. A
     value somebody set on this server – one on INT, another on PROD – stays as long as the package suggests what it
     suggested last time; you are asked only when the suggestion changed too. Only the <code>admin</code> role may set
     constants, and a token never carries it. With a token the command therefore names what an administrator still has
-    to set, and imports the rest. At the end it reports every constant the application reads and this server does not
-    hold.</p>
+    to set, and imports the rest. It sets the constants before it publishes, so the publish warns only about what is
+    really missing. At the end it reports every constant the application reads and this server does not hold.</p>
+  <p data-l="en"><b>What the server still needs.</b> Server constants and configured workers never travel: every
+    application on the instance reads a server constant, and a worker's endpoint and secret belong to the instance. So
+    the plan names, before anything is written, what the processes read of them and this server does not have – a
+    missing server or application constant, one with another type, a worker that is missing, configured as another
+    type or not usable – and where to set it up. A constant with a fallback is not missing. The import goes through
+    regardless: an application may be published before its surroundings exist.</p>
 </section>
 
 <section id="export">
@@ -570,6 +583,24 @@ atlas import --server https://atlas.example.com --answers paket/antworten.json p
     with what it will do on the target: a form outside the application, a process this server deploys nowhere, a
     product whose home catalogue is missing. A process a product is bound to that is not in the application travels in
     <code>katalog.json</code>.</p>
+  <p data-l="de">Zum Schluss listet der Befehl, was das Ziel braucht und kein Paket mitbringt: die Server-Konstanten
+    und Applikations-Konstanten, die die Prozesse lesen, und die Worker, die sie nennen, jeweils mit den Prozessen, die
+    sie brauchen. Eine Konstante, deren Wert in <code>konstanten.json</code> steht, fehlt in der Liste. Dieselbe Liste
+    steht unter <code>needs</code> in <code>atlas.json</code>.</p>
+  <p data-l="en">Finally the command lists what the target needs and no package brings: the server constants and
+    application constants the processes read and the workers they name, each with the processes that need it. A
+    constant whose value is in <code>konstanten.json</code> is left out. The same list is under <code>needs</code> in
+    <code>atlas.json</code>.</p>
+  <p data-l="de"><b>Ohne Terminal.</b> In der Console schreibt <i>Download source…</i> die Applikation als Archiv.
+    Der Dialog fragt vorher, ob die Konstanten-Werte mitkommen, und zeigt dieselbe Liste. <i>Import source tree…</i>
+    auf der anderen Instanz bietet die Konstanten an wie jedes andere Artefakt und nennt danach, was dort noch fehlt.
+    Ein entpacktes Archiv installiert auch <code>atlas import</code>. Den Shop bringt dieser Weg nicht mit; er reist
+    über den Katalog-Export.</p>
+  <p data-l="en"><b>Without a terminal.</b> In the Console, <i>Download source…</i> writes the application as an
+    archive. The dialog first asks whether the constant values come along, and shows the same list.
+    <i>Import source tree…</i> on the other instance offers the constants like any other artifact and then names what
+    is still missing there. <code>atlas import</code> installs an unpacked archive too. This way does not bring the
+    shop; that travels through the catalogue export.</p>
 </section>
 
 </main>
