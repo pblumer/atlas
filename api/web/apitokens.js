@@ -26,7 +26,7 @@
 
 import { copyText } from "./clipboard.js";
 import { fmtDate, fmtDateTime } from "./datefmt.js";
-import { locale, t } from "./i18n.js";
+import { locale, plural, t } from "./i18n.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -66,6 +66,15 @@ export const ADMIN_TOKEN_ROLES = ["modeler", "operator", "user"];
 export const MAX_DAYS = 1825;
 export const DEFAULT_DAYS = 365;
 
+// EXPIRY_WARN_DAYS is how far ahead an expiry is warned about. A token that expires
+// stops working without a word — every call its machine makes is a 401 from then on,
+// and for the shop's system processes that is an incident per order — so the time to
+// say so is while a replacement can still be minted and handed over. Thirty days
+// leaves room for a change process; it is the Console's choice, not a server rule.
+export const EXPIRY_WARN_DAYS = 30;
+
+const DAY = 86400;
+
 // rolesFor is the preview of tokenRolesFor(scope, an administrator).
 export const rolesFor = (scope) => SCOPE_ROLES[scope] || ADMIN_TOKEN_ROLES;
 
@@ -75,6 +84,29 @@ const scopeOf = (id) => SCOPES.find((s) => s.id === id);
 // been reached is refused. The browser's clock stands in for the server's, which
 // matters only for a token that expires within minutes of now.
 const expired = (tok, nowSec) => !!tok.expiresAt && nowSec >= tok.expiresAt;
+
+// expiringSoon is a token still accepted that has less than EXPIRY_WARN_DAYS left. An
+// expired one is not among them: it has already stopped working and says so itself.
+export const expiringSoon = (tok, nowSec) =>
+  !!tok.expiresAt && nowSec < tok.expiresAt && tok.expiresAt - nowSec < EXPIRY_WARN_DAYS * DAY;
+
+// soonest returns the tokens about to expire, the first to go first.
+const soonest = (tokens, nowSec) =>
+  tokens.filter((tok) => expiringSoon(tok, nowSec)).sort((a, b) => a.expiresAt - b.expiresAt);
+
+// leftLabel says how long a token has, in whole days: twelve days and an hour is
+// "12 days", because the reader plans in days, and under a day is said as such
+// rather than as "0 days".
+function leftLabel(tok, nowSec) {
+  const days = Math.floor((tok.expiresAt - nowSec) / DAY);
+  return days < 1 ? t("apitokens.expires.soonUnderADay") : plural("apitokens.expires.soon", days);
+}
+
+// soonItem is one line of a warning: the token, how long it has, and the vault secret
+// it went to, because that name is what a replacement has to be sealed under.
+const soonItem = (tok, nowSec) =>
+  `<li><b>${esc(tok.name)}</b> — ${esc(leftLabel(tok, nowSec))}${tok.vaultSecret
+    ? ` · ${esc(t("apitokens.vaultChip", { name: tok.vaultSecret }))}` : ""}</li>`;
 
 const chips = (list) => (list || []).map((r) => `<span class="chip">${esc(r)}</span>`).join(" ");
 
@@ -89,6 +121,9 @@ function tokenRow(tok, ctx) {
     expires = `<span class="pill warn" data-expiry="never"><span class="dot"></span>${esc(t("apitokens.expires.never"))}</span>`;
   } else if (gone) {
     expires = `<span class="pill err" data-expiry="expired" title="${esc(t("apitokens.expires.expiredTitle", { when: fmtDateTime(tok.expiresAt * 1000) }))}"><span class="dot"></span>${esc(t("apitokens.expires.expired"))}</span>
+      <div class="muted" style="font-size:12px">${esc(fmtDate(tok.expiresAt * 1000))}</div>`;
+  } else if (expiringSoon(tok, now)) {
+    expires = `<span class="pill warn" data-expiry="soon" title="${esc(t("apitokens.expires.soonTitle", { when: fmtDateTime(tok.expiresAt * 1000) }))}"><span class="dot"></span>${esc(leftLabel(tok, now))}</span>
       <div class="muted" style="font-size:12px">${esc(fmtDate(tok.expiresAt * 1000))}</div>`;
   } else {
     expires = `<span data-expiry="valid">${esc(fmtDate(tok.expiresAt * 1000))}</span>`;
@@ -113,6 +148,42 @@ function tokenRow(tok, ctx) {
 
 const emptyRow = () =>
   `<tr class="tok-empty"><td colspan="7" class="muted" style="padding:14px 18px">${esc(t("apitokens.list.empty"))}</td></tr>`;
+
+// paintSoon fills the warning above the list: which tokens expire within
+// EXPIRY_WARN_DAYS and what to do about them. It runs again after every mint and
+// revocation, so replacing a token and revoking the old one is what clears it.
+function paintSoon(root, tokens) {
+  const box = root.querySelector("#tok-soon");
+  const now = Date.now() / 1000;
+  const soon = soonest(tokens, now);
+  box.hidden = !soon.length;
+  box.innerHTML = soon.length
+    ? `<b>${esc(plural("apitokens.soon.summary", soon.length, { days: EXPIRY_WARN_DAYS }))}</b>
+      <ul>${soon.map((tok) => soonItem(tok, now)).join("")}</ul>
+      <div>${esc(t("apitokens.soon.hint"))}</div>`
+    : "";
+}
+
+// renderExpiringTokens tells an administrator on the Console's dashboard which tokens
+// expire within EXPIRY_WARN_DAYS. The API-token page says it too, but a warning that
+// lives only on a page nobody opens is the silence it exists to break. Silent when
+// nothing is about to expire and on any failure: the dashboard works without it.
+export async function renderExpiringTokens(slot, { api }) {
+  if (!slot) return;
+  let tokens;
+  try { tokens = await api("GET", "/api/v1/api-tokens"); } catch { return; }
+  if (!Array.isArray(tokens)) return;
+  const now = Date.now() / 1000;
+  const soon = soonest(tokens, now);
+  if (!soon.length) return;
+  slot.innerHTML = `<div class="card tokens-expiring" id="api-tokens-expiring" role="status">
+    <h2>${esc(t("apitokens.dashboard.title"))}</h2>
+    <p>${esc(plural("apitokens.dashboard.intro", soon.length, { days: EXPIRY_WARN_DAYS }))}</p>
+    <ul>${soon.map((tok) => soonItem(tok, now)).join("")}</ul>
+    <p class="muted">${esc(t("apitokens.soon.hint"))}</p>
+    <div class="row"><a class="btn ghost" href="#/console/api-tokens">${esc(t("apitokens.dashboard.open"))}</a></div>
+  </div>`;
+}
 
 // dropSecret empties and removes the result panel. It is the page's cleanup: the
 // router calls it on every navigation, so leaving the view takes the secret out of
@@ -175,6 +246,7 @@ export async function viewAPITokens({ api, toast, view, isSuperseded }) {
     <div class="card" style="padding:0; margin-top:18px">
       <div class="between" style="padding:16px 18px 0"><h2>${esc(t("apitokens.list.title"))}</h2></div>
       <p class="muted" style="padding:0 18px; margin:6px 0 12px">${esc(t("apitokens.list.intro"))}</p>
+      <div class="warn-note" id="tok-soon" role="status" style="margin:0 18px 12px" hidden></div>
       <table data-dt-key="api-tokens">
         <thead><tr><th>${esc(t("apitokens.col.name"))}</th><th>${esc(t("apitokens.col.scope"))}</th>
           <th>${esc(t("apitokens.col.roles"))}</th><th>${esc(t("apitokens.col.reach"))}</th>
@@ -186,6 +258,7 @@ export async function viewAPITokens({ api, toast, view, isSuperseded }) {
   window.__atlasCleanup = dropSecret;
 
   const root = document.getElementById("api-tokens");
+  paintSoon(root, tokens);
   wireForm({ api, toast, root, secrets, ctx, reachLists, tokens });
   wireRevoke({ api, toast, root, tokens });
 
@@ -365,6 +438,7 @@ function wireForm({ api, toast, root, secrets, ctx, reachLists, tokens }) {
       const empty = rows.querySelector("tr.tok-empty");
       if (empty) empty.remove();
       rows.insertAdjacentHTML("beforeend", tokenRow(created, ctx));
+      paintSoon(root, tokens);
       if (created.vaultSecret && secrets) secrets.add(created.vaultSecret);
       form.reset();
       reachFor = "";
@@ -442,6 +516,7 @@ function wireRevoke({ api, toast, root, tokens }) {
       const body = row.parentElement;
       row.remove();
       if (!body.querySelector("tr[data-id]")) body.insertAdjacentHTML("beforeend", emptyRow());
+      paintSoon(root, tokens);
       toast(t("apitokens.revoked"));
     } catch (err) {
       btn.disabled = false;
