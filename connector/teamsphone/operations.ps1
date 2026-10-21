@@ -23,6 +23,7 @@ $CallQueueApplicationId = '11cd3e2e-fccb-42ad-ad00-878b93575e07'
 $AutoAttendantApplicationId = 'ce933385-9390-45d1-9512-c8d228074e07'
 $RoutingNames = @{ 'attendant' = 'Attendant'; 'serial' = 'Serial'; 'round-robin' = 'RoundRobin'; 'longest-idle' = 'LongestIdle' }
 $NumberTypes = @{ 'direct-routing' = 'DirectRouting'; 'calling-plan' = 'CallingPlan'; 'operator-connect' = 'OperatorConnect' }
+$Capabilities = @{ 'user' = 'UserAssignment'; 'resource-account' = 'VoiceApplicationAssignment' }
 # The two Microsoft endpoints. A request may name others, which only the worker's own
 # tests do, against a local stand-in.
 $GraphRoot = if ($Request.graphRoot) { [string]$Request.graphRoot } else { 'https://graph.microsoft.com/v1.0' }
@@ -463,6 +464,38 @@ function Remove-PhoneNumber {
     return [ordered]@{ removed = ($removed.Count -gt 0); phoneNumbers = $removed }
 }
 
+# The numbers in the tenant's inventory nobody holds that Teams would give to the kind of
+# holder named, sorted, no more than max. Teams filters by status, activation, type,
+# capability and prefix; a number blocked for assignment is dropped here, because Teams
+# lists it as unassigned and then refuses to give it out. One more than max is asked
+# for, so truncated says whether Teams had more to offer. A Direct Routing number is in
+# the inventory only once it has been uploaded to it.
+function Get-FreePhoneNumbers {
+    $a = $Request.args
+    $most = [int]$a.max
+    $params = @{
+        PstnAssignmentStatus = 'Unassigned'; ActivationState = 'Activated'; Top = $most + 1
+        NumberType = $NumberTypes[[string]$a.numberType]; CapabilitiesContain = $Capabilities[[string]$a.assignableTo]
+    }
+    if ($a.numberPrefix) { $params.TelephoneNumberStartsWith = [string]$a.numberPrefix }
+    $rows = @(Get-CsPhoneNumberAssignment @params)
+    [object[]]$free = @(foreach ($r in $rows) {
+        $blocked = [string]$r.AssignmentBlockedState
+        if ($blocked -and $blocked -ne 'NotBlocked') { continue }
+        $r
+    })
+    [string[]]$keys = @(foreach ($r in $free) { [string]$r.TelephoneNumber })
+    [Array]::Sort($keys, $free, [StringComparer]::Ordinal)
+    $numbers = [System.Collections.Generic.List[string]]::new()
+    $entries = [System.Collections.Generic.List[object]]::new()
+    for ($i = 0; $i -lt [Math]::Min($free.Count, $most); $i++) {
+        $number = [string]$free[$i].TelephoneNumber
+        $numbers.Add($number)
+        $entries.Add([ordered]@{ phoneNumber = $number; numberType = [string]$a.numberType; city = [string]$free[$i].City; isoCountryCode = [string]$free[$i].IsoCountryCode })
+    }
+    return [ordered]@{ numbers = @($numbers); entries = @($entries); count = $numbers.Count; truncated = ($rows.Count -gt $most) }
+}
+
 # A resource account is an Entra user: Teams has no cmdlet that deletes one. So the
 # association goes through Teams and the account through Graph. The leaver path is one
 # task: the account's phone numbers are released first — a number left on a deleted
@@ -561,6 +594,7 @@ try {
         'ensure-phone-number' { Set-PhoneNumber }
         'remove-phone-number' { Remove-PhoneNumber }
         'remove-hotline' { Remove-Hotline }
+        'list-free-phone-numbers' { Get-FreePhoneNumbers }
         default { throw "unknown operation $($Request.operation)" }
     }
     $envelope = [ordered]@{ ok = $true; result = $result }

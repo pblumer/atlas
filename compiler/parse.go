@@ -3170,6 +3170,9 @@ type xmlTeamsPhoneConnector struct {
 	LocationID           string `xml:"locationId,attr"`
 	ResourceAccountIDs   string `xml:"resourceAccountIds,attr"`
 	Names                string `xml:"names,attr"`
+	NumberPrefix         string `xml:"numberPrefix,attr"`
+	Max                  string `xml:"max,attr"`
+	AssignableTo         string `xml:"assignableTo,attr"`
 	ResultVariable       string `xml:"resultVariable,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
@@ -3204,6 +3207,9 @@ func (c *xmlTeamsPhoneConnector) values() []struct{ attr, raw string } {
 		{"locationId", c.LocationID},
 		{"resourceAccountIds", c.ResourceAccountIDs},
 		{"names", c.Names},
+		{"numberPrefix", c.NumberPrefix},
+		{"max", c.Max},
+		{"assignableTo", c.AssignableTo},
 	}
 }
 

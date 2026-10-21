@@ -26,7 +26,8 @@ const (
 	// every name resolves.
 	teamsPhoneMockUsersEnv = teamsPhoneEnvPrefix + "MOCK_USERS"
 	// teamsPhoneMockNumbersEnv names the Calling Plan and Operator Connect numbers the
-	// mock tenant has; unset, it has every number.
+	// mock tenant has, which are also the inventory list-free-phone-numbers offers from;
+	// unset, it has every number and lists none.
 	teamsPhoneMockNumbersEnv = teamsPhoneEnvPrefix + "MOCK_NUMBERS"
 	// teamsPhoneTimeoutEnv bounds one job's PowerShell run.
 	teamsPhoneTimeoutEnv = teamsPhoneEnvPrefix + "TIMEOUT"

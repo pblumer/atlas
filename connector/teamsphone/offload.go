@@ -213,6 +213,8 @@ func normalize(name string, shape Shape, raw any) (any, error) {
 		return holidays(raw)
 	case PhoneNumber:
 		return phoneNumber(name, raw)
+	case Limit:
+		return limit(name, raw)
 	default:
 		s, err := text(name, raw)
 		return s, err
@@ -378,6 +380,25 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// limit reads how many entries an answer may hold. Unset is the default; anything but a
+// whole number from 1 to MaxFreeNumbers is refused rather than clamped, because a model
+// asking for 2000 numbers and getting 500 without a word would read the page as the
+// whole inventory.
+func limit(name string, raw any) (int, error) {
+	s, err := text(name, raw)
+	if err != nil {
+		return 0, err
+	}
+	if s == "" {
+		return DefaultFreeNumbers, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 1 || n > MaxFreeNumbers {
+		return 0, fmt.Errorf("%s must be a whole number from 1 to %d, not %q", name, MaxFreeNumbers, s)
+	}
+	return n, nil
 }
 
 // builtinProcessInstanceKey is the reserved FEEL name that binds to the instance's own

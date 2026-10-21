@@ -757,6 +757,95 @@ func attendant(holidays string) teamsphone.Job {
 
 // A holiday without an end is the one day it starts on, and a FEEL list of contexts
 // reads like the JSON text of one.
+// list-free-phone-numbers offers the inventory's numbers nobody holds, sorted, under the
+// prefix the model names, and says when it stopped short. A number given out is no longer
+// offered, and one released is offered again.
+func TestFreeNumbersAreTheInventorysUnheldOnes(t *testing.T) {
+	m := teamsphone.NewMockTenant("anna@contoso.example").WithNumbers("+41 44 111 00 02", "+41441110000", "+41441110001", "+41442220000")
+	reg := teamsphone.NewRegistry()
+	reg.Register("contoso", m)
+	run := func(op string, args map[string]any) map[string]any {
+		t.Helper()
+		out, err := teamsphone.Run(context.Background(), teamsphone.Job{Connector: "contoso", Operation: op, Args: args, ResultVariable: "r"}, reg)
+		if err != nil {
+			t.Fatalf("%s: %v", op, err)
+		}
+		return out["r"].(map[string]any)
+	}
+	free := func(extra map[string]any) map[string]any {
+		args := map[string]any{"numberType": "calling-plan", "assignableTo": "user"}
+		for k, v := range extra {
+			args[k] = v
+		}
+		return run("list-free-phone-numbers", args)
+	}
+	run("ensure-phone-number", map[string]any{"identity": "anna@contoso.example", "phoneNumber": "+41441110001", "numberType": "calling-plan"})
+	got := free(map[string]any{"numberPrefix": "+41 44 111"})
+	if !slices.Equal(got["numbers"].([]string), []string{"+41441110000", "+41441110002"}) || got["count"] != 2 || got["truncated"] != false {
+		t.Errorf("free numbers under +4144111 = %v; want the two nobody holds, sorted", got)
+	}
+	if entries := got["entries"].([]map[string]any); len(entries) != 2 || entries[0]["phoneNumber"] != "+41441110000" || entries[0]["numberType"] != "calling-plan" {
+		t.Errorf("entries = %v; want one per number, in the same order, with its type", entries)
+	}
+	if got := free(map[string]any{"max": json.Number("2")}); !slices.Equal(got["numbers"].([]string), []string{"+41441110000", "+41441110002"}) || got["truncated"] != true {
+		t.Errorf("two of three free numbers = %v; want the first two and truncated", got)
+	}
+	run("remove-phone-number", map[string]any{"identity": "anna@contoso.example"})
+	if got := free(nil); got["count"] != 4 {
+		t.Errorf("after the release = %v; want the released number offered again", got)
+	}
+	everything := teamsphone.NewRegistry()
+	everything.Register("contoso", teamsphone.NewMockTenant())
+	out, err := teamsphone.Run(context.Background(), teamsphone.Job{Connector: "contoso", Operation: "list-free-phone-numbers",
+		Args: map[string]any{"numberType": "direct-routing", "assignableTo": "resource-account"}, ResultVariable: "r"}, everything)
+	if err != nil || out["r"].(map[string]any)["count"] != 0 {
+		t.Errorf("a mock tenant that has every number = %v, %v; want nothing to list", out, err)
+	}
+}
+
+// What a free-number list may ask for: both settings, because a number listed for the
+// wrong type or the wrong kind of holder is one Teams then refuses; a prefix read like a
+// number; and a page of at most MaxFreeNumbers, DefaultFreeNumbers when none is named.
+func TestAFreeNumberListIsBounded(t *testing.T) {
+	prepare := func(args map[string]any) (teamsphone.Request, error) {
+		return teamsphone.Prepare(teamsphone.Job{Operation: "list-free-phone-numbers", Args: args})
+	}
+	base := func(extra map[string]any) map[string]any {
+		args := map[string]any{"numberType": "direct-routing", "assignableTo": "resource-account"}
+		for k, v := range extra {
+			args[k] = v
+		}
+		return args
+	}
+	req, err := prepare(base(map[string]any{"numberPrefix": "+41 44 555"}))
+	if err != nil || req.Args["max"] != teamsphone.DefaultFreeNumbers || req.Args["numberPrefix"] != "+4144555" || req.Args["assignableTo"] != "resource-account" {
+		t.Errorf("Prepare = %v, %v; want the default page, the prefix as Teams takes it and the setting carried", req.Args, err)
+	}
+	if _, present := req.Args["identity"]; present {
+		t.Errorf("Prepare carries %v; want only what the operation takes", req.Args)
+	}
+	for _, max := range []any{json.Number("500"), 1.0, "7"} {
+		if _, err := prepare(base(map[string]any{"max": max})); err != nil {
+			t.Errorf("max %v: %v; want it taken", max, err)
+		}
+	}
+	for _, max := range []any{0.0, json.Number("501"), "2.5", "viele"} {
+		if _, err := prepare(base(map[string]any{"max": max})); err == nil || !strings.Contains(err.Error(), "max") {
+			t.Errorf("max %v: %v; want it refused, naming max", max, err)
+		}
+	}
+	if _, err := prepare(base(map[string]any{"numberPrefix": "+41 (0)44"})); err == nil {
+		t.Error("a prefix with (0) after the country code was taken; want it refused like a number")
+	}
+	for _, setting := range []string{"numberType", "assignableTo"} {
+		args := base(nil)
+		delete(args, setting)
+		if _, err := prepare(args); err == nil || !strings.Contains(err.Error(), setting) {
+			t.Errorf("without %s: %v; want it refused, naming it", setting, err)
+		}
+	}
+}
+
 func TestHolidaysAreWholeDays(t *testing.T) {
 	req, err := teamsphone.Prepare(attendant(`[{"name":"Weihnachten","start":"2026-12-25"},{"name":"Neujahr","start":"2026-12-31","end":"2027-01-03"}]`))
 	if err != nil {
@@ -860,7 +949,12 @@ func TestARemoveFindsAnOrphanByName(t *testing.T) {
 // required value does not, every optional value and setting is accepted, and every
 // attribute the operation does not take is refused.
 func TestTeamsPhoneOpsMatchTheCompiler(t *testing.T) {
-	sample := map[teamsphone.Shape]string{teamsphone.Text: "x", teamsphone.List: "a,b", teamsphone.Holidays: `=[]`, teamsphone.PhoneNumber: "+41441234567"}
+	sample := map[teamsphone.Shape]string{teamsphone.Text: "x", teamsphone.List: "a,b", teamsphone.Holidays: `=[]`, teamsphone.PhoneNumber: "+41441234567", teamsphone.Limit: "10"}
+	for name, shape := range teamsphone.Attributes {
+		if sample[shape] == "" {
+			t.Fatalf("no sample for %s's shape: an attribute without one reads as unset, and every operation would seem to refuse it", name)
+		}
+	}
 	attrs := func(op string, spec teamsphone.Op, omit string, extra ...string) string {
 		parts := []string{`connector="c"`, `operation="` + op + `"`}
 		for _, name := range spec.Required {
@@ -952,6 +1046,9 @@ func TestTheCompilersSettingsAreThisPackages(t *testing.T) {
 		case "numberType":
 			op = "ensure-phone-number"
 			base = `connector="c" operation="ensure-phone-number" identity="u" phoneNumber="+41441234567" resultVariable="q"`
+		case "assignableTo":
+			op = "list-free-phone-numbers"
+			base = `connector="c" operation="list-free-phone-numbers" numberType="calling-plan" resultVariable="q"`
 		}
 		for _, v := range set.Values {
 			if _, _, _, err := compileTask(base + ` ` + name + `="` + v + `"`); err != nil {

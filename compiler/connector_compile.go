@@ -2738,11 +2738,17 @@ var teamsPhoneOps = map[string]teamsPhoneOp{
 	},
 	"remove-phone-number": {required: []string{"identity"}, optional: []string{"phoneNumber"}},
 	"remove-hotline":      {required: []string{"resourceAccountIds"}, optional: []string{"names"}},
+	"list-free-phone-numbers": {
+		optional:    []string{"numberPrefix", "max"},
+		settings:    []string{"numberType", "assignableTo"},
+		needsResult: true,
+	},
 }
 
 // teamsPhoneSettings are the static values each setting may take, and whether a model
 // must author it: an account type guessed wrong creates an account that cannot carry the
-// voice app it was meant for. The defaults of the others are the worker's.
+// voice app it was meant for, and a free number listed for the wrong kind of holder is
+// one Teams then refuses to give. The defaults of the others are the worker's.
 var teamsPhoneSettings = map[string]struct {
 	values   []string
 	required bool
@@ -2753,6 +2759,7 @@ var teamsPhoneSettings = map[string]struct {
 	"conferenceMode":       {values: []string{"true", "false"}},
 	"allowOptOut":          {values: []string{"true", "false"}},
 	"numberType":           {values: []string{"direct-routing", "calling-plan", "operator-connect"}, required: true},
+	"assignableTo":         {values: []string{"user", "resource-account"}, required: true},
 }
 
 func teamsPhoneOpNames() []string {
