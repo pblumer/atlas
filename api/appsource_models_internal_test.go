@@ -31,7 +31,7 @@ func TestBuildSourceTreeCarriesLocalDecisionModels(t *testing.T) {
 			{ID: "r2", Name: "Betragsgrenze", ModelRef: "freigabe"},
 			{ID: "r3", Name: "Risiko", ModelRef: "temis://risk"},
 		},
-		map[string][]byte{"freigabe": []byte(sourceModelXML)})
+		map[string][]byte{"freigabe": []byte(sourceModelXML)}, nil)
 	if err != nil {
 		t.Fatalf("buildSourceTree: %v", err)
 	}
@@ -49,8 +49,8 @@ func TestBuildSourceTreeCarriesLocalDecisionModels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseSourceTree: %v", err)
 	}
-	if man.FormatVersion != sourceFormatVersion {
-		t.Errorf("formatVersion = %d, want %d for a tree carrying a model", man.FormatVersion, sourceFormatVersion)
+	if man.FormatVersion != sourceFormatVersionModels {
+		t.Errorf("formatVersion = %d, want %d for a tree carrying a model", man.FormatVersion, sourceFormatVersionModels)
 	}
 	want := map[string]string{"r1": "decisions/freigabe.dmn", "r2": "decisions/freigabe.dmn", "r3": ""}
 	for _, d := range man.Decisions {
@@ -88,8 +88,8 @@ func TestParseSourceTreeDecisionModelRefusals(t *testing.T) {
 			"not a model handle"},
 		{"handle empty", []sourceFile{manifest(`[{"id":"d","path":"decisions/m.dmn"}]`), model},
 			"not a model handle"},
-		{"newer format", []sourceFile{{Path: manifestPath, Data: []byte(`{"formatVersion":3,"key":"a","name":"A"}`)}},
-			"unsupported format version 3"},
+		{"newer format", []sourceFile{{Path: manifestPath, Data: []byte(`{"formatVersion":4,"key":"a","name":"A"}`)}},
+			"unsupported format version 4"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -230,7 +230,7 @@ func modelTree(content string) (sourceManifest, map[string][]byte) {
 func TestApplySourceTreeWritesDecisionModels(t *testing.T) {
 	s, dir := modelStoresFor(t)
 	man, byPath := modelTree(sourceModelXML)
-	res, err := s.applySourceTree(man, byPath, "", allow, importplan.Decisions{})
+	res, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allow}, importplan.Decisions{})
 	if err != nil {
 		t.Fatalf("applySourceTree: %v", err)
 	}
@@ -247,7 +247,7 @@ func TestApplySourceTreeWritesDecisionModels(t *testing.T) {
 	if err := s.dmnrefs.Save(dmnRef{ID: "theirs", Name: "Fremd", ModelRef: "freigabe", ProjectID: "other"}); err != nil {
 		t.Fatalf("save ref: %v", err)
 	}
-	if res, err = s.applySourceTree(man, byPath, "", allow, importplan.Decisions{}); err != nil {
+	if res, err = s.applySourceTree(man, byPath, sourceCaller{authorize: allow}, importplan.Decisions{}); err != nil {
 		t.Fatalf("second applySourceTree: %v", err)
 	}
 	if res.Models != 1 {
@@ -271,7 +271,7 @@ func TestApplySourceTreeRefusesAModelOthersUse(t *testing.T) {
 				t.Fatalf("save ref: %v", err)
 			}
 			man, byPath := modelTree(sourceModelXML)
-			_, err := s.applySourceTree(man, byPath, "", allow, importplan.Decisions{OverwriteAll: true})
+			_, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allow}, importplan.Decisions{OverwriteAll: true})
 			var refusal sourceRefusal
 			if !errors.As(err, &refusal) || refusal.status != http.StatusConflict ||
 				!strings.Contains(refusal.msg, `decision model "freigabe"`) {
@@ -300,7 +300,7 @@ func TestApplySourceTreeOverwritesItsOwnModel(t *testing.T) {
 	}
 	writeModelFile(t, dir, "freigabe.dmn", "<old/>")
 	man, byPath := modelTree(sourceModelXML)
-	if _, err := s.applySourceTree(man, byPath, "", allow, importplan.Decisions{Overwrite: map[string]bool{"model:freigabe": true}}); err != nil {
+	if _, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allow}, importplan.Decisions{Overwrite: map[string]bool{"model:freigabe": true}}); err != nil {
 		t.Fatalf("applySourceTree: %v", err)
 	}
 	if data, _ := os.ReadFile(filepath.Join(dir, "freigabe.dmn")); string(data) != sourceModelXML {
@@ -315,7 +315,7 @@ func TestApplySourceTreeLeavesRemoteModelsAlone(t *testing.T) {
 	s := storesFor(t)
 	s.dmnResolver = dmn.ServiceResolver{BaseURL: "http://127.0.0.1:1"}
 	man, byPath := modelTree(sourceModelXML)
-	res, err := s.applySourceTree(man, byPath, "", allow, importplan.Decisions{})
+	res, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allow}, importplan.Decisions{})
 	if err != nil {
 		t.Fatalf("applySourceTree: %v", err)
 	}
@@ -340,7 +340,7 @@ func TestApplySourceTreeReportsModelFolderFailures(t *testing.T) {
 				t.Fatalf("mkdir: %v", err)
 			}
 			man, byPath := modelTree(sourceModelXML)
-			_, err := s.applySourceTree(man, byPath, "", allow, importplan.Decisions{})
+			_, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allow}, importplan.Decisions{})
 			var refusal sourceRefusal
 			if err == nil || errors.As(err, &refusal) {
 				t.Fatalf("err = %v, want a plain failure", err)
@@ -376,12 +376,12 @@ func TestCheckSourceModelsRefusesWhatDoesNotCompile(t *testing.T) {
 func TestABehindModelOthersUseIsStillRefused(t *testing.T) {
 	s, dir := modelStoresFor(t)
 	man, byPath := modelTree("<v1/>")
-	res, err := s.applySourceTree(man, byPath, "", allow, importplan.Decisions{})
+	res, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allow}, importplan.Decisions{})
 	if err != nil {
 		t.Fatalf("first import: %v", err)
 	}
 	newer, newerPath := modelTree("<v2/>")
-	if res, err = s.applySourceTree(newer, newerPath, "", allow, importplan.Decisions{DryRun: true}); err != nil {
+	if res, err = s.applySourceTree(newer, newerPath, sourceCaller{authorize: allow}, importplan.Decisions{DryRun: true}); err != nil {
 		t.Fatalf("plan: %v", err)
 	}
 	if got := res.Artifacts[len(res.Artifacts)-1]; got.Ref != "model:freigabe" || got.Status != importplan.Behind || got.Outcome != importplan.Updated {
@@ -390,7 +390,7 @@ func TestABehindModelOthersUseIsStillRefused(t *testing.T) {
 	if err := s.dmnrefs.Save(dmnRef{ID: "theirs", Name: "Fremd", ModelRef: "freigabe", ProjectID: "other"}); err != nil {
 		t.Fatalf("save ref: %v", err)
 	}
-	_, err = s.applySourceTree(newer, newerPath, "", allow, importplan.Decisions{})
+	_, err = s.applySourceTree(newer, newerPath, sourceCaller{authorize: allow}, importplan.Decisions{})
 	var refusal sourceRefusal
 	if !errors.As(err, &refusal) || refusal.status != http.StatusConflict {
 		t.Fatalf("err = %v, want a 409", err)
@@ -399,7 +399,7 @@ func TestABehindModelOthersUseIsStillRefused(t *testing.T) {
 		t.Errorf("the model was replaced anyway: %q", data)
 	}
 	// Keeping this server's model is the way through.
-	if _, err := s.applySourceTree(newer, newerPath, "", allow, importplan.Decisions{Keep: map[string]bool{"model:freigabe": true}}); err != nil {
+	if _, err := s.applySourceTree(newer, newerPath, sourceCaller{authorize: allow}, importplan.Decisions{Keep: map[string]bool{"model:freigabe": true}}); err != nil {
 		t.Fatalf("keeping the model: %v", err)
 	}
 }

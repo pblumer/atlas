@@ -251,3 +251,133 @@ func TestAPackageUpdateNeedsNoAnswers(t *testing.T) {
 		t.Error("the newer version was not taken")
 	}
 }
+
+// needyBPMN reads TENANT_ID from its application, MAIL_DOMAIN and LANGUAGE (with a
+// fallback) from the installation, and sends mail through the worker Postausgang.
+const needyBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
+  <process id="bedarf" name="Bedarf" isExecutable="true">
+    <extensionElements>
+      <atlas:constants>
+        <atlas:constant name="TENANT_ID" type="string" source="application"/>
+        <atlas:constant name="MAIL_DOMAIN" type="string" source="server"/>
+        <atlas:constant name="LANGUAGE" type="string" source="server" value="de-CH"/>
+      </atlas:constants>
+    </extensionElements>
+    <startEvent id="s"/>
+    <serviceTask id="notify">
+      <extensionElements><atlas:mailConnector connector="Postausgang" to="a@b.ch" subject="hi" body="hi"/></extensionElements>
+    </serviceTask>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="notify"/>
+    <sequenceFlow id="f2" sourceRef="notify" targetRef="e"/>
+  </process>
+</definitions>`
+
+// TestExportAndImportNameWhatTheTargetNeeds: the export lists what the processes read
+// from the installation and the package does not carry, and the import's plan names
+// what the target lacks of it, before anything is written or published. A constant
+// the package carries a value for is the constants' import to report, not a need.
+func TestExportAndImportNameWhatTheTargetNeeds(t *testing.T) {
+	src, _ := liveServer(t)
+	code, raw := apiCall(t, src, http.MethodPost, "/api/v1/applications", `{"name":"Bedarf"}`)
+	var app struct {
+		ID string `json:"id"`
+	}
+	if code != http.StatusOK || json.Unmarshal(raw, &app) != nil {
+		t.Fatalf("create the application = %d %s", code, raw)
+	}
+	req, _ := http.NewRequest(http.MethodPost, src.URL+"/api/v1/drafts?projectId="+app.ID, strings.NewReader(needyBPMN))
+	req.Header.Set("Content-Type", "application/xml")
+	resp, err := src.Client().Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("save the draft: %v %v", resp, err)
+	}
+	_ = resp.Body.Close()
+	putConstants(t, src, app.ID, `{"constants":[{"name":"TENANT_ID","type":"string","value":"int-01"}]}`)
+
+	dir := filepath.Join(t.TempDir(), "paket")
+	var out bytes.Buffer
+	if err := runExport([]string{"--server", src.URL, "--application", app.ID, dir}, &out); err != nil {
+		t.Fatalf("export: %v\n%s", err, out.String())
+	}
+	for _, want := range []string{"the target needs, and the package does not carry:",
+		"server constant MAIL_DOMAIN (string), read by bedarf: set it in the Console under Admin → Engine → Server constants",
+		"server constant LANGUAGE (string, has a fallback), read by bedarf",
+		`worker "Postausgang" (mail), read by bedarf: create a worker of that name and Worker Type under Workers`} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("export output lacks %q:\n%s", want, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "application constant TENANT_ID") {
+		t.Errorf("the export names a constant the package carries as a need:\n%s", out.String())
+	}
+
+	dst, _ := liveServer(t)
+	out.Reset()
+	if err := runImport([]string{"--server", dst.URL, "--dry-run", dir}, &out); err != nil {
+		t.Fatalf("dry run: %v\n%s", err, out.String())
+	}
+	for _, want := range []string{"this server lacks what the application needs",
+		"server constant MAIL_DOMAIN (string), missing here: set it in the Console under Admin → Engine → Server constants",
+		`worker "Postausgang" (mail), missing here: create a worker of that name and Worker Type under Workers`,
+		"dry run: nothing was written"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("plan lacks %q:\n%s", want, out.String())
+		}
+	}
+	// A fallback answers a missing constant, and TENANT_ID travels in konstanten.json.
+	for _, unwanted := range []string{"LANGUAGE", "application constant TENANT_ID"} {
+		if strings.Contains(out.String(), unwanted) {
+			t.Errorf("plan names %s as lacking:\n%s", unwanted, out.String())
+		}
+	}
+}
+
+// TestAConsoleDownloadInstallsWithItsConstants: a Console download asked for with its
+// constants, unpacked, is a package too. Its tree carries constants.json, and the
+// import sends it along: the source import sets the value and says so.
+func TestAConsoleDownloadInstallsWithItsConstants(t *testing.T) {
+	src, _ := liveServer(t)
+	code, raw := apiCall(t, src, http.MethodPost, "/api/v1/applications", `{"name":"Bedarf"}`)
+	var app struct {
+		ID string `json:"id"`
+	}
+	if code != http.StatusOK || json.Unmarshal(raw, &app) != nil {
+		t.Fatalf("create the application = %d %s", code, raw)
+	}
+	req, _ := http.NewRequest(http.MethodPost, src.URL+"/api/v1/drafts?projectId="+app.ID, strings.NewReader(needyBPMN))
+	req.Header.Set("Content-Type", "application/xml")
+	resp, err := src.Client().Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("save the draft: %v %v", resp, err)
+	}
+	_ = resp.Body.Close()
+	putConstants(t, src, app.ID, `{"constants":[{"name":"TENANT_ID","type":"string","value":"int-01"}]}`)
+	code, archive := apiCall(t, src, http.MethodGet, "/api/v1/applications/"+app.ID+"/source?constants=true", "")
+	if code != http.StatusOK {
+		t.Fatalf("download = %d", code)
+	}
+	files, err := unpackSource(archive)
+	if err != nil {
+		t.Fatalf("unpack: %v", err)
+	}
+	dir := t.TempDir()
+	for _, f := range files {
+		if err := os.MkdirAll(filepath.Join(dir, filepath.Dir(filepath.FromSlash(f.name))), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, dir, filepath.FromSlash(f.name), string(f.data))
+	}
+
+	dst, _ := liveServer(t)
+	var out bytes.Buffer
+	if err := runImport([]string{"--server", dst.URL, dir}, &out); err != nil {
+		t.Fatalf("import: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "constants set: TENANT_ID") {
+		t.Errorf("output:\n%s", out.String())
+	}
+	if got := heldConstants(t, dst, applicationID(t, dst, "bedarf")); got["TENANT_ID"] != "int-01" {
+		t.Errorf("constants on the target = %v", got)
+	}
+}

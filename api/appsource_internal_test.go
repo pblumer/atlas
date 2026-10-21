@@ -28,7 +28,7 @@ func TestBuildSourceTreeLayout(t *testing.T) {
 		[]draft{{ProcessID: "onboarding", Name: "Onboarding", XML: "<definitions/>"}},
 		[]form{{ID: "neuer-mitarbeiter", Name: "Neuer Mitarbeiter", Schema: `{"components":[]}`}},
 		[]dmnRef{{ID: "d1", Name: "Freigabestufe", ModelRef: "temis://m/1"}},
-		nil,
+		nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("buildSourceTree: %v", err)
@@ -94,13 +94,13 @@ func TestBuildSourceTreeIsDeterministic(t *testing.T) {
 	forms := []form{{ID: "f2", Name: "Zwei", Schema: "{}"}, {ID: "f1", Name: "Eins", Schema: "{}"}}
 	refs := []dmnRef{{ID: "r2", Name: "B", ModelRef: "m2"}, {ID: "r1", Name: "A", ModelRef: "m1"}}
 
-	first, err := buildSourceTree(app, drafts, forms, refs, nil)
+	first, err := buildSourceTree(app, drafts, forms, refs, nil, nil)
 	if err != nil {
 		t.Fatalf("buildSourceTree: %v", err)
 	}
 	// Reversed input, identical output.
 	second, err := buildSourceTree(app,
-		[]draft{drafts[1], drafts[0]}, []form{forms[1], forms[0]}, []dmnRef{refs[1], refs[0]}, nil)
+		[]draft{drafts[1], drafts[0]}, []form{forms[1], forms[0]}, []dmnRef{refs[1], refs[0]}, nil, nil)
 	if err != nil {
 		t.Fatalf("buildSourceTree (reversed): %v", err)
 	}
@@ -118,7 +118,7 @@ func TestBuildSourceTreeIsDeterministic(t *testing.T) {
 // tree without one would be unimportable. Refuse to write it rather than emit a
 // manifest nobody can read back.
 func TestBuildSourceTreeNeedsKey(t *testing.T) {
-	_, err := buildSourceTree(project{ID: "a", Name: "No Key"}, nil, nil, nil, nil)
+	_, err := buildSourceTree(project{ID: "a", Name: "No Key"}, nil, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "portable key") {
 		t.Fatalf("err = %v, want a missing-key error", err)
 	}
@@ -131,7 +131,7 @@ func TestSourcePathsDisambiguate(t *testing.T) {
 	files, err := buildSourceTree(app,
 		[]draft{{ProcessID: "p1", Name: "Antrag"}, {ProcessID: "p2", Name: "Antrag"}},
 		[]form{{ID: "f1", Name: "Antrag", Schema: "{}"}, {ID: "f2", Name: "Antrag", Schema: "{}"}},
-		nil, nil)
+		nil, nil, nil)
 	if err != nil {
 		t.Fatalf("buildSourceTree: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestParseSourceTreeRefusals(t *testing.T) {
 			project{ID: "a", Name: "App", Key: "app"},
 			[]draft{{ProcessID: "p1", Name: "P", XML: "<x/>"}},
 			[]form{{ID: "f1", Name: "F", Schema: "{}"}},
-			nil, nil)
+			nil, nil, nil)
 		if err != nil {
 			t.Fatalf("buildSourceTree: %v", err)
 		}
@@ -266,7 +266,7 @@ func TestCleanSourcePath(t *testing.T) {
 // key, and after nothing in particular when the tree has no readable manifest —
 // a download must still have a filename.
 func TestSourceArchiveNameFallsBack(t *testing.T) {
-	files, err := buildSourceTree(project{ID: "a", Name: "Onboarding", Key: "onboarding"}, nil, nil, nil, nil)
+	files, err := buildSourceTree(project{ID: "a", Name: "Onboarding", Key: "onboarding"}, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("buildSourceTree: %v", err)
 	}
@@ -542,9 +542,9 @@ func TestApplySourceTreeRefusals(t *testing.T) {
 			t.Fatalf("save: %v", err)
 		}
 		man, byPath := tree("app", nil, nil, nil)
-		_, err := s.applySourceTree(man, byPath, "", func(project) (int, string) {
+		_, err := s.applySourceTree(man, byPath, sourceCaller{authorize: func(project) (int, string) {
 			return http.StatusForbidden, "insufficient project access"
-		}, importplan.Decisions{})
+		}}, importplan.Decisions{})
 		var refusal sourceRefusal
 		if !errors.As(err, &refusal) || refusal.status != http.StatusForbidden {
 			t.Fatalf("err = %v, want a 403 refusal", err)
@@ -560,7 +560,7 @@ func TestApplySourceTreeRefusals(t *testing.T) {
 			t.Fatalf("save: %v", err)
 		}
 		man, byPath := tree("atlas-system", nil, nil, nil)
-		_, err := s.applySourceTree(man, byPath, "", allow, importplan.Decisions{})
+		_, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allow}, importplan.Decisions{})
 		var refusal sourceRefusal
 		if !errors.As(err, &refusal) || refusal.status != http.StatusForbidden {
 			t.Fatalf("err = %v, want a 403 refusal", err)
@@ -573,7 +573,7 @@ func TestApplySourceTreeRefusals(t *testing.T) {
 			t.Fatalf("save form: %v", err)
 		}
 		man, byPath := tree("app", nil, []sourceForm{{ID: "f1", Name: "F", Path: "forms/f.form.json"}}, nil)
-		_, err := s.applySourceTree(man, byPath, "", allow, importplan.Decisions{})
+		_, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allow}, importplan.Decisions{})
 		var refusal sourceRefusal
 		if !errors.As(err, &refusal) || refusal.status != http.StatusConflict {
 			t.Fatalf("err = %v, want a 409 refusal", err)
@@ -586,7 +586,7 @@ func TestApplySourceTreeRefusals(t *testing.T) {
 			t.Fatalf("save ref: %v", err)
 		}
 		man, byPath := tree("app", nil, nil, []sourceDecision{{ID: "r1", Name: "D", ModelRef: "m2"}})
-		_, err := s.applySourceTree(man, byPath, "", allow, importplan.Decisions{})
+		_, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allow}, importplan.Decisions{})
 		var refusal sourceRefusal
 		if !errors.As(err, &refusal) || refusal.status != http.StatusConflict {
 			t.Fatalf("err = %v, want a 409 refusal", err)
@@ -608,7 +608,7 @@ func TestApplySourceTreeKeepsDecisionCreatedAt(t *testing.T) {
 		FormatVersion: 1, Key: "app", Name: "App",
 		Decisions: []sourceDecision{{ID: "r1", Name: "Neu", ModelRef: "m2"}},
 	}
-	if _, err := s.applySourceTree(man, map[string][]byte{}, "", allow, importplan.Decisions{Overwrite: map[string]bool{"decision:r1": true}}); err != nil {
+	if _, err := s.applySourceTree(man, map[string][]byte{}, sourceCaller{authorize: allow}, importplan.Decisions{Overwrite: map[string]bool{"decision:r1": true}}); err != nil {
 		t.Fatalf("applySourceTree: %v", err)
 	}
 	got, ok, err := s.dmnrefs.Get("r1")
@@ -629,7 +629,7 @@ func TestApplySourceTreeReportsStoreFailure(t *testing.T) {
 	s := storesFor(t)
 	s.projects = brokenStore(newProjectStore(filepath.Join(t.TempDir(), "projects")))
 	man := sourceManifest{FormatVersion: 1, Key: "app", Name: "App"}
-	_, err := s.applySourceTree(man, map[string][]byte{}, "", allow, importplan.Decisions{})
+	_, err := s.applySourceTree(man, map[string][]byte{}, sourceCaller{authorize: allow}, importplan.Decisions{})
 	if err == nil {
 		t.Fatal("a broken project store was not reported")
 	}
@@ -664,7 +664,7 @@ func TestApplySourceTreeReportsUntrackedOfEveryKind(t *testing.T) {
 	}
 	// An empty tree for the same application: everything local is untracked.
 	man := sourceManifest{FormatVersion: 1, Key: "app", Name: "App"}
-	res, err := s.applySourceTree(man, map[string][]byte{}, "", allow, importplan.Decisions{})
+	res, err := s.applySourceTree(man, map[string][]byte{}, sourceCaller{authorize: allow}, importplan.Decisions{})
 	if err != nil {
 		t.Fatalf("applySourceTree: %v", err)
 	}
@@ -719,7 +719,7 @@ func TestApplySourceTreeReportsWriteFailure(t *testing.T) {
 				t.Fatalf("save project: %v", err)
 			}
 			c.break_(s)
-			if _, err := s.applySourceTree(c.man, c.files, "", allow, importplan.Decisions{}); err == nil {
+			if _, err := s.applySourceTree(c.man, c.files, sourceCaller{authorize: allow}, importplan.Decisions{}); err == nil {
 				t.Fatal("a failed write was reported as success")
 			}
 		})
@@ -737,7 +737,7 @@ func TestApplySourceTreeReportsCreateFailure(t *testing.T) {
 	}
 	s.projects = brokenStore(newProjectStore(dir))
 	if _, err := s.applySourceTree(
-		sourceManifest{FormatVersion: 1, Key: "app", Name: "App"}, map[string][]byte{}, "", allow, importplan.Decisions{}); err == nil {
+		sourceManifest{FormatVersion: 1, Key: "app", Name: "App"}, map[string][]byte{}, sourceCaller{authorize: allow}, importplan.Decisions{}); err == nil {
 		t.Fatal("a failed application create was reported as success")
 	}
 }

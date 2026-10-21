@@ -67,6 +67,9 @@ type packageManifestFile struct {
 	Decisions []struct {
 		Path string `json:"path"`
 	} `json:"decisions"`
+	// Constants names the file a tree carries its constants in, as a Console
+	// download with its constants does.
+	Constants string `json:"constants"`
 }
 
 // packageQuestion is one entry of fragen.json. Kind says where an answer must be
@@ -217,6 +220,18 @@ func runImport(args []string, out io.Writer) error {
 	if len(src.Untracked) > 0 {
 		fmt.Fprintf(out, "  left in place, not in the package: %s\n", strings.Join(src.Untracked, ", "))
 	}
+	if len(src.ConstantsSet) > 0 {
+		fmt.Fprintf(out, "constants set: %s\n", strings.Join(src.ConstantsSet, ", "))
+	}
+	if len(src.ConstantsNotSet) > 0 {
+		fmt.Fprintf(out, "  warning: constants not set — setting them is an administrator's, and a token never carries that role; set them in the Console under the application's constants: %s\n",
+			strings.Join(src.ConstantsNotSet, ", "))
+	}
+	// The constants go in before the publish, so what it warns about is what is
+	// still missing, not what the next step sets.
+	if err := c.installConstants(out, src.ApplicationID, pkg.constants, decided); err != nil {
+		return err
+	}
 
 	// Published only when the import changed the application, or it was never
 	// published here: a package installed every night is not a release every night.
@@ -237,10 +252,6 @@ func runImport(args []string, out io.Writer) error {
 			fmt.Fprintf(out, "  warning: %s\n", w)
 		}
 	}
-	if err := c.installConstants(out, src.ApplicationID, pkg.constants, decided); err != nil {
-		return err
-	}
-
 	if document != nil {
 		if err := c.installShop(out, document, decided); err != nil {
 			return err
@@ -298,6 +309,9 @@ func readImportPackage(dir string) (importPackage, error) {
 		if d.Path != "" && !slices.Contains(paths, d.Path) {
 			paths = append(paths, d.Path)
 		}
+	}
+	if man.Constants != "" {
+		paths = append(paths, man.Constants)
 	}
 	sort.Strings(paths)
 
@@ -528,6 +542,12 @@ type sourceImportBody struct {
 	ModelsSkipped []string              `json:"modelsSkipped"`
 	Artifacts     []importplan.Artifact `json:"artifacts"`
 	Untracked     []string              `json:"untracked"`
+	// ConstantsSet and ConstantsNotSet are about constants the tree itself carries,
+	// as a Console download with its constants does.
+	ConstantsSet    []string      `json:"constantsSet"`
+	ConstantsNotSet []string      `json:"constantsNotSet"`
+	Needs           []packageNeed `json:"needs"`
+	NeedsUnread     []string      `json:"needsUnread"`
 }
 
 type publishBody struct {

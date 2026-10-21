@@ -14,6 +14,7 @@ import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal
 import { renderDrgSvg, openDecisionGraph } from "./decision-graph.js";
 import { copyText } from "./clipboard.js";
 import { importAsking, outcomeSummary } from "./importchoices.js";
+import { openSourceDownload, needsReport, showImportNeeds } from "./sourceneeds.js";
 import { installFeelAssistant } from "./feel-assistant.js";
 import { restoreSummary } from "./restore-report.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
@@ -5926,10 +5927,20 @@ function showDeployWarnings(warnings) {
 
 // downloadApplicationSource downloads the application's source tree (ADR-0134): a
 // manifest plus its drafts and forms as native .bpmn and .form.json files, in one
-// .tar.gz. A plain same-origin navigation, so the session cookie authenticates it,
-// exactly as the console's backup download does.
-function downloadApplicationSource(id) {
-  window.location.href = `/api/v1/applications/${encodeURIComponent(id)}/source`;
+// .tar.gz. The dialog first asks whether the constant values travel too, and lists
+// what the processes need from the target that no download carries (ADR-0467). The
+// download itself is a plain same-origin navigation, so the session cookie
+// authenticates it, exactly as the console's backup download does.
+async function downloadApplicationSource(id) {
+  let info;
+  try {
+    info = await api("GET", `/api/v1/applications/${encodeURIComponent(id)}/needs`);
+  } catch (e) {
+    toast("Could not read what the application needs: " + (e && e.message || e), "err");
+    return;
+  }
+  const url = await openSourceDownload({ id, info });
+  if (url) window.location.href = url;
 }
 
 // importApplicationSource reads a source tree back in. Which application it lands
@@ -5937,8 +5948,9 @@ function downloadApplicationSource(id) {
 // the server updates the application that key names or creates it when this server
 // has never seen it (ADR-0134). An import never deletes — artifacts the tree omits
 // are reported back and left alone — and never replaces unasked: the plan comes
-// first, and whatever differs from this server's is listed to tick or leave
-// (ADR-0467).
+// first, and whatever differs from this server's, constants included, is listed to
+// tick or leave (ADR-0467). What the processes need and this server does not have
+// yet is named once the import is in, before anybody publishes.
 function importApplicationSource(reload) {
   const picker = document.createElement("input");
   picker.type = "file";
@@ -5966,6 +5978,7 @@ function importApplicationSource(reload) {
           : ""),
         "ok");
       await reload();
+      if (needsReport(data)) await showImportNeeds(data);
     } catch (e) {
       toast("Import failed: " + (e && e.message || e), "err");
     }

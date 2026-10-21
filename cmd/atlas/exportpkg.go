@@ -150,6 +150,24 @@ func runExport(args []string, out io.Writer) error {
 		fmt.Fprintf(out, "constants: %d in %s, as this server holds them; the import sets those the target lacks and asks before it replaces one it holds otherwise\n",
 			len(held.Constants), packageConstants)
 	}
+	// What the processes read from the installation and no package carries: the
+	// target has to have it before the application runs there as it does here.
+	carried := map[string]bool{}
+	for _, k := range held.Constants {
+		carried[k.Name] = true
+	}
+	var needs []packageNeed
+	for _, n := range man.Needs {
+		if !(n.Kind == "application-constant" && carried[n.Name]) {
+			needs = append(needs, n)
+		}
+	}
+	if len(needs) > 0 {
+		fmt.Fprintln(out, "the target needs, and the package does not carry:")
+		for _, n := range needs {
+			fmt.Fprintf(out, "  %s, read by %s: %s\n", n.what(), strings.Join(n.Processes, ", "), n.where())
+		}
+	}
 	install := "atlas import --server <target> " + dir
 	if len(catalogs) == 0 {
 		fmt.Fprintln(out, "no catalogue: the package installs the application alone")
@@ -192,6 +210,9 @@ type exportManifest struct {
 		ModelRef string `json:"modelRef"`
 		Path     string `json:"path"`
 	} `json:"decisions"`
+	// Needs is what the processes read from the installation, as the server read it
+	// from its drafts.
+	Needs []packageNeed `json:"needs"`
 }
 
 // paths are the files the manifest names, each once.
