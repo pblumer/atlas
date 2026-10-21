@@ -313,8 +313,8 @@ func TestEveryPlaceholderIsAsked(t *testing.T) {
 			switch {
 			case !ok:
 				t.Errorf("%s leaves {{%s}} to the reader, and %s does not ask for it", path, name, qpath)
-			case q.Kind != "group" && q.Kind != "user" && q.Kind != "text":
-				t.Errorf("%s: {{%s}} is a %q question; a question asks for a group, a user or text", qpath, name, q.Kind)
+			case q.Kind != "group" && q.Kind != "user" && q.Kind != "account" && q.Kind != "text":
+				t.Errorf("%s: {{%s}} is a %q question; a question asks for a group, a user, an account or text", qpath, name, q.Kind)
 			case q.Label["de"] == "" || q.Label["en"] == "":
 				t.Errorf("%s: {{%s}} is not asked in both languages", qpath, name)
 			}

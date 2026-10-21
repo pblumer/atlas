@@ -2208,6 +2208,11 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   plan; the tree names the server constants, application constants and workers its processes
   need, and the import, `atlas export` and `atlas import` say what the target still lacks before
   anything is published (ADR-0467, amended 2026-10-21).
+- ✅ **The Console moves an application with its catalogues.** Export application… downloads
+  the package `atlas export` writes, catalogues and their questions included; Import
+  application… answers the questions from the target's directory, asks for the rest, and installs
+  the application, its constants and its catalogues in `atlas import`'s order. A fixed approver
+  travels as an account by username (ADR-0467, amended 2026-10-21).
 
 **The shop & ordering**
 - ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per

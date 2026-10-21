@@ -13,8 +13,9 @@ import { enhanceTable } from "./table.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { renderDrgSvg, openDecisionGraph } from "./decision-graph.js";
 import { copyText } from "./clipboard.js";
-import { importAsking, outcomeSummary } from "./importchoices.js";
+import { outcomeSummary } from "./importchoices.js";
 import { openSourceDownload, needsReport, showImportNeeds } from "./sourceneeds.js";
+import { importPackage, packageSummary } from "./packageimport.js";
 import { installFeelAssistant } from "./feel-assistant.js";
 import { restoreSummary } from "./restore-report.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
@@ -3262,7 +3263,7 @@ async function viewModelerHome() {
         { sep: true },
         { label: "Import file…", icon: "📥", act: "import" },
         { label: "Import MIM workflow (XOML)…", icon: "🔁", act: "import-mim" },
-        { label: "Import source tree…", icon: "🗂", act: "import-source" },
+        { label: "Import application…", icon: "🗂", act: "import-source" },
       ])}
     </div>
     <div class="card" style="padding:0; margin-top:14px">
@@ -3617,7 +3618,7 @@ async function viewProjectDetail(id) {
     ];
 
     const projItems = ungrouped ? [] : [
-      { label: "Download source…", icon: "🗂", act: "srcexport" },
+      { label: "Export application…", icon: "🗂", act: "srcexport" },
       ...(rl.length ? [{ label: "Validate DMN", icon: "✔", act: "valproj" }] : []),
       ...(AUTH.enabled && isOwner ? [{ label: "Share…", icon: "👤", act: "shareproj" }] : []),
       ...(isOwner ? [{ label: "Rename application", icon: "✎", act: "renproj" }] : []),
@@ -5929,12 +5930,13 @@ function showDeployWarnings(warnings) {
   ov.querySelector("[data-done]").focus();
 }
 
-// downloadApplicationSource downloads the application's source tree (ADR-0134): a
-// manifest plus its drafts and forms as native .bpmn and .form.json files, in one
-// .tar.gz. The dialog first asks whether the constant values travel too, and lists
-// what the processes need from the target that no download carries (ADR-0467). The
-// download itself is a plain same-origin navigation, so the session cookie
-// authenticates it, exactly as the console's backup download does.
+// downloadApplicationSource downloads the application's package (ADR-0134, ADR-0467):
+// its source tree — a manifest plus its drafts and forms as native .bpmn and
+// .form.json files — in one .tar.gz, with the catalogues ticked in the dialog and
+// their groups and people as questions answered by name. The dialog also asks whether
+// the constant values travel, and lists what the processes need from the target that
+// no download carries. The download itself is a plain same-origin navigation, so the
+// session cookie authenticates it, exactly as the console's backup download does.
 async function downloadApplicationSource(id) {
   let info;
   try {
@@ -5943,18 +5945,38 @@ async function downloadApplicationSource(id) {
     toast("Could not read what the application needs: " + (e && e.message || e), "err");
     return;
   }
-  const url = await openSourceDownload({ id, info });
+  const url = await openSourceDownload({ id, info, preview: (u) => api("GET", u) });
   if (url) window.location.href = url;
 }
 
-// importApplicationSource reads a source tree back in. Which application it lands
-// in is not this dialog's choice: the tree's manifest carries the portable key, so
-// the server updates the application that key names or creates it when this server
-// has never seen it (ADR-0134). An import never deletes — artifacts the tree omits
-// are reported back and left alone — and never replaces unasked: the plan comes
-// first, and whatever differs from this server's, constants included, is listed to
-// tick or leave (ADR-0467). What the processes need and this server does not have
-// yet is named once the import is in, before anybody publishes.
+// packageCall sends one request of a package import and answers its status and body
+// rather than throwing: a 422 with questions is a step of the import, not a failure.
+async function packageCall(method, path, body, type) {
+  const opts = { method };
+  if (body instanceof Uint8Array) {
+    opts.body = body;
+    opts.headers = { "Content-Type": type };
+  } else if (body !== undefined) {
+    opts.body = JSON.stringify(body);
+    opts.headers = { "Content-Type": "application/json" };
+  }
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => null);
+  return { status: res.status, data };
+}
+
+// importApplicationSource installs an application package, or a source tree, which is
+// a package without a shop. Which application it lands in is not this dialog's
+// choice: the tree's manifest carries the portable key, so the server updates the
+// application that key names or creates it when this server has never seen it
+// (ADR-0134). An import never deletes — artifacts the tree omits are reported back and
+// left alone — and never replaces unasked: the plan comes first, and whatever differs
+// from this server's, constants and catalogues included, is listed to tick or leave
+// (ADR-0467). A package with catalogues has their groups and people answered from this
+// server's directory, asking for any it cannot find; the application is then
+// published, because the products are bound to its processes, and the catalogues
+// imported. What the processes need and this server does not have yet is named once
+// the import is in.
 function importApplicationSource(reload) {
   const picker = document.createElement("input");
   picker.type = "file";
@@ -5962,27 +5984,20 @@ function importApplicationSource(reload) {
   picker.addEventListener("change", async () => {
     const file = picker.files[0];
     if (!file) return;
-    const send = async (query) => {
-      const res = await fetch("/api/v1/applications/source" + (query ? "?" + query : ""), {
-        method: "POST",
-        headers: { "Content-Type": "application/gzip" },
-        body: file,
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error((data && data.error) || res.statusText);
-      return data;
-    };
     try {
-      const data = await importAsking(send, { title: "Import source tree" });
-      if (!data) return;
+      const out = await importPackage(file, { call: packageCall, title: "Import application" });
+      if (!out) return;
+      const data = out.source;
+      const shop = packageSummary(out);
       toast(
         `${data.created ? "Created" : "Imported"} ${data.name} — ${outcomeSummary(data.artifacts)}` +
         (data.untracked && data.untracked.length
           ? ` · ${data.untracked.length} local artifact${data.untracked.length === 1 ? "" : "s"} not in the tree, kept`
-          : ""),
+          : "") + (shop ? ` · ${shop}` : ""),
         "ok");
       await reload();
-      if (needsReport(data)) await showImportNeeds(data);
+      const report = { ...data, warnings: out.warnings };
+      if (needsReport(report)) await showImportNeeds(report);
     } catch (e) {
       toast("Import failed: " + (e && e.message || e), "err");
     }

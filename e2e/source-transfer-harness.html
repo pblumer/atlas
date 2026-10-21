@@ -15,6 +15,7 @@
     </div>
     <script type="module">
       import { openSourceDownload, needsReport, showImportNeeds } from "/sourceneeds.js";
+      import { importPackage, packageSummary } from "/packageimport.js";
 
       // What GET /api/v1/applications/{id}/needs answers for an application whose
       // process reads TENANT_ID from its application, MAIL_DOMAIN and LANGUAGE from the
@@ -32,9 +33,36 @@
       };
 
       const result = document.getElementById("result");
-      window.__download = async (info) => {
-        const url = await openSourceDownload({ id: "a 1", info });
+      // The preview a package download asks for first; every URL it was asked with.
+      window.__previews = [];
+      window.__download = async (info, previewAnswer) => {
+        const preview = async (url) => { window.__previews.push(url); return previewAnswer || { warnings: [] }; };
+        const url = await openSourceDownload({ id: "a 1", info, preview });
         result.textContent = url == null ? "cancelled" : url;
+      };
+
+      // A package import against answers the spec gives, route by route: each entry of
+      // routes is "METHOD path" (query included) → { status, data }, or a list of them
+      // answered in turn. Every request is recorded in window.__calls.
+      window.__calls = [];
+      window.__importPackage = async (base64, routes) => {
+        const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+        const file = new File([bytes], "paket.tar.gz", { type: "application/gzip" });
+        const call = async (method, path, body) => {
+          const key = method + " " + path;
+          // A copy: the body is what was sent then, as a request serializes it.
+          window.__calls.push({ key, body: body instanceof Uint8Array ? "<archive>" : JSON.parse(JSON.stringify(body ?? null)) });
+          let answer = routes[key];
+          if (Array.isArray(answer)) answer = answer.length > 1 ? answer.shift() : answer[0];
+          return answer || { status: 404, data: { error: "no route " + key } };
+        };
+        try {
+          const out = await importPackage(file, { call });
+          result.textContent = out == null ? "cancelled" : "done: " + packageSummary(out);
+          window.__out = out;
+        } catch (e) {
+          result.textContent = "failed: " + e.message;
+        }
       };
       window.__report = (answer) => needsReport(answer);
       window.__importNeeds = async (answer) => {

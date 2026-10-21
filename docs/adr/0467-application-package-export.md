@@ -1,6 +1,6 @@
 # ADR-0467: An application and its shop move as a package, and an import asks before it replaces
 
-- **Status:** Accepted (amended 2026-10-20: an import remembers, per artifact, the version the last import brought, and asks only about what both sides moved — see "The plan remembers the last import"; constants are imported through `POST /api/v1/applications/{id}/constants/import`. Amended 2026-10-21: a source download carries the constants when asked, and the tree names what its processes need from the installation — see "The download carries the constants when asked, and names what the target needs")
+- **Status:** Accepted (amended 2026-10-20: an import remembers, per artifact, the version the last import brought, and asks only about what both sides moved — see "The plan remembers the last import"; constants are imported through `POST /api/v1/applications/{id}/constants/import`. Amended 2026-10-21: a source download carries the constants when asked, and the tree names what its processes need from the installation — see "The download carries the constants when asked, and names what the target needs". Amended again 2026-10-21: the Console writes and installs the whole package, catalogues included, and a fixed approver travels as an account by username — see "The Console writes and installs the package")
 - **Implementation:** Landed
 - **Date:** 2026-10-20
 - **Deciders:** Atlas maintainers
@@ -321,12 +321,65 @@ Considered and set aside:
   one is connected is a runtime fact, not configuration the target holds, and a worker that
   polls later is not missing.
 
+### The Console writes and installs the package (amended 2026-10-21)
+
+The Console's source download carried no catalogue, and the catalogue's own export carried its
+groups, members and approvers as this installation's ids. The target's import keeps such ids
+without a word (`api/catalog/document.go`), so a shop moved that way reaches nobody there. Only
+`atlas export --catalog` turned them into questions answered by name. A person without a
+terminal could not move an application with its shop.
+
+**One implementation of the package.** What turns catalogue exports into a package — the
+questions, the processes carried once, the warnings — and what answers the questions on the
+target moved out of the command into `api/apppkg`. `atlas export`, `atlas import` and the
+server use it alike, so the Console and the terminal write and read the same package.
+
+**The export is a route.** `GET /api/v1/applications/{id}/package?catalog=…&constants=true`
+answers the package as one gzip tar: the source tree, and `katalog.json`, `fragen.json` and
+`antworten.json` for the catalogues named. Constants travel in the tree's `constants.json`, which
+`atlas import` sends along. Each catalogue is exported through the catalogue export itself
+(`catalog.Service.ExportDocument`), so it needs the productmanager role and a maintainer's access,
+exactly as its file does. `?preview=true` answers what the package would hold, with the export's
+notes and warnings, so the dialog can show them before anything is downloaded. The needs route
+lists the catalogues the caller may export, each marked bound when one of its products runs on a
+process of the application.
+
+**The import has no route of its own.** The Console calls the routes `atlas import` calls, in its
+order and under the authority each asks: the plans (source, constants, catalogues), one dialog
+for what differs, the source import, the constants, a publish when the package brings a shop,
+then the catalogue import. The only thing it needs beyond them is the one thing a browser cannot
+do without a second copy of the rules: `POST /api/v1/catalogs/import/answers` answers the
+package's questions from this server's directory and fills the document. Nothing is written
+there. It names each question it cannot answer — unanswered, unknown, or ambiguous with the ids
+the name matches — and the Console asks the person to choose.
+
+**A fixed approver is an account.** A `fixed` approval becomes a task assigned to a username
+(`api/catalog/approverreport.go`), and the catalogue editor writes one. The package asked for it as
+a user and answered it with a user id, which is assigned to nobody: a bug since the package's
+first version, in `atlas import`, in the example and in the shop handbook's installer alike. It is
+now a question of kind `account`: exported with the person's display name, answered on the target
+by a username (ignoring case) or by a display name one account carries, and filled with the
+username. The command reads accounts from `GET /api/v1/users/assignable`. The example's
+`facility-management` question and the installer ask for an account.
+
+Considered and set aside:
+
+- **One server route that imports the whole package.** It would be one request, but it would
+  call the publish and the catalogue import from inside another handler, past the role each of
+  their routes demands, or need both refactored into functions first. The routes in order keep
+  every step under its own door, which is the posture this record took for the command.
+- **Answering the questions in the browser.** It would need no route, and would copy the rule —
+  by id, then by a name exactly one principal carries, an account ignoring case — into a second
+  language, where the two would drift.
+
 ### Why not the others
 
 **A server route for the whole package** would serve the Console without a terminal, which is
 its strongest point. But it would duplicate three exports in one more format. It would also
 take the principal and constant handling onto the server, where the catalogue package has no
 business with the directory. A later Console button can call the same routes the command does.
+(Amended 2026-10-21: the export is now such a route, built by the command's own code; the import
+is still the routes in order, with only the answering of questions added. See above.)
 
 **Keeping the target's version silently** is safe for the target and wrong for the person:
 the import "succeeds", and production quietly differs from the package nobody looked at again.
@@ -370,7 +423,8 @@ silently wrong. ADR-0134 refused to merge for that reason, and it holds here.
 - **Follow-ups:**
   - Carry information models, once their import can find what an earlier one created.
   - Let the shop handbook's installer use the plan, or `atlas import`'s steps.
-  - A Console button that writes a package, if a person without a terminal needs one.
+  - A Console button that writes a package, if a person without a terminal needs one. (Done
+    2026-10-21: Export application… and Import application….)
 
 ## Links
 

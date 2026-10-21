@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/pblumer/atlas/api/apppkg"
 	"github.com/pblumer/atlas/api/importplan"
 )
 
@@ -32,7 +33,7 @@ import (
 // packageConstants is the file that carries an application's constants beside its
 // manifest: their values on the installation the package was exported from, as a
 // suggestion for the one it is imported into.
-const packageConstants = "konstanten.json"
+const packageConstants = apppkg.ConstantsFile
 
 // packageConstant is one constant as the Console holds it.
 type packageConstant struct {

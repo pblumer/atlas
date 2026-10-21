@@ -68,7 +68,7 @@ func TestImportInstallsTheExampleShopAndAgain(t *testing.T) {
 	alle := createdID(t, ts, "/api/v1/groups", `{"name":"Alle Mitarbeitenden"}`)
 	bau := createdID(t, ts, "/api/v1/groups", `{"name":"Fachbereich Bau"}`)
 	geo := createdID(t, ts, "/api/v1/groups", `{"name":"Geoportal-Team"}`)
-	fm := createdID(t, ts, "/api/v1/users",
+	createdID(t, ts, "/api/v1/users",
 		`{"username":"fmeier","displayName":"Fabienne Meier","password":"a-long-password-1"}`)
 	answers := writeAnswers(t, map[string]string{
 		"zielgruppe": "Alle Mitarbeitenden", "zielgruppe-bau": "Fachbereich Bau",
@@ -84,7 +84,8 @@ func TestImportInstallsTheExampleShopAndAgain(t *testing.T) {
 		`application "Beispiel: Dienstleistungen der Verwaltung" (beispiel-dienstleistungen-der-verwaltung) created: 5 processes, 10 forms, 0 decisions`,
 		"published release 1: 5 processes",
 		`zielgruppe: "Alle Mitarbeitenden" is group ` + alle,
-		`facility-management: "Fabienne Meier" is user ` + fm,
+		// A fixed approver is an account: the approval is assigned to its username.
+		`facility-management: "Fabienne Meier" is account fmeier`,
 		"shop created: catalog:cat-verwaltung-dienste, catalog:cat-fachbereich-bau, product:vd-zutrittsbadge",
 		"catalogues published: 2",
 	} {
@@ -105,6 +106,9 @@ func TestImportInstallsTheExampleShopAndAgain(t *testing.T) {
 	}
 	if bytes.Contains(raw, []byte("{{")) {
 		t.Fatalf("a placeholder was imported literally: %s", raw)
+	}
+	if _, doc := apiCall(t, ts, http.MethodGet, "/api/v1/catalogs/cat-verwaltung-dienste/document", ""); !bytes.Contains(doc, []byte(`"kind":"fixed","ref":"fmeier"`)) {
+		t.Fatalf("the parking approval does not name the approver's username: %s", doc)
 	}
 
 	// Installed again, the package changes nothing: no second application, no
@@ -143,7 +147,7 @@ func TestImportRefusesBeforeItWrites(t *testing.T) {
 	for _, want := range []string{
 		"nothing was imported",
 		`zielgruppe: no group with the id or name "Niemand"`,
-		`facility-management: 2 users are named "Kim Muster"`,
+		`facility-management: 2 accounts are named "Kim Muster"`,
 		"zielgruppe-bau is not answered: Audience of \"Building department\" (--set zielgruppe-bau=...)",
 		"geoportal-verantwortliche is not answered",
 	} {
@@ -286,6 +290,7 @@ func TestImportSaysWhatTheServerRefused(t *testing.T) {
 	reset := func() {
 		answers["/api/v1/info"] = ok(`{"version":"test"}`)
 		answers["/api/v1/principals"] = ok(`[{"type":"group","id":"g1","name":"G"},{"type":"user","id":"u1","name":"U"}]`)
+		answers["/api/v1/users/assignable"] = ok(`[{"username":"u1","displayName":"U"}]`)
 		answers["/api/v1/applications/source"] = ok(`{"applicationId":"app1","key":"k","name":"n","untracked":["old-form"]}`)
 		answers["/api/v1/applications/app1/publish"] = ok(`{"deployed":true,"definitions":[{}],"warnings":["worker verzeichnis is not configured"],"release":{"version":4}}`)
 		answers["/api/v1/catalogs/import"] = ok(`{"created":[],"updated":["catalog:c"],"releases":[{}],
