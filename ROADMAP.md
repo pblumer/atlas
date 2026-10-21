@@ -990,6 +990,11 @@ Composition and reuse.
 What it takes to run this for real.
 
 - 🚧 Public API surface (deploy, create instance, publish message, complete job, queries): every route is in the served OpenAPI document with its role (`api/openapi.go`), with scoped API tokens ([ADR-0194](docs/adr/0194-api-tokens.md)) and a stated runtime contract ([ADR-0176](docs/adr/0176-standards-boundary-and-runtime-contract.md)). Deploy is still a sidecar store, not an event-sourced command ([ADR-0019](docs/adr/0019-durable-deployments.md))
+- ✅ API tokens are minted, listed and revoked in the Console (**Console → API tokens**, admin
+  only): the roles a token will carry are shown before it is minted, the secret once, and an
+  expired token stays listed and marked. A token can be sealed straight into the vault
+  (`vaultSecret`), so the one the shop's system processes present never leaves the server
+  ([ADR-0194](docs/adr/0194-api-tokens.md), amendment 2026-10-21)
 - 🚧 Job-worker protocol — ADR-0007: built over HTTP, with the type-keyed pull, long-poll, leases, `leaseToken` fencing, complete, fail and BPMN errors, and the activation and lease-timeout counters. A gRPC transport is not built, and whether it should be is open
 - 🚧 Worker SDK (Go first): the `worker` package is usable from Go — handlers, concurrency, `BPMNError` — but is not yet packaged and documented as an SDK
 - ✅ A worker runs the jobs of one type concurrently: `--max-jobs` places, a poll asking only

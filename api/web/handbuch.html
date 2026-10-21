@@ -9774,8 +9774,9 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
               bezogenen Position endete, jedes gewährte und entzogene Recht und jeder ausgelöste und gelöste Incident –
               und sonst nichts. Für ein Umsystem
               wie eine CMDB oder die Verrechnung stellt ein Administrator einen API-Token mit dem Scope
-              <code>events</code> aus; er trägt genau diese Rolle und erreicht genau diese eine Route:
-              <code>POST /api/v1/api-tokens</code> mit <code>{"name":"cmdb","scope":"events","expiresInDays":365}</code>.
+              <code>events</code> aus; er trägt genau diese Rolle und erreicht genau diese eine Route. Das geht unter
+              <a href="/#/console/api-tokens">Console&nbsp;→&nbsp;API tokens</a> oder mit
+              <code>POST /api/v1/api-tokens</code> und <code>{"name":"cmdb","scope":"events","expiresInDays":365}</code>.
               Mit <code>"reach":["&lt;Katalog-ID&gt;"]</code> liest der Token nur, was die Produkte betrifft, die diese
               Kataloge pflegen; jedes Ereignis nennt diesen Katalog als <code>homeCatalog</code>.
               Bewusst kein Teil von <code>operator</code>: Der Feed zeigt, wer was hält, über alle Kataloge.</td>
@@ -9783,8 +9784,9 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
               position ended, every right granted and revoked, and every incident raised and resolved – and nothing else.
               For a system beyond atlas such as
               a CMDB or billing, an administrator mints an API token with the <code>events</code> scope; it carries
-              exactly this role and reaches exactly that one route: <code>POST /api/v1/api-tokens</code> with
-              <code>{"name":"cmdb","scope":"events","expiresInDays":365}</code>. With
+              exactly this role and reaches exactly that one route. That is done under
+              <a href="/#/console/api-tokens">Console&nbsp;→&nbsp;API tokens</a> or with
+              <code>POST /api/v1/api-tokens</code> and <code>{"name":"cmdb","scope":"events","expiresInDays":365}</code>. With
               <code>"reach":["&lt;catalogue id&gt;"]</code> the token reads only what concerns the products those
               catalogues maintain; every event names that catalogue as <code>homeCatalog</code>. Deliberately not part
               of <code>operator</code>: the feed shows who holds what, across every catalogue.</td></tr>
@@ -9967,6 +9969,97 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
           And because an MCP tool runs with the roles of whoever calls it, an assistant can never do more than the
           person who approved it.</p>
       </div>
+
+      <h3 data-l="de">Zugang für Maschinen: API-Tokens</h3><h3 data-l="en">Access for machines: API tokens</h3>
+      <p data-l="de">Eine Person meldet sich an, eine Maschine legt ein <b>API-Token</b> vor: ein Worker auf einem
+        anderen Host, ein CI-Job, ein MCP-Adapter, ein Prometheus-Scraper oder ein anderes Atlas. Erzeugt, angezeigt
+        und widerrufen werden Tokens unter <a href="/#/console/api-tokens">Console&nbsp;→&nbsp;API tokens</a>. Den
+        Menüpunkt sieht nur, wer die Rolle <code>admin</code> hat.</p>
+      <p data-l="en">A person signs in; a machine presents an <b>API token</b>: a worker on another host, a CI job,
+        an MCP adapter, a Prometheus scraper or another Atlas. Tokens are created, listed and revoked under
+        <a href="/#/console/api-tokens">Console&nbsp;→&nbsp;API tokens</a>. Only an account with the
+        <code>admin</code> role sees that menu entry.</p>
+      <p data-l="de">Du gibst dem Token einen Namen und wählst Scope und Gültigkeit. Bevor du es erzeugst, zeigt
+        die Seite, welche Rollen es tragen wird. <code>admin</code> trägt ein Token nie: Erzeugt es ein Admin,
+        sind es <code>modeler</code>, <code>operator</code> und <code>user</code>, bei einem
+        <code>events</code>-Token nur <code>feedreader</code>. Das Geheimnis erscheint <b>genau einmal</b>, mit
+        Kopierknopf. atlas speichert nur seinen Fingerabdruck; geht es verloren, widerrufst du das Token und
+        erzeugst ein neues. Verlässt du die Seite, ist es nicht mehr zu sehen.</p>
+      <p data-l="en">You name the token and choose its scope and lifetime. Before you create it, the page shows
+        which roles it will carry. A token never carries <code>admin</code>: created by an administrator it carries
+        <code>modeler</code>, <code>operator</code> and <code>user</code>, and an <code>events</code> token
+        <code>feedreader</code> alone. The secret is shown <b>exactly once</b>, with a copy button. atlas stores
+        only its fingerprint; if it is lost, revoke the token and create a new one. Once you leave the page, it is
+        gone from the screen.</p>
+      <table>
+        <thead><tr>
+          <th>Scope</th>
+          <th data-l="de">Wann er passt</th><th data-l="en">When it fits</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><code>worker</code></td>
+            <td data-l="de">Ein Worker, den du auf einem anderen Host startest (<code>atlas worker --token …</code>),
+              etwa in der Netzwerkzone des Zielsystems. Er holt Aufträge ab und meldet sie zurück, sonst nichts.</td>
+            <td data-l="en">A worker you start on another host (<code>atlas worker --token …</code>), for example in
+              the target system's network zone. It leases jobs and settles them, and nothing else.</td></tr>
+          <tr><td><code>metrics</code></td>
+            <td data-l="de">Prometheus, der <code>/metrics</code> abfragt.</td>
+            <td data-l="en">Prometheus scraping <code>/metrics</code>.</td></tr>
+          <tr><td><code>status</code></td>
+            <td data-l="de">Ein anderes Atlas, das nur wissen muss, wer dieser Server ist.</td>
+            <td data-l="en">Another Atlas that only needs to know who this server is.</td></tr>
+          <tr><td><code>events</code></td>
+            <td data-l="de">Eine CMDB oder eine Verrechnung, die dem Ereignis-Feed folgt. Du kannst es auf
+              Kataloge beschränken, die du pflegst.</td>
+            <td data-l="en">A CMDB or a billing system that follows the event feed. You can confine it to
+              catalogues you maintain.</td></tr>
+          <tr><td><code>landscape</code></td>
+            <td data-l="de">Ein anderes Atlas, das die Landschaft dieses Servers liest. Du musst die Applikationen
+              nennen, die es sehen darf.</td>
+            <td data-l="en">Another Atlas reading this server's landscape. You must name the applications it may
+              see.</td></tr>
+          <tr><td><code>directory</code></td>
+            <td data-l="de">Der geplante Prozess, der Konten aus einem Verzeichnis spiegelt.</td>
+            <td data-l="en">The scheduled process that mirrors accounts from a directory.</td></tr>
+          <tr><td><code>inventory</code></td>
+            <td data-l="de">Der Prozess, der die Bestände eines Zielsystems einliest und abgleicht.</td>
+            <td data-l="en">The process that loads a target system's holdings and compares them.</td></tr>
+          <tr><td><code>full</code></td>
+            <td data-l="de">Ein CI-Job, ein MCP-Adapter, die Systemprozesse des Shops: alles, was eine Person ohne
+              <code>admin</code> tun kann. Nimm ihn nur, wenn kein engerer Scope reicht.</td>
+            <td data-l="en">A CI job, an MCP adapter, the shop's system processes: everything a person without
+              <code>admin</code> can do. Use it only when no narrower scope will do.</td></tr>
+        </tbody>
+      </table>
+      <ul>
+        <li data-l="de"><b>Gültigkeit:</b> 365 Tage, wenn du nichts änderst, höchstens fünf Jahre. 0 bedeutet, dass
+          das Token nie abläuft; die Seite warnt davor und verlangt eine Bestätigung.</li>
+        <li data-l="en"><b>Lifetime:</b> 365 days unless you change it, five years at most. 0 means the token never
+          expires; the page warns about that and asks you to confirm it.</li>
+        <li data-l="de"><b>Abgelaufene Tokens</b> bleiben in der Liste und sind rot markiert. Angenommen werden sie
+          nicht mehr – die Liste zeigt dir, was neu ausgestellt werden muss.</li>
+        <li data-l="en"><b>Expired tokens</b> stay in the list, marked in red. They are no longer accepted – the list
+          shows you what needs reissuing.</li>
+        <li data-l="de"><b>Widerrufen wirkt sofort:</b> Aufrufer mit diesem Token schlagen ab der nächsten Anfrage
+          fehl.</li>
+        <li data-l="en"><b>Revoking takes effect immediately:</b> callers using the token fail from their next
+          request on.</li>
+      </ul>
+      <div class="note tip">
+        <div class="lbl" data-l="de">Das Token der Shop-Systemprozesse gehört in den Vault</div><div class="lbl" data-l="en">The shop's system processes keep their token in the vault</div>
+        <p data-l="de">Die Systemprozesse des Shops melden sich mit dem Vault-Secret <code>atlas</code> an und brauchen
+          dafür ein Token mit Scope <code>full</code>. Kreuze beim Erzeugen <b>Direkt im Vault ablegen</b> an und lass
+          den Namen auf <code>atlas</code>: Das Geheimnis verlässt den Server dann nie, und niemand muss es kopieren.
+          Zum Erneuern erzeugst du ein neues Token unter demselben Namen und widerrufst danach das alte.</p>
+        <p data-l="en">The shop's system processes sign in with the vault secret <code>atlas</code> and need a token of
+          scope <code>full</code> for it. Tick <b>Seal it in the vault directly</b> when you create it and leave the
+          name at <code>atlas</code>: the secret then never leaves the server, and nobody has to copy it. To renew it,
+          create a new token under the same name and then revoke the old one.</p>
+      </div>
+      <p data-l="de">Ohne Console – aus einem Skript – erreichst du dieselben Routen mit <code>curl</code>:
+        <a class="applink" href="https://github.com/pblumer/atlas/blob/main/docs/install.md#credentials-for-machines" target="_blank" rel="noopener"><code>docs/install.md</code>&nbsp;↗</a>.</p>
+      <p data-l="en">Without the Console – from a script – the same routes are reached with <code>curl</code>:
+        <a class="applink" href="https://github.com/pblumer/atlas/blob/main/docs/install.md#credentials-for-machines" target="_blank" rel="noopener"><code>docs/install.md</code>&nbsp;↗</a>.</p>
 
       <h3 data-l="de">Das Revisionsprotokoll</h3><h3 data-l="en">The audit log</h3>
       <p data-l="de">Wer eine Applikation für wen freigibt, ist die Zugriffskontrolle des Produkts &ndash; und
