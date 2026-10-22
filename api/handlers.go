@@ -1343,8 +1343,9 @@ func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var raw []byte
+	p := httpapi.PrincipalFrom(r.Context())
 	s.do(func() {
-		if d, ok := s.deployments[key]; ok {
+		if d, ok := s.deployments[key]; ok && definitionReadable(p, d) {
 			raw = d.xml
 		}
 	})

@@ -14,6 +14,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Events page shows the signals and messages of this installation.** Beside the
+  catalogue of what atlas emits, the Console's *Events* page has a second section that
+  lists every signal and message name the deployed models throw, send and receive: who
+  throws or sends it and who receives it, with process, version, project, element and role,
+  and for a message also the inbound watches and product actions that send it. Each name
+  carries what is wrong with it, read from the newest version of each process:
+  `signal.unreceived` (thrown, and no newest, active definition receives it),
+  `signal.unthrown` (received, and nothing deployed throws it), `signal.crosses-projects`
+  and `message.crosses-projects` (every variable of the sending instance arrives in another
+  project), `signal.reserved-name` and `message.reserved-name` (a model outside atlas's system
+  processes uses an `atlas.*` name), and `message.unreceived`. The section is derived from the
+  definitions on every request and stores nothing; it does not see running instances, and it
+  never says that nothing sends a message, because `POST /api/v1/messages` may send any
+  name. The routes are `GET /api/v1/signals` and `GET /api/v1/message-names`, for `modeler`
+  and above; the MCP tools are `atlas_signals` and `atlas_message_names`, so the tool count
+  is 151. In the Modeler, a receiving signal element is offered the names deployed models
+  throw, a receiving message element the names they send, and a throwing or sending element
+  says how many deployed processes receive its name, or that none does, with a link to the
+  page ([ADR-0447](docs/adr/0447-the-signals-deployed-models-throw-and-receive.md),
+  [ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md)).
 - **The replay's Variables tab says what an id stands for.** A string value that is a
   principal id (`usr_…`, `grp_…`), a deployed process id or a catalogue product or
   position id gets a chip beside it with the person's, group's, process's or product's
@@ -31,6 +51,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Message sources name what a model sends, and every deployed version.**
+  `GET /api/v1/message-sources` has a fourth kind of row, `process-throw`: a deployed
+  process that sends the name with a message throw or end event or a send task. A message
+  event subprocess is listed among the processes that wait, and so is it in the
+  administrator's view of who listens to atlas's events, where a message receiver's role is
+  now `start`, `catch`, `boundary` or `event-subprocess`. A process row carries
+  `processName`, `version`, `newest`, `definitionKey`, `projectId`, `system`, `role` and, for
+  a boundary or an event subprocess, `interrupting`, and every deployed version is listed
+  rather than the newest alone. A client that read the process rows as the newest versions
+  filters on `newest`; one that assumed three kinds skips the fourth. A name a deployed
+  model sends no longer reads as unfed in the Modeler
+  ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md)).
 - **The Microsoft 365 example asks the manager of the person a position is for.** Licence,
   team, shared mailbox and mailbox access in `examples/m365-dienste` were approved with the
   built-in kind `superior`, which asks the manager of the person who *ordered* and finds

@@ -3,8 +3,9 @@
 // entries; who listens now is a second, administrator-only route, so a modeler's page
 // has no "listening now" column at all, while an administrator's counts the listeners,
 // names them per event with the personal data each receives, and warns about models
-// that wait for an atlas.* name atlas never emits. The Go suite decides what the routes
-// answer; this checks the wiring.
+// that wait for an atlas.* name atlas never emits. The page's second section lists the
+// installation's own signals and messages with their findings (ADR-0447, ADR-0446).
+// The Go suite decides what the routes answer; this checks the wiring.
 import { test, expect } from "@playwright/test";
 
 const field = (name, personal, always = true) => ({ name, type: "string", always, data: personal ? "personal" : "not-personal", meaning: { en: `the ${name}`, de: name } });
@@ -58,7 +59,43 @@ const LISTENERS = (catalogueWithheld) => ({
   catalogueWithheld,
 });
 
-function installMock(page, { admin, catalogueWithheld = false }) {
+// The installation's own signals and messages (ADR-0447, ADR-0446), as the two
+// inventory routes answer them.
+const SIGNALS = {
+  signals: [
+    { name: "order.cancelled", findings: [{ rule: "signal.crosses-projects", message: "Thrown in project p-sales and received in project p-billing. An interrupting receiver there (billing v2) cancels the work it guards." }],
+      points: [
+        { processId: "billing", processName: "Billing", version: 2, newest: true, definitionKey: 21, projectId: "p-billing", elementId: "Stop", role: "boundary", interrupting: true },
+        { processId: "billing", processName: "Billing", version: 1, newest: false, definitionKey: 20, projectId: "p-billing", elementId: "Stop", role: "boundary", interrupting: true },
+        { processId: "shop", processName: "Shop", version: 4, newest: true, definitionKey: 30, projectId: "p-sales", elementId: "Cancel", role: "throw" },
+        { processId: "legacy", processName: "Legacy", version: 1, newest: false, definitionKey: 10, elementId: "Wait", role: "catch" },
+      ] },
+    { name: "typo.sent", findings: [{ rule: "signal.unreceived", message: "Thrown by shop v4, and no newest, active definition receives it." }],
+      points: [{ processId: "shop", processName: "Shop", version: 4, newest: true, definitionKey: 30, projectId: "p-sales", elementId: "Typo", role: "throw" }] },
+    { name: "spaced ", findings: [{ rule: "signal.unreceived", message: "Thrown by shop v4, and no newest, active definition receives it." }],
+      points: [{ processId: "shop", version: 4, newest: true, definitionKey: 30, elementId: "Say", role: "throw" }] },
+    { name: "quiet.one", findings: [],
+      points: [
+        { processId: "a", version: 1, newest: true, definitionKey: 40, elementId: "T", role: "throw" },
+        { processId: "b", version: 1, newest: true, definitionKey: 41, elementId: "C", role: "catch" },
+      ] },
+  ],
+};
+const MESSAGES = {
+  messages: [
+    { name: "invoice.ready", findings: [],
+      sources: [
+        { sourceKind: "inbound-watch", messageName: "invoice.ready", connectorName: "Ledger", kind: "clio", description: "stream invoices", enabled: true },
+        { sourceKind: "process", messageName: "invoice.ready", processId: "billing", processName: "Billing", version: 2, newest: true, definitionKey: 21, projectId: "p-billing", elementId: "Go", element: "start", role: "start", enabled: true },
+      ] },
+    { name: "lost.msg", findings: [{ rule: "message.unreceived", message: "Sent by shop v4, and no newest, active definition waits for it." }],
+      sources: [
+        { sourceKind: "process-throw", messageName: "lost.msg", processId: "shop", processName: "Shop", version: 4, newest: true, definitionKey: 30, projectId: "p-sales", elementId: "Lost", element: "throw", role: "throw", enabled: true },
+      ] },
+  ],
+};
+
+function installMock(page, { admin, catalogueWithheld = false, own = false }) {
   const calls = [];
   page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -66,6 +103,8 @@ function installMock(page, { admin, catalogueWithheld = false }) {
     if (path.endsWith("/auth/me")) {
       return route.fulfill({ json: { authEnabled: true, user: { id: "u1", username: "mo", roles: [admin ? "admin" : "modeler"] } } });
     }
+    if (own && path.endsWith("/signals")) return route.fulfill({ json: SIGNALS });
+    if (own && path.endsWith("/message-names")) return route.fulfill({ json: MESSAGES });
     if (path.endsWith("/event-catalog")) return route.fulfill({ json: CATALOG });
     if (path.endsWith("/event-catalog/listeners")) {
       return admin
@@ -190,5 +229,68 @@ test("with the shop switched off the catalogue's events are withheld and the eng
   await page.locator('#ev-rows tr[data-type="atlas.incident.raised"]').click();
   await expect(page.locator(".ev-detail .ev-withheld")).toHaveCount(0);
   await expect(page.locator(".ev-detail .ev-listeners")).toContainText("billing");
+  expect(page.__errors).toEqual([]);
+});
+
+test("the installation's own signals and messages are listed beside the catalogue, with their findings", async ({ page }) => {
+  installMock(page, { admin: false, own: true });
+  await openEvents(page);
+  const rows = page.locator("#own-rows tr[data-own]");
+  await expect(rows).toHaveCount(6);
+  // The catalogue is the first list and stays as it was: an own name is never in it.
+  await expect(page.locator("#ev-rows tr[data-i]")).toHaveCount(5);
+  await expect(page.locator('#ev-rows tr[data-type="order.cancelled"]')).toHaveCount(0);
+
+  const row = (name) => page.locator(`#own-rows tr[data-name="${name}"]`);
+  await expect(row("order.cancelled")).toContainText("crosses projects");
+  await expect(row("typo.sent")).toContainText("nobody receives it");
+  await expect(row("lost.msg")).toContainText("nobody waits for it");
+  // A process only an older version of which receives is named with that version; one
+  // whose newest version does, by its name alone.
+  await expect(row("order.cancelled")).toContainText("billing, legacy (v1)");
+  await expect(row("invoice.ready")).toContainText("watch of Ledger");
+
+  await page.locator("#own-channel").selectOption("message");
+  await expect(rows).toHaveCount(2);
+  await page.locator("#own-findings").check();
+  await expect(rows).toHaveCount(1);
+  await expect(row("lost.msg")).toHaveCount(1);
+  await page.locator("#own-channel").selectOption("");
+  await expect(rows).toHaveCount(4);
+  await page.locator("#own-findings").uncheck();
+  // A name with a space at its end is another name, and the row says so.
+  await expect(page.locator('#own-rows tr[data-name="spaced "]')).toContainText('"spaced "');
+  await expect(page.locator('#own-rows tr[data-name="spaced "] .pill.warn', { hasText: "space" })).toHaveCount(1);
+
+  await row("order.cancelled").click();
+  const detail = page.locator(".own-detail");
+  await expect(detail).toContainText("signal.crosses-projects");
+  await expect(detail).toContainText("An interrupting receiver there (billing v2) cancels the work it guards.");
+  await expect(detail).toContainText("boundary, interrupting");
+  await expect(detail.locator('a[href="#/operations/p/21"]')).toHaveCount(1);
+  await expect(detail).toContainText("Only a model throws a signal");
+  await expect(row("order.cancelled")).toHaveClass(/sel/);
+
+  await row("invoice.ready").focus();
+  await page.keyboard.press("Enter");
+  await expect(detail).toContainText("Inbound watch of worker Ledger");
+  await expect(detail).toContainText("never that nothing sends it");
+  expect(page.__errors).toEqual([]);
+});
+
+test("a link from the Modeler opens the name it names", async ({ page }) => {
+  installMock(page, { admin: false, own: true });
+  await page.goto("/index.html#/console/events?name=lost.msg&channel=message");
+  await expect(page.locator(".own-detail")).toContainText("lost.msg");
+  await expect(page.locator(".own-detail")).toContainText("message.unreceived");
+  await expect(page.locator("#own-channel")).toHaveValue("message");
+  expect(page.__errors).toEqual([]);
+});
+
+test("a server without the inventories says so in the second section and keeps the first", async ({ page }) => {
+  installMock(page, { admin: false });
+  await openEvents(page);
+  await expect(page.locator("#own-rows")).toContainText("No deployed model throws, sends or receives a signal or a message of its own.");
+  await expect(page.locator("#ev-rows tr[data-i]")).toHaveCount(5);
   expect(page.__errors).toEqual([]);
 });

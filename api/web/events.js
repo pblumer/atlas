@@ -10,6 +10,13 @@
 // across every project. A modeler's page never receives it — the 403 is the answer,
 // and the page simply has no "listening now" column then, rather than hiding one it
 // was sent.
+//
+// The page's second section is the installation's own signals and messages (ADR-0447,
+// ADR-0446): what the deployed models throw, send and receive, derived from the
+// definitions by GET /api/v1/signals and GET /api/v1/message-names, with what is wrong
+// with a name. They are not in the catalogue, because the catalogue is atlas's
+// contract and an own signal promises nothing; a modeler looking for a model's signal
+// in the first list is the misunderstanding that section answers.
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -92,20 +99,151 @@ function detailHTML(entry, ls) {
   </div>`;
 }
 
+// FINDING_LABEL is a finding's rule as the table's pill says it; the detail says the
+// whole sentence the server wrote.
+const FINDING_LABEL = {
+  "signal.unreceived": "nobody receives it",
+  "signal.unthrown": "nobody throws it",
+  "signal.crosses-projects": "crosses projects",
+  "signal.reserved-name": "speaks for atlas",
+  "message.unreceived": "nobody waits for it",
+  "message.crosses-projects": "crosses projects",
+  "message.reserved-name": "speaks for atlas",
+};
+
+// ownNames folds the two inventories into one list of names, each with its channel,
+// who sends and who receives it, and its findings. A server older than the routes
+// answers something that is not the inventory; that is an empty list, not an error.
+function ownNames(signals, messages) {
+  const out = [];
+  for (const g of (signals && Array.isArray(signals.signals)) ? signals.signals : []) {
+    const points = g.points || [];
+    out.push({
+      name: g.name, channel: "signal", findings: g.findings || [],
+      senders: points.filter((p) => p.role === "throw"),
+      receivers: points.filter((p) => p.role !== "throw"),
+      others: [],
+    });
+  }
+  for (const g of (messages && Array.isArray(messages.messages)) ? messages.messages : []) {
+    const rows = g.sources || [];
+    out.push({
+      name: g.name, channel: "message", findings: g.findings || [],
+      senders: rows.filter((r) => r.sourceKind === "process-throw"),
+      receivers: rows.filter((r) => r.sourceKind === "process"),
+      others: rows.filter((r) => r.sourceKind === "inbound-watch" || r.sourceKind === "product-action"),
+    });
+  }
+  return out.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.channel < b.channel ? -1 : 1));
+}
+
+// nameHTML shows an own name as the engine matches it. A name with a space at either
+// end is another name than the one without, and a space is invisible in code, so it is
+// shown quoted and said.
+function nameHTML(name) {
+  const n = String(name ?? "");
+  if (n === n.trim()) return `<code>${esc(n)}</code>`;
+  return `<code title="This name has a space at its start or end: the engine matches it exactly.">"${esc(n)}"</code> <span class="pill warn">space</span>`;
+}
+
+// processesText names the processes of some points once each, the newest marked by
+// nothing and an older version by its number: "billing, hr-notify (v1)".
+function processesText(points) {
+  const seen = new Map();
+  for (const p of points) {
+    const id = p.processId || "?";
+    const c = seen.get(id) || { newest: false, versions: [] };
+    if (p.newest) c.newest = true; else c.versions.push(p.version);
+    seen.set(id, c);
+  }
+  return [...seen.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([id, c]) =>
+    `${esc(id)}${c.newest ? "" : ` <span class="muted">(v${[...new Set(c.versions)].map(esc).join(", v")})</span>`}`).join(", ");
+}
+
+// othersText names the senders that are not models: a Worker's watch, a product action.
+function othersText(rows) {
+  return rows.map((r) => r.sourceKind === "inbound-watch"
+    ? `watch of ${esc(r.connectorName || r.connectorId || "?")}${r.enabled ? "" : " (off)"}`
+    : `${esc(r.action || "?")} of ${esc(r.productName || r.productId || "?")}${r.enabled ? "" : " (inactive)"}`).join(", ");
+}
+
+function pointRows(points, receiving) {
+  return points.map((p) => `<tr>
+      <td><a href="#/operations/p/${esc(p.definitionKey)}">${esc(p.processName || p.processId)}</a> <span class="chip">${esc(p.processId)}</span>${p.system ? ` <span class="pill">system</span>` : ""}${(p.inactive || p.enabled === false) ? ` <span class="pill warn">inactive</span>` : ""}</td>
+      <td>v${esc(p.version)}${p.newest ? ` <span class="pill">newest</span>` : ""}</td>
+      <td>${esc(p.projectId || "—")}</td>
+      <td><code>${esc(p.elementId)}</code></td>
+      <td>${esc(p.role)}${receiving && p.interrupting !== undefined ? (p.interrupting ? ", interrupting" : ", non-interrupting") : ""}</td></tr>`).join("");
+}
+
+function ownDetailHTML(n) {
+  const sendWord = n.channel === "signal" ? "Thrown by" : "Sent by";
+  const head = `<thead><tr><th>Process</th><th>Version</th><th>Project</th><th>Element</th><th>Role</th></tr></thead>`;
+  const findings = n.findings.length
+    ? `<ul class="own-findings">${n.findings.map((f) => `<li><span class="pill warn">${esc(f.rule)}</span> ${esc(f.message)}</li>`).join("")}</ul>`
+    : `<p class="muted">Nothing the deployed definitions show is wrong with this name.</p>`;
+  const others = n.others.length ? `<h3>Sent by something other than a model</h3><table><thead><tr><th>Source</th><th>What</th><th>State</th></tr></thead><tbody>${
+    n.others.map((r) => r.sourceKind === "inbound-watch"
+      ? `<tr><td>Inbound watch of worker <b>${esc(r.connectorName || r.connectorId)}</b> (${esc(r.kind)})</td><td>${esc(r.description || "")}</td><td>${r.enabled ? "on" : "off"}</td></tr>`
+      : `<tr><td>Product action <b>${esc(r.action)}</b> of ${esc(r.productName || r.productId)}</td><td>${esc(r.effect || "")}</td><td>${r.enabled ? "active" : "inactive"}</td></tr>`).join("")}</tbody></table>` : "";
+  const unseen = n.channel === "message"
+    ? `<p class="muted">A message can also be published through <code>POST /api/v1/messages</code>, which no definition shows: this page can say that nothing waits for a name, never that nothing sends it.</p>`
+    : `<p class="muted">Only a model throws a signal: no route broadcasts one.</p>`;
+  return `<div class="card own-detail" style="margin-top:12px">
+    <h2>${nameHTML(n.name)} <span class="chip">${esc(n.channel)}</span></h2>
+    ${findings}
+    <h3>${sendWord}</h3>
+    ${n.senders.length ? `<table>${head}<tbody>${pointRows(n.senders, false)}</tbody></table>` : `<p class="muted">No deployed model.</p>`}
+    ${others}
+    <h3>Received by</h3>
+    ${n.receivers.length ? `<table>${head}<tbody>${pointRows(n.receivers, true)}</tbody></table>` : `<p class="muted">No deployed model.</p>`}
+    ${unseen}
+    <p class="muted">Every deployed version is listed; the findings read the newest version of each process. An older
+    version's running instance can still ${n.channel === "signal" ? "throw" : "send"} a name the newest version dropped, or wait for one.
+    What ${n.channel === "signal" ? "a signal" : "a message"} carries is every variable of the instance that ${n.channel === "signal" ? "throws" : "sends"} it: nothing here promises a payload.</p>
+  </div>`;
+}
+
 export async function viewEvents({ api, view, isSuperseded }) {
   view.innerHTML = `
     <div class="between"><h1>Events</h1></div>
-    <p class="muted">Everything atlas emits, in one place: the signals and messages of its system
-    processes, the CloudEvents feed, and the log lines that belong to them. Each entry says what has
-    happened when it is emitted, what it carries — personal data marked — and who may receive it.
-    A model listens with a signal start or catch on the name; a system beyond atlas reads the feed.</p>
+    <p class="muted">Two lists. The first is what atlas itself emits: its contract, checked against its code.
+    The second is what the models of this installation throw, send and receive: read from the deployed
+    definitions, so it promises nothing and shows what is wrong. A signal or message a model of yours
+    throws is in the second list, never in the first.</p>
+    <h2>Events atlas emits</h2>
+    <p class="muted">The signals and messages of atlas's system processes, the CloudEvents feed, and the log
+    lines that belong to them. Each entry says what has happened when it is emitted, what it carries — personal
+    data marked — and who may receive it. A model listens with a signal start or catch on the name; a system
+    beyond atlas reads the feed.</p>
     <div class="card" style="padding:0">
       <table data-dt-key="events">
         <thead><tr id="ev-head"><th>Event</th><th>Kind</th><th>Channels</th><th>Meaning</th><th>Since</th><th>Stability</th></tr></thead>
         <tbody id="ev-rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>
-    <div id="ev-detail"></div>`;
+    <div id="ev-detail"></div>
+    <h2 id="own-title" style="margin-top:24px">Signals and messages of this installation</h2>
+    <p class="muted">Every signal and message name the deployed models throw, send or receive, with who does
+    which, in which project and version, and what is wrong with the name: a throw nobody receives, a receiver
+    nothing throws, a name that couples two projects, a model that speaks for atlas. A receiver of an
+    <code>atlas.*</code> name is in the first list's view of who listens, for administrators.</p>
+    <div class="row" style="gap:12px;align-items:center;margin-bottom:8px">
+      <label>Channel <select id="own-channel"><option value="">All</option><option value="signal">Signals</option><option value="message">Messages</option></select></label>
+      <label><input type="checkbox" id="own-findings"> Only names with a finding</label>
+    </div>
+    <div class="card" style="padding:0">
+      <table data-dt-key="own-events">
+        <thead><tr><th>Name</th><th>Channel</th><th>Sent or thrown by</th><th>Received by</th><th>Findings</th></tr></thead>
+        <tbody id="own-rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div id="own-detail"></div>`;
+
+  // The installation's own names are asked for beside the catalogue: neither waits
+  // for the other, and a failure of one leaves the other's section standing.
+  const settle = (p) => Promise.resolve(p).then((v) => ({ v }), (err) => ({ err }));
+  const ownReq = Promise.all([settle(api("GET", "/api/v1/signals")), settle(api("GET", "/api/v1/message-names"))]);
 
   let cat;
   try { cat = await api("GET", "/api/v1/event-catalog"); }
@@ -113,6 +251,8 @@ export async function viewEvents({ api, view, isSuperseded }) {
     if (isSuperseded()) return;
     view.querySelector("#ev-rows").innerHTML = `<tr><td colspan="6" class="empty">${
       esc(err.status === 403 ? "The event catalogue is available to modelers and administrators." : err.message)}</td></tr>`;
+    view.querySelector("#own-rows").innerHTML = `<tr><td colspan="5" class="empty">${
+      esc(err.status === 403 ? "The signals and messages of this installation are available to modelers and administrators." : "")}</td></tr>`;
     return;
   }
   // Who listens: an administrator's. A refusal is the answer for everybody else.
@@ -156,4 +296,65 @@ export async function viewEvents({ api, view, isSuperseded }) {
     const tr = e.target.closest("tr[data-i]");
     if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); show(Number(tr.dataset.i)); }
   });
+
+  const [sig, msg] = await ownReq;
+  if (isSuperseded()) return;
+  renderOwn(view, sig, msg);
+}
+
+// renderOwn fills the page's second section. A link from the Modeler names the name
+// and its channel in the hash (#/console/events?name=…&channel=…), and the section
+// opens on it.
+function renderOwn(view, sig, msg) {
+  const rowsEl = view.querySelector("#own-rows");
+  const failed = [sig, msg].find((r) => r.err);
+  if (failed) {
+    rowsEl.innerHTML = `<tr><td colspan="5" class="empty">${esc(failed.err.status === 403
+      ? "The signals and messages of this installation are available to modelers and administrators."
+      : failed.err.message)}</td></tr>`;
+    return;
+  }
+  const names = ownNames(sig.v, msg.v);
+  const channelEl = view.querySelector("#own-channel");
+  const findingsEl = view.querySelector("#own-findings");
+  const params = new URLSearchParams((location.hash.split("?")[1] || ""));
+  const want = { name: params.get("name") || "", channel: params.get("channel") || "" };
+  if (want.channel === "signal" || want.channel === "message") channelEl.value = want.channel;
+
+  const draw = () => {
+    const ch = channelEl.value;
+    const shown = names.map((n, i) => ({ n, i })).filter(({ n }) =>
+      (!ch || n.channel === ch) && (!findingsEl.checked || n.findings.length));
+    rowsEl.innerHTML = shown.length ? shown.map(({ n, i }) => `<tr data-own="${i}" data-name="${esc(n.name)}" data-channel="${n.channel}" style="cursor:pointer" tabindex="0">
+        <td>${nameHTML(n.name)}</td>
+        <td><span class="chip">${esc(n.channel)}</span></td>
+        <td>${[processesText(n.senders), othersText(n.others)].filter(Boolean).join(", ") || `<span class="muted">—</span>`}</td>
+        <td>${processesText(n.receivers) || `<span class="muted">—</span>`}</td>
+        <td>${n.findings.map((f) => `<span class="pill warn" title="${esc(f.message)}">${esc(FINDING_LABEL[f.rule] || f.rule)}</span>`).join(" ")}</td></tr>`).join("")
+      : `<tr><td colspan="5" class="empty">${names.length
+        ? "No name matches the filter."
+        : "No deployed model throws, sends or receives a signal or a message of its own."}</td></tr>`;
+  };
+  const show = (i) => {
+    view.querySelector("#own-detail").innerHTML = ownDetailHTML(names[i]);
+    view.querySelectorAll("#own-rows tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.own === String(i)));
+  };
+  channelEl.addEventListener("change", draw);
+  findingsEl.addEventListener("change", draw);
+  rowsEl.addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-own]");
+    if (tr && !e.target.closest("a")) show(Number(tr.dataset.own));
+  });
+  rowsEl.addEventListener("keydown", (e) => {
+    const tr = e.target.closest("tr[data-own]");
+    if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); show(Number(tr.dataset.own)); }
+  });
+  draw();
+  if (want.name) {
+    const i = names.findIndex((n) => n.name === want.name && (!want.channel || n.channel === want.channel));
+    if (i >= 0) {
+      show(i);
+      view.querySelector("#own-title").scrollIntoView({ block: "start" });
+    }
+  }
 }
