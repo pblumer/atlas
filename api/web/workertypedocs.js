@@ -296,11 +296,11 @@ export const WORKER_TYPE_DOCS = {
   sharepoint: {
     anchor: "runbook-sharepoint", title: "SharePoint",
     checked: "2026-09",
-    needs: `A configured SharePoint Worker in ${WORKERS}: a vault bundle for Microsoft Graph. No endpoint — Graph's address is the same for everyone.`,
+    needs: `A configured SharePoint Worker in ${WORKERS}: a vault bundle for Microsoft Graph with tenant, client and a secret, a certificate, or — on Windows — a certificate's thumbprint. No endpoint — Graph's address is the same for everyone.`,
     steps: [
-      `The groundwork is Entra ID's: an <b>app registration</b>, a client secret, and admin consent. Note tenant id, client id and secret.`,
+      `The groundwork is Entra ID's: an <b>app registration</b>, a client secret or a certificate, and admin consent. Note tenant id and client id, and the secret if you use one.`,
       `Grant the <b>site-specific</b> permission <code>Sites.Selected</code> and then grant this app access to the individual sites it works on. <code>Sites.ReadWrite.All</code> works too and is the grant an audit writes up.`,
-      `Store the bundle in the vault: ${VAULT}, e.g. <code>sharepoint_auth</code> holding <code>{"method": "clientCredentials", "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code>.`,
+      `Store the bundle in the vault: ${VAULT}, e.g. <code>sharepoint_auth</code> holding <code>{"method": "clientCredentials", "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code> — or, with a certificate, <code>"certificate"</code> in place of <code>"clientSecret"</code>: the certificate and its unencrypted private key as one PEM text. On a Windows server, <code>"certificateThumbprint"</code> may name a certificate already in the store instead (the service account's <code>CurrentUser\\My</code>, or <code>LocalMachine\\My</code>), as for Entra ID; its key signs there and may be non-exportable. Exactly one of the three.`,
       `${WORKERS} &rarr; <b>New worker</b>: type <b>Microsoft SharePoint</b>, a name, credential reference <code>sharepoint_auth</code>, no endpoint.`,
       `In the task, the <b>Site</b> is Graph's site identifier <code>contoso.sharepoint.com,&lt;siteId&gt;,&lt;webId&gt;</code>, and the list is named by title or id.`,
     ],

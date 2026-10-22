@@ -46,7 +46,11 @@ export const SECRET_SHAPES = {
   "sharepoint:": {
     what: "a Microsoft Graph OAuth credential bundle (JSON)",
     oauth: "microsoft",
+    // The app proves itself as an Entra app does: a clientCredentials bundle carries one
+    // of these where mail's carries clientSecret, and the worker refuses one carrying two.
+    appCredentials: ["clientSecret", "certificate", "certificateThumbprint"],
     skeleton: { method: "clientCredentials", tenantId: "…", clientId: "…", clientSecret: "…" },
+    note: "With <code>\"method\": \"clientCredentials\"</code> the app may prove itself with a <b>certificate</b> instead of a secret, as an Entra ID app does: <code>\"certificate\"</code> is the certificate and its <b>unencrypted</b> private key as one PEM text, after uploading the public part under <b>Certificates &amp; secrets &rsaquo; Certificates</b>. On a Windows server, <code>\"certificateThumbprint\"</code> may instead name a certificate already in the worker host's <code>CurrentUser\\My</code> or <code>LocalMachine\\My</code>; its key signs there and may be non-exportable. Carry exactly one of the three. A <code>refreshToken</code> bundle keeps its client secret.",
   },
   "remedy:": {
     what: "the AR System username and password (JSON)",
@@ -171,7 +175,22 @@ export function checkSecretValue(shape, value) {
   if (!need) {
     return `"method" is ${parsed.method ? `"${parsed.method}"` : "missing"} — it must be "refreshToken", "clientCredentials" or "serviceAccount".`;
   }
-  const gone = missing(need);
+  // A shape whose app may prove itself with a certificate takes exactly one of its
+  // credentials where the others take clientSecret — the server refuses a bundle
+  // carrying two rather than let precedence choose, and refuses a certificate on the
+  // refresh-token grant rather than ignore it.
+  const alternatives = shape.appCredentials;
+  if (alternatives && parsed.method === "clientCredentials") {
+    const present = alternatives.filter((k) => String(parsed[k] || "").trim());
+    const list = (ks) => ks.map((k) => `"${k}"`).join(", ");
+    if (present.length > 1) return `Carry exactly one of ${list(alternatives)} — this bundle has ${list(present)}.`;
+    if (!present.length) return `A "clientCredentials" bundle also needs one of ${list(alternatives)}.`;
+  }
+  if (alternatives && parsed.method === "refreshToken" &&
+      alternatives.some((k) => k !== "clientSecret" && String(parsed[k] || "").trim())) {
+    return `A "refreshToken" bundle signs in with "clientSecret"; a certificate belongs to a "clientCredentials" bundle.`;
+  }
+  const gone = missing(alternatives && parsed.method === "clientCredentials" ? need.filter((k) => k !== "clientSecret") : need);
   if (gone.length) return `A "${parsed.method}" bundle also needs ${gone.map((k) => `"${k}"`).join(" and ")}.`;
   // Microsoft builds its token endpoint from the tenant; without either there is
   // nothing to call, which the server reports much later as "no token URL".

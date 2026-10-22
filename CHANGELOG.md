@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The SharePoint worker signs in with a certificate.** A `clientCredentials` bundle may
+  carry `certificate` in place of `clientSecret` — the app's certificate and its
+  unencrypted private key as one PEM text — or, on a Windows server,
+  `certificateThumbprint`: a certificate in the worker host's `CurrentUser\My` or
+  `LocalMachine\My`, whose key signs there and is never read. These are the Entra ID
+  worker's three credentials, read the same way, so a certificate already in the host's
+  store for the Entra ID worker can be named here too. A bundle carries exactly one of
+  them, and a certificate in a `refreshToken` bundle is refused. The worker tries a
+  thumbprint's certificate when it starts and refuses to start, naming the instance and the
+  account, when the store does not hold it or the account may not use its key. The engine
+  does not open the store while it builds the client on its run loop, but on the first
+  token request. On a server that is not Windows, a thumbprint bundle is shown as the
+  Worker's problem and is not handed to the supervised worker. The Secrets panel checks
+  the new shape ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended).
+
 - **An account can name its line manager.** `managerId` on an account is the principal id
   of the person's line manager. An administrator sets it under Console → Administration →
   Organization (field *Line manager*) or with `PATCH /api/v1/users/{id}`. The Entra mirror

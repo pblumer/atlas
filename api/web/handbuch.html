@@ -7229,6 +7229,29 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           <a href="#runbook-entra">Entra&nbsp;ID</a>: an app registration, a client secret, admin consent. Secret:
           <code>{"method": "clientCredentials", "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code>, no
           endpoint.</p>
+        <p data-l="de">Wie bei Entra&nbsp;ID kann sich die App statt mit einem Client-Secret mit einem
+          <b>Zertifikat</b> ausweisen. Dazu steht im Secret <code>"certificate"</code> anstelle von
+          <code>"clientSecret"</code>: das Zertifikat mit seinem unverschlüsselten privaten Schlüssel als ein
+          PEM-Text. Auf einem Windows-Server kann <code>"certificateThumbprint"</code> stattdessen ein Zertifikat
+          nennen, das bereits im Speicher liegt (<code>CurrentUser\My</code> des Dienstkontos oder
+          <code>LocalMachine\My</code>); der Schlüssel signiert dort, auch wenn er als nicht exportierbar markiert ist. Genau eine
+          der drei Angaben, und nur bei <code>"method": "clientCredentials"</code>. Der Worker prüft das Zertifikat
+          beim Start; fehlt es oder darf das Dienstkonto den Schlüssel nicht lesen, startet er nicht und nennt den
+          Grund.</p>
+        <p data-l="en">As with Entra&nbsp;ID, the app may prove itself with a <b>certificate</b> instead of a
+          client secret: the secret then carries <code>"certificate"</code> in place of <code>"clientSecret"</code>
+          — the certificate and its unencrypted private key as one PEM text. On a Windows server,
+          <code>"certificateThumbprint"</code> may instead name a certificate already in the store (the service
+          account's <code>CurrentUser\My</code>, or <code>LocalMachine\My</code>); its key signs there and may
+          be non-exportable. Exactly one of the three, and only with <code>"method": "clientCredentials"</code>. The
+          worker tries the certificate when it starts; if it is missing, or the service account may not read its
+          key, the worker does not start and says why.</p>
+        <p data-l="de">Die Rechte hängen an der App-Registrierung, nicht am Zertifikat: Meldet sich der
+          SharePoint-Worker mit der App des Entra-ID-Workers an, darf er auch Konten anlegen und sperren. Eine eigene
+          App nur mit den SharePoint-Berechtigungen trennt das.</p>
+        <p data-l="en">The rights belong to the app registration, not to the certificate: if the SharePoint worker
+          signs in as the Entra&nbsp;ID worker's app, it may also create and disable accounts. An app of its own,
+          holding only the SharePoint permissions, keeps the two apart.</p>
         <p data-l="de"><b>Die Falle ist dieselbe wie bei Google:</b> Ein <code>403</code> heisst hier meistens nicht
           „Berechtigung fehlt", sondern „diese App hat auf <i>diese</i> Site keinen Zugriff". Graph kennt für
           SharePoint eine <b>seitenspezifische</b> Berechtigung (<code>Sites.Selected</code>), bei der eine Site

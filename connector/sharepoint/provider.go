@@ -52,6 +52,19 @@ func oauthTokenSource(cfg ProviderConfig) (TokenSource, error) {
 	return newTokenSource(b, nettimeout.HTTPClient(), nil)
 }
 
+// CertificateThumbprint returns the thumbprint a credential bundle names in its
+// certificateThumbprint field, or "" when it names none or is not a bundle at all. It
+// is how code that hands a bundle on without building a client from it — the worker's
+// startup check, the supervised worker's environment — asks whether the bundle depends
+// on this host's certificate store, without deciding the bundle's shape a second time.
+func CertificateThumbprint(secret string) string {
+	var b credentialBundle
+	if err := json.Unmarshal([]byte(secret), &b); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(b.CertificateThumbprint)
+}
+
 // applyGraphDefaults fills a credential bundle's token URL (from the tenant) and
 // scope from Graph conventions when the bundle leaves them unset, so an operator only
 // specifies the parts that vary.
