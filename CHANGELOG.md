@@ -12,6 +12,102 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-10-22
+
+**An application can leave an installation with everything it owns, and the Console
+moves it between installations with its catalogues.** Deleting an application offers to
+delete what it owns on the server as well — its deployed versions after cancelling their
+running instances, its decision deployments, drafts, forms, decision references and models
+— after a preview of what goes and of what outside it stops working; a deployed process
+can be deleted with `force=true` whatever still holds it
+([ADR-0468](docs/adr/0468-deleting-an-application-with-its-contents.md)). An administrator
+can delete a catalogue or a product for good, with the orders placed from it, the
+instances still working them and the rights they granted — on by default, meant for
+development and test installations, and switched off with `--catalogue-purge=false`
+([ADR-0469](docs/adr/0469-catalogue-purge.md)). The Console's
+**Export application…** and **Import application…** write and read the package
+`atlas export` and `atlas import` use, catalogues included, and ask only for the names the
+target's directory does not answer; what a person chose for such a name is remembered on
+the target, so the next import takes it without asking, and `atlas import` reads a
+package's `antworten.json` ([ADR-0467](docs/adr/0467-application-package-export.md),
+amendment 2026-10-21). API tokens are minted, listed and revoked in **Console →
+Administration → API tokens**, can be sealed straight into the vault, and are flagged
+30 days before they expire, in the Console and on `/metrics` for an alert rule
+([ADR-0194](docs/adr/0194-api-tokens.md), amendments 2026-10-21 and 2026-10-22). The
+Console's and Operations' seldom-opened pages moved behind **Administration ▾** and
+**Diagnostics ▾**, and neither bar wraps any more. Among the
+fixes, a fixed approver a package names is assigned by username, so the approval reaches
+somebody, and a refused process delete says why.
+
+**Read this before upgrading from 0.17.0.** These act on an existing installation:
+
+- A production installation must start 0.18.0 with `--catalogue-purge=false`
+  (`ATLAS_CATALOGUE_PURGE=false`, Helm `atlas.catalogue.purge: false`). The catalogue
+  purge is on by default: without the switch, an administrator can delete a catalogue or a
+  product for good, with its releases, the orders placed from it, the process instances
+  still working them and the rights they granted. Cancelled instances do not undo what
+  they did in a target system, and the rights leave the inventory without being
+  deprovisioned. Every start with the purge on logs a WARN,
+  `event=server.catalogue_purge_enabled`, which an alert can match; a value the switch does
+  not read stops the start. With it off, the delete answers 403 and the preview still
+  answers. Unlike `application.purged`, a catalogue purge writes no line of its own to the
+  security audit trail.
+- A fixed approver that a package filled in under 0.17.0 is a user id, and the approval
+  it asks for reaches nobody: the order waits. The approver report
+  (`GET /api/v1/catalog-products/approver-report`, `atlas_catalog_approver_report`) names
+  every product whose fixed approver no account answers to; set the approver to the
+  username there. A package exported with 0.17.0 still asks for that approver as a person
+  (`"kind": "user"` in `fragen.json`) and is answered with a user id under 0.18.0 too:
+  export it again, or change the question's kind to `account`. A package exported with
+  0.18.0 asks for an account, and an answers file or `--set` that gives a user id for it
+  is reported as unknown — `atlas import` stops before it writes anything; answer with
+  the username or the display name.
+- `atlas import` now answers a package's questions from its `antworten.json` without
+  `--answers`: a name the target's directory or its table of names answers is taken
+  without asking, where 0.17.0 refused with «not all answered» and imported nothing.
+  Answers passed with `--answers` or `--set` still win. A pipeline that relied on that
+  refusal to review the answers should run `--dry-run` first.
+- Upgrade the server before the CLI. `atlas import` of 0.18.0 records the names a person
+  chose on the server once the catalogues are in (`POST /api/v1/catalogs/import/mappings`),
+  which 0.17.0 does not know: against a 0.17.0 server the application, its constants, its
+  release and the catalogues are imported, and the command then fails with 404 instead of
+  reporting the constants still missing.
+- The guards that keep a deployed process an order line or the current catalogue release
+  still needs ([ADR-0427](docs/adr/0427-converting-a-product-to-a-lifecycle-process.md))
+  can now be overridden: whoever may delete a process — the modeler role — may delete it
+  with `force=true` while nothing runs under it, and an application's owner may purge it
+  with everything it owns, also what a catalogue product or another application's process
+  still needs. Cancelling running instances on the way needs `operator` or `admin`, and a
+  protected system process stays protected. Both are audited, as
+  `deployment.force_deleted` and `application.purged`. A plain process delete's refusal
+  now ends with a hint at `force=true`.
+- 0.18.0 reads the data directory 0.17.0 wrote: nothing under the log, the state or the
+  record format changed, and the first start deploys nothing new. One store is added on
+  the first start, `package-mappings`; it travels with a whole-instance snapshot and not
+  with an export. An API token's record names the vault secret it was sealed as
+  (`vaultSecret`). The routes added are `GET`/`POST`/`DELETE /api/v1/catalogs/import/mappings`,
+  `POST /api/v1/catalogs/import/answers`, `GET /api/v1/applications/{id}/package`,
+  `GET /api/v1/applications/{id}/deletion-preview`, `GET /api/v1/catalogs/{id}/deletion`,
+  `GET /api/v1/catalog-products/{id}/deletion`, `DELETE /api/v1/catalogs/{id}` and
+  `DELETE /api/v1/catalog-products/{id}`, the last four for administrators only;
+  `DELETE /api/v1/applications/{id}` takes `?purge=true`, `DELETE /api/v1/processes/{key}`
+  takes `?force=true`, and `POST /api/v1/api-tokens` takes `vaultSecret`. Five MCP tools
+  were added — `atlas_application_deletion_preview`, `atlas_catalog_deletion`,
+  `atlas_delete_catalog`, `atlas_catalog_product_deletion` and
+  `atlas_delete_catalog_product` — so the tool count is 149; `atlas_delete_application`
+  takes `purge` and `atlas_delete_process` `force`. `/metrics` carries three new series
+  without labels, `atlas_api_tokens_expiring_soon`, `atlas_api_tokens_expired` and
+  `atlas_api_token_next_expiry_timestamp_seconds`. The Helm chart has a new value,
+  `atlas.catalogue.purge` (default `true`), which it passes as `--catalogue-purge`. No
+  budget was added.
+- Going back to 0.17.0 starts on the same directory, but not with the 0.18.0 Helm chart or
+  a service definition that sets `--catalogue-purge`: 0.17.0 does not know the flag and
+  refuses to start. Go back with the 0.17.0 chart, and take the flag out of the command
+  line. 0.17.0 does not read the table of names, so an import there asks again for what
+  was remembered; the tokens minted in the Console stay valid, but 0.17.0 has no page for
+  them. What a purge of an application or a catalogue, or a forced delete, removed stays
+  removed.
+
 ### Added
 
 - **A catalogue can be deleted for good.** An administrator deletes a catalogue, or a single
@@ -15641,7 +15737,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/pblumer/atlas/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/pblumer/atlas/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/pblumer/atlas/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/pblumer/atlas/compare/v0.14.0...v0.15.0
