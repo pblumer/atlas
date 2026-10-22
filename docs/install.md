@@ -1057,14 +1057,17 @@ shipper extracts and keeps.
 ### Credentials for machines
 
 A person signs in; a machine presents an **API token**. Mint one as an
-administrator in **Console → API tokens**: name the machine, choose a scope — the page
+administrator in **Console → Administration → API tokens**: name the machine, choose a scope — the page
 says in one sentence what each reaches and which roles the token will carry — and a
 lifetime in days (365 by default, at most 1825; 0 never expires and asks you to
 confirm it). The secret is shown exactly once, with a copy button, because the server
 stores only its SHA-256; the page drops it when you press *Done* or leave it.
 
 The same page lists every token with its scope, roles, reach, expiry and who minted it
-when, marks an expired one, and revokes one after asking.
+when, marks an expired one, and revokes one after asking. A token with less than 30 days
+left is marked with the days it has, and the Console's dashboard says so to every
+administrator until it is replaced and revoked — an expired token is refused like an
+unknown one, so a machine that still holds it fails on its next call.
 
 Without the Console — from a script, say — the route is the same one the page uses, sent
 with an administrator's session cookie:

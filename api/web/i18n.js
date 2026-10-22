@@ -391,7 +391,7 @@ const CATALOGS = {
     "display.notSaved": "Nicht gespeichert: {reason}",
     "display.savedToast": "Darstellung gespeichert",
 
-    // Console → API tokens (ADR-0194). Each scope's sentence says what a token of it
+    // Console → Administration → API tokens (ADR-0194). Each scope's sentence says what a token of it
     // reaches, as the table in docs/install.md does; apitokens_page_test.go holds the
     // scope keys to apiMintableScopes.
     "apitokens.title": "API-Tokens",
@@ -470,6 +470,17 @@ const CATALOGS = {
     "apitokens.revoke.confirm": "«{name}» widerrufen?\n\nDas ist sofort wirksam: Aufrufer mit diesem Token schlagen ab der nächsten Anfrage fehl. Rückgängig machen lässt es sich nicht.",
     "apitokens.revoke.confirmVault": "\n\nDas Vault-Secret «{secret}» bleibt bestehen. Ersetze es zuerst durch ein neues Token, sonst enthält es danach ein ungültiges.",
     "apitokens.revoked": "Token widerrufen",
+    "apitokens.expires.soon.one": "läuft in 1 Tag ab",
+    "apitokens.expires.soon.other": "läuft in {n} Tagen ab",
+    "apitokens.expires.soonUnderADay": "läuft in weniger als einem Tag ab",
+    "apitokens.expires.soonTitle": "Läuft am {when} ab. Erzeuge vorher ein neues Token, übergib es der Maschine und widerrufe danach dieses.",
+    "apitokens.soon.summary.one": "Ein Token läuft in den nächsten {days} Tagen ab:",
+    "apitokens.soon.summary.other": "{n} Tokens laufen in den nächsten {days} Tagen ab:",
+    "apitokens.soon.hint": "Ein abgelaufenes Token weist atlas ab, und jede Maschine, die es vorlegt, schlägt dann fehl. Erzeuge rechtzeitig ein neues, übergib es der Maschine oder lege es unter demselben Vault-Namen ab, und widerrufe danach das alte.",
+    "apitokens.dashboard.title": "API-Tokens laufen bald ab",
+    "apitokens.dashboard.intro.one": "Ein API-Token läuft in weniger als {days} Tagen ab.",
+    "apitokens.dashboard.intro.other": "{n} API-Tokens laufen in weniger als {days} Tagen ab.",
+    "apitokens.dashboard.open": "API-Tokens öffnen",
   },
 
   // English is here to prove the mechanism carries a second language rather than
@@ -899,6 +910,17 @@ const CATALOGS = {
     "apitokens.revoke.confirm": "Revoke “{name}”?\n\nThis takes effect immediately: callers using this token fail from their next request on. It cannot be undone.",
     "apitokens.revoke.confirmVault": "\n\nThe vault secret “{secret}” stays. Replace it with a new token first, or it will hold an invalid one afterwards.",
     "apitokens.revoked": "Token revoked",
+    "apitokens.expires.soon.one": "expires in 1 day",
+    "apitokens.expires.soon.other": "expires in {n} days",
+    "apitokens.expires.soonUnderADay": "expires in less than a day",
+    "apitokens.expires.soonTitle": "Expires on {when}. Before then, create a new token, hand it to the machine and revoke this one afterwards.",
+    "apitokens.soon.summary.one": "One token expires within the next {days} days:",
+    "apitokens.soon.summary.other": "{n} tokens expire within the next {days} days:",
+    "apitokens.soon.hint": "Once a token expires, atlas refuses it and every machine presenting it fails. Create a new one in time, hand it to the machine or seal it under the same vault name, and then revoke the old one.",
+    "apitokens.dashboard.title": "API tokens about to expire",
+    "apitokens.dashboard.intro.one": "One API token expires in less than {days} days.",
+    "apitokens.dashboard.intro.other": "{n} API tokens expire in less than {days} days.",
+    "apitokens.dashboard.open": "Open API tokens",
   },
 };
 

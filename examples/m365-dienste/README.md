@@ -125,7 +125,7 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
    - `ucc_teams` (Microsoft Teams Phone): Rolle *Teams Administrator* und
      `User.ReadWrite.All`; PowerShell 7 mit dem Modul MicrosoftTeams auf dem Worker-Host.
 2. **Secret `atlas`** im Vault: ein API-Token mit der Rolle `operator`. Damit melden die
-   Prozesse ihre Positionen an die Bestellung. Am einfachsten unter **Console → API tokens**:
+   Prozesse ihre Positionen an die Bestellung. Am einfachsten unter **Console → Administration → API tokens**:
    Scope `full`, «Direkt im Vault ablegen» angekreuzt, Name `atlas`. Das Geheimnis verlässt
    den Server dann nie.
 3. **Verzeichnis-Worker `verzeichnis`** für die eingebaute Genehmigung durch die

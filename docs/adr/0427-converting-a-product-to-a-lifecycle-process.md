@@ -1,6 +1,6 @@
 # ADR-0427: Converting a product to a lifecycle process keeps the old processes alive until nothing needs them
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-21: a forced delete and an application purge override the guard — see the amendment below)
 - **Implementation:** Landed
 - **Date:** 2026-09-29
 - **Deciders:** Atlas maintainers
@@ -157,6 +157,16 @@ convention, stated here beside the existing one that every branch reports its ou
   Each moved line gains a `rebindings` entry — the ids it froze, the lifecycle process it
   moved to, who, when, why — and its old ids are cleared, so every starter reads the new
   binding. `running` and `returning` lines stay.
+
+### Amendment (2026-10-21): an explicit forced delete overrides the guard
+
+The guard of §1 holds for every delete that does not ask for more. A delete with
+`force=true`, and the purge of the application the process belongs to, override it
+([ADR-0468](0468-deleting-an-application-with-its-contents.md)):
+an operator who wants a process gone, after being shown which products and how many
+lines still need it, is not refused. A return of such a line then fails with *no
+deployed process*, which deploying the process again repairs. The refusal a plain delete
+meets now also names the forced delete as the way through.
 
 ### Consequences
 

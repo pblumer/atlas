@@ -21,8 +21,9 @@ _Changed_ / _Removed_ for each version.
   off on a production installation** with `--catalogue-purge=false`
   (`ATLAS_CATALOGUE_PURGE=false`, Helm `atlas.catalogue.purge: false`), and the delete answers
   403 there. While it is on, every start logs a WARN, `event=server.catalogue_purge_enabled`,
-  so an installation upgraded without the flag says so and an alert can match it. `GET /api/v1/catalogs/{id}/deletion` and
-  `GET /api/v1/catalog-products/{id}/deletion` show what would go and what it means —
+  so an installation upgraded without the flag says so and an alert can match it.
+  `GET /api/v1/catalogs/{id}/deletion` and `GET /api/v1/catalog-products/{id}/deletion` show
+  what would go and what it means —
   cancelled instances do not undo what they did in a target system, and rights leave the
   inventory without any deprovisioning — and `DELETE /api/v1/catalogs/{id}` and
   `DELETE /api/v1/catalog-products/{id}` carry it out only with `?confirm=` repeating the
@@ -33,7 +34,44 @@ _Changed_ / _Removed_ for each version.
   ([ADR-draft-catalogue-purge](docs/adr/draft-catalogue-purge.md), amending ADR-0312 and
   answering ADR-0376's open question).
 
-- **API tokens are minted, listed and revoked in the Console.** **Console → API tokens**,
+- **An application can be deleted with everything it owns.** Deleting an application now asks
+  how: keep its contents, which then read as Not assigned (as before), or delete everything it owns
+  on this server — its deployed versions after cancelling their running instances, its decision
+  deployments, BPMN drafts, decision drafts, DMN references and their stored models, forms, test
+  scenarios, Panorama and information models. Before the second runs, the dialog shows the server's
+  preview of what goes and what outside the application stops working — catalogue products whose
+  current release binds one of its processes, order lines that could still start one, other
+  applications' processes that evaluate one of its decisions — says that it cannot be undone, and
+  asks for the application's name to be typed. Cancelling instances needs the operator or admin role.
+  `DELETE /api/v1/applications/{id}?purge=true`, `GET /api/v1/applications/{id}/deletion-preview`;
+  MCP: `atlas_delete_application` takes `purge`, `atlas_application_deletion_preview` reads the
+  preview ([ADR-0468](docs/adr/0468-deleting-an-application-with-its-contents.md)).
+
+- **A deployed process can be deleted whatever holds it.** `DELETE /api/v1/processes/{key}?force=true`
+  cancels the version's running instances and removes it even while an order line or the current
+  catalogue release still needs it, overriding the ADR-0427 guard; a protected system process stays
+  protected. The Modeler offers it after a refused delete, with the server's reason and what forcing
+  does. MCP: `atlas_delete_process` takes `force`
+  ([ADR-0468](docs/adr/0468-deleting-an-application-with-its-contents.md)).
+
+- **An installation remembers what another's names mean.** When a package names a group, a
+  person or an approver the target does not carry by that name, the choice made on import — in
+  the Console's dialog, or with `atlas import --set` — is kept on the target once the catalogues
+  are in, and the next import takes it without asking. The table is read before the directory,
+  shown on the catalogue list with entries to correct, remove or add before the first import,
+  and served at `GET`/`POST`/`DELETE /api/v1/catalogs/import/mappings`. `atlas import` now also
+  reads a package's `antworten.json`, so an exported package installs without `--answers`
+  wherever its names are found or remembered
+  ([ADR-0467](docs/adr/0467-application-package-export.md), amendment 2026-10-21).
+
+- **An API token about to expire is flagged before it stops working.** A token with less
+  than 30 days left is marked in **Console → Administration → API tokens** with the days it has, listed
+  above the tokens, and named on the Console's dashboard to administrators, with the vault
+  secret it was sealed as — until it is replaced and revoked. An expired token is refused
+  like an unknown one, so without the warning the first sign was a machine failing
+  ([ADR-0194](docs/adr/0194-api-tokens.md), amendment 2026-10-21).
+
+- **API tokens are minted, listed and revoked in the Console.** **Console → Administration → API tokens**,
   offered to administrators only, lists every token with its scope, roles, reach, expiry
   and who minted it when, and marks an expired one rather than hiding it. The form says
   what each scope reaches and which roles the token will carry before it is minted, asks
@@ -58,7 +96,34 @@ _Changed_ / _Removed_ for each version.
   command and the server ([ADR-0467](docs/adr/0467-application-package-export.md), amendment
   2026-10-21).
 
+### Changed
+
+- **The Console and Operations put their seldom-opened pages behind one entry.** In the
+  Console, Engine, Logs, Backup, Organization, API tokens and Audit log moved into
+  **Administration ▾**, which only administrators see; Dashboard, Workers, Events, AI access
+  and Display stay on the bar. In Operations, Messages, Outbox and Call activities — and, for
+  administrators, Mock directory and Mock database — moved into **Diagnostics ▾**; Instances,
+  Incidents with its count, Workers, Decisions and Reconciliation stay. The pages keep their
+  addresses, so bookmarks and the handbook's links still open them, and the handbook, the
+  docs and the worker dialogs now say **Console → Administration → …** and
+  **Operations → Diagnostics → …**.
+
 ### Fixed
+
+- **A refused process delete says why.** The Modeler threw away the server's refusal and showed
+  *"Could not delete 1 version(s) — running instances?"* — also for a process that had never been
+  started and was refused because a catalogue release binds it. It now shows the server's reason,
+  and every refusal of a plain delete names the forced delete as the way through.
+
+- **The menu bar no longer wraps its names or cuts off its buttons.** In a window narrower
+  than about 1300 pixels an administrator's Console bar broke two-word names onto two lines,
+  shortened the organisation's name to «A…» and clipped the account button. Names now stay
+  on one line at every width, the bar scrolls within itself where they do not fit, and the
+  organisation's name gives way first. On a phone the app's name beside the logo gives way
+  too: there the view names had no room left at all, and in Operations the account button
+  was pushed off the screen. An end-to-end test measures the Console's and the
+  Operations bar at 1440, 1280 and 1024 pixels, for an administrator and an operator, and on
+  a phone.
 
 - **A fixed approver in a package is assigned by username.** A `fixed` approval is a task
   assigned to a username, but `atlas import`, the example's `facility-management` question and the

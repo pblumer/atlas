@@ -421,7 +421,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0333](0333-inventory-commissioning-load.md) | The inventory is taken before it is enforced, and what it records says Atlas did not grant it | Accepted | Landed |
 | [0334](0334-reconciliation.md) | Reconciliation reads absence as a finding, and only inside a scope somebody promised was complete | Accepted | Landed |
 | [0335](0335-starting-an-instance-returns-its-key.md) | Starting an instance returns its key | Accepted | Partial |
-| [0336](0336-cleaning-up-the-decision-store.md) | Cleaning up the decision store | Accepted | Landed |
+| [0336](0336-cleaning-up-the-decision-store.md) | Cleaning up the decision store | Accepted (amended) | Landed |
 | [0337](0337-incident-floods.md) | An incident flood is read by cause and resolved in bulk | Accepted | Landed |
 | [0338](0338-where-a-business-object-is-used.md) | Where a business object is used | Accepted | Landed |
 | [0339](0339-the-definition-key-space-never-goes-backwards.md) | The definition key space never goes backwards | Accepted | Landed |
@@ -512,7 +512,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0424](0424-a-playground-rule-can-demand-the-cases-it-speaks-about.md) | A Playground rule can demand the cases it speaks about | Proposed | Not started |
 | [0425](0425-a-product-lifecycle-is-one-process-with-message-triggers.md) | A product's lifecycle is one process, and each operation is a message start it is triggered at | Accepted | Landed |
 | [0426](0426-an-untriggered-create-never-seeds-several-start-events.md) | An untriggered create never seeds several start events | Accepted | Landed |
-| [0427](0427-converting-a-product-to-a-lifecycle-process.md) | Converting a product to a lifecycle process keeps the old processes alive until nothing needs them | Accepted | Landed |
+| [0427](0427-converting-a-product-to-a-lifecycle-process.md) | Converting a product to a lifecycle process keeps the old processes alive until nothing needs them | Accepted (amended) | Landed |
 | [0428](0428-a-product-lifecycle-may-run-as-one-instance-per-position.md) | A product lifecycle may run as one instance per position, and its later operations are delivered to that instance | Accepted (amended) | Landed |
 | [0429](0429-product-actions-are-commands-with-published-outcomes.md) | A product declares its actions, each a command whose outcome is a fact published beyond Atlas | Accepted (amended) | Partial |
 | [0430](0430-the-event-feed-has-its-own-role-and-token-scope.md) | The event feed has its own role and its own token scope | Accepted | Landed |
@@ -553,6 +553,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0465](0465-form-doors.md) | A step's form is opened from the step, and the way back links it | Accepted (amended) | Landed |
 | [0466](0466-start-view-groups-and-favourites.md) | The Start view groups by application and keeps favourites per person | Accepted | Landed |
 | [0467](0467-application-package-export.md) | An application and its shop move as a package, and an import asks before it replaces | Accepted (amended) | Landed |
+| [0468](0468-deleting-an-application-with-its-contents.md) | Deleting an application with everything it owns | Accepted | Landed |
 
 ## The two states of a record
 

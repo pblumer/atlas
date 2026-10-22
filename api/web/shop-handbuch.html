@@ -674,6 +674,22 @@ atlas import --server https://atlas.example.com --answers paket/antworten.json p
     asks only about what it cannot find there. It then shows one plan for the application, its constants and the
     catalogues, imports the application, publishes it, imports the catalogues and names what is still missing.
     <code>atlas import</code> installs such an archive too, unpacked, and the other way round.</p>
+  <p data-l="de"><b>Namen, die anders heissen.</b> Heisst eine Gruppe auf INT «Fachbereich Bau» und auf PROD
+    «FB Bau», findet der Import sie nicht und fragt nach. Die Wahl merkt sich PROD in seiner Zuordnungstabelle, sobald
+    die Kataloge importiert sind, und jeder spätere Import nimmt sie ohne Rückfrage – in der Console wie mit
+    <code>atlas import</code>, wo eine Antwort mit <code>--set</code> ebenso gemerkt wird. Die Tabelle steht auf der
+    Katalogliste unter <i>Names from other installations</i>: Dort lässt sich ein Eintrag korrigieren, entfernen oder
+    schon vor dem ersten Import anlegen. Ein Eintrag, dessen Gruppe oder Person es nicht mehr gibt, ist markiert;
+    der Import sucht den Namen dann wieder im Verzeichnis. <code>atlas import</code> liest die mitgelieferten
+    Antworten (<code>antworten.json</code>) selbst; <code>--answers</code> braucht es nur noch für Abweichungen.</p>
+  <p data-l="en"><b>Names that differ.</b> When a group is "Fachbereich Bau" on INT and "FB Bau" on PROD, the import
+    does not find it and asks. PROD keeps the choice in its table of names once the catalogues are in, and every later
+    import takes it without asking – in the Console and with <code>atlas import</code>, where an answer given with
+    <code>--set</code> is kept the same way. The table is on the catalogue list under
+    <i>Names from other installations</i>: an entry can be corrected, removed, or added before the first import. An
+    entry whose group or person no longer exists is marked, and the import looks the name up in the directory again.
+    <code>atlas import</code> reads the package's own answers (<code>antworten.json</code>); <code>--answers</code> is
+    only needed for what differs.</p>
 </section>
 
 </main>

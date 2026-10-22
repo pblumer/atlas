@@ -629,7 +629,7 @@ zu bestätigen.
     CI (ADR-0194). Mit Geltungsbereich und Ablauf ausstellen — `worker`
     wo immer möglich, `full` nur wo die Aufrufe nicht im Voraus benannt werden
     können. Ausstellung und Widerruf stehen im Audit-Log (`auth.token_minted`,
-    `auth.token_revoked`); Bestand unter Console → API tokens oder mit
+    `auth.token_revoked`); Bestand unter Console → Administration → API tokens oder mit
     `GET /api/v1/api-tokens` rezertifizieren.
   - Worker-Dienstkonten in den Fachsystemen: Least Privilege,
     Rotation ⟨Frist⟩; die Werte liegen im Vault bzw. beim Worker, nie im Modell.

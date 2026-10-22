@@ -241,11 +241,15 @@ func TestDeleteSystemProcessRefused(t *testing.T) {
 	if key == 0 {
 		t.Fatal("system process not deployed")
 	}
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/processes/"+strconv.FormatUint(key, 10), nil)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("delete system process = %d, want 403", rec.Code)
+	// force overrides the order and catalogue guards, never this one
+	// (ADR-0468).
+	for _, query := range []string{"", "?force=true"} {
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/processes/"+strconv.FormatUint(key, 10)+query, nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("delete system process%s = %d, want 403", query, rec.Code)
+		}
 	}
 }
 

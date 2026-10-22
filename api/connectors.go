@@ -1354,11 +1354,11 @@ func (s *Server) testSQLConnector(w http.ResponseWriter, r *http.Request, produc
 func connectorTestDetail(provider, endpoint, to string, loggedIn bool) string {
 	switch {
 	case to != "" && provider == mail.ProviderPreview:
-		return "Test message delivered to the outbox (Operations › Outbox) — the preview provider sends nothing outward."
+		return "Test message delivered to the outbox (Operations › Diagnostics › Outbox) — the preview provider sends nothing outward."
 	case to != "":
 		return "Test message sent to " + to + ". If it does not arrive, the message left atlas and the provider still has it."
 	case provider == mail.ProviderPreview:
-		return "Ready. The preview provider dials nothing: messages land in the outbox (Operations › Outbox)."
+		return "Ready. The preview provider dials nothing: messages land in the outbox (Operations › Diagnostics › Outbox)."
 	case provider == mail.ProviderSMTP && !loggedIn:
 		return "Connected to " + endpoint + " without logging in: no credential reference is set, so the server has to " +
 			"admit atlas by its network address. No message was sent — send a test message to confirm it relays."

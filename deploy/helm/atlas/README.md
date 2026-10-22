@@ -120,7 +120,7 @@ provider. Set it to the origin your Ingress serves, not the Service name.
 
 Keep the bootstrap administrator above — it is the way back in when the
 provider is unreachable. Which atlas roles the provider's groups grant is
-configured in the running instance, under Console → Organization → Single
+configured in the running instance, under Console → Administration → Organization → Single
 sign-on, and is off until somebody turns it on. See
 [`docs/install.md`](../../../docs/install.md#single-sign-on-with-an-identity-provider).
 

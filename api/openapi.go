@@ -317,7 +317,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Move", tObject()),
 			resp: jsonBody("What moved", tObject())}},
 		{"DELETE", "/api/v1/processes/{key}", s.handleDeleteProcess, apiOp{
-			summary: "Delete a deployment (must have no running instances)", tag: "Processes", role: RoleModeler,
+			summary: "Delete a deployment. Refused while it has running instances, while an order line could still start it, or while the current catalogue release binds it (ADR-0427) — unless ?force=true, which cancels its running instances (that needs the operator or admin role) and removes it anyway; a protected system process is never deleted (ADR-0468)", tag: "Processes", role: RoleModeler,
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/processes/{key}/runtime", s.handleProcessRuntime, apiOp{
 			summary: "Read a process's live runtime state", tag: "Processes", role: roleAny, resp: jsonBody("Runtime state", tObject())}},
@@ -1087,8 +1087,17 @@ func (s *Server) apiRoutes() []apiRoute {
 				"catalogs": tArray(), "products": tArray(), "edges": tArray(), "processes": tArray(), "publish": tBool(),
 			})),
 			resp: jsonBody("What was created and updated, as catalog:<id> and product:<id>, the releases published, and the processes deployed and left unchanged", tObject())}},
+		{"GET", "/api/v1/catalogs/import/mappings", s.handleListPackageMappings, apiOp{
+			summary: "This installation's table of names for the packages it imports (ADR-0467): for each kind (group, user, account) and name a package gives, the principal it means here — a group's or user's id, an account's username — with its name here and whether it still exists. The package import reads it before the directory, so a name chosen once is not asked again", tag: "Catalogue", role: RoleProductManager,
+			resp: jsonBody("The table", tArray())}},
+		{"POST", "/api/v1/catalogs/import/mappings", s.handleSetPackageMappings, apiOp{
+			summary: "Add to or change this installation's table of names (ADR-0467): body {mappings: [{kind, answer, id}]}, kind group, user or account, answer the name a package gives, id the principal it means here (an account by username, ignoring case). Every entry is checked before any is written; one naming a principal this server does not have is refused with 422. An entry of the same kind and name is replaced. Answers the table", tag: "Catalogue", role: RoleProductManager,
+			req:  jsonBody("Entries", schemaObj(map[string]any{"mappings": tArray()}, "mappings")),
+			resp: jsonBody("The table", tArray())}},
+		{"DELETE", "/api/v1/catalogs/import/mappings", s.handleDeletePackageMapping, apiOp{
+			summary: "Remove one entry of this installation's table of names, by ?kind= and ?answer= (ADR-0467)", tag: "Catalogue", role: RoleProductManager, status: http.StatusNoContent}},
 		{"POST", "/api/v1/catalogs/import/answers", s.handlePackageAnswers, apiOp{
-			summary: "Answer an application package's questions from this server's directory before its catalogue document is imported (ADR-0467): body {document, questions, answers} — katalog.json, fragen.json, and antworten.json with whatever was chosen instead. A group or person question is answered by an id, or by a name exactly one principal of that kind carries; anything else is taken as written. Answers the document with every {{question}} replaced (each value escaped as a JSON string) and how each answer was taken, or 422 with every question it could not answer — unanswered, unknown, or ambiguous with the ids the name matches. Nothing is written; the filled document is imported through POST /api/v1/catalogs/import and its plan", tag: "Catalogue", role: RoleProductManager,
+			summary: "Answer an application package's questions before its catalogue document is imported (ADR-0467): body {document, questions, answers, chosen} — katalog.json, fragen.json, antworten.json, and what the person chose instead. Each question is answered by the choice, else by this installation's table of names for the packaged answer (GET /api/v1/catalogs/import/mappings) while the principal it names exists, else from the directory: a group or user by id or by a name exactly one principal of that kind carries, an account by username or display name; anything else is taken as written. Answers the document with every {{question}} replaced (each value escaped as a JSON string), how each answer was taken, the questions the table answered (remembered) and the choices worth adding to it (learned), or 422 with every question it could not answer — unanswered, unknown, or ambiguous with the ids the name matches. Nothing is written; the filled document is imported through POST /api/v1/catalogs/import and its plan", tag: "Catalogue", role: RoleProductManager,
 			req:  jsonBody("A package's catalogue document, questions and answers", schemaObj(map[string]any{"document": tObject(), "questions": tObject(), "answers": tObject()}, "document")),
 			resp: jsonBody("The filled document, the resolved answers and notes", tObject())}},
 		{"GET", "/api/v1/catalogs/{id}/document", s.catalogs.HandleExportCatalog, apiOp{
@@ -1447,7 +1456,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Update", schemaObj(map[string]any{"name": tString(), "visibility": tString(), "ownerId": tString()})),
 			resp: jsonBody("Updated application", tObject())}},
 		{"DELETE", "/api/v1/applications/{id}", s.handleDeleteProject, apiOp{
-			summary: "Delete a process application", tag: "Applications", role: RoleModeler, status: http.StatusNoContent}},
+			summary: "Delete a process application. Its artifacts are kept and become Not assigned (ADR-0034); with ?purge=true everything it owns goes with it — deployed versions after cancelling their running instances, decision deployments, drafts, forms, decision references and models — irreversibly (ADR-0468). Read GET .../deletion-preview first", tag: "Applications", role: RoleModeler, status: http.StatusNoContent}},
+		{"GET", "/api/v1/applications/{id}/deletion-preview", s.handleApplicationDeletionPreview, apiOp{
+			summary: "What deleting an application with ?purge=true would remove — every deployed version with its running instances, decision deployments, drafts, forms, references and models — and what outside it would stop working: catalogue products binding its processes, order lines that could still start them, other applications' processes evaluating its decisions. Owner only (ADR-0468)", tag: "Applications", role: RoleModeler,
+			resp: jsonBody("Deletion preview", tObject())}},
 		{"PUT", "/api/v1/applications/{id}/members/{userId}", s.handleSetProjectMember, apiOp{
 			summary: "Share an application with a user, or change their role (ADR-0071)", tag: "Applications", role: RoleModeler,
 			req:  jsonBody("Member role", schemaObj(map[string]any{"role": tString()}, "role")),

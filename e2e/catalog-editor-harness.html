@@ -87,8 +87,12 @@
       // see the page ask; the default asks nothing.
       window.__importPlan = [{ ref: "product:p1", name: "P1", status: "new", outcome: "created" }];
 
+      // The table of names package imports keep (ADR-0467); a spec sets entries.
+      window.__mappings = [];
+
       const api = async (method, url, body) => {
         window.__sent.push({ method, url, body });
+        if (/\/catalogs\/import\/mappings/.test(url)) return method === "GET" ? window.__mappings : [];
         if (/\/catalogs\/import/.test(url) && window.__importRefusal) {
           throw Object.assign(new Error("refused"), { status: 422, body: window.__importRefusal });
         }

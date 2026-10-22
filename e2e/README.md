@@ -27,6 +27,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`application-delete.spec.mjs`**
+  ([ADR-0468](../docs/adr/0468-deleting-an-application-with-its-contents.md)):
+  the application delete dialog against previews of its own — the default keeps the contents and
+  reads no preview; deleting everything lists what goes (the running instances it cancels
+  included) and what outside the application stops working, and is armed only once the
+  application's name is typed; a refusal in the preview, or a caller who may not cancel
+  instances, keeps it disarmed; Escape cancels.
 - **`capabilities.spec.mjs`** ([ADR-0305](../docs/adr/0305-business-capabilities-and-value-streams.md),
   roadmap B8): the business-architecture screens against a stubbed API — the landing view
   is the gap report, one card per finding kind in the server's order, each sentence composed
@@ -140,7 +147,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 - **`multi-instance.spec.mjs`** (ADR-0097 / ADR-0100): a modelled **loop cardinality** drives
   the instance count and ticks down; a **data-driven** activity falls back to the
   toolbar-configurable default.
-- **`backup.spec.mjs`** (ADR-0107 / ADR-0109): the **Console → Backup** view — the nav entry
+- **`backup.spec.mjs`** (ADR-0107 / ADR-0109): the **Console → Administration → Backup** view — the nav entry
   opens it, both the design-time backup and the whole-instance **full snapshot** expose their
   `.tar.gz` download links and restore controls, and each restore flow validates an empty
   selection, then reports the file count and restart note on a (mocked) successful upload.
@@ -361,7 +368,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   where a box was moved; cancelling imports nothing. Drives the real `viewCatalogDetail` and
   `viewCatalogs` (and `api/web/importchoices.js` through them) via the editor harness, whose mock
   refuses an import when a spec sets `window.__importRefusal` and answers a dry run with
-  `window.__importPlan`.
+  `window.__importPlan`. The catalogue list also shows the **table of names** package imports
+  keep: each entry with what it means here, one whose principal is gone marked as such, a
+  remove button that sends `DELETE …/import/mappings?kind=&answer=`, and a form that adds an
+  approver among the accounts by username (`window.__mappings` sets the entries).
 
 - **`source-transfer.spec.mjs`** ([ADR-0467](../docs/adr/0467-application-package-export.md)):
   **moving an application and its catalogues** from the Console. The export dialog lists what the
@@ -371,10 +381,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   and offers the catalogues the person maintains, those selling the application ticked; with one
   ticked it asks `…/package` for a preview first and shows its warnings before "Download anyway",
   with none it downloads the source tree. The import reads a package archive in the browser,
-  answers its questions through `/api/v1/catalogs/import/answers`, asks the person for any the
-  directory cannot answer (a fixed approver among usernames), shows one plan for the application
-  and the catalogues, then imports the application, publishes it and imports the catalogues in
-  that order; a source tree without a shop asks nothing and publishes nothing; cancelling a
+  answers its questions through `/api/v1/catalogs/import/answers` — the package's answers and
+  the person's choices sent apart — asks the person for any the directory cannot answer (a fixed
+  approver among usernames), shows one plan for the application and the catalogues, then imports
+  the application, publishes it, imports the catalogues and only then keeps the choices the server
+  calls learned in the target's table of names, in that order; a source tree without a shop asks nothing and publishes nothing; cancelling a
   question installs nothing. After an import the report names only what the target still lacks
   and the constants it did not set. Drives the real `api/web/sourceneeds.js` and
   `api/web/packageimport.js` through their own harness, whose mock answers each route as the spec
@@ -561,9 +572,30 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
     node it was in. Sealed in the vault, it is never sent to the page.
   - **Revoking:** asks first, saying it is immediate and that callers fail from their next
     request on; a dismissed dialog sends nothing.
-  - **The listing:** an expired token stays listed and is marked expired.
+  - **The listing:** an expired token stays listed and is marked expired. A token with less than
+    30 days left — and not one with thirty days and an hour — is marked with its days left and
+    named above the list, a token minted for less than that at once, and revoking it clears the
+    notice.
+  - **The dashboard:** names those tokens to an administrator, with the vault secret each was
+    sealed as and a link to the page; says nothing when none is about to expire; and a
+    non-administrator's dashboard does not ask for the tokens at all.
   - **Who sees it:** a non-administrator is not offered the page, and reaching it anyway shows
     a refusal instead of the form. It reads in English when the reader chose English.
+
+- **`console-menu.spec.mjs`**: the **bar of view names** under the top bar, against a stubbed
+  API. It measures, not eyeballs, at 1440, 1280 and 1024 pixels — the Console's and the
+  Operations bar for an administrator, the Operations bar for an operator:
+  - no name takes two lines;
+  - every button on the top bar lies wholly inside the window;
+  - the entries need no sideways scroll.
+
+  At 900 and 700 pixels and on a phone, names still never wrap and no button is clipped;
+  the bar scrolls within itself. The administrator's Console pages sit behind
+  **Administration**: the menu opens unclipped, marks the open page, and the group is the
+  entry marked while one of its pages is open. A modeller and a task worker see no group;
+  with enforcement off it is offered. Operations keeps its working pages and the incident
+  count on the bar and puts the rest behind **Diagnostics**, whose mock tools only an
+  administrator sees.
 
 ## Rendering a conformance gallery diagram
 

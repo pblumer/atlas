@@ -990,9 +990,10 @@ Composition and reuse.
 What it takes to run this for real.
 
 - 🚧 Public API surface (deploy, create instance, publish message, complete job, queries): every route is in the served OpenAPI document with its role (`api/openapi.go`), with scoped API tokens ([ADR-0194](docs/adr/0194-api-tokens.md)) and a stated runtime contract ([ADR-0176](docs/adr/0176-standards-boundary-and-runtime-contract.md)). Deploy is still a sidecar store, not an event-sourced command ([ADR-0019](docs/adr/0019-durable-deployments.md))
-- ✅ API tokens are minted, listed and revoked in the Console (**Console → API tokens**, admin
+- ✅ API tokens are minted, listed and revoked in the Console (**Console → Administration → API tokens**, admin
   only): the roles a token will carry are shown before it is minted, the secret once, and an
-  expired token stays listed and marked. A token can be sealed straight into the vault
+  expired token stays listed and marked; one with less than 30 days left is flagged there and
+  on the dashboard. A token can be sealed straight into the vault
   (`vaultSecret`), so the one the shop's system processes present never leaves the server
   ([ADR-0194](docs/adr/0194-api-tokens.md), amendment 2026-10-21)
 - 🚧 Job-worker protocol — ADR-0007: built over HTTP, with the type-keyed pull, long-poll, leases, `leaseToken` fencing, complete, fail and BPMN errors, and the activation and lease-timeout counters. A gRPC transport is not built, and whether it should be is open
@@ -1911,6 +1912,13 @@ dataset of up to 50 000 cases":
 - 🚧 Minimap, align/distribute, element color/appearance: align and distribute are on the bpmn-js context menu; a minimap and element colour are not built.
 - 🔲 Element comments / annotations.
 - 🚧 Projects/folders to organize diagrams (draft/deployment listing grows a tree): projects exist ([ADR-0034](docs/adr/0034-projects-and-artifacts.md), [ADR-0128](docs/adr/0128-process-applications.md)); nested folders do not.
+- ✅ **Deleting an application with everything it owns**
+  ([ADR-0468](docs/adr/0468-deleting-an-application-with-its-contents.md)):
+  the delete dialog offers to keep the contents (Not assigned) or to remove every deployed version
+  with its running instances, the decision deployments, drafts, forms, references, models and
+  scenarios, after a preview of what goes and what outside the application stops working
+  (`?purge=true`, `GET .../deletion-preview`). A single version can be deleted with `?force=true`
+  over running instances and the ADR-0427 guard, and a refused delete shows the server's reason.
 - ✅ **The editor says which version it shows** ([ADR-0452](docs/adr/0452-modeler-shows-its-version.md)):
   a chip beside the breadcrumbs names the open record — the draft, or version N of M — and how it
   stands against the other (`Draft = v7`, `Draft · v7 + changes`, `Draft ≠ v7` when a newer
@@ -2213,6 +2221,10 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   application… answers the questions from the target's directory, asks for the rest, and installs
   the application, its constants and its catalogues in `atlas import`'s order. A fixed approver
   travels as an account by username (ADR-0467, amended 2026-10-21).
+- ✅ **A target remembers what a package's names mean.** A name chosen once on import — in the
+  Console or with `atlas import --set` — is kept in the target's table of names, shown and
+  corrected on the catalogue list, and answers the same question on every later import
+  (ADR-0467, amended 2026-10-21).
 - ✅ **A catalogue can be deleted for good.** An administrator deletes a catalogue or a product
   with its releases, own products, orders, the instances working them and the holds they
   granted, after a preview and a confirmation by id — in the Console, over HTTP and over MCP.

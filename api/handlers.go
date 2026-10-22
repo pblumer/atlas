@@ -1534,11 +1534,21 @@ func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
 
 // handleDeleteProcess removes a deployed definition (one version). It refuses if
 // the definition still has running instances, since a live instance resolves its
-// definition by key on every batch.
+// definition by key on every batch. With force=true it cancels them instead and
+// overrides the order and catalogue guards (forceDeleteProcess).
 func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
+		return
+	}
+	force, err := boolQuery(r.URL.Query().Get("force"), "force")
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if force {
+		s.forceDeleteProcess(w, r, key)
 		return
 	}
 	var (
@@ -1596,21 +1606,7 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		if scanErr != nil || running > 0 {
 			return
 		}
-		// Durable before visible (I2, ADR-0019): remove the on-disk record first,
-		// so a deletion that is acknowledged never reappears on restart.
-		if err := s.deploys.delete(key); err != nil {
-			persistErr = err
-			return
-		}
-		s.proc.Undeploy(key)
-		s.forgetLandscape()
-		delete(s.deployments, key)
-		for i, k := range s.order {
-			if k == key {
-				s.order = append(s.order[:i], s.order[i+1:]...)
-				break
-			}
-		}
+		persistErr = s.undeployOnLoop(key)
 	})
 	switch {
 	case !found:
@@ -1620,13 +1616,13 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "check instances: "+scanErr.Error())
 	case needed != "":
-		httpapi.Error(w, http.StatusConflict, needed)
+		httpapi.Error(w, http.StatusConflict, needed+forceHint)
 	case len(released) > 0:
 		httpapi.Error(w, http.StatusConflict, fmt.Sprintf("cannot delete: the current catalogue "+
 			"release binds %s for %s; an order placed now would freeze it (ADR-0427)",
-			processID, strings.Join(released, ", ")))
+			processID, strings.Join(released, ", "))+forceHint)
 	case running > 0:
-		httpapi.Error(w, http.StatusConflict, fmt.Sprintf("cannot delete: %d running instance(s); cancel them first", running))
+		httpapi.Error(w, http.StatusConflict, fmt.Sprintf("cannot delete: %d running instance(s); cancel them first", running)+forceHint)
 	case persistErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "remove deployment: "+persistErr.Error())
 	default:

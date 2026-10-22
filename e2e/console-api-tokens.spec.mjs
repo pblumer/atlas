@@ -56,6 +56,7 @@ function installFixture({ me, tokens, secrets, secret }) {
     const isAdmin = me.roles.includes("admin");
     if (path === "/api/v1/auth/me") return json({ authEnabled: true, user: me });
     if (path === "/api/v1/api-tokens" || path.startsWith("/api/v1/api-tokens/")) {
+      if (method === "GET") window.__listReads = (window.__listReads || 0) + 1;
       if (!isAdmin) return json({ error: `the admin role is required for ${method} ${path}` }, 403);
       if (method === "GET") return json(state.tokens);
       if (method === "POST") {
@@ -94,6 +95,17 @@ function installFixture({ me, tokens, secrets, secret }) {
   };
 }
 
+// boot loads the Console on its landing page, the dashboard, with the fixture in place.
+async function boot(page, { me = ADMIN, tokens = LISTED, secrets = ["atlas"] } = {}) {
+  page._console = [];
+  page._errors = [];
+  page.on("console", (m) => page._console.push(m.text()));
+  page.on("pageerror", (e) => page._errors.push(e.message));
+  await page.addInitScript(installFixture, { me, tokens, secrets, secret: SECRET });
+  await page.goto("/index.html");
+  await page.waitForFunction(() => document.querySelector("#view")?.children.length > 0, null, { timeout: 15000 });
+}
+
 async function open(page, { me = ADMIN, tokens = LISTED, secrets = ["atlas"], viaMenu = true } = {}) {
   page._console = [];
   page._errors = [];
@@ -102,7 +114,10 @@ async function open(page, { me = ADMIN, tokens = LISTED, secrets = ["atlas"], vi
   await page.addInitScript(installFixture, { me, tokens, secrets, secret: SECRET });
   await page.goto("/index.html");
   await page.waitForFunction(() => document.querySelector("#view")?.children.length > 0, null, { timeout: 15000 });
-  if (viaMenu) await page.locator("#topnav a", { hasText: "API tokens" }).click();
+  if (viaMenu) {
+    await page.locator("#topnav .topnav-group-btn", { hasText: "Administration" }).click();
+    await page.locator("#topnav .topnav-group a", { hasText: "API tokens" }).click();
+  }
   else await page.evaluate(() => { location.hash = "#/console/api-tokens"; });
   await expect(page.locator("#view h1").first()).toHaveText(/API-Tokens|API tokens/);
 }
@@ -307,4 +322,70 @@ test("the page speaks English when the reader chose it", async ({ page }) => {
   await form(page).locator('select[name="scope"]').selectOption("events");
   await expect(page.locator("#tok-scope-desc")).toContainText("event feed");
   await expect(page.locator('#tok-rows tr[data-id="tok_old"] [data-expiry="expired"]')).toHaveText("expired");
+});
+
+// A token that expires in less than EXPIRY_WARN_DAYS (30) — the one to replace now,
+// while the machine holding it still works.
+const SOON = { id: "tok_soon", name: "Jira-Worker host-c", scope: "worker", roles: ["modeler", "operator", "user"],
+  expiresAt: NOW + 12 * DAY + 3600, createdAt: NOW - 353 * DAY, createdBy: "usr_root", vaultSecret: "jira-host-c" };
+// Just outside the window: thirty days and an hour left is not "less than thirty".
+const LATER = { id: "tok_later", name: "Backup-Job", scope: "full", roles: ["modeler", "operator", "user"],
+  expiresAt: NOW + 30 * DAY + 3600, createdAt: NOW - 335 * DAY, createdBy: "usr_root" };
+
+test("a token about to expire is flagged in the list, with the days it has left", async ({ page }) => {
+  await open(page, { tokens: [...LISTED, SOON, LATER] });
+  const soon = page.locator('#tok-rows tr[data-id="tok_soon"]');
+  await expect(soon.locator('[data-expiry="soon"]')).toHaveText("läuft in 12 Tagen ab");
+  await expect(page.locator('#tok-rows tr[data-id="tok_later"] [data-expiry="valid"]')).toHaveCount(1);
+  // An expired token is already refused; it is marked expired, not "about to expire".
+  await expect(page.locator('#tok-rows tr[data-id="tok_old"] [data-expiry="soon"]')).toHaveCount(0);
+
+  // Above the list: how many, which one, and what to do.
+  const notice = page.locator("#tok-soon");
+  await expect(notice).toContainText("Ein Token läuft in den nächsten 30 Tagen ab");
+  await expect(notice).toContainText("Jira-Worker host-c");
+  await expect(notice).not.toContainText("Backup-Job");
+  await expect(notice).not.toContainText("Alter Worker");
+
+  // Replacing it ends the warning: revoke the old token, and the notice goes with it.
+  page.once("dialog", (d) => d.accept());
+  await soon.locator('button[data-act="revoke"]').click();
+  await expect(soon).toHaveCount(0);
+  await expect(notice).toBeHidden();
+});
+
+test("a token minted for less than thirty days is flagged at once", async ({ page }) => {
+  await open(page, { tokens: [] });
+  await expect(page.locator("#tok-soon")).toBeHidden();
+  await form(page).locator('input[name="name"]').fill("Test-Worker");
+  await form(page).locator('select[name="scope"]').selectOption("worker");
+  await form(page).locator('input[name="days"]').fill("7");
+  await form(page).locator('button[type="submit"]').click();
+  await expect(page.locator('#tok-rows tr', { hasText: "Test-Worker" }).locator('[data-expiry="soon"]'))
+    .toHaveText(/läuft in [67] Tagen ab/);
+  await expect(page.locator("#tok-soon")).toContainText("Test-Worker");
+});
+
+test("the dashboard tells an administrator which tokens are about to expire", async ({ page }) => {
+  await boot(page, { tokens: [...LISTED, SOON, LATER] });
+  const notice = page.locator("#api-tokens-expiring");
+  await expect(notice).toContainText("Jira-Worker host-c");
+  await expect(notice).toContainText("läuft in 12 Tagen ab");
+  await expect(notice).toContainText("im Vault als jira-host-c");
+  await expect(notice).not.toContainText("Backup-Job");
+  await notice.locator('a[href="#/console/api-tokens"]').click();
+  await expect(page.locator("#view h1").first()).toHaveText("API-Tokens");
+});
+
+test("the dashboard says nothing when no token is about to expire", async ({ page }) => {
+  await boot(page, { tokens: [...LISTED, LATER] });
+  await expect.poll(() => page.evaluate(() => window.__listReads || 0)).toBe(1);
+  await expect(page.locator("#api-tokens-expiring")).toHaveCount(0);
+});
+
+test("a non-administrator's dashboard does not ask for the tokens at all", async ({ page }) => {
+  await boot(page, { me: MODELLER, tokens: [...LISTED, SOON] });
+  await expect(page.locator("#view h1").first()).toContainText("Welcome");
+  expect(await page.evaluate(() => window.__listReads || 0)).toBe(0);
+  await expect(page.locator("#api-tokens-expiring")).toHaveCount(0);
 });

@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas application-delete e2e harness</title>
+    <!-- Drives the real api/web/deletedialog.js with deletion previews of the test's
+         own (ADR-0468). The reported case
+         is the first preview: an application whose process a catalogue product binds
+         and which has an instance running. The page scaffolding is the test's own,
+         because app.js boots the whole console on import and cannot be loaded here. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="card" style="padding: 18px; max-width: 720px">
+      <button class="btn" id="open">Delete M365</button>
+      <button class="btn" id="open-refused">Delete Newer</button>
+      <button class="btn" id="open-modeler">Delete as modeler</button>
+      <pre id="result">—</pre>
+      <pre id="loads">0</pre>
+    </div>
+    <script type="module">
+      import { openApplicationDeleteDialog } from "/deletedialog.js";
+
+      const empty = {
+        processes: [], runningInstances: 0, decisionDeployments: [], drafts: [], decisionDrafts: [],
+        decisionReferences: [], forms: [], scenarios: [], panoramaModels: [], informationModels: [],
+        catalogueProducts: [], orderLines: [], dependentProcesses: [], needsOperator: false,
+      };
+      const M365 = {
+        ...empty,
+        processes: [{ processId: "proc_m365_telefonzentrale", name: "Teams Phone: Telefonzentrale",
+          versions: [{ key: 7, version: 1, running: 2 }] }],
+        runningInstances: 2,
+        decisionDeployments: [{ key: 9, name: "Telefonie", decisions: ["m365-telefonie v1"] }],
+        drafts: [{ id: "proc_m365_telefonzentrale", name: "Teams Phone: Telefonzentrale" }],
+        forms: [{ id: "m365-telefonzentrale-bestellung", name: "m365-telefonzentrale-bestellung" }],
+        catalogueProducts: [{ processId: "proc_m365_telefonzentrale", products: ["m365-telefonzentrale"] }],
+      };
+
+      let loads = 0;
+      const result = document.getElementById("result");
+      const show = (r) => { result.textContent = r === null ? "cancelled" : r; };
+      const open = (name, preview) => async () => {
+        show(await openApplicationDeleteDialog({
+          name,
+          loadPreview: async () => {
+            loads++;
+            document.getElementById("loads").textContent = String(loads);
+            return preview;
+          },
+        }));
+      };
+      document.getElementById("open").addEventListener("click", open("M365", M365));
+      document.getElementById("open-refused").addEventListener("click", open("Newer", {
+        ...empty, refusal: "cannot purge: the application published the current version of [eligibility v2]",
+      }));
+      document.getElementById("open-modeler").addEventListener("click", open("Busy", {
+        ...M365, needsOperator: true,
+      }));
+      window.__ready = true;
+    </script>
+  </body>
+</html>

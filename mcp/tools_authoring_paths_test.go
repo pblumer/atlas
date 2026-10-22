@@ -142,3 +142,35 @@ func TestCompareDraftNamesAVersionOnlyWhenGiven(t *testing.T) {
 	_, _, c = rec.call(t, "atlas_compare_draft", map[string]any{"id": "order", "key": "2251799813685249"})
 	wantCall(t, "atlas_compare_draft", c, http.MethodGet, "/api/v1/drafts/order/comparison", "key=2251799813685249")
 }
+
+// TestDeletesForceAndPurgeOnlyWhenAsked: force and purge are irreversible, so each
+// travels only when the agent sets it to true — an omitted or false flag is the plain
+// delete (ADR-0468).
+func TestDeletesForceAndPurgeOnlyWhenAsked(t *testing.T) {
+	rec := newAPIRecorder(t, http.StatusNoContent, "")
+	for _, tc := range []struct {
+		tool  string
+		args  map[string]any
+		path  string
+		query string
+	}{
+		{"atlas_delete_process", map[string]any{"key": 7}, "/api/v1/processes/7", ""},
+		{"atlas_delete_process", map[string]any{"key": 7, "force": false}, "/api/v1/processes/7", ""},
+		{"atlas_delete_process", map[string]any{"key": 7, "force": true}, "/api/v1/processes/7", "force=true"},
+		{"atlas_delete_application", map[string]any{"id": "a-1"}, "/api/v1/applications/a-1", ""},
+		{"atlas_delete_application", map[string]any{"id": "a-1", "purge": true}, "/api/v1/applications/a-1", "purge=true"},
+	} {
+		text, isErr, c := rec.call(t, tc.tool, tc.args)
+		if isErr {
+			t.Fatalf("%s %v = tool error %q", tc.tool, tc.args, text)
+		}
+		wantCall(t, tc.tool, c, http.MethodDelete, tc.path, tc.query)
+	}
+
+	preview := newAPIRecorder(t, http.StatusOK, `{"applicationId":"a-1","runningInstances":2}`)
+	text, isErr, c := preview.call(t, "atlas_application_deletion_preview", map[string]any{"id": "a-1"})
+	if isErr || !strings.Contains(text, `"runningInstances":2`) {
+		t.Fatalf("preview = (%q, isErr=%v)", text, isErr)
+	}
+	wantCall(t, "atlas_application_deletion_preview", c, http.MethodGet, "/api/v1/applications/a-1/deletion-preview", "")
+}
