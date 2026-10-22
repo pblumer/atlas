@@ -75,7 +75,12 @@ exactly as ADR-0312 describes it.
   burden onto every production installation, which has to set the flag, and the record
   says so wherever the flag is described. The environment variable is read as strictly
   as `ATLAS_CATALOGUE`, so a mistyped `false` stops the start instead of leaving the
-  purge on.
+  purge on. And while the purge is on, **every start logs a WARN**,
+  `event=server.catalogue_purge_enabled`, naming the flag that switches it off: an
+  installation upgraded without the flag serves normally and would otherwise give no
+  sign, so the log says it at every start until the flag is set, under a stable name an
+  alert can match. A server with `--catalogue=false` does not write it, because its
+  catalogue routes, the purge among them, are not served.
 - **The routes.** `GET /api/v1/catalogs/{id}/deletion` and
   `GET /api/v1/catalog-products/{id}/deletion` answer the plan and change nothing, on
   any server, with `enabled` saying whether this one allows the purge.
@@ -141,7 +146,7 @@ exactly as ADR-0312 describes it.
   - A line that is running when its product is deleted from an order that stays keeps
     its status; only a line that had not started can be withdrawn.
 - **Follow-ups / risks to watch:** Production installations that upgrade without
-  setting `--catalogue-purge=false`. Whether anybody needs the history erased too
+  setting `--catalogue-purge=false`; the start WARN is how they show up. Whether anybody needs the history erased too
   (option 4). Whether the confirmation by id is enough for an agent, which can repeat an
   id as easily as read one; the switch is the real guard there.
 

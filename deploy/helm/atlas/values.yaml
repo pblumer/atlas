@@ -174,6 +174,7 @@ atlas:
     # (--catalogue-purge). On by default (opt-out). SET IT TO false ON PRODUCTION:
     # there a product is withdrawn and a catalogue kept, because orders and held
     # rights resolve through them. Meant for development and test installations.
+    # While it is true, every start logs a WARN (event=server.catalogue_purge_enabled).
     purge: true
 
   # -- Script task workers. Each shells out to an interpreter and runs arbitrary

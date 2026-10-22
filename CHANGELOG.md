@@ -20,7 +20,8 @@ _Changed_ / _Removed_ for each version.
   from and tried out can be cleared and imported again. **On by default (opt-out); switch it
   off on a production installation** with `--catalogue-purge=false`
   (`ATLAS_CATALOGUE_PURGE=false`, Helm `atlas.catalogue.purge: false`), and the delete answers
-  403 there. `GET /api/v1/catalogs/{id}/deletion` and
+  403 there. While it is on, every start logs a WARN, `event=server.catalogue_purge_enabled`,
+  so an installation upgraded without the flag says so and an alert can match it. `GET /api/v1/catalogs/{id}/deletion` and
   `GET /api/v1/catalog-products/{id}/deletion` show what would go and what it means —
   cancelled instances do not undo what they did in a target system, and rights leave the
   inventory without any deprovisioning — and `DELETE /api/v1/catalogs/{id}` and

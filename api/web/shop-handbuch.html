@@ -382,12 +382,17 @@ th{color:var(--muted);font-weight:600}
     bestellen, die Abwicklung beobachten und danach von vorne beginnen. Dafür gibt es das endgültige Löschen. Es ist
     eingeschaltet, und nur Administratoren dürfen es ausführen. <b>Auf einer produktiven Installation schaltest du es
     aus:</b> Starte den Server mit <code>--catalogue-purge=false</code> (oder <code>ATLAS_CATALOGUE_PURGE=false</code>,
-    im Helm-Chart <code>atlas.catalogue.purge: false</code>). Dann lehnt atlas das Löschen ab.</p>
+    im Helm-Chart <code>atlas.catalogue.purge: false</code>). Dann lehnt atlas das Löschen ab. Solange das Löschen
+    eingeschaltet ist, schreibt atlas bei jedem Start eine Warnung ins Log
+    (<code>event=server.catalogue_purge_enabled</code>); daran erkennst du eine Installation, bei der die Einstellung
+    fehlt.</p>
   <p data-l="en">On a development or test installation, though, you want to import a catalogue, order from it, watch
     the fulfilment and then start over. That is what deleting for good is for. It is switched on, and only
     administrators may run it. <b>Switch it off on a production installation:</b> start the server with
     <code>--catalogue-purge=false</code> (or <code>ATLAS_CATALOGUE_PURGE=false</code>, in the Helm chart
-    <code>atlas.catalogue.purge: false</code>), and atlas refuses the delete.</p>
+    <code>atlas.catalogue.purge: false</code>), and atlas refuses the delete. While deleting is switched on, atlas
+    writes a warning to the log at every start (<code>event=server.catalogue_purge_enabled</code>); that is how you
+    find an installation where the setting is missing.</p>
   <p data-l="de">In der Console findest du es auf der Seite eines Katalogs unter <b>Delete for good</b>. Zuerst zeigt
     atlas, was alles verschwinden würde, und erst wenn du die ID des Katalogs oder Produkts noch einmal eintippst,
     lässt sich der Knopf drücken. Mit einem Katalog werden gelöscht:</p>

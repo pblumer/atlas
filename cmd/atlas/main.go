@@ -958,16 +958,33 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		logging.Info(logging.ServerDocsEnabled, "API explorer enabled",
 			slog.String("docs", base+"/api/docs"), slog.String("openapi", base+"/api/v1/openapi.json"))
 	}
-	if !catalogue {
-		logging.Info(logging.ServerCatalogueDisabled,
-			"shop, catalogue, orders and inventory switched off (--catalogue=false): their routes are not served and nothing stored was removed")
-	}
+	logCatalogueSwitches(catalogue, cataloguePurge)
 	if metricsOn {
 		logging.Info(logging.ServerMetrics,
 			"Prometheus metrics enabled (with --auth on, a scraper needs an API token of scope metrics; ADR-0198)",
 			slog.String("metrics", base+"/metrics"))
 	}
 	return serveUntil(ctx, shutdownTimeout, listeners...)
+}
+
+// logCatalogueSwitches says at start what the two catalogue switches decided: that
+// the area is off (ADR-0434), or — when it is on — that its purge is too
+// (ADR-draft-catalogue-purge). The purge is an opt-out, so a production
+// installation upgraded without --catalogue-purge=false gives every administrator a
+// delete of orders and held rights and nothing else would tell its operator; the
+// WARN does, at every start, until the flag is set.
+func logCatalogueSwitches(catalogue, cataloguePurge bool) {
+	if !catalogue {
+		logging.Info(logging.ServerCatalogueDisabled,
+			"shop, catalogue, orders and inventory switched off (--catalogue=false): their routes are not served and nothing stored was removed")
+		return
+	}
+	if cataloguePurge {
+		logging.Warn(logging.ServerCataloguePurgeEnabled,
+			"an administrator can delete catalogues and products for good, with their orders and the rights they granted; "+
+				"start a production installation with --catalogue-purge=false (ATLAS_CATALOGUE_PURGE=false) to refuse it",
+			slog.String("switch", "--catalogue-purge=false"))
+	}
 }
 
 // runMCP serves the Model Context Protocol adapter on stdio, proxying tool calls
