@@ -12,6 +12,75 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-10-22
+
+**An application can leave an installation with everything it owns, and the Console
+moves it between installations with its catalogues.** Deleting an application offers to
+delete what it owns on the server as well — its deployed versions after cancelling their
+running instances, its decision deployments, drafts, forms, decision references and models
+— after a preview of what goes and of what outside it stops working; a deployed process
+can be deleted with `force=true` whatever still holds it
+([ADR-0468](docs/adr/0468-deleting-an-application-with-its-contents.md)). The Console's
+**Export application…** and **Import application…** write and read the package
+`atlas export` and `atlas import` use, catalogues included, and ask only for the names the
+target's directory does not answer; what a person chose for such a name is remembered on
+the target, so the next import takes it without asking, and `atlas import` reads a
+package's `antworten.json` ([ADR-0467](docs/adr/0467-application-package-export.md),
+amendment 2026-10-21). API tokens are minted, listed and revoked in **Console →
+Administration → API tokens**, can be sealed straight into the vault, and are flagged
+30 days before they expire ([ADR-0194](docs/adr/0194-api-tokens.md), amendment
+2026-10-21). The Console's and Operations' seldom-opened pages moved behind
+**Administration ▾** and **Diagnostics ▾**, and neither bar wraps any more. Among the
+fixes, a fixed approver a package names is assigned by username, so the approval reaches
+somebody, and a refused process delete says why.
+
+**Read this before upgrading from 0.17.0.** These act on an existing installation:
+
+- A fixed approver that a package filled in under 0.17.0 is a user id, and the approval
+  it asks for reaches nobody: the order waits. The approver report
+  (`GET /api/v1/catalog-products/approver-report`, `atlas_catalog_approver_report`) names
+  every product whose fixed approver no account answers to; set the approver to the
+  username there. A package exported with 0.17.0 still asks for that approver as a person
+  (`"kind": "user"` in `fragen.json`) and is answered with a user id under 0.18.0 too:
+  export it again, or change the question's kind to `account`. A package exported with
+  0.18.0 asks for an account, and an answers file or `--set` that gives a user id for it
+  is reported as unknown — `atlas import` stops before it writes anything; answer with
+  the username or the display name.
+- `atlas import` now answers a package's questions from its `antworten.json` without
+  `--answers`: a name the target's directory or its table of names answers is taken
+  without asking, where 0.17.0 refused with «not all answered» and imported nothing.
+  Answers passed with `--answers` or `--set` still win. A pipeline that relied on that
+  refusal to review the answers should run `--dry-run` first.
+- Upgrade the server before the CLI. `atlas import` of 0.18.0 records the names a person
+  chose on the server once the catalogues are in (`POST /api/v1/catalogs/import/mappings`),
+  which 0.17.0 does not know: against a 0.17.0 server the application, its constants, its
+  release and the catalogues are imported, and the command then fails with 404 instead of
+  reporting the constants still missing.
+- The guards that keep a deployed process an order line or the current catalogue release
+  still needs ([ADR-0427](docs/adr/0427-converting-a-product-to-a-lifecycle-process.md))
+  can now be overridden: whoever may delete a process — the modeler role — may delete it
+  with `force=true` while nothing runs under it, and an application's owner may purge it
+  with everything it owns, also what a catalogue product or another application's process
+  still needs. Cancelling running instances on the way needs `operator` or `admin`, and a
+  protected system process stays protected. Both are audited, as
+  `deployment.force_deleted` and `application.purged`. A plain process delete's refusal
+  now ends with a hint at `force=true`.
+- 0.18.0 reads the data directory 0.17.0 wrote: nothing under the log, the state or the
+  record format changed, and the first start deploys nothing new. One store is added on
+  the first start, `package-mappings`; it travels with a whole-instance snapshot and not
+  with an export. An API token's record names the vault secret it was sealed as
+  (`vaultSecret`). The routes added are `GET`/`POST`/`DELETE /api/v1/catalogs/import/mappings`,
+  `POST /api/v1/catalogs/import/answers`, `GET /api/v1/applications/{id}/package` and
+  `GET /api/v1/applications/{id}/deletion-preview`; `DELETE /api/v1/applications/{id}`
+  takes `?purge=true`, `DELETE /api/v1/processes/{key}` takes `?force=true`, and
+  `POST /api/v1/api-tokens` takes `vaultSecret`. One MCP tool was added,
+  `atlas_application_deletion_preview`, so the tool count is 145; `atlas_delete_application`
+  takes `purge` and `atlas_delete_process` `force`. No budget was added.
+- Going back to 0.17.0 starts on the same directory. It does not read the table of names,
+  so an import there asks again for what was remembered; the tokens minted in the Console
+  stay valid, but 0.17.0 has no page for them. What a purge or a forced delete removed
+  stays removed.
+
 ### Added
 
 - **An application can be deleted with everything it owns.** Deleting an application now asks
@@ -15612,7 +15681,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/pblumer/atlas/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/pblumer/atlas/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/pblumer/atlas/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/pblumer/atlas/compare/v0.14.0...v0.15.0
