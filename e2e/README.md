@@ -526,6 +526,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   filter and a filter for names with a finding; a detail with the interrupting receivers, a
   link to each deployed version and the watches that send a message. A link naming a name and a
   channel opens it, and a server without the routes leaves the catalogue standing.
+- **`operations-eventlog.spec.mjs`** ([ADR-draft-event-log](../docs/adr/draft-event-log.md)):
+  the Operations page **Event log**. A send heads its group with the receptions and starts it
+  caused under it; a send nobody received is marked unless the buffer kept it, and an expiry is
+  marked; instances and definitions link to their pages; the filters travel as query parameters,
+  *Older* pages back with `before`, and Live puts what came `after` the newest row on top.
 - **`signal-events-modeler.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):
   the **events atlas emits in the Modeler's signal picker**, driven through the real
   vendored bpmn-js.

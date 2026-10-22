@@ -11755,6 +11755,40 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
         project, because the same facts are in the XML of every deployed definition. Over the API,
         <code>GET /api/v1/signals</code> and <code>GET /api/v1/message-names</code> answer the same; over MCP,
         <code>atlas_signals</code> and <code>atlas_message_names</code> do.</p>
+      <h3 id="ev-protokoll" data-l="de">Das Ereignisprotokoll</h3><h3 data-l="en">The event log</h3>
+      <p data-l="de">Die Übersicht oben zeigt, was die Modelle austauschen <i>könnten</i>. Was tatsächlich geschah,
+        zeigt das Ereignisprotokoll unter <a class="applink" href="/#/operations/event-log">Operations → Diagnostics →
+        Event log</a> (ADR-draft-event-log): jedes geworfene Signal und jede gesendete Nachricht, neueste zuerst, mit
+        Absender, Zeitpunkt und Reichweite, also wie viele wartende Elemente sie erreicht und wie viele Instanzen sie
+        gestartet hat. Darunter steht, wo sie ankam: der Empfang mit Prozess, Element und Instanz, ein Start, und bei
+        einer Nachricht mit Lebensdauer, dass der Puffer sie aufbewahrt, später übergeben oder verfallen lassen hat. Ein
+        Senden, das niemand empfing, ist markiert; genau diesen Fall soll das Protokoll sichtbar machen. Filter grenzen
+        auf einen Kanal, einen Namen oder eine Instanz ein, «Live» lädt neue Zeilen alle paar Sekunden nach, und auf der
+        Seite <a class="applink" href="/#/console/events">Events</a> führt jeder Name direkt ins gefilterte
+        Protokoll.</p>
+      <p data-l="en">The overview above shows what the models <i>could</i> exchange. What actually happened is in the
+        event log under <a class="applink" href="/#/operations/event-log">Operations → Diagnostics → Event log</a>
+        (ADR-draft-event-log): every signal thrown and every message sent, newest first, with its sender, its moment and
+        its reach, that is how many waiting elements it reached and how many instances it started. Under it stands where
+        it arrived: the reception with process, element and instance, a start, and for a message with a time to live
+        that the buffer kept it, handed it over later or let it expire. A send nobody received is marked; that is the
+        case the log exists to show. Filters narrow to a channel, a name or an instance, Live reads new rows every few
+        seconds, and on the <a class="applink" href="/#/console/events">Events</a> page every name leads straight to the
+        filtered log.</p>
+      <p data-l="de">Das Protokoll speichert nie, was eine Instanz enthielt, sondern nur Namen, Schlüssel und Zeitpunkte.
+        Der Korrelationsschlüssel einer Nachricht wird gezeigt, weil «welcher Auftrag» meist die erste Frage ist.
+        Zeilen bleiben 30 Tage erhalten (<code>--event-log-ttl</code>). Jede Zeile wird gelesen wie die Instanz, um die
+        es geht: Operatoren und Administratoren sehen alle, Projektmitglieder die Zeilen der Definitionen ihrer Projekte,
+        und eine Zeile ohne Definition, etwa ein Senden über die Route oder einen Watch, nur die ersten. Über die API
+        liest <code>GET /api/v1/event-log</code> das Protokoll, über MCP <code>atlas_event_log</code>. Es beginnt mit
+        dem Upgrade auf diese Version; was davor gesendet wurde, steht nicht darin.</p>
+      <p data-l="en">The log never stores what an instance held, only names, keys and moments. A message's correlation
+        key is shown, because "which order" is usually the first question. Rows are kept for 30 days
+        (<code>--event-log-ttl</code>). Each row is read as the instance it is about: operators and administrators see
+        every row, project members the rows of their projects' definitions, and a row that names no definition, such
+        as a send through the route or a watch, only the former. Over the API, <code>GET /api/v1/event-log</code> reads
+        the log; over MCP, <code>atlas_event_log</code> does. It starts with the upgrade to this version; what was sent
+        before is not in it.</p>
     </section>
 
     <!-- ==================== GLOSSARY ==================== -->

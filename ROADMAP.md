@@ -938,8 +938,12 @@ Making processes wait, react, and time out.
   a name that crosses projects, a model that speaks for atlas. Message-sources names a model's
   own sends and message event subprocesses, the Modeler's pickers offer what deployed models
   throw and send and tell a sending element who receives it, and MCP has `atlas_signals` and
-  `atlas_message_names`. Runtime counts (how often a name was thrown, who waits now) are not
-  built.
+  `atlas_message_names`.
+- ✅ **The event log** ([ADR-draft-event-log](docs/adr/draft-event-log.md)): every signal
+  thrown and message sent, with its sender and how far it reached, every reception, start,
+  keeping and expiry, folded from the log into a table kept for `--event-log-ttl` (30 days).
+  *Operations → Diagnostics → Event log*, `GET /api/v1/event-log` and `atlas_event_log`; a row
+  is read as its instance is (ADR-0275). Counters per name are not built.
 
 **Still open in this milestone:**
 - 🔲 **Repeatable non-interrupting conditional events**: a non-interrupting conditional

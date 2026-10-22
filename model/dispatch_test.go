@@ -1,0 +1,57 @@
+package model
+
+import "testing"
+
+// TestADispatchRoundTrips: every field of a send comes back as it went in, a send that
+// reached nobody included (ADR-draft-event-log §1).
+func TestADispatchRoundTrips(t *testing.T) {
+	for _, in := range []*DispatchValue{
+		{Channel: DispatchSignal, Source: DispatchFromProcess, Name: "order.cancelled",
+			SenderProcessInstanceKey: 7, SenderProcessDefKey: 3, SenderElementId: 12, Reached: 2, Started: 1},
+		{Channel: DispatchMessage, Source: DispatchFromPublish, Name: "invoice.ready", CorrelationKey: "INV-1"},
+		{Channel: DispatchMessage, Source: DispatchDirected, Name: "tool.reset", CorrelationKey: "pos-1",
+			TargetProcessInstanceKey: 99, TargetProcessDefKey: 4, Reached: 1},
+	} {
+		v, err := DecodeValue(VTDispatch, AppendValue(nil, in))
+		if err != nil {
+			t.Fatalf("DecodeValue(%+v): %v", in, err)
+		}
+		if got := v.(*DispatchValue); *got != *in {
+			t.Fatalf("round trip = %+v, want %+v", got, in)
+		}
+	}
+}
+
+// TestTheReceptionsReadRecordsWrittenBeforeTheirSender: the sender and the stale mark
+// are appended fields, so a record written before them decodes them as zero, and the
+// fields before them are read as they always were (ADR-draft-event-log §2).
+func TestTheReceptionsReadRecordsWrittenBeforeTheirSender(t *testing.T) {
+	sig := &SignalSubscriptionValue{ProcessInstanceKey: 1, ElementInstanceKey: 2, SignalName: "go",
+		ProcessDefKey: 3, ElementId: 4, SenderProcessInstanceKey: 5, Stale: true}
+	full := AppendValue(nil, sig)
+	v, err := DecodeValue(VTSignal, full)
+	if err != nil || *v.(*SignalSubscriptionValue) != *sig {
+		t.Fatalf("signal round trip = %+v, %v", v, err)
+	}
+	old := full[:len(full)-9] // the record as a version before the fields wrote it
+	v, err = DecodeValue(VTSignal, old)
+	want := *sig
+	want.SenderProcessInstanceKey, want.Stale = 0, false
+	if err != nil || *v.(*SignalSubscriptionValue) != want {
+		t.Fatalf("signal written before the fields = %+v, %v; want %+v", v, err, want)
+	}
+
+	flow := &MessageFlowValue{SenderProcessInstanceKey: 1, ReceiverProcessInstanceKey: 2, ReceiverProcessDefKey: 3,
+		ReceiverElementId: 4, MessageName: "m", CorrelationKey: "k", Stale: true}
+	full = AppendValue(nil, flow)
+	v, err = DecodeValue(VTMessageFlow, full)
+	if err != nil || *v.(*MessageFlowValue) != *flow {
+		t.Fatalf("flow round trip = %+v, %v", v, err)
+	}
+	v, err = DecodeValue(VTMessageFlow, full[:len(full)-1])
+	wantFlow := *flow
+	wantFlow.Stale = false
+	if err != nil || *v.(*MessageFlowValue) != wantFlow {
+		t.Fatalf("flow written before the field = %+v, %v; want %+v", v, err, wantFlow)
+	}
+}

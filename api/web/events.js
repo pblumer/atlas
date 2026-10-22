@@ -198,6 +198,7 @@ function ownDetailHTML(n) {
     <h3>Received by</h3>
     ${n.receivers.length ? `<table>${head}<tbody>${pointRows(n.receivers, true)}</tbody></table>` : `<p class="muted">No deployed model.</p>`}
     ${unseen}
+    <p><a href="#/operations/event-log?name=${encodeURIComponent(n.name)}&amp;channel=${n.channel}" class="own-log-link">What was sent under this name: the event log</a></p>
     <p class="muted">Every deployed version is listed; the findings read the newest version of each process. An older
     version's running instance can still ${n.channel === "signal" ? "throw" : "send"} a name the newest version dropped, or wait for one.
     What ${n.channel === "signal" ? "a signal" : "a message"} carries is every variable of the instance that ${n.channel === "signal" ? "throws" : "sends"} it: nothing here promises a payload.</p>
@@ -227,7 +228,8 @@ export async function viewEvents({ api, view, isSuperseded }) {
     <p class="muted">Every signal and message name the deployed models throw, send or receive, with who does
     which, in which project and version, and what is wrong with the name: a throw nobody receives, a receiver
     nothing throws, a name that couples two projects, a model that speaks for atlas. A receiver of an
-    <code>atlas.*</code> name is in the first list's view of who listens, for administrators.</p>
+    <code>atlas.*</code> name is in the first list's view of who listens, for administrators. What was
+    actually sent, and where it arrived, is in the <a href="#/operations/event-log">event log</a>.</p>
     <div class="row" style="gap:12px;align-items:center;margin-bottom:8px">
       <label>Channel <select id="own-channel"><option value="">All</option><option value="signal">Signals</option><option value="message">Messages</option></select></label>
       <label><input type="checkbox" id="own-findings"> Only names with a finding</label>

@@ -269,6 +269,8 @@ test("the installation's own signals and messages are listed beside the catalogu
   await expect(detail).toContainText("boundary, interrupting");
   await expect(detail.locator('a[href="#/operations/p/21"]')).toHaveCount(1);
   await expect(detail).toContainText("Only a model throws a signal");
+  // What was sent under the name is the event log's, filtered to it.
+  await expect(detail.locator('a.own-log-link')).toHaveAttribute("href", "#/operations/event-log?name=order.cancelled&channel=signal");
   await expect(row("order.cancelled")).toHaveClass(/sel/);
 
   await row("invoice.ready").focus();

@@ -60,6 +60,7 @@ const (
 	cfBufferedMessage        columnFamily = 0x2F // msgBuf:<name>:<corrKey>:<msgKey> → MessageValue (ADR-0370)
 	cfMessageExpiry          columnFamily = 0x30 // msgExp:<expiresAt>:<msgKey> → MessageValue without payload (ADR-0370)
 	cfMessageId              columnFamily = 0x31 // msgId:<name>:<corrKey>:<messageId> → msgKey(8) (ADR-0370)
+	cfEventLog               columnFamily = 0x32 // evLog:0x00:<partition>:<position> → kind(1) at(8) cause(8) value; evLog:0x01:<partition> → pruned through (ADR-draft-event-log)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key

@@ -14,6 +14,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The event log shows what was sent and where it arrived.** *Operations → Diagnostics →
+  Event log* lists every signal thrown and every message sent, newest first: the sender, the
+  moment, how many waiting elements it reached and how many instances it started, and under
+  it each reception, each start and, for a message with a time to live, its keeping, handing
+  over and expiry. A send that reached nobody is marked. Filters narrow to a channel, a name or
+  an instance, Live follows the log, and each name on the *Events* page links to it. Nothing an
+  instance held is stored: names, keys and moments only. A row is read as its instance is: an
+  operator or an administrator reads every row, a project member the rows of their projects'
+  definitions, and a row that names no definition only the former. The route is
+  `GET /api/v1/event-log` (`before`, `after`, `limit`, `channel`, `name`, `instance`), the MCP
+  tool `atlas_event_log`, so the tool count is 152, and rows are kept for `--event-log-ttl`
+  (`ATLAS_EVENT_LOG_TTL`, 720h). Underneath, a send leaves a record of its own (`VTDispatch`), a
+  signal's reception names its sender, a broadcast records each instance it starts, and a
+  correlation that only cleared a subscription whose element no longer waited is marked stale
+  and is no reception. The log starts at the upgrade. A version before this one skips the new
+  records on replay, so going back loses the log and nothing else
+  ([ADR-draft-event-log](docs/adr/draft-event-log.md)).
 - **The Events page shows the signals and messages of this installation.** Beside the
   catalogue of what atlas emits, the Console's *Events* page has a second section that
   lists every signal and message name the deployed models throw, send and receive: who
