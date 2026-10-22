@@ -1,0 +1,380 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fallakte anlegen (SharePoint) — die Listen- und Bibliotheksoperationen des
+  SharePoint-Workers nach ADR-0141 (ergänzt 2026-10-22) in einem Ablauf.
+
+  Ein Antrag wird in der SharePoint-Liste "Antraege" erfasst — von einer Person im
+  Listenformular. atlas macht daraus eine Fallakte:
+
+    Start "Antrag erfasst"                    (Startvariable antragId)
+     → "Ablageort festlegen"                  (Script → ablage: Site, Listen, Bibliotheken)
+     → "Antrag lesen"                         (get-item → antrag)
+     → "Fallordner anlegen"                   (create-folder → ordner)
+     → "Briefvorlage lesen"                   (download-file → vorlage)
+     → "Brief ausfüllen"                      (Script → brief)
+     → "Ablage prüfen"                        (get-file → abgelegt)
+     → Gateway "Brief schon abgelegt?"
+         ├ ja    → (nichts überschreiben)
+         └ nein  → "Brief ablegen"            (upload-file mit Eigenschaften → datei)
+     → Join
+     → "Antrag nachführen"                    (update-item: Status, Dringend, Fallordner)
+     → "Protokoll schreiben"                  (create-item in die Liste "Protokoll")
+     → Ende "Fallakte angelegt"
+
+  Der rote Faden ist `antragId`: Der Antrag wird über seine Listen-ID gelesen, der
+  Fallordner heisst nach ihr, und der Antrag wird über sie nachgeführt.
+
+  Läuft nicht ohne SharePoint-Worker: Jeder SharePoint-Task parkt, bis unter
+  Console → Workers ein Worker "intranet" vom Typ Microsoft SharePoint konfiguriert
+  ist. Was in der Site vorhanden sein muss, steht in der Dokumentation des Prozesses.
+
+  Startvariable:
+    antragId   die ID des Listeneintrags in "Antraege", als Zeichenkette, z. B. "17"
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_sharepoint_fallakte"
+                  targetNamespace="http://atlas/examples">
+
+  <bpmn:process id="proc_sharepoint_fallakte" name="Fallakte anlegen (SharePoint)" isExecutable="true">
+    <bpmn:documentation>Macht aus einem Antrag in der SharePoint-Liste "Antraege" eine Fallakte: einen Ordner in der
+Bibliothek "Fallakten" mit einer ausgefüllten Eingangsbestätigung darin, den nachgeführten
+Antrag und einen Eintrag im Protokoll.
+
+Startvariable: `antragId` — die ID des Listeneintrags als Zeichenkette (Graph liefert IDs als
+Text). Ergebnis: `antrag` (der gelesene Eintrag), `ordner` (der Fallordner), `datei` (der
+abgelegte Brief, wenn er neu abgelegt wurde).
+
+Was in der Site vorhanden sein muss — Spalten mit ihren internen Namen:
+- Liste "Antraege": Title, Kunde (Text), Betrag (Zahl), Status (Auswahl mit "Neu",
+  "In Bearbeitung", "Erledigt"), Dringend (Ja/Nein), Fallordner (Text, eine Zeile).
+- Bibliothek "Fallakten": Kunde (Text), AntragNr (Zahl).
+- Bibliothek "Vorlagen": die Datei eingangsbestaetigung.txt mit den Platzhaltern %KUNDE%
+  und %NUMMER%.
+- Liste "Protokoll": Title, AntragNr (Zahl).
+
+Der SharePoint-Worker heisst `intranet` und wird unter Console → Workers angelegt: Typ
+Microsoft SharePoint, ein Vault-Secret mit {"method": "clientCredentials", "tenantId",
+"clientId", "clientSecret"} oder einem "certificate" an Stelle des Secrets. Die App braucht
+Sites.Selected mit einer Freigabe auf diese Site (oder Sites.ReadWrite.All).
+
+Ein Folgeprozess räumt erledigte Anträge wieder ab: sharepoint-aufraeumen.bpmn.</bpmn:documentation>
+
+    <bpmn:startEvent id="start" name="Antrag erfasst">
+      <bpmn:documentation>Ein einfaches Start-Event: Der Antrag ist schon in SharePoint, atlas bekommt nur seine ID
+mit. Wer den Prozess anstösst — ein Power-Automate-Flow auf "Element erstellt", ein Aufruf
+der atlas-API, eine Person im Tasks-Portal —, ist für den Ablauf gleichgültig.</bpmn:documentation>
+      <bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:scriptTask id="ablage" name="Ablageort festlegen">
+      <bpmn:documentation>Ein FEEL-Script, das alle Adressen an einem Ort hält (→ `ablage`). Jeder SharePoint-Task
+liest Site, Liste oder Bibliothek von hier (`=ablage.site`), statt sie selbst zu nennen; wer
+das Beispiel auf die eigene Site umstellt, ändert nur diese eine Zeile.
+
+Die Site steht so, wie der Browser sie zeigt. Der Worker schlägt ihre Graph-ID einmal nach
+und merkt sie sich. Gemeint ist die Site selbst, nicht eine Seite oder Liste darin.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="= { site: &quot;https://contoso.sharepoint.com/sites/verwaltung&quot;, liste: &quot;Antraege&quot;, akten: &quot;Fallakten&quot;, vorlagen: &quot;Vorlagen&quot;, protokoll: &quot;Protokoll&quot; }" resultVariable="ablage"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f1</bpmn:incoming>
+      <bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:scriptTask>
+
+    <bpmn:serviceTask id="lesen" name="Antrag lesen">
+      <bpmn:documentation>get-item: liest den Antrag über seine Listen-ID (→ `antrag`). Die Spalten stehen unter
+`antrag.fields`, also `=antrag.fields.Kunde`.
+
+`select` nennt die Spalten, die gebraucht werden. Ohne ihn liefert Graph jede Spalte des
+Eintrags, auch die internen, und die Variable wird ein Vielfaches grösser.
+
+Eine falsche ID scheitert hier mit einem Incident, bevor irgendetwas angelegt ist — deshalb
+ist Lesen der erste SharePoint-Schritt.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:sharePointConnector connector="intranet" operation="get-item"
+                                   site="=ablage.site" list="=ablage.liste" itemId="=antragId"
+                                   select="Title,Kunde,Betrag,Status" resultVariable="antrag"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f2</bpmn:incoming>
+      <bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="ordner" name="Fallordner anlegen">
+      <bpmn:documentation>create-folder: legt den Ordner Faelle/&lt;antragId&gt; in der Bibliothek "Fallakten" an
+(→ `ordner`). Fehlt der Ordner "Faelle" darüber, legt der Worker ihn mit an.
+
+Ein Ordner, der schon da ist, gilt als angelegt: `ordner.created` ist dann false, und der
+Task scheitert nicht. Deshalb ist ein zweiter Lauf für denselben Antrag harmlos — und eine
+Wiederholung nach einem Abbruch ebenso.
+
+`=ordner.webUrl` öffnet den Ordner im Browser für jede Person, die auf die Site darf; der
+Task "Antrag nachführen" schreibt ihn in den Antrag.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:sharePointConnector connector="intranet" operation="create-folder"
+                                   site="=ablage.site" list="=ablage.akten"
+                                   path="=&quot;Faelle/&quot; + antragId" resultVariable="ordner"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f3</bpmn:incoming>
+      <bpmn:outgoing>f4</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="vorlage" name="Briefvorlage lesen">
+      <bpmn:documentation>download-file: liest die Vorlage aus der Bibliothek "Vorlagen" in eine Variable
+(→ `vorlage`, der Text steht in `vorlage.content`).
+
+Ein Dateiinhalt läuft durch eine Prozessvariable und ist deshalb auf deren Budget begrenzt,
+1 MiB, wenn die Installation es nicht erhöht hat. Eine grössere Datei lässt den Task
+scheitern, statt abgeschnitten anzukommen. Für eine Textvorlage ist das reichlich; ein PDF
+liest man mit encoding="base64", weil es kein Text ist.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:sharePointConnector connector="intranet" operation="download-file"
+                                   site="=ablage.site" list="=ablage.vorlagen"
+                                   path="eingangsbestaetigung.txt" resultVariable="vorlage"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f4</bpmn:incoming>
+      <bpmn:outgoing>f5</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:scriptTask id="brief" name="Brief ausfüllen">
+      <bpmn:documentation>Setzt Kunde und Antragsnummer in die Vorlage ein (→ `brief`, Text).
+
+Die Falle: Ist die Spalte Kunde leer, liefert Graph sie gar nicht, `antrag.fields.Kunde`
+ist null — und replace(…, null) ergibt in FEEL null, nicht den Text ohne Ersetzung. Der
+ganze Brief wäre dann null und würde als leere Datei abgelegt. Das `if` fängt den Fall ab.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="= replace(replace(vorlage.content, &quot;%KUNDE%&quot;, if antrag.fields.Kunde = null then &quot;Kundin oder Kunde&quot; else antrag.fields.Kunde), &quot;%NUMMER%&quot;, antragId)" resultVariable="brief"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f5</bpmn:incoming>
+      <bpmn:outgoing>f6</bpmn:outgoing>
+    </bpmn:scriptTask>
+
+    <bpmn:serviceTask id="pruefen" name="Ablage prüfen">
+      <bpmn:documentation>get-file: fragt, ob die Eingangsbestätigung schon im Fallordner liegt (→ `abgelegt`).
+
+Eine Datei, die nicht da ist, ist hier eine Antwort und kein Fehler: `abgelegt.exists` ist
+dann false. Liegt sie da, kommen ihre Eigenschaften unter `abgelegt.listItem.fields` mit.
+
+Warum überhaupt fragen? Ein Upload an einen Pfad, der belegt ist, ersetzt die Datei. Wurde
+der Brief nach einem ersten Lauf von Hand angepasst, würde ein zweiter Lauf diese Anpassung
+überschreiben. Die Bibliothek behielte sie zwar als Version, aber niemand würde es merken.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:sharePointConnector connector="intranet" operation="get-file"
+                                   site="=ablage.site" list="=ablage.akten"
+                                   path="=&quot;Faelle/&quot; + antragId + &quot;/eingangsbestaetigung.txt&quot;"
+                                   resultVariable="abgelegt"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f6</bpmn:incoming>
+      <bpmn:outgoing>f7</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="schon_da" name="Brief schon abgelegt?" default="f_nein">
+      <bpmn:documentation>Ein exklusives Gateway auf `= abgelegt.exists = true`. Der Default-Flow ist "nein": Er
+legt den Brief ab. Nur ein Brief, der nachweislich schon da ist, wird übersprungen.</bpmn:documentation>
+      <bpmn:incoming>f7</bpmn:incoming>
+      <bpmn:outgoing>f_ja</bpmn:outgoing>
+      <bpmn:outgoing>f_nein</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="ablegen" name="Brief ablegen">
+      <bpmn:documentation>upload-file: legt den ausgefüllten Brief in den Fallordner (→ `datei`) und gibt ihm zwei
+Eigenschaften der Bibliothek mit — Kunde und AntragNr. Ohne Eigenschaften wäre es ein
+einziger Aufruf; mit ihnen setzt der Worker sie gleich danach am Listeneintrag der Datei.
+
+Die Spaltenwerte behalten den Typ ihres FEEL-Werts: `=number(antragId)` kommt als Zahl in
+der Zahlenspalte AntragNr an, nicht als Text. Eigenschaften stehen danach unter
+`datei.listItem.fields`, `=datei.webUrl` öffnet die Datei.
+
+Ohne encoding ist der Inhalt Text, so wie er im Script entstanden ist.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:sharePointConnector connector="intranet" operation="upload-file"
+                                   site="=ablage.site" list="=ablage.akten"
+                                   path="=&quot;Faelle/&quot; + antragId + &quot;/eingangsbestaetigung.txt&quot;"
+                                   content="=brief" resultVariable="datei">
+          <atlas:itemField name="Kunde" value="=antrag.fields.Kunde"/>
+          <atlas:itemField name="AntragNr" value="=number(antragId)"/>
+        </atlas:sharePointConnector>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_nein</bpmn:incoming>
+      <bpmn:outgoing>f8</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="schon_da_join">
+      <bpmn:incoming>f_ja</bpmn:incoming>
+      <bpmn:incoming>f8</bpmn:incoming>
+      <bpmn:outgoing>f9</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="nachfuehren" name="Antrag nachführen">
+      <bpmn:documentation>update-item: setzt drei Spalten des Antrags und lässt alle anderen, wie sie sind.
+
+- Status bekommt den Text "In Bearbeitung" — einen Literalwert, also Text.
+- Dringend bekommt `=antrag.fields.Betrag &gt; 10000`, einen Wahrheitswert, und die
+  Ja/Nein-Spalte liest ihn als Ja oder Nein. Als Text "true" käme er dort nicht an.
+- Fallordner bekommt den Link aus `ordner.webUrl`.
+
+Ergibt ein Ausdruck null, wird die Spalte geleert: Fehlt der Betrag, ist auch Dringend
+danach leer. Das ist gewollt — eine Spalte, die nicht stimmen kann, soll nicht stehen
+bleiben.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:sharePointConnector connector="intranet" operation="update-item"
+                                   site="=ablage.site" list="=ablage.liste" itemId="=antragId">
+          <atlas:itemField name="Status" value="In Bearbeitung"/>
+          <atlas:itemField name="Dringend" value="=antrag.fields.Betrag &gt; 10000"/>
+          <atlas:itemField name="Fallordner" value="=ordner.webUrl"/>
+        </atlas:sharePointConnector>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f9</bpmn:incoming>
+      <bpmn:outgoing>f10</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="protokoll" name="Protokoll schreiben">
+      <bpmn:documentation>create-item: legt in der Liste "Protokoll" einen Eintrag an.
+
+Der Task nennt keine Operation — so sehen alle SharePoint-Tasks aus, die vor den
+Operationen modelliert wurden, und sie legen weiterhin einen Eintrag an. Im Modeler
+erscheint das als "Create list item".
+
+Als einzige Operation ist create-item nicht gefahrlos wiederholbar: Bricht der Lauf
+zwischen "Eintrag angelegt" und "Job abgeschlossen" ab, entsteht der Eintrag beim
+nächsten Versuch ein zweites Mal. Für ein Protokoll ist das tragbar; wo nicht, gehört eine
+Spalte mit der Antragsnummer in die Liste, die der Prozess vorher mit list-items abfragt.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:sharePointConnector connector="intranet" site="=ablage.site" list="=ablage.protokoll">
+          <atlas:itemField name="Title" value="=&quot;Fallakte angelegt: &quot; + antrag.fields.Title"/>
+          <atlas:itemField name="AntragNr" value="=number(antragId)"/>
+        </atlas:sharePointConnector>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f10</bpmn:incoming>
+      <bpmn:outgoing>f11</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="ende" name="Fallakte angelegt">
+      <bpmn:documentation>Der Antrag hat einen Fallordner mit Eingangsbestätigung, steht auf "In Bearbeitung" und
+verweist auf seinen Ordner; das Protokoll hält fest, dass die Akte angelegt wurde.</bpmn:documentation>
+      <bpmn:incoming>f11</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="ablage"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="ablage" targetRef="lesen"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="lesen" targetRef="ordner"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="ordner" targetRef="vorlage"/>
+    <bpmn:sequenceFlow id="f5" sourceRef="vorlage" targetRef="brief"/>
+    <bpmn:sequenceFlow id="f6" sourceRef="brief" targetRef="pruefen"/>
+    <bpmn:sequenceFlow id="f7" sourceRef="pruefen" targetRef="schon_da"/>
+    <bpmn:sequenceFlow id="f_ja" name="ja" sourceRef="schon_da" targetRef="schon_da_join">
+      <bpmn:conditionExpression>= abgelegt.exists = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_nein" name="nein" sourceRef="schon_da" targetRef="ablegen"/>
+    <bpmn:sequenceFlow id="f8" sourceRef="ablegen" targetRef="schon_da_join"/>
+    <bpmn:sequenceFlow id="f9" sourceRef="schon_da_join" targetRef="nachfuehren"/>
+    <bpmn:sequenceFlow id="f10" sourceRef="nachfuehren" targetRef="protokoll"/>
+    <bpmn:sequenceFlow id="f11" sourceRef="protokoll" targetRef="ende"/>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram_sharepoint_fallakte">
+    <bpmndi:BPMNPlane id="plane_sharepoint_fallakte" bpmnElement="proc_sharepoint_fallakte">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="152" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="125" y="222" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ablage" bpmnElement="ablage">
+        <dc:Bounds x="250" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_lesen" bpmnElement="lesen">
+        <dc:Bounds x="400" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ordner" bpmnElement="ordner">
+        <dc:Bounds x="550" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_vorlage" bpmnElement="vorlage">
+        <dc:Bounds x="700" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_brief" bpmnElement="brief">
+        <dc:Bounds x="850" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_pruefen" bpmnElement="pruefen">
+        <dc:Bounds x="1000" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_schon_da" bpmnElement="schon_da" isMarkerVisible="true">
+        <dc:Bounds x="1175" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1150" y="232" width="100" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ablegen" bpmnElement="ablegen">
+        <dc:Bounds x="1300" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_schon_da_join" bpmnElement="schon_da_join" isMarkerVisible="true">
+        <dc:Bounds x="1475" y="175" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_nachfuehren" bpmnElement="nachfuehren">
+        <dc:Bounds x="1600" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_protokoll" bpmnElement="protokoll">
+        <dc:Bounds x="1750" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende" bpmnElement="ende">
+        <dc:Bounds x="1922" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1890" y="222" width="100" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1">
+        <di:waypoint x="188" y="200"/>
+        <di:waypoint x="250" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2">
+        <di:waypoint x="350" y="200"/>
+        <di:waypoint x="400" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3">
+        <di:waypoint x="500" y="200"/>
+        <di:waypoint x="550" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4">
+        <di:waypoint x="650" y="200"/>
+        <di:waypoint x="700" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f5" bpmnElement="f5">
+        <di:waypoint x="800" y="200"/>
+        <di:waypoint x="850" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f6" bpmnElement="f6">
+        <di:waypoint x="950" y="200"/>
+        <di:waypoint x="1000" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f7" bpmnElement="f7">
+        <di:waypoint x="1100" y="200"/>
+        <di:waypoint x="1175" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_ja" bpmnElement="f_ja">
+        <di:waypoint x="1200" y="175"/>
+        <di:waypoint x="1200" y="80"/>
+        <di:waypoint x="1500" y="80"/>
+        <di:waypoint x="1500" y="175"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1338" y="62" width="24" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_nein" bpmnElement="f_nein">
+        <di:waypoint x="1225" y="200"/>
+        <di:waypoint x="1300" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1245" y="180" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f8" bpmnElement="f8">
+        <di:waypoint x="1400" y="200"/>
+        <di:waypoint x="1475" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f9" bpmnElement="f9">
+        <di:waypoint x="1525" y="200"/>
+        <di:waypoint x="1600" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f10" bpmnElement="f10">
+        <di:waypoint x="1700" y="200"/>
+        <di:waypoint x="1750" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f11" bpmnElement="f11">
+        <di:waypoint x="1850" y="200"/>
+        <di:waypoint x="1922" y="200"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
