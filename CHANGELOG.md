@@ -28,8 +28,8 @@ the target, so the next import takes it without asking, and `atlas import` reads
 package's `antworten.json` ([ADR-0467](docs/adr/0467-application-package-export.md),
 amendment 2026-10-21). API tokens are minted, listed and revoked in **Console →
 Administration → API tokens**, can be sealed straight into the vault, and are flagged
-30 days before they expire ([ADR-0194](docs/adr/0194-api-tokens.md), amendment
-2026-10-21). The Console's and Operations' seldom-opened pages moved behind
+30 days before they expire, in the Console and on `/metrics` for an alert rule
+([ADR-0194](docs/adr/0194-api-tokens.md), amendments 2026-10-21 and 2026-10-22). The Console's and Operations' seldom-opened pages moved behind
 **Administration ▾** and **Diagnostics ▾**, and neither bar wraps any more. Among the
 fixes, a fixed approver a package names is assigned by username, so the approval reaches
 somebody, and a refused process delete says why.
@@ -75,7 +75,9 @@ somebody, and a refused process delete says why.
   takes `?purge=true`, `DELETE /api/v1/processes/{key}` takes `?force=true`, and
   `POST /api/v1/api-tokens` takes `vaultSecret`. One MCP tool was added,
   `atlas_application_deletion_preview`, so the tool count is 145; `atlas_delete_application`
-  takes `purge` and `atlas_delete_process` `force`. No budget was added.
+  takes `purge` and `atlas_delete_process` `force`. `/metrics` carries three new series
+  without labels, `atlas_api_tokens_expiring_soon`, `atlas_api_tokens_expired` and
+  `atlas_api_token_next_expiry_timestamp_seconds`. No budget was added.
 - Going back to 0.17.0 starts on the same directory. It does not read the table of names,
   so an import there asks again for what was remembered; the tokens minted in the Console
   stay valid, but 0.17.0 has no page for them. What a purge or a forced delete removed
