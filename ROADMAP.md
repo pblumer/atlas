@@ -549,6 +549,19 @@ The control-flow basics most real models use.
   Remedy instance, `atlas mock-remedy` serves an in-memory AR System REST mock
   (login → create-entry → logout, plus a `GET /mock/entries` inspection endpoint) the
   worker runs against unmodified (package `connector/remedy/mock`).
+  **SharePoint is another Worker Type in the catalog**
+  ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended 2026-10-22): a service task
+  marked `<atlas:sharepointConnector connector operation site …>` performs one step in a
+  site through Microsoft Graph — create, read, update, delete and find (OData filter,
+  paged) the items of a list, and upload, download, check, list, create and delete files
+  and folders in a document library — with every authored value literal-or-FEEL, column
+  values keeping the type of their FEEL value, and what Graph answered written into a
+  result variable. The site is named by its URL, `host:/sites/name` or Graph's id; the
+  Graph base and the OAuth bundle (client secret, certificate or refresh token) are
+  server-registered and vault-resolved, never in the model. Create-item keeps its job
+  type and every other operation rides `io.atlas.sharepoint`, so a worker built before
+  the operations never performs one as a create. Sharing links, an idempotency column
+  against a duplicated create, and a `select` on file reads are follow-ups.
   **Jira is another Worker Type in the catalog**
   ([ADR-0201](docs/adr/0201-jira-connector.md)): a service task marked
   `<atlas:jiraConnector connector operation …>` performs one Atlassian Jira operation
@@ -2278,6 +2291,13 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   `GET /api/v1/approvals/stalled` for a person to reassign
   ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md)); reminder processes read
   `GET /api/v1/pending-work` ([ADR-0343](docs/adr/0343-pending-work.md)).
+- ✅ **The line manager is on the account.** A `superior` approval starts with the orderer's
+  line manager as the account records it, and its escalation follows the line from whoever
+  holds it now. The Entra mirror fills the reference from `manager`, and an administrator
+  sets it where there is no mirror
+  ([ADR-0470](docs/adr/0470-the-line-manager-is-on-the-account.md)).
+  Still open: whether an order placed for somebody else should go to the recipient's line
+  manager, and an automatic feed from on-premises Active Directory.
 
 **Fulfilment & product lifecycle**
 - ✅ **Fulfilment.** The shipped orchestrator starts lines wave by wave, calling Atlas as

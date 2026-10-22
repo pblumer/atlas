@@ -50,11 +50,13 @@ var connectorJobTypes = map[string][]string{
 	"s3":           {compiler.S3JobType},
 	"scim":         {compiler.ScimJobType},
 	"script":       {compiler.PwshJobType, compiler.PythonJobType, compiler.JsJobType},
-	"sharepoint":   {compiler.SharePointJobType},
-	"soap":         {compiler.SoapJobType},
-	"teamsphone":   {compiler.TeamsPhoneJobType},
-	"temis":        {compiler.TemisDecisionJobType},
-	"webscrape":    {compiler.WebScrapeJobType},
+	// Two job types, one kind: create-item keeps the one it always had, and every other
+	// operation rides its own so an older worker is never handed one (ADR-0141, amended).
+	"sharepoint": {compiler.SharePointJobType, compiler.SharePointOpsJobType},
+	"soap":       {compiler.SoapJobType},
+	"teamsphone": {compiler.TeamsPhoneJobType},
+	"temis":      {compiler.TemisDecisionJobType},
+	"webscrape":  {compiler.WebScrapeJobType},
 }
 
 // configuredEnvFor is the smallest environment that makes a kind register rather than

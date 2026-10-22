@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/order"
@@ -20,25 +21,33 @@ import (
 // of that happen, and it sits here rather than in the order area because moving an
 // approval means moving a *task*, and only this server can reach one.
 //
-// # Why the caller names the superior
+// # Who names the superior
 //
-// Who somebody reports to is a question for a directory, and Atlas asks a
-// directory the way it asks anything outside: through a worker, from a model. The
-// approval process already does that lookup for its own "superior" variant, so the
-// escalation reuses it rather than giving the server a second, server-side path to
-// the same directory — which would be a configuration nobody set up and a
-// credential the server does not hold.
+// Either the caller, or the account. A model that looked the superior up itself
+// names them in `superior`, as every model did before. A model that wants the
+// current approver's line manager as Atlas records it asks with `lineManager`, and
+// the server reads the account — not a directory: the relation was reported to it by
+// the mirror's own process or typed by an administrator
+// (ADR-0470). The shipped `superior` approval
+// asks that way, because it has nothing a directory could be searched by (#1311).
 //
-// So the model looks up the superior and names them here. Everything that decides
-// whether the hop may happen — a loop in the directory, somebody who already held
-// it, a chain that has run out — stays in [order.Escalate], where it is pure and
-// tested. An empty superior is not an error: it is the answer "nobody", which is
-// what a group approval always gives and what the top of a hierarchy gives once.
+// Everything that decides whether the hop may happen — a loop in the line, somebody
+// who already held it, a chain that has run out — stays in [order.Escalate], where it
+// is pure and tested. An empty superior is not an error: it is the answer "nobody",
+// which is what a group approval always gives and what the top of a hierarchy gives
+// once.
 
 // escalateReq names whom the caller's directory says the current approver reports
 // to. Empty means nobody does, which stalls the approval instead of moving it.
+//
+// LineManager asks instead for the current approver's line manager as the account
+// records it (ADR-0470). It is a field of its own
+// rather than a missing superior, because a REST task that maps no input sends every
+// variable it sees, and an absent field is not something a model can be relied on to
+// say on purpose.
 type escalateReq struct {
-	Superior string `json:"superior"`
+	Superior    string `json:"superior"`
+	LineManager bool   `json:"lineManager"`
 }
 
 // reassignReq names whom a person is giving a stuck approval to.
@@ -73,7 +82,15 @@ func (s *Server) handleEscalateApproval(w http.ResponseWriter, r *http.Request) 
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if req.LineManager && strings.TrimSpace(req.Superior) != "" {
+		httpapi.Error(w, http.StatusBadRequest,
+			"name a superior or ask for the line manager, not both: the two could disagree, and neither would say which one moved the approval")
+		return
+	}
 	s.moveApproval(w, r, func(a order.Assignment, at int64) (order.Assignment, error) {
+		if req.LineManager {
+			return order.Escalate(a, s.lineManagerStep(a), at)
+		}
 		// A caller that found no superior is answering the question, not failing to
 		// answer it. Escalate reports that as ErrNoFurtherEscalation, which is the
 		// same thing the top of a hierarchy gives, and the stall below is the same

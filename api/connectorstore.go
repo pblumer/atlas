@@ -19,8 +19,9 @@ import (
 // connectorKindSharePoint is the SharePoint Worker Type (ADR-0141): a managed
 // record of this kind resolves to a live Microsoft Graph client whose OAuth
 // credential is read from the vault. Like mail, its Graph base and secret are managed
-// here, never in the model; only the target (site, list, item fields) is
-// model-authored. See sharepoint.NewProviderClient, which owns provider dispatch.
+// here, never in the model; only the operation and its target (site, list or
+// library, item or path, column values) are model-authored. See
+// sharepoint.NewProviderClient, which owns provider dispatch.
 // connectorKindRemedy is the BMC Remedy Worker Type (ADR-0106): a managed record
 // of this kind resolves to a live Remedy AR System client whose credential bundle
 // (username/password JSON) is read from the vault. Like clio and mail, its base URL

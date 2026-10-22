@@ -226,7 +226,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0138](0138-adhoc-subprocesses.md) | Ad-hoc subprocesses (on-demand, unordered contained activities) | Accepted | Landed |
 | [0139](0139-csv-to-json-connector.md) | A first-class "CSV to JSON" connector kind with model-authored layout | Accepted (amended) | Landed |
 | [0140](0140-live-collaborative-modeling-sessions.md) | Live collaborative modeling sessions — real-time co-editing of drafts by people and AI agents | Accepted | Landed |
-| [0141](0141-sharepoint-connector.md) | A SharePoint connector (create list item, via Microsoft Graph) | Accepted | Landed |
+| [0141](0141-sharepoint-connector.md) | A SharePoint connector (create list item, via Microsoft Graph) | Accepted (amended) | Landed |
 | [0142](0142-prometheus-metrics.md) | Operational metrics over a Prometheus endpoint | Accepted | Landed |
 | [0143](0143-process-documentation-export.md) | Process documentation export | Accepted | Landed |
 | [0144](0144-per-definition-history-ttl.md) | Per-definition history TTL — retention the model declares | Accepted | Landed |
@@ -555,6 +555,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0467](0467-application-package-export.md) | An application and its shop move as a package, and an import asks before it replaces | Accepted (amended) | Landed |
 | [0468](0468-deleting-an-application-with-its-contents.md) | Deleting an application with everything it owns | Accepted | Landed |
 | [0469](0469-catalogue-purge.md) | An administrator can delete a catalogue for good, unless the server opts out | Accepted | Landed |
+| [0470](0470-the-line-manager-is-on-the-account.md) | The line manager is a reference on the account | Accepted | Landed |
 
 ## The two states of a record
 

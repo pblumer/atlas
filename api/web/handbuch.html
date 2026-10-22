@@ -1659,7 +1659,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de">Ein Worker kann einen <b>BPMN-Fehler</b> mit Code <code>DECLINED</code> werfen; das passende <code>errorEventDefinition</code> am Rand der Aufgabe fängt ihn und lenkt auf einen Fehlerpfad. Das ist erwartbares Verhalten – kein Incident. Ein Skript-Task wirft ihn, indem er seinem Fehler einen Code gibt, den der Prozess fängt (siehe <a href="#runbook-script">Skript</a>); ein Teams-Phone-Task wirft die Codes seiner fachlichen Abweisungen (siehe <a href="#ref-teamsphone">Teams Phone – alle Operationen</a>).</span><span data-l="en">A worker can throw a <b>BPMN error</b> with code <code>DECLINED</code>; the matching <code>errorEventDefinition</code> on the task's edge catches it and diverts to an error path. That's expected behaviour – not an incident. A script task throws one by giving its error a code the process catches (see <a href="#runbook-script">Script</a>); a Teams Phone task throws the codes of its business refusals (see <a href="#ref-teamsphone">Teams Phone – every operation</a>).</span></p>
+        <p class="rz-how"><span data-l="de">Ein Worker kann einen <b>BPMN-Fehler</b> mit Code <code>DECLINED</code> werfen; das passende <code>errorEventDefinition</code> am Rand der Aufgabe fängt ihn und lenkt auf einen Fehlerpfad. Das ist erwartbares Verhalten – kein Incident. Ein Skript-Task wirft ihn, indem er seinem Fehler einen Code gibt, den der Prozess fängt (siehe <a href="#runbook-script">Skript</a>); ein Teams-Phone-Task wirft die Codes seiner fachlichen Abweisungen (siehe <a href="#ref-teamsphone">Teams Phone – alle Operationen</a>); ein Entra-Task mit <code>get-user-manager</code> wirft <code>ENTRA_USER_NOT_FOUND</code>, wenn Entra ID die Person nicht kennt. Jeder dieser Codes wird nur geworfen, wenn der Prozess ihn fängt; sonst bleibt es ein Fehlschlag mit Wiederholungen.</span><span data-l="en">A worker can throw a <b>BPMN error</b> with code <code>DECLINED</code>; the matching <code>errorEventDefinition</code> on the task's edge catches it and diverts to an error path. That's expected behaviour – not an incident. A script task throws one by giving its error a code the process catches (see <a href="#runbook-script">Script</a>); a Teams Phone task throws the codes of its business refusals (see <a href="#ref-teamsphone">Teams Phone – every operation</a>); an Entra task with <code>get-user-manager</code> throws <code>ENTRA_USER_NOT_FOUND</code> when Entra ID does not know the person. Each of these codes is thrown only when the process catches it; otherwise it stays a failure with its retries.</span></p>
       </div>
       <div class="recipe" id="rz-escalation" data-proc="recipe-escalation">
         <h4><span class="rz-emoji" aria-hidden="true">📣</span>
@@ -5029,8 +5029,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               unbeantworteten Zeilen, und die bleiben unbeantwortet: „Schweigen heisst behalten“ erfindet
               eine Bestätigung, die niemand gegeben hat, „Schweigen heisst entziehen“ sperrt Leute aus,
               weil jemand in den Ferien war. <code>undecided</code> ist deshalb eine eigene Zahl und kein
-              Rest. Das Modell legt fest, wer prüft, nicht atlas – eine Vorgesetztensuche ist eine
-              Verzeichnisfrage, genau wie bei der Genehmigungsregel <code>superior</code>.</p>
+              Rest. Das Modell legt fest, wer prüft, nicht atlas. Die Genehmigungsregel
+              <code>superior</code> nimmt den Linienvorgesetzten aus dem Konto; eine Kampagne kann
+              dagegen andere Prüfende brauchen als die Linie, und das entscheidet ihr Prozess.</p>
             <p data-l="en">The whole design is a refusal to make a signature cheap. There is <b>no way to
               answer several rows at once</b> – not in the screen and not in the API. A campaign answered
               in bulk is a signature with no reading behind it, and that is worse than none, because an
@@ -5039,8 +5040,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               it and they stay unanswered: "silence means keep" invents an attestation nobody gave,
               "silence means revoke" locks people out because somebody was on holiday. So
               <code>undecided</code> is a first-class count rather than a remainder. Who reviews is the
-              model's to decide, not atlas's – a line-manager lookup is a directory question, exactly as
-              it is for the <code>superior</code> approval rule.</p>
+              model's to decide, not atlas's. The <code>superior</code> approval rule takes the line
+              manager from the account; a campaign may need other reviewers than the line, and its
+              process decides that.</p>
           </div>
         </div>
         <div class="rz-actions"></div>
@@ -5457,13 +5459,13 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               zu, die Abwesenheitsnotiz am selben Produkt setzt Exchange. Die Worker heissen <code>ucc_entra</code>,
               <code>ucc_exchange</code> und <code>ucc_teams</code>. Lizenz, Team, Funktionspostfach und Postfachzugriff
               genehmigt die vorgesetzte Person der Person, für die bestellt wird: ein eigener Genehmigungsprozess liest
-              sie mit PowerShell aus Entra ID.</p>
+              sie mit <code>get-user-manager</code> über den Worker <code>ucc_entra</code> aus Entra ID.</p>
             <p data-l="en">Fifteen processes over the Entra, Exchange and Teams Phone Worker Types, five decision tables
               and 21 forms. One product may use several Workers: Entra assigns the licence, Exchange sets the automatic
               reply on the same product. The Workers are called <code>ucc_entra</code>, <code>ucc_exchange</code> and
               <code>ucc_teams</code>. Licence, team, shared mailbox and mailbox access are approved by the line manager
               of the person they are ordered for: an approval process of its own reads the manager from Entra ID with
-              PowerShell.</p>
+              <code>get-user-manager</code> through the <code>ucc_entra</code> Worker.</p>
           </div>
         </div>
         <p data-l="de"><b>Governance steckt im Modell, nicht in einer Weisung.</b> Wer ein Team, ein Postfach oder eine
@@ -5974,7 +5976,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <tr><td><b>HTTP REST</b></td><td data-l="de">Eine REST-API aufrufen, Antwort als Variable speichern.</td><td data-l="en">Call a REST API, store the response as a variable.</td></tr>
           <tr><td><b>Mail</b></td><td data-l="de">E-Mail versenden (SMTP, Gmail, Microsoft&nbsp;365) – oder <b>Vorschau</b>: die Nachricht wird genauso gebaut, landet aber im Postausgang unter <i>Operations &rsaquo; Diagnostics &rsaquo; Outbox</i> statt beim Empfänger. So lässt sich ein Mail-Task ohne Mailserver und ohne Zugangsdaten ausprobieren.</td><td data-l="en">Send email (SMTP, Gmail, Microsoft&nbsp;365) – or <b>preview</b>: the message is framed exactly the same way but lands in the outbox under <i>Operations &rsaquo; Diagnostics &rsaquo; Outbox</i> instead of reaching a recipient, so a mail task can be tried with no mail server and no credentials.</td></tr>
           <tr><td><b>Active&nbsp;Directory</b></td><td data-l="de">Konto anlegen, Passwort setzen, aktivieren/deaktivieren, verschieben, löschen, Gruppenmitgliedschaft pflegen, Konto oder Gruppe suchen (und dabei deren DN erfahren, den die Zuweisung braucht), Änderungen per DirSync lesen – oder <b>Mockup</b>: derselbe Task läuft gegen ein Verzeichnis im Arbeitsspeicher des Workers, ohne dass ein Domain Controller angefasst wird (siehe <a href="#testen">Testen &amp; Simulieren</a>).</td><td data-l="en">Create an account, set a password, enable/disable, move, delete, manage group membership, search for an account or a group (and learn the DN an assignment needs), read changes via DirSync – or <b>mockup</b>: the same task runs against a directory in the worker's memory, with no domain controller touched (see <a href="#testen">Test &amp; simulate</a>).</td></tr>
-          <tr><td><b>SharePoint</b></td><td data-l="de">Listeneintrag in SharePoint anlegen (Graph API).</td><td data-l="en">Create a list item in SharePoint (Graph API).</td></tr>
+          <tr><td><b>SharePoint</b></td><td data-l="de">Listeneinträge anlegen, lesen, ändern, löschen und per OData-Filter suchen; Dateien in eine Dokumentbibliothek hochladen, herunterladen und prüfen, Ordner auflisten, anlegen und löschen (Graph API). Spaltenwerte behalten den Typ ihres FEEL-Werts: <code>=42</code> geht als Zahl, <code>=true</code> als Ja, eine Liste als Mehrfachauswahl. Ein Dateiinhalt läuft durch eine Prozessvariable und ist deshalb auf deren Budget begrenzt (1&nbsp;MiB); für ein grösseres Dokument gibst du der Person die <code>webUrl</code> weiter, die jede Dateiantwort enthält. Zustellung ist <i>mindestens einmal</i>: Jede Operation ausser «Listeneintrag anlegen» lässt sich gefahrlos wiederholen – nach einem Absturz zwischen «angelegt» und «Job fertig» kann ein Eintrag doppelt entstehen.</td><td data-l="en">Create, read, update, delete and find list items with an OData filter; upload, download and check files in a document library, and list, create and delete folders (Graph API). Column values keep the type of their FEEL value: <code>=42</code> is sent as a number, <code>=true</code> as Yes, a list as a multi-choice. A file's content travels through a process variable and is therefore capped at its budget (1&nbsp;MiB); for a larger document, hand the person the <code>webUrl</code> every file answer carries. Delivery is <i>at least once</i>: every operation but "create list item" is safe to repeat – a crash between "created" and "job complete" can leave an item there twice.</td></tr>
           <tr><td><b>BMC Remedy</b></td><td data-l="de">Ticket/Incident im ITSM-System anlegen.</td><td data-l="en">Create a ticket/incident in the ITSM system.</td></tr>
           <tr><td><b>Jira</b></td><td data-l="de">Vorgang anlegen, lesen, ändern, weiterschalten, kommentieren, zuweisen, per JQL suchen — oder Konten suchen, um die accountId zu bekommen, die das Zuweisen braucht.</td><td data-l="en">Create, read, update, transition, comment on, assign, or search issues with JQL — or search accounts, to get the accountId assigning takes.</td></tr>
           <tr><td><b>Google&nbsp;Sheets</b></td><td data-l="de">Bereich lesen, Bereich schreiben, Zeilen anhängen, Bereich leeren, Tabelle anlegen, Blatt hinzufügen oder löschen, ganze Datei in den Papierkorb legen. <b>Werte</b> dürfen eine Liste von Zeilen sein, eine einzelne Zeile, oder eine Liste von Objekten – die dann über <b>Spalten</b> geschrieben wird, denn die Reihenfolge der Schlüssel eines Objekts ist keine Spaltenreihenfolge und wird nicht geraten. Beim Lesen macht <b>Kopfzeile</b> aus den Zeilen benannte Objekte, also die Form, die ein Multi-Instance-Unterprozess durchläuft. Anlegen und Löschen einer Tabelle sind Drive-Operationen mit derselben Berechtigung; gelöscht wird in den <b>Papierkorb</b>, nie endgültig. Zustellung ist <i>mindestens einmal</i> und eine Tabelle hat keinen Idempotenzschlüssel: nach einem Absturz zwischen „angehängt“ und „Job fertig“ steht die Zeile zweimal da. Wo das nicht tragbar ist, gehört eine Merkspalte in die Tabelle, die der Prozess vor dem Anhängen liest.</td><td data-l="en">Read a range, write one, append rows, clear a range, create a spreadsheet, add or delete a sheet, move the whole file to the trash. <b>Values</b> may be a list of rows, one row, or a list of objects – written through <b>Columns</b>, because an object's key order is not a column order and is not guessed. On a read, <b>Header</b> turns the rows into named objects, which is the shape a multi-instance subprocess iterates. Creating and deleting a spreadsheet are Drive operations on the same credential; a delete goes to the <b>trash</b>, never permanently. Delivery is <i>at least once</i> and a spreadsheet has no idempotency key: a crash between "appended" and "job complete" leaves the row there twice. Where that is not acceptable, put a marker column in the sheet and read it before appending.</td></tr>
@@ -6034,7 +6036,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <td><code>{"tenantId": "…", "clientId": "…", "clientSecret": "…"}</code></td></tr>
           <tr><td><b>SharePoint</b></td>
             <td data-l="de">keiner</td><td data-l="en">none</td>
-            <td><code>{"method": "clientCredentials", "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code></td></tr>
+            <td><code>{"method": "clientCredentials", "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code>
+              <span data-l="de">oder mit</span><span data-l="en">or with</span>
+              <code>"certificate": "-----BEGIN CERTIFICATE-----…-----BEGIN PRIVATE KEY-----…"</code>
+              <span data-l="de">statt <code>clientSecret</code></span><span data-l="en">in place of <code>clientSecret</code></span></td></tr>
           <tr><td><b>Google&nbsp;Sheets</b></td>
             <td data-l="de">keiner – Googles Adressen sind für alle dieselben</td>
             <td data-l="en">none – Google's addresses are the same for everyone</td>
@@ -7227,6 +7232,25 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           <a href="#runbook-entra">Entra&nbsp;ID</a>: an app registration, a client secret, admin consent. Secret:
           <code>{"method": "clientCredentials", "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code>, no
           endpoint.</p>
+        <p data-l="de">Statt des Client-Secrets kann das Secret ein <b>Zertifikat</b> tragen:
+          <code>"certificate"</code> enthält das Zertifikat und seinen unverschlüsselten privaten Schlüssel als einen
+          PEM-Text. Das Zertifikat lädst du in der App-Registrierung unter <i>Zertifikate &amp; Geheimnisse</i> hoch.
+          Microsoft empfiehlt diese Variante für Apps, die unbeaufsichtigt laufen: Der private Schlüssel verlässt den
+          Worker nie, zum Token-Endpunkt geht nur eine damit signierte Bestätigung.</p>
+        <p data-l="en">In place of the client secret the secret may carry a <b>certificate</b>: <code>"certificate"</code>
+          holds the certificate and its unencrypted private key as one PEM text. Upload the certificate to the app
+          registration under <i>Certificates &amp; secrets</i>. Microsoft recommends this for apps that run unattended:
+          the private key never leaves the worker, and only an assertion signed with it reaches the token endpoint.</p>
+        <p data-l="de">Im Task nennst du die <b>Site</b> so, wie der Browser sie zeigt
+          (<code>https://contoso.sharepoint.com/sites/hr</code>), als <code>contoso.sharepoint.com:/sites/hr</code>
+          oder mit der Site-ID von Graph (<code>contoso.sharepoint.com,&lt;siteId&gt;,&lt;webId&gt;</code>). Gemeint
+          ist die Site selbst, nicht eine Seite oder Liste darin. Listen und Bibliotheken nennst du mit ihrem Titel,
+          Spalten mit ihrem internen Namen.</p>
+        <p data-l="en">In the task you name the <b>site</b> as the browser shows it
+          (<code>https://contoso.sharepoint.com/sites/hr</code>), as <code>contoso.sharepoint.com:/sites/hr</code>, or
+          by Graph's site id (<code>contoso.sharepoint.com,&lt;siteId&gt;,&lt;webId&gt;</code>). It is the site itself,
+          not a page or a list in it. Lists and libraries are named by their title, columns by their internal
+          name.</p>
         <p data-l="de"><b>Die Falle ist dieselbe wie bei Google:</b> Ein <code>403</code> heisst hier meistens nicht
           „Berechtigung fehlt", sondern „diese App hat auf <i>diese</i> Site keinen Zugriff". Graph kennt für
           SharePoint eine <b>seitenspezifische</b> Berechtigung (<code>Sites.Selected</code>), bei der eine Site
@@ -9936,6 +9960,38 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         a worker is shared with the team once instead of person by person. A membership change takes effect at
         the member's next sign-in.</p>
 
+      <h3 data-l="de">Linienvorgesetzte</h3><h3 data-l="en">Line managers</h3>
+      <p data-l="de">Ein Konto kann seinen <b>Linienvorgesetzten</b> nennen, als Verweis auf ein anderes Konto. Eine
+        Genehmigung der Art <code>superior</code> geht an diese Person, wenn die Person bestellt, und eine
+        Eskalation geht von dort eine Stufe weiter hinauf. Atlas speichert dabei nur die ID des anderen Kontos,
+        keinen Namen. Gesetzt wird der Linienvorgesetzte auf zwei Wegen:</p>
+      <ul data-l="de">
+        <li>im Konto unter <a href="/#/console/org">Organization</a>, Feld <b>Line manager</b>, oder mit
+          <code>PATCH /api/v1/users/{id}</code> und <code>managerId</code>;</li>
+        <li>durch den Entra-Abgleich, wenn sein Modell <code>manager</code> mitliest. Dann gehört das Feld dem
+          Verzeichnis: Die Console zeigt es nur an, und eine Änderung machst du in Entra ID. Nennt das
+          Verzeichnis eine Person, die noch kein Konto hat, merkt sich Atlas ihre Objekt-ID und ordnet sie
+          zu, sobald ein späterer Lauf das Konto liest.</li>
+      </ul>
+      <p data-l="de">Hat die bestellende Person keinen Linienvorgesetzten, ist er deaktiviert oder hat er kein
+        Konto mehr, startet die Genehmigung nicht. Der Erfüllungsprozess meldet dann einen Incident, der den
+        Grund nennt. Trägst du den Linienvorgesetzten nach und löst den Incident auf, startet die Genehmigung.</p>
+      <p data-l="en">An account can name its <b>line manager</b>, as a reference to another account. An approval of
+        the kind <code>superior</code> goes to that person when the account orders, and an escalation goes one
+        level further up from there. Atlas stores only the other account's id, no name. The line manager is set
+        in one of two ways:</p>
+      <ul data-l="en">
+        <li>on the account under <a href="/#/console/org">Organization</a>, field <b>Line manager</b>, or with
+          <code>PATCH /api/v1/users/{id}</code> and <code>managerId</code>;</li>
+        <li>by the Entra mirror, when its model reads <code>manager</code>. The field then belongs to the
+          directory: the Console only shows it, and you change it in Entra ID. When the directory names somebody
+          who has no account yet, Atlas keeps their object id and resolves it once a later run reads the
+          account.</li>
+      </ul>
+      <p data-l="en">When the orderer has no line manager, or theirs is disabled or has no account any more, the
+        approval does not start. The fulfilment process then reports an incident that says why. Set the line
+        manager, resolve the incident, and the approval starts.</p>
+
       <h3 data-l="de">Wer gerade angemeldet ist</h3><h3 data-l="en">Who is signed in right now</h3>
       <p data-l="de">Die Benutzerliste hat neben <b>Status</b> – darf sich anmelden – eine Spalte <b>Presence</b>:
         Ist gerade jemand da. <b>Online</b> heisst, in den letzten fünf Minuten hat diese Person etwas getan;
@@ -11599,7 +11655,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
           <tr><td><code>provisionProcess</code></td><td>string</td><td></td><td data-l="de">Der Prozess, der die Position nach der Genehmigung bereitstellt.</td><td data-l="en">The process that provisions the position once it is approved.</td></tr>
           <tr><td><code>atlasApiBase</code></td><td>string</td><td></td><td data-l="de">Die eigene API-Adresse dieses Servers.</td><td data-l="en">This server&#39;s own API address.</td></tr>
           <tr><td><code>portalBaseUrl</code></td><td>string</td><td></td><td data-l="de">Die externe Adresse des Portals; leer, wo keine gesetzt ist.</td><td data-l="en">The external address of the portal; empty where none is set.</td></tr>
-          <tr><td><code>vorgesetzter</code></td><td>string</td><td><span data-l="de">optional</span><span data-l="en">optional</span></td><td data-l="de">Nur bei superior: die im Verzeichnis gefundene vorgesetzte Person, dieselbe wie approver.</td><td data-l="en">For superior only: the line manager found in the directory, the same as approver.</td></tr>
+          <tr><td><code>vorgesetzter</code></td><td>string</td><td><span data-l="de">optional</span><span data-l="en">optional</span></td><td data-l="de">Nur bei superior: die vorgesetzte Person der bestellenden Person, wie ihr Konto sie nennt, dieselbe wie approver.</td><td data-l="en">For superior only: the orderer&#39;s line manager as their account records it, the same as approver.</td></tr>
         </tbody>
       </table>
       <h3 id="ev-atlas-incident-raised"><code>atlas.incident.raised</code></h3>

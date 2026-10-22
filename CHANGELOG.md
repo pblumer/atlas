@@ -34,6 +34,48 @@ _Changed_ / _Removed_ for each version.
   says how many deployed processes receive its name, or that none does, with a link to the
   page ([ADR-0447](docs/adr/0447-the-signals-deployed-models-throw-and-receive.md),
   [ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md)).
+- **SharePoint reads, changes, finds and deletes list items, and works with document
+  libraries.** Beside creating a list item, a SharePoint task can now read one by its id
+  (`get-item`), change some of its columns (`update-item`), delete it (`delete-item`) and
+  find items by an OData filter one page at a time (`list-items`, with a
+  `nextPageToken` to carry on), and in a document library upload a file — optionally
+  with properties — (`upload-file`), download a small one into a variable
+  (`download-file`), ask whether one is there (`get-file`), list a folder
+  (`list-folder`), create a case folder with every missing one above it
+  (`create-folder`) and delete a file or folder (`delete-file`). The site may be named
+  as the browser shows it (`https://contoso.sharepoint.com/sites/hr`) or as
+  `host:/sites/name`, not only by Graph's site id; a document's content is bounded by
+  the process variable's budget and Graph's pre-authenticated download link never
+  reaches a variable. A task naming no operation is the create-item it always was. The
+  new operations ride a job type of their own, `io.atlas.sharepoint`, so a worker built
+  before them leaves those jobs for one that knows them instead of creating an item for
+  each ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended).
+- **A SharePoint Worker can sign in with a certificate.** The vault bundle may carry
+  `certificate` — the certificate and its unencrypted private key as one PEM text — in
+  place of `clientSecret`; the token comes from the same client-credentials grant with
+  a signed client assertion, so the private key never leaves the worker. A bundle
+  naming no `method` is a client-credentials bundle.
+- **The Entra Worker reads a person's manager.** A new operation, `get-user-manager`,
+  writes the manager's directory object for a `userId` into a result variable; an optional
+  `select` names which of the manager's properties come back. A person without a manager
+  is `null`, so a process can route an approval to a fallback approver; an id that belongs
+  to nobody still fails the task, because the worker reads the manager through the user
+  (`$expand=manager`) rather than from `/users/{id}/manager`, which answers 404 to both.
+  A process that catches the BPMN error `ENTRA_USER_NOT_FOUND` — an error boundary on the
+  task — gets the unknown id as that error instead, at once and without retries, and can
+  route it as well; uncaught, it stays a failure and then an incident
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended 2026-10-22).
+
+- **An account can name its line manager.** `managerId` on an account is the principal id
+  of the person's line manager. An administrator sets it under Console → Administration →
+  Organization (field *Line manager*) or with `PATCH /api/v1/users/{id}`. The Entra mirror
+  fills it when its model selects `manager`: it reads `manager@delta`, or a plain `manager`
+  object, keeps the manager's object id in `managerDirectoryId`, and resolves it to the
+  manager's account on the run that reads that account. While the directory reports it,
+  the field belongs to the directory, the Console shows it read-only and an edit is refused
+  with a 409. Only ids are stored, no names
+  ([ADR-0470](docs/adr/0470-the-line-manager-is-on-the-account.md)).
+
 - **The replay's Variables tab says what an id stands for.** A string value that is a
   principal id (`usr_…`, `grp_…`), a deployed process id or a catalogue product or
   position id gets a chip beside it with the person's, group's, process's or product's
@@ -63,24 +105,54 @@ _Changed_ / _Removed_ for each version.
   filters on `newest`; one that assumed three kinds skips the fourth. A name a deployed
   model sends no longer reads as unfed in the Modeler
   ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md)).
+- **A SharePoint column value keeps the type of its FEEL value.** A value that
+  evaluates to a number is sent to Graph as a number, a boolean as Yes/No, a list as a
+  multi-choice and null as null, which clears the column; before, every value was sent
+  as its text, which left multi-choice, lookup and Yes/No columns unreachable. A literal
+  is still its text. A create-item task that computed a number into a *text* column now
+  relies on Graph converting it — check such a task against your site
+  ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended).
+- **SharePoint failures say what to do.** A failed Graph call names the operation and
+  Graph's own error code and message; a 401 or 403 names the permission to grant, and a
+  throttled call quotes the wait Graph asked for. Every answer is read under the process
+  variable's budget — the read used to be unbounded.
+
 - **The Microsoft 365 example asks the manager of the person a position is for.** Licence,
   team, shared mailbox and mailbox access in `examples/m365-dienste` were approved with the
-  built-in kind `superior`, which asks the manager of the person who *ordered* and finds
-  that manager only through a directory worker. They now name the example's own approval
-  model, `proc_m365_genehmigung_vorgesetzter`: it receives the order form's answers
-  (ADR-0441), reads the manager of `upn`, `besitzer` or `person` from Entra ID in a
-  PowerShell script (Microsoft Graph, app-only with a certificate), assigns the task to the
-  manager's Atlas account, and falls back to `approval.ref` or the group
-  `M365-Administration` when there is no manager, no such person or no account. It mails the
-  approver, reminds after three days and escalates to the next manager after seven. The
-  answers are declared personal data in that model, so the script and the mail worker are
-  the only places they are read in the clear. The mailbox-access order form's
-  justification is now keyed `anlass` rather than `begruendung`, the variable the inbox
-  writes a refusal's reason to. New constants `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` and
-  `ENTRA_CERTIFICATE_SUBJECT`; the README lists what the operator sets up.
+  built-in kind `superior`, which asks the line manager of the person who *ordered*, as
+  that person's account names it. They now name the example's own approval model,
+  `proc_m365_genehmigung_vorgesetzter`: it receives the order form's answers (ADR-0441),
+  reads the manager of `upn`, `besitzer` or `person` from Entra ID with the Entra Worker's
+  `get-user-manager` through `ucc_entra`, assigns the task to the manager's Atlas account,
+  and falls back to `approval.ref` or the group `M365-Administration` when there is no
+  manager, no such person (`ENTRA_USER_NOT_FOUND`, caught by an error boundary) or no
+  account. It mails the approver, reminds after three days and escalates to the next
+  manager after seven. The answers are declared personal data in that model, so the Entra
+  task's `userId`, evaluated when its job is handed to the worker, and the mail worker are
+  the only places they are read in the clear. The mailbox-access order form's justification
+  is now keyed `anlass` rather than `begruendung`, the variable the inbox writes a
+  refusal's reason to. The README lists what the operator sets up; beyond the `ucc_entra`
+  Worker the other products already use, the lookup needs nothing new.
   `TestEveryFormReferenceResolves` accepts the platform's approval form `genehmigung`,
   which an installation's own approval model names to get the inbox's Genehmigen and
   Ablehnen, for as long as the system bundle declares it.
+
+### Fixed
+
+- **A `superior` approval reaches the orderer's line manager.** The system process
+  `atlas-genehmigung-vorgesetzter` searched the directory with
+  `(userPrincipalName=<principal id>)`, which no directory holds, and assigned its task to
+  the `manager` distinguished name it read back, which no task can be held by (#1311). The
+  server now starts the approval with `approvalRef` set to the orderer's line manager, and
+  refuses to start it with the reason when there is none, when the manager's account is
+  disabled or gone, or when the directory names somebody who has no account yet; the
+  fulfilment process shows that refusal as an incident, and resolving it after the manager
+  is set starts the approval. The escalation calls `POST …/escalate` with
+  `{"lineManager": true}` and moves one level up from whoever holds the approval now; a body
+  naming `superior` means what it did. The model reads no directory and needs no `ad`
+  Worker called `verzeichnis` any more, and it still writes `vorgesetzter` for listeners of
+  `atlas.approval.requested`. Approvals already running keep the old model.
+  `examples/entra-verzeichnis-abgleich.bpmn` now selects `manager`.
 
 ## [0.18.0] — 2026-10-22
 

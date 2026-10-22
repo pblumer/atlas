@@ -71,6 +71,8 @@ export function entraResultShape(operation) {
   switch (operation) {
     case "get-user":
       return "Bei dieser Operation das Benutzer-Objekt (id, displayName, userPrincipalName, mail, …) — mit «Properties» genau die genannten Eigenschaften, z. B. assignedLicenses oder employeeId.";
+    case "get-user-manager":
+      return "Bei Read manager das Objekt der vorgesetzten Person (id, displayName, mail, userPrincipalName, …) — nicht das des Benutzers. Mit «Properties» genau die genannten Eigenschaften der vorgesetzten Person. Ist keine vorgesetzte Person eingetragen, ist die Variable null — ein Gateway fragt das mit = <Variable> = null ab. Ein unbekannter Benutzer lässt den Task dagegen fehlschlagen; fängt ein Fehler-Grenzereignis den Code ENTRA_USER_NOT_FOUND, endet der Task stattdessen mit diesem BPMN-Fehler.";
     case "create-user":
     case "update-user":
       return "Bei dieser Operation das Benutzer-Objekt (id, displayName, userPrincipalName, mail, …).";

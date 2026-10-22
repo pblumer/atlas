@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -101,6 +103,47 @@ type directoryUser struct {
 	Mail              string            `json:"mail"`
 	AccountEnabled    *bool             `json:"accountEnabled"`
 	Removed           *directoryRemoval `json:"@removed"`
+
+	// ManagerDelta is Graph's manager@delta: the manager a selected `manager` reports,
+	// as one directory reference, or one marked removed when the person has none any
+	// more (ADR-0470). Absent says nothing about
+	// the manager, which is not the same as saying there is none — the distinction
+	// every optional field here keeps.
+	ManagerDelta []directoryMemberRef `json:"manager@delta"`
+	// Manager is the same thing as a plain object, which is how a read that is not a
+	// delta spells it. Kept raw, so an absent member and an explicit null — "no
+	// manager" — can be told apart.
+	Manager json.RawMessage `json:"manager"`
+}
+
+// reportedManager is the directory object id of the manager this page reports, and
+// whether it reports one at all. ("", true) is the directory saying the person has no
+// manager; ("", false) is the page not mentioning it.
+//
+// Both spellings are read because the record could not settle which one Graph sends
+// for a selected `manager` on /users/delta: its documentation names the annotation, an
+// earlier example here reads the object, and no run against a tenant has said.
+func (mu directoryUser) reportedManager() (oid string, said bool) {
+	if mu.ManagerDelta != nil {
+		for _, ref := range mu.ManagerDelta {
+			if ref.Removed == nil && strings.TrimSpace(ref.ID) != "" {
+				oid = directoryIDOf(ref.ID)
+			}
+		}
+		return oid, true
+	}
+	raw := bytes.TrimSpace(mu.Manager)
+	if len(raw) == 0 {
+		return "", false
+	}
+	if string(raw) == "null" {
+		return "", true
+	}
+	var ref directoryMemberRef
+	if err := json.Unmarshal(raw, &ref); err != nil {
+		return "", false
+	}
+	return directoryIDOf(ref.ID), true
 }
 
 // directoryPhoto is what one run learned about one person's picture: the bytes, or
@@ -504,6 +547,7 @@ func decideDirectorySync(msg directorySyncMessage, state directorySyncState, use
 		}
 	}
 	d.resolveMemberships()
+	d.resolveManagers(users)
 
 	plan.Users, plan.Groups = d.userPlan, d.groupPlan
 	plan.Notes, plan.Counts = d.notes, d.counts
@@ -590,6 +634,7 @@ func (d *directoryDecider) decideDeparture(mu directoryUser, oid string) error {
 func (d *directoryDecider) decideKnownUser(mu directoryUser, oid string, rec User) error {
 	before := rec
 	d.applyProfile(&rec, mu)
+	applyManager(&rec, mu)
 	photo, kind, clear := d.applyPhoto(&rec, oid)
 	// A refused disable does not discard the rest of the page. The profile change in
 	// the same object is a change a change-tracking read will never send again, and
@@ -637,6 +682,7 @@ func (d *directoryDecider) decideKnownUser(mu directoryUser, oid string, rec Use
 func (d *directoryDecider) decideMerge(mu directoryUser, oid string, rec User) error {
 	rec.DirectoryID = oid
 	d.applyProfile(&rec, mu)
+	applyManager(&rec, mu)
 	photo, kind, clear := d.applyPhoto(&rec, oid)
 	// Linking the account happens either way: the merge is what stops a second
 	// account existing, and refusing it because the disable was refused would leave
@@ -695,6 +741,7 @@ func (d *directoryDecider) decideNewUser(mu directoryUser, oid string) error {
 	if mu.AccountEnabled != nil {
 		rec.Disabled = !*mu.AccountEnabled
 	}
+	applyManager(&rec, mu)
 	photo, kind, _ := d.applyPhoto(&rec, oid)
 	d.counts.UsersCreated++
 	d.commitUser(directoryUserDecision{Action: dirUserCreate, ObjectID: oid, Record: rec,
@@ -820,6 +867,7 @@ func directoryUsername(mu directoryUser) string {
 func sameUserRecord(a, b User) bool {
 	return a.DisplayName == b.DisplayName && a.Email == b.Email &&
 		a.Disabled == b.Disabled && a.DirectoryID == b.DirectoryID &&
+		a.ManagerID == b.ManagerID && a.ManagerDirectoryID == b.ManagerDirectoryID &&
 		// The picture is part of the record for this comparison's sake: an account
 		// whose photo changed and whose attributes did not would otherwise be decided
 		// unchanged and written anyway, and the plan would stop describing the apply.
@@ -871,4 +919,79 @@ func sortedIDs(set map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// applyManager takes the manager a page reports onto the account. The directory id is
+// what is stored; which account it is, is [directoryDecider.resolveManagers]'s to
+// answer once every account of the run is known. A page that says nothing leaves the
+// field alone, and one that says "none" clears it — including a line manager an
+// administrator set by hand before the directory had an opinion, because the directory
+// owns the relation for the accounts it mirrors (ADR-0315).
+func applyManager(rec *User, mu directoryUser) {
+	oid, said := mu.reportedManager()
+	if !said || oid == rec.ManagerDirectoryID && oid != "" {
+		return
+	}
+	rec.ManagerDirectoryID, rec.ManagerID = oid, ""
+}
+
+// resolveManagers turns every manager the directory reported into the account it is.
+//
+// It walks the whole population and not only the page, for the reason memberships do:
+// a delta read names a person once, so a manager reported before their own account was
+// read would otherwise never resolve. A manager with no account yet is held as a
+// directory id and said, and resolves on the run that reads them.
+func (d *directoryDecider) resolveManagers(users []User) {
+	resolve := func(rec *User) bool {
+		if rec.ManagerDirectoryID == "" {
+			return false
+		}
+		want := ""
+		if boss, ok := d.byDirectory[rec.ManagerDirectoryID]; ok {
+			want = boss.ID
+		} else {
+			d.note(directoryNote{Kind: noteUnresolved, ObjectID: rec.DirectoryID, Subject: rec.Username, UserID: rec.ID,
+				Detail: fmt.Sprintf("line manager %s has no account here yet; the reference is held and "+
+					"resolves on the run that reads the account", rec.ManagerDirectoryID)})
+		}
+		if rec.ManagerID == want {
+			return false
+		}
+		rec.ManagerID = want
+		return true
+	}
+
+	written := map[string]bool{}
+	unchanged := map[string]int{}
+	for i := range d.userPlan {
+		dec := &d.userPlan[i]
+		if dec.Record.ID == "" {
+			if dec.Action == dirUserUnchanged {
+				unchanged[dec.ObjectID] = i
+			}
+			continue
+		}
+		written[dec.Record.ID] = true
+		resolve(&dec.Record)
+	}
+	for _, u := range users {
+		if written[u.ID] {
+			continue
+		}
+		rec := u
+		if !resolve(&rec) {
+			continue
+		}
+		rec.UpdatedAt = d.now
+		d.counts.UsersUpdated++
+		dec := directoryUserDecision{Action: dirUserUpdate, ObjectID: rec.DirectoryID, Record: rec}
+		if i, ok := unchanged[rec.DirectoryID]; ok && rec.DirectoryID != "" {
+			// The page named this person and nothing about them changed — except whom
+			// their manager's id now resolves to.
+			d.counts.UsersUnchanged--
+			d.userPlan[i] = dec
+			continue
+		}
+		d.userPlan = append(d.userPlan, dec)
+	}
 }

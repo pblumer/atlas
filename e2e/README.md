@@ -235,6 +235,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   directory is read once however often the rows are redrawn. A directory that fails
   leaves its ids unclaimed. The value column's filter finds a row by the resolved name.
 
+- **`user-line-manager.spec.mjs`**
+  ([ADR-0470](../docs/adr/0470-the-line-manager-is-on-the-account.md)):
+  an account's line manager in Console → Organization, against a mock of the users
+  endpoints. The edit form offers every other account and "none", with the current manager
+  chosen. A save sends `managerId` only when it changed, and an empty id to clear it. A
+  manager the directory reports is shown disabled with a note naming the directory, and is
+  left out of the save.
+
 - **`pdf-writer.spec.mjs`** (ADR-0143): the dependency-free **PDF writer** behind the process
   documentation export (`api/web/pdf.js`). A PDF is only valid if its cross-reference table
   points at the exact byte offset of every object, so these build documents in the browser

@@ -31,7 +31,7 @@ func TestRegistry(t *testing.T) {
 
 type stubTokensClient struct{}
 
-func (stubTokensClient) CreateItem(context.Context, ItemRequest) (any, error) { return nil, nil }
+func (stubTokensClient) Do(context.Context, Request) (any, error) { return nil, nil }
 
 // TestToExprKind covers every stored-variable-kind branch of the FEEL binding map.
 func TestToExprKind(t *testing.T) {

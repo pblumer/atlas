@@ -200,18 +200,23 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes: []int32{compiler.MailJobTypeIndex},
 	},
 	{
-		// A SharePoint task creates a list item through a server-registered
-		// Microsoft Graph provider (ADR-0141) and writes the created item's JSON into the
-		// task's result variable (HandleWithOutput). The Graph base and OAuth credential
-		// live in the managed worker store; the credential is resolved from the vault
-		// at build time (ADR-0041).
+		// A SharePoint task performs one list or library operation through a
+		// server-registered Microsoft Graph provider (ADR-0141, amended) and writes what
+		// Graph answered into the task's result variable (HandleWithOutput). Two job
+		// types, one handler: create-item keeps the one it always had and every other
+		// operation rides its own, so a worker built before the operations existed is
+		// never handed one (compiler.SharePointOpsJobType). The Graph base and OAuth
+		// credential live in the managed worker store; the credential is resolved from
+		// the vault at build time (ADR-0041).
 		name:           connectorKindSharePoint,
 		validateCreate: validateSharePointConnector,
 		newRegistry:    func(s *Server) { s.sharePointRegistry = sharepoint.NewRegistry() },
 		registerHandlers: func(s *Server, store *state.Store) {
-			s.jobRunner.HandleWithOutput(compiler.SharePointJobTypeIndex, func(rd state.Reader) job.OutputHandler {
-				return sharepoint.Handler(rd, s.processLookup, s.sharePointRegistry)
-			})
+			for _, jobType := range []int32{compiler.SharePointJobTypeIndex, compiler.SharePointOpsJobTypeIndex} {
+				s.jobRunner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+					return sharepoint.Handler(rd, s.processLookup, s.sharePointRegistry)
+				})
+			}
 		},
 		rebuild: func(s *Server) error {
 			clients, problems, err := s.buildSharePointClients()
@@ -227,7 +232,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 			}
 			return s.sharePointRegistry.Problem(name)
 		},
-		jobTypes: []int32{compiler.SharePointJobTypeIndex},
+		jobTypes: []int32{compiler.SharePointJobTypeIndex, compiler.SharePointOpsJobTypeIndex},
 	},
 	{
 		// A BMC Remedy task creates an entry (e.g. an incident) in a Remedy
@@ -555,7 +560,7 @@ var offloadableKinds = map[string][]int32{
 	connectorKindTemis:        {compiler.TemisDecisionJobTypeIndex},
 	connectorKindClio:         {compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
 	connectorKindMail:         {compiler.MailJobTypeIndex},
-	connectorKindSharePoint:   {compiler.SharePointJobTypeIndex},
+	connectorKindSharePoint:   {compiler.SharePointJobTypeIndex, compiler.SharePointOpsJobTypeIndex},
 	connectorKindRemedy:       {compiler.RemedyJobTypeIndex},
 	connectorKindJira:         {compiler.JiraJobTypeIndex},
 	connectorKindGoogleSheets: {compiler.GoogleSheetsJobTypeIndex},

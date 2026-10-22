@@ -1,6 +1,6 @@
 # ADR-0172: A Microsoft Entra ID connector
 
-- **Status:** Accepted (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`. Amended 2026-08-25: group lifecycle (`create-group`, `get-group`, `list-groups`, `update-group`, `delete-group`) and ownership (`add-group-owner`, `remove-group-owner`) beside the existing membership operations; a dedicated `reset-password` that wraps a literal-or-FEEL secret in a `passwordProfile`; Teams (`create-team` on a group, `add-team-member`, `add-team-owner`, `create-channel`, `archive-team`), a Team being addressed by its group's id; and `assign-license` / `assign-role`. Amended 2026-08-25: a supervised Entra worker can take its client secret from the engine vault — `ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF` names a vault key the server resolves and hands the child under `_CLIENT_SECRET`, the AD bind-secret story with a connector name in place of a reference, so an operator can type the secret into the Console instead of onto the worker host; the worker stays worker-only and the engine builds no client. Amended 2026-08-25: the attributes body can be authored inline as JSON in the modeler instead of naming a variable — a string value beginning with `=` is a FEEL expression evaluated per field at runtime, and the compiler turns the whole template into one FEEL context compiled once at deploy (I5); the two ways of supplying the body are mutually exclusive. Amended 2026-08-25: an Entra tenant is now an operator-managed connector in the Console — a worker-only managed kind whose `credentialsRef` names a vault OAuth bundle `{tenantId, clientId, clientSecret}` (as SharePoint's does), read only by `superviseEnv` so the engine still builds no client and holds no tenant credential; and the Entra worker is supervised by default, starting parked with nothing to serve and brought up by the same refresh that already restarts mail/AD workers the moment a tenant is added — so adding a tenant is a Console entry, not a deployment change. Amended 2026-08-25: the `connector` name may itself be a literal-or-FEEL value — a leading `=` resolves the tenant from the instance's variables at call time, so one process can serve several tenants; this is entra-only because the kind is worker-only and no engine-side credential lookup keys off a fixed name. Amended 2026-08-25: the body-carrying operations get a per-operation capture mask in the Modeler (named fields for the important attributes plus a Weitere-Attribute JSON escape hatch) assembled into the same `attributes` JSON — UI-only, no moddle/compiler change; and the result variable gets an operation-aware hint describing what it receives. Amended 2026-10-17: the app may prove itself with a certificate instead of a client secret — a client assertion signed with the certificate's private key, still the client-credentials grant — configured as `_CLIENT_CERTIFICATE` (or `_CLIENT_CERTIFICATE_REF`) or as a bundle's `certificate` field; and `get-user` / `get-group` take a `select`, because Graph's default property set leaves out `assignedLicenses` and `employeeId`. Amended 2026-10-19: on Windows the certificate may stay in the certificate store, named by its thumbprint — `_CLIENT_CERTIFICATE_THUMBPRINT`, or a bundle's `certificateThumbprint` — and its key signs there through CNG without ever being read, so a non-exportable key serves as it serves PowerShell.)
+- **Status:** Accepted (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`. Amended 2026-08-25: group lifecycle (`create-group`, `get-group`, `list-groups`, `update-group`, `delete-group`) and ownership (`add-group-owner`, `remove-group-owner`) beside the existing membership operations; a dedicated `reset-password` that wraps a literal-or-FEEL secret in a `passwordProfile`; Teams (`create-team` on a group, `add-team-member`, `add-team-owner`, `create-channel`, `archive-team`), a Team being addressed by its group's id; and `assign-license` / `assign-role`. Amended 2026-08-25: a supervised Entra worker can take its client secret from the engine vault — `ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF` names a vault key the server resolves and hands the child under `_CLIENT_SECRET`, the AD bind-secret story with a connector name in place of a reference, so an operator can type the secret into the Console instead of onto the worker host; the worker stays worker-only and the engine builds no client. Amended 2026-08-25: the attributes body can be authored inline as JSON in the modeler instead of naming a variable — a string value beginning with `=` is a FEEL expression evaluated per field at runtime, and the compiler turns the whole template into one FEEL context compiled once at deploy (I5); the two ways of supplying the body are mutually exclusive. Amended 2026-08-25: an Entra tenant is now an operator-managed connector in the Console — a worker-only managed kind whose `credentialsRef` names a vault OAuth bundle `{tenantId, clientId, clientSecret}` (as SharePoint's does), read only by `superviseEnv` so the engine still builds no client and holds no tenant credential; and the Entra worker is supervised by default, starting parked with nothing to serve and brought up by the same refresh that already restarts mail/AD workers the moment a tenant is added — so adding a tenant is a Console entry, not a deployment change. Amended 2026-08-25: the `connector` name may itself be a literal-or-FEEL value — a leading `=` resolves the tenant from the instance's variables at call time, so one process can serve several tenants; this is entra-only because the kind is worker-only and no engine-side credential lookup keys off a fixed name. Amended 2026-08-25: the body-carrying operations get a per-operation capture mask in the Modeler (named fields for the important attributes plus a Weitere-Attribute JSON escape hatch) assembled into the same `attributes` JSON — UI-only, no moddle/compiler change; and the result variable gets an operation-aware hint describing what it receives. Amended 2026-10-17: the app may prove itself with a certificate instead of a client secret — a client assertion signed with the certificate's private key, still the client-credentials grant — configured as `_CLIENT_CERTIFICATE` (or `_CLIENT_CERTIFICATE_REF`) or as a bundle's `certificate` field; and `get-user` / `get-group` take a `select`, because Graph's default property set leaves out `assignedLicenses` and `employeeId`. Amended 2026-10-19: on Windows the certificate may stay in the certificate store, named by its thumbprint — `_CLIENT_CERTIFICATE_THUMBPRINT`, or a bundle's `certificateThumbprint` — and its key signs there through CNG without ever being read, so a non-exportable key serves as it serves PowerShell. Amended 2026-10-22: `get-user-manager` reads a person's manager — through the user, as `$expand=manager`, so a person without one reads as null while an id that is nobody's still fails the job, or ends it with the BPMN error `ENTRA_USER_NOT_FOUND` when the process catches that code.)
 - **Implementation:** Landed
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
@@ -469,6 +469,59 @@ had to create and register a second certificate, with an exportable key, for the
 
 The same mechanism is open to the Exchange Worker and anything else that signs a client
 assertion; it is built for Entra first because that is where it was needed.
+
+### Amendment (2026-10-22): the manager, read through the user
+
+**Why.** Routing an approval to a person's line manager is among the most common
+questions an identity process asks the directory, and the worker could not answer it.
+`manager` is a relationship, not a property, so no `select` on `get-user` reaches it, and a
+model had to fall back to the REST Worker Type with a hand-built Graph URL and a Graph
+credential of its own — the encoding and the second credential this worker exists to
+avoid.
+
+**What.** `get-user-manager` takes a `userId` and a required `resultVariable`, which
+receives the manager's directory object, not the user's: a model addresses `=chef.mail`.
+An optional `select` names which of the *manager's* properties come back. Every other
+query field is refused at deploy, as on `get-user`.
+
+**Through the user, not from `/users/{id}/manager`.** Graph has a path for the manager,
+and it answers 404 both for a person who has no manager and for an id that is nobody's.
+[ADR-0367](0367-directory-photo.md) accepted that ambiguity for the photo and reads 404 as
+"no photo", trading a mistyped id that reads as "no photo" for an incident queue that
+stays readable. For the manager the same trade would be a wrong answer a process acts on:
+it would route the approval to its fallback approver for a person who does not exist. So
+the worker reads `GET /users/{id}?$select=id&$expand=manager` instead. An id that is
+nobody's is still a 404 and fails the job into an incident; a person without a manager is
+a user object without the expanded property, and the result variable is null, which a
+gateway asks with `= chef = null`. It costs no second call.
+
+- The user itself is cut down to `$select=id`, since none of it reaches the process; an
+  authored `select` goes into the expansion, `$expand=manager($select=…)`.
+- An absent and a null `manager` both read as null. An answer that is not a user object,
+  or a `manager` that is not an object, fails the job rather than reading as "no
+  manager".
+- Only the immediate manager. Graph walks the chain with `$levels`, but only as an
+  advanced query (`ConsistencyLevel: eventual`) and as a nested structure; nothing has
+  asked for it yet, and a plain expansion needs neither.
+- A manager can be an organizational contact rather than a user. Its `@odata.type` says
+  which, and the worker passes the object through unchanged.
+- The permission is `User.Read.All`, which a tenant that already runs `get-user` grants
+  ([`docs/entra-permissions.md`](../entra-permissions.md)).
+- **An unknown user can be a path rather than an incident.** When the task's process
+  catches `ENTRA_USER_NOT_FOUND` — an error boundary on the task, or an error event
+  subprocess around it — Graph's 404 with `Request_ResourceNotFound` ends the job with
+  that BPMN error, and the instance takes the path at once without spending retries on an
+  answer that will not change. Uncaught, it stays a failure with its retries and then an
+  incident, the rule [ADR-0461](0461-script-bpmn-errors.md) set for scripts and the Teams
+  Phone Worker follows. The codes a process catches travel with the job (`errorCodes`),
+  because the worker has no compiled process to ask. A 404 without Graph's code — a proxy,
+  a wrong base URL — is not Graph saying the person does not exist, and stays a failure.
+  The error's message names no user: it is kept with the error, and the id is often a
+  value the process declares personal. The approval model in `examples/m365-dienste`
+  uses it: a mistyped address in an order reaches the fallback group with that reason, as
+  it did when a PowerShell script read the manager there.
+- Written from Graph's documentation and tested against a recorded Graph; it has not yet
+  run against a live tenant.
 
 ## Pros and cons of the options
 
