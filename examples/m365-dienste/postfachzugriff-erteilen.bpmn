@@ -9,14 +9,14 @@ Exchange: Postfachzugriff erteilen. DMN-gesteuerte Zusatzfreigabe, dann die Bere
              xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
              xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_proc_m365_postfachzugriff_erteilen" targetNamespace="http://atlas/beispiel/m365-dienste">
-  <process id="proc_m365_postfachzugriff_erteilen" name="Exchange: Postfachzugriff erteilen" isExecutable="true" atlas:personal="postfach,person,begruendung" atlas:dataSubject="recipient">
+  <process id="proc_m365_postfachzugriff_erteilen" name="Exchange: Postfachzugriff erteilen" isExecutable="true" atlas:personal="postfach,person,anlass" atlas:dataSubject="recipient">
     <documentation>Erteilt einer Person Zugriff auf ein bestehendes Postfach: Vollzugriff, «Senden als» oder «Senden im Auftrag». Bereitstellungsprozess des Produkts m365-postfachzugriff (getrennte Prozesse, Form 1).
 
 Die Entscheidung M365PostfachzugriffFreigabe sagt, ob über die Genehmigung der vorgesetzten Person hinaus die Informationssicherheit zustimmen muss: Vollzugriff und «Senden als» auf ein persönliches Postfach ja, ein Funktionspostfach nein. Unbekannte Kombinationen verlangen die Zusatzfreigabe vorsorglich (fail-closed). Lehnt die Informationssicherheit ab, wird die Position über die Entscheidungsroute abgelehnt, nicht als Störung gemeldet.
 
 Das Recht ist im Katalog auf 365 Tage befristet (maxDays): Ein Zugriff auf fremde Korrespondenz endet, statt still weiterzubestehen.
 
-Personendaten: postfach, person und begruendung sind als Personendaten der empfangenden Person deklariert; postfachtyp und zugriffsart benennen niemanden und steuern die Gateways.</documentation>
+Personendaten: postfach, person und anlass sind als Personendaten der empfangenden Person deklariert; postfachtyp und zugriffsart benennen niemanden und steuern die Gateways.</documentation>
     <extensionElements>
       <atlas:constants>
         <atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/>
