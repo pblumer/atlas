@@ -103,7 +103,7 @@ Schreibt: stand.</bpmn:documentation>
     <bpmn:serviceTask id="konten_lesen" name="Konten lesen (Delta)">
       <bpmn:documentation>delta-users ab stand.usersDeltaLink. Leerer Cursor heisst: den ganzen Mandanten einmal aufzählen und dabei den Cursor setzen — der Lauf, der nichts schreiben darf.
 
-Das $select ist bewusst schmal: jedes Feld mehr ist Speicher in einer Prozessvariablen, und die ist durch das Budget ATLAS_LIMIT_VARIABLE begrenzt. maxUsers lässt einen zu grossen Lauf am Worker scheitern, statt eine gekürzte Änderungsmenge zu liefern, die atlas als vollständig verbuchen würde.
+Das $select ist bewusst schmal: jedes Feld mehr ist Speicher in einer Prozessvariablen, und die ist durch das Budget ATLAS_LIMIT_VARIABLE begrenzt. manager ist dabei, weil Atlas daraus den Linienvorgesetzten jedes Kontos übernimmt, an den eine Genehmigung der Art superior geht. Er kommt als Objekt-ID, nicht als Name. maxUsers lässt einen zu grossen Lauf am Worker scheitern, statt eine gekürzte Änderungsmenge zu liefern, die atlas als vollständig verbuchen würde.
 
 Gelöschte Objekte kommen mit @removed markiert mit; sie sind das eine der beiden Austrittssignale (das andere ist accountEnabled: false).
 
@@ -111,7 +111,7 @@ Schreibt: konten = { value, deltaLink }.</bpmn:documentation>
       <bpmn:extensionElements>
         <atlas:entraConnector connector="contoso" operation="delta-users"
                               deltaLink="=stand.usersDeltaLink"
-                              select="id,userPrincipalName,displayName,mail,accountEnabled"
+                              select="id,userPrincipalName,displayName,mail,accountEnabled,manager"
                               maxUsers="2000"
                               resultVariable="konten" />
       </bpmn:extensionElements>
