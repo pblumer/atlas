@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -277,4 +279,36 @@ func (s *listingSpy) Call(_ context.Context, r entra.Request) (any, error) {
 		vals = append(vals, map[string]any{"id": "u"})
 	}
 	return map[string]any{"value": vals}, nil
+}
+
+// unknownUserGraph answers every request the way Graph answers a read of a user that
+// does not exist.
+type unknownUserGraph struct{}
+
+func (unknownUserGraph) BaseURL() string { return "https://graph.microsoft.com/v1.0" }
+
+func (unknownUserGraph) Call(_ context.Context, r entra.Request) (any, error) {
+	return nil, &entra.GraphError{Method: r.Method, Path: r.Path, Status: http.StatusNotFound,
+		Code: "Request_ResourceNotFound", Message: "Resource does not exist"}
+}
+
+// The codes a process catches have to survive the hop as well, for advancedQuery's
+// reason above: a tag that disagreed with the key the engine sends would decode to
+// nothing, and every unknown user would fail into an incident instead of taking the
+// path the model drew for it.
+func TestRunEntraJobThrowsACaughtUnknownUser(t *testing.T) {
+	reg := entra.NewRegistry()
+	reg.Register("contoso", unknownUserGraph{})
+
+	_, err := RunEntraJob(context.Background(), Job{Connector: &ConnectorPayload{
+		Kind: "entra",
+		Fields: map[string]any{
+			"connector": "contoso", "operation": "get-user-manager", "userId": "nobody@contoso.com",
+			"resultVariable": "chef", "errorCodes": []any{entra.CodeUserNotFound},
+		},
+	}}, reg)
+	var be *BPMNError
+	if !errors.As(err, &be) || be.Code != entra.CodeUserNotFound {
+		t.Fatalf("err = %v, want the BPMN error %s", err, entra.CodeUserNotFound)
+	}
 }

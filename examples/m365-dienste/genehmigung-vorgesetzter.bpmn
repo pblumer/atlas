@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-Microsoft 365: Genehmigung durch Vorgesetzte. Eigene Genehmigungsart der Produkte Lizenz, Team, Funktionspostfach und Postfachzugriff: Vorgesetzten in Entra ID lesen (Microsoft Graph), Aufgabe an sein Atlas-Konto, sonst an die Ersatzgruppe.
+Microsoft 365: Genehmigung durch Vorgesetzte. Eigene Genehmigungsart der Produkte Lizenz, Team, Funktionspostfach und Postfachzugriff: Vorgesetzten in Entra ID lesen (Entra-Worker, get-user-manager), Aufgabe an sein Atlas-Konto, sonst an die Ersatzgruppe.
 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
@@ -9,6 +9,8 @@ Microsoft 365: Genehmigung durch Vorgesetzte. Eigene Genehmigungsart der Produkt
              xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
              xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_proc_m365_genehmigung_vorgesetzter" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <error id="Err_PersonUnbekannt" name="Person in Entra ID unbekannt" errorCode="ENTRA_USER_NOT_FOUND"/>
+
   <process id="proc_m365_genehmigung_vorgesetzter" name="Microsoft 365: Genehmigung durch Vorgesetzte" isExecutable="true" atlas:personal="upn,besitzer,person,postfach,anlass" atlas:dataSubject="recipient">
     <documentation>Holt die Genehmigung für eine Microsoft-365-Position bei der vorgesetzten Person der betroffenen Person ein und meldet das Ergebnis an den Auftrag.
 
@@ -16,28 +18,18 @@ Ersetzt für die Produkte dieser Applikation die Genehmigungsart «superior» (S
 
 Betroffene Person: upn (Lizenz), besitzer (Team, Funktionspostfach) oder person (Postfachzugriff), in dieser Reihenfolge.
 
-Ablauf: Vorgesetzten in Entra ID lesen (Microsoft Graph, PowerShell), sein Atlas-Konto suchen, Aufgabe an ihn. Gibt es keinen Vorgesetzten, ist die Person unbekannt oder hat der Vorgesetzte kein Atlas-Konto, entscheidet die Ersatzgruppe: approval.ref des Produkts, sonst die Gruppe M365-Administration (über ihren Namen).
+Ablauf: Vorgesetzten in Entra ID lesen (Entra-Worker ucc_entra, Operation get-user-manager), sein Atlas-Konto suchen, Aufgabe an ihn. Gibt es keinen Vorgesetzten, ist die Person unbekannt oder hat der Vorgesetzte kein Atlas-Konto, entscheidet die Ersatzgruppe: approval.ref des Produkts, sonst die Gruppe M365-Administration (über ihren Namen).
 
-Personendaten: upn, besitzer, person, postfach und anlass sind die Antworten der Bestellformulare, die eine Person nennen; sie sind als Personendaten der empfangenden Person deklariert und im Verlauf verschlüsselt. Kein Ausdruck, den die Engine auswertet, liest sie: die betroffene Person wählt das PowerShell-Skript, die Nachricht nennt sie im Mail-Worker. Beide erhalten den Klartext. Die übrigen Antworten (Bereich, Bezeichnung, Zugriffsart und so weiter) nennen niemanden. Der Vorgesetzte (vorgesetzter, naechster) ist nicht deklariert: er ist nicht die empfangende Person, und Gateway und Kontosuche müssen ihn lesen.
+Personendaten: upn, besitzer, person, postfach und anlass sind die Antworten der Bestellformulare, die eine Person nennen; sie sind als Personendaten der empfangenden Person deklariert und im Verlauf verschlüsselt. Kein Ausdruck, den die Engine auswertet, liest sie: die betroffene Person wählt der userId-Ausdruck der Entra-Aufgabe, der erst bei der Übergabe des Jobs an den Worker ausgewertet wird, und die Nachricht nennt sie im Mail-Worker. Beide erhalten den Klartext. Die übrigen Antworten (Bereich, Bezeichnung, Zugriffsart und so weiter) nennen niemanden. Der Vorgesetzte (vorgesetzter, naechster) ist nicht deklariert: er ist nicht die empfangende Person, und Gateway und Kontosuche müssen ihn lesen.
 
 Voraussetzungen beim Betreiber:
-- Ein Worker für PowerShell-Skripte (io.atlas.script.powershell) mit dem Modul Microsoft.Graph.Authentication.
-- Eine App-Registrierung mit der Anwendungsberechtigung User.Read.All und ein Zertifikat mit privatem Schlüssel im Speicher des Worker-Kontos (CurrentUser\My oder LocalMachine\My).
-- Die Applikationskonstanten ENTRA_TENANT_ID, ENTRA_CLIENT_ID und ENTRA_CERTIFICATE_SUBJECT (Vorgabe CN=atlas-m365-graph). Tenant und Client stehen auf dem Ersatzwert «nicht-gesetzt», damit eine Bestellung nicht schon beim Start abgewiesen wird; das Skript meldet den fehlenden Wert als Incident mit klarer Meldung.
+- Der Entra-Worker ucc_entra, den auch Lizenz, Team und Partnerzugang verwenden. Seine App-Registrierung braucht dafür User.Read.All, das in User.ReadWrite.All enthalten ist.
 - Das Secret atlas (API-Token mit der Rolle operator) für die Aufrufe an Atlas selbst.
 - Die Gruppe M365-Administration.
 - Den Vault des Servers, weil der Prozess Personendaten deklariert.
 - Ein Mail-Worker «mail» für die Benachrichtigung; fehlt er, bleibt nur die Nachricht liegen, die Genehmigung läuft.
 
 Atlas-Konto: gesucht wird ein Konto, dessen Benutzername gleich der UPN oder der Mailadresse des Vorgesetzten ist, sonst eines mit dem Teil vor dem «@» als Benutzername und gleichem Anzeigenamen (so benennt Atlas Konten aus Entra ID). Findet sich keines oder mehr als eines, entscheidet die Ersatzgruppe.</documentation>
-    <extensionElements>
-      <atlas:constants>
-        <atlas:constant name="ENTRA_TENANT_ID" type="string" source="application" value="nicht-gesetzt"/>
-        <atlas:constant name="ENTRA_CLIENT_ID" type="string" source="application" value="nicht-gesetzt"/>
-        <atlas:constant name="ENTRA_CERTIFICATE_SUBJECT" type="string" source="application" value="CN=atlas-m365-graph"/>
-      </atlas:constants>
-    </extensionElements>
-
     <startEvent id="Start" name="Genehmigung nötig">
       <documentation>Wird vom Auftrag gestartet, wenn die Position an der Reihe ist und ihr Produkt diesen Prozess als Genehmigungsart nennt. Startvariablen: orderId, itemId, positionId, recipient, orderer, provisionProcess, approvalRef, variantId, atlasApiBase, portalBaseUrl und die Antworten des Bestellformulars.</documentation>
       <outgoing>F_Start_Ersatzgruppe</outgoing>
@@ -56,86 +48,37 @@ Atlas-Konto: gesucht wird ein Konto, dessen Benutzername gleich der UPN oder der
       <outgoing>F_Ersatzgruppe_Graph</outgoing>
     </scriptTask>
 
-    <scriptTask id="Graph" name="Vorgesetzten lesen (Microsoft Graph)">
-      <documentation>Wählt die betroffene Person aus den Bestellangaben (upn, besitzer, person) und liest in Entra ID ihren Vorgesetzten (GET /users/{upn}/manager). Ohne Input-Zuordnung: die Angaben sind Personendaten, und nur der Worker sieht sie im Klartext.
+    <serviceTask id="Graph" name="Vorgesetzten lesen (Entra ID)">
+      <documentation>get-user-manager im Entra-Worker ucc_entra: der Vorgesetzte der betroffenen Person, die upn (Lizenz), besitzer (Team, Funktionspostfach) oder person (Postfachzugriff) nennt, in dieser Reihenfolge.
 
-Schreibt vorgesetzter = {gefunden, grund, upn, mail, anzeigename}. «Keine UPN», «Person unbekannt» und «kein Vorgesetzter» sind Antworten und kein Fehler: sie führen zur Ersatzgruppe. Ein technischer Fehler (Anmeldung, Berechtigung, Netz) erzeugt einen Incident, damit der Betrieb ihn sieht und nicht still jede Genehmigung bei der Ersatzgruppe landet.</documentation>
+Der Ausdruck in userId liest Personendaten und darf es: Die Engine wertet ihn nicht aus. Er wird erst bei der Übergabe des Jobs an den Worker ausgewertet, wo die Angaben im Klartext vorliegen (ADR-0314). In den Prozess kommt nur der Vorgesetzte zurück.
+
+Der Worker liest den Vorgesetzten über die Person (ADR-0172): Hat sie keinen, ist chef null. Kennt Entra ID die Person nicht, endet der Task mit dem BPMN-Fehler ENTRA_USER_NOT_FOUND, den «Person unbekannt» fängt. Ein technischer Fehler (Anmeldung, Berechtigung, Netz) bleibt ein Fehlschlag mit Wiederholungen und dann ein Incident, damit nicht still jede Genehmigung bei der Ersatzgruppe landet. Nennt die Bestellung niemanden, schlägt der Task ebenfalls fehl; die Bestellformulare verlangen die Angabe.
+
+Die Ausgabe formt chef um in vorgesetzter = {gefunden, grund, id, upn, mail, anzeigename}, die Form, die Kontosuche und Entscheider lesen. chef selbst bleibt im Task.</documentation>
       <extensionElements>
-        <atlas:jobScript language="powershell" resultVariable="vorgesetzter">$ErrorActionPreference = 'Stop'
-Set-StrictMode -Version Latest
-
-# Wessen Vorgesetzter gesucht wird. Ordnet der Task upnGesucht zu (Eskalation an den
-# nächsthöheren Vorgesetzten), gilt nur dieser Wert. Sonst die betroffene Person aus den
-# Bestellangaben: upn (Lizenz), besitzer (Team, Funktionspostfach) oder person
-# (Postfachzugriff). Diese Angaben sind Personendaten und im Prozess verschlüsselt; im
-# Klartext liegen sie nur hier im Worker vor, deshalb wählt das Skript und kein FEEL-Ausdruck.
-# Get-Variable statt $name, weil StrictMode eine nicht gesetzte Variable als Fehler meldet.
-$gesucht = $null
-$feld = Get-Variable -Name upnGesucht -ErrorAction SilentlyContinue
-if ($feld) {
-    $gesucht = [string]$feld.Value
-} else {
-    foreach ($name in 'upn', 'besitzer', 'person') {
-        $wert = [string](Get-Variable -Name $name -ValueOnly -ErrorAction SilentlyContinue)
-        if (-not [string]::IsNullOrWhiteSpace($wert)) { $gesucht = $wert; break }
-    }
-}
-if ([string]::IsNullOrWhiteSpace($gesucht)) {
-    [pscustomobject]@{ gefunden = $false; grund = 'keine-upn'; upn = $null; mail = $null; anzeigename = $null }
-    return
-}
-
-# Anmeldung app-only mit Zertifikat. Kein Geheimnis läuft durch Atlas: der private
-# Schlüssel bleibt im Zertifikatsspeicher des Worker-Kontos. Tenant, App-Registrierung
-# und Zertifikat sind Applikationskonstanten, weil sie je Installation verschieden sind.
-$tenant  = [string]$application.ENTRA_TENANT_ID
-$client  = [string]$application.ENTRA_CLIENT_ID
-$subject = [string]$application.ENTRA_CERTIFICATE_SUBJECT
-if ([string]::IsNullOrWhiteSpace($tenant) -or [string]::IsNullOrWhiteSpace($client) -or $tenant -eq 'nicht-gesetzt' -or $client -eq 'nicht-gesetzt') {
-    throw 'Die Applikationskonstanten ENTRA_TENANT_ID und ENTRA_CLIENT_ID sind nicht gesetzt (Applikation, Reiter Constants).'
-}
-$cert = Get-ChildItem Cert:\CurrentUser\My, Cert:\LocalMachine\My -ErrorAction SilentlyContinue |
-    Where-Object { $_.Subject -eq $subject -and $_.HasPrivateKey -and $_.NotAfter -gt (Get-Date) } |
-    Sort-Object NotAfter -Descending | Select-Object -First 1
-if (-not $cert) {
-    throw "Kein gültiges Zertifikat mit Subject '$subject' und privatem Schlüssel in Cert:\CurrentUser\My oder Cert:\LocalMachine\My des Worker-Kontos."
-}
-Connect-MgGraph -TenantId $tenant -ClientId $client -Certificate $cert -NoWelcome | Out-Null
-
-function Test-NichtGefunden($fehler) {
-    $status = $null
-    $antwort = $fehler.Exception.PSObject.Properties['Response']
-    if ($antwort -and $antwort.Value) { $status = [int]$antwort.Value.StatusCode }
-    return ($status -eq 404) -or ("$fehler" -match 'Request_ResourceNotFound|NotFound')
-}
-function Get-Wert($objekt, $name) {
-    $eigenschaft = $objekt.PSObject.Properties[$name]
-    if ($eigenschaft) { return $eigenschaft.Value }
-    return $null
-}
-
-$id = [uri]::EscapeDataString($gesucht.Trim())
-$ergebnis = [ordered]@{ gefunden = $false; grund = ''; upn = $null; mail = $null; anzeigename = $null }
-try {
-    $null = Invoke-MgGraphRequest -Method GET -OutputType PSObject -Uri "https://graph.microsoft.com/v1.0/users/$id`?`$select=id"
-} catch {
-    if (Test-NichtGefunden $_) { $ergebnis.grund = 'person-unbekannt' } else { throw }
-}
-if (-not $ergebnis.grund) {
-    try {
-        $chef = Invoke-MgGraphRequest -Method GET -OutputType PSObject -Uri "https://graph.microsoft.com/v1.0/users/$id/manager`?`$select=userPrincipalName,mail,displayName"
-        $ergebnis.gefunden    = $true
-        $ergebnis.upn         = Get-Wert $chef 'userPrincipalName'
-        $ergebnis.mail        = Get-Wert $chef 'mail'
-        $ergebnis.anzeigename = Get-Wert $chef 'displayName'
-    } catch {
-        if (Test-NichtGefunden $_) { $ergebnis.grund = 'kein-vorgesetzter' } else { throw }
-    }
-}
-[pscustomobject]$ergebnis</atlas:jobScript>
+        <atlas:entraConnector connector="ucc_entra" operation="get-user-manager" userId='=if upn != null and upn != "" then upn else if besitzer != null and besitzer != "" then besitzer else person' select="id,userPrincipalName,mail,displayName" resultVariable="chef"/>
+        <zeebe:ioMapping>
+          <zeebe:output source='=if chef = null then {gefunden: false, grund: "kein-vorgesetzter", id: null, upn: null, mail: null, anzeigename: null} else {gefunden: true, grund: "", id: chef.id, upn: chef.userPrincipalName, mail: chef.mail, anzeigename: chef.displayName}' target="vorgesetzter"/>
+        </zeebe:ioMapping>
       </extensionElements>
       <incoming>F_Ersatzgruppe_Graph</incoming>
       <outgoing>F_Graph_Gw</outgoing>
+    </serviceTask>
+
+    <boundaryEvent id="Unbekannt" name="Person unbekannt" attachedToRef="Graph">
+      <documentation>Fängt ENTRA_USER_NOT_FOUND: Entra ID kennt die Person nicht, die die Bestellung nennt. Ohne dieses Ereignis würde der Worker den Fehler nicht werfen, und die Bestellung hinge als Incident fest.</documentation>
+      <outgoing>F_Unbekannt_Festhalten</outgoing>
+      <errorEventDefinition errorRef="Err_PersonUnbekannt"/>
+    </boundaryEvent>
+
+    <scriptTask id="PersonUnbekannt" name="Unbekannte Person festhalten">
+      <documentation>Der Pfad von «Person unbekannt», meist ein Tippfehler in der Adresse im Bestellformular. vorgesetzter hält das in derselben Form fest wie die übrigen Antworten, mit grund person-unbekannt. Die Ersatzgruppe entscheidet, sieht den Grund und kann mit Begründung ablehnen.</documentation>
+      <extensionElements>
+        <zeebe:script expression='={gefunden: false, grund: "person-unbekannt", id: null, upn: null, mail: null, anzeigename: null}' resultVariable="vorgesetzter"/>
+      </extensionElements>
+      <incoming>F_Unbekannt_Festhalten</incoming>
+      <outgoing>F_Festhalten_Merge</outgoing>
     </scriptTask>
 
     <exclusiveGateway id="GwGefunden" name="Vorgesetzter gefunden?" default="F_Gw_Merge_Nein">
@@ -164,6 +107,7 @@ Nur der Treffer wird in den Prozess übernommen (vorgesetzterKonto); die Liste a
     <exclusiveGateway id="GwMerge">
       <incoming>F_Konto_Merge</incoming>
       <incoming>F_Gw_Merge_Nein</incoming>
+      <incoming>F_Festhalten_Merge</incoming>
       <outgoing>F_Merge_Entscheider</outgoing>
     </exclusiveGateway>
 
@@ -174,7 +118,7 @@ Nur der Treffer wird in den Prozess übernommen (vorgesetzterKonto); die Liste a
         <zeebe:ioMapping>
           <zeebe:output source="=vorgesetzterKonto" target="zuweisung"/>
           <zeebe:output source="=if vorgesetzterKonto = null then ersatzgruppe else vorgesetzterKonto" target="entscheider"/>
-          <zeebe:output source='=if vorgesetzterKonto != null then "Vorgesetzte Person der betroffenen Person" else if vorgesetzter.grund = "person-unbekannt" then "Ersatzgruppe: die betroffene Person ist in Entra ID unbekannt" else if vorgesetzter.grund = "kein-vorgesetzter" then "Ersatzgruppe: für die betroffene Person ist kein Vorgesetzter gepflegt" else if vorgesetzter.grund = "keine-upn" then "Ersatzgruppe: das Bestellformular nennt keine UPN" else "Ersatzgruppe: der Vorgesetzte " + (if vorgesetzter.upn = null then "-" else vorgesetzter.upn) + " hat kein Atlas-Konto"' target="entscheidungsweg"/>
+          <zeebe:output source='=if vorgesetzterKonto != null then "Vorgesetzte Person der betroffenen Person" else if vorgesetzter.grund = "person-unbekannt" then "Ersatzgruppe: die betroffene Person ist in Entra ID unbekannt" else if vorgesetzter.grund = "kein-vorgesetzter" then "Ersatzgruppe: für die betroffene Person ist kein Vorgesetzter gepflegt" else "Ersatzgruppe: der Vorgesetzte " + (if vorgesetzter.upn = null then "-" else vorgesetzter.upn) + " hat kein Atlas-Konto"' target="entscheidungsweg"/>
         </zeebe:ioMapping>
       </extensionElements>
       <incoming>F_Merge_Entscheider</incoming>
@@ -304,88 +248,24 @@ Nur der Treffer wird in den Prozess übernommen (vorgesetzterKonto); die Liste a
       <incoming>F_Erinnerung_Ende</incoming>
     </endEvent>
 
-    <scriptTask id="GraphNaechster" name="Nächsten Vorgesetzten lesen (Microsoft Graph)">
-      <documentation>Dasselbe Skript wie «Vorgesetzten lesen», gefragt nach dem Vorgesetzten des Vorgesetzten: upnGesucht hat Vorrang vor den Bestellangaben. Schreibt naechster.</documentation>
+    <serviceTask id="GraphNaechster" name="Nächsten Vorgesetzten lesen (Entra ID)">
+      <documentation>get-user-manager wie «Vorgesetzten lesen», gefragt nach dem Vorgesetzten des Vorgesetzten über dessen Objekt-ID (vorgesetzter.id). Schreibt naechster in derselben Form.
+
+Kennt Entra ID den Vorgesetzten nicht mehr, etwa weil er in den sieben Tagen ausgetreten ist, fängt «Vorgesetzter unbekannt» den Fehler: Die Genehmigung wird ohne neuen Vorgesetzten weitergereicht, und Atlas hält sie als festgefahren fest.</documentation>
       <extensionElements>
+        <atlas:entraConnector connector="ucc_entra" operation="get-user-manager" userId="=vorgesetzter.id" select="id,userPrincipalName,mail,displayName" resultVariable="chef"/>
         <zeebe:ioMapping>
-          <zeebe:input source="=vorgesetzter.upn" target="upnGesucht"/>
+          <zeebe:output source='=if chef = null then {gefunden: false, grund: "kein-vorgesetzter", id: null, upn: null, mail: null, anzeigename: null} else {gefunden: true, grund: "", id: chef.id, upn: chef.userPrincipalName, mail: chef.mail, anzeigename: chef.displayName}' target="naechster"/>
         </zeebe:ioMapping>
-        <atlas:jobScript language="powershell" resultVariable="naechster">$ErrorActionPreference = 'Stop'
-Set-StrictMode -Version Latest
-
-# Wessen Vorgesetzter gesucht wird. Ordnet der Task upnGesucht zu (Eskalation an den
-# nächsthöheren Vorgesetzten), gilt nur dieser Wert. Sonst die betroffene Person aus den
-# Bestellangaben: upn (Lizenz), besitzer (Team, Funktionspostfach) oder person
-# (Postfachzugriff). Diese Angaben sind Personendaten und im Prozess verschlüsselt; im
-# Klartext liegen sie nur hier im Worker vor, deshalb wählt das Skript und kein FEEL-Ausdruck.
-# Get-Variable statt $name, weil StrictMode eine nicht gesetzte Variable als Fehler meldet.
-$gesucht = $null
-$feld = Get-Variable -Name upnGesucht -ErrorAction SilentlyContinue
-if ($feld) {
-    $gesucht = [string]$feld.Value
-} else {
-    foreach ($name in 'upn', 'besitzer', 'person') {
-        $wert = [string](Get-Variable -Name $name -ValueOnly -ErrorAction SilentlyContinue)
-        if (-not [string]::IsNullOrWhiteSpace($wert)) { $gesucht = $wert; break }
-    }
-}
-if ([string]::IsNullOrWhiteSpace($gesucht)) {
-    [pscustomobject]@{ gefunden = $false; grund = 'keine-upn'; upn = $null; mail = $null; anzeigename = $null }
-    return
-}
-
-# Anmeldung app-only mit Zertifikat. Kein Geheimnis läuft durch Atlas: der private
-# Schlüssel bleibt im Zertifikatsspeicher des Worker-Kontos. Tenant, App-Registrierung
-# und Zertifikat sind Applikationskonstanten, weil sie je Installation verschieden sind.
-$tenant  = [string]$application.ENTRA_TENANT_ID
-$client  = [string]$application.ENTRA_CLIENT_ID
-$subject = [string]$application.ENTRA_CERTIFICATE_SUBJECT
-if ([string]::IsNullOrWhiteSpace($tenant) -or [string]::IsNullOrWhiteSpace($client) -or $tenant -eq 'nicht-gesetzt' -or $client -eq 'nicht-gesetzt') {
-    throw 'Die Applikationskonstanten ENTRA_TENANT_ID und ENTRA_CLIENT_ID sind nicht gesetzt (Applikation, Reiter Constants).'
-}
-$cert = Get-ChildItem Cert:\CurrentUser\My, Cert:\LocalMachine\My -ErrorAction SilentlyContinue |
-    Where-Object { $_.Subject -eq $subject -and $_.HasPrivateKey -and $_.NotAfter -gt (Get-Date) } |
-    Sort-Object NotAfter -Descending | Select-Object -First 1
-if (-not $cert) {
-    throw "Kein gültiges Zertifikat mit Subject '$subject' und privatem Schlüssel in Cert:\CurrentUser\My oder Cert:\LocalMachine\My des Worker-Kontos."
-}
-Connect-MgGraph -TenantId $tenant -ClientId $client -Certificate $cert -NoWelcome | Out-Null
-
-function Test-NichtGefunden($fehler) {
-    $status = $null
-    $antwort = $fehler.Exception.PSObject.Properties['Response']
-    if ($antwort -and $antwort.Value) { $status = [int]$antwort.Value.StatusCode }
-    return ($status -eq 404) -or ("$fehler" -match 'Request_ResourceNotFound|NotFound')
-}
-function Get-Wert($objekt, $name) {
-    $eigenschaft = $objekt.PSObject.Properties[$name]
-    if ($eigenschaft) { return $eigenschaft.Value }
-    return $null
-}
-
-$id = [uri]::EscapeDataString($gesucht.Trim())
-$ergebnis = [ordered]@{ gefunden = $false; grund = ''; upn = $null; mail = $null; anzeigename = $null }
-try {
-    $null = Invoke-MgGraphRequest -Method GET -OutputType PSObject -Uri "https://graph.microsoft.com/v1.0/users/$id`?`$select=id"
-} catch {
-    if (Test-NichtGefunden $_) { $ergebnis.grund = 'person-unbekannt' } else { throw }
-}
-if (-not $ergebnis.grund) {
-    try {
-        $chef = Invoke-MgGraphRequest -Method GET -OutputType PSObject -Uri "https://graph.microsoft.com/v1.0/users/$id/manager`?`$select=userPrincipalName,mail,displayName"
-        $ergebnis.gefunden    = $true
-        $ergebnis.upn         = Get-Wert $chef 'userPrincipalName'
-        $ergebnis.mail        = Get-Wert $chef 'mail'
-        $ergebnis.anzeigename = Get-Wert $chef 'displayName'
-    } catch {
-        if (Test-NichtGefunden $_) { $ergebnis.grund = 'kein-vorgesetzter' } else { throw }
-    }
-}
-[pscustomobject]$ergebnis</atlas:jobScript>
       </extensionElements>
       <incoming>F_Frist_Naechster</incoming>
       <outgoing>F_Naechster_Konto</outgoing>
-    </scriptTask>
+    </serviceTask>
+
+    <boundaryEvent id="UnbekanntNaechster" name="Vorgesetzter unbekannt" attachedToRef="GraphNaechster">
+      <outgoing>F_UnbekanntNaechster_Eskalieren</outgoing>
+      <errorEventDefinition errorRef="Err_PersonUnbekannt"/>
+    </boundaryEvent>
 
     <serviceTask id="KontoNaechster" name="Atlas-Konto des nächsten Vorgesetzten suchen">
       <extensionElements>
@@ -408,6 +288,7 @@ if (-not $ergebnis.grund) {
         </zeebe:ioMapping>
       </extensionElements>
       <incoming>F_KontoNaechster_Eskalieren</incoming>
+      <incoming>F_UnbekanntNaechster_Eskalieren</incoming>
       <outgoing>F_Eskalieren_Ende</outgoing>
     </serviceTask>
 
@@ -418,6 +299,8 @@ if (-not $ergebnis.grund) {
     <sequenceFlow id="F_Start_Ersatzgruppe" sourceRef="Start" targetRef="Ersatzgruppe"/>
     <sequenceFlow id="F_Ersatzgruppe_Graph" sourceRef="Ersatzgruppe" targetRef="Graph"/>
     <sequenceFlow id="F_Graph_Gw" sourceRef="Graph" targetRef="GwGefunden"/>
+    <sequenceFlow id="F_Unbekannt_Festhalten" sourceRef="Unbekannt" targetRef="PersonUnbekannt"/>
+    <sequenceFlow id="F_Festhalten_Merge" sourceRef="PersonUnbekannt" targetRef="GwMerge"/>
     <sequenceFlow id="F_Gw_Konto_Ja" name="ja" sourceRef="GwGefunden" targetRef="Konto">
       <conditionExpression>=vorgesetzter.gefunden = true</conditionExpression>
     </sequenceFlow>
@@ -448,6 +331,7 @@ if (-not $ergebnis.grund) {
     <sequenceFlow id="F_Naechster_Konto" sourceRef="GraphNaechster" targetRef="KontoNaechster"/>
     <sequenceFlow id="F_KontoNaechster_Eskalieren" sourceRef="KontoNaechster" targetRef="Eskalieren"/>
     <sequenceFlow id="F_Eskalieren_Ende" sourceRef="Eskalieren" targetRef="EndeFrist"/>
+    <sequenceFlow id="F_UnbekanntNaechster_Eskalieren" sourceRef="UnbekanntNaechster" targetRef="Eskalieren"/>
   </process>
 
   <bpmndi:BPMNDiagram id="Diagram">
@@ -461,6 +345,13 @@ if (-not $ergebnis.grund) {
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Graph" bpmnElement="Graph">
         <omgdc:Bounds x="390" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Unbekannt" bpmnElement="Unbekannt">
+        <omgdc:Bounds x="422" y="142" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="342" y="116" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_PersonUnbekannt" bpmnElement="PersonUnbekannt">
+        <omgdc:Bounds x="640" y="30" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_GwGefunden" bpmnElement="GwGefunden" isMarkerVisible="true">
         <omgdc:Bounds x="540" y="175" width="50" height="50"/>
@@ -534,6 +425,10 @@ if (-not $ergebnis.grund) {
       <bpmndi:BPMNShape id="S_GraphNaechster" bpmnElement="GraphNaechster">
         <omgdc:Bounds x="1440" y="580" width="100" height="80"/>
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_UnbekanntNaechster" bpmnElement="UnbekanntNaechster">
+        <omgdc:Bounds x="1472" y="642" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1500" y="682" width="120" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_KontoNaechster" bpmnElement="KontoNaechster">
         <omgdc:Bounds x="1590" y="580" width="100" height="80"/>
       </bpmndi:BPMNShape>
@@ -553,6 +448,12 @@ if (-not $ergebnis.grund) {
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Graph_Gw" bpmnElement="F_Graph_Gw">
         <omgdi:waypoint x="490" y="200"/><omgdi:waypoint x="540" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Unbekannt_Festhalten" bpmnElement="F_Unbekannt_Festhalten">
+        <omgdi:waypoint x="440" y="142"/><omgdi:waypoint x="440" y="70"/><omgdi:waypoint x="640" y="70"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Festhalten_Merge" bpmnElement="F_Festhalten_Merge">
+        <omgdi:waypoint x="740" y="70"/><omgdi:waypoint x="815" y="70"/><omgdi:waypoint x="815" y="175"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Gw_Konto_Ja" bpmnElement="F_Gw_Konto_Ja">
         <omgdi:waypoint x="590" y="200"/><omgdi:waypoint x="640" y="200"/>
@@ -628,6 +529,9 @@ if (-not $ergebnis.grund) {
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_KontoNaechster_Eskalieren" bpmnElement="F_KontoNaechster_Eskalieren">
         <omgdi:waypoint x="1690" y="620"/><omgdi:waypoint x="1740" y="620"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_UnbekanntNaechster_Eskalieren" bpmnElement="F_UnbekanntNaechster_Eskalieren">
+        <omgdi:waypoint x="1490" y="678"/><omgdi:waypoint x="1490" y="720"/><omgdi:waypoint x="1790" y="720"/><omgdi:waypoint x="1790" y="660"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Eskalieren_Ende" bpmnElement="F_Eskalieren_Ende">
         <omgdi:waypoint x="1840" y="620"/><omgdi:waypoint x="1890" y="620"/>

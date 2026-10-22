@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -18,14 +19,14 @@ import (
 // team or a mailbox is ordered for somebody named in the order form, and that
 // answer reaches only an approval model of the installation's own (ADR-0441). So
 // the example binds its products to proc_m365_genehmigung_vorgesetzter, which reads
-// the manager from Entra ID in a PowerShell script and hands the task to the
-// manager's Atlas account, or to a fallback group.
+// the manager from Entra ID with the Entra Worker's get-user-manager and hands the
+// task to the manager's Atlas account, or to a fallback group.
 //
 // The answers name people and are declared personal data (ADR-0314), so the engine
-// holds them enciphered and no engine expression may read them: the script picks
-// the person, and it is the worker that sees the plaintext. These tests run the
-// example's model on a real server, play the PowerShell worker by leasing its job,
-// and follow both ways a decision is reached.
+// holds them enciphered and no engine expression may read them: the task's userId
+// picks the person when the job is handed over, and it is the worker that sees the
+// plaintext. These tests run the example's model on a real server, play the Entra
+// worker by leasing its job, and follow every way a decision is reached.
 
 const m365ApprovalProcess = "proc_m365_genehmigung_vorgesetzter"
 
@@ -64,14 +65,15 @@ func TestTheM365ApprovalGoesToTheManagerOfTheTeamOwner(t *testing.T) {
 		"sichtbarkeit": "Private", "besitzer": "anna.beispiel@contoso.example",
 	})
 
-	// The script picks the person from the answers, so it must get them in the clear.
+	// The task's userId picks the person from the answers, so the job carries the
+	// plaintext the worker sends to Graph.
 	job := leaseM365Graph(t, ts, admin)
-	if got := job.Connector.Fields.Input["besitzer"]; got != "anna.beispiel@contoso.example" {
-		t.Fatalf("the PowerShell job got besitzer=%v, want the plaintext answer; input: %v",
-			got, job.Connector.Fields.Input)
+	if got := job.Connector.Fields["userId"]; got != "anna.beispiel@contoso.example" {
+		t.Fatalf("the Entra job got userId=%v, want the plaintext besitzer; fields: %v",
+			got, job.Connector.Fields)
 	}
-	completeM365Graph(t, ts, admin, job, `{"gefunden":true,"grund":"",`+
-		`"upn":"Chefin.Muster@contoso.example","mail":"chefin.muster@contoso.example","anzeigename":"Chefin Muster"}`)
+	completeM365Graph(t, ts, admin, job, `{"id":"m-1","userPrincipalName":"Chefin.Muster@contoso.example",`+
+		`"mail":"chefin.muster@contoso.example","displayName":"Chefin Muster"}`)
 
 	// The account is named after the part before the "@", as Atlas names an account
 	// from Entra ID, and its display name agrees: that is the manager.
@@ -120,15 +122,19 @@ func TestTheM365ApprovalFallsBackToTheGroupAndItsReasonReachesTheOrder(t *testin
 	})
 
 	job := leaseM365Graph(t, ts, admin)
-	if got := job.Connector.Fields.Input["person"]; got != "anna.beispiel@contoso.example" {
-		t.Fatalf("the PowerShell job got person=%v, want the plaintext answer; input: %v",
-			got, job.Connector.Fields.Input)
+	if got := job.Connector.Fields["userId"]; got != "anna.beispiel@contoso.example" {
+		t.Fatalf("the Entra job got userId=%v, want the plaintext person; fields: %v",
+			got, job.Connector.Fields)
 	}
-	completeM365Graph(t, ts, admin, job, `{"gefunden":false,"grund":"kein-vorgesetzter","upn":null,"mail":null,"anzeigename":null}`)
+	// Entra ID names no manager: get-user-manager answers null.
+	completeM365Graph(t, ts, admin, job, `null`)
 
 	task := awaitM365Task(t, ts, admin, "GenehmigenGruppe")
 	if task.CandidateGroups != "M365-Administration" {
 		t.Fatalf("the approval is offered to %q, want M365-Administration", task.CandidateGroups)
+	}
+	if got := m365Variables(t, ts, admin, task.ProcessInstanceKey)["entscheidungsweg"]; got != "Ersatzgruppe: für die betroffene Person ist kein Vorgesetzter gepflegt" {
+		t.Fatalf("entscheidungsweg = %v, want the missing manager named", got)
 	}
 	if code, b := cReq(t, mia.client, ts, "POST", fmt.Sprintf("/api/v1/tasks/%d/claim", task.Key), `{}`); code != http.StatusOK && code != http.StatusNoContent {
 		t.Fatalf("claim: %d (%s)", code, b)
@@ -145,6 +151,71 @@ func TestTheM365ApprovalFallsBackToTheGroupAndItsReasonReachesTheOrder(t *testin
 	if line.DecidedBy != mia.id {
 		t.Fatalf("the line was decided by %q, want mia (%s)", line.DecidedBy, mia.id)
 	}
+}
+
+// TestTheM365ApprovalAsksTheGroupWhenEntraDoesNotKnowThePerson: the order names
+// somebody Entra ID does not know — a mistyped address, typically. The worker ends the
+// job with ENTRA_USER_NOT_FOUND because the model catches it, and the fallback group
+// decides with that reason in front of it, instead of the order waiting on an incident.
+func TestTheM365ApprovalAsksTheGroupWhenEntraDoesNotKnowThePerson(t *testing.T) {
+	ts, admin := aServerThatCanCallItself(t)
+	setUpM365Approval(t, ts, admin)
+
+	orderM365(t, ts, admin, "m365-team", "m365-team-bestellung", map[string]string{
+		"bereich": "IT", "bezeichnung": "Projekt Atlas", "zweck": "Zusammenarbeit",
+		"sichtbarkeit": "Private", "besitzer": "anna.beisple@contoso.example",
+	})
+
+	job := leaseM365Graph(t, ts, admin)
+	// The worker throws the code only when the process catches it, and it can only know
+	// that from the job.
+	codes, _ := job.Connector.Fields["errorCodes"].([]any)
+	if !slices.Contains(codes, any("ENTRA_USER_NOT_FOUND")) {
+		t.Fatalf("the Entra job carries errorCodes %v, want ENTRA_USER_NOT_FOUND", job.Connector.Fields["errorCodes"])
+	}
+	body := fmt.Sprintf(`{"worker":"entra-test","leaseToken":%d,"errorCode":"ENTRA_USER_NOT_FOUND","errorMessage":"entra: get-user-manager: the user does not exist in Entra ID"}`, job.LeaseToken)
+	if code, b := cReq(t, admin, ts, "POST", fmt.Sprintf("/api/v1/jobs/%d/error", job.JobKey), body); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("throw the error: %d (%s)", code, b)
+	}
+
+	task := awaitM365Task(t, ts, admin, "GenehmigenGruppe")
+	if task.CandidateGroups != "M365-Administration" {
+		t.Fatalf("the approval is offered to %q, want M365-Administration", task.CandidateGroups)
+	}
+	if got := m365Variables(t, ts, admin, task.ProcessInstanceKey)["entscheidungsweg"]; got != "Ersatzgruppe: die betroffene Person ist in Entra ID unbekannt" {
+		t.Fatalf("entscheidungsweg = %v, want the unknown person named as the reason", got)
+	}
+	// The notification may raise its own incident here — this server has no mail worker
+	// and no such group — but the lookup must not.
+	code, inc := cReq(t, admin, ts, "GET", "/api/v1/incidents", "")
+	if code != http.StatusOK {
+		t.Fatalf("incidents: %d (%s)", code, inc)
+	}
+	var incidents []struct {
+		ElementID string `json:"elementId"`
+	}
+	if err := json.Unmarshal(listRows(t, inc), &incidents); err != nil {
+		t.Fatalf("decode incidents: %v (%s)", err, inc)
+	}
+	for _, i := range incidents {
+		if i.ElementID == "Graph" {
+			t.Fatalf("an unknown person raised an incident on the lookup: %s", inc)
+		}
+	}
+}
+
+// m365Variables reads what the approval instance holds.
+func m365Variables(t *testing.T, ts *httptest.Server, admin *http.Client, instance uint64) map[string]any {
+	t.Helper()
+	code, out := cReq(t, admin, ts, "GET", fmt.Sprintf("/api/v1/instances/%d/variables", instance), "")
+	if code != http.StatusOK {
+		t.Fatalf("variables: %d (%s)", code, out)
+	}
+	var vars map[string]any
+	if err := json.Unmarshal(out, &vars); err != nil {
+		t.Fatalf("decode variables: %v (%s)", err, out)
+	}
+	return vars
 }
 
 // setUpM365Approval puts the example's approval model and order forms on the
@@ -246,13 +317,11 @@ type m365GraphJob struct {
 	ElementID  string `json:"elementId"`
 	LeaseToken uint64 `json:"leaseToken"`
 	Connector  struct {
-		Fields struct {
-			Input map[string]any `json:"input"`
-		} `json:"fields"`
+		Fields map[string]any `json:"fields"`
 	} `json:"connector"`
 }
 
-// leaseM365Graph takes the "Vorgesetzten lesen" job the way a PowerShell worker does.
+// leaseM365Graph takes the "Vorgesetzten lesen" job the way an Entra worker does.
 // Polled, because the approval starts only after the order's orchestration has made
 // its own calls to this server.
 func leaseM365Graph(t *testing.T, ts *httptest.Server, admin *http.Client) m365GraphJob {
@@ -260,7 +329,7 @@ func leaseM365Graph(t *testing.T, ts *httptest.Server, admin *http.Client) m365G
 	deadline := time.Now().Add(20 * time.Second)
 	for {
 		code, raw := cReq(t, admin, ts, "POST", "/api/v1/jobs/activate",
-			`{"type":"io.atlas.script.powershell","worker":"pwsh-test","leaseMs":60000,"maxJobs":1}`)
+			`{"type":"io.atlas.entra","worker":"entra-test","leaseMs":60000,"maxJobs":1}`)
 		if code != http.StatusOK {
 			t.Fatalf("lease: %d (%s)", code, raw)
 		}
@@ -278,27 +347,33 @@ func leaseM365Graph(t *testing.T, ts *httptest.Server, admin *http.Client) m365G
 		}
 		if time.Now().After(deadline) {
 			_, inc := cReq(t, admin, ts, "GET", "/api/v1/incidents", "")
-			t.Fatalf("no PowerShell job for the approval.\nincidents: %s", inc)
+			t.Fatalf("no Entra job for the approval.\nincidents: %s", inc)
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
 }
 
-func completeM365Graph(t *testing.T, ts *httptest.Server, admin *http.Client, job m365GraphJob, vorgesetzter string) {
+// completeM365Graph answers the job as the Entra worker does: get-user-manager's
+// result variable holds the manager, or null when Entra ID names none.
+func completeM365Graph(t *testing.T, ts *httptest.Server, admin *http.Client, job m365GraphJob, chef string) {
 	t.Helper()
-	body := fmt.Sprintf(`{"worker":"pwsh-test","leaseToken":%d,"variables":{"vorgesetzter":%s}}`, job.LeaseToken, vorgesetzter)
+	if got := job.Connector.Fields["operation"]; got != "get-user-manager" {
+		t.Fatalf("the Entra job asks for %v, want get-user-manager", got)
+	}
+	body := fmt.Sprintf(`{"worker":"entra-test","leaseToken":%d,"variables":{"chef":%s}}`, job.LeaseToken, chef)
 	if code, b := cReq(t, admin, ts, "POST", fmt.Sprintf("/api/v1/jobs/%d/complete", job.JobKey), body); code != http.StatusOK && code != http.StatusNoContent {
-		t.Fatalf("complete the PowerShell job: %d (%s)", code, b)
+		t.Fatalf("complete the Entra job: %d (%s)", code, b)
 	}
 }
 
 type m365Task struct {
-	Key             uint64 `json:"key"`
-	ProcessID       string `json:"processId"`
-	ElementID       string `json:"elementId"`
-	Assignee        string `json:"assignee"`
-	CandidateGroups string `json:"candidateGroups"`
-	FormID          string `json:"formId"`
+	Key                uint64 `json:"key"`
+	ProcessInstanceKey uint64 `json:"processInstanceKey"`
+	ProcessID          string `json:"processId"`
+	ElementID          string `json:"elementId"`
+	Assignee           string `json:"assignee"`
+	CandidateGroups    string `json:"candidateGroups"`
+	FormID             string `json:"formId"`
 }
 
 func awaitM365Task(t *testing.T, ts *httptest.Server, admin *http.Client, element string) m365Task {

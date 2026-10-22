@@ -70,12 +70,15 @@ Genehmigungsprozess der Installation selbst (ADR-0441).
 
 Ablauf:
 
-1. **Vorgesetzten lesen.** Ein PowerShell-Skript wählt die betroffene Person aus den
-   Bestellangaben und liest in Entra ID ihren Vorgesetzten
-   (`GET /users/{upn}/manager`, Microsoft Graph, app-only mit Zertifikat). «Person
-   unbekannt», «kein Vorgesetzter» und «keine UPN» sind Antworten, kein Fehler. Ein
-   technischer Fehler (Anmeldung, Berechtigung, Netz) wird zum Incident, damit nicht still
-   jede Genehmigung bei der Ersatzgruppe landet.
+1. **Vorgesetzten lesen.** Eine Entra-Aufgabe mit der Operation `get-user-manager` liest
+   über den Worker `ucc_entra` den Vorgesetzten der betroffenen Person; welche Person das
+   ist, wählt ihr `userId`-Ausdruck aus den Bestellangaben. «Kein Vorgesetzter» ist eine
+   Antwort (das Ergebnis ist leer). Kennt Entra ID die Person nicht, endet die Aufgabe mit
+   dem BPMN-Fehler `ENTRA_USER_NOT_FOUND`, den ein Fehler-Grenzereignis fängt. Beide Fälle
+   führen zur Ersatzgruppe, die den Grund sieht. Ein technischer Fehler (Anmeldung,
+   Berechtigung, Netz) wird zum Incident, damit nicht still jede Genehmigung bei der
+   Ersatzgruppe landet. Nennt die Bestellung niemanden, schlägt die Aufgabe ebenfalls
+   fehl; die Bestellformulare verlangen die Angabe.
 2. **Atlas-Konto suchen** (`GET /api/v1/users/assignable`). Treffer ist ein Konto, dessen
    Benutzername gleich der UPN oder der Mailadresse des Vorgesetzten ist; sonst genau ein
    Konto mit dem Teil vor dem «@» als Benutzernamen (kleingeschrieben, nur `a-z 0-9 . - _`,
@@ -94,7 +97,9 @@ nächsthöheren Vorgesetzten weiter (`…/escalate`). Die Aufgabe bleibt dabei o
 **Personendaten.** `upn`, `besitzer`, `person`, `postfach` und `anlass` sind im
 Genehmigungsprozess als Personendaten der empfangenden Person deklariert. Kein Ausdruck, den
 die Engine auswertet, liest sie (der Compiler weist das zurück): die betroffene Person wählt
-das Skript, und den Text der Mail bildet der Mail-Worker; beide erhalten den Klartext. Der
+der `userId`-Ausdruck der Entra-Aufgabe, der erst bei der Übergabe des Jobs an den Worker
+ausgewertet wird, und den Text der Mail bildet der Mail-Worker; beide erhalten den
+Klartext. Der
 Vorgesetzte ist nicht deklariert, weil er nicht die empfangende Person ist und Gateway und
 Kontosuche ihn lesen.
 
@@ -175,11 +180,8 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
    den Server dann nie.
 3. **Für die Genehmigung durch die vorgesetzte Person** (Lizenz, Team, Funktionspostfach,
    Postfachzugriff):
-   - ein Worker für PowerShell-Skripte (`io.atlas.script.powershell`) mit dem Modul
-     `Microsoft.Graph.Authentication`;
-   - eine App-Registrierung mit der Anwendungsberechtigung `User.Read.All` und ein
-     Zertifikat mit privatem Schlüssel im Speicher des Worker-Kontos
-     (`Cert:\CurrentUser\My` oder `Cert:\LocalMachine\My`);
+   - der Worker `ucc_entra` aus Punkt 1; er liest den Vorgesetzten mit `User.Read.All`,
+     das in `User.ReadWrite.All` enthalten ist;
    - Atlas-Konten der vorgesetzten Personen, am einfachsten aus der Kontenspiegelung von
      Entra ID; wer kein Konto hat, wird durch die Ersatzgruppe vertreten;
    - der Vault des Servers (Vorgabe), weil der Prozess Personendaten deklariert;
@@ -197,13 +199,6 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
    | `USAGE_LOCATION` | `CH` | Nutzungsort, ohne den Graph keine Lizenz zuweist |
    | `PARTNER_UPN_DOMAIN` | `contoso.onmicrosoft.com` | Domain der Partnerkonten |
    | `ATLAS_API_BASE` | `http://127.0.0.1:8080` | Adresse, unter der die Prozesse Atlas selbst erreichen, wenn eine Rückgabe oder Aktion sie nicht mitbringt |
-   | `ENTRA_TENANT_ID` | `nicht-gesetzt` | Tenant für die Abfrage des Vorgesetzten |
-   | `ENTRA_CLIENT_ID` | `nicht-gesetzt` | Anwendungs-ID der App-Registrierung mit `User.Read.All` |
-   | `ENTRA_CERTIFICATE_SUBJECT` | `CN=atlas-m365-graph` | Subject des Zertifikats im Speicher des PowerShell-Workers |
-
-   `nicht-gesetzt` ist ein Ersatzwert, damit eine Bestellung nicht schon beim Start
-   abgewiesen wird. Steht er beim Lauf noch dort, meldet das Skript einen Incident, der die
-   fehlende Konstante nennt.
 
 ## Installieren
 
@@ -311,11 +306,14 @@ gegen einen echten Server: Bestellung eines Teams und eines Postfachzugriffs mit
 Bestellformularen dieses Pakets, der Job «Vorgesetzten lesen» erhält die Antworten im
 Klartext, die Aufgabe geht an das Konto der vorgesetzten Person bzw. an
 `M365-Administration`, die Zustimmung startet die Bereitstellung mit `approvedBy`, die
-Ablehnung erreicht den Auftrag mit der Begründung der genehmigenden Person. Die Antwort des
-PowerShell-Skripts spielt der Test selbst.
+Ablehnung erreicht den Auftrag mit der Begründung der genehmigenden Person; eine Person,
+die Entra ID nicht kennt (`ENTRA_USER_NOT_FOUND`), geht mit diesem Grund an die
+Ersatzgruppe und nicht in einen Incident. Den Entra-Worker spielt der Test selbst: Er
+übernimmt den Job und antwortet mit dem Vorgesetzten, ohne Vorgesetzten oder mit dem
+Fehler.
 
 Nicht geprüft: die Entra- und Exchange-Schritte gegen einen echten Tenant (für diese
-Worker gibt es keinen Mock), das PowerShell-Skript der Genehmigung gegen Microsoft Graph,
+Worker gibt es keinen Mock), `get-user-manager` gegen Microsoft Graph,
 die Mail an die genehmigende Person, die Eskalation nach sieben Tagen, die
 Governance-Prüfung gegen echte Daten und `installieren.ps1` (in der Prüfumgebung stand keine
 PowerShell zur Verfügung).

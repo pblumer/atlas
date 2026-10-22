@@ -19,7 +19,10 @@ _Changed_ / _Removed_ for each version.
   `select` names which of the manager's properties come back. A person without a manager
   is `null`, so a process can route an approval to a fallback approver; an id that belongs
   to nobody still fails the task, because the worker reads the manager through the user
-  (`$expand=manager`) rather than from `/users/{id}/manager`, which answers 404 to both
+  (`$expand=manager`) rather than from `/users/{id}/manager`, which answers 404 to both.
+  A process that catches the BPMN error `ENTRA_USER_NOT_FOUND` — an error boundary on the
+  task — gets the unknown id as that error instead, at once and without retries, and can
+  route it as well; uncaught, it stays a failure and then an incident
   ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended 2026-10-22).
 
 - **An account can name its line manager.** `managerId` on an account is the principal id
@@ -54,16 +57,17 @@ _Changed_ / _Removed_ for each version.
   built-in kind `superior`, which asks the manager of the person who *ordered* and finds
   that manager only through a directory worker. They now name the example's own approval
   model, `proc_m365_genehmigung_vorgesetzter`: it receives the order form's answers
-  (ADR-0441), reads the manager of `upn`, `besitzer` or `person` from Entra ID in a
-  PowerShell script (Microsoft Graph, app-only with a certificate), assigns the task to the
-  manager's Atlas account, and falls back to `approval.ref` or the group
-  `M365-Administration` when there is no manager, no such person or no account. It mails the
-  approver, reminds after three days and escalates to the next manager after seven. The
-  answers are declared personal data in that model, so the script and the mail worker are
-  the only places they are read in the clear. The mailbox-access order form's
-  justification is now keyed `anlass` rather than `begruendung`, the variable the inbox
-  writes a refusal's reason to. New constants `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` and
-  `ENTRA_CERTIFICATE_SUBJECT`; the README lists what the operator sets up.
+  (ADR-0441), reads the manager of `upn`, `besitzer` or `person` from Entra ID with the
+  Entra Worker's `get-user-manager` through `ucc_entra`, assigns the task to the manager's
+  Atlas account, and falls back to `approval.ref` or the group `M365-Administration` when
+  there is no manager, no such person (`ENTRA_USER_NOT_FOUND`, caught by an error boundary)
+  or no account. It mails the approver, reminds after three days and escalates to the next
+  manager after seven. The answers are declared personal data in that model, so the Entra
+  task's `userId`, evaluated when its job is handed to the worker, and the mail worker are
+  the only places they are read in the clear. The mailbox-access order form's justification
+  is now keyed `anlass` rather than `begruendung`, the variable the inbox writes a
+  refusal's reason to. The README lists what the operator sets up; beyond the `ucc_entra`
+  Worker the other products already use, the lookup needs nothing new.
   `TestEveryFormReferenceResolves` accepts the platform's approval form `genehmigung`,
   which an installation's own approval model names to get the inbox's Genehmigen and
   Ablehnen, for as long as the system bundle declares it.

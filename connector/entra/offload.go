@@ -5,14 +5,18 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
@@ -190,7 +194,23 @@ type Job struct {
 	// filter that needed the header, which is how this was found.
 	Advanced       bool   `json:"advancedQuery,omitempty"`
 	ResultVariable string `json:"resultVariable,omitempty"`
+	// ErrorCodes are the codes an error boundary or error event subprocess of the task's
+	// process catches. An answer under one of them is thrown as a BPMN error; anything
+	// else is a failure (ADR-0461). They travel with the job because a worker has no
+	// compiled process to ask.
+	ErrorCodes []string `json:"errorCodes,omitempty"`
 }
+
+// CodeUserNotFound is the BPMN error get-user-manager ends with when the user it reads
+// through does not exist — Graph's 404 with Request_ResourceNotFound — and the task's
+// process catches the code (ADR-0172, amended 2026-10-22). A process asking for a
+// person's manager usually has a path for that answer: the person was typed into an
+// order form, and somebody should decide instead. Uncaught, it stays the failure it
+// always was, with its retries and then an incident.
+const CodeUserNotFound = "ENTRA_USER_NOT_FOUND"
+
+// Codes lists every code an operation of this worker can throw.
+var Codes = []string{CodeUserNotFound}
 
 // Resolve turns a compiled Entra task into a [Job]: the authored ids
 // evaluated against the instance's variables, and the attributes object read up the
@@ -235,6 +255,7 @@ func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.Conn
 		Search:         resolveValue(detail.EntraSearch, elementInstanceKey, vars),
 		Advanced:       detail.EntraAdvanced,
 		ResultVariable: cp.Intern(detail.ResultVar),
+		ErrorCodes:     cp.CaughtErrorCodes(),
 	}
 	if spec.NeedsAttributes {
 		// Inline attributes (a FEEL context compiled from the modeler's JSON template)
@@ -342,7 +363,7 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 	}
 	res, err := client.Call(ctx, request(j, spec, client.BaseURL()))
 	if err != nil {
-		return nil, err
+		return nil, thrown(j, spec, err)
 	}
 	if spec.IsBinary {
 		return map[string]any{j.ResultVariable: photoResult(res)}, nil
@@ -358,6 +379,27 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 		return nil, nil
 	}
 	return map[string]any{j.ResultVariable: res}, nil
+}
+
+// thrown is err as the job ends with it. A read through the user that Graph answers
+// with Request_ResourceNotFound says the user does not exist, and becomes
+// [CodeUserNotFound] when the task's process catches that code, so the instance takes
+// its path at once instead of spending retries on an answer that will not change.
+// Anything else stays a failure (ADR-0461's rule).
+//
+// Graph's code is required as well as the 404: a 404 from a proxy or a wrong base URL
+// is not Graph saying the person does not exist, and routing it as if it were would
+// send every order to the fallback in silence. The message names no user, because it
+// is kept with the error and the id is often a value the process keeps enciphered.
+func thrown(j Job, spec Op, err error) error {
+	var ge *GraphError
+	if spec.Expands == "" || !errors.As(err, &ge) || ge.Status != http.StatusNotFound || ge.Code != "Request_ResourceNotFound" {
+		return err
+	}
+	if !slices.Contains(j.ErrorCodes, CodeUserNotFound) {
+		return err
+	}
+	return &job.BPMNError{Code: CodeUserNotFound, Message: "entra: " + j.Operation + ": the user does not exist in Entra ID"}
 }
 
 // expandedObject takes the expanded navigation property out of the user it was read

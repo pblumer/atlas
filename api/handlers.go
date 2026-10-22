@@ -6989,7 +6989,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"groupId": j.GroupID, "attributes": j.Attributes, "newPassword": j.NewPassword,
 			"filter": j.Filter, "select": j.Select, "pageSize": j.PageSize, "maxUsers": j.MaxUsers,
 			"search": j.Search, "advancedQuery": j.Advanced, "deltaLink": j.DeltaLink,
-			"resultVariable": j.ResultVariable,
+			"resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
 		}}
 	case compiler.ExchangeJobTypeIndex:
 		// Entra's arm with Exchange's operation: the operation and its evaluated
