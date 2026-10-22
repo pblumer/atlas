@@ -126,6 +126,16 @@ func TestTheAPITokenPageAgreesWithTheServer(t *testing.T) {
 	if days, _ := strconv.Atoi(m[1]); days != int(maxAPITokenLifetime/(24*time.Hour)) {
 		t.Errorf("the page allows %d days, the server %d", days, int(maxAPITokenLifetime/(24*time.Hour)))
 	}
+
+	// The warning window: the page and the atlas_api_tokens_expiring_soon alert warn
+	// about the same tokens, or an operator is told twice different things.
+	m = regexp.MustCompile(`export const EXPIRY_WARN_DAYS = (\d+);`).FindStringSubmatch(src)
+	if m == nil {
+		t.Fatal("web/apitokens.js has no `export const EXPIRY_WARN_DAYS = <n>;`")
+	}
+	if days, _ := strconv.Atoi(m[1]); days != int(apiTokenExpiryWarning/(24*time.Hour)) {
+		t.Errorf("the page warns %d days ahead, /metrics %d", days, int(apiTokenExpiryWarning/(24*time.Hour)))
+	}
 }
 
 // TestEveryMessageTheAPITokenPageAsksForExists: every key the page looks up is in
