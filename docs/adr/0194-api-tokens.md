@@ -188,7 +188,8 @@ from the page when the reader leaves, and asks before revoking. A token with les
 days left is flagged on the page and, for administrators, on the dashboard, because an
 expiry is otherwise silent until the machine holding the token starts failing. The
 threshold is the Console's, computed from `expiresAt`; the server has no notion of
-"soon". It adds nothing the three routes did not already do.
+"soon" (until the amendment of 2026-10-22, which gives `/metrics` the same window). It
+adds nothing the three routes did not already do.
 
 **`POST /api/v1/api-tokens` takes an optional `vaultSecret`.** The shop's system
 processes call Atlas with `authSecret="atlas"` (ADR-0411), so the token they need has to
@@ -223,6 +224,43 @@ Rejected: having the Console mint the token and then write it with
 `PUT /api/v1/secrets/{name}`. It needs no API change, but it is the same two crossings
 with a browser in the middle instead of a person, and it is not all or nothing — a
 failed second call leaves a token whose secret the page holds and nobody else.
+
+## Amendment (2026-10-22): token expiry on `/metrics`
+
+The Console's warning reaches whoever opens the Console, and a token held by a machine
+tends to run out when nobody is looking. So the same warning now also goes where an
+alert can read it: three gauges on `/metrics`, read at scrape time from the in-memory
+index authentication already uses, and none of them with a label.
+
+- **`atlas_api_tokens_expiring_soon`** — tokens still accepted with less than 30 days
+  left. Same window and same boundaries as the page: the window is a server constant
+  now (`apiTokenExpiryWarning`), and a test holds the page's `EXPIRY_WARN_DAYS` equal to
+  it, so the page and an alert never disagree about which tokens are in trouble.
+- **`atlas_api_tokens_expired`** — tokens past their expiry and not yet revoked. It is
+  there because of the first one: a token leaves "soon" by expiring, so an alert on
+  `expiring_soon` alone resolves at exactly the moment the machine starts failing. A
+  token whose expiry is this very second counts here, as it does for `match`.
+- **`atlas_api_token_next_expiry_timestamp_seconds`** — the earliest expiry among the
+  tokens still accepted, for an operator whose margin is not thirty days. `+Inf` when
+  none runs out: "never" is a known answer, and ADR-0142 reserves an absent series for
+  a number that could not be read.
+
+**No series names a token.** A token's name is a value an administrator invents, which
+is what ADR-0142's cardinality rule keeps out of labels — and `/metrics` is readable
+with a `metrics`-scoped token (ADR-0198), whose holder would otherwise read the
+server's credential inventory off it. What such a holder does learn is how many tokens
+are about to expire and when the next one does: the shape of the estate, not a
+credential or its owner, and judged acceptable on those grounds. Which token is the
+listing's answer, to an administrator.
+
+Nothing is counted as tokens are used, and the run loop is not involved: the index is
+the handler-side structure authentication reads under its own lock (I1, I3). The clock
+is the server's, which in production is the wall clock `match` reads.
+
+Rejected: one series per token, labelled with its name — the shape certificate
+exporters use, and the one the cardinality rule exists to forbid. Rejected: Atlas
+raising the alarm itself; it does not alert on its own (ADR-0142), and an alert rule on
+these gauges is one line of the operator's Prometheus configuration.
 
 ## Pros and cons of the options
 

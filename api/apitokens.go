@@ -26,6 +26,13 @@ import (
 // far out makes an absurd value (a typo of a hundred years) fail loudly.
 const maxAPITokenLifetime = 5 * 365 * 24 * time.Hour
 
+// apiTokenExpiryWarning is how far ahead a token's expiry is warned about, on the
+// Console (EXPIRY_WARN_DAYS in web/apitokens.js) and on /metrics alike, so the page
+// and an alert never disagree about which tokens are in trouble. A token that runs
+// out fails every call its machine makes from then on; thirty days leaves room to
+// mint a replacement and get it through a change process.
+const apiTokenExpiryWarning = 30 * 24 * time.Hour
+
 // newAPITokenResp is the mint response: the only time the secret exists outside
 // the caller's memory. Token is empty, and therefore absent, when the secret was
 // sealed in the vault instead: then it never leaves the server at all.
