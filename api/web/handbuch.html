@@ -5029,8 +5029,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               unbeantworteten Zeilen, und die bleiben unbeantwortet: „Schweigen heisst behalten“ erfindet
               eine Bestätigung, die niemand gegeben hat, „Schweigen heisst entziehen“ sperrt Leute aus,
               weil jemand in den Ferien war. <code>undecided</code> ist deshalb eine eigene Zahl und kein
-              Rest. Das Modell legt fest, wer prüft, nicht atlas – eine Vorgesetztensuche ist eine
-              Verzeichnisfrage, genau wie bei der Genehmigungsregel <code>superior</code>.</p>
+              Rest. Das Modell legt fest, wer prüft, nicht atlas. Die Genehmigungsregel
+              <code>superior</code> nimmt den Linienvorgesetzten aus dem Konto; eine Kampagne kann
+              dagegen andere Prüfende brauchen als die Linie, und das entscheidet ihr Prozess.</p>
             <p data-l="en">The whole design is a refusal to make a signature cheap. There is <b>no way to
               answer several rows at once</b> – not in the screen and not in the API. A campaign answered
               in bulk is a signature with no reading behind it, and that is worse than none, because an
@@ -5039,8 +5040,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               it and they stay unanswered: "silence means keep" invents an attestation nobody gave,
               "silence means revoke" locks people out because somebody was on holiday. So
               <code>undecided</code> is a first-class count rather than a remainder. Who reviews is the
-              model's to decide, not atlas's – a line-manager lookup is a directory question, exactly as
-              it is for the <code>superior</code> approval rule.</p>
+              model's to decide, not atlas's. The <code>superior</code> approval rule takes the line
+              manager from the account; a campaign may need other reviewers than the line, and its
+              process decides that.</p>
           </div>
         </div>
         <div class="rz-actions"></div>
@@ -9958,6 +9960,38 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         a worker is shared with the team once instead of person by person. A membership change takes effect at
         the member's next sign-in.</p>
 
+      <h3 data-l="de">Linienvorgesetzte</h3><h3 data-l="en">Line managers</h3>
+      <p data-l="de">Ein Konto kann seinen <b>Linienvorgesetzten</b> nennen, als Verweis auf ein anderes Konto. Eine
+        Genehmigung der Art <code>superior</code> geht an diese Person, wenn die Person bestellt, und eine
+        Eskalation geht von dort eine Stufe weiter hinauf. Atlas speichert dabei nur die ID des anderen Kontos,
+        keinen Namen. Gesetzt wird der Linienvorgesetzte auf zwei Wegen:</p>
+      <ul data-l="de">
+        <li>im Konto unter <a href="/#/console/org">Organization</a>, Feld <b>Line manager</b>, oder mit
+          <code>PATCH /api/v1/users/{id}</code> und <code>managerId</code>;</li>
+        <li>durch den Entra-Abgleich, wenn sein Modell <code>manager</code> mitliest. Dann gehört das Feld dem
+          Verzeichnis: Die Console zeigt es nur an, und eine Änderung machst du in Entra ID. Nennt das
+          Verzeichnis eine Person, die noch kein Konto hat, merkt sich Atlas ihre Objekt-ID und ordnet sie
+          zu, sobald ein späterer Lauf das Konto liest.</li>
+      </ul>
+      <p data-l="de">Hat die bestellende Person keinen Linienvorgesetzten, ist er deaktiviert oder hat er kein
+        Konto mehr, startet die Genehmigung nicht. Der Erfüllungsprozess meldet dann einen Incident, der den
+        Grund nennt. Trägst du den Linienvorgesetzten nach und löst den Incident auf, startet die Genehmigung.</p>
+      <p data-l="en">An account can name its <b>line manager</b>, as a reference to another account. An approval of
+        the kind <code>superior</code> goes to that person when the account orders, and an escalation goes one
+        level further up from there. Atlas stores only the other account's id, no name. The line manager is set
+        in one of two ways:</p>
+      <ul data-l="en">
+        <li>on the account under <a href="/#/console/org">Organization</a>, field <b>Line manager</b>, or with
+          <code>PATCH /api/v1/users/{id}</code> and <code>managerId</code>;</li>
+        <li>by the Entra mirror, when its model reads <code>manager</code>. The field then belongs to the
+          directory: the Console only shows it, and you change it in Entra ID. When the directory names somebody
+          who has no account yet, Atlas keeps their object id and resolves it once a later run reads the
+          account.</li>
+      </ul>
+      <p data-l="en">When the orderer has no line manager, or theirs is disabled or has no account any more, the
+        approval does not start. The fulfilment process then reports an incident that says why. Set the line
+        manager, resolve the incident, and the approval starts.</p>
+
       <h3 data-l="de">Wer gerade angemeldet ist</h3><h3 data-l="en">Who is signed in right now</h3>
       <p data-l="de">Die Benutzerliste hat neben <b>Status</b> – darf sich anmelden – eine Spalte <b>Presence</b>:
         Ist gerade jemand da. <b>Online</b> heisst, in den letzten fünf Minuten hat diese Person etwas getan;
@@ -11618,7 +11652,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
           <tr><td><code>provisionProcess</code></td><td>string</td><td></td><td data-l="de">Der Prozess, der die Position nach der Genehmigung bereitstellt.</td><td data-l="en">The process that provisions the position once it is approved.</td></tr>
           <tr><td><code>atlasApiBase</code></td><td>string</td><td></td><td data-l="de">Die eigene API-Adresse dieses Servers.</td><td data-l="en">This server&#39;s own API address.</td></tr>
           <tr><td><code>portalBaseUrl</code></td><td>string</td><td></td><td data-l="de">Die externe Adresse des Portals; leer, wo keine gesetzt ist.</td><td data-l="en">The external address of the portal; empty where none is set.</td></tr>
-          <tr><td><code>vorgesetzter</code></td><td>string</td><td><span data-l="de">optional</span><span data-l="en">optional</span></td><td data-l="de">Nur bei superior: die im Verzeichnis gefundene vorgesetzte Person, dieselbe wie approver.</td><td data-l="en">For superior only: the line manager found in the directory, the same as approver.</td></tr>
+          <tr><td><code>vorgesetzter</code></td><td>string</td><td><span data-l="de">optional</span><span data-l="en">optional</span></td><td data-l="de">Nur bei superior: die vorgesetzte Person der bestellenden Person, wie ihr Konto sie nennt, dieselbe wie approver.</td><td data-l="en">For superior only: the orderer&#39;s line manager as their account records it, the same as approver.</td></tr>
         </tbody>
       </table>
       <h3 id="ev-atlas-incident-raised"><code>atlas.incident.raised</code></h3>

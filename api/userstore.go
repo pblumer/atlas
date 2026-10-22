@@ -147,6 +147,24 @@ type User struct {
 	// the way in is what lets the lookup be an equality test.
 	DirectoryID string `json:"directoryId,omitempty"`
 
+	// ManagerID is the principal id of this person's line manager, and the only
+	// field read at run time: a `superior` approval starts with it, and an escalation
+	// asking for the line manager follows it one level up
+	// (ADR-0470).
+	//
+	// A reference and not a name, for ADR-0314's reason: what an approval routes on
+	// ends up in a variable and in the log, and a principal id is the one thing about
+	// a person that may.
+	ManagerID string `json:"managerId,omitempty"`
+
+	// ManagerDirectoryID is the directory object id of the manager, as the mirror last
+	// reported it, lower-cased like DirectoryID. While it is set the directory owns
+	// this account's manager: the mirror resolves it to ManagerID once the manager's
+	// own account exists here, and an administrator may not set ManagerID by hand —
+	// a value typed here must not outlive the directory changing it (ADR-0315's rule
+	// for the integration manager).
+	ManagerDirectoryID string `json:"managerDirectoryId,omitempty"`
+
 	// AvatarSource says where this account's picture came from — AvatarUploaded or
 	// AvatarFromDirectory — and is empty when there is none (ADR-0368).
 	//
@@ -211,8 +229,13 @@ type publicUser struct {
 	// list of people ask for the pictures that exist instead of a request per row
 	// that mostly 404s.
 	AvatarSource string `json:"avatarSource,omitempty"`
-	CreatedAt    int64  `json:"createdAt"`
-	UpdatedAt    int64  `json:"updatedAt"`
+	// ManagerID and ManagerDirectoryID are the account's line manager and, when the
+	// directory owns it, the directory's id for them — which is what the Console
+	// needs to show the field read-only (ADR-0470).
+	ManagerID          string `json:"managerId,omitempty"`
+	ManagerDirectoryID string `json:"managerDirectoryId,omitempty"`
+	CreatedAt          int64  `json:"createdAt"`
+	UpdatedAt          int64  `json:"updatedAt"`
 }
 
 // toPublic strips the secret and normalizes Roles to a non-nil slice so the JSON
@@ -223,16 +246,18 @@ func (u User) toPublic() publicUser {
 		roles = []string{}
 	}
 	return publicUser{
-		ID:           u.ID,
-		Username:     u.Username,
-		Email:        u.Email,
-		DisplayName:  u.DisplayName,
-		Roles:        roles,
-		Disabled:     u.Disabled,
-		Source:       u.Source,
-		AvatarSource: u.AvatarSource,
-		CreatedAt:    u.CreatedAt,
-		UpdatedAt:    u.UpdatedAt,
+		ID:                 u.ID,
+		Username:           u.Username,
+		Email:              u.Email,
+		DisplayName:        u.DisplayName,
+		Roles:              roles,
+		Disabled:           u.Disabled,
+		Source:             u.Source,
+		AvatarSource:       u.AvatarSource,
+		ManagerID:          u.ManagerID,
+		ManagerDirectoryID: u.ManagerDirectoryID,
+		CreatedAt:          u.CreatedAt,
+		UpdatedAt:          u.UpdatedAt,
 	}
 }
 

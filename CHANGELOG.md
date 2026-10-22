@@ -35,6 +35,23 @@ _Changed_ / _Removed_ for each version.
   place of `clientSecret`; the token comes from the same client-credentials grant with
   a signed client assertion, so the private key never leaves the worker. A bundle
   naming no `method` is a client-credentials bundle.
+- **The Entra Worker reads a person's manager.** A new operation, `get-user-manager`,
+  writes the manager's directory object for a `userId` into a result variable; an optional
+  `select` names which of the manager's properties come back. A person without a manager
+  is `null`, so a process can route an approval to a fallback approver; an id that belongs
+  to nobody still fails the task, because the worker reads the manager through the user
+  (`$expand=manager`) rather than from `/users/{id}/manager`, which answers 404 to both
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended 2026-10-22).
+
+- **An account can name its line manager.** `managerId` on an account is the principal id
+  of the person's line manager. An administrator sets it under Console → Administration →
+  Organization (field *Line manager*) or with `PATCH /api/v1/users/{id}`. The Entra mirror
+  fills it when its model selects `manager`: it reads `manager@delta`, or a plain `manager`
+  object, keeps the manager's object id in `managerDirectoryId`, and resolves it to the
+  manager's account on the run that reads that account. While the directory reports it,
+  the field belongs to the directory, the Console shows it read-only and an edit is refused
+  with a 409. Only ids are stored, no names
+  ([ADR-0470](docs/adr/0470-the-line-manager-is-on-the-account.md)).
 
 - **The replay's Variables tab says what an id stands for.** A string value that is a
   principal id (`usr_…`, `grp_…`), a deployed process id or a catalogue product or
@@ -83,6 +100,23 @@ _Changed_ / _Removed_ for each version.
   `TestEveryFormReferenceResolves` accepts the platform's approval form `genehmigung`,
   which an installation's own approval model names to get the inbox's Genehmigen and
   Ablehnen, for as long as the system bundle declares it.
+
+### Fixed
+
+- **A `superior` approval reaches the orderer's line manager.** The system process
+  `atlas-genehmigung-vorgesetzter` searched the directory with
+  `(userPrincipalName=<principal id>)`, which no directory holds, and assigned its task to
+  the `manager` distinguished name it read back, which no task can be held by (#1311). The
+  server now starts the approval with `approvalRef` set to the orderer's line manager, and
+  refuses to start it with the reason when there is none, when the manager's account is
+  disabled or gone, or when the directory names somebody who has no account yet; the
+  fulfilment process shows that refusal as an incident, and resolving it after the manager
+  is set starts the approval. The escalation calls `POST …/escalate` with
+  `{"lineManager": true}` and moves one level up from whoever holds the approval now; a body
+  naming `superior` means what it did. The model reads no directory and needs no `ad`
+  Worker called `verzeichnis` any more, and it still writes `vorgesetzter` for listeners of
+  `atlas.approval.requested`. Approvals already running keep the old model.
+  `examples/entra-verzeichnis-abgleich.bpmn` now selects `manager`.
 
 ## [0.18.0] — 2026-10-22
 

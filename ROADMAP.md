@@ -2282,6 +2282,13 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   `GET /api/v1/approvals/stalled` for a person to reassign
   ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md)); reminder processes read
   `GET /api/v1/pending-work` ([ADR-0343](docs/adr/0343-pending-work.md)).
+- ✅ **The line manager is on the account.** A `superior` approval starts with the orderer's
+  line manager as the account records it, and its escalation follows the line from whoever
+  holds it now. The Entra mirror fills the reference from `manager`, and an administrator
+  sets it where there is no mirror
+  ([ADR-0470](docs/adr/0470-the-line-manager-is-on-the-account.md)).
+  Still open: whether an order placed for somebody else should go to the recipient's line
+  manager, and an automatic feed from on-premises Active Directory.
 
 **Fulfilment & product lifecycle**
 - ✅ **Fulfilment.** The shipped orchestrator starts lines wave by wave, calling Atlas as
