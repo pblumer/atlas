@@ -11,7 +11,7 @@ import (
 	"github.com/pblumer/atlas/api"
 )
 
-// Deleting a catalogue or a product for good (ADR-draft-catalogue-purge), through
+// Deleting a catalogue or a product for good (ADR-0469), through
 // the whole stack: refused on a server started with --catalogue-purge=false, refused
 // to anybody but an administrator, refused without the id repeated — and otherwise the
 // catalogue, its products, its orders, the work running for them and the holds

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// The Console's half of the purge (ADR-draft-catalogue-purge): a card only an
+// The Console's half of the purge (ADR-0469): a card only an
 // administrator is drawn, that asks the server what would go before it offers to
 // delete anything, and whose delete button stays disabled until the id is typed
 // again. The server refuses each of those on its own; the card is what keeps a

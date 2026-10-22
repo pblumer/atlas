@@ -799,7 +799,7 @@ type Server struct {
 	catalogueOff bool
 	// cataloguePurgeOff is the administrator's permanent delete of a catalogue or a
 	// product switched off with --catalogue-purge=false / WithoutCataloguePurge
-	// (ADR-draft-catalogue-purge). Spelled as "off" for catalogueOff's reason: the
+	// (ADR-0469). Spelled as "off" for catalogueOff's reason: the
 	// zero value is the shipped default, and the default is opt-out — an installation
 	// that must not be able to delete orders and holds says so. Set once before
 	// Handler is mounted.

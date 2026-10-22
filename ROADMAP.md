@@ -2231,7 +2231,7 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   granted, after a preview and a confirmation by id — in the Console, over HTTP and over MCP.
   On by default for development and test installations; a production installation opts out
   with `--catalogue-purge=false`, and there a product is withdrawn and a catalogue kept
-  ([ADR-draft-catalogue-purge](docs/adr/draft-catalogue-purge.md)). The inventory's history of
+  ([ADR-0469](docs/adr/0469-catalogue-purge.md)). The inventory's history of
   the removed holds is kept; erasing it would need an engine event of its own.
 
 **The shop & ordering**

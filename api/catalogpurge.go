@@ -13,7 +13,7 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// Deleting a catalogue or a product for good (ADR-draft-catalogue-purge).
+// Deleting a catalogue or a product for good (ADR-0469).
 //
 // ADR-0312 gave the catalogue no delete: an order placed years ago and a right
 // still held resolve through the product, and a store that can delete one can

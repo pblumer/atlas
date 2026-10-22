@@ -36,7 +36,7 @@ var mcpToolRoutes = map[string]string{
 	// (ADR-0376). A product is withdrawn through the ordinary save, because an
 	// order placed years ago still resolves through it; the one delete is the
 	// administrator's purge for a development installation, refused by a server
-	// started with --catalogue-purge=false (ADR-draft-catalogue-purge).
+	// started with --catalogue-purge=false (ADR-0469).
 	"atlas_list_catalogs":             "GET /api/v1/catalogs",
 	"atlas_get_catalog":               "GET /api/v1/catalogs/{id}",
 	"atlas_create_catalog":            "POST /api/v1/catalogs",

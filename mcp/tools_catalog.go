@@ -29,7 +29,7 @@ import (
 // **Deleting is not how a product ends.** A product is withdrawn rather than
 // removed, because an order placed years ago and an entitlement still held both
 // resolve through it; withdrawal is a state on the ordinary save. The one delete
-// there is, the administrator's purge (ADR-draft-catalogue-purge), exists for a
+// there is, the administrator's purge (ADR-0469), exists for a
 // development installation and is refused by a server started with
 // --catalogue-purge=false, so its tools say so before they say anything else.
 //

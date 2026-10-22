@@ -554,6 +554,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0466](0466-start-view-groups-and-favourites.md) | The Start view groups by application and keeps favourites per person | Accepted | Landed |
 | [0467](0467-application-package-export.md) | An application and its shop move as a package, and an import asks before it replaces | Accepted (amended) | Landed |
 | [0468](0468-deleting-an-application-with-its-contents.md) | Deleting an application with everything it owns | Accepted | Landed |
+| [0469](0469-catalogue-purge.md) | An administrator can delete a catalogue for good, unless the server opts out | Accepted | Landed |
 
 ## The two states of a record
 

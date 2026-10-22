@@ -1275,7 +1275,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
 // right still held resolve through it (ADR-0312), and a product is withdrawn instead.
 // A development installation is the exception — somebody imports a catalogue, orders
 // from it to watch the fulfilment run, and must be able to start over — so an
-// administrator can purge one (ADR-draft-catalogue-purge). It is on unless the server
+// administrator can purge one (ADR-0469). It is on unless the server
 // was started with --catalogue-purge=false, which a production installation should be.
 //
 // The card never deletes on the first click. It asks the server what would go and

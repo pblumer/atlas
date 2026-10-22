@@ -5,7 +5,7 @@ import "sort"
 // StripProducts returns c without the products in gone: they leave its offer and
 // every edge that names one of them, and the ids it lost are answered sorted.
 //
-// It is the one change an administrator's purge (ADR-draft-catalogue-purge) makes
+// It is the one change an administrator's purge (ADR-0469) makes
 // to a catalogue it does not delete. A product is referenced by catalogues rather
 // than owned by one, so the catalogue being purged can be the home of a product
 // another catalogue offers; deleting the product and leaving the other offer

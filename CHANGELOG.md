@@ -31,7 +31,7 @@ _Changed_ / _Removed_ for each version.
   MCP four tools (`atlas_catalog_deletion`, `atlas_delete_catalog`,
   `atlas_catalog_product_deletion`, `atlas_delete_catalog_product`). On a server started
   with `--catalogue-purge=false` nothing changes: a product is withdrawn and a catalogue kept
-  ([ADR-draft-catalogue-purge](docs/adr/draft-catalogue-purge.md), amending ADR-0312 and
+  ([ADR-0469](docs/adr/0469-catalogue-purge.md), amending ADR-0312 and
   answering ADR-0376's open question).
 
 - **API-token expiry can be alerted on.** `/metrics` carries `atlas_api_tokens_expiring_soon`

@@ -169,7 +169,7 @@ publishes, not as an incident for whoever orders at 23:00.
 years ago and an entitlement still held both resolve through the item, and a store that
 can delete one of those is a store that can orphan evidence.
 
-**Amended by [ADR-draft-catalogue-purge](draft-catalogue-purge.md).** An administrator
+**Amended by [ADR-0469](0469-catalogue-purge.md).** An administrator
 can delete a catalogue or a product for good, with the orders placed from it and the
 holds they granted, unless the server was started with `--catalogue-purge=false`. The
 purge exists for development and test installations; on a server started with that

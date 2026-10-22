@@ -7,7 +7,7 @@ import (
 	"github.com/pblumer/atlas/api"
 )
 
-// The purge tools (ADR-draft-catalogue-purge): the preview answers on any server,
+// The purge tools (ADR-0469): the preview answers on any server,
 // the delete on every server not started with --catalogue-purge=false, and only
 // with the id repeated.
 

@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/logging"
 )
 
-// The purge is an opt-out (ADR-draft-catalogue-purge), so a production installation
+// The purge is an opt-out (ADR-0469), so a production installation
 // keeps its orders and held rights only if somebody set --catalogue-purge=false. A
 // server that was upgraded without it says nothing is wrong — it serves, and every
 // administrator can delete. The start says so instead, as a WARN under a stable event

@@ -93,7 +93,7 @@ var (
 	ServerCatalogueInFlight = newEvent("server.catalogue_disabled_in_flight")
 	// ServerCataloguePurgeEnabled is a server that lets an administrator delete a
 	// catalogue or a product for good, with its orders and held rights
-	// (ADR-draft-catalogue-purge). The purge is an opt-out, so this is every server
+	// (ADR-0469). The purge is an opt-out, so this is every server
 	// started without --catalogue-purge=false — which a production installation must
 	// be. A WARN at every start, so an installation upgraded without the flag says so
 	// in the log, and an alert can match it.

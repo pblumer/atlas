@@ -98,7 +98,7 @@ func (s *Store) Items() ([]Item, error) { return s.items.LoadAll() }
 
 // DeleteCatalog removes a catalogue's record, and DeleteItem and DeleteRelease the
 // same for a product and a release. ADR-0312 gave the catalogue no delete; these
-// exist only for the administrator's purge (ADR-draft-catalogue-purge), which a
+// exist only for the administrator's purge (ADR-0469), which a
 // server started with --catalogue-purge=false refuses, and which decides beforehand
 // what else has to go with them. A record already gone is not an error, so a purge
 // that stopped halfway can be run again.

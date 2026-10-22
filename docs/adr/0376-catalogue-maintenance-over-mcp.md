@@ -126,7 +126,7 @@ the test with a float64 round trip in it, and that round trip is kept in
 
 ### Withdrawal is the delete, and it is not a tool
 
-**Amended by [ADR-draft-catalogue-purge](draft-catalogue-purge.md).** This record left
+**Amended by [ADR-0469](0469-catalogue-purge.md).** This record left
 open whether a catalogue ever needs a delete. It does, on a development or test
 installation that orders from a catalogue to try it and then has to start over. That
 delete is an administrator's purge with its own four tools, refused by a server started

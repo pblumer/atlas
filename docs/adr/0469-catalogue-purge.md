@@ -1,4 +1,4 @@
-# ADR-DRAFT: An administrator can delete a catalogue for good, unless the server opts out
+# ADR-0469: An administrator can delete a catalogue for good, unless the server opts out
 
 - **Status:** Accepted
 - **Implementation:** Landed
