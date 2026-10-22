@@ -150,7 +150,7 @@ type User struct {
 	// ManagerID is the principal id of this person's line manager, and the only
 	// field read at run time: a `superior` approval starts with it, and an escalation
 	// asking for the line manager follows it one level up
-	// (ADR-draft-the-line-manager-is-on-the-account).
+	// (ADR-0470).
 	//
 	// A reference and not a name, for ADR-0314's reason: what an approval routes on
 	// ends up in a variable and in the log, and a principal id is the one thing about
@@ -231,7 +231,7 @@ type publicUser struct {
 	AvatarSource string `json:"avatarSource,omitempty"`
 	// ManagerID and ManagerDirectoryID are the account's line manager and, when the
 	// directory owns it, the directory's id for them — which is what the Console
-	// needs to show the field read-only (ADR-draft-the-line-manager-is-on-the-account).
+	// needs to show the field read-only (ADR-0470).
 	ManagerID          string `json:"managerId,omitempty"`
 	ManagerDirectoryID string `json:"managerDirectoryId,omitempty"`
 	CreatedAt          int64  `json:"createdAt"`

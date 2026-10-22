@@ -106,7 +106,7 @@ type directoryUser struct {
 
 	// ManagerDelta is Graph's manager@delta: the manager a selected `manager` reports,
 	// as one directory reference, or one marked removed when the person has none any
-	// more (ADR-draft-the-line-manager-is-on-the-account). Absent says nothing about
+	// more (ADR-0470). Absent says nothing about
 	// the manager, which is not the same as saying there is none — the distinction
 	// every optional field here keeps.
 	ManagerDelta []directoryMemberRef `json:"manager@delta"`

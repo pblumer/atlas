@@ -1,4 +1,4 @@
-# ADR-DRAFT: The line manager is a reference on the account
+# ADR-0470: The line manager is a reference on the account
 
 - **Status:** Accepted
 - **Implementation:** Landed

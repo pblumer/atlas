@@ -22,7 +22,7 @@ _Changed_ / _Removed_ for each version.
   manager's account on the run that reads that account. While the directory reports it,
   the field belongs to the directory, the Console shows it read-only and an edit is refused
   with a 409. Only ids are stored, no names
-  ([ADR-draft-the-line-manager-is-on-the-account](docs/adr/draft-the-line-manager-is-on-the-account.md)).
+  ([ADR-0470](docs/adr/0470-the-line-manager-is-on-the-account.md)).
 
 - **The replay's Variables tab says what an id stands for.** A string value that is a
   principal id (`usr_…`, `grp_…`), a deployed process id or a catalogue product or

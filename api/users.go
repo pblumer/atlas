@@ -374,7 +374,7 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 		Roles       *[]string `json:"roles"`
 		Disabled    *bool     `json:"disabled"`
 		// ManagerID is the principal id of the account's line manager, and "" clears
-		// it (ADR-draft-the-line-manager-is-on-the-account).
+		// it (ADR-0470).
 		ManagerID *string `json:"managerId"`
 	}
 	if !s.decodeJSONBody(w, r, &payload) {

@@ -7,7 +7,7 @@ import (
 	"github.com/pblumer/atlas/api/order"
 )
 
-// Who somebody's line manager is (ADR-draft-the-line-manager-is-on-the-account).
+// Who somebody's line manager is (ADR-0470).
 //
 // The account holds it as a reference — another principal id — reported by the
 // directory mirror or set by an administrator. This file is the one place that reads

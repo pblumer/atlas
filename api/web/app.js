@@ -2146,7 +2146,7 @@ function userForm(u, people) {
 }
 
 // lineManagerField is whom a `superior` approval of this person's orders goes to
-// (ADR-draft-the-line-manager-is-on-the-account). Every other account is offered; the
+// (ADR-0470). Every other account is offered; the
 // account itself never is. Where the directory mirror reports the manager the field
 // is shown and not offered for editing — the server refuses the edit, because a value
 // typed here would outlive the directory changing it — and the form leaves it out of

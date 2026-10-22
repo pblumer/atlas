@@ -148,7 +148,7 @@ func (s *Server) handleStartLine(w http.ResponseWriter, r *http.Request) {
 		// Atlas's own `superior` approval is given its approver here: the orderer's
 		// line manager as the account records it. The model used to look them up in a
 		// directory by the orderer's principal id, which no directory knows (#1311,
-		// ADR-draft-the-line-manager-is-on-the-account). Nobody to give it to is a
+		// ADR-0470). Nobody to give it to is a
 		// refusal that names the reason, so the incident it becomes in the fulfilment
 		// says what to fix, and resolving it asks again.
 		if line.AtlasApproval() && line.Approval.Kind == "superior" {

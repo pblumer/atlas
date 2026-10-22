@@ -1,5 +1,5 @@
 // An account's line manager, as an administrator sets it in Console → Organization
-// (ADR-draft-the-line-manager-is-on-the-account; userForm in app.js).
+// (ADR-0470; userForm in app.js).
 //
 // A `superior` approval goes to the orderer's line manager as the account records it,
 // so an installation without a directory mirror keeps the relation here. The form

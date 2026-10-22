@@ -236,7 +236,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   leaves its ids unclaimed. The value column's filter finds a row by the resolved name.
 
 - **`user-line-manager.spec.mjs`**
-  ([ADR-draft-the-line-manager-is-on-the-account](../docs/adr/draft-the-line-manager-is-on-the-account.md)):
+  ([ADR-0470](../docs/adr/0470-the-line-manager-is-on-the-account.md)):
   an account's line manager in Console → Organization, against a mock of the users
   endpoints. The edit form offers every other account and "none", with the current manager
   chosen. A save sends `managerId` only when it changed, and an empty id to clear it. A

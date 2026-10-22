@@ -8,7 +8,7 @@ import (
 )
 
 // The line manager as an administrator sets it and as an escalation reads it
-// (ADR-draft-the-line-manager-is-on-the-account).
+// (ADR-0470).
 
 func TestAnAdministratorSetsSomebodysLineManager(t *testing.T) {
 	ts, _ := newAuthServer(t, "root", "rootpassword")

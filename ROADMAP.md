@@ -2273,7 +2273,7 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   line manager as the account records it, and its escalation follows the line from whoever
   holds it now. The Entra mirror fills the reference from `manager`, and an administrator
   sets it where there is no mirror
-  ([ADR-draft-the-line-manager-is-on-the-account](docs/adr/draft-the-line-manager-is-on-the-account.md)).
+  ([ADR-0470](docs/adr/0470-the-line-manager-is-on-the-account.md)).
   Still open: whether an order placed for somebody else should go to the recipient's line
   manager, and an automatic feed from on-premises Active Directory.
 

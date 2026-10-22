@@ -28,7 +28,7 @@ import (
 // current approver's line manager as Atlas records it asks with `lineManager`, and
 // the server reads the account — not a directory: the relation was reported to it by
 // the mirror's own process or typed by an administrator
-// (ADR-draft-the-line-manager-is-on-the-account). The shipped `superior` approval
+// (ADR-0470). The shipped `superior` approval
 // asks that way, because it has nothing a directory could be searched by (#1311).
 //
 // Everything that decides whether the hop may happen — a loop in the line, somebody
@@ -41,7 +41,7 @@ import (
 // to. Empty means nobody does, which stalls the approval instead of moving it.
 //
 // LineManager asks instead for the current approver's line manager as the account
-// records it (ADR-draft-the-line-manager-is-on-the-account). It is a field of its own
+// records it (ADR-0470). It is a field of its own
 // rather than a missing superior, because a REST task that maps no input sends every
 // variable it sees, and an absent field is not something a model can be relied on to
 // say on purpose.

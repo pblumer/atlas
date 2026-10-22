@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/api/order"
 )
 
-// The line manager is a reference on the account (ADR-draft-the-line-manager-is-on-the-account).
+// The line manager is a reference on the account (ADR-0470).
 //
 // These hold the three places it is decided and read: the mirror that reports it, the
 // approval that starts with it, and the refusal when there is nobody to start with.

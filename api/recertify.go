@@ -82,7 +82,7 @@ type recertifyOpen struct {
 	// of the holder, to the principal of the person who reviews their rights.
 	//
 	// Atlas does not derive it, although an account may now carry its line manager
-	// (ADR-draft-the-line-manager-is-on-the-account): a reviewer is whoever the
+	// (ADR-0470): a reviewer is whoever the
 	// campaign's own process says answers for a holder, and that need not be the
 	// line. So the process that opens a campaign resolves the reviewers and names
 	// them here.

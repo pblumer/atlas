@@ -92,7 +92,7 @@ func TestTheApprovalProcessesAnnounceTheRequestAsASignal(t *testing.T) {
 		{"atlas-genehmigung-fix", "fixed", "anna", "anna"},
 		{"atlas-genehmigung-rolle", "role", "einkauf", "einkauf"},
 		// The server starts it with the orderer's line manager as approvalRef; the
-		// model asks no directory (ADR-draft-the-line-manager-is-on-the-account).
+		// model asks no directory (ADR-0470).
 		{"atlas-genehmigung-vorgesetzter", "superior", "chefin", "chefin"},
 	} {
 		t.Run(c.kind, func(t *testing.T) {

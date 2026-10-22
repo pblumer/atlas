@@ -1760,7 +1760,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		//
 		// The operator role, and not a manager relationship. When ADR-0349 was
 		// written Atlas held no such relationship; an account may now carry its line
-		// manager (ADR-draft-the-line-manager-is-on-the-account), but that record
+		// manager (ADR-0470), but that record
 		// decided only whom an approval goes to. Whether a line manager may order
 		// in their people's name is ADR-0349's open question, and a gate does not
 		// widen itself because the data for a different rule arrived.
