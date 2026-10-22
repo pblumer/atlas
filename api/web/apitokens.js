@@ -70,7 +70,9 @@ export const DEFAULT_DAYS = 365;
 // stops working without a word — every call its machine makes is a 401 from then on,
 // and for the shop's system processes that is an incident per order — so the time to
 // say so is while a replacement can still be minted and handed over. Thirty days
-// leaves room for a change process; it is the Console's choice, not a server rule.
+// leaves room for a change process. /metrics counts the same window
+// (apiTokenExpiryWarning, atlas_api_tokens_expiring_soon), so the page and an alert
+// warn about the same tokens; a Go test holds the two equal.
 export const EXPIRY_WARN_DAYS = 30;
 
 const DAY = 86400;

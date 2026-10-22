@@ -277,13 +277,14 @@ func (c *durabilityCollector) Collect(ch chan<- prometheus.Metric) {
 // Prometheus conventions use.
 const nanosPerSecond = 1_000_000_000
 
-// buildMetrics assembles the registry this server exports: the build info and the
-// durability collector. It runs at construction, so a duplicate or inconsistent
-// registration fails the boot rather than a scrape.
+// buildMetrics assembles the registry this server exports: the build info, the
+// durability collector and the API tokens' lifetimes. It runs at construction, so a
+// duplicate or inconsistent registration fails the boot rather than a scrape.
 func (s *Server) buildMetrics() error {
 	reg := metrics.NewRegistry()
 	b := Build()
-	if err := reg.Register(metrics.BuildInfo(b.Version, b.Revision), newDurabilityCollector(s)); err != nil {
+	if err := reg.Register(metrics.BuildInfo(b.Version, b.Revision), newDurabilityCollector(s),
+		newAPITokenCollector(s)); err != nil {
 		return err
 	}
 	// The engine's hot-path counters, pushed from the batch loop rather than read at

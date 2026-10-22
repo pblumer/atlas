@@ -8938,6 +8938,43 @@ curl -H "Authorization: Bearer $ATLAS_METRICS_TOKEN" https://atlas.example.com/m
         Prometheus alerting, or a log processor on the events (every line carries a stable <code>event=</code>,
         ADR-0142). To see the cases yourself, read them over <code>GET /api/v1/incidents</code> and resolve them
         with <code>POST /api/v1/incidents/{key}/resolve</code> (role <code>operator</code>).</p>
+      <p data-l="de"><b>Ablaufende API-Tokens</b> gehören in dieselben Regeln, denn ein abgelaufenes Token meldet
+        sich nicht: Die Maschine, die es hält, scheitert ab dem nächsten Aufruf mit <i>401</i>. Drei Kennzahlen
+        ohne Labels sagen es vorher (ADR-0194): <code>atlas_api_tokens_expiring_soon</code> zählt die Tokens, die
+        noch angenommen werden und weniger als 30 Tage haben – dasselbe Fenster wie die Warnung in der Console –,
+        <code>atlas_api_tokens_expired</code> die abgelaufenen, noch nicht widerrufenen, und
+        <code>atlas_api_token_next_expiry_timestamp_seconds</code> nennt den nächsten Ablauf als Unix-Zeit
+        (<code>+Inf</code>, wenn keines abläuft). Alarmiere auf die ersten beiden zusammen: Ein Token verlässt
+        «bald» dadurch, dass es abläuft, eine Regel allein auf die erste Kennzahl verstummt also genau in dem
+        Moment, in dem die Maschine zu scheitern beginnt. Welches Token betroffen ist, steht nicht in den Metriken
+        – Namen wären Labels aus den Daten, und <code>/metrics</code> liest jeder Inhaber eines
+        <code>metrics</code>-Tokens –, sondern unter <a href="/#/console/api-tokens">Console › Administration ›
+        API-Tokens</a>.</p>
+      <p data-l="en"><b>Expiring API tokens</b> belong in the same rules, because an expired token does not
+        announce itself: the machine holding it fails with <i>401</i> from its next call on. Three metrics without
+        labels say so beforehand (ADR-0194): <code>atlas_api_tokens_expiring_soon</code> counts the tokens still
+        accepted with less than 30 days left – the same window as the Console's warning –,
+        <code>atlas_api_tokens_expired</code> the expired ones not yet revoked, and
+        <code>atlas_api_token_next_expiry_timestamp_seconds</code> gives the next expiry as a Unix time
+        (<code>+Inf</code> when none expires). Alert on the first two together: a token leaves "soon" by expiring,
+        so a rule on the first metric alone falls silent exactly when the machine starts failing. Which token it is
+        is not in the metrics – names would be labels taken from the data, and anyone holding a
+        <code>metrics</code> token reads <code>/metrics</code> – but under <a href="/#/console/api-tokens">Console ›
+        Administration › API tokens</a>.</p>
+      <pre><code># Prometheus-Regeln  ·  Prometheus rules
+groups:
+  - name: atlas-api-tokens
+    rules:
+      - alert: AtlasApiTokenExpiringSoon
+        expr: atlas_api_tokens_expiring_soon &gt; 0
+        labels: { severity: warning }
+      - alert: AtlasApiTokenExpired
+        expr: atlas_api_tokens_expired &gt; 0
+        labels: { severity: critical }
+      # Eigene Frist statt 30 Tage  ·  your own margin instead of 30 days
+      - alert: AtlasApiTokenExpiresThisWeek
+        expr: atlas_api_token_next_expiry_timestamp_seconds - time() &lt; 7 * 86400
+        labels: { severity: critical }</code></pre>
 
       <h4 data-l="de">Ereignisse exportieren</h4><h4 data-l="en">Exporting events</h4>
       <p data-l="de">Für Auswertung und Aufbewahrung über die Instanz hinaus spiegelt ein Exporter das
@@ -10092,11 +10129,13 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         <li data-l="de"><b>Bald ablaufende Tokens</b> – weniger als 30 Tage – sind gelb markiert und sagen, wie viele
           Tage ihnen bleiben. Über der Liste und auf dem Dashboard der Console steht dann ein Hinweis, den nur
           Admins sehen. Erzeuge rechtzeitig ein neues Token, übergib es der Maschine und widerrufe danach das alte;
-          damit verschwindet der Hinweis.</li>
+          damit verschwindet der Hinweis. Für einen Alarm ausserhalb der Console zählt
+          <code>/metrics</code> dieselben Tokens (<a href="#ueberwachen">Überwachen</a>).</li>
         <li data-l="en"><b>Tokens about to expire</b> – in less than 30 days – are marked in yellow and say how many
           days they have left. A notice then appears above the list and on the Console's dashboard, for
           administrators only. Create a new token in time, hand it to the machine and then revoke the old one; that
-          clears the notice.</li>
+          clears the notice. For an alert outside the Console, <code>/metrics</code> counts the same tokens
+          (<a href="#ueberwachen">Monitoring</a>).</li>
         <li data-l="de"><b>Abgelaufene Tokens</b> bleiben in der Liste und sind rot markiert. Angenommen werden sie
           nicht mehr – die Liste zeigt dir, was neu ausgestellt werden muss.</li>
         <li data-l="en"><b>Expired tokens</b> stay in the list, marked in red. They are no longer accepted – the list
