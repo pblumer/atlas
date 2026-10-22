@@ -20,7 +20,11 @@ delete what it owns on the server as well — its deployed versions after cancel
 running instances, its decision deployments, drafts, forms, decision references and models
 — after a preview of what goes and of what outside it stops working; a deployed process
 can be deleted with `force=true` whatever still holds it
-([ADR-0468](docs/adr/0468-deleting-an-application-with-its-contents.md)). The Console's
+([ADR-0468](docs/adr/0468-deleting-an-application-with-its-contents.md)). An administrator
+can delete a catalogue or a product for good, with the orders placed from it, the
+instances still working them and the rights they granted — on by default, meant for
+development and test installations, and switched off with `--catalogue-purge=false`
+([ADR-0469](docs/adr/0469-catalogue-purge.md)). The Console's
 **Export application…** and **Import application…** write and read the package
 `atlas export` and `atlas import` use, catalogues included, and ask only for the names the
 target's directory does not answer; what a person chose for such a name is remembered on
@@ -29,13 +33,25 @@ package's `antworten.json` ([ADR-0467](docs/adr/0467-application-package-export.
 amendment 2026-10-21). API tokens are minted, listed and revoked in **Console →
 Administration → API tokens**, can be sealed straight into the vault, and are flagged
 30 days before they expire, in the Console and on `/metrics` for an alert rule
-([ADR-0194](docs/adr/0194-api-tokens.md), amendments 2026-10-21 and 2026-10-22). The Console's and Operations' seldom-opened pages moved behind
-**Administration ▾** and **Diagnostics ▾**, and neither bar wraps any more. Among the
+([ADR-0194](docs/adr/0194-api-tokens.md), amendments 2026-10-21 and 2026-10-22). The
+Console's and Operations' seldom-opened pages moved behind **Administration ▾** and
+**Diagnostics ▾**, and neither bar wraps any more. Among the
 fixes, a fixed approver a package names is assigned by username, so the approval reaches
 somebody, and a refused process delete says why.
 
 **Read this before upgrading from 0.17.0.** These act on an existing installation:
 
+- A production installation must start 0.18.0 with `--catalogue-purge=false`
+  (`ATLAS_CATALOGUE_PURGE=false`, Helm `atlas.catalogue.purge: false`). The catalogue
+  purge is on by default: without the switch, an administrator can delete a catalogue or a
+  product for good, with its releases, the orders placed from it, the process instances
+  still working them and the rights they granted. Cancelled instances do not undo what
+  they did in a target system, and the rights leave the inventory without being
+  deprovisioned. Every start with the purge on logs a WARN,
+  `event=server.catalogue_purge_enabled`, which an alert can match; a value the switch does
+  not read stops the start. With it off, the delete answers 403 and the preview still
+  answers. Unlike `application.purged`, a catalogue purge writes no line of its own to the
+  security audit trail.
 - A fixed approver that a package filled in under 0.17.0 is a user id, and the approval
   it asks for reaches nobody: the order waits. The approver report
   (`GET /api/v1/catalog-products/approver-report`, `atlas_catalog_approver_report`) names
@@ -70,18 +86,27 @@ somebody, and a refused process delete says why.
   the first start, `package-mappings`; it travels with a whole-instance snapshot and not
   with an export. An API token's record names the vault secret it was sealed as
   (`vaultSecret`). The routes added are `GET`/`POST`/`DELETE /api/v1/catalogs/import/mappings`,
-  `POST /api/v1/catalogs/import/answers`, `GET /api/v1/applications/{id}/package` and
-  `GET /api/v1/applications/{id}/deletion-preview`; `DELETE /api/v1/applications/{id}`
-  takes `?purge=true`, `DELETE /api/v1/processes/{key}` takes `?force=true`, and
-  `POST /api/v1/api-tokens` takes `vaultSecret`. One MCP tool was added,
-  `atlas_application_deletion_preview`, so the tool count is 145; `atlas_delete_application`
+  `POST /api/v1/catalogs/import/answers`, `GET /api/v1/applications/{id}/package`,
+  `GET /api/v1/applications/{id}/deletion-preview`, `GET /api/v1/catalogs/{id}/deletion`,
+  `GET /api/v1/catalog-products/{id}/deletion`, `DELETE /api/v1/catalogs/{id}` and
+  `DELETE /api/v1/catalog-products/{id}`, the last four for administrators only;
+  `DELETE /api/v1/applications/{id}` takes `?purge=true`, `DELETE /api/v1/processes/{key}`
+  takes `?force=true`, and `POST /api/v1/api-tokens` takes `vaultSecret`. Five MCP tools
+  were added — `atlas_application_deletion_preview`, `atlas_catalog_deletion`,
+  `atlas_delete_catalog`, `atlas_catalog_product_deletion` and
+  `atlas_delete_catalog_product` — so the tool count is 149; `atlas_delete_application`
   takes `purge` and `atlas_delete_process` `force`. `/metrics` carries three new series
   without labels, `atlas_api_tokens_expiring_soon`, `atlas_api_tokens_expired` and
-  `atlas_api_token_next_expiry_timestamp_seconds`. No budget was added.
-- Going back to 0.17.0 starts on the same directory. It does not read the table of names,
-  so an import there asks again for what was remembered; the tokens minted in the Console
-  stay valid, but 0.17.0 has no page for them. What a purge or a forced delete removed
-  stays removed.
+  `atlas_api_token_next_expiry_timestamp_seconds`. The Helm chart has a new value,
+  `atlas.catalogue.purge` (default `true`), which it passes as `--catalogue-purge`. No
+  budget was added.
+- Going back to 0.17.0 starts on the same directory, but not with the 0.18.0 Helm chart or
+  a service definition that sets `--catalogue-purge`: 0.17.0 does not know the flag and
+  refuses to start. Go back with the 0.17.0 chart, and take the flag out of the command
+  line. 0.17.0 does not read the table of names, so an import there asks again for what
+  was remembered; the tokens minted in the Console stay valid, but 0.17.0 has no page for
+  them. What a purge of an application or a catalogue, or a forced delete, removed stays
+  removed.
 
 ### Added
 
