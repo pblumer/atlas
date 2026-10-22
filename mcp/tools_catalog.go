@@ -26,10 +26,12 @@ import (
 // agent to destroy work. So every write tool says to read first, and the product
 // tool takes the revision it read.
 //
-// **Nothing here deletes.** A catalogue has no delete at all and a product is
-// withdrawn rather than removed, because an order placed years ago and an
-// entitlement still held both resolve through the product. Withdrawal is a state
-// on the ordinary save, so there is no tool to look for and not find.
+// **Deleting is not how a product ends.** A product is withdrawn rather than
+// removed, because an order placed years ago and an entitlement still held both
+// resolve through it; withdrawal is a state on the ordinary save. The one delete
+// there is, the administrator's purge (ADR-0469), exists for a
+// development installation and is refused by a server started with
+// --catalogue-purge=false, so its tools say so before they say anything else.
 //
 // **Nothing is orderable until it is published.** Editing a catalogue changes
 // what the *next* release will contain and changes nothing the shop shows.
@@ -292,7 +294,7 @@ func catalogTools() []Tool {
 				"atlas_publish_catalog creates the thing that is ordered from. Note two defaults " +
 				"that are the opposite of the friendly guess: an empty `groups` means NOBODY may " +
 				"see it, and a product is offered only once its id is in `items`. A catalogue " +
-				"cannot be deleted afterwards, so create one when you mean to.",
+				"cannot be deleted afterwards on a production server, so create one when you mean to.",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": catalogRecordProps(),
@@ -839,6 +841,111 @@ func catalogTools() []Tool {
 					return "", err
 				}
 				return asText(c.post(withID(id, "/import"), "application/xml", []byte(model)))
+			},
+		},
+		{
+			Name: "atlas_catalog_deletion",
+			Description: "Read what deleting a catalogue FOR GOOD would remove, without removing " +
+				"anything: its releases, its brand mark and every product whose home it is; the " +
+				"catalogues that would stop offering those products; the orders that would be " +
+				"deleted and those that stay with lines withdrawn; how many running instances " +
+				"would be cancelled and how many holds of how many people would leave the " +
+				"inventory; the processes that stay deployed; and `warnings` to read. `enabled` " +
+				"says whether this server allows the purge — it is on unless the server was " +
+				"started with --catalogue-purge=false, which a production installation should " +
+				"be. Administrators only. Call it before atlas_delete_catalog and " +
+				"show the person the warnings.",
+			InputSchema: catalogIDArg("The catalogue whose deletion to preview."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get(withID(id, "/deletion")))
+			},
+		},
+		{
+			Name: "atlas_delete_catalog",
+			Description: "Delete a catalogue FOR GOOD, with everything atlas_catalog_deletion " +
+				"names: releases, its own products, the orders placed from it, the running " +
+				"instances working them (cancelled — what they did in a target system is NOT " +
+				"undone) and the holds they granted (taken out of the inventory with NO " +
+				"deprovisioning). There is no undo. Meant for development and test installations; " +
+				"refused with 403 on a server started with --catalogue-purge=false, and on " +
+				"production a product is withdrawn instead. Administrators only. `confirm` must " +
+				"repeat the catalogue id. Only call this when the person asked for this catalogue " +
+				"to be deleted and has seen the preview.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      stringProp("The catalogue to delete."),
+					"confirm": stringProp("The catalogue id again. Anything else deletes nothing."),
+				},
+				"required": []any{"id", "confirm"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				confirm, err := argString(args, "confirm")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.del(withID(id, "?confirm="+url.QueryEscape(confirm))))
+			},
+		},
+		{
+			Name: "atlas_catalog_product_deletion",
+			Description: "Read what deleting a product FOR GOOD would remove, without removing " +
+				"anything: the catalogues that would stop offering it, the orders of nothing but " +
+				"it, the orders that stay with its lines withdrawn, how many running instances " +
+				"would be cancelled and holds removed, the catalogues whose published release " +
+				"still offers it until they are published again, and `warnings`. `enabled` says " +
+				"whether this server allows the purge (refused after --catalogue-purge=false; " +
+				"meant for development and test installations). Administrators only. To take a product off sale on " +
+				"production, save it with state \"withdrawn\" instead.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The product id.")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/catalog-products/" + url.PathEscape(id) + "/deletion"))
+			},
+		},
+		{
+			Name: "atlas_delete_catalog_product",
+			Description: "Delete a product FOR GOOD, with everything " +
+				"atlas_catalog_product_deletion names. There is no undo. Meant for development and " +
+				"test installations; refused with 403 on a server started with " +
+				"--catalogue-purge=false. On production withdraw it with atlas_save_catalog_product " +
+				"and state \"withdrawn\". Administrators only. `confirm` must repeat the product " +
+				"id. Only call this when the person asked for this product to be deleted and has " +
+				"seen the preview.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      stringProp("The product to delete."),
+					"confirm": stringProp("The product id again. Anything else deletes nothing."),
+				},
+				"required": []any{"id", "confirm"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				confirm, err := argString(args, "confirm")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.del("/api/v1/catalog-products/" + url.PathEscape(id) +
+					"?confirm=" + url.QueryEscape(confirm)))
 			},
 		},
 	})

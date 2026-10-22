@@ -39,6 +39,12 @@ func (s *Store) Save(o Order) error { return s.orders.Save(o) }
 // Get reads one order. A missing record is not an error.
 func (s *Store) Get(id string) (Order, bool, error) { return s.orders.Get(id) }
 
+// Delete removes an order. Nothing in the shop deletes one: an order is evidence
+// of what somebody asked for. It exists for the administrator's purge of a
+// catalogue (ADR-0469), which a server started with
+// --catalogue-purge=false refuses. An order already gone is not an error.
+func (s *Store) Delete(id string) error { return s.orders.Delete(id) }
+
 // All lists every order, newest first.
 func (s *Store) All() ([]Order, error) { return s.orders.LoadAll() }
 

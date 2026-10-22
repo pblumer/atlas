@@ -91,6 +91,13 @@ var (
 	// when there are any: it names how many and which, so the operator meets the
 	// consequence before the incidents do.
 	ServerCatalogueInFlight = newEvent("server.catalogue_disabled_in_flight")
+	// ServerCataloguePurgeEnabled is a server that lets an administrator delete a
+	// catalogue or a product for good, with its orders and held rights
+	// (ADR-0469). The purge is an opt-out, so this is every server
+	// started without --catalogue-purge=false — which a production installation must
+	// be. A WARN at every start, so an installation upgraded without the flag says so
+	// in the log, and an alert can match it.
+	ServerCataloguePurgeEnabled = newEvent("server.catalogue_purge_enabled")
 	// The operator-supplied certificate, where this server terminates TLS itself
 	// (ADR-0191). ServerTLSReloaded is one line per renewal picked up without a
 	// restart; ServerTLSReloadFailed is the pair that changed on disk and could not

@@ -4,13 +4,6 @@
 - **Implementation:** Landed
 - **Date:** 2026-09-16
 - **Deciders:** Atlas maintainers
-- **Open question:** Whether a catalogue ever needs a delete. This record keeps the
-  model's answer — a product is withdrawn, a catalogue is not removable at all — and
-  that answer was written for records an order resolves through. It was not written
-  for the twenty draft products an agent can now file in a minute and nobody can
-  clear away. No installation has yet run an agent against a catalogue long enough
-  to say whether that becomes the first thing somebody asks for.
-- **Question checked:** 2026-09
 
 ## Context and problem statement
 
@@ -132,6 +125,13 @@ the test with a float64 round trip in it, and that round trip is kept in
 `mcp/tools_catalog_test.go` so the mistake cannot be made again.
 
 ### Withdrawal is the delete, and it is not a tool
+
+**Amended by [ADR-0469](0469-catalogue-purge.md).** This record left
+open whether a catalogue ever needs a delete. It does, on a development or test
+installation that orders from a catalogue to try it and then has to start over. That
+delete is an administrator's purge with its own four tools, refused by a server started
+with `--catalogue-purge=false`. What follows still holds for every server started with
+that flag, and for every product manager on any server.
 
 `state: "withdrawn"` on the ordinary save. No `atlas_delete_catalog_product` exists,
 because there is nothing for it to call and inventing a route would mean deciding, in

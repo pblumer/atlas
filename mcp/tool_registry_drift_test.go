@@ -33,10 +33,10 @@ var mcpToolRoutes = map[string]string{
 	"atlas_product_usage":  "GET /api/v1/catalog-products/{id}/usage",
 
 	// The portal catalogue an agent maintains as a product manager
-	// (ADR-0376). No delete among them, and that is
-	// the model and not an omission: a catalogue has none, and a product is
-	// withdrawn through the ordinary save because an order placed years ago still
-	// resolves through it.
+	// (ADR-0376). A product is withdrawn through the ordinary save, because an
+	// order placed years ago still resolves through it; the one delete is the
+	// administrator's purge for a development installation, refused by a server
+	// started with --catalogue-purge=false (ADR-0469).
 	"atlas_list_catalogs":             "GET /api/v1/catalogs",
 	"atlas_get_catalog":               "GET /api/v1/catalogs/{id}",
 	"atlas_create_catalog":            "POST /api/v1/catalogs",
@@ -54,6 +54,10 @@ var mcpToolRoutes = map[string]string{
 	"atlas_export_catalog":            "GET /api/v1/catalogs/{id}/document",
 	"atlas_export_catalog_products":   "GET /api/v1/catalog-products/document",
 	"atlas_import_catalog_archimate":  "POST /api/v1/catalogs/{id}/import",
+	"atlas_catalog_deletion":          "GET /api/v1/catalogs/{id}/deletion",
+	"atlas_delete_catalog":            "DELETE /api/v1/catalogs/{id}",
+	"atlas_catalog_product_deletion":  "GET /api/v1/catalog-products/{id}/deletion",
+	"atlas_delete_catalog_product":    "DELETE /api/v1/catalog-products/{id}",
 	// What a held position offers and whether it takes it now (ADR-0429). Reading it
 	// changes nothing; asking for an action is omitted below.
 	"atlas_order_line_actions": "GET /api/v1/orders/{id}/lines/{item}/actions",

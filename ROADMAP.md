@@ -2226,6 +2226,13 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   Console or with `atlas import --set` — is kept in the target's table of names, shown and
   corrected on the catalogue list, and answers the same question on every later import
   (ADR-0467, amended 2026-10-21).
+- ✅ **A catalogue can be deleted for good.** An administrator deletes a catalogue or a product
+  with its releases, own products, orders, the instances working them and the holds they
+  granted, after a preview and a confirmation by id — in the Console, over HTTP and over MCP.
+  On by default for development and test installations; a production installation opts out
+  with `--catalogue-purge=false`, and there a product is withdrawn and a catalogue kept
+  ([ADR-0469](docs/adr/0469-catalogue-purge.md)). The inventory's history of
+  the removed holds is kept; erasing it would need an engine event of its own.
 
 **The shop & ordering**
 - ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per
