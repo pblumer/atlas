@@ -96,6 +96,11 @@ func (a Assignment) Valid() error {
 	return nil
 }
 
+// Held reports whether this principal has already held the approval, spelled the way
+// the record spells them. A caller choosing how to name the next holder asks it, so
+// that the loop guard in [Escalate] sees a person it has met before.
+func (a Assignment) Held(who string) bool { return a.held(who) }
+
 // held reports whether this principal has already held the approval.
 func (a Assignment) held(who string) bool {
 	if a.Approver == who || a.Original == who {

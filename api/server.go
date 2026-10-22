@@ -1758,12 +1758,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		},
 		// Whose name an order may carry (ADR-0349).
 		//
-		// The operator role, and not a manager relationship, because Atlas cannot
-		// answer what a manager relationship *is*: the escalation path has the
-		// caller name a superior precisely because a directory lookup belongs to a
-		// modelled process and not to the engine. Gating on something this server
-		// cannot evaluate would mean inventing a hierarchy, and an invented
-		// hierarchy decides who may act in whose name.
+		// The operator role, and not a manager relationship. When ADR-0349 was
+		// written Atlas held no such relationship; an account may now carry its line
+		// manager (ADR-0470), but that record
+		// decided only whom an approval goes to. Whether a line manager may order
+		// in their people's name is ADR-0349's open question, and a gate does not
+		// widen itself because the data for a different rule arrived.
 		//
 		// With enforcement off there is nobody to be, exactly as everywhere else.
 		func(p *httpapi.Principal) bool {

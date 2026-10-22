@@ -2123,7 +2123,7 @@ const GRANTABLE_ROLES = [
   { id: "feedreader", name: "Feed reader", what: "read the event feed of action outcomes, granted and revoked rights and incidents, and nothing else" },
 ];
 
-function userForm(u) {
+function userForm(u, people) {
   const isEdit = !!u;
   const held = (isEdit && u.roles) || ["user"];
   const boxes = GRANTABLE_ROLES.map((r) =>
@@ -2138,10 +2138,36 @@ function userForm(u) {
       <label class="field">Email<input name="email" type="email" value="${isEdit ? esc(u.email || "") : ""}"></label>
       ${isEdit ? "" : `<label class="field">Password<input name="password" type="password" autocomplete="new-password" required></label>`}
       <div class="field"><b>Roles</b><div class="muted" style="margin:2px 0 6px">What this account may do. Untick everything and it can only sign in.</div>${boxes}</div>
+      ${isEdit ? lineManagerField(u, people) : ""}
       ${isEdit ? `<label class="field inline"><input type="checkbox" name="disabled"${u.disabled ? " checked" : ""}> Disabled</label>` : ""}
       <div class="row" style="margin-top:4px"><button class="btn" type="submit" title="${isEdit ? "Save changes to this user" : "Create the user account"}">${isEdit ? "Save changes" : "Create user"}</button></div>
     </form>
     ${isEdit ? avatarField(u) : ""}</div>`;
+}
+
+// lineManagerField is whom a `superior` approval of this person's orders goes to
+// (ADR-0470). Every other account is offered; the
+// account itself never is. Where the directory mirror reports the manager the field
+// is shown and not offered for editing — the server refuses the edit, because a value
+// typed here would outlive the directory changing it — and the form leaves it out of
+// what it sends.
+function lineManagerField(u, people) {
+  const fromDirectory = !!u.managerDirectoryId;
+  const others = (people || []).filter((p) => p.id !== u.id);
+  const label = (p) => `${p.displayName || p.username}${p.displayName ? ` (${p.username})` : ""}`;
+  const known = others.some((p) => p.id === u.managerId);
+  const options = [`<option value="">— none —</option>`]
+    .concat(others.map((p) => `<option value="${esc(p.id)}"${p.id === u.managerId ? " selected" : ""}>${esc(label(p))}</option>`))
+    // A manager whose account is gone stays visible as what it is, rather than the
+    // select quietly showing "none" and a save then clearing it.
+    .concat(u.managerId && !known ? [`<option value="${esc(u.managerId)}" selected>${esc(u.managerId)} — no account</option>`] : [])
+    .join("");
+  const note = fromDirectory
+    ? `The directory reports this person's line manager (${esc(u.managerDirectoryId)}); change it there, and the mirror brings it here.`
+    : "Whom an approval of the kind “superior” goes to when this person orders.";
+  return `<label class="field">Line manager
+    <select name="managerId"${fromDirectory ? " disabled" : ""}>${options}</select>
+    <span class="muted manager-note" style="font-size:12px">${note}</span></label>`;
 }
 
 // avatarField is the picture, outside the form on purpose.
@@ -2251,12 +2277,18 @@ async function createUser(fd, reload) {
 
 async function saveUser(id, fd, reload, u) {
   try {
-    await api("PATCH", `/api/v1/users/${encodeURIComponent(id)}`, {
+    const body = {
       displayName: (fd.get("displayName") || "").trim(),
       email: (fd.get("email") || "").trim(),
       roles: rolesFrom(fd, u),
       disabled: !!fd.get("disabled"),
-    });
+    };
+    // Only a change is sent. A disabled select (the directory's) is not in the form
+    // data at all, and re-sending an unchanged manager would fail an unrelated edit
+    // once that manager's account is gone.
+    const manager = fd.get("managerId");
+    if (manager !== null && manager !== ((u && u.managerId) || "")) body.managerId = manager;
+    await api("PATCH", `/api/v1/users/${encodeURIComponent(id)}`, body);
     toast("User updated", "ok");
     reload();
   } catch (e) { toast("could not update user: " + e.message, "err"); }
@@ -2883,7 +2915,7 @@ async function viewConsoleOrg() {
     switch (btn.dataset.act) {
       case "edit":
         slot.dataset.mode = "edit";
-        slot.innerHTML = userForm(u);
+        slot.innerHTML = userForm(u, users);
         slot.querySelector(".user-form").addEventListener("submit", (ev) => {
           ev.preventDefault();
           saveUser(u.id, new FormData(ev.target), reload, u);

@@ -1273,9 +1273,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "How the commands of one position ended — the provision, the return and every action asked of it — each with its command id, action, outcome, event type, source and moment (ADR-0429 §3). Whoever may act on the order may read it. Read off the run loop", tag: "Order", role: RoleUser,
 			resp: jsonBody("The position and its outcomes", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}/escalate", s.handleEscalateApproval, apiOp{
-			summary: "Move one line's approval to the superior the caller names, or stall it when there is none — one hop per call, because each call is one deadline that elapsed. Never decides: silence is not a refusal", tag: "Order", role: RoleOperator,
-			req: jsonBody("Whom the caller's directory says the current approver reports to; empty means nobody does", schemaObj(map[string]any{
-				"superior": tString(),
+			summary: "Move one line's approval to the superior the caller names — or, with lineManager, to the current approver's line manager as the account records it — or stall it when there is none. One hop per call, because each call is one deadline that elapsed. Never decides: silence is not a refusal", tag: "Order", role: RoleOperator,
+			req: jsonBody("Whom the caller's directory says the current approver reports to (empty means nobody does), or lineManager: true to ask the account instead; not both", schemaObj(map[string]any{
+				"superior": tString(), "lineManager": tBool(),
 			})),
 			resp: jsonBody("Where the approval sits now, and whether it can go further", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}/reassign", s.handleReassignApproval, apiOp{
@@ -1968,10 +1968,11 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/users/{id}", s.handleGetUser, apiOp{
 			summary: "Fetch a user account", tag: "Users", role: RoleAdmin, resp: jsonBody("User", tObject())}},
 		{"PATCH", "/api/v1/users/{id}", s.handlePatchUser, apiOp{
-			summary: "Update a user account", tag: "Users", role: RoleAdmin,
+			summary: "Update a user account. managerId sets the account's line manager by principal id (\"\" clears it), and is refused while the directory mirror reports it", tag: "Users", role: RoleAdmin,
 			req: jsonBody("User changes", schemaObj(map[string]any{
 				"email": tString(), "displayName": tString(),
 				"roles": map[string]any{"type": "array", "items": tString()}, "disabled": tBool(),
+				"managerId": tString(),
 			})),
 			resp: jsonBody("Updated user", tObject())}},
 		{"POST", "/api/v1/users/{id}/password", s.handleSetUserPassword, apiOp{
