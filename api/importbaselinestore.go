@@ -69,6 +69,31 @@ func (s *Server) recordImportBaselines(scope string, hashes map[string]string) e
 	return s.baselines.Save(rec)
 }
 
+// forgetImportBaselines drops refs from a scope's bases, so the next import of a
+// document carrying them meets them as new rather than as records somebody here
+// deleted on purpose. Runs on the run loop.
+func (s *Server) forgetImportBaselines(scope string, refs []string) error {
+	if s.baselines == nil {
+		return nil
+	}
+	rec, ok, err := s.baselines.Get(scope)
+	if err != nil || !ok {
+		return err
+	}
+	forgot := false
+	for _, ref := range refs {
+		if _, had := rec.Hashes[ref]; had {
+			delete(rec.Hashes, ref)
+			forgot = true
+		}
+	}
+	if !forgot {
+		return nil
+	}
+	rec.UpdatedAt = time.Now().Unix()
+	return s.baselines.Save(rec)
+}
+
 // catalogBaselines is the catalogue service's memory of what the last import of a
 // document brought, kept in this server's baseline store under the catalogue's
 // scope. The service calls it on the run loop it shares with the server.

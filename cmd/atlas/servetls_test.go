@@ -217,6 +217,7 @@ func serveBehindForTest(ctx context.Context, addr, dataDir string, tlsCfg tlsCon
 		0, 0, false,
 		false, // metrics
 		true,  // catalogue
+		true,  // cataloguePurge
 		logging.FormatText, logging.DefaultLevel, tracing.Config{}, superviseFlag{}, nil, nil,
 		api.DefaultSupervisedWorkerMaxJobs,
 		true, // inProcessConnectors: no worker subprocesses out of a test binary

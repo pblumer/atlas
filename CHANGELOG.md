@@ -14,6 +14,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A catalogue can be deleted for good.** An administrator deletes a catalogue, or a single
+  product, with its releases, its own products, the orders placed from it, the process
+  instances still working them and the rights they granted — so a catalogue imported, ordered
+  from and tried out can be cleared and imported again. **On by default (opt-out); switch it
+  off on a production installation** with `--catalogue-purge=false`
+  (`ATLAS_CATALOGUE_PURGE=false`, Helm `atlas.catalogue.purge: false`), and the delete answers
+  403 there. While it is on, every start logs a WARN, `event=server.catalogue_purge_enabled`,
+  so an installation upgraded without the flag says so and an alert can match it.
+  `GET /api/v1/catalogs/{id}/deletion` and `GET /api/v1/catalog-products/{id}/deletion` show
+  what would go and what it means —
+  cancelled instances do not undo what they did in a target system, and rights leave the
+  inventory without any deprovisioning — and `DELETE /api/v1/catalogs/{id}` and
+  `DELETE /api/v1/catalog-products/{id}` carry it out only with `?confirm=` repeating the
+  id. The Console's catalogue page has a **Delete for good** card for administrators, and
+  MCP four tools (`atlas_catalog_deletion`, `atlas_delete_catalog`,
+  `atlas_catalog_product_deletion`, `atlas_delete_catalog_product`). On a server started
+  with `--catalogue-purge=false` nothing changes: a product is withdrawn and a catalogue kept
+  ([ADR-draft-catalogue-purge](docs/adr/draft-catalogue-purge.md), amending ADR-0312 and
+  answering ADR-0376's open question).
+
 - **API-token expiry can be alerted on.** `/metrics` carries `atlas_api_tokens_expiring_soon`
   (tokens still accepted with less than 30 days left — the Console's warning window, held equal
   to it by a test), `atlas_api_tokens_expired` (expired, not yet revoked) and

@@ -1114,6 +1114,19 @@ func (s *Server) apiRoutes() []apiRoute {
 				"members": tArray(), "revision": tInteger(),
 			})),
 			resp: jsonBody("The updated catalogue", tObject())}},
+		// Deleting for good (ADR-draft-catalogue-purge): ADR-0312 gives the catalogue
+		// no delete, so this is an administrator's purge, on by default and refused on
+		// a server started with --catalogue-purge=false — which a production
+		// installation is. The GET answers what the DELETE would remove, and the DELETE
+		// has to repeat the id it deletes.
+		{"GET", "/api/v1/catalogs/{id}/deletion", s.handleCatalogDeletion, apiOp{
+			summary: "What deleting a catalogue for good would remove (ADR-draft-catalogue-purge): its releases, its brand mark and every product whose home it is; the catalogues that would lose those products; the orders placed against its releases or carrying nothing but its products, and those that stay with lines withdrawn; how many running instances would be cancelled and how many holds of how many people would leave the inventory; the processes that stay deployed; and the warnings to read before confirming. `enabled` is false on a server started with --catalogue-purge=false. Answered whether or not it allows the purge, and nothing is changed",
+			tag:     "Catalogue", role: RoleAdmin,
+			resp: jsonBody("The purge plan", tObject())}},
+		{"DELETE", "/api/v1/catalogs/{id}", s.handleDeleteCatalog, apiOp{
+			summary: "Delete a catalogue for good, with everything GET …/deletion names (ADR-draft-catalogue-purge). Permanent and meant for a development or test installation: refused with 403 on a server started with --catalogue-purge=false (ATLAS_CATALOGUE_PURGE=false), which a production installation should be, and with 400 unless `?confirm=` repeats the catalogue id. Running instances working its orders are cancelled without undoing what they did in a target system, and holds leave the inventory without any deprovisioning. Answers the plan it carried out, with `done: true`",
+			tag:     "Catalogue", role: RoleAdmin,
+			resp: jsonBody("The purge carried out", tObject())}},
 		{"POST", "/api/v1/catalogs/{id}/releases", s.catalogs.HandlePublish, apiOp{
 			summary: "Publish a catalogue: validate it and freeze a release, or answer with every problem that stops it (422)", tag: "Catalogue", role: RoleProductManager,
 			resp: jsonBody("The published release", tObject())}},
@@ -1162,6 +1175,15 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Where one product is used, read backwards out of the same edges the release froze: which catalogues offer it, which wholes carry it and whether integrally or optionally, what it needs, **what needs it**, what it may never be held with, and how many people hold it by origin. The reverse question is the one a maintainer cannot ask anywhere else — a product manager about to retire a service, rebind its provisioning or move it between catalogues has no other way to find out what they are about to break. Merged across catalogues, because a service does not belong to one: the same product carried by two catalogues is one thing somebody is about to change. Holders are counted and never listed — a list of the people holding one service is the inventory filtered to the interesting part",
 			tag:     "Catalogue", role: RoleProductManager,
 			resp: jsonBody("Where the product is used, what depends on it, and how many hold it", tObject())}},
+
+		{"GET", "/api/v1/catalog-products/{id}/deletion", s.handleProductDeletion, apiOp{
+			summary: "What deleting a product for good would remove (ADR-draft-catalogue-purge): the catalogues that would stop offering it, the orders carrying nothing but it, the orders that stay with its lines withdrawn, how many running instances would be cancelled and how many holds would leave the inventory, the catalogues whose published release still offers it, the processes that stay deployed, and the warnings to read before confirming. `enabled` says whether this server allows the purge. Nothing is changed",
+			tag:     "Catalogue", role: RoleAdmin,
+			resp: jsonBody("The purge plan", tObject())}},
+		{"DELETE", "/api/v1/catalog-products/{id}", s.handleDeleteProduct, apiOp{
+			summary: "Delete a product for good, with everything GET …/deletion names (ADR-draft-catalogue-purge). Permanent and meant for a development or test installation: refused with 403 on a server started with --catalogue-purge=false (ATLAS_CATALOGUE_PURGE=false), and with 400 unless `?confirm=` repeats the product id. On a production installation a product is withdrawn instead (`state: withdrawn`). Answers the plan it carried out, with `done: true`",
+			tag:     "Catalogue", role: RoleAdmin,
+			resp: jsonBody("The purge carried out", tObject())}},
 
 		{"GET", "/api/v1/catalog-products/{id}/picture", s.catalogs.HandleGetPicture, apiOp{
 			summary: "A product's picture — a photograph or the vendor's mark — or 404 when it has none, which is the ordinary case the caller falls back from. Readable by anybody a catalogue offering the product is for, and not only by whoever maintains it: a product is referenced by catalogues rather than owned by one, so a customer of one catalogue legitimately orders a product whose home is another. A product nobody may see answers the same 404, because the two must be indistinguishable", tag: "Catalogue", role: RoleUser,
