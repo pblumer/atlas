@@ -357,9 +357,27 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 			jobType: compiler.SharePointJobType,
 			want:    "sharepoint",
 			fields: map[string]any{
-				"connector": "contoso", "site": "contoso.sharepoint.com,/sites/ops",
+				"connector": "contoso", "operation": "create-item", "site": "contoso.sharepoint.com,/sites/ops",
 				"list":   "Onboarding",
 				"fields": map[string]any{"Title": "cn=ada,dc=example,dc=com"},
+			},
+		},
+		{
+			// Every other operation rides its own job type — which a worker built before
+			// operations existed does not lease — and the same arm: the operation and
+			// the values it takes travel, the endpoint and the bundle do not.
+			name: "sharepoint operation",
+			element: `<atlas:sharePointConnector connector="contoso" operation="update-item" site="https://contoso.sharepoint.com/sites/ops" list="Onboarding" itemId="=itemNr" resultVariable="aktualisiert">` +
+				`<atlas:itemField name="Status" value="Erledigt"/>` +
+				`</atlas:sharePointConnector>`,
+			variables: `{"variables":{"itemNr":"17"}}`,
+			jobType:   compiler.SharePointOpsJobType,
+			want:      "sharepoint",
+			fields: map[string]any{
+				"connector": "contoso", "operation": "update-item",
+				"site": "https://contoso.sharepoint.com/sites/ops", "list": "Onboarding",
+				"itemId": "17", "fields": map[string]any{"Status": "Erledigt"},
+				"resultVariable": "aktualisiert",
 			},
 		},
 		{
@@ -827,6 +845,7 @@ func payloadArmCases(t *testing.T) map[int32]bool {
 		"S3JobTypeIndex":            compiler.S3JobTypeIndex,
 		"ExchangeJobTypeIndex":      compiler.ExchangeJobTypeIndex,
 		"TeamsPhoneJobTypeIndex":    compiler.TeamsPhoneJobTypeIndex,
+		"SharePointOpsJobTypeIndex": compiler.SharePointOpsJobTypeIndex,
 	}
 	if len(indexByConstName) != int(compiler.ReservedJobTypeCount()) {
 		t.Fatalf("this table names %d job-type constants but the compiler reserves %d; "+

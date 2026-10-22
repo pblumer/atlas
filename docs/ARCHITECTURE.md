@@ -266,7 +266,7 @@ atlas/
 ├── connector/     Worker Type implementations, one package per type (ADR-0203)
 │   ├── rest/          HTTP REST outbound (ADR-0067)
 │   ├── mail/          Outbound mail: SMTP, Gmail, Microsoft Graph (ADR-0079/0093)
-│   ├── sharepoint/    SharePoint list items via Graph (ADR-0141)
+│   ├── sharepoint/    SharePoint lists and document libraries via Graph (ADR-0141)
 │   ├── remedy/        BMC Remedy AR System (ADR-0106)
 │   ├── jira/          Atlassian Jira issues (ADR-0201)
 │   ├── googlesheets/  Google Sheets and Drive (ADR-0235)

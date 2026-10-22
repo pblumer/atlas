@@ -2,6 +2,12 @@ package sharepoint
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -166,6 +172,63 @@ func TestNewTokenSourceValidation(t *testing.T) {
 	for name, b := range cases {
 		if _, err := newTokenSource(b, http.DefaultClient, nil); err == nil {
 			t.Errorf("%s: want an error, got nil", name)
+		}
+	}
+}
+
+// testCertificatePEM is a self-signed certificate and its private key as one PEM text —
+// the shape a bundle's certificate field carries.
+func testCertificatePEM(t *testing.T) string {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := &x509.Certificate{SerialNumber: big.NewInt(7), Subject: pkix.Name{CommonName: "atlas-sharepoint"},
+		NotBefore: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), NotAfter: time.Date(2028, 1, 1, 0, 0, 0, 0, time.UTC)}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyDER, _ := x509.MarshalPKCS8PrivateKey(key)
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})) +
+		string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}))
+}
+
+// An app that proves itself with a certificate sends a signed client assertion and no
+// secret at all — which is the point: the private key never leaves this host. A bundle
+// that names no method is a client-credentials bundle, the one a server workflow uses.
+func TestCertificateGrant(t *testing.T) {
+	ts := newTokenServer(t, 3600)
+	src, err := newTokenSource(credentialBundle{
+		TokenURL: ts.srv.URL, Scope: graphScope, ClientID: "app-1", Certificate: testCertificatePEM(t),
+	}, http.DefaultClient, func() time.Time { return time.Date(2026, 10, 22, 8, 0, 0, 0, time.UTC) })
+	if err != nil {
+		t.Fatalf("newTokenSource: %v", err)
+	}
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	if ts.lastForm["grant_type"] != "client_credentials" || ts.lastForm["client_id"] != "app-1" ||
+		ts.lastForm["client_assertion_type"] != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" ||
+		ts.lastForm["client_assertion"] == "" || ts.lastForm["scope"] != graphScope {
+		t.Errorf("token form = %v, want the certificate grant", ts.lastForm)
+	}
+	if _, sent := ts.lastForm["client_secret"]; sent {
+		t.Error("a certificate grant sent a client secret")
+	}
+}
+
+func TestCertificateBundleRefusals(t *testing.T) {
+	cert := testCertificatePEM(t)
+	for name, b := range map[string]credentialBundle{
+		"secret and certificate": {TokenURL: "http://x", ClientID: "c", ClientSecret: "s", Certificate: cert},
+		"no client id":           {TokenURL: "http://x", Certificate: cert},
+		"not a certificate":      {TokenURL: "http://x", ClientID: "c", Certificate: "-----BEGIN NOTHING-----"},
+		"certificate on refresh": {Method: methodRefreshToken, TokenURL: "http://x", ClientID: "c", ClientSecret: "s", RefreshToken: "r", Certificate: cert},
+	} {
+		if _, err := newTokenSource(b, http.DefaultClient, nil); err == nil {
+			t.Errorf("%s: want a refusal", name)
 		}
 	}
 }
