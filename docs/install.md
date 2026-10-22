@@ -1069,6 +1069,33 @@ left is marked with the days it has, and the Console's dashboard says so to ever
 administrator until it is replaced and revoked — an expired token is refused like an
 unknown one, so a machine that still holds it fails on its next call.
 
+To be told without opening the Console, alert on `/metrics`. Three gauges without
+labels cover it: `atlas_api_tokens_expiring_soon` (tokens still accepted with less than
+the same 30 days left), `atlas_api_tokens_expired` (expired and not yet revoked) and
+`atlas_api_token_next_expiry_timestamp_seconds` (the next expiry as a Unix time, `+Inf`
+when none expires). Alert on the first two together — a token leaves "soon" by
+expiring, so a rule on the first alone resolves just as the machine starts failing:
+
+```yaml
+groups:
+  - name: atlas-api-tokens
+    rules:
+      - alert: AtlasApiTokenExpiringSoon
+        expr: atlas_api_tokens_expiring_soon > 0
+        labels: { severity: warning }
+      - alert: AtlasApiTokenExpired
+        expr: atlas_api_tokens_expired > 0
+        labels: { severity: critical }
+      # a margin of your own instead of 30 days
+      - alert: AtlasApiTokenExpiresThisWeek
+        expr: atlas_api_token_next_expiry_timestamp_seconds - time() < 7 * 86400
+        labels: { severity: critical }
+```
+
+The metrics say how many, never which: a token's name would be a label invented by the
+data, and anyone holding a `metrics` token reads `/metrics`. The Console's list says
+which.
+
 Without the Console — from a script, say — the route is the same one the page uses, sent
 with an administrator's session cookie:
 

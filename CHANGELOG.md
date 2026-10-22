@@ -34,6 +34,15 @@ _Changed_ / _Removed_ for each version.
   ([ADR-draft-catalogue-purge](docs/adr/draft-catalogue-purge.md), amending ADR-0312 and
   answering ADR-0376's open question).
 
+- **API-token expiry can be alerted on.** `/metrics` carries `atlas_api_tokens_expiring_soon`
+  (tokens still accepted with less than 30 days left — the Console's warning window, held equal
+  to it by a test), `atlas_api_tokens_expired` (expired, not yet revoked) and
+  `atlas_api_token_next_expiry_timestamp_seconds` (`+Inf` when none expires), so an alert rule
+  catches a token before the machine holding it starts failing with 401, without anybody
+  opening the Console. The series carry no labels: which token is the Console's answer, not
+  something a `metrics`-scoped scraper reads
+  ([ADR-0194](docs/adr/0194-api-tokens.md), amendment 2026-10-22).
+
 - **An application can be deleted with everything it owns.** Deleting an application now asks
   how: keep its contents, which then read as Not assigned (as before), or delete everything it owns
   on this server — its deployed versions after cancelling their running instances, its decision

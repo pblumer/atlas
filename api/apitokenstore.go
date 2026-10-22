@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pblumer/atlas/api/sidecar"
 )
@@ -211,6 +212,38 @@ func (i *apiTokenIndex) remove(id string) {
 		}
 	}
 	i.mu.Unlock()
+}
+
+// apiTokenExpiry is what the index says about lifetimes at one instant: the tokens
+// still accepted that run out within the warning window, the ones that already have,
+// and the earliest expiry among those still accepted (zero when none runs out).
+type apiTokenExpiry struct {
+	soon, expired int
+	next          int64
+}
+
+// expiry summarises the tokens' lifetimes at the given Unix time, by the same
+// reading match applies: a token is expired from its expiry second on.
+func (i *apiTokenIndex) expiry(now int64, window time.Duration) apiTokenExpiry {
+	warn := int64(window / time.Second)
+	var e apiTokenExpiry
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	for _, rec := range i.byHash {
+		switch {
+		case rec.ExpiresAt == 0:
+		case rec.expired(now):
+			e.expired++
+		default:
+			if rec.ExpiresAt-now < warn {
+				e.soon++
+			}
+			if e.next == 0 || rec.ExpiresAt < e.next {
+				e.next = rec.ExpiresAt
+			}
+		}
+	}
+	return e
 }
 
 // match resolves a presented secret to its token, refusing one whose lifetime has
