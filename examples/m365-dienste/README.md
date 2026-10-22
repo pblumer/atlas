@@ -14,7 +14,7 @@ verwendet, ersetzt sie in den `.bpmn`-Dateien (Attribut `connector`).
 
 | Datei | Inhalt |
 |---|---|
-| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 14 Prozesse, 21 Formulare, 5 Entscheidungsreferenzen |
+| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 15 Prozesse, 21 Formulare, 5 Entscheidungsreferenzen |
 | `katalog.json` | Das Katalogdokument: zwei Kataloge, neun Produkte, eine Beziehung |
 | `fragen.json` | Was jeder Platzhalter im Katalogdokument fragt (Zielgruppen, Genehmigende) |
 | `*.bpmn` | Die Prozesse, je mit Dokumentation an Prozess und Elementen |
@@ -38,12 +38,12 @@ Die Ränge müssen auf der Zielinstanz frei sein; sonst sind sie in `katalog.jso
 
 | Produkt | Worker | Genehmigung | Prozess | Aktionen nach der Bereitstellung |
 |---|---|---|---|---|
-| Microsoft 365: Lizenz mit Postfach (`m365-lizenz`), Varianten E3, E5, F3 | Entra, Exchange | vorgesetzte Person | `lizenz.bpmn` (Lebenszyklus) | Lizenz zurückgeben, Abwesenheitsnotiz setzen, Abwesenheitsnotiz beenden |
+| Microsoft 365: Lizenz mit Postfach (`m365-lizenz`), Varianten E3, E5, F3 | Entra, Exchange | vorgesetzte Person der betroffenen Person | `lizenz.bpmn` (Lebenszyklus) | Lizenz zurückgeben, Abwesenheitsnotiz setzen, Abwesenheitsnotiz beenden |
 | Teams-Telefonie mit eigener Rufnummer (`m365-telefonie`), setzt die Lizenz voraus | Entra, Teams Phone | `{{telefonie-team}}` | `telefonie.bpmn` (Lebenszyklus) | Telefonie aufheben |
-| Microsoft Teams: Team (`m365-team`) | Entra | vorgesetzte Person | `team.bpmn` (Lebenszyklus) | Team archivieren, Person aufnehmen, Kanal anlegen |
-| Funktionspostfach (`m365-funktionspostfach`) | Exchange | vorgesetzte Person | `funktionspostfach.bpmn` (Lebenszyklus) | entfernen, Zugriff erteilen, Zugriff entziehen |
+| Microsoft Teams: Team (`m365-team`) | Entra | vorgesetzte Person der verantwortlichen Person | `team.bpmn` (Lebenszyklus) | Team archivieren, Person aufnehmen, Kanal anlegen |
+| Funktionspostfach (`m365-funktionspostfach`) | Exchange | vorgesetzte Person der verantwortlichen Person | `funktionspostfach.bpmn` (Lebenszyklus) | entfernen, Zugriff erteilen, Zugriff entziehen |
 | Verteilerliste (`m365-verteiler`) | Exchange | keine | `verteiler.bpmn` (Lebenszyklus) | entfernen, Mitglied aufnehmen, Mitglied entfernen |
-| Zugriff auf ein Postfach (`m365-postfachzugriff`), 365 Tage befristet | Exchange | vorgesetzte Person, je nach Regel zusätzlich Informationssicherheit | `postfachzugriff-erteilen.bpmn`, `postfachzugriff-entziehen.bpmn` (getrennte Prozesse) | Rückgabe |
+| Zugriff auf ein Postfach (`m365-postfachzugriff`), 365 Tage befristet | Exchange | vorgesetzte Person der Person, die den Zugriff erhält, je nach Regel zusätzlich Informationssicherheit | `postfachzugriff-erteilen.bpmn`, `postfachzugriff-entziehen.bpmn` (getrennte Prozesse) | Rückgabe |
 | Sitzungszimmer (`m365-raum`) | Exchange | `{{facility-management}}` | `raum-einrichten.bpmn`, `raum-entfernen.bpmn` (getrennte Prozesse) | Rückgabe |
 | Anrufwarteschlange (`m365-warteschlange`) | Teams Phone, Entra | `{{telefonie-team}}` | `warteschlange.bpmn` (Lebenszyklus) | entfernen, Agenten ändern |
 | Telefonzentrale (`m365-telefonzentrale`) | Teams Phone, Entra | `{{telefonie-team}}` | `telefonzentrale.bpmn` (Lebenszyklus) | entfernen |
@@ -57,6 +57,51 @@ Nummer frei, bevor die Lizenz geht, und `remove-resource-account` gibt die Numme
 Warteschlange oder Telefonzentrale frei, bevor es das Konto löscht. Ein Ressourcenkonto
 nimmt eine Rufnummer nur mit Nutzungsort und der Lizenz *Microsoft Teams Phone Resource
 Account* an; beides gibt ihm der Entra-Worker gleich nach dem Anlegen.
+
+## Die Genehmigung durch die vorgesetzte Person
+
+Lizenz, Team, Funktionspostfach und Postfachzugriff nennen als Genehmigungsart den Prozess
+`proc_m365_genehmigung_vorgesetzter` (`genehmigung-vorgesetzter.bpmn`) und nicht die
+eingebaute Art «superior». Der Grund: Die eingebaute Art fragt die vorgesetzte Person der
+**bestellenden** Person und kennt dafür nur deren Atlas-Konto. Bestellt wird hier aber für
+jemanden, den das Bestellformular nennt: `upn` (Lizenz), `besitzer` (Team,
+Funktionspostfach) oder `person` (Postfachzugriff). Diese Antworten erhält nur ein
+Genehmigungsprozess der Installation selbst (ADR-0441).
+
+Ablauf:
+
+1. **Vorgesetzten lesen.** Ein PowerShell-Skript wählt die betroffene Person aus den
+   Bestellangaben und liest in Entra ID ihren Vorgesetzten
+   (`GET /users/{upn}/manager`, Microsoft Graph, app-only mit Zertifikat). «Person
+   unbekannt», «kein Vorgesetzter» und «keine UPN» sind Antworten, kein Fehler. Ein
+   technischer Fehler (Anmeldung, Berechtigung, Netz) wird zum Incident, damit nicht still
+   jede Genehmigung bei der Ersatzgruppe landet.
+2. **Atlas-Konto suchen** (`GET /api/v1/users/assignable`). Treffer ist ein Konto, dessen
+   Benutzername gleich der UPN oder der Mailadresse des Vorgesetzten ist; sonst genau ein
+   Konto mit dem Teil vor dem «@» als Benutzernamen (kleingeschrieben, nur `a-z 0-9 . - _`,
+   so benennt Atlas Konten aus Entra ID) und gleichem Anzeigenamen.
+3. **Aufgabe** an dieses Konto, sonst an die **Ersatzgruppe**: `approval.ref` des Produkts,
+   wenn gesetzt, sonst die Gruppe `M365-Administration`. Beide Aufgaben tragen das Formular
+   `genehmigung` der Plattform; der Posteingang zeigt dafür «Genehmigen» und «Ablehnen» und
+   die Angaben der Bestellung.
+4. **Ergebnis an den Auftrag:** `…/start` mit `approvedBy` (wer die Aufgabe abgeschlossen
+   hat) oder `…/decision` mit der Begründung der Ablehnung.
+
+Daneben benachrichtigt der Prozess die entscheidende Person oder Gruppe per Mail, erinnert
+die vorgesetzte Person nach drei Tagen und reicht die Genehmigung nach sieben Tagen an den
+nächsthöheren Vorgesetzten weiter (`…/escalate`). Die Aufgabe bleibt dabei offen.
+
+**Personendaten.** `upn`, `besitzer`, `person`, `postfach` und `anlass` sind im
+Genehmigungsprozess als Personendaten der empfangenden Person deklariert. Kein Ausdruck, den
+die Engine auswertet, liest sie (der Compiler weist das zurück): die betroffene Person wählt
+das Skript, und den Text der Mail bildet der Mail-Worker; beide erhalten den Klartext. Der
+Vorgesetzte ist nicht deklariert, weil er nicht die empfangende Person ist und Gateway und
+Kontosuche ihn lesen.
+
+**`anlass` statt `begruendung`.** Das Bestellformular des Postfachzugriffs fragt den Anlass
+unter dem Schlüssel `anlass`. `begruendung` ist die Variable, in die der Posteingang die
+Begründung einer Ablehnung schreibt; unter demselben Namen hätte die Antwort der
+bestellenden Person den Grund der Ablehnung überdeckt bzw. ihn als Personendatum gesperrt.
 
 ## Die Entscheidungen
 
@@ -128,8 +173,18 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
    Prozesse ihre Positionen an die Bestellung. Am einfachsten unter **Console → Administration → API tokens**:
    Scope `full`, «Direkt im Vault ablegen» angekreuzt, Name `atlas`. Das Geheimnis verlässt
    den Server dann nie.
-3. **Verzeichnis-Worker `verzeichnis`** für die eingebaute Genehmigung durch die
-   vorgesetzte Person (Lizenz, Team, Funktionspostfach, Postfachzugriff).
+3. **Für die Genehmigung durch die vorgesetzte Person** (Lizenz, Team, Funktionspostfach,
+   Postfachzugriff):
+   - ein Worker für PowerShell-Skripte (`io.atlas.script.powershell`) mit dem Modul
+     `Microsoft.Graph.Authentication`;
+   - eine App-Registrierung mit der Anwendungsberechtigung `User.Read.All` und ein
+     Zertifikat mit privatem Schlüssel im Speicher des Worker-Kontos
+     (`Cert:\CurrentUser\My` oder `Cert:\LocalMachine\My`);
+   - Atlas-Konten der vorgesetzten Personen, am einfachsten aus der Kontenspiegelung von
+     Entra ID; wer kein Konto hat, wird durch die Ersatzgruppe vertreten;
+   - der Vault des Servers (Vorgabe), weil der Prozess Personendaten deklariert;
+   - für die Benachrichtigung ein Mail-Worker `mail`. Fehlt er, bleibt nur die Nachricht
+     liegen; die Genehmigung läuft.
 4. **Gruppen** in Atlas: die beiden Zielgruppen, `M365-Telefonie`, `M365-Administration`,
    `Informationssicherheit` und die Gruppe des Facility Managements. Die Aufgaben der
    Prozesse adressieren `M365-Telefonie`, `M365-Administration` und
@@ -142,6 +197,13 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
    | `USAGE_LOCATION` | `CH` | Nutzungsort, ohne den Graph keine Lizenz zuweist |
    | `PARTNER_UPN_DOMAIN` | `contoso.onmicrosoft.com` | Domain der Partnerkonten |
    | `ATLAS_API_BASE` | `http://127.0.0.1:8080` | Adresse, unter der die Prozesse Atlas selbst erreichen, wenn eine Rückgabe oder Aktion sie nicht mitbringt |
+   | `ENTRA_TENANT_ID` | `nicht-gesetzt` | Tenant für die Abfrage des Vorgesetzten |
+   | `ENTRA_CLIENT_ID` | `nicht-gesetzt` | Anwendungs-ID der App-Registrierung mit `User.Read.All` |
+   | `ENTRA_CERTIFICATE_SUBJECT` | `CN=atlas-m365-graph` | Subject des Zertifikats im Speicher des PowerShell-Workers |
+
+   `nicht-gesetzt` ist ein Ersatzwert, damit eine Bestellung nicht schon beim Start
+   abgewiesen wird. Steht er beim Lauf noch dort, meldet das Skript einen Incident, der die
+   fehlende Konstante nennt.
 
 ## Installieren
 
@@ -244,9 +306,19 @@ fragte die Plätze mit einem Zahlenfeld ab, das der Shop als Zahl sendet und die
 nur als Text annimmt (jetzt ein Textfeld mit Muster), und der Systemprozess startete die
 Lizenz-Position mit Variante nicht (siehe Voraussetzung 0).
 
+Die Genehmigung durch die vorgesetzte Person prüft `go test ./api -run TestTheM365Approval`
+gegen einen echten Server: Bestellung eines Teams und eines Postfachzugriffs mit den
+Bestellformularen dieses Pakets, der Job «Vorgesetzten lesen» erhält die Antworten im
+Klartext, die Aufgabe geht an das Konto der vorgesetzten Person bzw. an
+`M365-Administration`, die Zustimmung startet die Bereitstellung mit `approvedBy`, die
+Ablehnung erreicht den Auftrag mit der Begründung der genehmigenden Person. Die Antwort des
+PowerShell-Skripts spielt der Test selbst.
+
 Nicht geprüft: die Entra- und Exchange-Schritte gegen einen echten Tenant (für diese
-Worker gibt es keinen Mock), die Governance-Prüfung gegen echte Daten und
-`installieren.ps1` (in der Prüfumgebung stand keine PowerShell zur Verfügung).
+Worker gibt es keinen Mock), das PowerShell-Skript der Genehmigung gegen Microsoft Graph,
+die Mail an die genehmigende Person, die Eskalation nach sieben Tagen, die
+Governance-Prüfung gegen echte Daten und `installieren.ps1` (in der Prüfumgebung stand keine
+PowerShell zur Verfügung).
 
 ## Annahmen, die vor dem Einsatz zu prüfen sind
 

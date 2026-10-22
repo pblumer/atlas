@@ -29,6 +29,27 @@ _Changed_ / _Removed_ for each version.
   enabled account behind it is marked *no account*, and a group id nobody lists any more
   *no group*. A directory that cannot be read leaves its ids as they were.
 
+### Changed
+
+- **The Microsoft 365 example asks the manager of the person a position is for.** Licence,
+  team, shared mailbox and mailbox access in `examples/m365-dienste` were approved with the
+  built-in kind `superior`, which asks the manager of the person who *ordered* and finds
+  that manager only through a directory worker. They now name the example's own approval
+  model, `proc_m365_genehmigung_vorgesetzter`: it receives the order form's answers
+  (ADR-0441), reads the manager of `upn`, `besitzer` or `person` from Entra ID in a
+  PowerShell script (Microsoft Graph, app-only with a certificate), assigns the task to the
+  manager's Atlas account, and falls back to `approval.ref` or the group
+  `M365-Administration` when there is no manager, no such person or no account. It mails the
+  approver, reminds after three days and escalates to the next manager after seven. The
+  answers are declared personal data in that model, so the script and the mail worker are
+  the only places they are read in the clear. The mailbox-access order form's
+  justification is now keyed `anlass` rather than `begruendung`, the variable the inbox
+  writes a refusal's reason to. New constants `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` and
+  `ENTRA_CERTIFICATE_SUBJECT`; the README lists what the operator sets up.
+  `TestEveryFormReferenceResolves` accepts the platform's approval form `genehmigung`,
+  which an installation's own approval model names to get the inbox's Genehmigen and
+  Ablehnen, for as long as the system bundle declares it.
+
 ## [0.18.0] — 2026-10-22
 
 **An application can leave an installation with everything it owns, and the Console
