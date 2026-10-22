@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas variables-references e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountInstanceReplay against a mock `api`, for
+         the Variables tab's references: a value that is a person's, a process's or a
+         product's id is named beside it. bpmn assets are the production ones. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { mountInstanceReplay } from "/editor.js";
+      import { enhanceTable } from "/table.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000;
+      const ns = (ms) => ms * 1e6;
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_refs" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="refs" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f_0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:serviceTask id="Lesen_1" name="Vorgesetzten lesen"><bpmn:incoming>f_0</bpmn:incoming><bpmn:outgoing>f_1</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:endEvent id="End_1" name="Ende"><bpmn:incoming>f_1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f_0" sourceRef="Start_1" targetRef="Lesen_1"/>
+    <bpmn:sequenceFlow id="f_1" sourceRef="Lesen_1" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="refs">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="142" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Lesen_1_di" bpmnElement="Lesen_1"><dc:Bounds x="260" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="440" y="142" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f_0_di" bpmnElement="f_0"><di:waypoint x="196" y="160"/><di:waypoint x="260" y="160"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_1_di" bpmnElement="f_1"><di:waypoint x="360" y="160"/><di:waypoint x="440" y="160"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      const ORDERER = "usr_3b0ed4783d940eac82171edf";
+      // An id no account answers to: deleted since, or disabled — the directory lists
+      // neither.
+      const GONE = "usr_0123456789abcdef01234567";
+      const GROUP = "grp_aaaaaaaaaaaaaaaaaaaaaaaa";
+      // A group nobody lists any more. A group cannot be disabled, so this one was deleted.
+      const GONE_GROUP = "grp_bbbbbbbbbbbbbbbbbbbbbbbb";
+
+      // What an approval of the shop starts with, plus three strings that only look like
+      // references: a filter that *contains* an id, a sentence that names the prefix, and
+      // an identifier-shaped word nothing is called.
+      const vars = [
+        { name: "orderer", value: ORDERER, kind: "string" },
+        { name: "recipient", value: GONE, kind: "string" },
+        { name: "approvalRef", value: GROUP, kind: "string" },
+        { name: "formerTeam", value: GONE_GROUP, kind: "string" },
+        { name: "provisionProcess", value: "proc_m365_funktionspostfach", kind: "string" },
+        { name: "itemId", value: "m365-funktionspostfach", kind: "string" },
+        { name: "positionId", value: "m365-funktionspostfach#gross", kind: "string" },
+        { name: "filter", value: `(userPrincipalName=${ORDERER})`, kind: "string" },
+        { name: "note", value: "usr_ ids are opaque", kind: "string" },
+        { name: "status", value: "approved", kind: "string" },
+        { name: "count", value: "3", kind: "number" },
+      ];
+
+      const steps = [
+        { elementId: "Start_1", elementInstanceKey: "1000", type: "bpmn:startEvent", position: 1, tokenId: "1", variables: [] },
+        { elementId: "Lesen_1", elementInstanceKey: "1001", type: "bpmn:serviceTask", position: 2, tokenId: "1", variables: vars },
+        { elementId: "End_1", elementInstanceKey: "1002", type: "bpmn:endEvent", position: 3, tokenId: "1", variables: vars },
+      ].map((s, i) => ({ ...s, at: ns(T + i * 1000), endAt: ns(T + i * 1000 + 500) }));
+
+      const frames = steps.map((s, i) => ({
+        position: s.position, at: s.at,
+        tokens: i < steps.length - 1 ? [{ elementId: s.elementId, tokenId: "1", elementInstanceKey: s.elementInstanceKey, state: "active" }] : [],
+      }));
+
+      const TIMELINE = { processDefKey: "7", processId: "refs", version: 1, state: "completed", steps, frames };
+
+      const PRINCIPALS = [
+        { type: "user", id: ORDERER, name: "Patrick Blumer" },
+        { type: "group", id: GROUP, name: "IT-Leitung" },
+      ];
+      // Two versions of the provisioning process: the reference opens the newest.
+      const PROCESSES = [
+        { key: 11, processId: "proc_m365_funktionspostfach", name: "M365 Funktionspostfach", version: 1 },
+        { key: 22, processId: "proc_m365_funktionspostfach", name: "M365 Funktionspostfach", version: 2 },
+        { key: 7, processId: "refs", name: "Referenzen", version: 1 },
+      ];
+      const PRODUCTS = [
+        {
+          id: "m365-funktionspostfach", homeCatalog: "m365",
+          texts: { de: "Funktionspostfach", en: "Shared mailbox" },
+          variants: [{ id: "gross", texts: { de: "Gross", en: "Large" } }],
+        },
+      ];
+
+      // Every request the view makes, by path, so a test can ask how often a directory
+      // was read.
+      window.__calls = {};
+
+      const makeApi = (opts) => async (method, url) => {
+        window.__calls[url] = (window.__calls[url] || 0) + 1;
+        if (url === "/api/v1/principals") {
+          if (opts.failPrincipals) throw new Error("directory unavailable");
+          return PRINCIPALS;
+        }
+        if (url === "/api/v1/processes") return PROCESSES;
+        if (url === "/api/v1/catalog-products") return PRODUCTS;
+        if (/\/instances\/\d+\/timeline$/.test(url)) return TIMELINE;
+        if (/\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (url.includes("/runtime")) return { elements: [] };
+        if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        if (/\/instances\/\d+\/data-objects$/.test(url)) return [];
+        if (/\/instances\/\d+\/object-graph$/.test(url)) return { nodes: [], links: [], unresolved: [] };
+        return {};
+      };
+
+      // opts.roles: the roles the signed-in person holds, or absent for "everything" —
+      // the answer app.js's mayUse gives when nothing is enforced.
+      window.__mount = async (opts = {}) => {
+        const mayUse = opts.roles ? (role) => opts.roles.includes(role) : undefined;
+        await mountInstanceReplay(view, { api: makeApi(opts), toast: noop, key: "281474976723211", mayUse });
+        for (const t of view.querySelectorAll("table:not(.no-enhance)")) enhanceTable(t);
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

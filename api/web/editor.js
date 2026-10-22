@@ -4,6 +4,7 @@
 
 import { attachFeelEditor } from "./feel.js";
 import { copyText } from "./clipboard.js";
+import { createRefResolver, refChipHTML, refPopHTML } from "./varrefs.js";
 import { attachCodeEditor } from "./code-editor.js";
 import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
@@ -13773,7 +13774,11 @@ export async function mountTaskProcess(container, { api, instanceKey, activeElem
 // cross-highlights both and shows that element instance's facts and the variables
 // as they stood when it activated. The timeline is polled so a still-running
 // instance keeps gaining steps live.
-export async function mountInstanceReplay(root, { api, toast, key }) {
+// mayUse is the Console's role check (app.js). The Variables tab asks it before
+// offering a reference as a link; left out, every link is offered — the answer the
+// Console gives when nothing is enforced, and the server refuses a page the caller
+// may not open either way.
+export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
@@ -13846,6 +13851,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         </div>
       </div>
       <div class="dec-pop" id="dec-pop" hidden></div>
+      <div class="dec-pop ref-pop" id="ref-pop" role="tooltip" hidden></div>
     </div>`;
 
   let lib;
@@ -13905,7 +13911,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       fromProcessDefKey: tl.processDefKey,
       // The replay is a fold of the instance's history and the migration changes what
       // that history means, so it is re-read from scratch rather than patched.
-      onDone: () => mountInstanceReplay(root, { api, toast, key }),
+      onDone: () => mountInstanceReplay(root, { api, toast, key, mayUse }),
     }));
   }
 
@@ -13948,7 +13954,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const decEl = root.querySelector("#tab-decisions");
   const dataEl = root.querySelector("#tab-data");
   const decPop = root.querySelector("#dec-pop");
+  const refPop = root.querySelector("#ref-pop");
   const speedSel = root.querySelector("#speed");
+  // What the Variables tab's values name — a person, a process, a product — read once
+  // for this view, and drawn again when a directory arrives (varrefs.js).
+  const refs = createRefResolver({ api, mayUse, onLoad: () => renderVarRows() });
 
   let steps = [];    // element-activation audit timeline, oldest first
   let frames = [];   // complete logical token states, oldest first
@@ -14493,7 +14503,10 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <span class="peek">${esc(jsonPeek(v.value))}</span></button>`;
     } else {
       const cls = v.kind === "boolean" ? "bool" : v.kind === "number" ? "num" : v.kind === "null" ? "null" : "str";
-      valCell = `<span class="c-val ${cls}">${esc(v.value)}</span>`;
+      // A value that is somebody's or something's id keeps its place and is named beside
+      // it: the stored value is still what the row shows first and what it copies.
+      const ref = v.kind === "string" ? refChipHTML(refs.refOf(v.value)) : "";
+      valCell = `<span class="c-val ${cls}">${esc(v.value)}</span>${ref}`;
     }
     const typeBadge = complex
       ? `<span class="vtag obj">${esc(jsonTypeLabel(v.value))}</span>`
@@ -14592,6 +14605,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (!body) return;
     const f = varFilter.trim().toLowerCase();
     const shown = shownVars();
+    refs.want(shown.filter((v) => v.kind === "string").map((v) => v.value));
     varsEl.querySelector("#v-count").textContent = `${shown.length} variable${shown.length === 1 ? "" : "s"}`;
     body.innerHTML = shown.length
       ? shown.map(varRow).join("")
@@ -14696,6 +14710,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (ctx !== varsContext) {
       varsContext = ctx;
       expandedVars.clear();
+      // The chip a reference card was explaining is not in the next set of rows.
+      refPop.hidden = true;
     }
     varsEl.querySelector("#v-scope").innerHTML = scope;
     varsEl.querySelector("#v-copyall").innerHTML = copyAllBtn(curVarList);
@@ -16086,6 +16102,31 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   });
   decEl.addEventListener("focusin", (e) => { const row = e.target.closest(".res-row.hoverable"); if (row) showDecPop(row); });
   decEl.addEventListener("focusout", hideDecPop);
+
+  // Variables tab: hovering (or focusing) a reference says what its id names. The card
+  // is built from the resolver, not from the chip's markup, so it says what the
+  // directory says.
+  const showRefPop = (chip) => {
+    const html = refPopHTML(refs.refOf(chip.dataset.ref));
+    if (!html) return;
+    refPop.innerHTML = html;
+    refPop.hidden = false;
+    const box = chip.getBoundingClientRect();
+    const top = box.top - refPop.offsetHeight - 8;
+    refPop.style.left = Math.max(8, Math.min(box.left, window.innerWidth - refPop.offsetWidth - 8)) + "px";
+    refPop.style.top = (top < 8 ? box.bottom + 8 : top) + "px";
+  };
+  const hideRefPop = () => { refPop.hidden = true; };
+  varsEl.addEventListener("pointerover", (e) => {
+    const chip = e.target.closest(".c-ref");
+    if (chip && varsEl.contains(chip)) showRefPop(chip);
+  });
+  varsEl.addEventListener("pointerout", (e) => {
+    const chip = e.target.closest(".c-ref");
+    if (chip && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest(".c-ref") === chip)) hideRefPop();
+  });
+  varsEl.addEventListener("focusin", (e) => { const chip = e.target.closest(".c-ref"); if (chip) showRefPop(chip); });
+  varsEl.addEventListener("focusout", hideRefPop);
 
   await poll();
   renderInspector();

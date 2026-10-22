@@ -223,6 +223,17 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   and — for a branch this instance never took — the element's identity plus its
   documentation instead of the old silent fallback to the process panel. Reads it off the
   rendered model; no server call involved.
+- **`variables-refs.spec.mjs`** (ADR-0314): what an id in the **Operations instance
+  replay**'s Variables tab stands for (`api/web/varrefs.js`), against a mock `api`. A
+  principal id is named beside its unchanged value, and the copy button still copies the
+  id. Hovering or focusing a chip opens a card naming the kind, the id and that the name
+  is today's. A user id no enabled account answers to is marked *no account*, with
+  deleted and disabled both named; a group nobody lists is *no group*, and only deleted
+  is named, since a group cannot be disabled. A process links to its newest deployment's live view and a
+  product or position to its home catalogue, and neither links without the role. A
+  filter containing an id, a sentence, an unknown word and a number get no chip. Each
+  directory is read once however often the rows are redrawn. A directory that fails
+  leaves its ids unclaimed. The value column's filter finds a row by the resolved name.
 
 - **`pdf-writer.spec.mjs`** (ADR-0143): the dependency-free **PDF writer** behind the process
   documentation export (`api/web/pdf.js`). A PDF is only valid if its cross-reference table

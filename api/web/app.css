@@ -2080,6 +2080,25 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   padding: 0 5px; margin-left: 6px; border-radius: 4px; color: var(--muted);
   background: var(--surface); border: 1px solid var(--border); white-space: nowrap; vertical-align: middle;
 }
+/* What a value in the replay variables table names — a person, a process, a product —
+   beside the value itself (varrefs.js). A link only where the reader may open it. */
+.c-ref {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; max-width: 100%;
+  font: 600 11px/1.6 system-ui, sans-serif; white-space: nowrap; vertical-align: middle;
+  padding: 0 7px; border-radius: 999px; color: var(--accent); background: var(--accent-soft);
+  text-decoration: none; cursor: default;
+}
+.c-ref svg { flex: none; }
+.c-ref .c-ref-name { overflow: hidden; text-overflow: ellipsis; }
+a.c-ref { cursor: pointer; }
+a.c-ref:hover .c-ref-name { text-decoration: underline; }
+.c-ref:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.c-ref.missing { color: var(--muted); background: var(--surface); border: 1px dashed var(--border); font-style: italic; }
+.ref-pop { max-width: 340px; }
+.ref-pop-kind { font: 600 11px/1.4 system-ui, sans-serif; color: var(--muted); }
+.ref-pop-id { font: 11.5px/1.5 ui-monospace, monospace; color: var(--text); margin-top: 2px; word-break: break-all; }
+.ref-pop-note, .ref-pop-go { font: 11.5px/1.45 system-ui, sans-serif; color: var(--muted); margin: 6px 0 0; }
+.ref-pop-go { color: var(--accent); }
 .vars .vv.num  { color: #0a7c5a; }
 .vars .vv.str  { color: var(--text); }
 .vars .vv.bool { color: #b26a00; font-weight: 600; }
