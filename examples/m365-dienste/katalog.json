@@ -102,7 +102,7 @@
         }
       ],
       "approval": {
-        "kind": "superior"
+        "kind": "proc_m365_genehmigung_vorgesetzter"
       },
       "lifecycleProcess": "proc_m365_lizenz",
       "configForm": "m365-person",
@@ -233,7 +233,7 @@
         "en": "A team for a project or a department, named by the naming rule (TM-<DEPT> …), owned by a responsible person."
       },
       "approval": {
-        "kind": "superior"
+        "kind": "proc_m365_genehmigung_vorgesetzter"
       },
       "lifecycleProcess": "proc_m365_team",
       "configForm": "m365-team-bestellung",
@@ -312,7 +312,7 @@
         "en": "A mailbox shared by a function or a team. Name and address follow the naming rule (FP-…)."
       },
       "approval": {
-        "kind": "superior"
+        "kind": "proc_m365_genehmigung_vorgesetzter"
       },
       "lifecycleProcess": "proc_m365_funktionspostfach",
       "configForm": "m365-funktionspostfach-bestellung",
@@ -470,7 +470,7 @@
         "en": "Full access, send-as or send-on-behalf to an existing mailbox, limited to one year. For personal mailboxes, information security also reviews depending on the access type."
       },
       "approval": {
-        "kind": "superior"
+        "kind": "proc_m365_genehmigung_vorgesetzter"
       },
       "provisionProcess": "proc_m365_postfachzugriff_erteilen",
       "deprovisionProcess": "proc_m365_postfachzugriff_entziehen",

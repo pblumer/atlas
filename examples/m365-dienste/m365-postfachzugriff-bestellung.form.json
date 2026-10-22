@@ -71,7 +71,7 @@
       }
     },
     {
-      "key": "begruendung",
+      "key": "anlass",
       "type": "textarea",
       "label": "Begründung · Reason",
       "validate": {

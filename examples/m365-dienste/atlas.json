@@ -9,6 +9,11 @@
       "path": "funktionspostfach.bpmn"
     },
     {
+      "id": "proc_m365_genehmigung_vorgesetzter",
+      "name": "Microsoft 365: Genehmigung durch Vorgesetzte",
+      "path": "genehmigung-vorgesetzter.bpmn"
+    },
+    {
       "id": "proc_m365_governance_pruefung",
       "name": "Microsoft 365: Governance-Prüfung",
       "path": "governance-pruefung.bpmn"
