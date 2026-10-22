@@ -1493,42 +1493,273 @@ func compileUserConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	}), nil
 }
 
-// compileSharePointConnectorTask compiles an <atlas:sharepointConnector> task: it
-// creates a list item in a model-authored site/list through a server-registered
-// SharePoint provider (Microsoft Graph) via the job path (ADR-0141). The provider
-// (Graph base, OAuth credential) is resolved server-side by worker name, like mail;
-// only the target (site, list, item fields) lives in the model.
+// The content encodings and the listing ceilings a SharePoint task may author. They are
+// spelled here as well as in connector/sharepoint because the compiler cannot import
+// that package (the dependency runs the other way); the drift test
+// TestSharePointOpsMatchTheCompiler guards the seam.
+const (
+	sharePointEncodingText   = "text"
+	sharePointEncodingBase64 = "base64"
+
+	// sharePointDefaultMaxResults and sharePointMaxPageSize bound one page of a listing.
+	// A hundred is small enough that a page of list items with all their columns stays
+	// well inside a process variable, and 999 is the largest page Graph accepts on the
+	// collections that state one; a list or a folder may answer with fewer per page,
+	// and then says where to carry on.
+	sharePointDefaultMaxResults int32 = 100
+	sharePointMaxPageSize       int32 = 999
+)
+
+// sharePointOp describes what one SharePoint operation requires of a model and what it
+// is allowed to carry. The table is the compiler's half of connector/sharepoint's Ops
+// table; the drift test TestSharePointOpsMatchTheCompiler keeps the two from
+// disagreeing about the operation set.
+//
+// "Needs" is the familiar half: an update with no item id cannot be sent. "Takes" is
+// the half that is expensive to forget — a filter authored on a get-item, or content on
+// a delete, would otherwise compile and then be dropped at call time, which from the
+// author's side is indistinguishable from a Worker that ignored it.
+type sharePointOp struct {
+	// needsList marks an item operation, which acts on one list; takesList a file
+	// operation, where the list is the document library and may be left to the site's
+	// default one.
+	needsList bool
+	takesList bool
+	// needsItemID marks an operation on one list item.
+	needsItemID bool
+	// needsPath marks an operation on one file or folder; takesPath a listing of a
+	// folder, whose path may be empty for the library's top level.
+	needsPath bool
+	takesPath bool
+	// needsFields marks update-item, which is nothing without the columns it sets;
+	// takesFields the two that may carry column values without needing them — an item
+	// created with only its defaults, a file uploaded without properties.
+	needsFields bool
+	takesFields bool
+	// needsContent and takesEncoding mark the byte path: an upload carries content, and
+	// an upload and a download say whether it is text or base64.
+	needsContent  bool
+	takesEncoding bool
+	// takesFilter marks the one listing that can be filtered (folders cannot), and
+	// takesSelect the reads whose columns can be narrowed.
+	takesFilter bool
+	takesSelect bool
+	// takesPaging marks the two listings: pageToken and maxResults apply to them only.
+	takesPaging bool
+	// needsResult marks an operation whose whole point is what it returns.
+	needsResult bool
+	takesResult bool
+}
+
+// sharePointOps is the operation table: the steps a process takes in a SharePoint site
+// — record a row, read it back, change it, find rows, take one away; put a document in
+// a library, read it, ask whether it is there, list a folder, make one, delete one. It
+// mirrors connector/sharepoint.Ops, which the drift test keeps honest.
+var sharePointOps = map[string]sharePointOp{
+	"create-item":   {needsList: true, takesFields: true, takesResult: true},
+	"get-item":      {needsList: true, needsItemID: true, takesSelect: true, needsResult: true, takesResult: true},
+	"update-item":   {needsList: true, needsItemID: true, needsFields: true, takesResult: true},
+	"delete-item":   {needsList: true, needsItemID: true, takesResult: true},
+	"list-items":    {needsList: true, takesFilter: true, takesSelect: true, takesPaging: true, needsResult: true, takesResult: true},
+	"upload-file":   {takesList: true, needsPath: true, needsContent: true, takesEncoding: true, takesFields: true, takesResult: true},
+	"download-file": {takesList: true, needsPath: true, takesEncoding: true, needsResult: true, takesResult: true},
+	"get-file":      {takesList: true, needsPath: true, needsResult: true, takesResult: true},
+	"list-folder":   {takesList: true, takesPath: true, takesPaging: true, needsResult: true, takesResult: true},
+	"create-folder": {takesList: true, needsPath: true, takesResult: true},
+	"delete-file":   {takesList: true, needsPath: true, takesResult: true},
+}
+
+// sharePointOpNames lists the operations, sorted, for the messages that have to say what
+// was expected.
+func sharePointOpNames() []string {
+	out := make([]string, 0, len(sharePointOps))
+	for name := range sharePointOps {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// compileSharePointConnectorTask compiles an <atlas:sharepointConnector> task: one list
+// or library operation in a model-authored site through a server-registered SharePoint
+// provider (Microsoft Graph) via the job path (ADR-0141, amended). The provider (Graph
+// base, OAuth credential) is resolved server-side by worker name, like mail; only the
+// operation and its target live in the model.
+//
+// A task naming no operation creates a list item, which keeps every model authored
+// before operations existed meaning what it meant.
 func compileSharePointConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.sharePointConn()
 	if strings.TrimSpace(cn.Connector) == "" {
 		return 0, fmt.Errorf("compiler: sharepoint task %q needs a worker", st.Id)
 	}
-	if strings.TrimSpace(cn.Site) == "" {
-		return 0, fmt.Errorf("compiler: sharepoint task %q needs a site", st.Id)
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		op = sharePointCreateItem
 	}
-	if strings.TrimSpace(cn.List) == "" {
-		return 0, fmt.Errorf("compiler: sharepoint task %q needs a list", st.Id)
+	spec, ok := sharePointOps[op]
+	if !ok {
+		return 0, fmt.Errorf("compiler: sharepoint task %q has an unknown operation %q (want %s)",
+			st.Id, cn.Operation, strings.Join(sharePointOpNames(), ", "))
 	}
-	site, err := restValue(b.gate(), st.Id, "site", cn.Site)
-	if err != nil {
-		return 0, err
+	// One pass over every authored value: required where the operation needs it, refused
+	// where it does not use it — the same table-driven check the S3 and Jira tasks make,
+	// for their reason: an added attribute is one row rather than two checks that can
+	// disagree.
+	values := []struct {
+		attr     string
+		noun     string
+		raw      string
+		required bool
+		allowed  bool
+	}{
+		{"site", "a site", cn.Site, true, true},
+		{"list", "a list", cn.List, spec.needsList, spec.needsList || spec.takesList},
+		{"itemId", "an itemId", cn.ItemID, spec.needsItemID, spec.needsItemID},
+		{"path", "a path", cn.Path, spec.needsPath, spec.needsPath || spec.takesPath},
+		{"content", "content to upload", cn.Content, spec.needsContent, spec.needsContent},
+		{"encoding", "an encoding", cn.Encoding, false, spec.takesEncoding},
+		{"filter", "a filter", cn.Filter, false, spec.takesFilter},
+		{"select", "a select", cn.Select, false, spec.takesSelect},
+		{"pageToken", "a pageToken", cn.PageToken, false, spec.takesPaging},
+		{"maxResults", "a maxResults", cn.MaxResults, false, spec.takesPaging},
+		{"resultVariable", "a resultVariable", cn.ResultVariable, spec.needsResult, spec.takesResult},
 	}
-	list, err := restValue(b.gate(), st.Id, "list", cn.List)
-	if err != nil {
-		return 0, err
+	for _, v := range values {
+		set := strings.TrimSpace(v.raw) != ""
+		if v.required && !set {
+			return 0, fmt.Errorf("compiler: sharepoint task %q operation %q needs %s (%s)",
+				st.Id, op, v.noun, sharePointWhy(v.attr))
+		}
+		if set && !v.allowed {
+			return 0, fmt.Errorf("compiler: sharepoint task %q operation %q does not use %s (%s); remove it rather than leaving a value the Worker ignores",
+				st.Id, op, v.attr, sharePointWhy(v.attr))
+		}
+	}
+	switch {
+	case len(cn.Fields) > 0 && !spec.takesFields && !spec.needsFields:
+		return 0, fmt.Errorf("compiler: sharepoint task %q operation %q sets no columns, so it does not use itemField values; remove them rather than leaving values the Worker ignores", st.Id, op)
+	case len(cn.Fields) == 0 && spec.needsFields:
+		return 0, fmt.Errorf("compiler: sharepoint task %q operation %q needs at least one itemField: the column values it sets", st.Id, op)
 	}
 	fields, err := httpKVList(b.gate(), st.Id, "item field", cn.Fields)
 	if err != nil {
 		return 0, err
 	}
-	return b.AddSharePointConnectorTask(SharePointConfig{
-		Connector: strings.TrimSpace(cn.Connector),
-		Site:      site,
-		List:      list,
-		Fields:    fields,
-		ResultVar: strings.TrimSpace(cn.ResultVariable),
-		Retries:   retries,
-	}), nil
+	encoding, err := sharePointEncoding(st.Id, op, cn.Encoding, spec.takesEncoding)
+	if err != nil {
+		return 0, err
+	}
+	maxResults, err := sharePointMaxResults(st.Id, op, cn.MaxResults, spec.takesPaging)
+	if err != nil {
+		return 0, err
+	}
+	cfg := SharePointConfig{
+		Connector:  strings.TrimSpace(cn.Connector),
+		Operation:  op,
+		Fields:     fields,
+		Encoding:   encoding,
+		MaxResults: maxResults,
+		ResultVar:  strings.TrimSpace(cn.ResultVariable),
+		Retries:    retries,
+	}
+	// Each authored value is literal or FEEL (the fx toggle, ADR-0067), compiled once
+	// here and evaluated over the variables the task sees at call time. The diagnostics
+	// keep the "rest worker" wording restValue gave them before operations existed.
+	for _, v := range []struct {
+		what string
+		raw  string
+		into *RestExpr
+	}{
+		{"site", cn.Site, &cfg.Site},
+		{"list", cn.List, &cfg.List},
+		{"itemId", cn.ItemID, &cfg.ItemID},
+		{"path", cn.Path, &cfg.Path},
+		{"content", cn.Content, &cfg.Content},
+		{"filter", cn.Filter, &cfg.Filter},
+		{"select", cn.Select, &cfg.Select},
+		{"pageToken", cn.PageToken, &cfg.PageToken},
+	} {
+		if strings.TrimSpace(v.raw) == "" {
+			continue
+		}
+		val, err := restValue(b.gate(), st.Id, v.what, v.raw)
+		if err != nil {
+			return 0, err
+		}
+		*v.into = val
+	}
+	return b.AddSharePointConnectorTask(cfg), nil
+}
+
+// sharePointWhy explains one attribute, so both halves of the check above — the missing
+// value and the ignored one — say the same thing about it in one place.
+func sharePointWhy(attr string) string {
+	switch attr {
+	case "site":
+		return "the site every operation acts in: a Graph site id, host:/sites/name, or the site's URL"
+	case "list":
+		return "the list an item operation acts on, or the document library a file operation does — empty there means the site's default library"
+	case "itemId":
+		return "the id of the one list item the operation addresses, e.g. the id create-item or list-items answered with"
+	case "path":
+		return "the file or folder inside the library, e.g. Vertraege/2026/vertrag.pdf; list-folder lists the library's top level without one"
+	case "content":
+		return "what upload-file writes, and nothing else carries content"
+	case "encoding":
+		return "whether upload-file's content or download-file's answer is text or base64"
+	case "filter":
+		return "an OData filter over list-items, such as fields/Status eq 'Offen'; a folder listing cannot be filtered"
+	case "select":
+		return "the columns get-item and list-items answer with"
+	case "pageToken", "maxResults":
+		return "where a listing carries on and how much one page holds; only list-items and list-folder page"
+	case "resultVariable":
+		return "a read whose answer is discarded is a call made for nothing"
+	}
+	return attr
+}
+
+// sharePointEncoding reads the content encoding an upload or a download authors,
+// defaulting to text. It is compiled structure rather than an authored value, because it
+// decides how the bytes are read rather than which bytes they are.
+func sharePointEncoding(taskID, op, raw string, takes bool) (string, error) {
+	if !takes {
+		return "", nil
+	}
+	switch mode := strings.ToLower(strings.TrimSpace(raw)); mode {
+	case "":
+		return sharePointEncodingText, nil
+	case sharePointEncodingText, sharePointEncodingBase64:
+		return mode, nil
+	default:
+		return "", fmt.Errorf("compiler: sharepoint task %q operation %q has an unknown encoding %q (want %q or %q)",
+			taskID, op, raw, sharePointEncodingText, sharePointEncodingBase64)
+	}
+}
+
+// sharePointMaxResults reads a listing's page size, applying the default when a model
+// authors none. A value that is not a positive number, or is past what Graph accepts,
+// is refused at deploy rather than becoming a call Graph refuses on every token.
+func sharePointMaxResults(taskID, op, raw string, takes bool) (int32, error) {
+	if !takes {
+		return 0, nil
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return sharePointDefaultMaxResults, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: sharepoint task %q operation %q has a non-numeric maxResults %q", taskID, op, raw)
+	}
+	if n <= 0 {
+		return 0, fmt.Errorf("compiler: sharepoint task %q operation %q has a maxResults of %d; it must be positive", taskID, op, n)
+	}
+	if n > int(sharePointMaxPageSize) {
+		return 0, fmt.Errorf("compiler: sharepoint task %q operation %q has a maxResults of %d, and one page holds at most %d; page with pageToken instead", taskID, op, n, sharePointMaxPageSize)
+	}
+	return int32(n), nil
 }
 
 // compileRemedyConnectorTask compiles an <atlas:remedyConnector> task: it creates an

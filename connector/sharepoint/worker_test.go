@@ -2,7 +2,9 @@ package sharepoint_test
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
@@ -19,21 +21,20 @@ type fixedClock struct{ t int64 }
 
 func (c *fixedClock) Now() int64 { c.t++; return c.t }
 
-// recordingClient captures the item-creation requests a task makes and
-// returns a canned created item.
+// recordingClient captures the requests a task makes and returns a canned answer.
 type recordingClient struct {
-	requests []sharepoint.ItemRequest
+	requests []sharepoint.Request
 	item     any
 }
 
-func (r *recordingClient) CreateItem(_ context.Context, req sharepoint.ItemRequest) (any, error) {
+func (r *recordingClient) Do(_ context.Context, req sharepoint.Request) (any, error) {
 	r.requests = append(r.requests, req)
 	return r.item, nil
 }
 
 type erroringClient struct{}
 
-func (erroringClient) CreateItem(context.Context, sharepoint.ItemRequest) (any, error) {
+func (erroringClient) Do(context.Context, sharepoint.Request) (any, error) {
 	return nil, context.DeadlineExceeded
 }
 
@@ -247,7 +248,7 @@ func TestSharePointConnectorFeelFields(t *testing.T) {
 	if req.Site != "s-1" || req.List != "List Ops" {
 		t.Errorf("site/list = %q / %q, want the FEEL-computed values", req.Site, req.List)
 	}
-	if req.Fields["Title"][:2] != "#7" {
+	if title, _ := req.Fields["Title"].(string); !strings.HasPrefix(title, "#7") {
 		t.Errorf("Title = %q, want the number and processInstanceKey rendered", req.Fields["Title"])
 	}
 	if req.Fields["Static"] != "x" {
@@ -407,5 +408,87 @@ func TestSharePointConnectorSeesInputMappedLocal(t *testing.T) {
 	}
 	if req.Fields["Title"] != "List Ops / Ops" {
 		t.Errorf("Title = %q, want the mapped local beside the inherited variable", req.Fields["Title"])
+	}
+}
+
+// Column values keep the shape their FEEL value had: Graph reads a Number column from a
+// number, a Yes/No column from a boolean and a multi-choice column from a list, and none
+// of them from its text. A literal stays the text it was written as, and a FEEL null is
+// sent as null, which clears the column.
+func TestSharePointFieldsKeepTheirShape(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := spProcess(t, compiler.SharePointConfig{
+		Connector: "contoso",
+		Site:      compiler.RestExpr{Literal: "s"},
+		List:      compiler.RestExpr{Literal: "l"},
+		Fields: []compiler.RestKV{
+			{Name: "Amount", Val: compiler.RestExpr{Expr: compileExpr(t, `betrag * 2`)}},
+			{Name: "Urgent", Val: compiler.RestExpr{Expr: compileExpr(t, `betrag > 10`)}},
+			{Name: "Tags", Val: compiler.RestExpr{Expr: compileExpr(t, `["a", "b"]`)}},
+			{Name: "Missing", Val: compiler.RestExpr{Expr: compileExpr(t, `nichtDa`)}},
+			{Name: "Literal", Val: compiler.RestExpr{Literal: "42"}},
+		},
+		Retries: 3,
+	})
+	rc := &recordingClient{item: map[string]any{"id": "1"}}
+	reg := sharepoint.NewRegistry()
+	reg.Register("contoso", rc)
+	if err := drive(t, cp, jobType, reg, store, log,
+		model.VariableValue{Name: "betrag", Kind: model.VarNumber, Text: "21"},
+	); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if len(rc.requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(rc.requests))
+	}
+	f := rc.requests[0].Fields
+	if f["Amount"] != json.Number("42") || f["Urgent"] != true || f["Literal"] != "42" {
+		t.Errorf("fields = %#v, want a number, a boolean and the literal's text", f)
+	}
+	if tags, _ := f["Tags"].([]any); len(tags) != 2 || tags[0] != "a" {
+		t.Errorf("Tags = %#v, want a list", f["Tags"])
+	}
+	if v, present := f["Missing"]; !present || v != nil {
+		t.Errorf("Missing = %#v (present %v), want null", v, present)
+	}
+}
+
+// Every operation but create-item rides the operations job type, and the handler
+// serves it the same way: the operation and the values it takes reach the client, and
+// the answer reaches the result variable.
+func TestSharePointOperationRidesItsOwnJobType(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := spThenWaitProcess(t, compiler.SharePointConfig{
+		Connector:  "contoso",
+		Operation:  "list-items",
+		Site:       compiler.RestExpr{Literal: "https://contoso.sharepoint.com/sites/hr"},
+		List:       compiler.RestExpr{Literal: "Auftraege"},
+		Filter:     compiler.RestExpr{Expr: compileExpr(t, `"fields/Status eq '" + status + "'"`)},
+		Select:     compiler.RestExpr{Literal: "Title"},
+		MaxResults: 25,
+		ResultVar:  "seite",
+		Retries:    3,
+	})
+	if jobType != compiler.SharePointOpsJobTypeIndex {
+		t.Fatalf("job type = %d, want the operations job type %d", jobType, compiler.SharePointOpsJobTypeIndex)
+	}
+	rc := &recordingClient{item: map[string]any{"items": []any{}, "hasMore": false}}
+	reg := sharepoint.NewRegistry()
+	reg.Register("contoso", rc)
+	if err := drive(t, cp, jobType, reg, store, log,
+		model.VariableValue{Name: "status", Kind: model.VarString, Text: "Offen"},
+	); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if len(rc.requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(rc.requests))
+	}
+	req := rc.requests[0]
+	if req.Operation != "list-items" || req.Filter != "fields/Status eq 'Offen'" || req.Select != "Title" || req.MaxResults != 25 {
+		t.Errorf("request = %+v, want the operation and its resolved values", req)
+	}
+	page := readVar(t, store, soleInstanceKey(t, store), "seite")
+	if page == nil || page.Kind != model.VarJSON || !strings.Contains(page.Text, `"hasMore"`) {
+		t.Errorf("result variable = %+v, want the page", page)
 	}
 }

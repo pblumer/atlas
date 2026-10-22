@@ -4489,23 +4489,142 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "sharepoint", name: "SharePoint", group: "Applications", desc: "Create a list item in a SharePoint site", icon: "S",
+    id: "sharepoint", name: "SharePoint", group: "Applications",
+    desc: "Record, find and change list items, and put documents into a library and get them back",
+    icon: "S",
     // A list/grid mark on a Microsoft-teal tile reads "SharePoint list" at a glance —
     // this Worker Type's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white list rows.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#038387"/><rect x="3" y="3.6" width="10" height="8.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 6.2h9.2M6 3.9v8.2" stroke="#fff" stroke-width="1.1"/></svg>`,
     ext: "atlas:SharePointConnector",
+    // The operation's first option is create-item under the empty value: a task authored
+    // before operations existed carries no operation attribute and means exactly that,
+    // and the compiler reads an empty operation the same way, so such a model keeps its
+    // meaning whatever the panel writes for it.
     fields: [
       { group: "SharePoint worker" },
-      { key: "connector", label: "Worker", datalist: "sharepoint", placeholder: "contoso", hint: "The configured SharePoint Worker this task creates the item through, by the name it has under Workers in the Console. Its Graph base and OAuth credential live on the server, never in the model." },
-      { group: "Target" },
-      { key: "site", label: "Site", placeholder: "contoso.sharepoint.com,<siteId>,<webId>", fx: true, hint: "The Microsoft Graph site identifier. A value may be a FEEL expression (fx)." },
-      { key: "list", label: "List", placeholder: "Incidents", fx: true, hint: "The list name or id the item is created in." },
-      { group: "Item" },
-      { key: "fields", label: "Item fields", type: "map", childType: "atlas:ItemField", fx: true, hint: "Column values of the created list item. A value may be a FEEL expression (fx) over the instance's variables." },
+      { key: "connector", label: "Worker", datalist: "sharepoint", placeholder: "contoso", hint: "The configured SharePoint Worker this task acts through, by the name it has under Workers in the Console. Its Graph base and OAuth credential live on the server, never in the model." },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "", l: "Create list item" },
+          { v: "get-item", l: "Read list item" },
+          { v: "update-item", l: "Update list item" },
+          { v: "delete-item", l: "Delete list item" },
+          { v: "list-items", l: "Find list items" },
+          { v: "upload-file", l: "Upload file" },
+          { v: "download-file", l: "Download file" },
+          { v: "get-file", l: "Check file" },
+          { v: "list-folder", l: "List folder" },
+          { v: "create-folder", l: "Create folder" },
+          { v: "delete-file", l: "Delete file or folder" },
+        ],
+      },
+      {
+        key: "site", label: "Site", placeholder: "https://contoso.sharepoint.com/sites/hr", fx: true,
+        hint: "The site's address as the browser shows it, host:/sites/name, or a Graph site id (host,siteId,webId). Name the site itself, not a page or a list in it. May be a FEEL expression (fx).",
+      },
+      {
+        key: "list", label: "List", placeholder: "Incidents", fx: true,
+        showIf: (v) => ["", "get-item", "update-item", "delete-item", "list-items"].includes(v.operation || ""),
+        hint: "The list's title or id, as the site shows it.",
+      },
+      {
+        key: "list", label: "Library", placeholder: "Verträge", fx: true,
+        showIf: (v) => ["upload-file", "download-file", "get-file", "list-folder", "create-folder", "delete-file"].includes(v.operation || ""),
+        hint: "Optional. The document library's title or id; empty means the site's default library (Documents).",
+      },
+      {
+        key: "itemId", label: "Item id", placeholder: "=auftrag.id", fx: true,
+        showIf: (v) => ["get-item", "update-item", "delete-item"].includes(v.operation || ""),
+        hint: "The list item's id — usually from an earlier step: =angelegt.id after Create list item, or =seite.items[1].id after Find list items.",
+      },
+      {
+        key: "path", label: "Path", placeholder: "=\"Akten/\" + fall.nummer + \"/antrag.pdf\"", fx: true,
+        showIf: (v) => ["upload-file", "download-file", "get-file", "list-folder", "create-folder", "delete-file"].includes(v.operation || ""),
+        hint: (v) => {
+          switch (v.operation) {
+            case "list-folder":
+              return "Optional. The folder to list, from the library's top level; empty lists the top level itself.";
+            case "create-folder":
+              return "The folder to create, from the library's top level. Missing folders above it are created too, and a folder that is already there counts as created — so a retry is harmless.";
+            case "delete-file":
+              return "The file or folder to delete. A folder goes with everything inside it; both land in the site's recycle bin. Something that is not there answers deleted=false rather than failing.";
+            case "upload-file":
+              return "Where the file goes, from the library's top level, with its name. A file already there is replaced (the library keeps the old one as a version), and missing folders on the way are created.";
+            default:
+              return "The file, from the library's top level, with its name. A retry re-runs the task with the same variables, so a path built from a timestamp names a different file the second time.";
+          }
+        },
+      },
+      {
+        key: "fields", label: "Columns", type: "map", childType: "atlas:ItemField", fx: true,
+        showIf: (v) => ["", "update-item", "upload-file"].includes(v.operation || ""),
+        hint: (v) => (v.operation === "upload-file"
+          ? "Optional. Column values the uploaded file gets as its properties, by the columns' internal names."
+          : "Column values by the columns' internal names. A FEEL value keeps its type: =42 is sent as a number, =true as Yes, =[\"A\", \"B\"] as a multi-choice; a lookup or person column takes the item's id under <Name>LookupId. A value that evaluates to null clears the column."),
+      },
+      {
+        key: "content", label: "Content", placeholder: "=brief", fx: true,
+        showIf: (v) => v.operation === "upload-file",
+        hint: "What to store. It travels through a process variable, so it is capped at that variable's own budget — 1 MiB unless this installation raised it.",
+      },
+      {
+        key: "encoding", label: "Content is", type: "select",
+        options: [{ v: "", l: "Text — the characters as they are" }, { v: "base64", l: "Base64 — a binary file, e.g. a PDF" }],
+        showIf: (v) => v.operation === "upload-file" || v.operation === "download-file",
+        hint: "Text is right for JSON, CSV, XML and a letter. Base64 is what a binary needs to survive a process variable at all, and what a form's uploaded file already is. On a download, a file that is not text needs base64.",
+      },
+      {
+        key: "filter", label: "Filter", placeholder: "=\"fields/Status eq '\" + status + \"'\"", fx: true,
+        showIf: (v) => v.operation === "list-items",
+        hint: "Optional. An OData filter over the columns, e.g. fields/Status eq 'Offen'. A list past 5000 items needs the filtered column indexed; a smaller one does not.",
+      },
+      {
+        key: "select", label: "Columns to read", placeholder: "Title,Status,Kunde",
+        showIf: (v) => v.operation === "get-item" || v.operation === "list-items",
+        hint: "Optional. The columns' internal names, separated by commas. Empty reads every column, which makes each item much larger.",
+      },
+      {
+        key: "pageToken", label: "Continue from", placeholder: "=seite.nextPageToken", fx: true,
+        showIf: (v) => v.operation === "list-items" || v.operation === "list-folder",
+        hint: "Optional. The nextPageToken an earlier page answered with, passed back unchanged; empty starts at the first page.",
+      },
+      {
+        key: "maxResults", label: "Page size", placeholder: "100",
+        showIf: (v) => v.operation === "list-items" || v.operation === "list-folder",
+        hint: "How many entries one page holds. Empty uses 100; at most 999.",
+      },
       { group: "Output" },
-      { key: "resultVariable", label: "Result variable", resultType: "object", placeholder: "createdItem", hint: "The created item's JSON is written into this process variable (leave empty to discard it)." },
+      {
+        key: "resultVariable", label: "Result variable", resultType: () => "object", placeholder: "antwort",
+        hint: (v) => {
+          switch (v.operation) {
+            case "get-item":
+              return "The item lands here: =antwort.id, and its columns under =antwort.fields.Title.";
+            case "update-item":
+              return "Optional. The item's columns after the change land here.";
+            case "delete-item":
+            case "delete-file":
+              return "Optional. =antwort.deleted is false when there was nothing to delete.";
+            case "list-items":
+            case "list-folder":
+              return "The page lands here: =antwort.items is the list (1-based, so the first is =antwort.items[1]), =antwort.hasMore whether there is more, and =antwort.nextPageToken where to carry on.";
+            case "upload-file":
+              return "Optional. The stored file lands here: =antwort.id, =antwort.webUrl — a link that opens it for anybody allowed to — and its properties under =antwort.listItem.fields.";
+            case "download-file":
+              return "The file lands in =antwort.content, with =antwort.contentType and =antwort.size beside it. A file larger than a process variable's budget fails the task rather than arriving cut short — hand a person its webUrl instead.";
+            case "get-file":
+              return "=antwort.exists says whether it is there; when it is, =antwort.webUrl, =antwort.size and its properties under =antwort.listItem.fields come with it.";
+            case "create-folder":
+              return "Optional. The folder lands here, with =antwort.created false when it was already there.";
+            default:
+              return "Optional. The created item's JSON lands here — =antwort.id is what the other item operations address it by.";
+          }
+        },
+      },
     ],
   },
   {
@@ -5829,6 +5948,16 @@ function settleKindFields(kind, stored, props) {
     }
     const select = fields.find((f) => f.type === "select" && shown(f, all));
     if (select && !value(key) && firstOption(select)) props[key] = firstOption(select);
+  }
+  // A map the panel hid is saved empty already, but one it still showed is not: when
+  // this save is the change of operation, the panel on screen is the previous
+  // operation's, and its rows are read as they stand. The new operation may not take
+  // them — S3 metadata on a read, SharePoint columns on a file check, Jira fields on a
+  // comment — and the compiler refuses a task that carries them.
+  for (const f of kind.fields) {
+    if (f.type === "map" && Array.isArray(props[f.key]) && props[f.key].length && !shown(f, mode) && !shown(f, all)) {
+      props[f.key] = [];
+    }
   }
   return props;
 }

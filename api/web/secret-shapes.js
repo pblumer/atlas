@@ -47,6 +47,10 @@ export const SECRET_SHAPES = {
     what: "a Microsoft Graph OAuth credential bundle (JSON)",
     oauth: "microsoft",
     skeleton: { method: "clientCredentials", tenantId: "…", clientId: "…", clientSecret: "…" },
+    note: "An app that runs unattended may prove itself with a certificate instead: <code>\"certificate\"</code> — the certificate and its unencrypted private key as one PEM text — in place of <code>clientSecret</code>.",
+    // connector/sharepoint/oauth.go reads a bundle without a method as clientCredentials,
+    // and a clientCredentials bundle may carry a certificate in place of the secret.
+    certificate: true,
   },
   "remedy:": {
     what: "the AR System username and password (JSON)",
@@ -163,19 +167,26 @@ export function checkSecretValue(shape, value) {
     const gone = missing(shape.fields);
     return gone.length ? `Missing ${gone.map((k) => `"${k}"`).join(" and ")}.` : "";
   }
+  const method = parsed.method || (shape.certificate ? "clientCredentials" : "");
+  // A worker that takes a certificate takes it in place of the client secret, never
+  // beside it — the server refuses a bundle carrying both rather than pick one.
+  const withCert = shape.certificate && method === "clientCredentials" && String(parsed.certificate || "").trim() !== "";
+  if (withCert && String(parsed.clientSecret || "").trim()) {
+    return `The bundle carries "clientSecret" and "certificate"; give one, not both.`;
+  }
   const need = {
     refreshToken: ["clientId", "clientSecret", "refreshToken"],
-    clientCredentials: ["clientId", "clientSecret"],
+    clientCredentials: withCert ? ["clientId", "certificate"] : ["clientId", "clientSecret"],
     serviceAccount: ["clientEmail", "privateKey"],
-  }[parsed.method];
+  }[method];
   if (!need) {
-    return `"method" is ${parsed.method ? `"${parsed.method}"` : "missing"} — it must be "refreshToken", "clientCredentials" or "serviceAccount".`;
+    return `"method" is ${method ? `"${method}"` : "missing"} — it must be "refreshToken", "clientCredentials" or "serviceAccount".`;
   }
   const gone = missing(need);
-  if (gone.length) return `A "${parsed.method}" bundle also needs ${gone.map((k) => `"${k}"`).join(" and ")}.`;
+  if (gone.length) return `A "${method}" bundle also needs ${gone.map((k) => `"${k}"`).join(" and ")}.`;
   // Microsoft builds its token endpoint from the tenant; without either there is
   // nothing to call, which the server reports much later as "no token URL".
-  if (shape.oauth === "microsoft" && parsed.method === "clientCredentials" && !parsed.tenantId && !parsed.tokenUrl) {
+  if (shape.oauth === "microsoft" && method === "clientCredentials" && !parsed.tenantId && !parsed.tokenUrl) {
     return `A Microsoft bundle needs "tenantId" (or an explicit "tokenUrl").`;
   }
   return "";

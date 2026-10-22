@@ -515,10 +515,12 @@ type UserTaskDetail struct {
 //     (ADR-0067, revising ADR-0036 for REST); a method that carries one gets the body
 //     described below; ResultVar, if set, is the process variable the JSON response is
 //     written back into on completion.
-//   - SharePoint (JobType == SharePointJobType): Worker names the
-//     server-registered SharePoint provider; Site and List address the target list
-//     and Fields are the created item's column values (all literal-or-FEEL); the
-//     created item's JSON is written into ResultVar when set (ADR-0141).
+//   - SharePoint (JobType == SharePointJobType for create-item,
+//     SharePointOpsJobType for every other operation): Worker names the
+//     server-registered SharePoint provider; SharePointOp is the operation, Site
+//     addresses the site, List the list or document library, and the SharePoint*
+//     fields below the rest of what the operation takes (all literal-or-FEEL); what
+//     Graph returned is written into ResultVar when set (ADR-0141, amended).
 //   - BMC Remedy (JobType == RemedyJobType): Worker names the server-registered
 //     Remedy instance; RemedyForm and RemedyFields are the form and the entry's field
 //     values (literal-or-FEEL) an incident/entry is created with through the AR System
@@ -621,16 +623,41 @@ type ConnectorTaskDetail struct {
 	CsvFormat    int32
 	CsvOperation int32
 	CsvWidths    []int32
-	// SharePoint worker fields (JobType == SharePointJobType, ADR-0141). Worker
-	// (above) names the server-registered SharePoint provider (its Graph base and
-	// OAuth credential live server-side). Site and List address the target list (a
-	// site host/path or id, and a list name or id); Fields are the created item's
-	// column values. Each is a literal-or-FEEL value evaluated over the instance's
-	// variables at call time; Site/List are the zero RestExpr and Fields is nil for a
-	// non-SharePoint task. ResultVar (above), if set, receives the created item's JSON.
-	Site   RestExpr
-	List   RestExpr
-	Fields []RestKV
+	// SharePoint worker fields (JobType == SharePointJobType or SharePointOpsJobType,
+	// ADR-0141, amended). Worker (above) names the server-registered SharePoint
+	// provider (its Graph base and OAuth credential live server-side). SharePointOp is
+	// the interned operation ("create-item" for every model authored before
+	// operations existed), and it decides which of the rest are populated; the
+	// compiler refuses a value on an operation that does not use it.
+	//
+	// Site addresses the site (a Graph site id, a host and path, or the site's URL)
+	// and List the list an item operation acts on — or, for a file operation, the
+	// document library, which SharePoint keeps as a list too; empty there means the
+	// site's default library. Fields are column values: what an item is created or
+	// updated with, or the properties an uploaded file is given. SharePointItemID
+	// addresses one list item and SharePointPath one file or folder inside the
+	// library. SharePointContent is what an upload writes, in the form
+	// SharePointEncoding names. SharePointFilter and SharePointSelect are a listing's
+	// OData filter and the columns a read returns; SharePointPageToken resumes a
+	// listing where an earlier page stopped.
+	//
+	// SharePointEncoding and SharePointMaxResults are compiled structure rather than
+	// authored values, with their defaults already applied, so the runtime interprets
+	// nothing (I5). Each RestExpr is a literal-or-FEEL value evaluated over the
+	// variables the task sees at call time; all are the zero value for a
+	// non-SharePoint task. ResultVar (above), if set, receives what Graph returned.
+	Site                 RestExpr
+	List                 RestExpr
+	Fields               []RestKV
+	SharePointOp         int32
+	SharePointItemID     RestExpr
+	SharePointPath       RestExpr
+	SharePointContent    RestExpr
+	SharePointEncoding   int32
+	SharePointFilter     RestExpr
+	SharePointSelect     RestExpr
+	SharePointPageToken  RestExpr
+	SharePointMaxResults int32
 	// Remedy worker fields (JobType == RemedyJobType, ADR-0106). Worker (above)
 	// names the server-registered BMC Remedy instance; ResultVar (above), if set,
 	// receives the created entry's id. RemedyForm is the Remedy form the entry is
