@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An account can name its line manager.** `managerId` on an account is the principal id
+  of the person's line manager. An administrator sets it under Console → Administration →
+  Organization (field *Line manager*) or with `PATCH /api/v1/users/{id}`. The Entra mirror
+  fills it when its model selects `manager`: it reads `manager@delta`, or a plain `manager`
+  object, keeps the manager's object id in `managerDirectoryId`, and resolves it to the
+  manager's account on the run that reads that account. While the directory reports it,
+  the field belongs to the directory, the Console shows it read-only and an edit is refused
+  with a 409. Only ids are stored, no names
+  ([ADR-draft-the-line-manager-is-on-the-account](docs/adr/draft-the-line-manager-is-on-the-account.md)).
+
 - **The replay's Variables tab says what an id stands for.** A string value that is a
   principal id (`usr_…`, `grp_…`), a deployed process id or a catalogue product or
   position id gets a chip beside it with the person's, group's, process's or product's
@@ -49,6 +59,23 @@ _Changed_ / _Removed_ for each version.
   `TestEveryFormReferenceResolves` accepts the platform's approval form `genehmigung`,
   which an installation's own approval model names to get the inbox's Genehmigen and
   Ablehnen, for as long as the system bundle declares it.
+
+### Fixed
+
+- **A `superior` approval reaches the orderer's line manager.** The system process
+  `atlas-genehmigung-vorgesetzter` searched the directory with
+  `(userPrincipalName=<principal id>)`, which no directory holds, and assigned its task to
+  the `manager` distinguished name it read back, which no task can be held by (#1311). The
+  server now starts the approval with `approvalRef` set to the orderer's line manager, and
+  refuses to start it with the reason when there is none, when the manager's account is
+  disabled or gone, or when the directory names somebody who has no account yet; the
+  fulfilment process shows that refusal as an incident, and resolving it after the manager
+  is set starts the approval. The escalation calls `POST …/escalate` with
+  `{"lineManager": true}` and moves one level up from whoever holds the approval now; a body
+  naming `superior` means what it did. The model reads no directory and needs no `ad`
+  Worker called `verzeichnis` any more, and it still writes `vorgesetzter` for listeners of
+  `atlas.approval.requested`. Approvals already running keep the old model.
+  `examples/entra-verzeichnis-abgleich.bpmn` now selects `manager`.
 
 ## [0.18.0] — 2026-10-22
 

@@ -373,6 +373,9 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 		DisplayName *string   `json:"displayName"`
 		Roles       *[]string `json:"roles"`
 		Disabled    *bool     `json:"disabled"`
+		// ManagerID is the principal id of the account's line manager, and "" clears
+		// it (ADR-draft-the-line-manager-is-on-the-account).
+		ManagerID *string `json:"managerId"`
 	}
 	if !s.decodeJSONBody(w, r, &payload) {
 		return
@@ -381,6 +384,7 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 		updated   User
 		found     bool
 		conflict  string
+		refused   string
 		lockout   bool
 		opErr     error
 		disabling bool
@@ -421,6 +425,11 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 		if payload.Disabled != nil {
 			u.Disabled = *payload.Disabled
 		}
+		if payload.ManagerID != nil {
+			if conflict, refused, opErr = s.setLineManager(&u, *payload.ManagerID); opErr != nil || conflict != "" || refused != "" {
+				return
+			}
+		}
 		// Guard against locking everyone out: if the result is not an enabled admin
 		// and no other enabled admin remains, refuse.
 		if !(u.hasRole(RoleAdmin) && !u.Disabled) {
@@ -451,6 +460,8 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no user with that id")
 	case conflict != "":
 		httpapi.Error(w, http.StatusConflict, conflict)
+	case refused != "":
+		httpapi.Error(w, http.StatusBadRequest, refused)
 	case lockout:
 		httpapi.Error(w, http.StatusConflict, "cannot remove the last enabled admin")
 	default:
