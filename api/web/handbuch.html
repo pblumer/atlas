@@ -8738,6 +8738,31 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           the element says <i>how many</i> are waiting; a click says <i>which ones</i>. It works for every
           element a token can rest on, not only user tasks, and it costs the page you are shown – at hundreds
           of thousands of instances too.</li>
+        <li data-l="de"><b>Wofür steht diese ID?</b> – im <b>Replay</b> einer Instanz zeigt der Reiter
+          <b>Variables</b> neben einer ID, was sie bezeichnet: bei <code>usr_…</code> den Namen der Person, bei
+          <code>grp_…</code> die Gruppe, bei einer Prozess-ID den Prozess und bei einer Produkt- oder Positions-ID
+          das Produkt mit seiner Variante. Fährst du mit der Maus darüber oder springst mit der Tabulatortaste
+          hin, erklärt ein Fenster die ID. Ein Klick auf einen Prozess öffnet die Live-Ansicht seiner neuesten
+          Version, ein Klick auf ein Produkt den Katalog, in dem es gepflegt wird – sofern deine Rolle dorthin
+          reicht. Der Wert selbst bleibt stehen, wie er gespeichert ist, und wird auch so kopiert. Erkannt wird
+          nur ein ganzer Wert: ein Filter, der eine ID enthält, bleibt Text. Aufgelöst wird nur, was du ohnehin
+          lesen darfst; Produkte zum Beispiel nur aus Katalogen, die du pflegst. Eine Instanz enthält Personen
+          absichtlich nur als ID. Der Name wird beim Anzeigen aus dem Konto gelesen und nirgends gespeichert.
+          Deshalb siehst du den <i>heutigen</i> Namen, auch bei einem Schritt von letzter Woche. Eine
+          Personen-ID, zu der es kein aktives Konto mehr gibt – gelöscht oder deaktiviert –, ist mit
+          <b>no account</b> markiert, eine gelöschte Gruppe mit <b>no group</b>.</li>
+        <li data-l="en"><b>What does this id stand for?</b> – in an instance's <b>replay</b>, the
+          <b>Variables</b> tab shows beside an id what it names: the person's name beside <code>usr_…</code>,
+          the group beside <code>grp_…</code>, the process beside a process id, and the product and its variant
+          beside a product or position id. Hover over it or tab to it and a card explains the id. Clicking a
+          process opens the live view of its newest version, clicking a product opens the catalogue that
+          maintains it – where your role reaches that page. The value itself stays as it is stored, and the
+          copy button still copies it. Only a whole value counts: a filter that contains an id stays text. Only
+          what you may read anyway is resolved; products, for example, only from catalogues you maintain. An
+          instance holds people as ids on purpose. The name is read from the account when the tab is shown
+          and is stored nowhere. So you see <i>today's</i> name, even on a step from last week. A person's
+          id with no active account behind it any more – deleted or disabled – is marked
+          <b>no account</b>, and a deleted group <b>no group</b>.</li>
         <li data-l="de"><b><a href="/#/operations/incidents">Incidents</a></b> – wenn ein Token nicht weiterkommt
           (Job fehlgeschlagen, Ausdrucksfehler, fehlende Variable), entsteht ein <b>Incident</b>. Du behebst die
           Ursache und löst ihn auf – die Instanz läuft weiter. Du musst dafür nicht in die Liste: das steckengebliebene
