@@ -12,6 +12,23 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The replay's Variables tab says what an id stands for.** A string value that is a
+  principal id (`usr_…`, `grp_…`), a deployed process id or a catalogue product or
+  position id gets a chip beside it with the person's, group's, process's or product's
+  name. Hovering it or tabbing to it opens a card that names the kind and the id, and
+  says that the name is today's. A process links to the live view of its newest version
+  for an operator, a product to its home catalogue for a product manager. The value
+  itself is unchanged and is still what the row copies. Only a whole value counts.
+  Names are read from the directories the server already serves to the caller
+  (`/api/v1/principals`, `/api/v1/processes`, `/api/v1/catalog-products`), once per
+  view, and are stored nowhere: an instance keeps people as ids so that an erasure has
+  nothing to reach ([ADR-0314](docs/adr/0314-portal-personal-data.md)), and the name is
+  resolved when the screen is drawn, as that record says it should be. A user id with no
+  enabled account behind it is marked *no account*, and a group id nobody lists any more
+  *no group*. A directory that cannot be read leaves its ids as they were.
+
 ### Changed
 
 - **The Microsoft 365 example asks the manager of the person a position is for.** Licence,

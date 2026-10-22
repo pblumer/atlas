@@ -2308,7 +2308,9 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   until that endpoint exists ([ADR-0313](docs/adr/0313-portal-language-follows-the-browser.md)).
 - 🚧 **Personal data.** A reference by default, and a per-subject key in the vault for the
   rest, so erasure destroys one key; whether erasure waits for running instances and held
-  rights is still open ([ADR-0314](docs/adr/0314-portal-personal-data.md)).
+  rights is still open ([ADR-0314](docs/adr/0314-portal-personal-data.md)). The Operations
+  replay's Variables tab resolves those references when it is drawn, naming the person,
+  process or product beside the id and storing nothing.
 
 **Not built yet**
 - 🔲 The aggregate figures a product manager may see and the integration-manager relation

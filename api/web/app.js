@@ -10975,7 +10975,7 @@ async function viewCollaboration(key) {
 
 async function viewInstanceReplay(key) {
   const mod = await import("./editor.js");
-  await mod.mountInstanceReplay(view, { api, toast, key });
+  await mod.mountInstanceReplay(view, { api, toast, key, mayUse });
 }
 
 // ---------- Router ----------
