@@ -6950,17 +6950,22 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"version": j.Version, "body": j.Body, "auth": j.Auth,
 			"resultVariable": j.Result,
 		}}
-	case compiler.SharePointJobTypeIndex:
+	case compiler.SharePointJobTypeIndex, compiler.SharePointOpsJobTypeIndex:
 		// Jira's arm exactly, and for Jira's reason: the task names its instance, and
 		// the Graph endpoint and OAuth bundle stay with the worker — a URL is half a
-		// credential (ADR-0141/0168). The site and list are model data and travel.
+		// credential (ADR-0141/0168). The operation, the site, the list and the values
+		// it takes are model data and travel. Both job types share the arm: which one a
+		// job carries decides which workers lease it, not what it says.
 		j, err := sharepoint.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
 		return &connectorPayload{Kind: "sharepoint", Fields: map[string]any{
-			"connector": j.Connector, "site": j.Site, "list": j.List,
-			"fields": j.Fields, "requestId": j.RequestID, "resultVariable": j.Result,
+			"connector": j.Connector, "operation": j.Operation, "site": j.Site,
+			"list": j.List, "itemId": j.ItemID, "path": j.Path, "fields": j.Fields,
+			"content": j.Content, "encoding": j.Encoding, "filter": j.Filter,
+			"select": j.Select, "pageToken": j.PageToken, "maxResults": j.MaxResults,
+			"requestId": j.RequestID, "resultVariable": j.Result,
 		}}
 	case compiler.ScimJobTypeIndex:
 		// The authored operation and its operands travel, not the method and URL

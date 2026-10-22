@@ -141,11 +141,19 @@ const CsvImportJobType = "io.atlas.csv-import"
 // way the mail worker uses MailJobTypeIndex.
 const CsvImportJobTypeIndex int32 = 11
 
-// SharePointJobType is the reserved job type a SharePoint task carries.
+// SharePointJobType is the reserved job type a SharePoint create-item task carries.
 // The in-process SharePoint worker subscribes to it to create a list item
 // in a model-authored SharePoint site/list through a server-registered SharePoint
 // provider (Microsoft Graph) off the hot path (ADR-0141), the same way the mail
 // worker subscribes to MailJobType.
+//
+// It serves create-item and nothing else, although the Worker Type has grown every
+// other list and library operation since: those carry [SharePointOpsJobType]. The
+// split is what keeps a worker built before the operations existed from performing
+// them. Such a worker reads a job as "create an item from these fields" whatever else
+// it carries, so a get-item or a delete-item handed to it would create an item and
+// complete the job as if it had done what was asked. Under a job type it does not
+// subscribe to, the same job waits for a worker that knows it.
 const SharePointJobType = "io.atlas.sharepoint.createitem"
 
 // SharePointJobTypeIndex is the interned index SharePointJobType is guaranteed to
@@ -475,6 +483,23 @@ const TeamsPhoneJobType = "io.atlas.teamsphone"
 // in every compiled process: NewBuilder reserves it thirty-fifth, so it is always 34.
 const TeamsPhoneJobTypeIndex int32 = 34
 
+// SharePointOpsJobType is the reserved job type every SharePoint operation but
+// create-item carries (ADR-0141, amended): reading, updating, deleting and listing
+// list items, and uploading, downloading, inspecting, listing, creating and deleting
+// what a document library holds. One job type serves all of them because they share a
+// Worker, a credential and Graph's error envelope; the operation is a modelled value,
+// as it is for S3 and Jira.
+//
+// It exists beside [SharePointJobType] rather than replacing it for the reason given
+// there: the job type is the one contract an older worker can be held to, and a
+// worker that has never heard of this one leaves its jobs alone.
+const SharePointOpsJobType = "io.atlas.sharepoint"
+
+// SharePointOpsJobTypeIndex is the interned index SharePointOpsJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it thirty-sixth, so it is
+// always 35.
+const SharePointOpsJobTypeIndex int32 = 35
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -517,6 +542,7 @@ var reservedJobTypes = []string{
 	S3JobType,            // 32
 	ExchangeJobType,      // 33
 	TeamsPhoneJobType,    // 34
+	SharePointOpsJobType, // 35
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -1956,45 +1982,82 @@ func (b *Builder) AddCsvConnectorTask(cfg CsvConfig) int32 {
 }
 
 // SharePointConfig is the deploy-time configuration of a SharePoint task
-// (ADR-0141). Worker names the server-registered SharePoint provider (its Graph
-// base and OAuth credential live server-side, never in the model); Site and List
-// address the target list, and Fields are the created item's column values — all
-// literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over the
-// instance's variables at call time. ResultVar, if set, is the process variable the
-// created item's JSON is written back into (empty = discard it).
+// (ADR-0141, amended). Worker names the server-registered SharePoint provider (its
+// Graph base and OAuth credential live server-side, never in the model) and Operation
+// the step the task takes, empty meaning create-item — which is what every task
+// authored before operations existed does. Site and List address the site and the
+// list or document library; Fields are column values; ItemID, Path, Content, Filter,
+// Select and PageToken are the values the operation takes — all literal-or-FEEL values
+// (the parser compiles the FEEL ones) evaluated over the instance's variables at call
+// time. Encoding and MaxResults are compiled structure with their defaults applied.
+// ResultVar, if set, is the process variable what Graph returned is written back into
+// (empty = discard it).
 type SharePointConfig struct {
-	Connector string
-	Site      RestExpr
-	List      RestExpr
-	Fields    []RestKV
-	ResultVar string
-	Retries   int32
+	Connector  string
+	Operation  string
+	Site       RestExpr
+	List       RestExpr
+	Fields     []RestKV
+	ItemID     RestExpr
+	Path       RestExpr
+	Content    RestExpr
+	Encoding   string
+	Filter     RestExpr
+	Select     RestExpr
+	PageToken  RestExpr
+	MaxResults int32
+	ResultVar  string
+	Retries    int32
 }
+
+// sharePointCreateItem is the operation a SharePoint task performs when it names
+// none: the only one there was before operations existed.
+const sharePointCreateItem = "create-item"
 
 // AddSharePointConnectorTask adds a SharePoint task and returns its element
 // id. Like a service task it creates a job on activation and waits; the job carries
-// the reserved SharePointJobType so the in-process SharePoint worker picks it up,
-// evaluates any FEEL site/list/field values over the instance's variables, resolves
-// the named worker's Graph client, creates the list item, writes the created
-// item's JSON into ResultVar, and completes the job (ADR-0141). The Graph base and
+// a reserved SharePoint job type so the SharePoint worker picks it up, evaluates the
+// FEEL values over the instance's variables, resolves the named worker's Graph
+// client, performs the one operation, writes what Graph returned into ResultVar, and
+// completes the job (ADR-0141, amended). The Graph base and
 // credentials are resolved server-side from the named worker, never authored in
 // the model — mirroring the mail worker (ADR-0079).
+//
+// Create-item keeps SharePointJobType and every other operation carries
+// SharePointOpsJobType; see the latter for why the two are not one.
 func (b *Builder) AddSharePointConnectorTask(cfg SharePointConfig) int32 {
+	op := cfg.Operation
+	if op == "" {
+		op = sharePointCreateItem
+	}
+	jobType := SharePointOpsJobType
+	if op == sharePointCreateItem {
+		jobType = SharePointJobType
+	}
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:    b.intern(SharePointJobType),
-		Connector:  b.intern(cfg.Connector),
-		Subject:    -1, // not a clio task
-		EventType:  -1,
-		ClioQuery:  -1,
-		ReduceSpec: -1,
-		Method:     -1, // not a REST task
-		ResultVar:  b.intern(cfg.ResultVar),
-		Auth:       -1,
-		Site:       cfg.Site,
-		List:       cfg.List,
-		Fields:     cfg.Fields,
-		Retries:    cfg.Retries,
+		JobType:              b.intern(jobType),
+		Connector:            b.intern(cfg.Connector),
+		Subject:              -1, // not a clio task
+		EventType:            -1,
+		ClioQuery:            -1,
+		ReduceSpec:           -1,
+		Method:               -1, // not a REST task
+		ResultVar:            b.intern(cfg.ResultVar),
+		Auth:                 -1,
+		Site:                 cfg.Site,
+		List:                 cfg.List,
+		Fields:               cfg.Fields,
+		SharePointOp:         b.intern(op),
+		SharePointItemID:     cfg.ItemID,
+		SharePointPath:       cfg.Path,
+		SharePointContent:    cfg.Content,
+		SharePointEncoding:   b.intern(cfg.Encoding),
+		SharePointFilter:     cfg.Filter,
+		SharePointSelect:     cfg.Select,
+		SharePointPageToken:  cfg.PageToken,
+		SharePointMaxResults: cfg.MaxResults,
+		Retries:              cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

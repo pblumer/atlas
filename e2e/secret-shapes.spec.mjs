@@ -145,3 +145,20 @@ test("a JSON list is not a bundle", async ({ page }) => {
   await save(page);
   await expect(error(page)).toContainText("not a list");
 });
+
+// A SharePoint app that runs unattended may prove itself with a certificate in place of
+// the client secret (connector/sharepoint/oauth.go). The check accepts that shape, and
+// refuses a bundle carrying both rather than letting the server pick one later.
+test("a SharePoint bundle takes a certificate in place of the secret, not beside it", async ({ page }) => {
+  await name(page, "sharepoint_auth");
+  await expect(page.locator(".secret-hint")).toContainText("certificate");
+
+  const cert = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----";
+  await value(page, JSON.stringify({ tenantId: "t", clientId: "c", certificate: cert }));
+  await save(page);
+  await expect(error(page)).toBeHidden();
+
+  await value(page, JSON.stringify({ method: "clientCredentials", tenantId: "t", clientId: "c", clientSecret: "s", certificate: cert }));
+  await save(page);
+  await expect(error(page)).toContainText("give one, not both");
+});

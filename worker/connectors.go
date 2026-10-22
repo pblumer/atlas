@@ -346,9 +346,14 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 				continue
 			}
 			built.Names = append(built.Names, names...)
-			built.Handlers[compiler.SharePointJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
-				return RunSharePointJob(ctx, j, reg)
-			})
+			// Both job types: create-item keeps the one it always had, and every other
+			// operation rides compiler.SharePointOpsJobType, which a worker built before
+			// operations existed does not lease.
+			for _, jobType := range []string{compiler.SharePointJobType, compiler.SharePointOpsJobType} {
+				built.Handlers[jobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+					return RunSharePointJob(ctx, j, reg)
+				})
+			}
 		case "googlesheets":
 			reg, names, err := googleSheetsRegistryFromEnv(env)
 			if err != nil {

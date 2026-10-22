@@ -2952,18 +2952,38 @@ func csvHasHeader(attr string) bool {
 }
 
 // A SharePoint task's parameters, carried on a service task as an
-// <atlas:sharepointConnector connector="..." site="..." list="..."> extension
-// element (ADR-0141). worker names a server-registered SharePoint provider (its
-// Graph base and OAuth credential live on the server, never in the model). site
-// (required) addresses the SharePoint site ("host,/sites/path" or a site id); list
-// (required) is the list name or id the item is created in; resultVariable, if set,
-// receives the created item's JSON. Each ItemField child is one column value of the
-// created item. Every value is literal or, with a leading '=', a FEEL expression
-// evaluated over the instance's variables at call time (the fx toggle, ADR-0067).
+// <atlas:sharepointConnector connector="..." operation="..." site="..."> extension
+// element (ADR-0141, amended). connector names a server-registered SharePoint
+// provider (its Graph base and OAuth credential live on the server, never in the
+// model) and operation the step the task takes; a task naming none creates a list
+// item, which is what every model authored before operations existed does.
+//
+// Which of the remaining attributes apply is decided by the operation, and only by it:
+// site addresses the site every operation acts in (a Graph site id
+// "host,siteId,webId", a host and server-relative path "host:/sites/hr", or the site's
+// URL); list is the list an item operation acts on, or the document library a file
+// operation does (empty there means the site's default library); itemId addresses one
+// list item and path one file or folder inside the library; content is what an upload
+// writes and encoding whether that text is the characters or base64; filter, select,
+// pageToken and maxResults shape a listing, and select also a single read. Each
+// ItemField child is one column value — of the item created or updated, or a property
+// of the file uploaded. resultVariable receives what Graph returned. Every value is
+// literal or, with a leading '=', a FEEL expression evaluated over the instance's
+// variables at call time (the fx toggle, ADR-0067); encoding and maxResults are not,
+// because each decides the shape of the call rather than its content.
 type xmlSharePointConnector struct {
 	Connector      string      `xml:"connector,attr"`
+	Operation      string      `xml:"operation,attr"`
 	Site           string      `xml:"site,attr"`
 	List           string      `xml:"list,attr"`
+	ItemID         string      `xml:"itemId,attr"`
+	Path           string      `xml:"path,attr"`
+	Content        string      `xml:"content,attr"`
+	Encoding       string      `xml:"encoding,attr"`
+	Filter         string      `xml:"filter,attr"`
+	Select         string      `xml:"select,attr"`
+	PageToken      string      `xml:"pageToken,attr"`
+	MaxResults     string      `xml:"maxResults,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"itemField"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a

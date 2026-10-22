@@ -14,6 +14,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **SharePoint reads, changes, finds and deletes list items, and works with document
+  libraries.** Beside creating a list item, a SharePoint task can now read one by its id
+  (`get-item`), change some of its columns (`update-item`), delete it (`delete-item`) and
+  find items by an OData filter one page at a time (`list-items`, with a
+  `nextPageToken` to carry on), and in a document library upload a file — optionally
+  with properties — (`upload-file`), download a small one into a variable
+  (`download-file`), ask whether one is there (`get-file`), list a folder
+  (`list-folder`), create a case folder with every missing one above it
+  (`create-folder`) and delete a file or folder (`delete-file`). The site may be named
+  as the browser shows it (`https://contoso.sharepoint.com/sites/hr`) or as
+  `host:/sites/name`, not only by Graph's site id; a document's content is bounded by
+  the process variable's budget and Graph's pre-authenticated download link never
+  reaches a variable. A task naming no operation is the create-item it always was. The
+  new operations ride a job type of their own, `io.atlas.sharepoint`, so a worker built
+  before them leaves those jobs for one that knows them instead of creating an item for
+  each ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended).
+- **A SharePoint Worker can sign in with a certificate.** The vault bundle may carry
+  `certificate` — the certificate and its unencrypted private key as one PEM text — in
+  place of `clientSecret`; the token comes from the same client-credentials grant with
+  a signed client assertion, so the private key never leaves the worker. A bundle
+  naming no `method` is a client-credentials bundle.
 - **The Entra Worker reads a person's manager.** A new operation, `get-user-manager`,
   writes the manager's directory object for a `userId` into a result variable; an optional
   `select` names which of the manager's properties come back. A person without a manager
@@ -51,6 +72,18 @@ _Changed_ / _Removed_ for each version.
   *no group*. A directory that cannot be read leaves its ids as they were.
 
 ### Changed
+
+- **A SharePoint column value keeps the type of its FEEL value.** A value that
+  evaluates to a number is sent to Graph as a number, a boolean as Yes/No, a list as a
+  multi-choice and null as null, which clears the column; before, every value was sent
+  as its text, which left multi-choice, lookup and Yes/No columns unreachable. A literal
+  is still its text. A create-item task that computed a number into a *text* column now
+  relies on Graph converting it — check such a task against your site
+  ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended).
+- **SharePoint failures say what to do.** A failed Graph call names the operation and
+  Graph's own error code and message; a 401 or 403 names the permission to grant, and a
+  throttled call quotes the wait Graph asked for. Every answer is read under the process
+  variable's budget — the read used to be unbounded.
 
 - **The Microsoft 365 example asks the manager of the person a position is for.** Licence,
   team, shared mailbox and mailbox access in `examples/m365-dienste` were approved with the

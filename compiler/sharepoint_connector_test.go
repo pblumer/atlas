@@ -200,3 +200,144 @@ func TestParseSharePointConnectorCamelTag(t *testing.T) {
 		t.Errorf("fields = %+v, want the Title item field", d.Fields)
 	}
 }
+
+// sharePointTask compiles one SharePoint task carrying attrs and the given children,
+// and returns its detail, or the compile error.
+func sharePointTask(t *testing.T, attrs, children string) (*CompiledProcess, *ConnectorTaskDetail, error) {
+	t.Helper()
+	bpmn := `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas/schema/1.0">
+  <bpmn:process id="p">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:sharepointConnector ` + attrs + `>` + children + `</atlas:sharepointConnector></bpmn:extensionElements></bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(bpmn))
+	if err != nil {
+		return nil, nil, err
+	}
+	task := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
+	return cp, cp.ConnectorTask(cp.Node(task).Detail), nil
+}
+
+// Create-item keeps the job type it always had, whether a model names it or leaves the
+// operation out, and every other operation carries the operations job type. The split is
+// what keeps an older worker — one that reads every job as "create an item" — from ever
+// being handed a read or a delete.
+func TestSharePointOperationsChooseTheirJobType(t *testing.T) {
+	for _, tc := range []struct {
+		name, attrs, children string
+		wantJob               int32
+		wantOp                string
+	}{
+		{"no operation", `connector="c" site="s" list="l"`, "", SharePointJobTypeIndex, "create-item"},
+		{"create-item", `connector="c" operation="create-item" site="s" list="l"`, "", SharePointJobTypeIndex, "create-item"},
+		{"get-item", `connector="c" operation="get-item" site="s" list="l" itemId="7" resultVariable="r"`, "", SharePointOpsJobTypeIndex, "get-item"},
+		{"upload-file", `connector="c" operation="Upload-File" site="s" path="a/b.txt" content="hi"`, "", SharePointOpsJobTypeIndex, "upload-file"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cp, d, err := sharePointTask(t, tc.attrs, tc.children)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if d.JobType != tc.wantJob {
+				t.Errorf("job type = %q, want %q", cp.Intern(d.JobType), cp.Intern(tc.wantJob))
+			}
+			if got := cp.Intern(d.SharePointOp); got != tc.wantOp {
+				t.Errorf("operation = %q, want %q", got, tc.wantOp)
+			}
+		})
+	}
+}
+
+// Every value an operation takes reaches the detail, as literal or FEEL, and the two
+// compiled-structure values carry their defaults when a model authors none.
+func TestSharePointOperationValuesReachTheDetail(t *testing.T) {
+	cp, d, err := sharePointTask(t,
+		`connector="c" operation="list-items" site="=siteUrl" list="Auftraege" filter="=&quot;fields/Status eq '&quot; + status + &quot;'&quot;" select="Title,Status" pageToken="=seite.nextPageToken" resultVariable="seite"`, "")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if d.Site.Expr == nil || d.SharePointFilter.Expr == nil || d.SharePointPageToken.Expr == nil {
+		t.Errorf("site/filter/pageToken = %+v / %+v / %+v, want FEEL", d.Site, d.SharePointFilter, d.SharePointPageToken)
+	}
+	if d.List.Literal != "Auftraege" || d.SharePointSelect.Literal != "Title,Status" {
+		t.Errorf("list/select = %q / %q, want the literals", d.List.Literal, d.SharePointSelect.Literal)
+	}
+	if d.SharePointMaxResults != sharePointDefaultMaxResults {
+		t.Errorf("maxResults = %d, want the default %d", d.SharePointMaxResults, sharePointDefaultMaxResults)
+	}
+	if got := cp.Intern(d.ResultVar); got != "seite" {
+		t.Errorf("resultVariable = %q, want seite", got)
+	}
+
+	cp, d, err = sharePointTask(t, `connector="c" operation="upload-file" site="s" list="Vertraege" path="=pfad" content="=pdf" encoding="base64"`,
+		`<atlas:itemField name="Kunde" value="=kunde.name"/>`)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if d.SharePointPath.Expr == nil || d.SharePointContent.Expr == nil {
+		t.Errorf("path/content = %+v / %+v, want FEEL", d.SharePointPath, d.SharePointContent)
+	}
+	if got := cp.Intern(d.SharePointEncoding); got != "base64" {
+		t.Errorf("encoding = %q, want base64", got)
+	}
+	if len(d.Fields) != 1 || d.Fields[0].Name != "Kunde" {
+		t.Errorf("fields = %+v, want the Kunde property", d.Fields)
+	}
+
+	cp, d, err = sharePointTask(t, `connector="c" operation="download-file" site="s" path="a.txt" resultVariable="datei"`, "")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := cp.Intern(d.SharePointEncoding); got != sharePointEncodingText {
+		t.Errorf("encoding = %q, want the text default", got)
+	}
+
+	_, d, err = sharePointTask(t, `connector="c" operation="list-folder" site="s" maxResults="999" resultVariable="r"`, "")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if d.SharePointMaxResults != 999 {
+		t.Errorf("maxResults = %d, want 999", d.SharePointMaxResults)
+	}
+}
+
+// Each refusal is a value that would otherwise be missing at call time or silently
+// dropped there.
+func TestSharePointOperationRules(t *testing.T) {
+	field := `<atlas:itemField name="Title" value="x"/>`
+	for name, tc := range map[string]struct{ attrs, children, want string }{
+		"unknown operation":         {`connector="c" operation="move-item" site="s" list="l"`, "", "unknown operation"},
+		"get-item without id":       {`connector="c" operation="get-item" site="s" list="l" resultVariable="r"`, "", "needs an itemId"},
+		"get-item without result":   {`connector="c" operation="get-item" site="s" list="l" itemId="1"`, "", "needs a resultVariable"},
+		"get-item with a filter":    {`connector="c" operation="get-item" site="s" list="l" itemId="1" filter="x" resultVariable="r"`, "", "does not use filter"},
+		"update-item without field": {`connector="c" operation="update-item" site="s" list="l" itemId="1"`, "", "needs at least one itemField"},
+		"delete-item with fields":   {`connector="c" operation="delete-item" site="s" list="l" itemId="1"`, field, "does not use itemField"},
+		"list-items without list":   {`connector="c" operation="list-items" site="s" resultVariable="r"`, "", "needs a list"},
+		"item op with a path":       {`connector="c" operation="create-item" site="s" list="l" path="a"`, "", "does not use path"},
+		"file op with an item id":   {`connector="c" operation="get-file" site="s" path="a" itemId="1" resultVariable="r"`, "", "does not use itemId"},
+		"upload without content":    {`connector="c" operation="upload-file" site="s" path="a"`, "", "needs content"},
+		"download with content":     {`connector="c" operation="download-file" site="s" path="a" content="x" resultVariable="r"`, "", "does not use content"},
+		"folder listing filtered":   {`connector="c" operation="list-folder" site="s" filter="x" resultVariable="r"`, "", "does not use filter"},
+		"unknown encoding":          {`connector="c" operation="download-file" site="s" path="a" encoding="hex" resultVariable="r"`, "", "unknown encoding"},
+		"encoding on an item":       {`connector="c" operation="get-item" site="s" list="l" itemId="1" encoding="base64" resultVariable="r"`, "", "does not use encoding"},
+		"maxResults past a page":    {`connector="c" operation="list-items" site="s" list="l" maxResults="1000" resultVariable="r"`, "", "at most 999"},
+		"maxResults not a number":   {`connector="c" operation="list-items" site="s" list="l" maxResults="viele" resultVariable="r"`, "", "non-numeric"},
+		"maxResults zero":           {`connector="c" operation="list-folder" site="s" maxResults="0" resultVariable="r"`, "", "must be positive"},
+		"malformed FEEL item id":    {`connector="c" operation="delete-item" site="s" list="l" itemId="=("`, "", "itemId"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := sharePointTask(t, tc.attrs, tc.children)
+			if err == nil {
+				t.Fatalf("compiled; want a refusal mentioning %q", tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}
