@@ -14,6 +14,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Entra Worker reads a person's manager.** A new operation, `get-user-manager`,
+  writes the manager's directory object for a `userId` into a result variable; an optional
+  `select` names which of the manager's properties come back. A person without a manager
+  is `null`, so a process can route an approval to a fallback approver; an id that belongs
+  to nobody still fails the task, because the worker reads the manager through the user
+  (`$expand=manager`) rather than from `/users/{id}/manager`, which answers 404 to both
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended 2026-10-22).
+
 - **An account can name its line manager.** `managerId` on an account is the principal id
   of the person's line manager. An administrator sets it under Console → Administration →
   Organization (field *Line manager*) or with `PATCH /api/v1/users/{id}`. The Entra mirror
