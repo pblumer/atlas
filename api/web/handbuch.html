@@ -1659,7 +1659,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de">Ein Worker kann einen <b>BPMN-Fehler</b> mit Code <code>DECLINED</code> werfen; das passende <code>errorEventDefinition</code> am Rand der Aufgabe fängt ihn und lenkt auf einen Fehlerpfad. Das ist erwartbares Verhalten – kein Incident. Ein Skript-Task wirft ihn, indem er seinem Fehler einen Code gibt, den der Prozess fängt (siehe <a href="#runbook-script">Skript</a>); ein Teams-Phone-Task wirft die Codes seiner fachlichen Abweisungen (siehe <a href="#ref-teamsphone">Teams Phone – alle Operationen</a>).</span><span data-l="en">A worker can throw a <b>BPMN error</b> with code <code>DECLINED</code>; the matching <code>errorEventDefinition</code> on the task's edge catches it and diverts to an error path. That's expected behaviour – not an incident. A script task throws one by giving its error a code the process catches (see <a href="#runbook-script">Script</a>); a Teams Phone task throws the codes of its business refusals (see <a href="#ref-teamsphone">Teams Phone – every operation</a>).</span></p>
+        <p class="rz-how"><span data-l="de">Ein Worker kann einen <b>BPMN-Fehler</b> mit Code <code>DECLINED</code> werfen; das passende <code>errorEventDefinition</code> am Rand der Aufgabe fängt ihn und lenkt auf einen Fehlerpfad. Das ist erwartbares Verhalten – kein Incident. Ein Skript-Task wirft ihn, indem er seinem Fehler einen Code gibt, den der Prozess fängt (siehe <a href="#runbook-script">Skript</a>); ein Teams-Phone-Task wirft die Codes seiner fachlichen Abweisungen (siehe <a href="#ref-teamsphone">Teams Phone – alle Operationen</a>); ein Entra-Task mit <code>get-user-manager</code> wirft <code>ENTRA_USER_NOT_FOUND</code>, wenn Entra ID die Person nicht kennt. Jeder dieser Codes wird nur geworfen, wenn der Prozess ihn fängt; sonst bleibt es ein Fehlschlag mit Wiederholungen.</span><span data-l="en">A worker can throw a <b>BPMN error</b> with code <code>DECLINED</code>; the matching <code>errorEventDefinition</code> on the task's edge catches it and diverts to an error path. That's expected behaviour – not an incident. A script task throws one by giving its error a code the process catches (see <a href="#runbook-script">Script</a>); a Teams Phone task throws the codes of its business refusals (see <a href="#ref-teamsphone">Teams Phone – every operation</a>); an Entra task with <code>get-user-manager</code> throws <code>ENTRA_USER_NOT_FOUND</code> when Entra ID does not know the person. Each of these codes is thrown only when the process catches it; otherwise it stays a failure with its retries.</span></p>
       </div>
       <div class="recipe" id="rz-escalation" data-proc="recipe-escalation">
         <h4><span class="rz-emoji" aria-hidden="true">📣</span>
@@ -5459,13 +5459,13 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               zu, die Abwesenheitsnotiz am selben Produkt setzt Exchange. Die Worker heissen <code>ucc_entra</code>,
               <code>ucc_exchange</code> und <code>ucc_teams</code>. Lizenz, Team, Funktionspostfach und Postfachzugriff
               genehmigt die vorgesetzte Person der Person, für die bestellt wird: ein eigener Genehmigungsprozess liest
-              sie mit PowerShell aus Entra ID.</p>
+              sie mit <code>get-user-manager</code> über den Worker <code>ucc_entra</code> aus Entra ID.</p>
             <p data-l="en">Fifteen processes over the Entra, Exchange and Teams Phone Worker Types, five decision tables
               and 21 forms. One product may use several Workers: Entra assigns the licence, Exchange sets the automatic
               reply on the same product. The Workers are called <code>ucc_entra</code>, <code>ucc_exchange</code> and
               <code>ucc_teams</code>. Licence, team, shared mailbox and mailbox access are approved by the line manager
               of the person they are ordered for: an approval process of its own reads the manager from Entra ID with
-              PowerShell.</p>
+              <code>get-user-manager</code> through the <code>ucc_entra</code> Worker.</p>
           </div>
         </div>
         <p data-l="de"><b>Governance steckt im Modell, nicht in einer Weisung.</b> Wer ein Team, ein Postfach oder eine

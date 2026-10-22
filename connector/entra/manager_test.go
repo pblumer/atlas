@@ -2,10 +2,16 @@ package entra
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/model"
 )
 
 func managerJob() Job {
@@ -117,6 +123,11 @@ func TestAnUnknownUserIsAFailureNotAMissingManager(t *testing.T) {
 	if !strings.Contains(err.Error(), "Request_ResourceNotFound") {
 		t.Errorf("err = %v, want Graph's code in it", err)
 	}
+	// A process that catches nothing gets an ordinary failure, with its retries.
+	var be *job.BPMNError
+	if errors.As(err, &be) {
+		t.Errorf("err = %v is a BPMN error, but the process catches no code", err)
+	}
 	// The plain expansion of the immediate manager is not an advanced query: Graph asks
 	// for ConsistencyLevel only with $levels, which this read does not send.
 	if gotConsistency != "" {
@@ -182,5 +193,118 @@ func TestTheManagerNeedsAResultVariable(t *testing.T) {
 	}
 	if rc.method != "" {
 		t.Errorf("Graph was called (%s %s) for a job that could not keep the answer", rc.method, rc.path)
+	}
+}
+
+// notFoundServer answers every request 404 with the given body, as Graph answers a read
+// of a user that does not exist.
+func notFoundServer(t *testing.T, body string) Client {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return NewGraphClient(staticToken{tok: "t"}, srv.URL, http.DefaultClient)
+}
+
+const graphUserNotFound = `{"error":{"code":"Request_ResourceNotFound","message":"Resource 'nobody@contoso.com' does not exist or one of its queried reference-property objects are not present."}}`
+
+// A process that catches ENTRA_USER_NOT_FOUND gets an unknown user as that BPMN error,
+// so it can route the order to a person who decides, the way it routes a person
+// without a manager — at once, with no retry spent on an answer that will not change
+// (ADR-0461's rule, ADR-0172 amended 2026-10-22).
+//
+// The message names no user. It is kept with the error, and the id it would name is
+// often the very value a process declares personal and keeps enciphered.
+func TestAnUnknownUserIsThrownWhenTheProcessCatchesIt(t *testing.T) {
+	j := managerJob()
+	j.UserID = "nobody@contoso.com"
+	j.ErrorCodes = []string{"SOMETHING_ELSE", CodeUserNotFound}
+	_, err := Run(context.Background(), j, regWith("contoso", notFoundServer(t, graphUserNotFound)))
+	var be *job.BPMNError
+	if !errors.As(err, &be) {
+		t.Fatalf("err = %v, want a BPMN error the process catches", err)
+	}
+	if be.Code != CodeUserNotFound {
+		t.Errorf("code = %q, want %s", be.Code, CodeUserNotFound)
+	}
+	if strings.Contains(be.Message, "nobody") {
+		t.Errorf("message = %q names the user; it is kept with the error", be.Message)
+	}
+}
+
+// Everything else stays an ordinary failure, which keeps its retries and ends in an
+// incident: a process that does not catch the code, a 404 that is not Graph saying the
+// user does not exist, another status, and another operation.
+func TestOnlyACaughtUnknownUserIsThrown(t *testing.T) {
+	caught := []string{CodeUserNotFound}
+	for _, tc := range []struct {
+		name   string
+		op     string
+		codes  []string
+		status int
+		body   string
+	}{
+		{"the process catches nothing", "get-user-manager", nil, http.StatusNotFound, graphUserNotFound},
+		{"a 404 without Graph's code", "get-user-manager", caught, http.StatusNotFound, "Not Found"},
+		{"a refused read", "get-user-manager", caught, http.StatusForbidden, `{"error":{"code":"Authorization_RequestDenied","message":"Insufficient privileges"}}`},
+		{"another operation", "get-user", caught, http.StatusNotFound, graphUserNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			t.Cleanup(srv.Close)
+			c := NewGraphClient(staticToken{tok: "t"}, srv.URL, http.DefaultClient)
+			j := managerJob()
+			j.Operation, j.ErrorCodes = tc.op, tc.codes
+			_, err := Run(context.Background(), j, regWith("contoso", c))
+			if err == nil {
+				t.Fatal("Run succeeded; want a failure")
+			}
+			var be *job.BPMNError
+			if errors.As(err, &be) {
+				t.Errorf("err = %v is a BPMN error; want an ordinary failure", err)
+			}
+		})
+	}
+}
+
+// The codes a process catches travel with the job, because the worker has no compiled
+// process to ask.
+func TestResolveCarriesTheCaughtErrorCodes(t *testing.T) {
+	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
+  <bpmn:error id="unbekannt" errorCode="ENTRA_USER_NOT_FOUND"/>
+  <bpmn:process id="p" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:entraConnector connector="contoso" operation="get-user-manager" userId="=upn" resultVariable="chef"/></bpmn:extensionElements></bpmn:serviceTask>
+    <bpmn:boundaryEvent id="b" attachedToRef="t"><bpmn:errorEventDefinition errorRef="unbekannt"/></bpmn:boundaryEvent>
+    <bpmn:endEvent id="e"/>
+    <bpmn:endEvent id="e2"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="b" targetRef="e2"/>
+  </bpmn:process>
+</bpmn:definitions>`
+	cp, err := compiler.Parse(1, 1, strings.NewReader(bpmn))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	node := cp.Node(cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target)
+	store := fakeVarStore{vars: map[uint64][]model.VariableValue{
+		1: {{Name: "upn", Kind: model.VarString, Text: "arno@contoso.com"}},
+	}}
+	j, err := Resolve(store, cp, cp.ConnectorTask(node.Detail), 1)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if !slices.Contains(j.ErrorCodes, CodeUserNotFound) {
+		t.Errorf("errorCodes = %v, want %s", j.ErrorCodes, CodeUserNotFound)
+	}
+	if j.UserID != "arno@contoso.com" {
+		t.Errorf("userId = %q", j.UserID)
 	}
 }

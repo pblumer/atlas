@@ -145,6 +145,29 @@ func NewGraphClient(tokens oauth2.TokenSource, baseURL string, httpc *http.Clien
 // BaseURL returns the Graph root this client calls.
 func (c *GraphClient) BaseURL() string { return c.baseURL }
 
+// GraphError is a request Graph answered with a non-2xx status: the status, and Graph's
+// own error code and message when the body carried its envelope. It is a type rather
+// than a formatted string because one answer is something a process may have a path
+// for — a user that does not exist (see [CodeUserNotFound]) — and telling it apart by
+// matching text would break on the first change of wording.
+type GraphError struct {
+	Method string
+	Path   string
+	Status int
+	// Code and Message are Graph's, empty when the body was not its envelope; Body is
+	// the raw body then.
+	Code    string
+	Message string
+	Body    string
+}
+
+func (e *GraphError) Error() string {
+	if e.Code != "" {
+		return fmt.Sprintf("entra: %s %s returned HTTP %d: %s: %s", e.Method, e.Path, e.Status, e.Code, e.Message)
+	}
+	return fmt.Sprintf("entra: %s %s returned HTTP %d: %s", e.Method, e.Path, e.Status, e.Body)
+}
+
 // graphError is the error envelope Graph returns. Surfacing its code and message is
 // the difference between "HTTP 400" and "Request_BadRequest: Property netId is
 // invalid", which is the whole of what an operator needs from a failed provisioning
@@ -290,9 +313,12 @@ func (c *GraphClient) resolve(path string) (string, error) {
 
 // graphFailure turns a non-2xx response into the most specific error the body allows.
 func graphFailure(method, path string, status int, raw []byte) error {
+	e := &GraphError{Method: method, Path: path, Status: status}
 	var ge graphError
 	if err := json.Unmarshal(raw, &ge); err == nil && ge.Error.Code != "" {
-		return fmt.Errorf("entra: %s %s returned HTTP %d: %s: %s", method, path, status, ge.Error.Code, ge.Error.Message)
+		e.Code, e.Message = ge.Error.Code, ge.Error.Message
+		return e
 	}
-	return fmt.Errorf("entra: %s %s returned HTTP %d: %s", method, path, status, strings.TrimSpace(string(raw)))
+	e.Body = strings.TrimSpace(string(raw))
+	return e
 }
