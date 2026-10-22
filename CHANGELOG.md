@@ -12,6 +12,79 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.19.0] — 2026-10-22
+
+**A `superior` approval reaches the orderer's line manager, and a SharePoint task does
+more than create a list item.** An account names its line manager — set by an
+administrator under **Console → Administration → Organization** or filled by the Entra
+mirror when its model selects `manager` — and a `superior` approval starts with it; its
+escalation moves one level up the line from whoever holds the approval now
+([ADR-0470](docs/adr/0470-the-line-manager-is-on-the-account.md)). The shipped approval
+model no longer searches a directory for a principal id no directory holds, which is why
+such an approval reached nobody before (#1311). The Entra Worker reads a person's manager
+(`get-user-manager`), and the Microsoft 365 example uses it to ask the manager of the
+person a position is for ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended
+2026-10-22). A SharePoint task reads, changes, finds and deletes list items, and uploads,
+downloads, lists, creates and deletes files and folders in a document library; it
+addresses a site by its URL, keeps the type of a FEEL value in a column, names Graph's
+error and the missing permission when a call fails, and its Worker can sign in with a
+certificate ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended 2026-10-22). The
+replay's Variables tab names the person, group, process or product an id stands for.
+
+**Read this before upgrading from 0.18.0.** These act on an existing installation:
+
+- A `superior` approval needs the orderer's line manager on the orderer's account. Where
+  there is none, where the manager's account is disabled or gone, or where the directory
+  names somebody who has no account yet, the approval refuses to start and the
+  fulfilment process shows the refusal as an incident; resolving it after the manager is
+  set starts the approval. Fill the relation before the first such order: with an Entra
+  mirror, add `manager` to the mirror model's `select`, as
+  `examples/entra-verzeichnis-abgleich.bpmn` now does, and deploy it again; without one,
+  an administrator sets *Line manager* in the Console or `managerId` with
+  `PATCH /api/v1/users/{id}`. While the mirror reports a manager, the field belongs to
+  the directory and a hand edit answers 409. The approval no longer needs an `ad` Worker
+  called `verzeichnis`. Approvals already running keep the 0.18.0 model and its
+  directory steps.
+- Upgrade a SharePoint Worker that runs apart from the server together with the server.
+  A 0.19.0 server sends a column value with the type of its FEEL value; a 0.18.0 Worker
+  reads every value as text, so a create-item task whose value computes a number, a
+  boolean, a list or a context fails with «cannot read the resolved detail», retries and
+  ends as an incident. The new operations ride a job type of their own,
+  `io.atlas.sharepoint`, which a 0.18.0 Worker does not lease: such a task waits for a
+  0.19.0 Worker rather than creating an item. A create-item task that computed a number
+  into a *text* column now relies on Graph converting it — check such a task against
+  your site.
+- A model that uses `get-user-manager`, such as the Microsoft 365 example's approval
+  model `proc_m365_genehmigung_vorgesetzter`, needs a 0.19.0 Entra Worker; a 0.18.0 one
+  fails the task with «unknown operation». The operation needs `User.Read.All`, which
+  the user reads already need.
+- Not yet confirmed against a live tenant: Graph's `manager@delta` shape on the mirror's
+  delta read, and for SharePoint a number written into a text column, the column update
+  of a document (`PATCH …/listItem/fields`), the expanded read of a path-addressed file
+  and the ceiling of 999 items per page. The tests run against a fake Graph endpoint.
+- 0.19.0 reads the data directory 0.18.0 wrote: nothing under the log, the state or the
+  record format changed. The first start deploys one new version of the system process
+  `atlas-genehmigung-vorgesetzter`. An account's record may carry `managerId` and
+  `managerDirectoryId`. No route was added: `PATCH /api/v1/users/{id}` takes `managerId`
+  (`""` clears it), and `POST /api/v1/orders/{id}/lines/{item}/escalate` takes
+  `lineManager`, which is refused together with `superior`. `vorgesetzter` in
+  `atlas.approval.requested` is now the line manager as the orderer's account records
+  it. The Entra task takes the operation `get-user-manager`; the SharePoint task takes
+  `operation` and the attributes its operations use (`itemId`, `path`, `content`,
+  `encoding`, `filter`, `select`, `pageToken`, `maxResults`), and a SharePoint vault
+  bundle may carry `certificate` in place of `clientSecret`. The MCP tools (149), the
+  `/metrics` series, the Helm chart's values and the budgets are unchanged.
+- Going back to 0.18.0 starts on the same directory only while no deployed process uses
+  `get-user-manager` or a SharePoint task that names no list: 0.18.0 cannot compile
+  either and refuses to start. It is worse for a SharePoint task that names a list:
+  0.18.0 knows only create-item and compiles such a task as one whatever its operation,
+  so a `delete-item` or `update-item` would create an item. Remove every deployed
+  version of such a process before going back, once nothing runs under it. 0.18.0
+  ignores an account's line manager, and an account it saves again loses it; its
+  `superior` approval returns to the directory lookup that reaches nobody, and an
+  approval started under 0.19.0 that escalates under 0.18.0 stalls, because 0.18.0 does
+  not read `lineManager`.
+
 ### Added
 
 - **SharePoint reads, changes, finds and deletes list items, and works with document
@@ -15847,7 +15920,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/pblumer/atlas/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/pblumer/atlas/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/pblumer/atlas/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/pblumer/atlas/compare/v0.15.0...v0.16.0
