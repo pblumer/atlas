@@ -30,7 +30,7 @@ Derived from the Graph request each operation issues (`connector/entra/offload.g
 | Operation(s) | Graph request | Minimal application permission |
 |---|---|---|
 | `create-user`, `update-user`, `delete-user`, `enable`, `disable`, `reset-password` | `POST` / `PATCH` / `DELETE /users/{id}` | **`User.ReadWrite.All`** |
-| `get-user`, `list-users`, `delta-users` | `GET /users[/delta]` | `User.Read.All` (subset of `User.ReadWrite.All`) |
+| `get-user`, `get-user-manager`, `list-users`, `delta-users` | `GET /users[/{id}][/delta]` — the manager as `GET /users/{id}?$expand=manager` | `User.Read.All` (subset of `User.ReadWrite.All`) |
 | `assign-license` | `POST /users/{id}/assignLicense` | `User.ReadWrite.All` — no `Organization.Read.All` needed, the worker sends explicit `skuId`s rather than enumerating SKUs |
 | `add-group-member`, `remove-group-member` | `POST` / `DELETE /groups/{id}/members` | **`GroupMember.ReadWrite.All`** (tighter) or `Group.ReadWrite.All` |
 | `create-group`, `update-group`, `delete-group`, `add-group-owner`, `remove-group-owner` | `POST` / `PATCH` / `DELETE /groups[/{id}/owners]` | **`Group.ReadWrite.All`** |

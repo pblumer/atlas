@@ -3928,6 +3928,7 @@ const SERVICE_TASK_KINDS = [
         options: [
           { v: "create-user", l: "Create user" },
           { v: "get-user", l: "Read user" },
+          { v: "get-user-manager", l: "Read manager (Vorgesetzte/r)" },
           { v: "list-users", l: "List users" },
           { v: "delta-users", l: "Delta users (Änderungen)" },
           { v: "update-user", l: "Update user" },
@@ -3958,7 +3959,7 @@ const SERVICE_TASK_KINDS = [
         key: "userId", label: "User", placeholder: "arno@contoso.com", fx: true,
         // The operations that address a user (compiler's needsUser). An explicit list so
         // an operation that takes only a group never prompts for a user it ignores.
-        showIf: (v) => ["get-user", "update-user", "delete-user", "reset-password", "enable", "disable", "add-group-member", "remove-group-member", "add-group-owner", "remove-group-owner", "add-team-member", "add-team-owner", "assign-license", "assign-role"].includes(v.operation),
+        showIf: (v) => ["get-user", "get-user-manager", "update-user", "delete-user", "reset-password", "enable", "disable", "add-group-member", "remove-group-member", "add-group-owner", "remove-group-owner", "add-team-member", "add-team-owner", "assign-license", "assign-role"].includes(v.operation),
         hint: "A user principal name or object id. May be a FEEL expression (fx) over the instance's variables.",
       },
       {
@@ -4010,8 +4011,10 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "select", label: "Properties", placeholder: "id,displayName,mail",
-        showIf: (v) => ["get-user", "get-group", "list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
-        hint: (v) => ["get-user", "get-group"].includes(v.operation)
+        showIf: (v) => ["get-user", "get-user-manager", "get-group", "list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
+        hint: (v) => v.operation === "get-user-manager"
+          ? "An OData $select over the manager: which of the manager's properties come back, e.g. id,displayName,mail,userPrincipalName. Empty returns Graph's default set for the manager."
+          : ["get-user", "get-group"].includes(v.operation)
           ? "An OData $select: which properties the object comes back with. Empty returns Graph's default set, which leaves out properties such as assignedLicenses and employeeId \u2014 name them here to read them, e.g. id,assignedLicenses,employeeId."
           : "An OData $select: which properties each object comes back with. Empty returns Graph's default set. Naming the few a process actually reads keeps a large read out of the state store. On a delta query Graph threads the $select forward into the deltaLink, so a resume keeps it automatically.",
       },

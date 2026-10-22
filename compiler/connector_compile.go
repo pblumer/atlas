@@ -217,16 +217,21 @@ type entraOp struct {
 	// reason and takes none of the query fields: there is no collection to filter,
 	// project or page.
 	isBinary bool
-	// selects marks a single-object read that takes a select (get-user, get-group):
-	// Graph's default property set leaves out assignedLicenses, employeeId and others a
-	// process may need to read (ADR-0172, amended).
+	// selects marks a single-object read that takes a select (get-user, get-group,
+	// get-user-manager): Graph's default property set leaves out assignedLicenses,
+	// employeeId and others a process may need to read (ADR-0172, amended).
 	selects bool
+	// expands marks a read that returns an object expanded on the user instead of the
+	// user — get-user-manager (ADR-0172, amended 2026-10-22). Like a listing, it needs a
+	// resultVariable: reading the manager to discard it is a read nothing asked for.
+	expands bool
 }
 
 var entraOps = map[string]entraOp{
 	"create-user":         {needsAttributes: true},
 	"get-user":            {needsUser: true, selects: true},
 	"get-user-photo":      {needsUser: true, isBinary: true},
+	"get-user-manager":    {needsUser: true, selects: true, expands: true},
 	"list-users":          {isList: true},
 	"delta-users":         {isDelta: true},
 	"update-user":         {needsUser: true, needsAttributes: true},
@@ -333,7 +338,7 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if !spec.needsPassword && strings.TrimSpace(cn.NewPassword) != "" {
 		return 0, fmt.Errorf("compiler: entra task %q sets newPassword on operation %q, which sets no password (newPassword applies to reset-password)", st.Id, op)
 	}
-	if (spec.isList || spec.isDelta || spec.isBinary) && strings.TrimSpace(cn.ResultVariable) == "" {
+	if (spec.isList || spec.isDelta || spec.isBinary || spec.expands) && strings.TrimSpace(cn.ResultVariable) == "" {
 		return 0, fmt.Errorf("compiler: entra task %q operation %q needs a resultVariable (a directory read that discards its result is one nothing asked for)", st.Id, op)
 	}
 	if err := entraFieldGating(st.Id, op, spec, cn); err != nil {
@@ -437,8 +442,8 @@ func entraAdvancedQuery(taskID string, cn *xmlEntraConnector) (bool, error) {
 //
 //   - filter, search, advancedQuery — a listing only (list-users, list-groups). Graph's
 //     delta endpoint runs none of them, so they are an error on a delta op too.
-//   - select — a listing, a delta query, or a single-object read (get-user, get-group):
-//     each returns something whose properties can be projected.
+//   - select — a listing, a delta query, or a single-object read (get-user, get-group,
+//     get-user-manager): each returns something whose properties can be projected.
 //   - deltaLink — a delta query alone; a resume cursor has nothing to resume elsewhere.
 //
 // pageSize and maxUsers are numbers, gated by [entraListBound]; this covers the
@@ -454,7 +459,7 @@ func entraFieldGating(taskID, op string, spec entraOp, cn *xmlEntraConnector) er
 		}
 	}
 	if strings.TrimSpace(cn.Select) != "" && !spec.isList && !spec.isDelta && !spec.selects {
-		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which reads nothing to project (select applies to get-user, get-group, list-users, list-groups and the delta operations)", taskID, op)
+		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which reads nothing to project (select applies to get-user, get-user-manager, get-group, list-users, list-groups and the delta operations)", taskID, op)
 	}
 	if strings.TrimSpace(cn.DeltaLink) != "" && !spec.isDelta {
 		return fmt.Errorf("compiler: entra task %q sets deltaLink on operation %q, which is not a change-tracking query (deltaLink applies to delta-users and delta-groups)", taskID, op)
