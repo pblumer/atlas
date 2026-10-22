@@ -1166,7 +1166,7 @@ function handbookHelp(path) {
   if (path.startsWith("#/console/api-tokens")) return H("konten", "API tokens for machines");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
   if (path.startsWith("#/console/events")) return H("ereignisse", "Events");
-  if (path.startsWith("#/operations/event-log")) return H("ev-protokoll", "The event log");
+  if (path.startsWith("#/operations/event-log")) return H("ereignisse", "The event log");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
   // Organization pointed at the worker chapter only because the worker cards used to
   // sit on it; with those on their own page it points there instead, and Organization
