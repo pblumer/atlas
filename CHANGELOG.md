@@ -54,14 +54,14 @@ _Changed_ / _Removed_ for each version.
 
 - **The Microsoft 365 example asks the manager of the person a position is for.** Licence,
   team, shared mailbox and mailbox access in `examples/m365-dienste` were approved with the
-  built-in kind `superior`, which asks the manager of the person who *ordered* and finds
-  that manager only through a directory worker. They now name the example's own approval
-  model, `proc_m365_genehmigung_vorgesetzter`: it receives the order form's answers
-  (ADR-0441), reads the manager of `upn`, `besitzer` or `person` from Entra ID with the
-  Entra Worker's `get-user-manager` through `ucc_entra`, assigns the task to the manager's
-  Atlas account, and falls back to `approval.ref` or the group `M365-Administration` when
-  there is no manager, no such person (`ENTRA_USER_NOT_FOUND`, caught by an error boundary)
-  or no account. It mails the approver, reminds after three days and escalates to the next
+  built-in kind `superior`, which asks the line manager of the person who *ordered*, as
+  that person's account names it. They now name the example's own approval model,
+  `proc_m365_genehmigung_vorgesetzter`: it receives the order form's answers (ADR-0441),
+  reads the manager of `upn`, `besitzer` or `person` from Entra ID with the Entra Worker's
+  `get-user-manager` through `ucc_entra`, assigns the task to the manager's Atlas account,
+  and falls back to `approval.ref` or the group `M365-Administration` when there is no
+  manager, no such person (`ENTRA_USER_NOT_FOUND`, caught by an error boundary) or no
+  account. It mails the approver, reminds after three days and escalates to the next
   manager after seven. The answers are declared personal data in that model, so the Entra
   task's `userId`, evaluated when its job is handed to the worker, and the mail worker are
   the only places they are read in the clear. The mailbox-access order form's justification

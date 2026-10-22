@@ -14,7 +14,7 @@ Microsoft 365: Genehmigung durch Vorgesetzte. Eigene Genehmigungsart der Produkt
   <process id="proc_m365_genehmigung_vorgesetzter" name="Microsoft 365: Genehmigung durch Vorgesetzte" isExecutable="true" atlas:personal="upn,besitzer,person,postfach,anlass" atlas:dataSubject="recipient">
     <documentation>Holt die Genehmigung für eine Microsoft-365-Position bei der vorgesetzten Person der betroffenen Person ein und meldet das Ergebnis an den Auftrag.
 
-Ersetzt für die Produkte dieser Applikation die Genehmigungsart «superior» (Systemprozess «Shop: Genehmigung (Linienvorgesetzter)»). Das Produkt nennt diesen Prozess als Genehmigungsart (approval.kind = proc_m365_genehmigung_vorgesetzter). Als eigener Prozess der Installation erhält er die Antworten des Bestellformulars und kennt damit die betroffene Person; der Systemprozess kennt nur das Atlas-Konto der bestellenden Person und fragt deren Vorgesetzten im Verzeichnis-Worker nach.
+Ersetzt für die Produkte dieser Applikation die Genehmigungsart «superior» (Systemprozess «Shop: Genehmigung (Linienvorgesetzter)»). Das Produkt nennt diesen Prozess als Genehmigungsart (approval.kind = proc_m365_genehmigung_vorgesetzter). Als eigener Prozess der Installation erhält er die Antworten des Bestellformulars und kennt damit die betroffene Person; der Systemprozess kennt nur das Atlas-Konto der bestellenden Person und nimmt deren Linienvorgesetzten aus diesem Konto (managerId, ADR-0470).
 
 Betroffene Person: upn (Lizenz), besitzer (Team, Funktionspostfach) oder person (Postfachzugriff), in dieser Reihenfolge.
 
