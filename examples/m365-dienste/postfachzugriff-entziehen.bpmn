@@ -9,7 +9,7 @@ Exchange: Postfachzugriff entziehen.
              xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
              xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_proc_m365_postfachzugriff_entziehen" targetNamespace="http://atlas/beispiel/m365-dienste">
-  <process id="proc_m365_postfachzugriff_entziehen" name="Exchange: Postfachzugriff entziehen" isExecutable="true" atlas:personal="postfach,person,begruendung" atlas:dataSubject="recipient">
+  <process id="proc_m365_postfachzugriff_entziehen" name="Exchange: Postfachzugriff entziehen" isExecutable="true" atlas:personal="postfach,person,anlass" atlas:dataSubject="recipient">
     <documentation>Entzieht den mit der Position erteilten Postfachzugriff wieder. Rückgabeprozess des Produkts m365-postfachzugriff (Form 1); er läuft bei Rückgabe durch die Person, durch den Betrieb oder wenn das befristete Recht abgelaufen ist und ein Prozess es zurückgibt (siehe examples/befristung.bpmn).
 
 Die Antworten des Bestellformulars reisen mit der Rückgabe mit, deshalb kennt der Prozess Postfach, Person und Zugriffsart, ohne etwas nachzuschlagen.</documentation>

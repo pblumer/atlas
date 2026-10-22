@@ -46,7 +46,7 @@
       "disabled": true
     },
     {
-      "key": "begruendung",
+      "key": "anlass",
       "type": "textarea",
       "label": "Begründung · Reason",
       "disabled": true
