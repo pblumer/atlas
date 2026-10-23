@@ -29,6 +29,9 @@ type authzRig struct {
 	piKey   uint64
 	job     uint64
 	epoch   uint64
+	// closed is set once replayed has closed the harness, so the cleanup does not
+	// close it twice.
+	closed bool
 }
 
 // newAuthzRig starts one instance of cp as alice and leases its service-task job to
@@ -37,6 +40,13 @@ func newAuthzRig(t *testing.T, cp *compiler.CompiledProcess, jobType int32) *aut
 	t.Helper()
 	dir := t.TempDir()
 	r := &authzRig{t: t, dir: dir, h: openHarness(t, dir), cp: cp, jobType: jobType}
+	// Closed before the temporary directory is removed: Windows refuses to delete a
+	// file that is still open, so a store left open fails the test at cleanup.
+	t.Cleanup(func() {
+		if !r.closed {
+			r.h.close(t)
+		}
+	})
 	r.p = engine.New(1, r.h.log, r.h.store, &manualClock{})
 	r.p.Deploy(cp)
 	if err := r.p.Recover(); err != nil {
@@ -107,6 +117,7 @@ func approvalFacts(t *testing.T, s *state.Store, piKey uint64) []model.ActionApp
 func (r *authzRig) replayed() *state.Store {
 	r.t.Helper()
 	r.h.close(r.t)
+	r.closed = true
 	log2, err := wal.Open(wal.Options{Dir: filepath.Join(r.dir, "wal")})
 	if err != nil {
 		r.t.Fatalf("reopen wal: %v", err)
