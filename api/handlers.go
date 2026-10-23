@@ -1343,8 +1343,9 @@ func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var raw []byte
+	p := httpapi.PrincipalFrom(r.Context())
 	s.do(func() {
-		if d, ok := s.deployments[key]; ok {
+		if d, ok := s.deployments[key]; ok && definitionReadable(p, d) {
 			raw = d.xml
 		}
 	})
@@ -5774,6 +5775,13 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	// processor is told anything.
 	auth, authErr := s.mayWorkTask(r, key)
 	if s.refuseTaskWork(w, auth, authErr) {
+		return
+	}
+	// A directory field's value is the business decision, so it is checked before it
+	// becomes one: its shape, and by default the directory once more
+	// (ADR-0473). Off the run loop; a form without such a
+	// field is not looked at.
+	if s.checkTaskSubmission(w, r, key, body) {
 		return
 	}
 	var (

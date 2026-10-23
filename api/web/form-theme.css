@@ -125,3 +125,49 @@
   border-color: var(--accent);
   color: var(--accent-ink);
 }
+
+/* A directory field (remote-select.js, ADR-0473): a form-js
+   textfield with a search attached. The textfield's own input still holds the submitted
+   value and is hidden; its label, description and errors stay where form-js draws them,
+   and the search sits in the input's place. The tokens are the console's, with the
+   stock values behind them for a page that does not carry app.css. The preview note
+   and an unknown selection are coloured in app.css: both appear only in the console
+   (the form editor, Tasks), and the public pages declare no --warn. */
+.fjs-container .atlas-rs-host > .fjs-input-group { display: none; }
+.fjs-container .atlas-rs { display: flex; flex-direction: column; gap: 6px; }
+.fjs-container .atlas-rs-preview { font-size: 12px; padding: 4px 8px; border-radius: 4px; }
+.fjs-container .atlas-rs-selected {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border: 1px solid var(--accent, #0b5cff); border-radius: 4px;
+  background: var(--accent-soft, #eaf0ff);
+}
+.fjs-container .atlas-rs-selected-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.fjs-container .atlas-rs-selected-label { font-weight: 600; }
+.fjs-container .atlas-rs-selected-desc,
+.fjs-container .atlas-rs-desc,
+.fjs-container .atlas-rs-details { font-size: 12px; color: var(--muted, #62666d); overflow-wrap: anywhere; }
+.fjs-container .atlas-rs-clear {
+  border: 0; background: transparent; cursor: pointer; font-size: 14px;
+  color: var(--muted, #62666d); padding: 2px 6px; border-radius: 4px;
+}
+.fjs-container .atlas-rs-clear:hover,
+.fjs-container .atlas-rs-clear:focus-visible { color: var(--text, #14161a); background: var(--surface, #fff); }
+.fjs-container .atlas-rs-status { font-size: 12px; color: var(--muted, #62666d); min-height: 1em; }
+.fjs-container .atlas-rs-status:empty { display: none; }
+.fjs-container .atlas-rs-status.atlas-rs-error { color: var(--danger, #c0392b); }
+.fjs-container .atlas-rs-busy .atlas-rs-search { cursor: progress; }
+.fjs-container .atlas-rs-list {
+  list-style: none; margin: 0; padding: 0; max-height: 280px; overflow-y: auto;
+  border: 1px solid var(--border-strong, #cdd0d6); border-radius: 4px; background: var(--surface, #fff);
+}
+.fjs-container .atlas-rs-list li {
+  display: flex; flex-direction: column; padding: 6px 10px; cursor: pointer;
+  border-bottom: 1px solid var(--border, #e2e4e9);
+}
+.fjs-container .atlas-rs-list li:last-child { border-bottom: 0; }
+.fjs-container .atlas-rs-list li[aria-selected="true"] { background: var(--accent-soft, #eaf0ff); outline: 2px solid var(--accent, #0b5cff); outline-offset: -2px; }
+.fjs-container .atlas-rs-list li.atlas-rs-chosen .atlas-rs-label::after { content: " ✓"; color: var(--accent, #0b5cff); }
+.fjs-container .atlas-rs-more {
+  align-self: flex-start; border: 1px solid var(--border-strong, #cdd0d6); background: var(--surface, #fff);
+  border-radius: 4px; padding: 4px 10px; cursor: pointer; color: var(--text, #14161a);
+}

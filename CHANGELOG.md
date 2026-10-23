@@ -12,6 +12,98 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A task form can search a directory instead of listing it.** A textfield with an
+  `atlasDataSource` block is a directory field: in the Tasks app the person types a name or
+  an e-mail address, sees at most one page of matches (25 by default) from Microsoft Entra
+  ID, narrowed by another field of the form such as the department, and the task completes
+  with the chosen entry's object id — never its label, and never a listing in a process
+  variable. `POST /api/v1/tasks/{key}/form-data/{field}/query` answers only somebody who may
+  work on the task; which Worker, resource and properties are searched is read from the
+  stored form, the request may name none of them, and the search is rate-limited per
+  person. Nothing about a search is written to the log
+  ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
+- **The Worker protocol carries a query beside the job.** A Worker Instance long-polls
+  `POST /api/v1/worker-queries/activate` and answers `POST /api/v1/worker-queries/{id}/answer`,
+  under the same `worker` scope as the job routes; a query is held only in the server's
+  memory while somebody waits on it, routed to an Instance reporting the Worker it names,
+  and fenced by a lease token. The Entra Worker answers user lookups with `startswith`
+  over allowlisted properties and equality filters, OData literals escaped, one page and
+  Graph's own continuation, sealed into an opaque cursor before it reaches the browser.
+- **Forms may search, per Worker.** An Entra Worker's dialog in the Console has a
+  **Forms may search** switch (`formLookups`), off until its editors turn it on: a form
+  can name any Worker, but only one opened this way answers its searches.
+- **The form editor configures a directory field without JSON.** **＋ Directory field**
+  adds one, and a panel above the properties of a selected text field chooses the source,
+  the Worker, the properties searched and shown, filters bound to another field or fixed,
+  the page size and how the choice is checked. The Validate tab and the Design preview
+  search made-up people and say so; no directory is asked while a form is designed.
+- **Example: pick a person and read their manager.** `examples/entra-benutzerauswahl` is the
+  process `Process_mvjoqvisfajk` without its `list-users` step: a department, a directory
+  search, the object id into `user`, and `get-user-manager` with `userId="= user"`.
+- **The event log shows what was sent and where it arrived.** *Operations → Diagnostics →
+  Event log* lists every signal thrown and every message sent, newest first: the sender, the
+  moment, how many waiting elements it reached and how many instances it started, and under
+  it each reception, each start and, for a message with a time to live, its keeping, handing
+  over and expiry. A send that reached nobody is marked. Filters narrow to a channel, a name or
+  an instance, Live follows the log, and each name on the *Events* page links to it. Nothing an
+  instance held is stored: names, keys and moments only. A row is read as its instance is: an
+  operator or an administrator reads every row, a project member the rows of their projects'
+  definitions, and a row that names no definition only the former. The route is
+  `GET /api/v1/event-log` (`before`, `after`, `limit`, `channel`, `name`, `instance`), the MCP
+  tool `atlas_event_log`, so the tool count is 152, and rows are kept for `--event-log-ttl`
+  (`ATLAS_EVENT_LOG_TTL`, 720h). Underneath, a send leaves a record of its own (`VTDispatch`), a
+  signal's reception names its sender, a broadcast records each instance it starts, and a
+  correlation that only cleared a subscription whose element no longer waited is marked stale
+  and is no reception. The log starts at the upgrade. A version before this one skips the new
+  records on replay, so going back loses the log and nothing else
+  ([ADR-0472](docs/adr/0472-event-log.md)).
+- **The Events page shows the signals and messages of this installation.** Beside the
+  catalogue of what atlas emits, the Console's *Events* page has a second section that
+  lists every signal and message name the deployed models throw, send and receive: who
+  throws or sends it and who receives it, with process, version, project, element and role,
+  and for a message also the inbound watches and product actions that send it. Each name
+  carries what is wrong with it, read from the newest version of each process:
+  `signal.unreceived` (thrown, and no newest, active definition receives it),
+  `signal.unthrown` (received, and nothing deployed throws it), `signal.crosses-projects`
+  and `message.crosses-projects` (every variable of the sending instance arrives in another
+  project), `signal.reserved-name` and `message.reserved-name` (a model outside atlas's system
+  processes uses an `atlas.*` name), and `message.unreceived`. The section is derived from the
+  definitions on every request and stores nothing; it does not see running instances, and it
+  never says that nothing sends a message, because `POST /api/v1/messages` may send any
+  name. The routes are `GET /api/v1/signals` and `GET /api/v1/message-names`, for `modeler`
+  and above; the MCP tools are `atlas_signals` and `atlas_message_names`, so the tool count
+  is 151. In the Modeler, a receiving signal element is offered the names deployed models
+  throw, a receiving message element the names they send, and a throwing or sending element
+  says how many deployed processes receive its name, or that none does, with a link to the
+  page ([ADR-0447](docs/adr/0447-the-signals-deployed-models-throw-and-receive.md),
+  [ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md)).
+- **A SharePoint Worker can name its certificate by thumbprint.** On a Windows server the
+  vault bundle may carry `certificateThumbprint` in place of `clientSecret` or
+  `certificate`: a certificate in the worker host's `CurrentUser\My` or
+  `LocalMachine\My`, whose key signs there and is never read, so a non-exportable key
+  serves as it does for the Entra ID Worker and for PowerShell. A bundle gives one of the
+  three, and a thumbprint in a `refreshToken` bundle is refused as a certificate already
+  is. The worker tries the certificate when it starts and refuses to start, naming the
+  instance and the account, when the store does not hold it or the account may not use
+  its key. The engine does not open the store while it builds the client on its run loop,
+  but at the first token request. On a server that is not Windows a thumbprint bundle is
+  shown as the Worker's problem and is not handed to the supervised worker. The Secrets
+  panel checks the new field ([ADR-0141](docs/adr/0141-sharepoint-connector.md),
+  amended).
+- **An example for the SharePoint operations: the case file.** `examples/sharepoint-fallakte`
+  turns a request entered in a SharePoint list into a case file — it reads the request
+  (`get-item`), creates its folder (`create-folder`), fills in a letter template from a
+  library (`download-file` and FEEL `replace`), files the letter with properties unless
+  `get-file` finds it there already (`upload-file`), updates the request with typed
+  columns (`update-item`) and writes a log entry (`create-item`). A second process finds
+  settled requests page by page with an OData filter (`list-items`) and deletes each
+  one's folder and entry in a parallel multi-instance (`delete-file`, `delete-item`).
+  Both run end to end in `connector/sharepoint/example_test.go` against a site kept in
+  memory, with the real compiler, engine and Graph client. The handbook's examples
+  chapter has its card.
+
 ### Changed
 
 - **New BPMN elements get readable ids.** A task, event, gateway, flow, pool, lane, data
@@ -24,6 +116,45 @@ _Changed_ / _Removed_ for each version.
   installation and the server's availability check, and a draft save that still collides
   is refused as before. Ids already in a diagram are not changed
   ([ADR-draft-readable-element-ids](docs/adr/draft-readable-element-ids.md)).
+- **Completing a task checks a directory field's value first.** A value that is not an
+  object id, or an object where an id was expected, is refused with 400; by default the
+  entry is looked up once more under the field's filters, and one the directory no longer
+  holds is refused with 422, while a directory that cannot be asked is a 503 that completes
+  nothing. A form without a directory field completes exactly as before.
+- **A public link refuses a form with a directory field.** Nobody is signed in there to
+  search, and checking a typed id would tell an anonymous visitor who is in the directory.
+- **A form is checked for its directory fields when it is saved.** An `atlasDataSource`
+  naming a source, a property or a version this server cannot honour is refused with the
+  reason.
+- **Message sources name what a model sends, and every deployed version.**
+  `GET /api/v1/message-sources` has a fourth kind of row, `process-throw`: a deployed
+  process that sends the name with a message throw or end event or a send task. A message
+  event subprocess is listed among the processes that wait, and so is it in the
+  administrator's view of who listens to atlas's events, where a message receiver's role is
+  now `start`, `catch`, `boundary` or `event-subprocess`. A process row carries
+  `processName`, `version`, `newest`, `definitionKey`, `projectId`, `system`, `role` and, for
+  a boundary or an event subprocess, `interrupting`, and every deployed version is listed
+  rather than the newest alone. A client that read the process rows as the newest versions
+  filters on `newest`; one that assumed three kinds skips the fourth. A name a deployed
+  model sends no longer reads as unfed in the Modeler
+  ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md)).
+
+### Fixed
+
+- **A message or signal that reaches only a left-behind subscription is no delivery.** The
+  losing branch of an event-based gateway and a boundary whose host finished leave their
+  subscription behind until the next matching send clears it. That send counted as
+  delivered: a message with `timeToLiveMs` that only such a subscription matched was not
+  kept and was lost, and the send wrote its variables into the instance, which may have
+  moved on — a running instance read values of a message or signal it never received. Now
+  such a correlation only clears the subscription: no variables, no completion, no flow in
+  the collaboration replay, and a message with a time to live is kept for the subscription
+  that opens later. What earlier versions wrote stays as it was
+  ([ADR-0370](docs/adr/0370-durable-message-buffer.md), amended 2026-10-23).
+- **A SharePoint task that names `create-item` keeps its list and columns in the
+  Modeler.** The panel showed the list and the column table only for a task with no
+  operation, so a model spelling `operation="create-item"` out lost both on its next
+  save, and the compiler then refused the task.
 
 ## [0.19.0] — 2026-10-22
 

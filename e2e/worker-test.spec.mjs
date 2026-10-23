@@ -84,3 +84,30 @@ test("a worker that cannot be checked by sending is not asked about it", async (
   await expect(posted(page)).toHaveText(/"kind":"postgres"/);
   await expect(posted(page)).toHaveText(/"to":""/);
 });
+
+// An Entra Worker's editors decide whether task forms may search its directory
+// (ADR-0473): the switch is on the Worker's dialog, it is
+// sent with the save, and a kind no form can search does not show it.
+test("an Entra Worker's dialog switches form searches on and off", async ({ page }) => {
+  await page.evaluate(() => window.__editEntra(false));
+  const box = page.locator("#conn-formlookups");
+  await expect(box).toBeVisible();
+  await expect(box).not.toBeChecked();
+  await box.check();
+  await page.locator("[data-conn-save]").click();
+  await expect.poll(() => page.evaluate(() => (window.__posted || []).length)).toBe(1);
+  const [call] = await page.evaluate(() => window.__posted);
+  expect(call.method).toBe("PATCH");
+  expect(call.body.formLookups).toBe(true);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a mail Worker's dialog has no form-search switch and sends none", async ({ page }) => {
+  await page.evaluate(() => window.__editMail());
+  await expect(page.locator("#conn-formlookups")).toBeHidden();
+  await page.locator("[data-conn-save]").click();
+  await expect.poll(() => page.evaluate(() => (window.__posted || []).length)).toBe(1);
+  const [call] = await page.evaluate(() => window.__posted);
+  expect("formLookups" in call.body).toBe(false);
+  expect(page.__errors).toEqual([]);
+});

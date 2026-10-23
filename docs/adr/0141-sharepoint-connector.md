@@ -1,6 +1,6 @@
 # ADR-0141: A SharePoint connector (create list item, via Microsoft Graph)
 
-- **Status:** Accepted (amended 2026-10-22: ten operations beside create-item — `get-item`, `update-item`, `delete-item` and `list-items` on a list, and `upload-file`, `download-file`, `get-file`, `list-folder`, `create-folder` and `delete-file` in a document library — carried by a second reserved job type, `io.atlas.sharepoint`, so a worker built before them is never handed one; a site addressed by its URL or by host and path as well as by its Graph id; column values that keep the JSON shape of their FEEL value; a certificate in place of the client secret; and every answer read under the process variable's budget.)
+- **Status:** Accepted (amended 2026-10-22: ten operations beside create-item — `get-item`, `update-item`, `delete-item` and `list-items` on a list, and `upload-file`, `download-file`, `get-file`, `list-folder`, `create-folder` and `delete-file` in a document library — carried by a second reserved job type, `io.atlas.sharepoint`, so a worker built before them is never handed one; a site addressed by its URL or by host and path as well as by its Graph id; column values that keep the JSON shape of their FEEL value; a certificate in place of the client secret; and every answer read under the process variable's budget. Amended 2026-10-23: a certificate may also be named by its thumbprint in the Windows certificate store, `certificateThumbprint`, the Entra worker's third credential read the same way; the store is asked on the first token request rather than while the engine builds the client on its run loop, and tried at startup by the worker.)
 - **Implementation:** Landed
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
@@ -211,6 +211,60 @@ SharePoint's 5000-item threshold still needs the filtered column indexed. The pa
 is the query of Graph's `nextLink` rather than the link itself, so a variable can never
 choose the host the bearer token goes to.
 
+### Amendment (2026-10-23): a certificate named by its thumbprint, as for Entra
+
+**Why.** The amendment above lets a `clientCredentials` bundle carry the app's certificate
+as PEM, its private key in the clear. On the Windows servers these processes run on, the
+certificate usually already sits in the host's store, its key marked **non-exportable**,
+and a key that cannot be exported cannot be turned into PEM. The Entra worker has read
+such a certificate by its thumbprint since the 2026-10-19 amendment of
+[ADR-0172](0172-entra-id-connector.md), which called the mechanism open to anything that
+signs a client assertion. The SharePoint worker speaks to the same token endpoint and
+could not, so an operator had to register a second certificate with an exportable key for
+the same app.
+
+- A `clientCredentials` bundle — or one naming no method — may carry
+  `certificateThumbprint` in place of `clientSecret` or `certificate`: the SHA-1
+  thumbprint as Windows shows it, searched in `CurrentUser\My` of the account the process
+  runs as and then in `LocalMachine\My`. That is `internal/certstore`, the Entra worker's,
+  so one thumbprint names one certificate for both; the key signs through CNG and is
+  never read. A bundle carries one of the three, two or more are refused naming each, and
+  a thumbprint in a `refreshToken` bundle is refused as a certificate is.
+- **The store is asked on the first token request, not when the client is built.** This
+  is where SharePoint differs from Entra. Entra is worker-only, so its worker opens the
+  store while it starts and nothing else touches it. SharePoint has an in-engine half,
+  and the engine builds every SharePoint client on its run loop — at startup and after
+  every Worker or secret change — even while the kind is offloaded, because the Console
+  reads each Worker's state from those clients. Opening the store is a call into a key
+  storage provider, including one signature to prove the key is usable, and Atlas does
+  not control how long that takes; on the single writer it would hold up every other
+  request. So `sharepoint.NewProviderClient` checks only the thumbprint's form, and the
+  token source opens the store when it first needs a token, off the loop. A failed open
+  is not remembered: a certificate installed, or a key permission granted, afterwards is
+  picked up by the next request.
+- **The worker still tries the certificate at startup**, as the Entra worker does:
+  `sharepointRegistryFromEnv` opens the store for every instance that names a thumbprint,
+  so a certificate the store does not hold, or a key the account may not use, is a
+  startup error naming the instance and the account. The cost is Entra's as well: a
+  supervised worker that refuses to start serves none of its instances until the one is
+  fixed.
+- **On a host without a certificate store** — anything but Windows — a thumbprint bundle
+  is reported, not served: `buildSharePointClients` records `certstore.ErrUnsupported` as
+  the Worker's problem, and `sharepointWorkerEnv` leaves the instance out of the
+  supervised worker's environment, as `entraBundleParse` does for a tenant, because
+  handing it over would make that worker refuse to start for every instance it serves.
+- The Console's secret check (`api/web/secret-shapes.js`) states the same rule: a
+  SharePoint bundle gives one of the three, while mail's Microsoft bundle, which shares
+  the grant but not the certificate, still needs its secret.
+
+**What it does not decide** is whether the SharePoint and Entra Workers should share an
+app registration. The certificate proves the app; the registration decides what the app
+may do, and a token for `.default` carries every application permission granted to it. A
+SharePoint Worker signed in as the Entra Worker's app can therefore do what the Entra
+Worker can — create and disable accounts — on every SharePoint task. A registration of
+its own, holding `Sites.Selected` or `Sites.ReadWrite.All` and nothing else, keeps the
+two apart.
+
 ## Pros and cons of the options
 
 ### Operation — create list item (chosen)
@@ -234,3 +288,5 @@ choose the host the bearer token goes to.
 - realizes the connector catalog concept of ADR-0067; output mapping mirrors ADR-0067
 - honors I1/I2/I4/I5/I6 and ADR-0005/0007/0041; keeps ADR-0010 (grants use only the
   standard library)
+- the 2026-10-23 amendment takes the thumbprint credential from
+  [ADR-0172](0172-entra-id-connector.md)'s amendment of 2026-10-19

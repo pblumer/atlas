@@ -24,6 +24,7 @@ import (
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/temis"
+	"github.com/pblumer/atlas/internal/certstore"
 
 	"github.com/pblumer/atlas/api/httpapi"
 )
@@ -304,12 +305,22 @@ func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, map[str
 			problems[c.Name] = problemDisabled
 			continue
 		}
+		secret := s.resolveConnectorSecret(c.CredentialsRef)
 		client, err := sharepoint.NewProviderClient(sharepoint.ProviderConfig{
 			Endpoint: strings.TrimSpace(c.Endpoint),
-			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
+			Secret:   secret,
 		})
 		if err != nil {
 			problems[c.Name] = err.Error() // its tasks park until it is fixed (ADR-0141)
+			continue
+		}
+		// A thumbprint names a certificate in the Windows certificate store, so on a host
+		// without one the record is reported rather than served: neither this client nor a
+		// supervised worker, which sharepointWorkerEnv leaves it out of, could ever sign
+		// with it. On Windows the client is built without the store being asked — that
+		// happens on its first token request, off this loop (ADR-0141, amended).
+		if sharepoint.CertificateThumbprint(secret) != "" && !certStoreSupported {
+			problems[c.Name] = "sharepoint: " + certstore.ErrUnsupported.Error()
 			continue
 		}
 		clients[c.Name] = client
@@ -752,6 +763,10 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	if p.Kind != connectorKindMail {
 		p.MailboxEndpoint = "" // a mail-only field, cleared like Provider and Sender are
 	}
+	if p.FormLookups && !formLookupKind(p.Kind) {
+		httpapi.Error(w, http.StatusBadRequest, refuseFormLookups(p.Kind))
+		return
+	}
 	// And the one rule a pure validator cannot state, because it depends on a stored
 	// setting: whether a database needs a connection string at all. The read rides the
 	// run loop, which owns the settings store (I3).
@@ -772,6 +787,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		CredentialsRef: p.CredentialsRef, Enabled: enabled,
 		Provider: p.Provider, Sender: p.Sender, Model: p.Model,
 		MailboxEndpoint: p.MailboxEndpoint,
+		FormLookups:     p.FormLookups,
 		CreatedAt:       time.Now().Unix(),
 		// Whoever made it owns it, and it starts private (ADR-0205). Private is the
 		// only defensible default for a thing that may hold a personal mailbox; what
@@ -851,6 +867,9 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		// makes the Worker a sender only again (ADR-0438).
 		MailboxEndpoint *string `json:"mailboxEndpoint"`
 		Enabled         *bool   `json:"enabled"`
+		// FormLookups opens the Worker to task forms' directory searches, or closes it
+		// (ADR-0473). An editor's act, like the credential.
+		FormLookups *bool `json:"formLookups"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -901,6 +920,13 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		}
 		if p.Enabled != nil {
 			rec.Enabled = *p.Enabled
+		}
+		if p.FormLookups != nil {
+			if *p.FormLookups && !formLookupKind(rec.Kind) {
+				badRequest = refuseFormLookups(rec.Kind)
+				return
+			}
+			rec.FormLookups = *p.FormLookups
 		}
 		// The updated record has to satisfy what a create would have demanded of it —
 		// an SMTP endpoint that dials, a provider that has a credential — or the change

@@ -168,6 +168,11 @@ var apiScopeAllowed = map[string][]string{
 		"POST /api/v1/jobs/{key}/complete",
 		"POST /api/v1/jobs/{key}/fail",
 		"POST /api/v1/jobs/{key}/error",
+		// The query twin of the job pull and its answer
+		// (ADR-0473): the same Instances, the same Workers,
+		// and nothing an Instance does not already do for a job.
+		"POST /api/v1/worker-queries/activate",
+		"POST /api/v1/worker-queries/{id}/answer",
 		"POST /api/v1/mail/outbox",
 		"POST /api/v1/ad/mock-directory",
 		"POST /api/v1/sql/mock-journal",

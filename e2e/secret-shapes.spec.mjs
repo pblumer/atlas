@@ -108,6 +108,34 @@ test("a Microsoft bundle without a tenant is refused here rather than at the fir
   await expect(error(page)).toBeHidden();
 });
 
+// A SharePoint app may also name its certificate by thumbprint, as an Entra app may: a
+// certificate in the Windows store whose key signs there. It is one more credential in
+// place of the secret, never beside it. Mail's Microsoft bundle shares the grant but
+// not the certificate, so it still needs its secret.
+test("a SharePoint bundle may name its certificate by thumbprint in place of the secret, not beside it", async ({ page }) => {
+  await name(page, "sharepoint_auth");
+  await expect(page.locator(".secret-hint")).toContainText("certificateThumbprint");
+  const app = { method: "clientCredentials", tenantId: "t", clientId: "c" };
+
+  await value(page, JSON.stringify({ ...app, certificateThumbprint: "02CB6038F2E91693AE8D31C983569366034B2100" }));
+  await save(page);
+  await expect(error(page)).toBeHidden();
+  await expect(page.locator("#saved")).toHaveText("saved");
+
+  await value(page, JSON.stringify({ ...app, clientSecret: "s", certificateThumbprint: "02CB6038F2E91693AE8D31C983569366034B2100" }));
+  await save(page);
+  await expect(error(page)).toContainText("give one, not both");
+
+  await value(page, JSON.stringify(app));
+  await save(page);
+  await expect(error(page)).toContainText('"certificateThumbprint"');
+
+  await name(page, "graph_bundle");
+  await value(page, JSON.stringify({ ...app, certificateThumbprint: "02CB6038F2E91693AE8D31C983569366034B2100" }));
+  await save(page);
+  await expect(error(page)).toContainText('"clientSecret"');
+});
+
 test("a Remedy credential is checked against its own two fields", async ({ page }) => {
   await name(page, "remedy_creds");
   await expect(page.locator(".secret-hint")).toContainText("AR System username and password");

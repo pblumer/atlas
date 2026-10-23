@@ -245,3 +245,24 @@ func TestAPublicWizardNeedsATimeoutToBePublished(t *testing.T) {
 		t.Errorf("start after a redeploy dropped the timeout: %d %s, want 409", code, body)
 	}
 }
+
+// A directory field answers only inside a task, where somebody is signed in to search it
+// and the value can be checked (ADR-0473). Through a public
+// link it fails closed: nobody can search there, and a check of a typed id would tell an
+// anonymous visitor who is in the directory.
+func TestAPublicLinkRefusesAFormWithADirectoryField(t *testing.T) {
+	ts := newTestServer(t)
+	token := publish(t, ts)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/forms",
+		`{"id":"onboarding-form","name":"Onboarding","schema":{"type":"default","components":[
+		  {"type":"textfield","key":"customer","label":"Customer",
+		   "atlasDataSource":{"version":1,"workerType":"entra","worker":"ucc_entra","resource":"users"}}]}}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("save form: %d %s", code, body)
+	}
+	code, body = doReq(t, ts, http.MethodPost, "/public/forms/"+token+"/start",
+		`{"variables":{"customer":"11111111-0000-0000-0000-000000000001"}}`, "application/json")
+	if code != http.StatusBadRequest || !bytes.Contains(body, []byte("directory field")) {
+		t.Fatalf("public start with a directory field: %d %s, want 400", code, body)
+	}
+}
