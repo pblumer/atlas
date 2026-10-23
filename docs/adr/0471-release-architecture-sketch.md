@@ -47,6 +47,16 @@
 > configuration can report where it connects; until then such a worker is drawn as
 > holding its endpoint itself.
 >
+> **Update (2026-10-23): the worker protocol extension has landed, and S2 with it.**
+> `atlas worker` reduces the endpoint each held name's configuration names
+> (`internal/endpoint`, shared with the server so both mean the same by "scheme, host
+> and port") and sends it in the additive `endpoints` field of job activation. The
+> server reduces it again, keeps it only for names the same poll reported, and bounds
+> it. A snapshot draws a reported endpoint for a worker the installation holds no
+> configuration for, marked as reported; instances that disagree are recorded as
+> disagreeing; and a reported endpoint, being information about instances, is read by
+> operators only. Format and mapping version 3; a version-2 snapshot is drawn as before.
+>
 > One addition to §1's logical part, found while building it: **job types.** A service or
 > send task with a job type hands its work to whichever worker subscribes to that type
 > (ADR-0007) — the plain external job worker, which §1 did not name because it is reached

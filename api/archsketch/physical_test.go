@@ -237,3 +237,45 @@ func itoa(n int) string {
 		}
 	}
 }
+
+// TestAReportedEndpointIsDrawnAsReportedAndReadByOperators: an endpoint a worker
+// reported is drawn as reported, goes to whoever may see the instances rather than
+// whoever may see a configuration, and instances that disagree are drawn as
+// disagreeing.
+func TestAReportedEndpointIsDrawnAsReportedAndReadByOperators(t *testing.T) {
+	s := physicalSample()
+	for i := range s.Physical.Workers {
+		switch s.Physical.Workers[i].Name {
+		case "ad-forest":
+			s.Physical.Workers[i].Endpoint = &Endpoint{Scheme: "ldaps", Host: "dc.corp.local"}
+			s.Physical.Workers[i].EndpointReported = true
+		case "erp":
+			s.Physical.Workers[i].Endpoint, s.Physical.Workers[i].ConfiguredID = nil, ""
+			s.Physical.Workers[i].EndpointsDiffer = true
+		}
+	}
+	svg := string(SVG(s, meta()))
+	for _, want := range []string{"→ ldaps://dc.corp.local (reported)", "workers report different endpoints",
+		"had not polled since the server started"} {
+		if !strings.Contains(svg, want) {
+			t.Errorf("SVG lacks %q", want)
+		}
+	}
+	if doc := string(ArchiMate(s, meta())); !strings.Contains(doc, "as the worker instances serving it reported it") {
+		t.Error("the ArchiMate document does not say the endpoint was reported")
+	}
+
+	everyWorker := func(string) bool { return true }
+	if red := s.Physical.Redacted(everyWorker, false); !red.Workers[0].Endpoint.Withheld {
+		t.Errorf("a non-operator reads %+v, want the reported endpoint withheld even with the worker's configuration in view", red.Workers[0].Endpoint)
+	}
+	if red := s.Physical.Redacted(func(string) bool { return false }, true); red.Workers[0].Endpoint.Withheld {
+		t.Error("an operator is refused a reported endpoint because a configuration is out of view")
+	}
+
+	// A version-2 snapshot keeps its own wording.
+	s.FormatVersion = 2
+	if !strings.Contains(string(SVG(s, meta())), "which such a worker does not report yet") {
+		t.Error("a version-2 snapshot is not drawn as version 2 drew it")
+	}
+}

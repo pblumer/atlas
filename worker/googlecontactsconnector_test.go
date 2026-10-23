@@ -28,6 +28,14 @@ func TestBuiltinConnectorsRegistersGoogleContacts(t *testing.T) {
 	if strings.Join(got.Names, ",") != "privat,verkauf" {
 		t.Errorf("names = %v", got.Names)
 	}
+	// The address book behind a proxy reports where it connects, reduced to scheme and
+	// host; the one reaching Google directly names nothing and reports nothing.
+	if got.Endpoints["privat"] != "https://proxy.example" {
+		t.Errorf("endpoint of privat = %q", got.Endpoints["privat"])
+	}
+	if _, ok := got.Endpoints["verkauf"]; ok {
+		t.Errorf("verkauf reports an endpoint it never named: %v", got.Endpoints)
+	}
 }
 
 // With no address book the worker parks rather than failing: the kind is supervised by

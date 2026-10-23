@@ -6490,11 +6490,18 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		// process's environment. Reporting it here is what lets the Workers view say
 		// which names deployed models reference and *nothing* can serve (ADR-0168).
 		Connectors []string `json:"connectors,omitempty"`
+		// Endpoints are where those workers connect, keyed by worker name, as the
+		// worker reduced them to scheme, host and port (ADR-0471). The server reduces
+		// them again before keeping them — a report is input, not a promise — and an
+		// architecture sketch draws them for workers the server holds no
+		// configuration for.
+		Endpoints map[string]string `json:"endpoints,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
+	reported := reportedEndpoints(body.Connectors, body.Endpoints)
 	body.Type = strings.TrimSpace(body.Type)
 	if body.Type == "" {
 		httpapi.Error(w, http.StatusBadRequest, "type is required: a worker leases by job type")
@@ -6606,7 +6613,7 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			// Recorded on every poll, not just a productive one: an idle worker still
 			// holds its workers, and it is exactly the idle case an operator is
 			// looking at when work is not moving.
-			s.workers.holdsConnectors(body.Worker, body.Connectors)
+			s.workers.holdsConnectors(body.Worker, body.Connectors, reported)
 		})
 	}
 

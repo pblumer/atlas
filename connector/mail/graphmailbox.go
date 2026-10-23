@@ -31,7 +31,7 @@ type graphMailbox struct{ c *GraphClient }
 // Mailbox answers the Graph mailbox of this worker's sender.
 func (c *GraphClient) Mailbox() (Mailbox, error) {
 	if strings.TrimSpace(c.sender) == "" {
-		return nil, fmt.Errorf("mail: graph: the worker names no sender mailbox, so there is no mailbox to read")
+		return nil, errGraphHasNoSender
 	}
 	return graphMailbox{c: c}, nil
 }
