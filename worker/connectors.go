@@ -340,7 +340,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 				})
 			}
 		case "sharepoint":
-			reg, names, err := sharepointRegistryFromEnv(env)
+			reg, names, brokered, err := sharepointSourcesFromEnv(env)
 			if err != nil {
 				return Connectors{}, err
 			}
@@ -359,7 +359,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			// operations existed does not lease.
 			for _, jobType := range []string{compiler.SharePointJobType, compiler.SharePointOpsJobType} {
 				built.Handlers[jobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
-					return RunSharePointJob(ctx, j, reg)
+					return runSharePointJob(ctx, j, reg, brokered)
 				})
 			}
 		case "googlesheets":

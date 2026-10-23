@@ -264,6 +264,8 @@ func vaultSecretName(raw string) (name, refusal string) {
 		return "", "vaultSecret must name a vault secret, or be left out"
 	case vault.IsDataKeyName(name):
 		return "", "vaultSecret names a data subject's personal-data key, which is not an operator secret (ADR-0314)"
+	case vault.IsReservedName(name):
+		return "", "vaultSecret names a delegated connection's credential, which is not an operator secret"
 	}
 	return name, ""
 }

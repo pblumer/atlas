@@ -138,6 +138,7 @@ var persistentStores = []storeEntry{
 	{name: "inventory-loads", class: classIdentity, onDemand: true, why: "whether a commissioning load has ever been applied per target system; without it a restored installation cannot tell a system it loaded and found empty from one it never loaded, and those call for opposite actions"},
 	{name: "discrepancies", class: classIdentity, onDemand: true, why: "the journal of what atlas and the target systems disagreed about, and who decided what about it; it is evidence and it is not in the event log, so nothing else can rebuild it"},
 	{name: "recertification-campaigns", class: classIdentity, onDemand: true, why: "what was asked of whom, when, and by whose authority; an attestation with no campaign around it says nothing about what else was in front of the reviewer"},
+	{name: "policies", class: classIdentity, why: "the authorization policies governed Worker actions are decided by, every published version immutable (ADR-0475). A restore without them fails closed — every enforced action is refused for want of an applicable policy — and the recorded decisions in the log name versions nothing could show any more"},
 	{name: "recertification-rows", class: classIdentity, onDemand: true, why: "the attestations themselves — who judged which right still needed, and when. Separate from the campaigns because there are thousands per campaign and each is written once; losing them loses the evidence and nothing can reconstruct a judgement"},
 
 	// --- credentials -------------------------------------------------------
@@ -147,6 +148,7 @@ var persistentStores = []storeEntry{
 	{name: "oauth-grants", class: classCredential, why: "standing OAuth authorizations"},
 	{name: "grant-audit", class: classCredential, why: "the trail of who was granted what"},
 	{name: "targets", class: classCredential, why: "where workers send, and what they authenticate with"},
+	{name: "identity", class: classCredential, why: "the external accounts people linked and the delegated connections they authorize, with the Workers each owner allowed. Standing permissions to act as a person: whether a restore carries or revokes them is an operator's decision. The refresh credentials are not here but in the vault, so a restore of this without the vault leaves every connection asking its owner to sign in again"},
 
 	// --- secrets -----------------------------------------------------------
 	{name: "vault", class: classSecret, why: "the encrypted secrets themselves"},

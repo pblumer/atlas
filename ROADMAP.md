@@ -1026,6 +1026,7 @@ What it takes to run this for real.
   (`vaultSecret`), so the one the shop's system processes present never leaves the server
   ([ADR-0194](docs/adr/0194-api-tokens.md), amendment 2026-10-21)
 - 🚧 Job-worker protocol — ADR-0007: built over HTTP, with the type-keyed pull, long-poll, leases, `leaseToken` fencing, complete, fail and BPMN errors, and the activation and lease-timeout counters. A gRPC transport is not built, and whether it should be is open
+- 🚧 Authorize step in the job-worker protocol ([ADR-0475](docs/adr/0475-identity-aware-worker-execution.md)): a Worker governed by an identity policy asks `POST /api/v1/jobs/{key}/authorize` for the lease it holds before it acts, and a completion without a recorded Permit for that lease is refused (409). The shipped SharePoint Worker asks; other Worker Types and externally built Workers do not yet. A per-Worker-Instance credential, which would let the server tell instances apart beyond the shared internal token, is not built
 - 🚧 Worker SDK (Go first): the `worker` package is usable from Go — handlers, concurrency, `BPMNError` — but is not yet packaged and documented as an SDK
 - ✅ A worker runs the jobs of one type concurrently: `--max-jobs` places, a poll asking only
   for the free ones, and supervised built-in workers at the engine's in-process bound
@@ -1415,6 +1416,21 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   right now** — `online` / `idle` / `offline` per account, admin-only, read from the
   live sessions and stored nowhere, so it is presence and never an attendance history
   ([ADR-0228](docs/adr/0228-user-presence.md)).
+- 🚧 **Identity-aware Worker execution & policy-based authorization**
+  ([ADR-0475](docs/adr/0475-identity-aware-worker-execution.md),
+  proposed): a person links their Microsoft account (authorization code with PKCE; no
+  password ever reaches Atlas) and chooses which Workers may act as them; the refresh
+  token stays in the vault, and a supervised SharePoint Worker receives a short-lived
+  access token only after a recorded Permit for that exact action. Versioned, immutable
+  policies (JSON matchers, FEEL conditions, DMN decisions) are evaluated fail-closed —
+  default deny, deny-overrides, Indeterminate refuses — with approval obligations bound to
+  the action's digest and separation of duties by stable ids. Every decision and approval
+  is an engine fact fenced on the job's lease, replayed without re-evaluation. The Console
+  has **Connected accounts** and **Administration → Security** (readiness, policies,
+  simulator, evidence). Built for the SharePoint Worker Type only, with brokering to
+  Atlas-supervised Worker Instances only. Next: Google, further Worker Types, a Console
+  screen for answering approvals, the evidence in the Operations instance view, and the
+  open question of brokering to external Worker Instances (an amendment of ADR-0168).
 - ✅ **Engine-internal encrypted secret vault**
   ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md),
   [ADR-0070](docs/adr/0070-vault-on-by-default-with-generated-key.md)): closes

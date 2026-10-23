@@ -175,6 +175,11 @@ type Options struct {
 	ID string
 	// Token, when set, is sent as a bearer credential on every request.
 	Token string
+	// BrokerKey, when set, is presented when this worker asks whether it may act
+	// (Authorize). A server supervising this worker hands it over (ATLAS_BROKER_KEY)
+	// only to the process serving a Worker whose credential it brokers per job; without
+	// it, the server releases no person's token to this process.
+	BrokerKey string
 	// Handlers is what this worker serves, keyed by job type. A worker with none is a
 	// misconfiguration rather than a process that polls forever over nothing.
 	Handlers map[string]Exec
@@ -404,7 +409,11 @@ func (w *Worker) pollOnce(ctx context.Context, jobType string) error {
 // sees, and a worker that swallowed the error would park the token silently. A
 // [BPMNError] is the one error that is not a failure, and it is thrown instead.
 func (w *Worker) work(ctx context.Context, j Job) {
-	out, err := runHandler(ctx, w.opts.Handlers[j.Type], j)
+	out, err := runHandler(w.withAuthorizer(ctx, j), w.opts.Handlers[j.Type], j)
+	if errors.Is(err, errPolicyRefused) {
+		// Refused by policy: the server settled the job with its decision.
+		return
+	}
 	if err != nil {
 		// Nothing else to do when a report is refused: the lease will elapse and the job
 		// is offered again.
@@ -503,6 +512,11 @@ func (w *Worker) throwError(ctx context.Context, j Job, be *BPMNError) error {
 
 // call posts a JSON body and decodes a JSON reply into out (nil to discard it).
 func (w *Worker) call(ctx context.Context, path string, body, out any) error {
+	return w.callWith(ctx, path, nil, body, out)
+}
+
+// callWith is call with extra request headers.
+func (w *Worker) callWith(ctx context.Context, path string, header http.Header, body, out any) error {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return err
@@ -510,6 +524,9 @@ func (w *Worker) call(ctx context.Context, path string, body, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.opts.Server+path, bytes.NewReader(payload))
 	if err != nil {
 		return err
+	}
+	for k, v := range header {
+		req.Header[k] = v
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if w.opts.Token != "" {
@@ -524,11 +541,12 @@ func (w *Worker) call(ctx context.Context, path string, body, out any) error {
 		var msg struct {
 			Error string `json:"error"`
 		}
-		_ = json.NewDecoder(resp.Body).Decode(&msg)
-		if msg.Error != "" {
-			return fmt.Errorf("worker: %s: %s", path, msg.Error)
-		}
-		return fmt.Errorf("worker: %s: status %d", path, resp.StatusCode)
+		decodeErr := json.NewDecoder(resp.Body).Decode(&msg)
+		se := &statusError{path: path, status: resp.StatusCode, msg: msg.Error,
+			// A route the server does not have answers the mux's plain-text 404, not
+			// the API's JSON error: that is how "no such step" is told from "no such job".
+			noRoute: resp.StatusCode == http.StatusNotFound && decodeErr != nil}
+		return se
 	}
 	if out == nil {
 		return nil
@@ -575,4 +593,19 @@ func (c CmdExec) Run(ctx context.Context, j Job) (map[string]any, error) {
 		return nil, fmt.Errorf("%s: its output is not a JSON object of variables: %w", c.Name, err)
 	}
 	return vars, nil
+}
+
+// statusError is a non-200 answer from the server.
+type statusError struct {
+	path    string
+	status  int
+	msg     string
+	noRoute bool
+}
+
+func (e *statusError) Error() string {
+	if e.msg != "" {
+		return fmt.Sprintf("worker: %s: %s", e.path, e.msg)
+	}
+	return fmt.Sprintf("worker: %s: status %d", e.path, e.status)
 }

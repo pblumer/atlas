@@ -355,6 +355,22 @@ Prozessinstanzen, Backup/Restore, Metriken und
 Ereignisprotokollierung. Das ist mehr, als der ältere Vergleich
 erkennen liess.
 
+**Handeln als die anfragende Person.** n8n Enterprise dokumentiert
+[End-User Credentials](https://docs.n8n.io/administer/manage-credentials/end-user-credentials):
+eine OAuth-Anmeldung, die zur Laufzeit auf das Konto der Person aufgelöst
+wird, die den Workflow auslöst. Eine ausführende Identität pro Ausführung ist
+also **kein** Alleinstellungsmerkmal von Atlas. Atlas hat einen
+vorgeschlagenen, teilweise umgesetzten Entwurf
+([ADR-0475](../adr/0475-identity-aware-worker-execution.md)),
+in dem ein geregelter Worker vor jeder Aktion einen Entscheid anfordert –
+gegen versionierte Policies, mit Genehmigungen, die an einen Digest der
+genauen Aktion gebunden sind, und mit dem Entscheid im Ereignisprotokoll.
+Er umfasst nur den SharePoint-Worker-Typ. Die geprüfte n8n-Dokumentation
+(2026-10-23) beschreibt keine Policy-Auswertung pro Operation, keine
+digest-gebundene Genehmigung und keine dauerhaften Entscheidnachweise dieser
+Art; *in der geprüften Dokumentation nicht gefunden* heisst nicht *im Produkt
+nicht vorhanden*, und eine Evaluation sollte beim Hersteller nachfragen.
+
 Die [Atlas-Liste offener Compliance-Punkte](../compliance/isds-offene-punkte.md)
 nennt aber weiterhin Risiken und notwendige Arbeiten bei:
 
@@ -651,6 +667,7 @@ Für die Unternehmensarchitektur und die Positionierung von Atlas:
 - [Integrationskatalog](https://n8n.io/integrations/)
 - [Community- und kostenpflichtige Editionsfunktionen](https://docs.n8n.io/hosting/community-edition-features/)
 - [Security Audit](https://docs.n8n.io/hosting/securing/security-audit/)
+- [End-User Credentials](https://docs.n8n.io/administer/manage-credentials/end-user-credentials) (Enterprise)
 - [Sustainable Use License](https://docs.n8n.io/sustainable-use-license/)
 
 **Pflegeregel:** Dieses Dokument ist bei Änderungen an der

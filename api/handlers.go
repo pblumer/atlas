@@ -5494,10 +5494,11 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		actor = p.Username
 	}
 	var (
-		found     bool
-		notHolder bool
-		badReport error
-		runErr    error
+		found        bool
+		notHolder    bool
+		unauthorized bool
+		badReport    error
+		runErr       error
 	)
 	s.do(func() {
 		jv, ok, err := s.store.GetJob(key)
@@ -5508,6 +5509,13 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		if worker != "" {
 			if !holdsLease(jv, worker, payload.LeaseToken) {
 				notHolder = true
+				return
+			}
+			// A governed Worker's completion stands only on a permit recorded for this
+			// very lease (ADR-0475 §11): a Worker that
+			// acted without asking cannot move the process on, whatever it did.
+			if s.refusesUnauthorizedCompletion(key, jv) {
+				unauthorized = true
 				return
 			}
 			// A decision report is accepted only from a lease-holding worker, and
@@ -5570,6 +5578,12 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	case notHolder:
 		httpapi.Error(w, http.StatusConflict,
 			"worker "+strconv.Quote(worker)+" does not hold this job's current lease; it may have elapsed and been taken by another worker. Lease it again, or complete it as an operator with a reason")
+	case unauthorized:
+		auditRefusal(r, logging.AuthorizationRefused, "refused a completion no permit was recorded for",
+			slog.Uint64("job", key), slog.String("worker", worker))
+		httpapi.Error(w, http.StatusConflict,
+			"this job belongs to a governed Worker and no permit was recorded for the lease it is held under: "+
+				"authorize it (POST /api/v1/jobs/{key}/authorize) before acting, then complete it")
 	default:
 		httpapi.JSON(w, http.StatusOK, map[string]any{"jobKey": key})
 	}

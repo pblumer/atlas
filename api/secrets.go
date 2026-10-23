@@ -48,6 +48,9 @@ func (s *Server) handleSetSecret(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "secret name is required")
 		return
 	}
+	if refuseReservedSecret(w, r, name) {
+		return
+	}
 	if vault.IsDataKeyName(name) {
 		auditRefusal(r, logging.PersonalDataKeyWriteRefused, "refused an attempt to overwrite a data subject's personal-data key through the secrets API",
 			slog.String("name", name))
@@ -109,6 +112,9 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "secret name is required")
 		return
 	}
+	if refuseReservedSecret(w, r, name) {
+		return
+	}
 	if vault.IsDataKeyName(name) {
 		auditRefusal(r, logging.PersonalDataKeyWriteRefused, "refused an attempt to delete a data subject's personal-data key through the secrets API",
 			slog.String("name", name))
@@ -127,4 +133,19 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// refuseReservedSecret answers a write or delete of a connection's credential through
+// the secrets API (ADR-0475 §3) and reports whether it
+// did. A data key has its own refusal above, with its own route to name; a connection's
+// refresh token is a person's consent, managed by revoking the connection, and an
+// operator overwriting it would make the broker act on a token nobody consented to.
+func refuseReservedSecret(w http.ResponseWriter, r *http.Request, name string) bool {
+	if !vault.IsReservedName(name) || vault.IsDataKeyName(name) {
+		return false
+	}
+	auditRefusal(r, logging.ConnectionCredentialRefused, "refused an attempt to reach a connection's credential through the secrets API",
+		slog.String("name", name))
+	httpapi.Error(w, http.StatusForbidden, "that name belongs to a delegated connection's credential, which a person consented to and only Atlas's credential broker reads; revoke the connection instead")
+	return true
 }

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs-dokument-loeschen" targetNamespace="http://atlas/examples">
+  <bpmn:error id="err-freigabe" name="Freigabe nötig" errorCode="ATLAS_APPROVAL_REQUIRED"/>
+  <bpmn:process id="dokument-loeschen" name="Dokument löschen (delegiert, freigabepflichtig)" isExecutable="true">
+    <bpmn:documentation>Deletes a document in the HR library as the person who started the instance, through their own linked Microsoft account (ADR-0475). Starts from the variable docPath. The Worker sp-prod carries the identity policy delegated-per-job / actAs initiator; the policy hr-documents permits members of grp_documents only with one manager's approval of this exact deletion. Nothing in the model decides who may delete or as whom: a variable named approved would change nothing.</bpmn:documentation>
+    <bpmn:startEvent id="start" name="Löschung beantragt">
+      <bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="loeschen" name="Dokument löschen">
+      <bpmn:documentation>A SharePoint delete-file through the Worker sp-prod. Before the Worker acts it asks the server, which records a decision for this lease and these parameters. Refused for want of approval, the server throws ATLAS_APPROVAL_REQUIRED (caught below); refused for any other reason, the job parks on an incident naming the reason. Permitted, the Worker receives a short-lived token for the initiator's account and nothing else.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:sharePointConnector connector="sp-prod" operation="delete-file" site="contoso.sharepoint.com:/sites/hr" list="Documents" path="=docPath"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f1</bpmn:incoming>
+      <bpmn:incoming>f4</bpmn:incoming>
+      <bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:boundaryEvent id="freigabe-noetig" name="Freigabe nötig" attachedToRef="loeschen">
+      <bpmn:documentation>Why an error boundary and not a gateway: the decision is the server's, and a refusal for want of approval is the one refusal a process can do something about. The server opens the approval request in the same batch as the decision, bound to the digest of this deletion.</bpmn:documentation>
+      <bpmn:outgoing>f3</bpmn:outgoing>
+      <bpmn:errorEventDefinition errorRef="err-freigabe"/>
+    </bpmn:boundaryEvent>
+    <bpmn:userTask id="freigeben" name="Löschung freigeben">
+      <bpmn:documentation>A manager answers the approval through POST /api/v1/instances/{key}/action-approvals/{approval}/decide; completing this task only moves the process back to the deletion, which is decided afresh. The person the deletion runs for cannot approve it, and a rejection stays a refusal.</bpmn:documentation>
+      <bpmn:incoming>f3</bpmn:incoming>
+      <bpmn:outgoing>f4</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="ende" name="Gelöscht">
+      <bpmn:incoming>f2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="loeschen"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="loeschen" targetRef="ende"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="freigabe-noetig" targetRef="freigeben"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="freigeben" targetRef="loeschen"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="dia">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="dokument-loeschen">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <dc:Bounds x="152" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="126" y="225" width="88" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="loeschen_di" bpmnElement="loeschen">
+        <dc:Bounds x="250" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="freigabe-noetig_di" bpmnElement="freigabe-noetig">
+        <dc:Bounds x="312" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="356" y="262" width="74" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="freigeben_di" bpmnElement="freigeben">
+        <dc:Bounds x="250" y="320" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <dc:Bounds x="432" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="426" y="225" width="48" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1">
+        <di:waypoint x="188" y="200"/>
+        <di:waypoint x="250" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2">
+        <di:waypoint x="350" y="200"/>
+        <di:waypoint x="432" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3">
+        <di:waypoint x="330" y="258"/>
+        <di:waypoint x="330" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4">
+        <di:waypoint x="270" y="320"/>
+        <di:waypoint x="270" y="240"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

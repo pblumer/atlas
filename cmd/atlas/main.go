@@ -245,6 +245,14 @@ func runServe(args []string) error {
 	oidcClientSecret := fs.String("oidc-client-secret", os.Getenv("ATLAS_OIDC_CLIENT_SECRET"), "client secret for the OIDC token exchange; empty is allowed for a public client, since PKCE covers the flow either way (or ATLAS_OIDC_CLIENT_SECRET)")
 	oidcScopes := fs.String("oidc-scopes", os.Getenv("ATLAS_OIDC_SCOPES"), "space-separated OIDC scopes to request; empty asks for \"openid profile email\" (or ATLAS_OIDC_SCOPES)")
 	oidcName := fs.String("oidc-name", os.Getenv("ATLAS_OIDC_NAME"), "what the sign-in button on the login screen says; empty uses the issuer's host (or ATLAS_OIDC_NAME)")
+	// Linking Microsoft accounts for delegated Worker execution
+	// (ADR-0475 §4): an app registration of one tenant,
+	// separate from the sign-in provider above, because what it asks for — delegated
+	// Graph scopes and offline access — is not what a login needs.
+	linkTenant := fs.String("link-microsoft-tenant", os.Getenv("ATLAS_LINK_MICROSOFT_TENANT"), "Microsoft Entra tenant id whose users may link their accounts for delegated Worker execution; empty turns linking off (or ATLAS_LINK_MICROSOFT_TENANT)")
+	linkClientID := fs.String("link-microsoft-client-id", os.Getenv("ATLAS_LINK_MICROSOFT_CLIENT_ID"), "client id of the app registration accounts are linked through (or ATLAS_LINK_MICROSOFT_CLIENT_ID)")
+	linkClientSecret := fs.String("link-microsoft-client-secret", os.Getenv("ATLAS_LINK_MICROSOFT_CLIENT_SECRET"), "client secret of that app registration (or ATLAS_LINK_MICROSOFT_CLIENT_SECRET)")
+	linkScopes := fs.String("link-microsoft-scopes", os.Getenv("ATLAS_LINK_MICROSOFT_SCOPES"), "space-separated delegated scopes a linked connection is for, e.g. https://graph.microsoft.com/Sites.ReadWrite.All; openid, profile and offline_access are always added (or ATLAS_LINK_MICROSOFT_SCOPES)")
 	// RFC 7591 self-registration, off by default. It is the one unauthenticated
 	// endpoint that writes durable state, so an operator turns it on deliberately or
 	// not at all; a client that would use it discovers its absence from the metadata
@@ -415,6 +423,11 @@ func runServe(args []string) error {
 		ClientSecret: *oidcClientSecret,
 		Scopes:       *oidcScopes,
 		Name:         *oidcName,
+	}, msLink: api.MicrosoftLinkConfig{
+		TenantID:     *linkTenant,
+		ClientID:     *linkClientID,
+		ClientSecret: *linkClientSecret,
+		Scopes:       *linkScopes,
 	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, proxies, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, *catalogue, *cataloguePurge, logging.Format(*logFormat), logging.Level(*logLevel), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *workerMaxJobs, *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
 }
 
@@ -485,6 +498,9 @@ type oauthConfig struct {
 	// the one thing that has to be right for both — the origin this server is
 	// reachable under, which is what a redirect URI is built from.
 	oidc api.OIDCConfig
+	// msLink is the app registration people link Microsoft accounts through for
+	// delegated Worker execution, when an operator configured one.
+	msLink api.MicrosoftLinkConfig
 }
 
 // tlsConfig is the transport half of the serve flags (ADR-0191), kept together for
@@ -756,6 +772,9 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	}
 	if oauth.externalURL != "" {
 		apiOpts = append(apiOpts, api.WithExternalURL(oauth.externalURL))
+	}
+	if oauth.msLink.TenantID != "" {
+		apiOpts = append(apiOpts, api.WithMicrosoftLinking(oauth.msLink))
 	}
 	if oauth.oidc.Issuer != "" {
 		apiOpts = append(apiOpts, api.WithOIDC(oauth.oidc))
@@ -1384,7 +1403,10 @@ func runWorker(args []string) error {
 	}
 	opts := worker.Options{
 		Server: strings.TrimRight(*server, "/"), ID: *id, Token: *token,
-		Handlers: execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
+		// Only a server that supervises this worker sets it, and only for the process
+		// serving a Worker whose credential it brokers per job.
+		BrokerKey: os.Getenv("ATLAS_BROKER_KEY"),
+		Handlers:  execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
 		Connectors: builtin.Names,
 		// The form lookups the configured kinds answer, for the same Workers
 		// (ADR-0473).

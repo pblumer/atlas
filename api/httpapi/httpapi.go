@@ -102,6 +102,13 @@ type Principal struct {
 	// nothing is narrowed, which is what keeps every credential already in the field
 	// working; a credential that must state one is refused at minting instead.
 	Reach []string
+	// Session is true when the principal is a person signed in with their own
+	// session, not a bearer credential: an API token, the internal token, or an
+	// application the person granted access to (an OAuth grant resolves to their id,
+	// and to their roles). A few acts are the person's alone — answering an approval,
+	// consenting to a Worker acting as them — and are refused to anything that is not
+	// their session (ADR-0475 §10).
+	Session bool
 }
 
 // ErrNoSuchPrincipal says a name did not resolve to anybody.
