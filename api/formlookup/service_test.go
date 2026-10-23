@@ -410,8 +410,12 @@ func TestTheSourcesListingSaysWhatCanBeConfigured(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil || rec.Code != 200 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
-	if len(out.Providers) != 1 || out.Providers[0]["workerType"] != "entra" || out.Providers[0]["resource"] != "users" {
+	if len(out.Providers) != 2 || out.Providers[0]["workerType"] != "entra" || out.Providers[0]["resource"] != "users" ||
+		out.Providers[1]["workerType"] != "googlecontacts" || out.Providers[1]["resource"] != "contacts" {
 		t.Errorf("providers = %v", out.Providers)
+	}
+	if out.Providers[0]["activeFilter"] != true || out.Providers[1]["activeFilter"] != false {
+		t.Errorf("which sources know disabled entries: %v", out.Providers)
 	}
 	if len(out.Workers) != 2 || out.Workers[0]["name"] != "closed" || out.Workers[0]["formLookups"] != false {
 		t.Errorf("workers = %v, want both, sorted, each saying whether forms may use it", out.Workers)

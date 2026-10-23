@@ -53,20 +53,31 @@
       // properties panel the other; now there is one id, and it is the stored one on
       // open (ADR-0222). Saves are captured rather than sent.
       // A form with a department select and a plain text field, against a server that
-      // offers the Entra users source and two Workers — one open to forms, one not
-      // (ADR-0473). Saves and every call are captured.
+      // offers the Entra users source with two Workers — one open to forms, one not —
+      // and a Google address book open to forms (ADR-0473). Saves and every call are
+      // captured.
       window.__calls = [];
-      window.__mountDirectory = () => {
+      // With "contacts-only", only the Google address book is open to forms.
+      window.__mountDirectory = (variant) => {
         const sources = {
           providers: [{ workerType: "entra", resource: "users", label: "Microsoft Entra ID — users",
             valueProperty: "id",
             searchable: ["displayName", "givenName", "surname", "mail", "userPrincipalName"],
             filterable: ["department", "jobTitle"],
             readable: ["id", "displayName", "givenName", "surname", "mail", "userPrincipalName", "department", "jobTitle"],
-            defaultLabel: "displayName", defaultDescription: "mail", fallback: "userPrincipalName", valueFormat: "an Entra object id (a GUID)" }],
+            defaultLabel: "displayName", defaultDescription: "mail", fallback: "userPrincipalName", valueFormat: "an Entra object id (a GUID)",
+            defaultSearch: ["displayName", "mail", "userPrincipalName"], activeFilter: true },
+          { workerType: "googlecontacts", resource: "contacts", label: "Google Contacts — contacts",
+            valueProperty: "id",
+            searchable: ["displayName", "givenName", "familyName", "email", "phone", "organization"],
+            filterable: ["groups", "organization"],
+            readable: ["id", "displayName", "givenName", "familyName", "email", "phone", "organization", "jobTitle", "department", "city"],
+            defaultLabel: "displayName", defaultDescription: "email", fallback: "email", valueFormat: "a Google contact id (people/c…)",
+            defaultSearch: ["displayName", "email", "organization"], activeFilter: false }],
           workers: [
             { name: "contoso", workerType: "entra", enabled: true, formLookups: false },
-            { name: "ucc_entra", workerType: "entra", enabled: true, formLookups: true },
+            { name: "ucc_entra", workerType: "entra", enabled: true, formLookups: variant !== "contacts-only" },
+            { name: "google_verkauf", workerType: "googlecontacts", enabled: true, formLookups: true },
           ],
         };
         const api = async (method, url, body) => {

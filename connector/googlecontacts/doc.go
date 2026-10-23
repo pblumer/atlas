@@ -28,7 +28,9 @@
 // The People API's own search (searchContacts) answers from a cache Google asks to be
 // warmed with an empty query first, matches prefixes of names, e-mail addresses, phone
 // numbers and organizations, and lags behind changes. search-contacts uses it, warming
-// the cache before every search, for what it is good at: a person's free text.
+// the cache before every search, for what it is good at: a person's free text. So does a
+// task form's contact search ([RunLookup], ADR-0473), warming at most once a minute; the
+// value a person then submits is read again with people.get, which is current.
 //
 // A process deciding whether a customer exists must not use it. A contact created a
 // minute ago may not be in the cache yet, and a process that reads "not found" then

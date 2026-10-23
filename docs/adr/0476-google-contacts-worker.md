@@ -237,11 +237,96 @@ payload guards in `api`, `worker/googlecontactsconnector_test.go`, and the Playw
 - **Follow-ups / risks to watch:**
   - A form-lookup provider for this kind ([ADR-0473](0473-form-remote-data-sources.md)),
     so a person picks a customer in a task form — the question "which customer is this
-    request for" answered interactively rather than by a service task. The worker query
-    channel exists; this kind would add a query handler and a provider row.
+    request for" answered interactively rather than by a service task. Built: see the
+    amendment of 2026-10-23.
   - Whether `find-contacts` should keep a per-Worker index between calls if the quota
     becomes the limit in practice.
   - The open question above.
+
+## Amendment (2026-10-23): a form searches the address book
+
+The follow-up named under *Consequences* is built: a task form's directory field
+([ADR-0473](0473-form-remote-data-sources.md)) can search a Google address book, so a
+person picks "the customer this request is for" by typing a few letters, and only the
+contact's id becomes a process variable. It is the second provider of that channel, and
+the first that is not Entra.
+
+**What a field may say.** The provider `googlecontacts`/`contacts` allows searching
+`displayName`, `givenName`, `familyName`, `email`, `phone` and `organization`; filtering
+on `groups` (a label, by its name) and `organization`; and showing those plus `jobTitle`,
+`department` and `city` (the primary address's). The value is the contact's resource
+name, `people/c…` — the id every operation of this Worker Type takes. An option's label
+is what Google Contacts shows as the contact's title: the name, else the organization,
+else the e-mail address, so a company kept without a person's name is offered by the
+company's.
+
+**Search uses Google's index, and that is accepted here.** *Find reads; search searches*
+above says a process deciding whether a customer exists must not use `searchContacts`.
+The strongest case for using `find-contacts`' exact read here too: the person is
+deciding as well, and a contact created a minute ago is invisible to them. It does not
+carry, for two reasons. A person who does not find a customer types on, or looks again;
+nobody acts on an absence the way a process creating a customer does. And the exact
+read costs a full pass over the book per keystroke — twenty-five requests for a book
+near Google's limit, for every letter of every person typing — which is the per-minute
+quota spent on one form. So a term search asks `searchContacts` for its maximum window
+of 30 and narrows that window to the field's own search properties and filters; Google
+asks for its cache to be warmed with an empty query, which a form's search does at most
+once a minute per Worker (a job still warms before every search). What becomes durable
+is checked exactly: the submission's verification reads the chosen contact with
+`people.get` and holds it to the field's filters, so a contact deleted or relabelled
+since the search does not complete the task.
+
+**Its limits, stated rather than hidden.** A term search answers one window and offers
+no *Load more*: `searchContacts` has no paging. A field narrowed to a label shows the
+matches among Google's first 30, so a term that thirty contacts outside the label match
+first can hide a customer behind them; the person narrows the term. A field that lists
+without a term (`minSearchLength: 0`) pages exactly instead — through a label's members
+when it is narrowed to one, otherwise through the address book in Google's order. A
+label filter names a label by its name, its resource name or, when that is unambiguous,
+its name in another case; a label the book does not have, or a name two labels share,
+matches no contact rather than guessing.
+
+**No disabled contacts.** An address book has no disabled state, so the provider says so
+(`activeFilter: false` in `GET /api/v1/form-data/sources`) and a form that sets
+`activeOnly` on such a field is refused at save, whichever value it states. That is a
+property of the provider, not a special case: `Provider.ActiveFilter` and
+`Provider.DefaultSearch` are generic, and the form editor reads both.
+
+**Failures** map as Entra's do: HTTP 429 is `provider_throttled`; 400, 401 and 403 are
+`provider_refused`; anything else, the network included, is `provider_unavailable`. No
+Google message crosses, because it can quote the request and the request carries the
+person's term.
+
+### As built
+
+- `connector/googlecontacts/lookup.go` — `LookupResources`, `CheckLookup`, `RunLookup`
+  and `ValidLookupValue`; the client keeps the warm-up time and the label list for a
+  minute (`search` takes the warm-up age; `cachedGroups`, `connectionsPage`).
+- `worker/connectors.go` registers the lookup beside the job handler, for the same
+  address books.
+- `api/formlookup/provider.go` — the provider row, and `DefaultSearch` and
+  `ActiveFilter` on every row; `api/formlookup/schema.go` refuses `activeOnly` for a
+  provider without disabled entries.
+- The Console's Worker dialog shows **Forms may search** for a Google Contacts Worker.
+  The form editor starts a new directory field on the first source a Worker already
+  lets forms search, hides the switch for disabled entries where there are none, and
+  previews a contacts field with made-up contacts.
+- `examples/google-kundenauswahl` — a customer picked from the contacts labelled
+  "Kunden", then read with `get-contact`.
+
+Tested by `connector/googlecontacts/lookup_test.go` (search, warm-up per burst, label
+narrowing and its cache, listing pages, value lookups, refusals, failure codes),
+`api/formlookup/contacts_test.go` (schema, routing, the fixed label, submission),
+`api/googlecontacts_formlookup_http_test.go` (the example end to end with the worker
+built from its environment, a supplier's id refused at completion, the log position
+unchanged by searches), and the Playwright specs `form-directory-field` and
+`worker-test`.
+
+**Open question, added:** that `searchContacts` returns `memberships` when its read mask
+asks for them, as `people.get` does — the label filter of a term search rests on it, and
+a search that came back without them would offer no contact of a label at all. It is
+assumed, not observed: no test here reaches Google. A Workspace test account should
+search a labelled contact through a form and record what it saw here.
 
 ## Pros and cons of the options
 
@@ -277,5 +362,6 @@ payload guards in `api`, `worker/googlecontactsconnector_test.go`, and the Playw
 - shares the credential bundle of [ADR-0235](0235-google-sheets-worker.md) and the grant in
   `connector/oauth2` it moved there
 - throws its refusal under [ADR-0461](0461-script-bpmn-errors.md)'s rule
-- relates to [ADR-0473](0473-form-remote-data-sources.md) (the follow-up above)
+- extends [ADR-0473](0473-form-remote-data-sources.md) with its second provider (the
+  amendment above)
 - relates to [ADR-0203](0203-worker-execution-model.md) — Worker Type / Worker / Worker Instance

@@ -262,6 +262,9 @@ var catalogSources = []catalogSource{
 	// A person picked from the directory by a search in the task form, not from a listing
 	// the process read first (ADR-0473).
 	{ID: "entra-benutzerauswahl", App: "Beispiel: Person wählen (Entra)", Dir: "entra-benutzerauswahl"},
+	// The same field over a Google address book: a customer, picked by a search in the
+	// sales team's contacts labelled "Kunden".
+	{ID: "google-kundenauswahl", App: "Beispiel: Kunden wählen (Google Contacts)", Dir: "google-kundenauswahl"},
 	{ID: "account-bestellung", App: "Beispiel: Account-Bestellung (Entra)", Dir: "account-bestellung"},
 	// No install: these three ship inside the binary and are deployed into the
 	// protected system project at server start, so their forms are protected system

@@ -14,19 +14,34 @@
 
 import { DATA_SOURCE_MEMBER, directoryFields } from "./remote-select.js";
 
-// The defaults a new directory field starts with. They are the shipped example's.
+// The defaults a new directory field starts with: the source's own (the shipped
+// examples'), searched where a person would look for a name.
 export function defaultDataSource(provider, worker) {
   return {
     version: 1,
     workerType: provider.workerType,
     worker: worker || "",
     resource: provider.resource,
-    searchFields: provider.defaultSearch || ["displayName", "mail", "userPrincipalName"].filter((p) => provider.searchable.includes(p)),
+    searchFields: (provider.defaultSearch || ["displayName", "mail", "userPrincipalName"]).filter((p) => provider.searchable.includes(p)),
     filters: [],
     option: { label: provider.defaultLabel, description: provider.defaultDescription, details: [] },
     pageSize: 25,
     minSearchLength: 2,
   };
+}
+
+// openWorker names the first Worker of a source's type that lets forms search it, or ""
+// when none does yet.
+export function openWorker(provider, workers) {
+  const w = (workers || []).find((x) => x.workerType === provider.workerType && x.formLookups);
+  return w ? w.name : "";
+}
+
+// preferredProvider is the source a new directory field starts on: the first one this
+// server offers that a Worker already lets forms search, else simply the first. A server
+// with only a Google address book open to forms starts a field there, not on Entra.
+export function preferredProvider(providers, workers) {
+  return (providers || []).find((p) => openWorker(p, workers)) || (providers || [])[0] || null;
 }
 
 // keyedFields lists the fields a filter may be bound to: every keyed field of the form
@@ -51,6 +66,7 @@ export function checkDataSource(block, provider, keys) {
   if (!block) return problems;
   if (!provider) return ["This server offers no remote data source " + block.workerType + "/" + block.resource + "."];
   if (!block.worker || !String(block.worker).trim()) problems.push("Choose the Worker whose credential answers the search.");
+  if (block.activeOnly !== undefined && !provider.activeFilter) problems.push(`${provider.label} has no disabled entries to leave out; remove activeOnly.`);
   if (String(block.worker || "").trim().startsWith("=")) problems.push("The Worker must be a plain name, not a FEEL expression.");
   for (const p of block.searchFields || []) {
     if (!provider.searchable.includes(p)) problems.push(`“${p}” cannot be searched.`);
@@ -111,7 +127,7 @@ export function attachDataSourcePanel(container, editor, sources) {
     if (!field) { panel.hidden = true; panel.innerHTML = ""; return; }
     panel.hidden = false;
     const block = field[DATA_SOURCE_MEMBER] && typeof field[DATA_SOURCE_MEMBER] === "object" ? field[DATA_SOURCE_MEMBER] : null;
-    const provider = block ? providers.find((p) => p.workerType === block.workerType && p.resource === block.resource) : providers[0];
+    const provider = block ? providers.find((p) => p.workerType === block.workerType && p.resource === block.resource) : preferredProvider(providers, workers);
     const keys = keyedFields(schemaNow(), field.key);
     if (!block) {
       panel.innerHTML = `
@@ -121,8 +137,7 @@ export function attachDataSourcePanel(container, editor, sources) {
           : `<p class="atlas-ds-hint">This server offers no remote data source.</p>`}`;
       const on = panel.querySelector("[data-act=enable]");
       if (on) on.addEventListener("click", () => {
-        const open = workers.find((w) => w.workerType === providers[0].workerType && w.formLookups);
-        write(defaultDataSource(providers[0], open ? open.name : ""));
+        write(defaultDataSource(provider, openWorker(provider, workers)));
       });
       return;
     }
@@ -168,10 +183,10 @@ export function attachDataSourcePanel(container, editor, sources) {
       </fieldset>
       <div class="atlas-ds-row"><span>Results per page</span><input type="number" min="1" max="50" data-field="pageSize" value="${esc(block.pageSize || 25)}"/></div>
       <div class="atlas-ds-row"><span>Search from</span><input type="number" min="0" max="10" data-field="minSearchLength" value="${esc(block.minSearchLength === undefined ? 2 : block.minSearchLength)}"/> characters</div>
-      <label class="atlas-ds-check"><input type="checkbox" data-field="activeOnly" ${block.activeOnly === false ? "" : "checked"}/> Leave out disabled accounts</label>
-      <label class="atlas-ds-check"><input type="checkbox" data-field="verify" ${block.verify === "format" ? "" : "checked"}/> Check the choice in the directory again when the task is completed</label>
+      ${provider && provider.activeFilter ? `<label class="atlas-ds-check"><input type="checkbox" data-field="activeOnly" ${block.activeOnly === false ? "" : "checked"}/> Leave out disabled accounts</label>` : ""}
+      <label class="atlas-ds-check"><input type="checkbox" data-field="verify" ${block.verify === "format" ? "" : "checked"}/> Check the choice at the source again when the task is completed</label>
       ${problems.length ? `<ul class="atlas-ds-problems">${problems.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>` : ""}
-      <p class="atlas-ds-hint">The Validate tab previews the field with made-up people; no directory is asked while you design.</p>
+      <p class="atlas-ds-hint">The Validate tab previews the field with made-up entries; no directory or address book is asked while you design.</p>
       <button type="button" class="btn ghost small" data-act="disable">Back to a plain text field</button>`;
     wire(block, provider);
   }
@@ -183,7 +198,7 @@ export function attachDataSourcePanel(container, editor, sources) {
     on("[data-field=source]", "change", (e) => {
       const [workerType, resource] = e.target.value.split("/");
       const p = providers.find((x) => x.workerType === workerType && x.resource === resource);
-      if (p) write(defaultDataSource(p, ""));
+      if (p) write(defaultDataSource(p, openWorker(p, workers)));
     });
     on("[data-field=worker]", "change", (e) => { const b = next(); b.worker = e.target.value; write(b); });
     on("[data-list=searchFields]", "change", () => {
@@ -259,17 +274,16 @@ export function attachDataSourcePanel(container, editor, sources) {
 
 // addDirectoryField appends a new directory field to the form and selects it.
 export function addDirectoryField(editor, sources) {
-  const providers = (sources && sources.providers) || [];
-  if (!providers.length) return null;
-  const p = providers[0];
-  const open = ((sources && sources.workers) || []).find((w) => w.workerType === p.workerType && w.formLookups);
+  const workers = (sources && sources.workers) || [];
+  const p = preferredProvider((sources && sources.providers) || [], workers);
+  if (!p) return null;
   const registry = editor.get("formFieldRegistry");
   const root = registry.getForm();
   const taken = new Set(registry.getAll().map((f) => f.key).filter(Boolean));
   let key = "person";
   for (let i = 2; taken.has(key); i++) key = "person" + i;
   const created = editor.get("modeling").addFormField(
-    { type: "textfield", key, label: "Person", validate: { required: true }, [DATA_SOURCE_MEMBER]: defaultDataSource(p, open ? open.name : "") },
+    { type: "textfield", key, label: "Person", validate: { required: true }, [DATA_SOURCE_MEMBER]: defaultDataSource(p, openWorker(p, workers)) },
     root, (root.components || []).length);
   try { editor.get("selection").set(created); } catch { /* selection is a convenience */ }
   return created;

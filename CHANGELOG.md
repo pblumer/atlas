@@ -46,6 +46,22 @@ governs a Worker:
 
 ### Added
 
+- **A task form searches a Google address book.** A form's directory field can now search
+  the contacts of a Google Contacts Worker as well as an Entra directory: a person types a
+  few letters of a name, an e-mail address or a company, sees the matching contacts —
+  narrowed, if the form says so, to a label such as *Kunden* — and picks one; only its id
+  (`people/c…`) is submitted, and the server checks it in the address book once more
+  before the task completes. The search uses Google's own index, so it shows the fitting
+  contacts among Google's first 30 matches, offers no *Load more* for a term, and finds a
+  contact added a moment ago only after a few minutes; whether a customer exists is still
+  `find-contacts`' question. A Google Contacts Worker shows the **Forms may search**
+  switch, the form editor offers the address book as a source and starts a new field on
+  whichever source a Worker already lets forms search, and `activeOnly` is refused for a
+  source without disabled entries. The example `examples/google-kundenauswahl` picks a
+  customer and reads the contact
+  ([ADR-0476](docs/adr/0476-google-contacts-worker.md),
+  [ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
+
 - **The user list shows when each account last signed in.** **Organization → Users** has
   a **Last login** column beside Status and Presence: "today", "yesterday" or "N days
   ago", with the day itself, and sorting by it puts the accounts nobody uses first — the

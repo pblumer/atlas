@@ -25,6 +25,10 @@ func TestBuiltinConnectorsRegistersGoogleContacts(t *testing.T) {
 	if _, ok := got.Handlers[compiler.GoogleContactsJobType]; !ok {
 		t.Errorf("no handler for %s; have %v", compiler.GoogleContactsJobType, got.Handlers)
 	}
+	// The same Workers answer a form's contact search.
+	if _, ok := got.Queries[compiler.GoogleContactsJobType]; !ok {
+		t.Errorf("no query handler for %s; have %v", compiler.GoogleContactsJobType, got.Queries)
+	}
 	if strings.Join(got.Names, ",") != "privat,verkauf" {
 		t.Errorf("names = %v", got.Names)
 	}

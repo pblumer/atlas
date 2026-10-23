@@ -389,8 +389,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   through the Worker open to forms, a plain text field becomes one bound to the department it
   is filtered by, a Worker that does not let forms search it is named as such, an unfinished
   filter is pointed out before Save, the field turns back into a plain one, and both the
-  Validate tab and the Design preview search made-up people and ask no directory.
-  `worker-test.spec.mjs` covers the Worker dialog's **Forms may search** switch.
+  Validate tab and the Design preview search made-up people and ask no directory. The second
+  source, a **Google address book** ([ADR-0476](../docs/adr/0476-google-contacts-worker.md)):
+  switching to it starts the field on the address book's defaults and its Worker open to
+  forms, without the switch for disabled entries; a new field starts on whichever source a
+  Worker already lets forms search; and its preview searches made-up contacts.
+  `worker-test.spec.mjs` covers the Worker dialog's **Forms may search** switch, for an Entra
+  and a Google Contacts Worker.
 
 - **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):
   **who is signed in**, in the Users card under Organization. The column must render the

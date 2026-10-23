@@ -366,6 +366,27 @@ doors, a restart before and after the choice with the log position unchanged by
 searches), and the Playwright specs `remote-select`, `tasks-remote-select`,
 `form-directory-field` and `worker-test`.
 
+## Amendment (2026-10-23): a second provider
+
+The registry's second row is a Google address book (`googlecontacts`/`contacts`,
+[ADR-0476](0476-google-contacts-worker.md)), and it took what *Consequences* promised: a
+row in `api/formlookup/provider.go` and a query handler in its Worker Type, with no
+change to the channel, the broker, the cursor or the submission check.
+
+Two things that were Entra's turned out to be a provider's, and are now said by the row:
+
+- **`activeFilter`** — whether the source knows disabled records. Entra's accounts do;
+  an address book's contacts do not. `activeOnly` is honoured only where it is true, and
+  a form that sets it on a field whose source has none is refused at save rather than
+  silently ignored.
+- **`defaultSearch`** — the properties a new field searches before its author picks.
+
+The form editor reads both, and a new directory field starts on the first source a
+Worker already lets forms search, so a server whose only open Worker is an address book
+does not start every field on Entra. The editor's preview answers each kind of source
+with made-up entries of its own shape. The Console's **Forms may search** switch is
+shown for every kind the registry names.
+
 ## Pros and cons of the options
 
 ### Option 1 — preload into a variable

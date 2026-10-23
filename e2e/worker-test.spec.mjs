@@ -102,6 +102,20 @@ test("an Entra Worker's dialog switches form searches on and off", async ({ page
   expect(page.__errors).toEqual([]);
 });
 
+test("a Google Contacts Worker's dialog switches form searches of its address book off", async ({ page }) => {
+  await page.evaluate(() => window.__editGoogleContacts(true));
+  const box = page.locator("#conn-formlookups");
+  await expect(box).toBeVisible();
+  await expect(box).toBeChecked();
+  await box.uncheck();
+  await page.locator("[data-conn-save]").click();
+  await expect.poll(() => page.evaluate(() => (window.__posted || []).length)).toBe(1);
+  const [call] = await page.evaluate(() => window.__posted);
+  expect(call.method).toBe("PATCH");
+  expect(call.body.formLookups).toBe(false);
+  expect(page.__errors).toEqual([]);
+});
+
 test("a mail Worker's dialog has no form-search switch and sends none", async ({ page }) => {
   await page.evaluate(() => window.__editMail());
   await expect(page.locator("#conn-formlookups")).toBeHidden();

@@ -219,7 +219,7 @@ func run(ctx context.Context, c *Client, j Job, op catalog.Op) (any, error) {
 	case "find-contacts":
 		return b.find(ctx, j, limit)
 	case "search-contacts":
-		people, err := c.search(ctx, strings.TrimSpace(j.Query), limit, readFields)
+		people, err := c.search(ctx, strings.TrimSpace(j.Query), limit, readFields, 0)
 		if err != nil {
 			return nil, err
 		}

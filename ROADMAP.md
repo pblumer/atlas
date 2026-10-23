@@ -633,9 +633,10 @@ The control-flow basics most real models use.
   under the etag it read. `find-contacts` reads the address book rather than Google's search
   cache, so a process deciding whether a customer is known is not told "no" about one
   created a minute ago. Worker-only and supervised by default; the credential is the Google
-  Sheets bundle with the Workspace user it acts as. Still open: a run against a real
-  account (the record's open question), and a form-lookup provider so a person picks a
-  customer in a task form ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
+  Sheets bundle with the Workspace user it acts as. A task form's directory field searches
+  the address book too, so a person picks a customer by typing
+  ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)'s second provider). Still open: a
+  run against a real account (the record's open questions).
   **On Windows, the Go Workers take the route PowerShell takes**
   ([ADR-0464](docs/adr/0464-windows-system-proxy.md)): outbound
   HTTP follows a proxy variable when one is set and otherwise the account's PAC, WPAD or
@@ -1781,6 +1782,10 @@ the hand-written Details panel one vertical slice at a time:
   reaches the log; a Worker's editors open it with **Forms may search**. The form editor
   configures it without JSON and previews it with made-up people
   ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
+- ✅ **A Google address book as the second source**: the same field searches the contacts
+  of a Google Contacts Worker, optionally narrowed to a label such as *Kunden*, through
+  Google's search index, and the submission is checked against the address book itself
+  ([ADR-0476](docs/adr/0476-google-contacts-worker.md)'s amendment).
 - 🔲 Further remote data sources: Entra groups and administrative units, a `$search` mode
   for word matching, and departments discovered rather than configured — each needs a
   provider row and a query handler in its Worker Type.

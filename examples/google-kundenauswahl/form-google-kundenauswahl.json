@@ -1,0 +1,32 @@
+{
+  "type": "default",
+  "id": "google-kundenauswahl",
+  "schemaVersion": 16,
+  "components": [
+    {
+      "type": "text",
+      "id": "Text_einleitung",
+      "text": "**Kunde auswählen · Select a customer**\n\nSuche nach Name, E-Mail-Adresse oder Firma. Angeboten werden nur Kontakte mit dem Label «Kunden» im Google-Adressbuch des Verkaufs; die Suche läuft dort, nicht in diesem Formular. · Search by name, e-mail address or company. Only contacts labelled «Kunden» in the sales team's Google address book are offered; the search runs there, not in this form."
+    },
+    {
+      "type": "textfield",
+      "id": "Field_kunde",
+      "key": "kunde",
+      "label": "Kunde · Customer",
+      "description": "Mindestens zwei Zeichen. Neu erfasste Kontakte erscheinen erst nach einigen Minuten. · At least two characters. A contact added a moment ago appears after a few minutes.",
+      "validate": { "required": true },
+      "atlasDataSource": {
+        "version": 1,
+        "workerType": "googlecontacts",
+        "worker": "google_verkauf",
+        "resource": "contacts",
+        "searchFields": ["displayName", "email", "organization"],
+        "filters": [{ "property": "groups", "value": "Kunden" }],
+        "option": { "label": "displayName", "description": "email", "details": ["organization", "phone"] },
+        "pageSize": 25,
+        "minSearchLength": 2,
+        "verify": "lookup"
+      }
+    }
+  ]
+}

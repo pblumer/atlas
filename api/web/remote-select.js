@@ -85,9 +85,10 @@ const PREVIEW_NAMES = [
   "Tanja Bühler", "Urs Suter", "Vera Lüthi", "Walter Hofer", "Yvonne Egger", "Zoé Marti",
 ];
 
+const ascii = (s) => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
 export const PREVIEW_PEOPLE = PREVIEW_NAMES.flatMap((name, i) => {
   const [first, last] = name.split(" ");
-  const ascii = (s) => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
   return [{
     value: "00000000-0000-4000-8000-" + String(i + 1).padStart(12, "0"),
     label: name,
@@ -96,18 +97,42 @@ export const PREVIEW_PEOPLE = PREVIEW_NAMES.flatMap((name, i) => {
   }];
 });
 
-// previewTransport answers from the made-up directory above, with the server's paging
-// and filtering rules, so the editor shows the field as it will behave.
-export function previewTransport(people = PREVIEW_PEOPLE, pageSize = 25) {
-  return async (_field, body) => {
+// PREVIEW_CONTACTS is the example address book a contacts field previews with: the same
+// made-up names, each at a made-up company named after them, and every fifth a company
+// kept without a person's name — offered by the company's, as the server offers it.
+const PREVIEW_CITIES = ["Zürich", "Bern", "Basel", "Luzern", "St. Gallen"];
+export const PREVIEW_CONTACTS = PREVIEW_NAMES.flatMap((name, i) => {
+  const [first, last] = name.split(" ");
+  const company = last + (i % 2 ? " GmbH" : " AG");
+  const domain = ascii(last) + ".example";
+  return [{
+    value: "people/c" + String(1001 + i),
+    label: i % 5 === 4 ? company : name,
+    description: (i % 5 === 4 ? "info" : ascii(first)) + "@" + domain,
+    details: { organization: company, phone: "+41 44 555 " + String(10 + i).padStart(2, "0") + " 00",
+      city: PREVIEW_CITIES[i % PREVIEW_CITIES.length] },
+  }];
+});
+
+// PREVIEW_SOURCES is what each kind of source previews with; a kind without its own
+// set previews with people.
+const PREVIEW_SOURCES = { googlecontacts: PREVIEW_CONTACTS };
+
+// previewTransport answers from the made-up entries above, with the server's paging
+// and filtering rules, so the editor shows the field as it will behave. Without people
+// of its own it answers from the set the field's source kind has (src, the field's
+// data source block, which every call passes).
+export function previewTransport(people, pageSize = 25) {
+  return async (_field, body, _signal, src) => {
+    const set = people || PREVIEW_SOURCES[src && src.workerType] || PREVIEW_PEOPLE;
     const fold = (s) => String(s || "").toLocaleLowerCase();
     const filters = body.filters || {};
     const holds = (p) => Object.entries(filters).every(([k, v]) => fold(p.details && p.details[k]) === fold(v));
     if (body.value) {
-      return { items: people.filter((p) => p.value === body.value && holds(p)), nextCursor: null };
+      return { items: set.filter((p) => p.value === body.value && holds(p)), nextCursor: null };
     }
     const term = fold(body.search).trim();
-    const hits = people.filter((p) => holds(p) && (!term ||
+    const hits = set.filter((p) => holds(p) && (!term ||
       fold(p.label).startsWith(term) || fold(p.label).split(" ").some((w) => w.startsWith(term)) || fold(p.description).startsWith(term)));
     const size = Math.min(body.limit || pageSize, pageSize);
     const from = body.cursor ? Number(body.cursor) || 0 : 0;
@@ -354,7 +379,7 @@ class Controller {
     if (this.resolveCtrl) this.resolveCtrl.abort();
     const ctrl = this.resolveCtrl = new AbortController();
     try {
-      const res = await this.transport(this.field.key, { value, filters: this.filtersOf(this.readData()) }, ctrl.signal);
+      const res = await this.transport(this.field.key, { value, filters: this.filtersOf(this.readData()) }, ctrl.signal, this.src);
       if (ctrl.signal.aborted || !this.selected || this.selected.value !== value) return;
       const hit = (res.items || []).find((i) => i.value === value);
       this.selected = hit || { value, label: value, description: t("remote.unknownValue"), unknown: true };
@@ -458,7 +483,7 @@ class Controller {
     const ctrl = this.ctrl = new AbortController();
     this.busy(true);
     try {
-      const res = await this.transport(this.field.key, body, ctrl.signal);
+      const res = await this.transport(this.field.key, body, ctrl.signal, this.src);
       if (seq !== this.seq || ctrl.signal.aborted) return;
       const fresh = res.items || [];
       this.items = append ? this.items.concat(fresh).slice(0, MAX_SHOWN) : fresh;

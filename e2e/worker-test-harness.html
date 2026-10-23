@@ -64,6 +64,13 @@
         const ENTRA = { id: "c3", name: "ucc_entra", kind: "entra", enabled: true, credentialsRef: "entra-ucc", formLookups };
         editWorkerFlow({ api, toast, worker: ENTRA, reload: () => {} });
       };
+      // A Google Contacts Worker's, whose address book a form can search too.
+      window.__editGoogleContacts = async (formLookups) => {
+        window.__posted = [];
+        const { editWorkerFlow } = await import("/workerdialog.js");
+        const BOOK = { id: "c4", name: "google_verkauf", kind: "googlecontacts", enabled: true, credentialsRef: "google_contacts_verkauf", formLookups };
+        editWorkerFlow({ api, toast, worker: BOOK, reload: () => {} });
+      };
       window.__editMail = async () => {
         window.__posted = [];
         const { editWorkerFlow } = await import("/workerdialog.js");

@@ -17,6 +17,7 @@ import (
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/envname"
+	"github.com/pblumer/atlas/connector/googlecontacts"
 	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/lookup"
@@ -469,6 +470,12 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.GoogleContactsJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunGoogleContactsJob(ctx, j, reg)
 			})
+			// The same address books answer a form's contact search, under the same
+			// credential: the server routes a query only to an Instance reporting the
+			// Worker it names (ADR-0473).
+			built.Queries[compiler.GoogleContactsJobType] = func(ctx context.Context, connector string, q lookup.Query) (lookup.Page, error) {
+				return googlecontacts.RunLookup(ctx, connector, q, reg)
+			}
 		case "jira":
 			reg, names, err := jiraRegistryFromEnv(env)
 			if err != nil {

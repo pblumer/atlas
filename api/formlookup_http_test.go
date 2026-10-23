@@ -771,7 +771,8 @@ func TestADirectorySearchIsGuardedAtEveryDoor(t *testing.T) {
 		if err := json.Unmarshal(b, &out); err != nil {
 			t.Fatal(err)
 		}
-		if len(out.Providers) != 1 || out.Providers[0].WorkerType != "entra" || out.Providers[0].Resource != "users" {
+		if len(out.Providers) != 2 || out.Providers[0].WorkerType != "entra" || out.Providers[0].Resource != "users" ||
+			out.Providers[1].WorkerType != "googlecontacts" || out.Providers[1].Resource != "contacts" {
 			t.Errorf("providers = %+v", out.Providers)
 		}
 		if len(out.Workers) != 1 || out.Workers[0]["name"] != "ucc_entra" || out.Workers[0]["formLookups"] != true {

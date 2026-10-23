@@ -3140,6 +3140,76 @@
       ]
     },
     {
+      "id": "google-kundenauswahl",
+      "path": "google-kundenauswahl",
+      "app": "Beispiel: Kunden wählen (Google Contacts)",
+      "processes": [
+        {
+          "processId": "Process_google_kundenauswahl",
+          "name": "Google Contacts: Kunden wählen und Kontakt lesen",
+          "file": "google-kundenauswahl/kundenauswahl.bpmn",
+          "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003c!--\nGoogle Contacts: Kunden aus dem Adressbuch des Verkaufs wählen und seinen Kontakt lesen. Die Auswahl sucht über den Google-Contacts-Worker im Adressbuch (Remote-Datenquelle, ADR-0473), statt das Adressbuch vorher mit list-contacts in eine Prozessvariable zu laden.\n--\u003e\n\u003cbpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n                  xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n                  xmlns:atlas=\"http://atlas/schema/1.0\"\n                  xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n                  xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\"\n                  xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\"\n                  id=\"Definitions_google_kundenauswahl\" targetNamespace=\"http://atlas/beispiel/google-kundenauswahl\"\u003e\n  \u003cbpmn:process id=\"Process_google_kundenauswahl\" name=\"Google Contacts: Kunden wählen und Kontakt lesen\" isExecutable=\"true\"\u003e\n    \u003cbpmn:documentation\u003eEine Person wählt in einer Aufgabe einen Kunden aus dem Google-Adressbuch des Verkaufs; danach liest der Prozess dessen Kontakt.\n\nWarum so: Ein Adressbuch mit einigen tausend Kunden gehört nicht in eine Prozessvariable. Mit list-contacts stünde es im Ereignisprotokoll, im Zustand, in jedem Verlaufsschritt und in jeder Sicherung. Das Feld «Kunde» des Formulars ist eine Adressbuchauswahl (atlasDataSource): Es sucht beim Tippen über den Google-Contacts-Worker google_verkauf, zeigt nur Kontakte mit dem Label «Kunden», höchstens 25 Treffer, und übermittelt nur die Kontakt-ID (people/c…).\n\nVariablen: kunde schreibt das Formular; kontakt schreibt der Google-Contacts-Schritt. Der Prozess startet ohne Variablen.\n\nVoraussetzungen beim Betreiber: der Google-Contacts-Worker google_verkauf für das Adressbuch des Verkaufs, in der Console mit eingeschaltetem «Formulare dürfen suchen» (formLookups). Ohne diesen Schalter verweigert der Server die Suche, auch wenn das Formular den Worker nennt. Im Adressbuch gibt es das Label «Kunden»; heisst es anders, ist der Wert im Formular anzupassen.\n\nGrenzen: Die Suche nutzt Googles Suchindex. Ein soeben erfasster Kontakt erscheint dort erst nach einigen Minuten. Ob es einen Kunden schon gibt, entscheidet ein Prozess deshalb mit find-contacts, nicht mit dieser Auswahl.\u003c/bpmn:documentation\u003e\n    \u003cbpmn:startEvent id=\"StartEvent_1\" name=\"Anfrage eingegangen\"\u003e\n      \u003cbpmn:outgoing\u003eFlow_start_choose\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:startEvent\u003e\n    \u003cbpmn:userTask id=\"Activity_chooseCustomer\" name=\"Kunde auswählen\"\u003e\n      \u003cbpmn:documentation\u003eNach Name, E-Mail-Adresse oder Firma suchen und genau einen Kunden auswählen. Die Suche fragt das Adressbuch bei jeder Eingabe (verzögert), nicht eine vorher geladene Liste; nichts davon wird gespeichert. Übermittelt wird nur kunde (die Kontakt-ID). Vor dem Abschluss prüft der Server die ID noch einmal im Adressbuch (verify: lookup): Gibt es den Kontakt nicht mehr oder trägt er das Label «Kunden» nicht mehr, wird die Aufgabe nicht abgeschlossen.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:formDefinition formId=\"google-kundenauswahl\" /\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003eFlow_start_choose\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003eFlow_choose_read\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:userTask\u003e\n    \u003cbpmn:serviceTask id=\"Activity_readContact\" name=\"Kontakt lesen (Google Contacts)\"\u003e\n      \u003cbpmn:documentation\u003eget-contact im Google-Contacts-Worker google_verkauf für den gewählten Kunden: contactId ist die Kontakt-ID aus dem Formular (= kunde). Das Ergebnis kontakt ist der Kontakt als flaches Objekt (id, Namen, E-Mail-Adressen, Telefonnummern, Firma, Adressen, Labels und eigene Felder). Zwischen Auswahl und diesem Schritt kann sich das Adressbuch ändern. Ist der Kontakt inzwischen gelöscht, wirft der Schritt GOOGLECONTACTS_CONTACT_NOT_FOUND, wenn eine Fehlergrenze diesen Code fängt; dieses Beispiel hat keine, also entsteht ein Incident.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003catlas:googleContactsConnector connector=\"google_verkauf\" operation=\"get-contact\" contactId=\"= kunde\" resultVariable=\"kontakt\" /\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003eFlow_choose_read\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003eFlow_read_end\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:serviceTask\u003e\n    \u003cbpmn:endEvent id=\"EndEvent_1\" name=\"Kunde bekannt\"\u003e\n      \u003cbpmn:incoming\u003eFlow_read_end\u003c/bpmn:incoming\u003e\n    \u003c/bpmn:endEvent\u003e\n    \u003cbpmn:sequenceFlow id=\"Flow_start_choose\" sourceRef=\"StartEvent_1\" targetRef=\"Activity_chooseCustomer\" /\u003e\n    \u003cbpmn:sequenceFlow id=\"Flow_choose_read\" sourceRef=\"Activity_chooseCustomer\" targetRef=\"Activity_readContact\" /\u003e\n    \u003cbpmn:sequenceFlow id=\"Flow_read_end\" sourceRef=\"Activity_readContact\" targetRef=\"EndEvent_1\" /\u003e\n  \u003c/bpmn:process\u003e\n  \u003cbpmndi:BPMNDiagram id=\"BPMNDiagram_1\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"BPMNPlane_1\" bpmnElement=\"Process_google_kundenauswahl\"\u003e\n      \u003cbpmndi:BPMNShape id=\"StartEvent_1_di\" bpmnElement=\"StartEvent_1\"\u003e\n        \u003cdc:Bounds x=\"152\" y=\"182\" width=\"36\" height=\"36\" /\u003e\n        \u003cbpmndi:BPMNLabel\u003e\n          \u003cdc:Bounds x=\"122\" y=\"225\" width=\"96\" height=\"14\" /\u003e\n        \u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"Activity_chooseCustomer_di\" bpmnElement=\"Activity_chooseCustomer\"\u003e\n        \u003cdc:Bounds x=\"250\" y=\"160\" width=\"100\" height=\"80\" /\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"Activity_readContact_di\" bpmnElement=\"Activity_readContact\"\u003e\n        \u003cdc:Bounds x=\"400\" y=\"160\" width=\"100\" height=\"80\" /\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"EndEvent_1_di\" bpmnElement=\"EndEvent_1\"\u003e\n        \u003cdc:Bounds x=\"562\" y=\"182\" width=\"36\" height=\"36\" /\u003e\n        \u003cbpmndi:BPMNLabel\u003e\n          \u003cdc:Bounds x=\"538\" y=\"225\" width=\"84\" height=\"14\" /\u003e\n        \u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNEdge id=\"Flow_start_choose_di\" bpmnElement=\"Flow_start_choose\"\u003e\n        \u003cdi:waypoint x=\"188\" y=\"200\" /\u003e\n        \u003cdi:waypoint x=\"250\" y=\"200\" /\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"Flow_choose_read_di\" bpmnElement=\"Flow_choose_read\"\u003e\n        \u003cdi:waypoint x=\"350\" y=\"200\" /\u003e\n        \u003cdi:waypoint x=\"400\" y=\"200\" /\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"Flow_read_end_di\" bpmnElement=\"Flow_read_end\"\u003e\n        \u003cdi:waypoint x=\"500\" y=\"200\" /\u003e\n        \u003cdi:waypoint x=\"562\" y=\"200\" /\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/bpmn:definitions\u003e"
+        }
+      ],
+      "forms": [
+        {
+          "id": "google-kundenauswahl",
+          "name": "google-kundenauswahl",
+          "file": "google-kundenauswahl/form-google-kundenauswahl.json",
+          "schema": {
+            "type": "default",
+            "id": "google-kundenauswahl",
+            "schemaVersion": 16,
+            "components": [
+              {
+                "type": "text",
+                "id": "Text_einleitung",
+                "text": "**Kunde auswählen · Select a customer**\n\nSuche nach Name, E-Mail-Adresse oder Firma. Angeboten werden nur Kontakte mit dem Label «Kunden» im Google-Adressbuch des Verkaufs; die Suche läuft dort, nicht in diesem Formular. · Search by name, e-mail address or company. Only contacts labelled «Kunden» in the sales team's Google address book are offered; the search runs there, not in this form."
+              },
+              {
+                "type": "textfield",
+                "id": "Field_kunde",
+                "key": "kunde",
+                "label": "Kunde · Customer",
+                "description": "Mindestens zwei Zeichen. Neu erfasste Kontakte erscheinen erst nach einigen Minuten. · At least two characters. A contact added a moment ago appears after a few minutes.",
+                "validate": {
+                  "required": true
+                },
+                "atlasDataSource": {
+                  "version": 1,
+                  "workerType": "googlecontacts",
+                  "worker": "google_verkauf",
+                  "resource": "contacts",
+                  "searchFields": [
+                    "displayName",
+                    "email",
+                    "organization"
+                  ],
+                  "filters": [
+                    {
+                      "property": "groups",
+                      "value": "Kunden"
+                    }
+                  ],
+                  "option": {
+                    "label": "displayName",
+                    "description": "email",
+                    "details": [
+                      "organization",
+                      "phone"
+                    ]
+                  },
+                  "pageSize": 25,
+                  "minSearchLength": 2,
+                  "verify": "lookup"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "account-bestellung",
       "path": "account-bestellung",
       "app": "Beispiel: Account-Bestellung (Entra)",

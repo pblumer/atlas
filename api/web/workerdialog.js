@@ -156,11 +156,11 @@ export function workerShape(kind, provider) {
   return {
     mail,
     sql,
-    // An Entra Worker can let task forms search its directory — a directory field of a
-    // form that names it (ADR-0473). It is a switch on the
-    // Worker because it puts this Worker's credential behind every such form, and that
-    // is its editors' decision, not the form author's.
-    formLookups: entra,
+    // An Entra Worker can let task forms search its directory, a Google Contacts Worker
+    // its address book — a directory field of a form that names it (ADR-0473). It is a
+    // switch on the Worker because it puts this Worker's credential behind every such
+    // form, and that is its editors' decision, not the form author's.
+    formLookups: entra || googlecontacts,
     // An SMTP mail Worker can name an IMAP endpoint, which is what lets it read the
     // mailbox it sends from (ADR-0438). Gmail and Graph read through the
     // API they send with; preview has no mailbox at all.
@@ -384,7 +384,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
             <label class="field conn-f-connstr" style="flex:1 1 100%"><span>Connection string</span><input id="conn-connstr" type="password" autocomplete="new-password"/></label>
           </div>
           <label class="conn-enabled"><input type="checkbox" id="conn-enabled"${c.enabled ? " checked" : ""}/> <span>Enabled — a disabled worker is skipped, and its tasks park</span></label>
-          <label class="conn-formlookups"><input type="checkbox" id="conn-formlookups"${c.formLookups ? " checked" : ""}/> <span>Forms may search — a directory field of a task form that names this Worker searches its directory with this Worker's credential, and shows name, mail and the properties the form names to whoever may work on the task</span></label>
+          <label class="conn-formlookups"><input type="checkbox" id="conn-formlookups"${c.formLookups ? " checked" : ""}/> <span>Forms may search — a directory field of a task form that names this Worker searches its directory or address book with this Worker's credential, and shows name, e-mail address and the properties the form names to whoever may work on the task</span></label>
           <p class="muted conn-hint" style="margin:8px 0 0;font-size:12.5px"></p>
           <div class="conn-setup" style="margin:10px 0 0">${workerKindDocHTML(c.kind)}</div>
           <p class="conn-test-result" style="margin:8px 0 0;font-size:12.5px" hidden></p>

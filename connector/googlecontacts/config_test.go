@@ -208,7 +208,7 @@ func TestAnUnreachableAPIIsNamedWithoutItsURL(t *testing.T) {
 	people := newFakePeople(t)
 	c := people.client()
 	people.srv.Close()
-	_, err := c.search(context.Background(), "geheim@kunde.ch", 5, readFields)
+	_, err := c.search(context.Background(), "geheim@kunde.ch", 5, readFields, 0)
 	if err == nil || strings.Contains(err.Error(), "geheim") || !strings.Contains(err.Error(), "could not be reached") {
 		t.Errorf("err = %v", err)
 	}

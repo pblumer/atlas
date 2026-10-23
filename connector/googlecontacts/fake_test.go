@@ -42,6 +42,8 @@ type fakePeople struct {
 	lastOnly map[string]bool
 	// groupPage, when set, pages contactGroups.list by this many groups.
 	groupPage int
+	// shared is the one client registry hands out.
+	shared *Client
 }
 
 func newFakePeople(t *testing.T) *fakePeople {
@@ -65,9 +67,14 @@ func (f *fakePeople) client() *Client {
 	return &Client{tokens: staticToken("tok"), base: f.srv.URL, http: f.srv.Client()}
 }
 
+// registry holds one client for this fake, as a worker's registry does for one Worker:
+// what the client keeps between calls — a warmed search, the labels — is kept here too.
 func (f *fakePeople) registry(name string) *Registry {
+	if f.shared == nil {
+		f.shared = f.client()
+	}
 	r := NewRegistry()
-	r.Register(name, f.client())
+	r.Register(name, f.shared)
 	return r
 }
 

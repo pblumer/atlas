@@ -110,8 +110,11 @@ func (f Field) MinSearchLength() int {
 	return *f.Source.MinSearchLength
 }
 
-// ActiveOnly reports whether disabled records are left out.
-func (f Field) ActiveOnly() bool { return f.Source.ActiveOnly == nil || *f.Source.ActiveOnly }
+// ActiveOnly reports whether disabled records are left out. A source without disabled
+// records leaves none out.
+func (f Field) ActiveOnly() bool {
+	return f.Provider.ActiveFilter && (f.Source.ActiveOnly == nil || *f.Source.ActiveOnly)
+}
 
 // Verify is how a submitted value is checked.
 func (f Field) Verify() string {
@@ -388,6 +391,9 @@ func field(comp map[string]any, inPath bool, form *Form, counts map[string]int) 
 	}
 	if m := src.MinSearchLength; m != nil && (*m < 0 || *m > maxMinSearchLength) {
 		return fail("minSearchLength %d is outside 0..%d", *m, maxMinSearchLength)
+	}
+	if src.ActiveOnly != nil && !prov.ActiveFilter {
+		return fail("activeOnly: %s has no disabled entries to leave out; remove it", prov.Label)
 	}
 	switch src.Verify {
 	case "", VerifyLookup, VerifyFormat:

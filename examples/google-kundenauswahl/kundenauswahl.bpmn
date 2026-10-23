@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Google Contacts: Kunden aus dem Adressbuch des Verkaufs wählen und seinen Kontakt lesen. Die Auswahl sucht über den Google-Contacts-Worker im Adressbuch (Remote-Datenquelle, ADR-0473), statt das Adressbuch vorher mit list-contacts in eine Prozessvariable zu laden.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_google_kundenauswahl" targetNamespace="http://atlas/beispiel/google-kundenauswahl">
+  <bpmn:process id="Process_google_kundenauswahl" name="Google Contacts: Kunden wählen und Kontakt lesen" isExecutable="true">
+    <bpmn:documentation>Eine Person wählt in einer Aufgabe einen Kunden aus dem Google-Adressbuch des Verkaufs; danach liest der Prozess dessen Kontakt.
+
+Warum so: Ein Adressbuch mit einigen tausend Kunden gehört nicht in eine Prozessvariable. Mit list-contacts stünde es im Ereignisprotokoll, im Zustand, in jedem Verlaufsschritt und in jeder Sicherung. Das Feld «Kunde» des Formulars ist eine Adressbuchauswahl (atlasDataSource): Es sucht beim Tippen über den Google-Contacts-Worker google_verkauf, zeigt nur Kontakte mit dem Label «Kunden», höchstens 25 Treffer, und übermittelt nur die Kontakt-ID (people/c…).
+
+Variablen: kunde schreibt das Formular; kontakt schreibt der Google-Contacts-Schritt. Der Prozess startet ohne Variablen.
+
+Voraussetzungen beim Betreiber: der Google-Contacts-Worker google_verkauf für das Adressbuch des Verkaufs, in der Console mit eingeschaltetem «Formulare dürfen suchen» (formLookups). Ohne diesen Schalter verweigert der Server die Suche, auch wenn das Formular den Worker nennt. Im Adressbuch gibt es das Label «Kunden»; heisst es anders, ist der Wert im Formular anzupassen.
+
+Grenzen: Die Suche nutzt Googles Suchindex. Ein soeben erfasster Kontakt erscheint dort erst nach einigen Minuten. Ob es einen Kunden schon gibt, entscheidet ein Prozess deshalb mit find-contacts, nicht mit dieser Auswahl.</bpmn:documentation>
+    <bpmn:startEvent id="StartEvent_1" name="Anfrage eingegangen">
+      <bpmn:outgoing>Flow_start_choose</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Activity_chooseCustomer" name="Kunde auswählen">
+      <bpmn:documentation>Nach Name, E-Mail-Adresse oder Firma suchen und genau einen Kunden auswählen. Die Suche fragt das Adressbuch bei jeder Eingabe (verzögert), nicht eine vorher geladene Liste; nichts davon wird gespeichert. Übermittelt wird nur kunde (die Kontakt-ID). Vor dem Abschluss prüft der Server die ID noch einmal im Adressbuch (verify: lookup): Gibt es den Kontakt nicht mehr oder trägt er das Label «Kunden» nicht mehr, wird die Aufgabe nicht abgeschlossen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:formDefinition formId="google-kundenauswahl" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_start_choose</bpmn:incoming>
+      <bpmn:outgoing>Flow_choose_read</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Activity_readContact" name="Kontakt lesen (Google Contacts)">
+      <bpmn:documentation>get-contact im Google-Contacts-Worker google_verkauf für den gewählten Kunden: contactId ist die Kontakt-ID aus dem Formular (= kunde). Das Ergebnis kontakt ist der Kontakt als flaches Objekt (id, Namen, E-Mail-Adressen, Telefonnummern, Firma, Adressen, Labels und eigene Felder). Zwischen Auswahl und diesem Schritt kann sich das Adressbuch ändern. Ist der Kontakt inzwischen gelöscht, wirft der Schritt GOOGLECONTACTS_CONTACT_NOT_FOUND, wenn eine Fehlergrenze diesen Code fängt; dieses Beispiel hat keine, also entsteht ein Incident.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:googleContactsConnector connector="google_verkauf" operation="get-contact" contactId="= kunde" resultVariable="kontakt" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_choose_read</bpmn:incoming>
+      <bpmn:outgoing>Flow_read_end</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="EndEvent_1" name="Kunde bekannt">
+      <bpmn:incoming>Flow_read_end</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_start_choose" sourceRef="StartEvent_1" targetRef="Activity_chooseCustomer" />
+    <bpmn:sequenceFlow id="Flow_choose_read" sourceRef="Activity_chooseCustomer" targetRef="Activity_readContact" />
+    <bpmn:sequenceFlow id="Flow_read_end" sourceRef="Activity_readContact" targetRef="EndEvent_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_google_kundenauswahl">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="152" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="122" y="225" width="96" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_chooseCustomer_di" bpmnElement="Activity_chooseCustomer">
+        <dc:Bounds x="250" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_readContact_di" bpmnElement="Activity_readContact">
+        <dc:Bounds x="400" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
+        <dc:Bounds x="562" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="538" y="225" width="84" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_start_choose_di" bpmnElement="Flow_start_choose">
+        <di:waypoint x="188" y="200" />
+        <di:waypoint x="250" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_choose_read_di" bpmnElement="Flow_choose_read">
+        <di:waypoint x="350" y="200" />
+        <di:waypoint x="400" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_read_end_di" bpmnElement="Flow_read_end">
+        <di:waypoint x="500" y="200" />
+        <di:waypoint x="562" y="200" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -131,3 +131,56 @@ test("the panel sits above form-js's properties, which keep their column's full 
   expect(g.props).toBe(g.col);
   expect(g.panelBottom).toBeLessThanOrEqual(g.propsTop);
 });
+
+// A second source (ADR-0476): a Google address book. Switching to it starts the field
+// over on the address book's own defaults and its Worker open to forms, and offers no
+// switch for disabled entries an address book does not have.
+test("switching the source to Google Contacts starts on the address book's defaults", async ({ page }) => {
+  await page.locator("#form-add-directory").click();
+  await expect(panel(page).locator("[data-field=activeOnly]")).toBeVisible();
+  await panel(page).locator("[data-field=source]").selectOption("googlecontacts/contacts");
+  await expect(panel(page).locator(".atlas-ds-head")).toContainText("Google Contacts");
+  await expect(panel(page).locator("[data-field=worker]")).toHaveValue("google_verkauf");
+  await expect(panel(page).locator("[data-field=activeOnly]")).toHaveCount(0);
+  await panel(page).locator("[data-act=f-add]").click();
+  await panel(page).locator(".atlas-ds-filter [data-field=f-property]").selectOption("groups");
+  await panel(page).locator(".atlas-ds-filter [data-field=f-mode]").selectOption("value");
+  await panel(page).locator(".atlas-ds-filter [data-field=f-value]").fill("Kunden");
+  await panel(page).locator(".atlas-ds-filter [data-field=f-value]").blur();
+  await panel(page).locator("[data-list=details][value=organization]").check();
+  await expect(panel(page).locator(".atlas-ds-problems")).toHaveCount(0);
+  const schema = await save(page);
+  const ds = fieldOf(schema, "person").atlasDataSource;
+  expect(ds).toMatchObject({
+    workerType: "googlecontacts", worker: "google_verkauf", resource: "contacts",
+    searchFields: ["displayName", "email", "organization"],
+    filters: [{ property: "groups", value: "Kunden" }],
+    option: { label: "displayName", description: "email", details: ["organization"] },
+  });
+  expect("activeOnly" in ds).toBe(false);
+});
+
+test("a new directory field starts on the source whose Worker forms may search", async ({ page }) => {
+  await page.goto("/form-editor-harness.html");
+  await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
+  await page.evaluate(() => window.__mountDirectory("contacts-only"));
+  await expect(page.locator("#form-add-directory")).toBeVisible({ timeout: 25000 });
+  await page.locator("#form-add-directory").click();
+  await expect(panel(page).locator(".atlas-ds-head")).toContainText("Google Contacts");
+  await expect(panel(page).locator("[data-field=worker]")).toHaveValue("google_verkauf");
+});
+
+test("the Validate tab previews a contacts field with made-up contacts", async ({ page }) => {
+  await page.locator("#form-add-directory").click();
+  await panel(page).locator("[data-field=source]").selectOption("googlecontacts/contacts");
+  await panel(page).locator("[data-list=details][value=organization]").check();
+  await page.locator('#form-tabs button[data-ftab="validate"]').click();
+  const preview = page.locator("#fv-form");
+  await expect(preview.locator(".atlas-rs-preview")).toBeVisible({ timeout: 15000 });
+  await preview.locator(".atlas-rs-search").fill("Mos");
+  await expect(preview.locator(".atlas-rs-list li[role=option]").first()).toBeVisible();
+  await expect(preview.locator(".atlas-rs-list li[role=option]").first()).toContainText("Marina Moser");
+  await expect(preview.locator(".atlas-rs-list li[role=option]").first()).toContainText("Moser AG");
+  const calls = await page.evaluate(() => window.__calls.map((c) => c.url));
+  expect(calls.some((u) => u.includes("/form-data/") && u.endsWith("/query"))).toBe(false);
+});

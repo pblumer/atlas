@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/pblumer/atlas/connector/clientreg"
 	"github.com/pblumer/atlas/connector/oauth2"
@@ -25,6 +27,14 @@ type Client struct {
 	tokens oauth2.TokenSource
 	base   string
 	http   *http.Client
+
+	// What a form lookup keeps between keystrokes (see lookup.go): when the search cache
+	// was last warmed, and the address book's labels as last read. A job reads both
+	// fresh; a person typing does not need either re-read on every letter.
+	mu       sync.Mutex
+	warmedAt time.Time
+	labels   []group
+	labelsAt time.Time
 }
 
 // Registry resolves a Worker name to the address book behind it. It is the worker's own
@@ -220,13 +230,45 @@ func (c *Client) connections(ctx context.Context, fields string, visit func(pers
 	}
 }
 
+// connectionsPage reads one page of the address book, continuing at token when it is
+// not empty, and answers Google's token for the page after it.
+func (c *Client) connectionsPage(ctx context.Context, fields string, size int, token string) ([]person, string, error) {
+	q := url.Values{
+		"personFields": {fields},
+		"pageSize":     {strconv.Itoa(size)},
+		"sortOrder":    {"LAST_NAME_ASCENDING"},
+	}
+	if token != "" {
+		q.Set("pageToken", token)
+	}
+	var page struct {
+		Connections   []person `json:"connections"`
+		NextPageToken string   `json:"nextPageToken"`
+	}
+	if err := c.call(ctx, "people.connections.list", http.MethodGet, "people/me/connections", q, nil, &page); err != nil {
+		return nil, "", err
+	}
+	return page.Connections, page.NextPageToken, nil
+}
+
 // search runs the People API's own contact search. Google answers it from a cache it
 // asks to be warmed first with an empty query, so search sends that request before the
-// real one; see the package doc for what it does and does not guarantee.
-func (c *Client) search(ctx context.Context, query string, size int, fields string) ([]person, error) {
-	warm := url.Values{"query": {""}, "readMask": {"names"}, "pageSize": {"1"}}
-	if err := c.call(ctx, "people.searchContacts", http.MethodGet, "people:searchContacts", warm, nil, nil); err != nil {
-		return nil, err
+// real one — unless the cache was warmed less than warmAge ago, which is how a form's
+// search, asked on every keystroke, warms it once per burst of typing rather than once
+// per letter. A job passes zero and always warms. See the package doc for what the
+// cache does and does not guarantee.
+func (c *Client) search(ctx context.Context, query string, size int, fields string, warmAge time.Duration) ([]person, error) {
+	c.mu.Lock()
+	warmed := warmAge > 0 && time.Since(c.warmedAt) < warmAge
+	c.mu.Unlock()
+	if !warmed {
+		warm := url.Values{"query": {""}, "readMask": {"names"}, "pageSize": {"1"}}
+		if err := c.call(ctx, "people.searchContacts", http.MethodGet, "people:searchContacts", warm, nil, nil); err != nil {
+			return nil, err
+		}
+		c.mu.Lock()
+		c.warmedAt = time.Now()
+		c.mu.Unlock()
 	}
 	q := url.Values{"query": {query}, "readMask": {fields}, "pageSize": {strconv.Itoa(size)}}
 	var out struct {
@@ -329,6 +371,30 @@ func (c *Client) groups(ctx context.Context) ([]group, error) {
 		}
 		token = page.NextPageToken
 	}
+}
+
+// cachedGroups is [Client.groups] read at most once per maxAge: a form's search filters
+// by label on every keystroke, and an address book's labels change when a person makes
+// one, not between two letters.
+func (c *Client) cachedGroups(ctx context.Context, maxAge time.Duration) ([]group, error) {
+	c.mu.Lock()
+	if c.labels != nil && time.Since(c.labelsAt) < maxAge {
+		out := c.labels
+		c.mu.Unlock()
+		return out, nil
+	}
+	c.mu.Unlock()
+	all, err := c.groups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if all == nil {
+		all = []group{}
+	}
+	c.mu.Lock()
+	c.labels, c.labelsAt = all, time.Now()
+	c.mu.Unlock()
+	return all, nil
 }
 
 // members reads up to max member resource names of a group, and how many it has.
