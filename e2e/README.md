@@ -354,6 +354,28 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   with padding, since headless Chromium hides scrollbars). A double-click on either
   divider restores the column's default width.
 
+- **`remote-select.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
+  the **directory field** (`api/web/remote-select.js`) on the real vendored form-js viewer,
+  with a transport the test answers itself — nothing is asked before somebody types; a search
+  waits for the department it is bound to and for the field's minimum length; loading, results,
+  an empty answer and a failure each say so; keystrokes are debounced into one request; a newer
+  term aborts the older request and a late answer is ignored; the keyboard moves through the
+  results and Enter chooses without submitting; the form submits the chosen id, not its label,
+  and refuses a missing choice; changing the department clears a choice it no longer admits;
+  Load more continues through the server's cursor; a reopened task shows who its value stands
+  for, or that the directory no longer holds it; and the preview searches made-up people.
+- **`tasks-remote-select.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
+  the same field in the **real Tasks app** against a stubbed API — the search goes to the
+  task's own lookup route, Complete sends `{abteilung, user}` with the object id, Complete
+  without a choice sends nothing, and "Back to the list" completes nothing.
+- **`form-directory-field.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
+  the **form editor's** directory field panel — **＋ Directory field** writes a data source
+  through the Worker open to forms, a plain text field becomes one bound to the department it
+  is filtered by, a Worker that does not let forms search it is named as such, an unfinished
+  filter is pointed out before Save, the field turns back into a plain one, and both the
+  Validate tab and the Design preview search made-up people and ask no directory.
+  `worker-test.spec.mjs` covers the Worker dialog's **Forms may search** switch.
+
 - **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):
   **who is signed in**, in the Users card under Organization. The column must render the
   three states from what the roster carries, and keep itself current *without* reloading

@@ -97,6 +97,9 @@ type createConnectorParams struct {
 	// (ADR-0255). Not a secret, so it travels as
 	// itself and is echoed back — it is the setting an operator changes most often.
 	Model string `json:"model"`
+	// FormLookups lets task forms search through the Worker
+	// (ADR-0473); only a kind a form can search may set it.
+	FormLookups bool `json:"formLookups"`
 }
 
 // managedConnectorKinds is the ordered registry of managed worker kinds. Order is

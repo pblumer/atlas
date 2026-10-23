@@ -259,6 +259,9 @@ var catalogSources = []catalogSource{
 		Files: []string{"exchange-austritt.bpmn"},
 	},
 	{ID: "entra-onboarding-selfservice", App: "Beispiel: Onboarding-Self-Service (Entra)", Dir: "entra-onboarding-selfservice"},
+	// A person picked from the directory by a search in the task form, not from a listing
+	// the process read first (ADR-0473).
+	{ID: "entra-benutzerauswahl", App: "Beispiel: Person wählen (Entra)", Dir: "entra-benutzerauswahl"},
 	{ID: "account-bestellung", App: "Beispiel: Account-Bestellung (Entra)", Dir: "account-bestellung"},
 	// No install: these three ship inside the binary and are deployed into the
 	// protected system project at server start, so their forms are protected system

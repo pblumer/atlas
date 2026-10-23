@@ -558,6 +558,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0470](0470-the-line-manager-is-on-the-account.md) | The line manager is a reference on the account | Accepted | Landed |
 | [0471](0471-release-architecture-sketch.md) | A release carries its architecture sketch, and a worker publishes it to Confluence | Accepted (amended) | Partial |
 | [0472](0472-event-log.md) | Atlas keeps a log of the signals and messages that were sent | Accepted (2026-10-22) | Landed |
+| [0473](0473-form-remote-data-sources.md) | A form looks remote data up through an ephemeral worker query | Accepted | Landed |
 
 ## The two states of a record
 

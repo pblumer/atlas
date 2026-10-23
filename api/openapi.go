@@ -513,6 +513,21 @@ func (s *Server) apiRoutes() []apiRoute {
 				"type": tString(), "worker": tString(), "leaseMs": tInteger(), "maxJobs": tInteger(), "waitMs": tInteger(),
 			}, "type")),
 			resp: jsonBody("The leased jobs, with the variables visible at each task", tObject())}},
+		// The Worker protocol's second message kind: a query a Worker Instance answers
+		// with its Worker's credential, held only in memory for as long as somebody
+		// waits on it — never an event, never a job (ADR-0473).
+		{"POST", "/api/v1/worker-queries/activate", s.workerQueries.HandleActivate, apiOp{
+			summary: "Lease the form lookups waiting for a Worker this Worker Instance holds, optionally long-polling — the query twin of the job pull; nothing about a query is durable", tag: "Workers", role: RoleOperator,
+			req: jsonBody("Job type, worker id, the Workers this instance holds, batch size, and how long to wait", schemaObj(map[string]any{
+				"type": tString(), "worker": tString(), "connectors": tArray(), "maxQueries": tInteger(), "waitMs": tInteger(),
+			}, "type", "worker")),
+			resp: jsonBody("The leased queries", tObject())}},
+		{"POST", "/api/v1/worker-queries/{id}/answer", s.workerQueries.HandleAnswer, apiOp{
+			summary: "Answer a leased form lookup with one page or a failure code, fenced by its lease token; 404 once its asker has stopped waiting", tag: "Workers", role: RoleOperator,
+			req: jsonBody("The holding worker id and lease token, and exactly one of page and error", schemaObj(map[string]any{
+				"worker": tString(), "leaseToken": tString(), "page": tObject(), "error": tObject(),
+			}, "worker", "leaseToken")),
+			resp: jsonBody("Query id", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/activate", s.handleActivateJob, apiOp{
 			summary: "Lease a job to an external worker for a bounded time (ADR-0007)", tag: "Incidents", role: RoleOperator,
 			req: jsonBody("Worker id and how long to hold the job", schemaObj(map[string]any{
@@ -563,6 +578,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Complete a user task", tag: "Tasks", role: RoleUser,
 			req:  jsonBody("Completion variables", schemaObj(map[string]any{"variables": tObject()})),
 			resp: jsonBody("Task key", tObject())}},
+		{"POST", "/api/v1/tasks/{key}/form-data/{field}/query", s.formLookup.HandleQuery, apiOp{
+			summary: "Search the remote data source of one directory field of a task's form: one bounded page of options from the Worker the form names, for a caller who may work on the task. The request carries only the term, the values of the form fields the source is bound to, a cursor and a page size; which Worker, resource and properties is the stored form's (ADR-0473)", tag: "Tasks", role: RoleUser,
+			req: jsonBody("Search term, bound filter values, cursor, value to resolve, page size", schemaObj(map[string]any{
+				"search": tString(), "filters": tObject(), "cursor": tString(), "value": tString(), "limit": tInteger(),
+			})),
+			resp: jsonBody("Options and the cursor of the next page", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/claim", s.handleClaimTask, apiOp{
 			summary: "Claim a user task (self, or assign a named user)", tag: "Tasks", role: RoleUser,
 			req:  jsonBody("Optional assignee (empty claims for the signed-in user)", schemaObj(map[string]any{"assignee": tString()})),
@@ -745,6 +766,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Save a form definition. \"from\" names the form being edited (empty for a never-saved one): a changed id then renames the form instead of leaving a second copy behind, and a save onto an id another form already holds is refused with 409 (ADR-0222). Omit \"from\" for the plain upsert-by-id an import or an agent wants", tag: "Forms", role: RoleModeler, req: jsonBody("Form", tObject()), resp: jsonBody("Saved form", tObject())}},
 		{"GET", "/api/v1/forms", s.handleListForms, apiOp{
 			summary: "List form definitions", tag: "Forms", role: roleAny, resp: jsonBody("Forms", tArray())}},
+		{"GET", "/api/v1/form-data/sources", s.formLookup.HandleSources, apiOp{
+			summary: "The remote data sources a form's directory field can name, what each lets a field search, filter and show, and the Workers of those types with whether each allows forms to search through it (ADR-0473)", tag: "Forms", role: RoleModeler,
+			resp: jsonBody("Sources and Workers", tObject())}},
 		{"GET", "/api/v1/forms/{id}/availability", s.handleFormIDAvailability, apiOp{
 			summary: "Report whether a form id is free — the live check behind the form editor's ID field, so a collision shows while the id is typed rather than at Save", tag: "Forms", role: RoleModeler, resp: jsonBody("Availability", tObject())}},
 		{"GET", "/api/v1/forms/{id}", s.handleGetForm, apiOp{

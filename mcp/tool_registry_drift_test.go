@@ -413,6 +413,10 @@ var mcpOmittedRoutes = map[string]string{
 	// pointed at, and never needs to hold one against other workers.
 	"POST /api/v1/jobs/{key}/activate": "worker-protocol lease, not an agent action",
 	"POST /api/v1/jobs/activate":       "worker-protocol lease (type-keyed pull), not an agent action",
+	// The query twin of the job protocol (ADR-0473): a Worker
+	// Instance's lease and answer, not an agent's action.
+	"POST /api/v1/worker-queries/activate":    "worker-protocol lease of a form lookup, not an agent action",
+	"POST /api/v1/worker-queries/{id}/answer": "worker-protocol answer to a leased form lookup, fenced by a lease an agent never holds",
 	// The same category: a mail worker running a preview worker hands the framed
 	// message back to this server's outbox (ADR-0168). An agent reads the outbox with
 	// atlas_mail_outbox; putting a message *into* it would be inventing a preview of
@@ -893,6 +897,13 @@ var mcpOmittedRoutes = map[string]string{
 	// only invite an agent to ask first and then race the answer.
 	"GET /api/v1/drafts/{id}/availability": "a live check for a field being typed; an agent learns the same thing from the save's 409",
 	"GET /api/v1/forms/{id}/availability":  "a live check for a field being typed; an agent learns the same thing from the save's 409",
+	// A person's directory search inside a task form, keystroke by keystroke and rate
+	// limited per person (ADR-0473). An agent completing the
+	// task submits the entry's id, and completion checks it against the directory the
+	// same way it checks a person's — so the agent loses nothing it needs, and the
+	// directory behind a Worker's credential is not made browsable by a tool.
+	"POST /api/v1/tasks/{key}/form-data/{field}/query": "a person's interactive directory search inside a task form; an agent submits the id and completion verifies it",
+	"GET /api/v1/form-data/sources":                    "the form editor's picker feed for a directory field; an agent authors the form's atlasDataSource and the save checks it",
 
 	// Decision drafts (ADR-0321): the Modeler's holding place for a
 	// decision an author has not finished. Its whole purpose is that nothing else

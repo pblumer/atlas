@@ -7255,6 +7255,32 @@ button.im-problem:hover { background: var(--accent-soft); }
 .package-answers .package-question label { display: grid; gap: 4px; }
 .package-answers .package-answer { max-width: 100%; }
 
+/* The form editor's remote data source panel (remote-select-editor.js,
+   ADR-0473): above form-js's own properties, for a selected
+   textfield. */
+.atlas-ds-panel { padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--surface); font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
+.atlas-ds-panel[hidden] { display: none; }
+/* form-js lays its properties column out as a row; with the panel shown, stack it above
+   the properties panel instead of squeezing that panel aside, and let each scroll. */
+.fjs-pgl-properties-container:has(> .atlas-ds-panel:not([hidden])) { flex-direction: column; }
+.fjs-pgl-properties-container > .atlas-ds-panel { flex: 0 0 auto; max-height: 55%; overflow-y: auto; box-sizing: border-box; }
+.fjs-pgl-properties-container:has(> .atlas-ds-panel:not([hidden])) > .fjs-properties-container { flex: 1 1 0; min-height: 0; }
+.atlas-ds-head { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.atlas-ds-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.atlas-ds-row > span:first-child { min-width: 96px; color: var(--muted); }
+.atlas-ds-row select, .atlas-ds-row input[type=number], .atlas-ds-filter select, .atlas-ds-filter input[type=text] { font: inherit; padding: 3px 6px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface); color: var(--text); max-width: 100%; }
+.atlas-ds-row input[type=number] { width: 64px; }
+.atlas-ds-group { border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.atlas-ds-group legend { color: var(--muted); padding: 0 4px; }
+.atlas-ds-check { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; }
+.atlas-ds-filter { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.atlas-ds-hint { color: var(--muted); margin: 0; font-size: 12px; }
+.atlas-ds-warn { color: var(--warn); background: var(--warn-soft); border-radius: 4px; padding: 6px 8px; margin: 0; font-size: 12px; }
+.atlas-ds-problems { color: var(--danger); margin: 0; padding-left: 18px; font-size: 12px; }
+/* The directory field's own warn states (form-theme.css lays the field out): the
+   preview's "example data" note and a chosen id the directory no longer resolves. */
+.fjs-container .atlas-rs-preview { background: var(--warn-soft); color: var(--warn); }
+.fjs-container .atlas-rs-selected.atlas-rs-unknown { border-color: var(--warn); background: var(--warn-soft); }
 /* The event log (web/eventlog.js): a reception, start or keeping sits under the send it
    shares a cause with, so the send reads as the head of its group. */
 .el-row.el-child td { border-top-color: transparent; }

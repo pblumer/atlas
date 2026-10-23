@@ -302,6 +302,9 @@ func (s *Server) handlePublicWizardComplete(w http.ResponseWriter, r *http.Reque
 		httpapi.Error(w, http.StatusBadRequest, "not fields of this form: "+strings.Join(bad, ", "))
 		return
 	}
+	if refuseDirectoryFieldInPublic(w, schema) {
+		return
+	}
 	if err := s.encipherJobVars(taskKey, vars); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return

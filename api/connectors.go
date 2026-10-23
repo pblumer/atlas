@@ -763,6 +763,10 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	if p.Kind != connectorKindMail {
 		p.MailboxEndpoint = "" // a mail-only field, cleared like Provider and Sender are
 	}
+	if p.FormLookups && !formLookupKind(p.Kind) {
+		httpapi.Error(w, http.StatusBadRequest, refuseFormLookups(p.Kind))
+		return
+	}
 	// And the one rule a pure validator cannot state, because it depends on a stored
 	// setting: whether a database needs a connection string at all. The read rides the
 	// run loop, which owns the settings store (I3).
@@ -783,6 +787,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		CredentialsRef: p.CredentialsRef, Enabled: enabled,
 		Provider: p.Provider, Sender: p.Sender, Model: p.Model,
 		MailboxEndpoint: p.MailboxEndpoint,
+		FormLookups:     p.FormLookups,
 		CreatedAt:       time.Now().Unix(),
 		// Whoever made it owns it, and it starts private (ADR-0205). Private is the
 		// only defensible default for a thing that may hold a personal mailbox; what
@@ -862,6 +867,9 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		// makes the Worker a sender only again (ADR-0438).
 		MailboxEndpoint *string `json:"mailboxEndpoint"`
 		Enabled         *bool   `json:"enabled"`
+		// FormLookups opens the Worker to task forms' directory searches, or closes it
+		// (ADR-0473). An editor's act, like the credential.
+		FormLookups *bool `json:"formLookups"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -912,6 +920,13 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		}
 		if p.Enabled != nil {
 			rec.Enabled = *p.Enabled
+		}
+		if p.FormLookups != nil {
+			if *p.FormLookups && !formLookupKind(rec.Kind) {
+				badRequest = refuseFormLookups(rec.Kind)
+				return
+			}
+			rec.FormLookups = *p.FormLookups
 		}
 		// The updated record has to satisfy what a create would have demanded of it —
 		// an SMTP endpoint that dials, a provider that has a credential — or the change

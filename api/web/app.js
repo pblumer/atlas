@@ -46,6 +46,7 @@ import { runImport } from "./infomodel-import.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
 import { formRefusalNames, loadFormViewer, scrollToFirstInvalidField } from "./formviewer.js";
+import { attachRemoteSelects, taskTransport } from "./remote-select.js";
 // A start form does not replace the start variables declared on the process: the ones
 // it does not ask for are asked beneath it, with the Modeler's typed fields.
 import { uncoveredStartVariables, extraStartFieldsHTML, wireStartJSONEditors, readTypedDeployBody, keepConstantNameInCapitals } from "./startvars.js";
@@ -8519,6 +8520,7 @@ async function viewTasks(preselectKey) {
     me: authOn ? ((AUTH.user && AUTH.user.username) || "") : (localStorage.getItem("atlas.tasks.me") || ""),
     assignable: [], // enabled users a task can be assigned to, for the picker
     mountedForm: null, // the live form-js viewer instance for the selected task, if any
+    mountedLookups: null, // the searches attached to its directory fields, if any
     mountedProc: null, // the read-only process-view handle for the selected task, if mounted
     detailTab: "form", // which detail tab shows — "form" | "process" (kept across selections)
     query: "", // free-text filter over the visible tasks (name/process/assignee/…)
@@ -9139,6 +9141,12 @@ async function viewTasks(preselectKey) {
   // destroyForm tears down the live form-js instance (if any) before the detail
   // pane is re-rendered or the selection changes, so no viewer leaks.
   function destroyForm() {
+    // The directory fields' searches first: they hold requests and listeners on the
+    // form being torn down (ADR-0473).
+    if (state.mountedLookups) {
+      try { state.mountedLookups.destroy(); } catch { /* already gone */ }
+      state.mountedLookups = null;
+    }
     if (state.mountedForm) {
       try { state.mountedForm.destroy(); } catch { /* already gone */ }
       state.mountedForm = null;
@@ -9215,6 +9223,11 @@ async function viewTasks(preselectKey) {
       await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
+      // A directory field searches its remote data source through this task: the
+      // server checks that this person may work on it and reads which Worker and which
+      // properties from the stored form (ADR-0473). A form
+      // without one attaches nothing.
+      state.mountedLookups = attachRemoteSelects(form, host, { transport: taskTransport(t.key), data: data || {} });
       // The variables the form was filled from, kept beside it. Completing the task
       // needs one the form does not render — which catalogue a picked logo belongs
       // to — and reading it back off the submitted data would only find the fields

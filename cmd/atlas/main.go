@@ -1355,7 +1355,7 @@ func runWorker(args []string) error {
 		return err
 	}
 	installOutboundProxy(os.Getenv)
-	if len(handles) == 0 && len(builtin.Handlers) == 0 {
+	if len(handles) == 0 && len(builtin.Handlers) == 0 && len(builtin.Queries) == 0 {
 		// Nothing to serve. For a worker an operator ran by hand this is a typo, and
 		// saying so and stopping is right. For a supervised one it is an ordinary
 		// state — a mail worker on a server with no mail worker yet — and the
@@ -1386,6 +1386,9 @@ func runWorker(args []string) error {
 		Server: strings.TrimRight(*server, "/"), ID: *id, Token: *token,
 		Handlers: execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
 		Connectors: builtin.Names,
+		// The form lookups the configured kinds answer, for the same Workers
+		// (ADR-0473).
+		Queries: builtin.Queries,
 	}
 	if serverRoots != nil {
 		// Only where a CA was named: otherwise worker.New builds the client, and a

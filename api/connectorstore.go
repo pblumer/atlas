@@ -150,6 +150,15 @@ type configuredWorker struct {
 	// startup, which is why validateAgentConnector insists on one for that protocol.
 	Model string `json:"model,omitempty"`
 
+	// FormLookups lets a task form search through this Worker: a person typing into a
+	// directory field of a form that names it sees entries of its directory
+	// (ADR-0473). It is the Worker's editors' decision, off
+	// until one of them makes it, because it puts the Worker's credential behind every
+	// task form that names it — and being able to see or edit a form is not
+	// permission to search a directory with somebody else's credential. Only a kind a
+	// remote data source is offered for (entra) may carry it.
+	FormLookups bool `json:"formLookups,omitempty"`
+
 	// Ownership and sharing (ADR-0205, measure M11). The three fields are ADR-0071's
 	// for a project, reused verbatim rather than reinvented, so a group grant
 	// (ADR-0180) works here with no further thought and there is one sharing

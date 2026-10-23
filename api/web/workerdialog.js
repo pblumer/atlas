@@ -152,6 +152,11 @@ export function workerShape(kind, provider) {
   return {
     mail,
     sql,
+    // An Entra Worker can let task forms search its directory — a directory field of a
+    // form that names it (ADR-0473). It is a switch on the
+    // Worker because it puts this Worker's credential behind every such form, and that
+    // is its editors' decision, not the form author's.
+    formLookups: entra,
     // An SMTP mail Worker can name an IMAP endpoint, which is what lets it read the
     // mailbox it sends from (ADR-0438). Gmail and Graph read through the
     // API they send with; preview has no mailbox at all.
@@ -369,6 +374,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
             <label class="field conn-f-connstr" style="flex:1 1 100%"><span>Connection string</span><input id="conn-connstr" type="password" autocomplete="new-password"/></label>
           </div>
           <label class="conn-enabled"><input type="checkbox" id="conn-enabled"${c.enabled ? " checked" : ""}/> <span>Enabled — a disabled worker is skipped, and its tasks park</span></label>
+          <label class="conn-formlookups"><input type="checkbox" id="conn-formlookups"${c.formLookups ? " checked" : ""}/> <span>Forms may search — a directory field of a task form that names this Worker searches its directory with this Worker's credential, and shows name, mail and the properties the form names to whoever may work on the task</span></label>
           <p class="muted conn-hint" style="margin:8px 0 0;font-size:12.5px"></p>
           <div class="conn-setup" style="margin:10px 0 0">${workerKindDocHTML(c.kind)}</div>
           <p class="conn-test-result" style="margin:8px 0 0;font-size:12.5px" hidden></p>
@@ -390,6 +396,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
     const credRefIn = ov.querySelector("#conn-credref");
     const connStrIn = ov.querySelector("#conn-connstr");
     const enabledIn = ov.querySelector("#conn-enabled");
+    const formLookupsIn = ov.querySelector("#conn-formlookups");
     const testOut = ov.querySelector(".conn-test-result");
 
     // The kind's shape as stored, read once: it says whether this kind has a provider
@@ -423,6 +430,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
       show(".conn-f-name", create);
       show(".conn-f-connstr", create && sh.sql);
       show(".conn-enabled", !create);
+      show(".conn-formlookups", !create && sh.formLookups);
       show(".conn-f-test", sh.test);
       endpointIn.placeholder = sh.endpointPlaceholder;
       ov.querySelector(".conn-credref-label").textContent = sh.credRefLabel;
@@ -497,6 +505,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
         return;
       }
       const patch = { enabled: enabledIn.checked };
+      if (sh.formLookups) patch.formLookups = formLookupsIn.checked;
       if (sh.endpoint) patch.endpoint = endpointIn.value.trim();
       if (sh.credRef !== "none") patch.credentialsRef = credRefIn.value.trim();
       if (sh.mail) {
