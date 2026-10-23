@@ -230,6 +230,15 @@ The single writer must never block. Service tasks therefore never call external 
 
 This keeps the processor at full speed and makes external work naturally at-least-once, with idempotency handled via job keys. See [ADR-0007](adr/0007-job-worker-protocol.md).
 
+The same Worker Instances answer a second, **non-durable** kind of message: a *worker
+query*. A person searching a directory from a task form is not work the process depends
+on, so it is not a job — nothing is appended to the log, nothing is replayed, and the
+processor never sees it. The HTTP request that asks holds the query in an in-memory broker
+beside the engine; a Worker Instance holding the named Worker leases it, answers with one
+bounded page under its own credential, and the broker hands the page back to the waiting
+request. Only the value the person finally submits becomes durable, through the ordinary
+task completion. See [ADR-draft-form-remote-data-sources](adr/draft-form-remote-data-sources.md).
+
 ## BPMN coverage
 
 The target is full BPMN 2.0 execution semantics. Coverage is delivered in phases (see the [roadmap](../ROADMAP.md)):

@@ -22,6 +22,8 @@ import { makeIdCheck } from "./idcheck.js";
 import { generationWorkers, openFormGenerator } from "./formgen-dialog.js";
 import { ensureFormStyles } from "./formviewer.js";
 import { fromTail, noteFormSaved } from "./form-return.js";
+import { attachRemoteSelects, previewTransport } from "./remote-select.js";
+import { addDirectoryField, attachDataSourcePanel } from "./remote-select-editor.js";
 
 const FORM_CSS = "vendor/form-js/form-playground.css";
 
@@ -117,6 +119,8 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
         <span class="id-warn" id="form-id-warn" hidden></span>
         <div style="flex:1"></div>
         <span class="muted" id="form-status"></span>
+        <button class="btn ghost" id="form-add-directory" hidden
+          title="Add a field that searches a directory and submits the id of the entry chosen">＋ Directory field</button>
         <button class="btn ghost" id="form-generate" hidden
           title="Write this form from a description and from the process it belongs to">✨ Generate</button>
         <button class="btn" id="form-save" title="Save this form">Save</button>
@@ -337,10 +341,44 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     if (ed && typeof ed.on === "function") {
       ed.on("changed", syncIdentity);
       if (baseline === null) baseline = snapshot(); // the form as opened, as form-js holds it
+      wireDirectoryFields(ed);
       return;
     }
     if (tries < 40) idWatchTimer = setTimeout(() => followDesignEdits(tries + 1), 50);
   })();
+
+  // ---- Directory fields --------------------------------------------------------
+  // A textfield can search a remote data source instead of taking free text
+  // (ADR-draft-form-remote-data-sources). The panel above form-js's properties
+  // edits its atlasDataSource block; the button adds a new one. Both read what this
+  // server offers — the sources and the Workers of their types — once per editor.
+  let dataSources = null;
+  let dsPanel = null;
+  let designPreview = null;
+  async function wireDirectoryFields(ed) {
+    try { dataSources = await api("GET", "/api/v1/form-data/sources"); } catch { dataSources = null; }
+    if (gen !== generation || !dataSources) return;
+    dsPanel = attachDataSourcePanel(container, ed, dataSources);
+    const addBtn = root.querySelector("#form-add-directory");
+    addBtn.hidden = !(dataSources.providers && dataSources.providers.length);
+    addBtn.addEventListener("click", async () => {
+      if (activeTab !== "design") await setTab("design");
+      addDirectoryField(ed, dataSources);
+    });
+    // The Design pane's own preview shows the field with made-up people too, never a
+    // live directory: a design-time preview must not reach a production Worker.
+    try {
+      const pf = panes.design.pg.getForm();
+      const attach = () => {
+        if (designPreview) designPreview.destroy();
+        // The preview form's own element, not the editor canvas beside it: both sit
+        // in a .fjs-pgl-form-container, and the canvas renders fields too.
+        const host = pf._container || [...container.querySelectorAll(".fjs-pgl-form-container")].pop() || container;
+        designPreview = attachRemoteSelects(pf, host, { transport: previewTransport(), preview: true });
+      };
+      if (pf && typeof pf.on === "function") { pf.on("import.done", attach); attach(); }
+    } catch { /* the playground's preview is a convenience */ }
+  }
 
   // commit pulls the outgoing pane's edits back into the shared schema, bumping
   // `rev` only when the value actually changed (so an unchanged round-trip does
@@ -492,7 +530,11 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
         p.viewer = new Form({ container: host });
         p.viewer.on("changed", (ev) => renderOutput(ev.data, ev.errors));
       }
+      if (p.lookups) { p.lookups.destroy(); p.lookups = null; }
       await p.viewer.importSchema(schema, currentInputData());
+      // A directory field previews with made-up people and says so; nothing is asked
+      // of a directory while a form is being designed.
+      p.lookups = attachRemoteSelects(p.viewer, host, { transport: previewTransport(), preview: true, data: currentInputData() });
       renderOutput(currentInputData(), null);
     } catch (e) {
       host.innerHTML = `<p class="muted err">Could not render this form: ${esc(e.message)}</p>`;
@@ -721,6 +763,9 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
       clearTimeout(reseedTimer);
       clearTimeout(idWatchTimer);
       idCheck.dispose();
+      if (dsPanel) { try { dsPanel.destroy(); } catch { /* ignore */ } }
+      if (designPreview) { try { designPreview.destroy(); } catch { /* ignore */ } }
+      if (panes.validate.lookups) { try { panes.validate.lookups.destroy(); } catch { /* ignore */ } }
       if (panes.design.pg) { try { panes.design.pg.destroy(); } catch { /* ignore */ } }
       if (panes.validate.viewer) { try { panes.validate.viewer.destroy(); } catch { /* ignore */ } }
       if (panes.validate.input) { try { panes.validate.input.destroy(); } catch { /* ignore */ } }

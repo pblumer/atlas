@@ -31,6 +31,7 @@ Derived from the Graph request each operation issues (`connector/entra/offload.g
 |---|---|---|
 | `create-user`, `update-user`, `delete-user`, `enable`, `disable`, `reset-password` | `POST` / `PATCH` / `DELETE /users/{id}` | **`User.ReadWrite.All`** |
 | `get-user`, `get-user-manager`, `list-users`, `delta-users` | `GET /users[/{id}][/delta]` — the manager as `GET /users/{id}?$expand=manager` | `User.Read.All` (subset of `User.ReadWrite.All`) |
+| A form's directory field (lookup, not an operation) | `GET /users?$filter=…&$select=…&$top=…`, and `GET /users/{id}?$select=…` to check a submitted id | `User.Read.All` — and the Worker's **Forms may search** switch in the Console ([ADR-draft-form-remote-data-sources](adr/draft-form-remote-data-sources.md)) |
 | `assign-license` | `POST /users/{id}/assignLicense` | `User.ReadWrite.All` — no `Organization.Read.All` needed, the worker sends explicit `skuId`s rather than enumerating SKUs |
 | `add-group-member`, `remove-group-member` | `POST` / `DELETE /groups/{id}/members` | **`GroupMember.ReadWrite.All`** (tighter) or `Group.ReadWrite.All` |
 | `create-group`, `update-group`, `delete-group`, `add-group-owner`, `remove-group-owner` | `POST` / `PATCH` / `DELETE /groups[/{id}/owners]` | **`Group.ReadWrite.All`** |

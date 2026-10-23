@@ -3020,6 +3020,107 @@
       ]
     },
     {
+      "id": "entra-benutzerauswahl",
+      "path": "entra-benutzerauswahl",
+      "app": "Beispiel: Person wählen (Entra)",
+      "processes": [
+        {
+          "processId": "Process_mvjoqvisfajk",
+          "name": "Entra ID: Person wählen und Vorgesetzten lesen",
+          "file": "entra-benutzerauswahl/benutzerauswahl.bpmn",
+          "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003c!--\nEntra ID: Person aus dem Verzeichnis wählen und ihren Vorgesetzten lesen. Die Auswahl sucht im Verzeichnis über den Entra-Worker (Remote-Datenquelle, ADR-draft-form-remote-data-sources), statt das Verzeichnis vorher mit list-users in eine Prozessvariable zu laden.\n--\u003e\n\u003cbpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n                  xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n                  xmlns:atlas=\"http://atlas/schema/1.0\"\n                  xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n                  xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\"\n                  xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\"\n                  id=\"Definitions_entra_benutzerauswahl\" targetNamespace=\"http://atlas/beispiel/entra-benutzerauswahl\"\u003e\n  \u003cbpmn:process id=\"Process_mvjoqvisfajk\" name=\"Entra ID: Person wählen und Vorgesetzten lesen\" isExecutable=\"true\"\u003e\n    \u003cbpmn:documentation\u003eEine Person wählt in einer Aufgabe eine Abteilung und darin eine Person aus Microsoft Entra ID; danach liest der Prozess deren Vorgesetzten.\n\nWarum so: Die frühere Fassung las mit list-users zuerst das ganze Verzeichnis in die Variable userList und bot es im Formular zur Auswahl an. Bei mehreren tausend Konten stand damit das Verzeichnis im Ereignisprotokoll, im Zustand, in jedem Verlaufsschritt und in jeder Sicherung, und list-users bricht über seinem maxUsers-Grenzwert absichtlich ab. Diese Fassung braucht den Schritt Activity_getUser nicht mehr: Das Feld «Person» des Formulars ist eine Verzeichnisauswahl (atlasDataSource). Es sucht beim Tippen über den Entra-Worker ucc_entra im Verzeichnis, zeigt höchstens 25 Treffer und übermittelt nur die unveränderliche Objekt-ID der gewählten Person.\n\nVariablen: abteilung und user schreibt das Formular; vorgesetzter schreibt der Entra-Schritt. Der Prozess startet ohne Variablen.\n\nVoraussetzungen beim Betreiber: der Entra-Worker ucc_entra mit User.Read.All, in der Console mit eingeschaltetem «Formulare dürfen suchen» (formLookups). Ohne diesen Schalter verweigert der Server die Suche, auch wenn das Formular den Worker nennt. Die Abteilungen im Formular müssen so geschrieben sein wie das Attribut department im Verzeichnis.\u003c/bpmn:documentation\u003e\n    \u003cbpmn:startEvent id=\"StartEvent_1\" name=\"Auswahl nötig\"\u003e\n      \u003cbpmn:outgoing\u003eFlow_start_choose\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:startEvent\u003e\n    \u003cbpmn:userTask id=\"Activity_chooseUser\" name=\"User auswählen\"\u003e\n      \u003cbpmn:documentation\u003eAbteilung wählen, dann nach Name oder E-Mail-Adresse suchen und genau eine Person auswählen. Die Suche fragt das Verzeichnis bei jeder Eingabe (verzögert), nicht eine vorher geladene Liste; nichts davon wird gespeichert. Übermittelt werden nur abteilung und user (die Objekt-ID). Vor dem Abschluss prüft der Server die ID noch einmal im Verzeichnis (verify: lookup): Gibt es die Person nicht mehr oder gehört sie nicht zur gewählten Abteilung, wird die Aufgabe nicht abgeschlossen.\n\nLehrreich: Abbrechen schliesst die Aufgabe nicht ab und bricht sie nicht ab; es verlässt nur das Formular.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:formDefinition formId=\"entra-benutzerauswahl\" /\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003eFlow_start_choose\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003eFlow_choose_manager\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:userTask\u003e\n    \u003cbpmn:serviceTask id=\"Activity_1jjn1v5\" name=\"Vorgesetzten lesen (Entra ID)\"\u003e\n      \u003cbpmn:documentation\u003eget-user-manager im Entra-Worker ucc_entra für die gewählte Person: userId ist die Objekt-ID aus dem Formular (= user). Das Ergebnis vorgesetzter ist das Verzeichnisobjekt des Vorgesetzten, hier nur mit seiner id (select=\"id\"); hat die Person keinen Vorgesetzten, ist vorgesetzter null. Die Auswahl im Formular ist kein Vorgesetzter: Zwischen Auswahl und diesem Schritt kann sich das Verzeichnis ändern.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003catlas:entraConnector connector=\"ucc_entra\" operation=\"get-user-manager\" userId=\"= user\" select=\"id\" resultVariable=\"vorgesetzter\" /\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003eFlow_choose_manager\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003eFlow_manager_end\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:serviceTask\u003e\n    \u003cbpmn:endEvent id=\"EndEvent_1\" name=\"Vorgesetzter bekannt\"\u003e\n      \u003cbpmn:incoming\u003eFlow_manager_end\u003c/bpmn:incoming\u003e\n    \u003c/bpmn:endEvent\u003e\n    \u003cbpmn:sequenceFlow id=\"Flow_start_choose\" sourceRef=\"StartEvent_1\" targetRef=\"Activity_chooseUser\" /\u003e\n    \u003cbpmn:sequenceFlow id=\"Flow_choose_manager\" sourceRef=\"Activity_chooseUser\" targetRef=\"Activity_1jjn1v5\" /\u003e\n    \u003cbpmn:sequenceFlow id=\"Flow_manager_end\" sourceRef=\"Activity_1jjn1v5\" targetRef=\"EndEvent_1\" /\u003e\n  \u003c/bpmn:process\u003e\n  \u003cbpmndi:BPMNDiagram id=\"BPMNDiagram_1\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"BPMNPlane_1\" bpmnElement=\"Process_mvjoqvisfajk\"\u003e\n      \u003cbpmndi:BPMNShape id=\"StartEvent_1_di\" bpmnElement=\"StartEvent_1\"\u003e\n        \u003cdc:Bounds x=\"152\" y=\"182\" width=\"36\" height=\"36\" /\u003e\n        \u003cbpmndi:BPMNLabel\u003e\n          \u003cdc:Bounds x=\"134\" y=\"225\" width=\"72\" height=\"14\" /\u003e\n        \u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"Activity_chooseUser_di\" bpmnElement=\"Activity_chooseUser\"\u003e\n        \u003cdc:Bounds x=\"250\" y=\"160\" width=\"100\" height=\"80\" /\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"Activity_1jjn1v5_di\" bpmnElement=\"Activity_1jjn1v5\"\u003e\n        \u003cdc:Bounds x=\"400\" y=\"160\" width=\"100\" height=\"80\" /\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"EndEvent_1_di\" bpmnElement=\"EndEvent_1\"\u003e\n        \u003cdc:Bounds x=\"562\" y=\"182\" width=\"36\" height=\"36\" /\u003e\n        \u003cbpmndi:BPMNLabel\u003e\n          \u003cdc:Bounds x=\"526\" y=\"225\" width=\"108\" height=\"14\" /\u003e\n        \u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNEdge id=\"Flow_start_choose_di\" bpmnElement=\"Flow_start_choose\"\u003e\n        \u003cdi:waypoint x=\"188\" y=\"200\" /\u003e\n        \u003cdi:waypoint x=\"250\" y=\"200\" /\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"Flow_choose_manager_di\" bpmnElement=\"Flow_choose_manager\"\u003e\n        \u003cdi:waypoint x=\"350\" y=\"200\" /\u003e\n        \u003cdi:waypoint x=\"400\" y=\"200\" /\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"Flow_manager_end_di\" bpmnElement=\"Flow_manager_end\"\u003e\n        \u003cdi:waypoint x=\"500\" y=\"200\" /\u003e\n        \u003cdi:waypoint x=\"562\" y=\"200\" /\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/bpmn:definitions\u003e"
+        }
+      ],
+      "forms": [
+        {
+          "id": "entra-benutzerauswahl",
+          "name": "entra-benutzerauswahl",
+          "file": "entra-benutzerauswahl/form-entra-benutzerauswahl.json",
+          "schema": {
+            "type": "default",
+            "id": "entra-benutzerauswahl",
+            "schemaVersion": 16,
+            "components": [
+              {
+                "type": "text",
+                "id": "Text_einleitung",
+                "text": "**Person auswählen · Select a person**\n\nWähle zuerst die Abteilung und suche dann nach Name oder E-Mail-Adresse. Die Suche läuft im Verzeichnis, nicht in diesem Formular. · Choose the department first, then search by name or e-mail address. The search runs in the directory, not in this form."
+              },
+              {
+                "type": "select",
+                "id": "Field_abteilung",
+                "key": "abteilung",
+                "label": "Abteilung · Department",
+                "description": "Die Werte müssen so geschrieben sein wie das Attribut «department» im Verzeichnis. · The values must be spelled as the directory's department attribute.",
+                "validate": {
+                  "required": true
+                },
+                "values": [
+                  {
+                    "label": "IT",
+                    "value": "IT"
+                  },
+                  {
+                    "label": "Finanzen · Finance",
+                    "value": "Finance"
+                  },
+                  {
+                    "label": "Personal · HR",
+                    "value": "HR"
+                  },
+                  {
+                    "label": "Vertrieb · Sales",
+                    "value": "Sales"
+                  }
+                ],
+                "properties": {
+                  "personal": "false"
+                }
+              },
+              {
+                "type": "textfield",
+                "id": "Field_user",
+                "key": "user",
+                "label": "Person",
+                "description": "Name oder E-Mail-Adresse, mindestens zwei Zeichen. · Name or e-mail address, at least two characters.",
+                "validate": {
+                  "required": true
+                },
+                "atlasDataSource": {
+                  "version": 1,
+                  "workerType": "entra",
+                  "worker": "ucc_entra",
+                  "resource": "users",
+                  "searchFields": [
+                    "displayName",
+                    "mail",
+                    "userPrincipalName"
+                  ],
+                  "filters": [
+                    {
+                      "property": "department",
+                      "field": "abteilung",
+                      "required": true
+                    }
+                  ],
+                  "option": {
+                    "label": "displayName",
+                    "description": "mail",
+                    "details": [
+                      "department"
+                    ]
+                  },
+                  "pageSize": 25,
+                  "minSearchLength": 2,
+                  "verify": "lookup"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "account-bestellung",
       "path": "account-bestellung",
       "app": "Beispiel: Account-Bestellung (Entra)",

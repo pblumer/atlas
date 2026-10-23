@@ -2218,12 +2218,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">43</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">44</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">43</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">44</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -2456,6 +2456,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <td data-l="de">Fachbereich bestellt selbst, Admin gibt frei</td><td data-l="en">The department orders, an admin approves</td>
             <td><span class="tag err">Entra&nbsp;ID</span></td>
             <td data-l="de">Optionale Schritte übersprungen, ohne Zweigwald</td><td data-l="en">Optional steps skipped without a thicket of branches</td></tr>
+          <tr><td><a href="#bsp-entra-benutzerauswahl" data-l="de">Person wählen</a><a href="#bsp-entra-benutzerauswahl" data-l="en">Pick a person</a></td>
+            <td data-l="de">Eine Person aus dem Verzeichnis wählen und ihren Vorgesetzten lesen</td><td data-l="en">Pick a person from the directory and read their manager</td>
+            <td><span class="tag err">Entra&nbsp;ID</span></td>
+            <td data-l="de">Im Formular suchen statt das Verzeichnis in eine Variable laden</td><td data-l="en">Search in the form instead of loading the directory into a variable</td></tr>
           <tr><td><a href="#bsp-account-bestellung">Account-Bestellung</a></td>
             <td data-l="de">Bestellung von einer beliebigen Website aus, DMN bestimmt das Profil</td><td data-l="en">Ordering from any website, with DMN deciding the profile</td>
             <td><span class="tag err">Entra&nbsp;ID</span></td>
@@ -5049,6 +5053,69 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="rz-status" role="status" aria-live="polite"></div>
       </div>
 
+      <div class="bsp" id="bsp-entra-benutzerauswahl">
+        <h4><span class="rz-emoji" aria-hidden="true">🔎</span>
+          <span data-l="de">Person wählen: im Verzeichnis suchen statt es laden</span><span data-l="en">Pick a person: search the directory instead of loading it</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">Entra ID</span>
+          <span class="tag" data-l="de">Verzeichnisauswahl</span><span class="tag" data-l="en">directory field</span>
+          <span class="tag">get-user-manager</span>
+          <span class="tag">examples/entra-benutzerauswahl/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Jemand wählt in einer Aufgabe zuerst eine Abteilung und sucht dann nach Name oder
+              E-Mail-Adresse eine Person aus Microsoft Entra ID; danach liest der Prozess ihren Vorgesetzten. Die
+              frühere Fassung las dafür mit <code>list-users</code> zuerst das ganze Verzeichnis in eine Variable. Bei
+              einigen tausend Konten stand das Verzeichnis dann im Verlauf, im Zustand und in jeder Sicherung, und das
+              Formular filterte eine Liste, die schon veraltet war, als die Aufgabe geöffnet wurde.</p>
+            <p data-l="en">Someone in a task first chooses a department and then searches Microsoft Entra ID for a
+              person by name or e-mail address; the process then reads that person's manager. The earlier version read
+              the whole directory into a variable with <code>list-users</code> first. With a few thousand accounts the
+              directory then sat in the history, in the state and in every backup, and the form filtered a list that
+              was out of date by the time the task was opened.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Das Feld «Person» ist ein Textfeld mit einer <b>Verzeichnisauswahl</b>
+              (<code>atlasDataSource</code>): Beim Tippen fragt der Server über den Entra-Worker <code>ucc_entra</code>
+              im Verzeichnis nach, gefiltert nach der gewählten Abteilung, und zeigt höchstens 25 Treffer. Übermittelt
+              wird nur die Objekt-ID nach <code>user</code>; <code>get-user-manager</code> liest daraus mit
+              <code>userId="= user"</code> den Vorgesetzten nach <code>vorgesetzter</code>. Die Suchen landen nicht im
+              Ereignisprotokoll – nur die Auswahl. Vor dem Abschluss prüft der Server die ID noch einmal im
+              Verzeichnis. Das Formular kann den Worker nur nennen: Suchen darf es erst, wenn beim Worker in der
+              Console «Formulare dürfen suchen» eingeschaltet ist.</p>
+            <p data-l="en">The «Person» field is a text field with a <b>directory field</b> configuration
+              (<code>atlasDataSource</code>): as the person types, the server searches the directory through the Entra
+              Worker <code>ucc_entra</code>, filtered by the chosen department, and shows at most 25 matches. Only the
+              object id is submitted, into <code>user</code>; <code>get-user-manager</code> reads the manager from it
+              with <code>userId="= user"</code> into <code>vorgesetzter</code>. The searches never reach the event log
+              – only the choice does. Before the task completes, the server checks the id in the directory once more.
+              The form can only name the Worker: searching works once «Forms may search» is switched on for the Worker
+              in the Console.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="bsp-more">
+          <summary><span data-l="de">Was du vor der Inbetriebnahme einrichtest</span><span data-l="en">What to set up before you use it</span></summary>
+          <p data-l="de">Den Entra-Worker <code>ucc_entra</code> mit der Anwendungsberechtigung
+            <code>User.Read.All</code>, in der Console mit eingeschaltetem «Formulare dürfen suchen». Die Abteilungen im
+            Formular sind feste Werte und müssen so geschrieben sein wie das Attribut <code>department</code> im
+            Verzeichnis: Microsoft Graph kennt keine Abfrage, die alle vorkommenden Abteilungen liefert. Die Suche
+            beginnt mit dem Anfang von Anzeigename, E-Mail-Adresse oder Benutzerprinzipalname; «Müller» findet «Anna
+            Müller» also über die E-Mail-Adresse oder den Nachnamen, wenn du <code>surname</code> mitsuchen lässt.</p>
+          <p data-l="en">The Entra Worker <code>ucc_entra</code> with the application permission
+            <code>User.Read.All</code>, with «Forms may search» switched on in the Console. The departments in the form
+            are fixed values and must be spelled as the directory's <code>department</code> attribute: Microsoft Graph
+            has no query that returns every department in use. The search matches the start of the display name, the
+            e-mail address or the user principal name; «Müller» therefore finds «Anna Müller» through her e-mail
+            address, or through her surname if you let the field search <code>surname</code> too.</p>
+        </details>
+      </div>
+
       <div class="bsp" id="bsp-entra-onboarding-selfservice">
         <h4><span class="rz-emoji" aria-hidden="true">🙋</span>
           <span data-l="de">Onboarding-Self-Service mit Freigabe</span><span data-l="en">Onboarding self-service with an approval</span></h4>
@@ -5832,6 +5899,49 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         one that answers inside a running process — one address, one key in the vault, one place to change the model.
         The browser never sees the key, and <b>no case data from running instances</b> goes to a model this way: what
         is read is the process's model, not its operation.</p>
+
+      <div id="verzeichnisauswahl" style="scroll-margin-top:66px"></div>
+      <h4 data-l="de">Eine Person aus dem Verzeichnis wählen (Verzeichnisauswahl)</h4><h4 data-l="en">Picking a person from the directory (directory field)</h4>
+      <p data-l="de">Ein Textfeld kann statt freiem Text eine <b>Suche im Verzeichnis</b> anbieten: Im Formular-Editor
+        fügt <b>＋ Directory field</b> ein solches Feld hinzu, oder du wählst ein Textfeld und drückst im Bereich
+        <b>Remote data source</b> über seinen Eigenschaften auf <b>Search a remote data source</b>. Dort legst du fest,
+        welcher Worker sucht (heute ein Entra-Worker), worin gesucht wird (Anzeigename, E-Mail-Adresse,
+        Benutzerprinzipalname …), was jeder Treffer zeigt, wie viele Treffer eine Seite hat und ob ein anderes Feld
+        die Suche eingrenzt – etwa eine Abteilung, die die Person vorher wählt. In der Aufgabe tippt die Person
+        mindestens zwei Zeichen, sieht höchstens eine Seite Treffer und wählt genau einen Eintrag. Übermittelt wird
+        nur dessen ID, nie der angezeigte Name.</p>
+      <p data-l="en">A text field can offer a <b>directory search</b> instead of free text: in the form editor,
+        <b>＋ Directory field</b> adds one, or you select a text field and press <b>Search a remote data source</b> in
+        the <b>Remote data source</b> area above its properties. There you choose which Worker searches (an Entra Worker
+        today), what is searched (display name, e-mail address, user principal name …), what each match shows, how many
+        matches a page holds, and whether another field narrows the search – a department the person chooses first, for
+        instance. In the task the person types at least two characters, sees at most one page of matches and picks
+        exactly one entry. Only its id is submitted, never the name shown.</p>
+      <p data-l="de"><b>Was das Formular nicht entscheidet.</b> Das Formular nennt den Worker nur. Suchen darf es erst,
+        wenn beim Worker in der Console <b>Forms may search</b> eingeschaltet ist – denn gesucht wird mit dessen
+        Zugangsdaten. Suchen darf nur, wer die Aufgabe bearbeiten darf. Welche Eigenschaften gesucht und gezeigt werden,
+        liest der Server aus dem gespeicherten Formular; eine Anfrage, die einen anderen Worker, Mandanten oder eine
+        Adresse nennt, wird abgelehnt. Die Suchen werden nicht gespeichert und landen nicht im Verlauf – nur die
+        gewählte ID. Vor dem Abschluss prüft der Server sie noch einmal im Verzeichnis; gibt es den Eintrag nicht mehr,
+        wird die Aufgabe nicht abgeschlossen, und ist das Verzeichnis gerade nicht erreichbar, auch nicht.</p>
+      <p data-l="en"><b>What the form does not decide.</b> The form only names the Worker. It may search once
+        <b>Forms may search</b> is switched on for that Worker in the Console – the search runs with its credentials.
+        Only somebody who may work on the task may search. Which properties are searched and shown, the server reads from
+        the stored form; a request naming another Worker, tenant or address is refused. Searches are not stored and do
+        not reach the history – only the chosen id does. Before the task completes, the server checks it in the
+        directory once more; if the entry is gone, the task is not completed, and neither is it while the directory
+        cannot be reached.</p>
+      <p data-l="de"><b>Grenzen.</b> Die Verzeichnisauswahl gibt es in Aufgabenformularen. In einem Startformular und
+        in einem öffentlichen Formular ist niemand angemeldet, der suchen dürfte: Dort ist das Feld ein gewöhnliches
+        Textfeld, und ein öffentlicher Link lehnt ein solches Formular ab. Abteilungen sind feste Auswahlwerte, weil
+        Microsoft Graph keine Abfrage aller vorkommenden Abteilungen kennt. Im Editor und in der Vorschau sucht das Feld
+        in erfundenen Beispieldaten, nie im echten Verzeichnis. Ein Beispiel ist
+        <a href="#bsp-entra-benutzerauswahl">Person wählen</a>.</p>
+      <p data-l="en"><b>Limits.</b> The directory field works in task forms. In a start form and in a public form
+        nobody is signed in who could search: there the field is an ordinary text field, and a public link refuses such
+        a form. Departments are fixed choices, because Microsoft Graph has no query for every department in use. In the
+        editor and its preview the field searches made-up example data, never the real directory. An example is
+        <a href="#bsp-entra-benutzerauswahl">Pick a person</a>.</p>
 
       <div id="wizards" style="scroll-margin-top:66px"></div>
       <h4 data-l="de">Mehrstufige Formulare (Wizards)</h4><h4 data-l="en">Multi-step forms (wizards)</h4>
@@ -11744,7 +11854,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">43</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">43</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">44</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">44</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>

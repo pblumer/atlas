@@ -321,14 +321,50 @@ Every refusal is the API's error envelope with a machine-readable `code` beside
   - **Graph's order is Graph's.** Without an advanced query Graph does not sort a
     filtered listing, so the first page is the first 25 matches in Graph's order, not
     alphabetically the first 25.
-  - **Only task forms.** A lookup needs a task to authorize against; a start form, a
-    public link and a repair form render the field as the plain text field it is.
+  - **Only task forms.** A lookup needs a task to authorize against. A start form in the
+    Console and a repair form render the field as the plain text field it is, with no
+    search and no check of the value; a public start link and a public wizard step
+    refuse a form with such a field, because nobody there is signed in to search and a
+    check would answer anonymous visitors who is in the directory.
 - **Follow-ups / risks to watch:**
   - Groups and administrative units as resources, and dynamic department discovery if
     Graph ever offers it.
   - `$search` as an opt-in search mode for tenants that want word matching and accept
     eventual consistency.
   - The same channel serves ADR-0220's connection check for worker-only kinds.
+
+### As built
+
+- `connector/lookup` — the wire shape: `Query`, `Filter`, `Page`, the failure codes and
+  the bounds every lookup keeps (50 per page at most, 25 by default, 64 characters per
+  term, 128 per value).
+- `connector/entra/lookup.go` — `LookupResources` (the allowlist), `CheckLookup`,
+  `RunLookup` and `ValidLookupValue`; `GraphError` carries `Retry-After`.
+- `api/workerquery` — the broker (`Ask`, `Lease`, `Answer`, presence) and the two worker
+  routes; `worker/query.go` — the Worker Instance's query loop beside its job loop,
+  `Options.Queries`; the Entra Worker Type registers its lookup there.
+- `api/formlookup` — the `atlasDataSource` schema and its checks (`Parse`, `Check`), the
+  provider registry, the sealed cursor, `HandleQuery`, `HandleSources` and
+  `CheckSubmission`; `api/formlookups.go` is its reach into the server (the task question,
+  the Worker store, the broker, the rate limit).
+- `configuredWorker.FormLookups` (`formLookups`) on a Worker record, settable only for a
+  kind a provider exists for; the Console's Worker dialog shows it for Entra.
+- Completion (`handleCompleteTask`) checks directory fields after the task question and
+  before the command; the public start link and the public wizard step refuse a form with
+  one; the form save refuses an `atlasDataSource` the server cannot honour.
+- `api/web/remote-select.js` — the Tasks app's search on a directory field;
+  `api/web/remote-select-editor.js` — the form editor's panel and **＋ Directory field**,
+  with the Validate tab and the Design preview on made-up people.
+- `examples/entra-benutzerauswahl` — `Process_mvjoqvisfajk` without `list-users`.
+
+Tested by `connector/entra/lookup_test.go` (filter construction, escaping, allowlist,
+paging, value lookups, failure codes), `api/workerquery` (lease, fencing, deadlines,
+cancellation, presence, bounds), `worker/query_test.go`, `api/formlookup` (schema,
+request validation, cursor, error mapping, submission), `api/formlookup_http_test.go` (the
+example end to end against a recorded Graph with a real Worker Instance, the security
+doors, a restart before and after the choice with the log position unchanged by
+searches), and the Playwright specs `remote-select`, `tasks-remote-select`,
+`form-directory-field` and `worker-test`.
 
 ## Pros and cons of the options
 

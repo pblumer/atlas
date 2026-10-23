@@ -111,6 +111,11 @@ api/        HTTP API, web UI, command submission and queries
               whose stages they perform, with the realisation edge resolved at read
               time and the gap report computed against what this server runs
               (ADR-0305)
+  formlookup/ A task form's remote data sources: the directory field's schema, the
+              provider registry, the task-bound lookup route and the check before
+              completion (ADR-draft-form-remote-data-sources)
+  workerquery/ The Worker protocol's non-durable query beside the job: an in-memory
+              broker Worker Instances lease from, never the log
   formgen/    Writing a form from a description and from the process it belongs to
               (ADR-0260) — design-time authoring against the agent
               Worker an operator configured; it owns no state, so it holds no run loop
