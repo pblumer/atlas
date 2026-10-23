@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,8 +39,7 @@ func loginDayServer(t *testing.T) (*Server, *httptest.Server) {
 	return srv, ts
 }
 
-// saveAda writes the ordinary account the tests sign in as. Its UpdatedAt is a value
-// no handler would write, so a test can tell whether anything rewrote it.
+// saveAda writes the ordinary account the tests sign in as.
 func saveAda(t *testing.T, srv *Server) {
 	t.Helper()
 	hash, err := hashPassword("ada-password")
@@ -76,44 +76,19 @@ func signIn(t *testing.T, ts *httptest.Server, username, password string) (int, 
 	return resp.StatusCode, c
 }
 
-// storedUser reads an account as the store holds it now.
-func storedUser(t *testing.T, srv *Server, id string) (User, bool) {
+// recordedDay reads an account's login day as the store holds it.
+func recordedDay(t *testing.T, srv *Server, id string) string {
 	t.Helper()
-	var (
-		u   User
-		ok  bool
-		err error
-	)
-	srv.do(func() { u, ok, err = srv.users.Get(id) })
+	day, err := srv.lastLogins.get(id)
 	if err != nil {
-		t.Fatalf("get %s: %v", id, err)
+		t.Fatalf("read login day of %s: %v", id, err)
 	}
-	return u, ok
+	return day
 }
 
-// TestALoginRecordsTheDayAndNothingElse is the feature: after somebody signs in, the
-// roster says on which day, and that is the only thing the login changed about the
-// account.
-func TestALoginRecordsTheDayAndNothingElse(t *testing.T) {
-	srv, ts := loginDayServer(t)
-
-	if code, _ := signIn(t, ts, "ada", "ada-password"); code != http.StatusOK {
-		t.Fatalf("ada login = %d, want 200", code)
-	}
-	srv.flushLoginDates()
-
-	u, ok := storedUser(t, srv, "u-ada")
-	if !ok {
-		t.Fatal("ada's account is gone")
-	}
-	if u.LastLoginDate != "2026-10-23" {
-		t.Errorf("LastLoginDate = %q, want 2026-10-23 — the UTC day of 00:30 in Zurich on the 24th", u.LastLoginDate)
-	}
-	if u.UpdatedAt != 7 {
-		t.Errorf("UpdatedAt = %d, want 7: signing in is not changing the account", u.UpdatedAt)
-	}
-
-	// The administrator's roster carries it, beside presence.
+// rosterDays reads the administrator's roster and returns user id → lastLoginDate.
+func rosterDays(t *testing.T, ts *httptest.Server) map[string]string {
+	t.Helper()
 	code, admin := signIn(t, ts, "root", "rootpassword12")
 	if code != http.StatusOK {
 		t.Fatalf("root login = %d, want 200", code)
@@ -123,6 +98,9 @@ func TestALoginRecordsTheDayAndNothingElse(t *testing.T) {
 		t.Fatalf("roster: %v", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("roster = %d, want 200", resp.StatusCode)
+	}
 	var roster []struct {
 		ID            string `json:"id"`
 		LastLoginDate string `json:"lastLoginDate"`
@@ -130,17 +108,49 @@ func TestALoginRecordsTheDayAndNothingElse(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&roster); err != nil {
 		t.Fatalf("decode roster: %v", err)
 	}
-	found := false
+	out := map[string]string{}
 	for _, r := range roster {
-		if r.ID == "u-ada" {
-			found = true
-			if r.LastLoginDate != "2026-10-23" {
-				t.Errorf("roster lastLoginDate for ada = %q, want 2026-10-23", r.LastLoginDate)
-			}
-		}
+		out[r.ID] = r.LastLoginDate
 	}
-	if !found {
-		t.Fatal("ada is missing from the roster")
+	return out
+}
+
+// TestALoginRecordsTheDayBeforeItAnswers is the feature: once the login has
+// answered, its day is on disk and the roster says it — nothing is left for later
+// that a restore, an edit or a check could run into.
+func TestALoginRecordsTheDayBeforeItAnswers(t *testing.T) {
+	srv, ts := loginDayServer(t)
+
+	if code, _ := signIn(t, ts, "ada", "ada-password"); code != http.StatusOK {
+		t.Fatalf("ada login = %d, want 200", code)
+	}
+	if got := recordedDay(t, srv, "u-ada"); got != "2026-10-23" {
+		t.Errorf("recorded day = %q, want 2026-10-23 — the UTC day of 00:30 in Zurich on the 24th", got)
+	}
+	if got := rosterDays(t, ts)["u-ada"]; got != "2026-10-23" {
+		t.Errorf("roster lastLoginDate for ada = %q, want 2026-10-23", got)
+	}
+}
+
+// TestALoginLeavesTheAccountRecordAlone: the day is beside the account, not on it.
+// Signing in is using an account, not changing it, and a login that rewrote the
+// record would race every other writer of it.
+func TestALoginLeavesTheAccountRecordAlone(t *testing.T) {
+	srv, ts := loginDayServer(t)
+	before, err := os.ReadFile(srv.users.FileFor("u-ada"))
+	if err != nil {
+		t.Fatalf("read account: %v", err)
+	}
+
+	if code, _ := signIn(t, ts, "ada", "ada-password"); code != http.StatusOK {
+		t.Fatalf("login = %d, want 200", code)
+	}
+	after, err := os.ReadFile(srv.users.FileFor("u-ada"))
+	if err != nil {
+		t.Fatalf("read account: %v", err)
+	}
+	if string(after) != string(before) {
+		t.Errorf("the login rewrote the account record:\nbefore %s\nafter  %s", before, after)
 	}
 }
 
@@ -152,23 +162,21 @@ func TestARefusedLoginRecordsNothing(t *testing.T) {
 	if code, _ := signIn(t, ts, "ada", "not-her-password"); code != http.StatusUnauthorized {
 		t.Fatalf("wrong password = %d, want 401", code)
 	}
-	srv.flushLoginDates()
-
-	u, _ := storedUser(t, srv, "u-ada")
-	if u.LastLoginDate != "" {
-		t.Errorf("LastLoginDate = %q after a refused login, want none", u.LastLoginDate)
+	if got := recordedDay(t, srv, "u-ada"); got != "" {
+		t.Errorf("recorded day = %q after a refused login, want none", got)
 	}
 }
 
-// TestALoginDayIsWrittenAfterTheLoopIsFree: the login does not wait for the run
-// loop (ADR-0265), and the day it leaves behind is not lost because of that — it
-// lands on the loop's next turn.
-func TestALoginDayIsWrittenAfterTheLoopIsFree(t *testing.T) {
+// TestRecordingTheDayDoesNotNeedTheRunLoop: the login does not wait for the loop
+// (ADR-0265), and neither does the day it records — it is on disk while the loop is
+// still held.
+func TestRecordingTheDayDoesNotNeedTheRunLoop(t *testing.T) {
 	srv, ts := loginDayServer(t)
 
 	held, release := make(chan struct{}), make(chan struct{})
 	go srv.do(func() { close(held); <-release })
 	<-held
+	defer close(release)
 
 	done := make(chan int, 1)
 	go func() { code, _ := signIn(t, ts, "ada", "ada-password"); done <- code }()
@@ -178,32 +186,10 @@ func TestALoginDayIsWrittenAfterTheLoopIsFree(t *testing.T) {
 			t.Fatalf("login = %d, want 200", code)
 		}
 	case <-time.After(10 * time.Second):
-		close(release)
-		t.Fatal("the login waited for the run loop to record its day")
+		t.Fatal("the login waited for the run loop")
 	}
-
-	close(release)
-	srv.flushLoginDates()
-	if u, _ := storedUser(t, srv, "u-ada"); u.LastLoginDate != "2026-10-23" {
-		t.Errorf("LastLoginDate = %q once the loop was free, want 2026-10-23", u.LastLoginDate)
-	}
-}
-
-// TestALoginTheSameDayAsksForNoWrite: a person who signs in five times a day is one
-// write, not five. The record already says today, so there is nothing to note.
-func TestALoginTheSameDayAsksForNoWrite(t *testing.T) {
-	// No writer goroutine here, so whatever is noted stays in the map to be looked at.
-	s := &Server{sessions: newSessionStore(time.Hour), loginDates: newLoginDates()}
-	s.sessions.now = func() time.Time { return lateEveningInZurich }
-
-	s.noteLogin(User{ID: "u-ada", LastLoginDate: "2026-10-23"})
-	if got := s.loginDates.take(); len(got) != 0 {
-		t.Errorf("a second login on the same day noted %v, want nothing", got)
-	}
-
-	s.noteLogin(User{ID: "u-ada", LastLoginDate: "2026-10-22"})
-	if got := s.loginDates.take(); got["u-ada"] != "2026-10-23" {
-		t.Errorf("the first login of a new day noted %v, want u-ada → 2026-10-23", got)
+	if got := recordedDay(t, srv, "u-ada"); got != "2026-10-23" {
+		t.Errorf("recorded day while the loop is held = %q, want 2026-10-23", got)
 	}
 }
 
@@ -211,93 +197,91 @@ func TestALoginTheSameDayAsksForNoWrite(t *testing.T) {
 // arrives last. Two logins either side of midnight, or a clock corrected backwards,
 // must not make an account look less recently used than it is.
 func TestALoginDayNeverMovesBack(t *testing.T) {
-	l := newLoginDates()
-	l.note("u-ada", "2026-10-23")
-	l.note("u-ada", "2026-10-22")
-	if got := l.take()["u-ada"]; got != "2026-10-23" {
-		t.Errorf("pending after an older note = %q, want 2026-10-23", got)
-	}
-
 	srv, _ := loginDayServer(t)
-	srv.do(func() { srv.recordLoginDates(map[string]string{"u-ada": "2026-10-23"}) })
-	srv.do(func() { srv.recordLoginDates(map[string]string{"u-ada": "2026-10-20"}) })
-	if u, _ := storedUser(t, srv, "u-ada"); u.LastLoginDate != "2026-10-23" {
-		t.Errorf("stored after an older write = %q, want 2026-10-23", u.LastLoginDate)
+
+	for _, day := range []string{"2026-10-23", "2026-10-20", "2026-10-23"} {
+		if err := srv.lastLogins.record("u-ada", day); err != nil {
+			t.Fatalf("record %s: %v", day, err)
+		}
+	}
+	if got := recordedDay(t, srv, "u-ada"); got != "2026-10-23" {
+		t.Errorf("recorded day after an older write = %q, want 2026-10-23", got)
+	}
+	if err := srv.lastLogins.record("u-ada", "2026-10-24"); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	if got := recordedDay(t, srv, "u-ada"); got != "2026-10-24" {
+		t.Errorf("recorded day after a later write = %q, want 2026-10-24", got)
 	}
 }
 
-// TestALoginDayDoesNotBringBackADeletedAccount: an administrator may delete an
-// account between its login and the write of that login's day. The write must find
-// nothing to do — a day is not a reason for a record to exist.
-func TestALoginDayDoesNotBringBackADeletedAccount(t *testing.T) {
+// TestTwoBrowsersSigningInAtOnceLeaveOneWholeRecord: the same person in two tabs is
+// two concurrent writes of one key, and the record they leave must still be one that
+// reads.
+func TestTwoBrowsersSigningInAtOnceLeaveOneWholeRecord(t *testing.T) {
 	srv, _ := loginDayServer(t)
 
-	var delErr error
-	srv.do(func() { delErr = srv.users.Delete("u-ada") })
-	if delErr != nil {
-		t.Fatalf("delete: %v", delErr)
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			// Alternate between two days so that both the skip and the write are taken.
+			day := "2026-10-23"
+			if i%2 == 0 {
+				day = "2026-10-24"
+			}
+			if err := srv.lastLogins.record("u-ada", day); err != nil {
+				t.Errorf("record: %v", err)
+			}
+		}(i)
 	}
-	srv.do(func() { srv.recordLoginDates(map[string]string{"u-ada": "2026-10-23"}) })
-	if _, ok := storedUser(t, srv, "u-ada"); ok {
-		t.Error("recording a login day recreated a deleted account")
+	wg.Wait()
+	if got := recordedDay(t, srv, "u-ada"); got != "2026-10-24" {
+		t.Errorf("recorded day = %q, want the later 2026-10-24", got)
 	}
 }
 
-// TestALoginDayKeepsAnEditMadeAfterTheLogin: the login read the account before an
-// administrator disabled it; the day written afterwards must not carry that older
-// copy back over the edit.
-func TestALoginDayKeepsAnEditMadeAfterTheLogin(t *testing.T) {
-	srv, _ := loginDayServer(t)
-
-	before, _ := storedUser(t, srv, "u-ada") // what the login read
-	srv.loginDates.note(before.ID, "2026-10-23")
-
-	// The edit, in its own turn, before the day is written.
-	var saveErr error
-	srv.do(func() {
-		u, _, _ := srv.users.Get("u-ada")
-		u.Disabled = true
-		saveErr = srv.users.Save(u)
-	})
-	if saveErr != nil {
-		t.Fatalf("disable: %v", saveErr)
-	}
-	srv.flushLoginDates()
-
-	u, _ := storedUser(t, srv, "u-ada")
-	if !u.Disabled {
-		t.Error("writing the login day re-enabled an account an administrator had disabled")
-	}
-	if u.LastLoginDate != "2026-10-23" {
-		t.Errorf("LastLoginDate = %q, want 2026-10-23", u.LastLoginDate)
-	}
-}
-
-// TestAnUnreadableAccountDoesNotStopTheOthers: one record that cannot be read is
-// that record's problem. The days of every other account in the same write still
-// land, and the login that noted it has long since succeeded.
-func TestAnUnreadableAccountDoesNotStopTheOthers(t *testing.T) {
-	srv, _ := loginDayServer(t)
-	if err := os.WriteFile(srv.users.FileFor("u-broken"), []byte("{not json"), 0o644); err != nil {
-		t.Fatalf("write corrupt record: %v", err)
+// TestADeletedAccountKeepsNoDay: deleting an account deletes its login day with it,
+// and a login that read the account before the delete writes nothing after it.
+func TestADeletedAccountKeepsNoDay(t *testing.T) {
+	srv, ts := loginDayServer(t)
+	if code, _ := signIn(t, ts, "ada", "ada-password"); code != http.StatusOK {
+		t.Fatalf("login = %d, want 200", code)
 	}
 
-	srv.do(func() {
-		srv.recordLoginDates(map[string]string{"u-broken": "2026-10-23", "u-ada": "2026-10-23"})
-	})
-	if u, _ := storedUser(t, srv, "u-ada"); u.LastLoginDate != "2026-10-23" {
-		t.Errorf("ada's day = %q beside an unreadable record, want 2026-10-23", u.LastLoginDate)
+	code, admin := signIn(t, ts, "root", "rootpassword12")
+	if code != http.StatusOK {
+		t.Fatalf("root login = %d, want 200", code)
+	}
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/users/u-ada", nil)
+	resp, err := admin.Do(req)
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete = %d, want 204", resp.StatusCode)
+	}
+	if _, err := os.Stat(srv.lastLogins.store.FileFor("u-ada")); !os.IsNotExist(err) {
+		t.Errorf("the deleted account's login day is still on disk (stat err %v)", err)
+	}
+
+	// The login that read ada just before the delete now gets to write its day.
+	if err := srv.lastLogins.record("u-ada", "2026-10-25"); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	if got := recordedDay(t, srv, "u-ada"); got != "" {
+		t.Errorf("a login racing the delete recorded %q for an account that is gone", got)
 	}
 }
 
-// TestALoginDaySurvivesARestart: unlike presence, the day is on the account record,
-// and a login right before the server stops is not lost with the process — Close
-// writes what the writer had not reached yet.
-func TestALoginDaySurvivesARestart(t *testing.T) {
+// TestADayLeftBehindIsPrunedAtStartup: whatever left a day for an account that no
+// longer exists, the next start removes it, and keeps the days of accounts that do.
+func TestADayLeftBehindIsPrunedAtStartup(t *testing.T) {
 	t.Setenv("ATLAS_ADMIN_USERNAME", "root")
 	t.Setenv("ATLAS_ADMIN_PASSWORD", "rootpassword12")
 	dir := t.TempDir()
-
 	open := func() (*Server, func()) {
 		log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
 		if err != nil {
@@ -319,19 +303,70 @@ func TestALoginDaySurvivesARestart(t *testing.T) {
 	}
 
 	srv, stop := open()
-	srv.sessions.now = func() time.Time { return lateEveningInZurich }
 	saveAda(t, srv)
-	ts := httptest.NewServer(srv.Handler())
-	if code, _ := signIn(t, ts, "ada", "ada-password"); code != http.StatusOK {
-		t.Fatalf("login = %d, want 200", code)
+	for _, rec := range []lastLogin{{UserID: "u-ada", Date: "2026-10-23"}, {UserID: "u-gone", Date: "2026-03-01"}} {
+		if err := srv.lastLogins.store.Save(rec); err != nil {
+			t.Fatalf("save %s: %v", rec.UserID, err)
+		}
 	}
-	ts.Close()
-	stop() // no flush: whatever the writer has not done, Close must
+	stop()
 
 	srv, stop = open()
 	defer stop()
-	if u, _ := storedUser(t, srv, "u-ada"); u.LastLoginDate != "2026-10-23" {
-		t.Errorf("LastLoginDate after a restart = %q, want 2026-10-23", u.LastLoginDate)
+	if got := recordedDay(t, srv, "u-gone"); got != "" {
+		t.Errorf("an account that does not exist still has the day %q after a restart", got)
+	}
+	if got := recordedDay(t, srv, "u-ada"); got != "2026-10-23" {
+		t.Errorf("ada's day after a restart = %q, want 2026-10-23 — pruning took a live account's day", got)
+	}
+}
+
+// TestAnUnreadableDayDoesNotTakeTheRosterDown: the roster is the page an
+// administrator fixes things from. One login day that cannot be read leaves that row
+// without one; every other row, and the page, stay.
+func TestAnUnreadableDayDoesNotTakeTheRosterDown(t *testing.T) {
+	srv, ts := loginDayServer(t)
+	if err := os.WriteFile(srv.lastLogins.store.FileFor("u-ada"), []byte("{not json"), 0o644); err != nil {
+		t.Fatalf("write corrupt record: %v", err)
+	}
+
+	days := rosterDays(t, ts) // root signs in here, so root has a day
+	if days["u-ada"] != "" {
+		t.Errorf("ada's unreadable day rendered as %q, want none", days["u-ada"])
+	}
+	rootHasDay := false
+	for id, day := range days {
+		if id != "u-ada" && day == "2026-10-23" {
+			rootHasDay = true
+		}
+	}
+	if !rootHasDay {
+		t.Errorf("roster days = %v, want the administrator's own login beside ada's unreadable one", days)
+	}
+
+	// And the next login replaces the torn record rather than failing on it.
+	if code, _ := signIn(t, ts, "ada", "ada-password"); code != http.StatusOK {
+		t.Fatalf("login = %d, want 200", code)
+	}
+	if got := recordedDay(t, srv, "u-ada"); got != "2026-10-23" {
+		t.Errorf("recorded day after a login over a torn record = %q, want 2026-10-23", got)
+	}
+}
+
+// TestAFailedWriteDoesNotFailTheLogin: the person is signed in whether or not the
+// day could be written, and the next login writes it again.
+func TestAFailedWriteDoesNotFailTheLogin(t *testing.T) {
+	srv, ts := loginDayServer(t)
+	dir := srv.lastLogins.store.Dir()
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatalf("remove store: %v", err)
+	}
+	if err := os.WriteFile(dir, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("block store: %v", err)
+	}
+
+	if code, _ := signIn(t, ts, "ada", "ada-password"); code != http.StatusOK {
+		t.Fatalf("login with an unwritable login-day store = %d, want 200", code)
 	}
 }
 
@@ -347,14 +382,12 @@ func TestAFederatedLoginRecordsTheDayToo(t *testing.T) {
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("callback = %d, want 302", resp.StatusCode)
 	}
-	srv.flushLoginDates()
-
 	u, ok := accountBySubject(t, srv, "subject-1")
 	if !ok {
 		t.Fatal("the federated login created no account")
 	}
-	if u.LastLoginDate != "2026-10-23" {
-		t.Errorf("LastLoginDate = %q after a federated login, want 2026-10-23", u.LastLoginDate)
+	if got := recordedDay(t, srv, u.ID); got != "2026-10-23" {
+		t.Errorf("recorded day after a federated login = %q, want 2026-10-23", got)
 	}
 }
 
@@ -367,24 +400,23 @@ func TestADisabledAccountsFederatedAttemptRecordsNothing(t *testing.T) {
 
 	first := federate(t, ts, idp, noRedirects(t))
 	first.Body.Close()
-	srv.flushLoginDates()
 	u, ok := accountBySubject(t, srv, "subject-1")
 	if !ok {
 		t.Fatal("first login created no account")
 	}
 	u.Disabled = true
-	u.LastLoginDate = "2026-01-01"
 	var saveErr error
 	srv.do(func() { saveErr = srv.users.Save(u) })
 	if saveErr != nil {
 		t.Fatalf("disable: %v", saveErr)
 	}
+	if err := srv.lastLogins.forget(u.ID); err != nil {
+		t.Fatalf("clear day: %v", err)
+	}
 
-	srv.sessions.now = func() time.Time { return lateEveningInZurich }
 	second := federate(t, ts, idp, noRedirects(t))
 	second.Body.Close()
-	srv.flushLoginDates()
-	if u, _ := accountBySubject(t, srv, "subject-1"); u.LastLoginDate != "2026-01-01" {
-		t.Errorf("LastLoginDate = %q after a refused federated login, want it left at 2026-01-01", u.LastLoginDate)
+	if got := recordedDay(t, srv, u.ID); got != "" {
+		t.Errorf("recorded day = %q after a refused federated login, want none", got)
 	}
 }

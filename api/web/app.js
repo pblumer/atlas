@@ -2852,7 +2852,7 @@ async function viewConsoleOrg() {
           administrators see it: <b>online</b> means somebody did something in the last five minutes,
           <b>idle</b> that a session is open but untouched, <b>offline</b> that no browser is reporting.
           It is read from the live sessions and never stored — a restart shows nobody.` : ""}${showLastLogin ? ` <b>Last login</b>
-          is the day an account last signed in, kept on the account so that an account nobody uses any more
+          is the day an account last signed in, kept per account so that an account nobody uses any more
           stands out. It is a calendar day (UTC) and nothing finer: it says whether an account is in use, not
           when anybody starts work — the audit log has the exact time of every login.` : ""}</p>
         <div id="user-form-slot" style="padding:0 18px"></div>

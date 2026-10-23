@@ -54,10 +54,11 @@ governs a Worker:
   overwrites it at the next one: it says whether an account is in use, never when
   anybody starts work, and the audit log keeps the exact time of every login. The
   roster and `GET /api/v1/users` carry it as `lastLoginDate`; signing in still never
-  waits for the run loop. Accounts show "no login recorded" until their first login
-  after the upgrade, and an account used only through an API token or an AI client
-  never signs in here
-  ([ADR-draft-last-login-day](docs/adr/draft-last-login-day.md)).
+  waits for the run loop, and never rewrites the account record. The data directory
+  gains a store, `last-logins`, which a whole-instance snapshot carries with the
+  accounts. Accounts show "no login recorded" until their first login after the
+  upgrade, and an account used only through an API token or an AI client never signs
+  in here ([ADR-draft-last-login-day](docs/adr/draft-last-login-day.md)).
 
 - **Approvals in the Console.** **Approvals** (account menu, and a tile on the dashboard
   when some wait) lists the open action approvals a person may answer and the ones asked on

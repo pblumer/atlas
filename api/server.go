@@ -478,10 +478,10 @@ type Server struct {
 	// mutex; it is not engine state and does not persist (ADR-0044).
 	sessions *sessionStore
 
-	// loginDates carries the day of each login from the sign-in path, which never
-	// waits for the run loop, to the account records, which are only written on it
-	// (ADR-draft-last-login-day, lastlogin.go).
-	loginDates *loginDates
+	// lastLogins is the day each account last signed in, beside the account rather
+	// than on it. Written by the sign-in path off the run loop and serialised by its
+	// own mutex, like sessions (ADR-draft-last-login-day, lastlogin.go).
+	lastLogins *lastLoginStore
 
 	// collab holds live collaborative-editing sessions on drafts in memory
 	// (ADR-0140). Like sessions it is reached from concurrent handler goroutines
@@ -1528,6 +1528,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	lastLogins, err := newLastLoginStore(filepath.Join(dataDir, "last-logins"), users)
+	if err != nil {
+		return nil, err
+	}
 	groups, err := newGroupStore(filepath.Join(dataDir, "groups"))
 	if err != nil {
 		return nil, err
@@ -1704,13 +1708,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		checkpointKeep:    checkpointKeepDefault,    // published checkpoints kept; WithCheckpointRetention overrides (ADR-0131)
 		vaultEnabled:      true,                     // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:             users,
+		lastLogins:        lastLogins,
 		groups:            groups,
 		directorySync:     directorySync,
 		inventoryLoads:    inventoryLoads,
 		discrepancies:     discrepancies,
 		recertifications:  recertifications,
 		sessions:          newSessionStore(defaultSessionTTL),
-		loginDates:        newLoginDates(),
 		oidcStates:        newOIDCStateStore(),
 		collab:            collab.NewRegistry(),
 		collabKeepalive:   collab.KeepaliveInterval,
@@ -2084,6 +2088,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		if err := s.upgradeLegacyRoles(time.Now().Unix()); err != nil {
 			return nil, err
 		}
+		// A login day left behind by an account that is gone is removed before anybody
+		// can sign in (lastlogin.go). Reported and not fatal: it is a convenience
+		// column, and it must not be what keeps a server from starting.
+		if err := s.lastLogins.prune(); err != nil {
+			logging.Warn(logging.AuthLoginDateUnrecorded, "login days of deleted accounts could not be pruned",
+				slog.String("error", err.Error()))
+		}
 		token, err := randomHex(32)
 		if err != nil {
 			return nil, err
@@ -2375,12 +2386,6 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// run loop: sessions own their own writers.
 	s.wg.Add(1)
 	go s.playgroundReaper(s.playgroundSweep)
-	// A login leaves the day it happened on for this writer, which puts it on the
-	// account in a run-loop turn of its own, so that signing in never waits for the
-	// loop (ADR-0265, ADR-draft-last-login-day). Tracked, because Close
-	// writes whatever the writer had not reached and must know it has stopped first.
-	s.wg.Add(1)
-	go s.loginDateWriter()
 	// The clio inbound bridge polls configured subscriptions and republishes new
 	// clio events as Atlas messages (ADR-0075). It is a separate goroutine like the
 	// timer scheduler — it does its network reads off the run loop and hands only the
@@ -3431,10 +3436,6 @@ func (s *Server) do(fn func()) { s.runLoop.Do(fn) }
 func (s *Server) Close() {
 	close(s.quit)
 	s.wg.Wait()
-	// The loop and the login-day writer have stopped, so nothing else writes the user
-	// store now: a login noted after the writer's last turn is written here rather
-	// than lost with the process (ADR-draft-last-login-day).
-	s.recordLoginDates(s.loginDates.take())
 	// After the workers have stopped, nothing is borrowing from the pool any more, so
 	// the sockets it is holding can go.
 	if s.ldapPool != nil {

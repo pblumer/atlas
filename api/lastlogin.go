@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pblumer/atlas/api/sidecar"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -28,6 +29,14 @@ import (
 // chooses their own (ADR-0459) — and a day that meant something different to each
 // reader would make the column disagree with itself. Near midnight that puts a login
 // on the neighbouring day, which does not change whether an account is in use.
+//
+// It is kept beside the account, in a store of its own, and written by the login
+// itself before it answers. Not on the account record: that record is only written
+// on the run loop, a login must not wait for the loop (ADR-0265), and a write left
+// for later would land on the account at a moment nobody chose — after an
+// administrator's edit, a restore, or a check that nothing changed. This store has
+// one kind of record and one writer, so its own mutex is all the ordering it needs,
+// the way the session store's is.
 
 // loginDateLayout is how a login day is written: an ISO 8601 calendar date, which
 // sorts as text in the same order it sorts as time.
@@ -36,106 +45,122 @@ const loginDateLayout = "2006-01-02"
 // loginDate is the UTC calendar day of an instant.
 func loginDate(t time.Time) string { return t.UTC().Format(loginDateLayout) }
 
-// loginDates carries login days from the sign-in path to the account records.
+// lastLogin is one account's login day.
+type lastLogin struct {
+	UserID string `json:"userId"`
+	Date   string `json:"date"`
+}
+
+// lastLoginStore holds one lastLogin per account that has signed in.
 //
-// A login must not wait for the run loop (ADR-0265), and account records are only
-// written on it, so the two meet here: a login leaves its day in this map and
-// returns, and the writer moves the map onto the records in the loop's next turn for
-// it. The map holds one entry per account, so however long the loop is busy, a burst
-// of logins is one write per account, and the map can grow no larger than the roster.
-type loginDates struct {
-	mu      sync.Mutex
-	pending map[string]string // user id → login day
-	wake    chan struct{}     // capacity 1: there is something to write
+// Writes take mu. Two browsers of one person can sign in at the same moment, and
+// the sidecar writes a record through a temp file whose name is fixed per key, so
+// two unserialised writes of one key could leave a torn record behind. The mutex is
+// also what makes "no day for a deleted account" hold: record checks that the
+// account exists and forget removes the day after the account is gone, both under
+// it, so neither can slip between the other's check and write.
+//
+// Reads take nothing: a record is replaced by an atomic rename, so a reader sees the
+// old day or the new one.
+type lastLoginStore struct {
+	mu    sync.Mutex
+	store *sidecar.Store[lastLogin]
+	users *userStore
 }
 
-func newLoginDates() *loginDates {
-	return &loginDates{pending: map[string]string{}, wake: make(chan struct{}, 1)}
-}
-
-// note records that an account signed in on day. A later day replaces an earlier
-// one and never the other way round, so two logins either side of midnight leave the
-// later day whichever of them is noted last.
-func (l *loginDates) note(userID, day string) {
-	l.mu.Lock()
-	if day > l.pending[userID] {
-		l.pending[userID] = day
+// newLastLoginStore opens (creating if needed) the login-day directory.
+func newLastLoginStore(dir string, users *userStore) (*lastLoginStore, error) {
+	st, err := sidecar.NewStore(dir, "lastloginstore", func(rec lastLogin) string { return rec.UserID })
+	if err != nil {
+		return nil, err
 	}
-	l.mu.Unlock()
-	select {
-	case l.wake <- struct{}{}:
-	default: // a wake is already pending, and the write it starts takes this entry too
-	}
+	return &lastLoginStore{store: st, users: users}, nil
 }
 
-// take empties the map and returns what it held.
-func (l *loginDates) take() map[string]string {
+// get returns the day an account last signed in, or "" when none is recorded.
+func (l *lastLoginStore) get(userID string) (string, error) {
+	rec, _, err := l.store.Get(userID)
+	return rec.Date, err
+}
+
+// record stores day as userID's last login, unless a day as late is already there or
+// the account no longer exists. A day never moves backwards, so two logins either
+// side of midnight leave the later one whichever is written last.
+//
+// The common case — the account already signed in today — is one read and no lock.
+func (l *lastLoginStore) record(userID, day string) error {
+	if cur, err := l.get(userID); err == nil && cur >= day {
+		return nil
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	out := l.pending
-	l.pending = map[string]string{}
-	return out
+	// Asked again under the lock: the answer outside it may be a moment old. An
+	// unreadable record is replaced rather than reported — it holds nothing a
+	// login could lose.
+	if cur, err := l.get(userID); err == nil && cur >= day {
+		return nil
+	}
+	if _, ok, err := l.users.Get(userID); err != nil || !ok {
+		return err // an account deleted since its login gets no day
+	}
+	return l.store.Save(lastLogin{UserID: userID, Date: day})
 }
 
-// noteLogin records that u has just signed in. It never waits: the write happens on
-// a later run-loop turn, and the login has already succeeded by the time this runs.
+// forget removes an account's login day. It is called after the account itself is
+// deleted, which is the order that keeps record from writing a day for it afterwards.
+func (l *lastLoginStore) forget(userID string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.store.Delete(userID)
+}
+
+// prune removes the days of accounts that no longer exist. A delete whose second step
+// failed, or an account file removed from the disk by hand, can leave one behind, and
+// a login day is no reason to keep anything about an account that is gone. Run at
+// startup, before anybody can sign in.
+func (l *lastLoginStore) prune() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	all, err := l.store.LoadAll()
+	if err != nil {
+		return err
+	}
+	for _, rec := range all {
+		if _, ok, err := l.users.Get(rec.UserID); err != nil || ok {
+			continue // an unreadable account is not a deleted one
+		}
+		if err := l.store.Delete(rec.UserID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// recordLogin stores the day u has just signed in. It runs on the sign-in path after
+// the session exists, never on the run loop. A failure is logged rather than returned:
+// the person is signed in either way, and their next login writes the day again.
 //
 // The day is read from the session store's clock, because it is the day the session
-// that login opened was opened. An account whose record already says today is left
-// alone, which is the common case and costs no loop turn at all.
-func (s *Server) noteLogin(u User) {
-	day := loginDate(s.sessions.now())
-	if u.LastLoginDate >= day {
-		return
-	}
-	s.loginDates.note(u.ID, day)
-}
-
-// loginDateWriter writes noted login days onto the account records whenever there are
-// some, until the server stops.
-func (s *Server) loginDateWriter() {
-	defer s.wg.Done()
-	for {
-		select {
-		case <-s.quit:
-			return
-		case <-s.loginDates.wake:
-			s.flushLoginDates()
-		}
+// that login opened was opened.
+func (s *Server) recordLogin(u User) {
+	if err := s.lastLogins.record(u.ID, loginDate(s.sessions.now())); err != nil {
+		logging.Warn(logging.AuthLoginDateUnrecorded, "the day of a login could not be recorded",
+			slog.String("user_id", u.ID), slog.String("error", err.Error()))
 	}
 }
 
-// flushLoginDates writes every noted login day in one run-loop turn.
-//
-// The map is taken inside the turn, not before it. A flush that never gets its turn
-// because the server is stopping then leaves the days where Close finds them,
-// instead of holding them in a closure that does not run.
-func (s *Server) flushLoginDates() {
-	s.do(func() { s.recordLoginDates(s.loginDates.take()) })
-}
-
-// recordLoginDates writes login days onto the account records. It must run where
-// nothing else writes the user store: on the run loop, or after it has stopped.
-//
-// Each record is read again here and only its login day changes, so an edit an
-// administrator made after the login read the account is never overwritten with that
-// older copy. An account deleted since is not recreated: a login day is no reason
-// for a record to exist.
-func (s *Server) recordLoginDates(days map[string]string) {
-	for id, day := range days {
-		u, ok, err := s.users.Get(id)
-		if err == nil && (!ok || u.LastLoginDate >= day) {
+// withLastLogins puts each account's login day on the roster. One record that cannot
+// be read leaves that row without a day and is logged; it must not take the page an
+// administrator needs to fix things down with it.
+func (s *Server) withLastLogins(roster []rosterUser) []rosterUser {
+	for i := range roster {
+		day, err := s.lastLogins.get(roster[i].ID)
+		if err != nil {
+			logging.Warn(logging.AuthLoginDateUnrecorded, "the day of an account's last login could not be read",
+				slog.String("user_id", roster[i].ID), slog.String("error", err.Error()))
 			continue
 		}
-		if err == nil {
-			u.LastLoginDate = day
-			err = s.users.Save(u)
-		}
-		if err != nil {
-			// Nothing the caller could act on: the login it describes has succeeded, and
-			// the account's next login writes the day again.
-			logging.Warn(logging.AuthLoginDateUnrecorded, "the day of a login could not be written to the account",
-				slog.String("user_id", id), slog.String("error", err.Error()))
-		}
+		roster[i].LastLoginDate = day
 	}
+	return roster
 }

@@ -133,6 +133,7 @@ var persistentStores = []storeEntry{
 
 	// --- identity ----------------------------------------------------------
 	{name: "users", class: classIdentity, why: "accounts and their roles"},
+	{name: "last-logins", class: classIdentity, why: "the UTC day each account last signed in, kept beside it (ADR-draft-last-login-day). It belongs with the accounts it describes: restored without them it would name nobody, and an installation restored without it only shows no login until each account signs in again"},
 	{name: "groups", class: classIdentity, why: "group membership, which grants project access"},
 	{name: "directory-sync", class: classIdentity, onDemand: true, why: "where the Entra mirror resumes from; without it the next run enumerates the whole tenant again, which is expensive and safe"},
 	{name: "inventory-loads", class: classIdentity, onDemand: true, why: "whether a commissioning load has ever been applied per target system; without it a restored installation cannot tell a system it loaded and found empty from one it never loaded, and those call for opposite actions"},
