@@ -172,6 +172,16 @@ governs a Worker:
   calls Graph only with the token Atlas released for that action.
 - **An instance records who started it.** The instance's activation event carries the
   signed-in account that started it; a `delegated-per-job` Worker acts as that person.
+- **New BPMN elements get readable ids.** A task, event, gateway, flow, pool, lane, data
+  object, message, signal, error or escalation drawn in the Modeler, and a new diagram's
+  process, is named `<type>_<yyyymmdd>_<researcher>` — `activity_20261023_heisenberg` —
+  instead of `Activity_0jmndkk` or `Process_<timestamp>`. No id is handed out twice in a
+  diagram: every candidate is checked against the ids the diagram holds, and once every
+  researcher is taken for a type on a day a counter follows the name (`heisenberg2`). A
+  process id is also checked against the drafts and deployed processes of the
+  installation and the server's availability check, and a draft save that still collides
+  is refused as before. Ids already in a diagram are not changed
+  ([ADR-draft-readable-element-ids](docs/adr/draft-readable-element-ids.md)).
 - **Completing a task checks a directory field's value first.** A value that is not an
   object id, or an object where an id was expected, is refused with 400; by default the
   entry is looked up once more under the field's filters, and one the directory no longer
