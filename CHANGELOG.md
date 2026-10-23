@@ -42,6 +42,19 @@ _Changed_ / _Removed_ for each version.
 - **Example: pick a person and read their manager.** `examples/entra-benutzerauswahl` is the
   process `Process_mvjoqvisfajk` without its `list-users` step: a department, a directory
   search, the object id into `user`, and `get-user-manager` with `userId="= user"`.
+- **A SharePoint Worker can name its certificate by thumbprint.** On a Windows server the
+  vault bundle may carry `certificateThumbprint` in place of `clientSecret` or
+  `certificate`: a certificate in the worker host's `CurrentUser\My` or
+  `LocalMachine\My`, whose key signs there and is never read, so a non-exportable key
+  serves as it does for the Entra ID Worker and for PowerShell. A bundle gives one of the
+  three, and a thumbprint in a `refreshToken` bundle is refused as a certificate already
+  is. The worker tries the certificate when it starts and refuses to start, naming the
+  instance and the account, when the store does not hold it or the account may not use
+  its key. The engine does not open the store while it builds the client on its run loop,
+  but at the first token request. On a server that is not Windows a thumbprint bundle is
+  shown as the Worker's problem and is not handed to the supervised worker. The Secrets
+  panel checks the new field ([ADR-0141](docs/adr/0141-sharepoint-connector.md),
+  amended).
 - **An example for the SharePoint operations: the case file.** `examples/sharepoint-fallakte`
   turns a request entered in a SharePoint list into a case file — it reads the request
   (`get-item`), creates its folder (`create-folder`), fills in a letter template from a

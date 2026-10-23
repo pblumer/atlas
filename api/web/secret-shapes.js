@@ -47,10 +47,12 @@ export const SECRET_SHAPES = {
     what: "a Microsoft Graph OAuth credential bundle (JSON)",
     oauth: "microsoft",
     skeleton: { method: "clientCredentials", tenantId: "…", clientId: "…", clientSecret: "…" },
-    note: "An app that runs unattended may prove itself with a certificate instead: <code>\"certificate\"</code> — the certificate and its unencrypted private key as one PEM text — in place of <code>clientSecret</code>.",
+    note: "An app that runs unattended may prove itself with a certificate instead: <code>\"certificate\"</code> — the certificate and its unencrypted private key as one PEM text — in place of <code>clientSecret</code>. On a Windows server, <code>\"certificateThumbprint\"</code> may instead name a certificate already in the worker host's <code>CurrentUser\\My</code> or <code>LocalMachine\\My</code>, as for an Entra ID worker; its key signs there and may be non-exportable. Give one of the three. A <code>refreshToken</code> bundle keeps its client secret.",
     // connector/sharepoint/oauth.go reads a bundle without a method as clientCredentials,
-    // and a clientCredentials bundle may carry a certificate in place of the secret.
+    // and a clientCredentials bundle may carry a certificate in place of the secret —
+    // as PEM, or by the thumbprint of one in the Windows certificate store.
     certificate: true,
+    thumbprint: true,
   },
   "remedy:": {
     what: "the AR System username and password (JSON)",
@@ -169,21 +171,33 @@ export function checkSecretValue(shape, value) {
   }
   const method = parsed.method || (shape.certificate ? "clientCredentials" : "");
   // A worker that takes a certificate takes it in place of the client secret, never
-  // beside it — the server refuses a bundle carrying both rather than pick one.
-  const withCert = shape.certificate && method === "clientCredentials" && String(parsed.certificate || "").trim() !== "";
-  if (withCert && String(parsed.clientSecret || "").trim()) {
-    return `The bundle carries "clientSecret" and "certificate"; give one, not both.`;
+  // beside it — the server refuses a bundle carrying two rather than pick one. Where the
+  // shape allows it, the certificate may be named by its thumbprint instead of given as
+  // PEM, and that counts as a second certificate, not as the same one.
+  const given = (k) => String(parsed[k] || "").trim() !== "";
+  const certFields = shape.certificate ? ["certificate", ...(shape.thumbprint ? ["certificateThumbprint"] : [])] : [];
+  const quote = (ks) => ks.map((k) => `"${k}"`);
+  if (method === "refreshToken" && certFields.some(given)) {
+    return `A "refreshToken" bundle signs in with "clientSecret"; a certificate belongs to a "clientCredentials" bundle.`;
   }
+  const certs = method === "clientCredentials" ? certFields.filter(given) : [];
+  const credentials = [...(given("clientSecret") ? ["clientSecret"] : []), ...certs];
+  if (credentials.length === 2) return `The bundle carries ${quote(credentials).join(" and ")}; give one, not both.`;
+  if (credentials.length > 2) return `The bundle carries ${quote(credentials).join(", ")}; give one of them.`;
   const need = {
     refreshToken: ["clientId", "clientSecret", "refreshToken"],
-    clientCredentials: withCert ? ["clientId", "certificate"] : ["clientId", "clientSecret"],
+    clientCredentials: certs.length ? ["clientId", certs[0]] : ["clientId", "clientSecret"],
     serviceAccount: ["clientEmail", "privateKey"],
   }[method];
   if (!need) {
     return `"method" is ${method ? `"${method}"` : "missing"} — it must be "refreshToken", "clientCredentials" or "serviceAccount".`;
   }
-  const gone = missing(need);
-  if (gone.length) return `A "${method}" bundle also needs ${gone.map((k) => `"${k}"`).join(" and ")}.`;
+  // A missing secret is named with the certificates that could stand in for it.
+  const gone = missing(need).map((k) =>
+    k === "clientSecret" && method === "clientCredentials" && certFields.length
+      ? `one of ${quote(["clientSecret", ...certFields.slice(0, -1)]).join(", ")} or "${certFields[certFields.length - 1]}"`
+      : `"${k}"`);
+  if (gone.length) return `A "${method}" bundle also needs ${gone.join(" and ")}.`;
   // Microsoft builds its token endpoint from the tenant; without either there is
   // nothing to call, which the server reports much later as "no token URL".
   if (shape.oauth === "microsoft" && method === "clientCredentials" && !parsed.tenantId && !parsed.tokenUrl) {
