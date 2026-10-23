@@ -16,12 +16,8 @@ import (
 //	apr:<piKey>:<approvalKey>:<pos> → ActionApprovalValue
 //
 // The job key sits before the position so "was this job's current lease permitted" is
-// a scan of one job's decisions, not of the instance's.
-
-const (
-	cfAuthorization  columnFamily = 0x32
-	cfActionApproval columnFamily = 0x33
-)
+// a scan of one job's decisions, not of the instance's. Both families are declared with
+// every other in keys.go, where a value already taken is in plain sight.
 
 func authorizationInstancePrefix(piKey uint64) []byte {
 	return appendBE64([]byte{byte(cfAuthorization)}, piKey)

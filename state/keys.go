@@ -61,6 +61,8 @@ const (
 	cfMessageExpiry          columnFamily = 0x30 // msgExp:<expiresAt>:<msgKey> → MessageValue without payload (ADR-0370)
 	cfMessageId              columnFamily = 0x31 // msgId:<name>:<corrKey>:<messageId> → msgKey(8) (ADR-0370)
 	cfEventLog               columnFamily = 0x32 // evLog:0x00:<partition>:<position> → kind(1) at(8) cause(8) value; evLog:0x01:<partition> → pruned through (ADR-0472)
+	cfActionApproval         columnFamily = 0x33 // apr:<piKey>:<approvalKey>:<pos> → ActionApprovalValue (ADR-0475 §9)
+	cfAuthorization          columnFamily = 0x34 // authz:<piKey>:<jobKey>:<pos> → AuthorizationValue (ADR-0475 §12); 0x32 until it was found to be the event log's
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
