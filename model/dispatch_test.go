@@ -41,3 +41,17 @@ func TestTheReceptionsReadRecordsWrittenBeforeTheirSender(t *testing.T) {
 		t.Fatalf("signal written before the fields = %+v, %v; want %+v", v, err, want)
 	}
 }
+
+// TestACutShortDispatchIsAnError: a send record cut anywhere — before its kind, inside
+// either name, or in its counts — is refused rather than read as something it is not.
+func TestACutShortDispatchIsAnError(t *testing.T) {
+	full := AppendValue(nil, &DispatchValue{Channel: DispatchMessage, Name: "n", CorrelationKey: "k"})
+	for _, n := range []int{1, 3, 8, len(full) - 1} {
+		if _, err := DecodeValue(VTDispatch, full[:n]); err == nil {
+			t.Errorf("a send record cut to %d of %d bytes was decoded", n, len(full))
+		}
+	}
+	if vt := (&DispatchValue{}).ValueType(); vt != VTDispatch {
+		t.Errorf("a send record is a %s", vt)
+	}
+}
