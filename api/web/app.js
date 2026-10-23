@@ -241,6 +241,7 @@ function updateAccount() {
     if (menu) menu.innerHTML =
       `<div class="mlabel">Signed in as <b>${esc(AUTH.user.username)}</b></div>` +
       `<a href="#/console/settings" title="Number format, time zone and language — yours, not this server's">Display settings</a>` +
+      `<a href="#/console/connections" title="The external accounts you linked, and which Workers may act as you">Connected accounts</a>` +
       `<button type="button" data-act="logout" title="Sign out of atlas">Log out</button>`;
   } else {
     // Nobody is signed in — which is two different things. With enforcement off the
@@ -718,6 +719,9 @@ const TOPNAV = {
       // The credentials machines sign in with (ADR-0194). Admin, like the three routes
       // behind it: issuing one is the same class of act as creating an account.
       { name: "API tokens", route: "#/console/api-tokens", role: "admin" },
+      // Which Workers act as whom, by which policy (ADR-draft-identity-aware-worker-
+      // execution): readiness, policies, the simulator and the recorded decisions.
+      { name: "Security", route: "#/console/security", role: "admin" },
       { name: "Audit log", route: "#/console/audit", role: "admin" },
     ] },
   ],
@@ -1160,6 +1164,8 @@ function handbookHelp(path) {
   if (path.startsWith("#/console/settings")) return H("darstellung", "Display settings");
   if (path.startsWith("#/console/ai-access")) return H("konten", "Connecting an AI assistant");
   if (path.startsWith("#/console/api-tokens")) return H("konten", "API tokens for machines");
+  if (path.startsWith("#/console/connections")) return H("konten", "Connected accounts");
+  if (path.startsWith("#/console/security")) return H("konten", "Security: identities and policies");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
   if (path.startsWith("#/console/events")) return H("ereignisse", "Events");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
@@ -11237,6 +11243,8 @@ function routeTitle(path) {
     [/^#\/console\/workers$/, "Workers · Console"],
     [/^#\/console\/events$/, "Events · Console"],
     [/^#\/console\/api-tokens$/, "API tokens · Console"],
+    [/^#\/console\/connections/, "Connected accounts · Console"],
+    [/^#\/console\/security$/, "Security · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
     [/^#\/modeler\/form\//, "Form · Modeler"],
@@ -11341,6 +11349,16 @@ async function route() {
       const gen = navGen;
       const { viewAPITokens } = await import("./apitokens.js");
       return await viewAPITokens({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
+    if (path === "#/console/connections") {
+      const gen = navGen;
+      const { viewConnections } = await import("./connections.js");
+      return await viewConnections({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
+    if (path === "#/console/security") {
+      const gen = navGen;
+      const { viewSecurity } = await import("./security.js");
+      return await viewSecurity({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
     if (path === "#/console/settings") return await renderDisplaySettings(view, { api, toast });

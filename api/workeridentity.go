@@ -240,12 +240,17 @@ func (s *Server) handleClearWorkerIdentity(w http.ResponseWriter, r *http.Reques
 
 // readinessRow is one Worker in the readiness report.
 type readinessRow struct {
+	ID          string `json:"id"`
 	Worker      string `json:"worker"`
 	Kind        string `json:"kind"`
 	Governed    bool   `json:"governed"`
 	Governable  bool   `json:"governable"`
 	Mode        string `json:"mode"`
 	Enforcement string `json:"enforcement"`
+	// ConnectionID and ActAs are the identity policy's other two settings, so a
+	// client can show the policy it would change.
+	ConnectionID string `json:"connectionId,omitempty"`
+	ActAs        string `json:"actAs,omitempty"`
 	// Credential says where the Worker's credential is, never what it is.
 	Credential string `json:"credential"`
 	// CredentialKind is the same as a word a client can translate: brokered, worker
@@ -269,7 +274,7 @@ func (s *Server) handleSecurityReadiness(w http.ResponseWriter, _ *http.Request)
 	}
 	rows := []readinessRow{}
 	for _, r := range recs {
-		row := readinessRow{Worker: r.Name, Kind: r.Kind, Governable: governableKinds[r.Kind], Mode: "legacy", Enforcement: "off"}
+		row := readinessRow{ID: r.ID, Worker: r.Name, Kind: r.Kind, Governable: governableKinds[r.Kind], Mode: "legacy", Enforcement: "off"}
 		switch {
 		case r.Identity != nil && authz.IsDelegated(r.Identity.Mode):
 			row.Credential, row.CredentialKind = "brokered by Atlas per authorized job", "brokered"
@@ -281,6 +286,7 @@ func (s *Server) handleSecurityReadiness(w http.ResponseWriter, _ *http.Request)
 		}
 		if r.Identity != nil {
 			row.Governed, row.Mode, row.Enforcement = true, r.Identity.Mode, r.Identity.Enforcement
+			row.ConnectionID, row.ActAs = r.Identity.ConnectionID, r.Identity.ActAs
 			switch {
 			case r.Identity.Enforcement == enforcementShadow:
 				row.Note = "decisions are recorded and never block: this is not enforcement"
