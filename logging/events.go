@@ -493,6 +493,36 @@ var (
 	PersonalDataKeyWriteRefused = newEvent("personal_data.key_write_refused")
 )
 
+// Identity-aware Worker execution (ADR-0475). The
+// decisions themselves are engine facts, durable in the log; these lines are the
+// operational trail of what happened around them — a link, a revocation, a refusal at
+// the edge — and name principals by id, never a token or a credential.
+var (
+	// ConnectionLinked is a person linking an external account and authorizing a
+	// delegated connection, or re-authenticating one.
+	ConnectionLinked = newEvent("identity.connection_linked")
+	// ConnectionLinkFailed is a linking flow that did not end in a connection: which
+	// check refused it is in the reason, as a failed login's is.
+	ConnectionLinkFailed = newEvent("identity.connection_link_failed")
+	// ConnectionRevoked is a connection withdrawn by its owner or an administrator.
+	ConnectionRevoked = newEvent("identity.connection_revoked")
+	// ConnectionRefreshFailed is the broker failing to obtain an access token; a
+	// refusal by the provider marks the connection for re-authentication.
+	ConnectionRefreshFailed = newEvent("identity.connection_refresh_failed")
+	// ConnectionCredentialRefused is an attempt to reach a connection's credential
+	// through an operator surface.
+	ConnectionCredentialRefused = newEvent("identity.connection_credential_refused")
+	// PolicyPublished is an administrator publishing a new version of a policy, or
+	// switching one on or off.
+	PolicyPublished = newEvent("authz.policy_published")
+	// AuthorizationRefused is an enforcement point refusing an external action; the
+	// decision itself is in the instance's log.
+	AuthorizationRefused = newEvent("authz.action_refused")
+	// ApprovalAnswered is an approver answering, or withdrawing an answer to, an
+	// approval of an action.
+	ApprovalAnswered = newEvent("authz.approval_answered")
+)
+
 // The FEEL assistant (ADR-0445).
 var (
 	// FeelAssistantAnswered is one request of the FEEL assistant that reached a model:

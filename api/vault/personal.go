@@ -75,6 +75,26 @@ var ErrErased = errors.New("vault: the data subject's key has been erased; this 
 // secrets API can refuse the region and an operator view can label it.
 func DataKeyName(subject string) string { return dataKeyPrefix + subject }
 
+// connectionCredentialPrefix names the region holding delegated connections' refresh
+// tokens (ADR-0475 §3). Like the data keys they are
+// not operator secrets: a person consented to them, and only the credential broker
+// reads them.
+const connectionCredentialPrefix = "atlas:connection-credential:"
+
+// ConnectionCredentialName is the vault name of one connection's credential.
+func ConnectionCredentialName(connectionID string) string {
+	return connectionCredentialPrefix + connectionID
+}
+
+// IsReservedName reports whether a name belongs to a region the vault keeps for Atlas
+// itself — a data subject's key or a connection's credential. The operator surfaces —
+// the secrets API, a Worker's credential reference, an API token sealed into the vault
+// — refuse such a name, because reaching one through them would hand a person's
+// credential, or the key to their data, to whatever that surface feeds.
+func IsReservedName(name string) bool {
+	return IsDataKeyName(name) || strings.HasPrefix(name, connectionCredentialPrefix)
+}
+
 // IsDataKeyName reports whether a vault name belongs to the data-key region.
 func IsDataKeyName(name string) bool { return strings.HasPrefix(name, dataKeyPrefix) }
 

@@ -181,6 +181,17 @@ const (
 	// Appended last so every prior value type keeps its numeric value on the log; a
 	// version before it decodes it to no value and skips it on replay.
 	VTDispatch
+	// VTAuthorization is one policy decision about one external Worker action — the
+	// evidence written before anything the action needs is released
+	// (ADR-0475 §12). Append-only history keyed under
+	// its process instance, like VTOperatorAction. Appended last so every prior value
+	// type keeps its numeric value on the log.
+	VTAuthorization
+	// VTActionApproval is one fact about the approval of one action digest: requested,
+	// answered, or withdrawn (§9). A separate type from VTAuthorization because the two
+	// answer different questions — what was decided, and who agreed to what. Appended
+	// last so every prior value type keeps its numeric value on the log.
+	VTActionApproval
 )
 
 func (t ValueType) String() string {
@@ -213,6 +224,10 @@ func (t ValueType) String() string {
 		return "FeedRetention"
 	case VTDispatch:
 		return "Dispatch"
+	case VTAuthorization:
+		return "Authorization"
+	case VTActionApproval:
+		return "ActionApproval"
 	case VTSignal:
 		return "Signal"
 	case VTError:
@@ -552,6 +567,23 @@ const (
 	// IntentEventLogPruned is the fact that it did, with the position it was pruned
 	// through (VTFeedRetention).
 	IntentEventLogPruned
+
+	// IntentAuthorizationDeciding is a command-only intent: an enforcement point asks
+	// that a decision it made be recorded for a job it holds a lease on
+	// (ADR-0475 §5). Its handler re-checks the lease,
+	// records IntentAuthorizationDecided and, for an enforced refusal, fails the job or
+	// asks for approval in the same batch, so the decision and its consequence are
+	// durable together (I2). Appended at the end so every prior intent keeps its value.
+	IntentAuthorizationDeciding
+	// IntentAuthorizationDecided is the decision, as a fact.
+	IntentAuthorizationDecided
+	// IntentApprovalDeciding is a command-only intent: an approver answers an approval,
+	// or withdraws an answer. Its handler checks the approval is open and records
+	// IntentApprovalRecorded.
+	IntentApprovalDeciding
+	// IntentApprovalRecorded is one fact about an approval — requested, answered or
+	// withdrawn; the value's Kind says which.
+	IntentApprovalRecorded
 )
 
 func (i Intent) String() string {
@@ -686,6 +718,14 @@ func (i Intent) String() string {
 		return "EventLogPruning"
 	case IntentEventLogPruned:
 		return "EventLogPruned"
+	case IntentAuthorizationDeciding:
+		return "AuthorizationDeciding"
+	case IntentAuthorizationDecided:
+		return "AuthorizationDecided"
+	case IntentApprovalDeciding:
+		return "ApprovalDeciding"
+	case IntentApprovalRecorded:
+		return "ApprovalRecorded"
 	default:
 		return "Intent(?)"
 	}

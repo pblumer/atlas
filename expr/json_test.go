@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pblumer/atlas/expr"
 )
@@ -174,5 +175,23 @@ func TestClassifyListContainingTemporal(t *testing.T) {
 	}
 	if text == "" {
 		t.Error("text is empty")
+	}
+}
+
+// A context assembled from values already built — an instant among them, which has no
+// JSON image to come from — reads its members back by name.
+func TestAContextOfBuiltValuesReadsBack(t *testing.T) {
+	at := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
+	ctx := expr.ContextOf(map[string]expr.Value{"time": expr.DateTime(at), "who": expr.String("alice")})
+	c, err := expr.Compile(`context.who = "alice" and context.time = date and time("2026-10-23T09:00:00Z")`, "context")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := c.Eval(map[string]expr.Value{"context": ctx})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !expr.IsTrue(v) {
+		t.Fatalf("result = %v", v)
 	}
 }

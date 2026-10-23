@@ -424,3 +424,27 @@ func TestADataKeyFromAnotherInstallationIsNamed(t *testing.T) {
 		}
 	}
 }
+
+// A connection's refresh token is not an operator secret any more than a data key is:
+// it belongs to the person who consented, and only the credential broker reads it
+// (ADR-0475 §3).
+func TestConnectionCredentialsAreReservedAndUnlisted(t *testing.T) {
+	v := newTestVault(t)
+	name := ConnectionCredentialName("con_1")
+	if !IsReservedName(name) || !IsReservedName("atlas:personal-data-key:x") || IsReservedName("mail-bundle") {
+		t.Fatalf("reserved names misclassified")
+	}
+	if _, err := v.Set(name, `{"refreshToken":"rt"}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.Set("mail-bundle", "x"); err != nil {
+		t.Fatal(err)
+	}
+	list, err := v.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].Name != "mail-bundle" {
+		t.Fatalf("listing shows %+v", list)
+	}
+}

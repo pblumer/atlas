@@ -118,6 +118,12 @@ type Command struct {
 	// recorded now, answered from the record, or refused as a second ending of the
 	// same command. Same contract as Triggered.
 	Reported *OutcomeResult
+	// Authorized is where a decision's recording is answered
+	// (ADR-0475): recorded, or refused because the
+	// lease it was made for is gone. Same contract as Triggered.
+	Authorized *AuthorizationResult
+	// Approved is where an approver's answer is answered. Same contract as Triggered.
+	Approved *ApprovalResult
 	// MessageTTL is how long a published message stays useful when nothing waits for
 	// it yet (ADR-0370): zero, the default, keeps ADR-0020's no-op for an unmatched
 	// publish, and a positive value buffers it for a subscription that opens later.

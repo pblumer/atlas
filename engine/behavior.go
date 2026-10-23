@@ -58,6 +58,8 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTFeedRetention, model.IntentEventLogPruning):         handleEventLogPruning,
 		handlerKey(model.VTTriggerReceipt, model.IntentDelivering):             handleDelivering,
 		handlerKey(model.VTActionOutcome, model.IntentActionReporting):         handleActionReporting,
+		handlerKey(model.VTAuthorization, model.IntentAuthorizationDeciding):   handleAuthorizationDeciding,
+		handlerKey(model.VTActionApproval, model.IntentApprovalDeciding):       handleApprovalDeciding,
 	}
 }
 
@@ -1290,19 +1292,27 @@ func handleJobError(c *ProcessingContext) {
 			ErrorCode:          code,
 		})
 	}
+	throwJobError(c, c.cmd.Key, job, code, c.cmd.ErrorMessage)
+}
+
+// throwJobError throws code from the job's element: to the nearest handler that
+// catches it, or — with nowhere to go — onto an incident that keeps the job, its
+// retries spent. A worker's report and an enforcement point's request for approval
+// (ADR-0475 §9) throw through here alike.
+func throwJobError(c *ProcessingContext, key uint64, job *model.JobValue, code, message string) {
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil && errorUncaughtAtRoot(c, job.ElementInstanceKey, ei, code) {
 		// Given back as a failing worker gives it back (handleJobFailed): the lease is
 		// released, Assignee left alone.
 		job.Retries = 0
 		job.LeaseExpiresAt = 0
 		msg := unhandledErrorMessage(code)
-		if c.cmd.ErrorMessage != "" {
-			msg += ": " + c.cmd.ErrorMessage
+		if message != "" {
+			msg += ": " + message
 		}
-		recordJobFailure(c, c.cmd.Key, job, 0, msg, model.IncidentUnhandledError)
+		recordJobFailure(c, key, job, 0, msg, model.IncidentUnhandledError)
 		return
 	}
-	c.AppendJobEvent(c.cmd.Key, model.IntentJobCanceled, *job)
+	c.AppendJobEvent(key, model.IntentJobCanceled, *job)
 	propagateError(c, job.ElementInstanceKey, code)
 }
 
