@@ -522,6 +522,21 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.RecordVariableAudit(h.Timestamp, h.Position, &v.variableAudit)
 		}
 
+	case model.VTAuthorization:
+		if h.Intent == model.IntentAuthorizationDecided && v.authorization != nil {
+			// A policy decision (ADR-draft-identity-aware-worker-execution §12). It was
+			// made on the command path and frozen into the event; this only stores it, so
+			// replay rebuilds the same evidence without evaluating any policy (I4/I6).
+			return tx.RecordAuthorization(h.Position, v.authorization)
+		}
+
+	case model.VTActionApproval:
+		if h.Intent == model.IntentApprovalRecorded && v.approval != nil {
+			// One fact about an approval — requested, answered or withdrawn — frozen on
+			// the command path; stored as it is (I4/I6).
+			return tx.RecordApprovalFact(h.Position, v.approval)
+		}
+
 	case model.VTOperatorAction:
 		if h.Intent == model.IntentOperatorActed {
 			// Retain who forced a step from outside the model — an operator completing a

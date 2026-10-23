@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/authz"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/mail"
@@ -870,6 +871,7 @@ func (s *Server) sharepointWorkerEnv() []string {
 		env       []string
 		names     []string
 		fromStore bool // a store instance contributed a name; only then must CONNECTORS be rendered
+		brokered  bool // a delegated Worker is among them; only then is the broker key handed over
 	)
 	seen := map[string]bool{}
 	addName := func(n string) {
@@ -908,6 +910,21 @@ func (s *Server) sharepointWorkerEnv() []string {
 					slog.String("connector", c.Name), slog.String("collidesWith", first))
 				continue
 			}
+			// A delegated Worker's credential is brokered per authorized job and never
+			// handed over whole (ADR-draft-identity-aware-worker-execution §4): the child
+			// learns only where the Graph is and that it must ask for a token, so a
+			// compromised child holds no refresh token and no app secret for it.
+			if c.Identity != nil && authz.IsDelegated(c.Identity.Mode) {
+				taken[envKey] = c.Name
+				key := sharepointEnvPrefix + envKey + "_"
+				if endpoint := strings.TrimSpace(c.Endpoint); endpoint != "" {
+					env = append(env, key+"ENDPOINT="+endpoint)
+				}
+				env = append(env, key+"BROKERED=1")
+				addName(c.Name)
+				fromStore, brokered = true, true
+				continue
+			}
 			bundle := strings.TrimSpace(s.resolveConnectorSecret(c.CredentialsRef))
 			// An instance whose bundle does not resolve — no secret set yet — is left
 			// out rather than handed over empty: the worker refuses at startup on a
@@ -942,6 +959,11 @@ func (s *Server) sharepointWorkerEnv() []string {
 	// render the union so a host-named instance is not lost to the override.
 	if !fromStore {
 		return nil
+	}
+	// The broker key goes only to the process serving a delegated Worker: with it, and
+	// only with it, that process is handed a person's token (handleAuthorizeJob).
+	if brokered && s.brokerKey != "" {
+		env = append(env, brokerKeyEnv+"="+s.brokerKey)
 	}
 	return append(env, sharepointConnectorsEnv+"="+strings.Join(names, ","))
 }

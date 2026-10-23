@@ -12,8 +12,69 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+**A SharePoint Worker can act as the person who asked, and only for what a policy
+permits.** A person links their Microsoft account and chooses which Workers may act as
+them; an administrator publishes versioned authorization policies; and a governed Worker
+asks Atlas before every action, which decides, records the decision on the log, and — for
+a delegated Worker — releases a short-lived token for that one action
+([ADR-draft-identity-aware-worker-execution](docs/adr/draft-identity-aware-worker-execution.md),
+proposed). This build governs the SharePoint Worker Type only, and releases a person's
+token only to a Worker Instance Atlas supervises.
+
+**Read this before upgrading from 0.19.0.** Nothing changes until an administrator
+governs a Worker:
+
+- Every existing Worker is *legacy* — no decision, nothing recorded, unchanged behavior —
+  and **Administration → Security** lists it as not governed.
+- Governing a Worker in `service` mode with `enforce` refuses its completions until the
+  Worker asks `POST /api/v1/jobs/{key}/authorize`. The shipped SharePoint Worker asks; a
+  Worker built against an earlier `worker` package does not, and its completions are then
+  refused with 409. Start with `shadow`, which records and never blocks.
+- With no policy published, every enforced action is refused (default deny).
+- The data directory gains two stores, `identity` and `policies`; both are in the backup.
+  The log gains two record types. 0.19.0 does not know them, and a downgrade after a
+  governed Worker has recorded a decision has not been tested.
+- A delegated SharePoint Worker started by Atlas receives no credential in its
+  environment, only `ATLAS_SHAREPOINT_<NAME>_BROKERED=1` and a per-start
+  `ATLAS_BROKER_KEY` it presents when it asks.
+- A governed Worker is changed or deleted only by an administrator, and a delegated
+  Worker's endpoint must be Microsoft Graph (or blank).
+- With `--in-process-connectors`, a governed SharePoint Worker's tasks park instead of
+  running inside the engine: governed Workers run only on a supervised Worker Instance.
+- A Worker's `credentialsRef` may not name a reserved vault entry
+  (`atlas:connection-credential:…`, `atlas:personal-data-key:…`).
+
 ### Added
 
+- **External accounts and delegated connections.** A signed-in person links a Microsoft
+  account under **Connected accounts** (account menu) with the authorization code flow and
+  PKCE; Atlas never sees a password, and the tenant's multi-factor and Conditional Access
+  rules apply. The account is recognised by tenant and object id, never by e-mail. A new
+  connection allows no Worker until its owner chooses; its owner or an administrator
+  revokes it, which deletes the credential. The refresh token lives in the vault under a
+  reserved name no secret route, API token or Worker reference can reach. Configured with
+  `--link-microsoft-tenant`, `--link-microsoft-client-id`, `--link-microsoft-client-secret`
+  and `--link-microsoft-scopes`.
+- **Authorization policies, decided before a governed action and recorded on the log.**
+  `POST /api/v1/jobs/{key}/authorize` decides for the lease a Worker holds, from versioned,
+  immutable policies of JSON matchers, FEEL conditions and DMN decisions: default deny, a
+  Deny from any policy wins, and a policy that cannot answer refuses. Each decision is an
+  engine fact naming who started the instance, for whom and as whom the action runs, the
+  policy and version, and the action's digest; it replays without being evaluated again.
+  A refusal parks the job on an incident. A governed Worker's completion without a Permit
+  is refused.
+- **Approval of the exact action.** A policy may require that people of a group approve
+  an action: the decision throws `ATLAS_APPROVAL_REQUIRED`, an approval request bound to
+  the action's digest is recorded, and a member of the group answers it at
+  `POST /api/v1/instances/{key}/action-approvals/{approval}/decide`, in their own
+  session. Nobody approves an action that would run for themselves; an approval counts
+  only for the same digest and until it expires. A variable such as `approved = true`
+  changes nothing.
+- **Administration → Security.** Which Workers are governed and how — shadow is labelled
+  as not enforcement — setting a Worker's identity policy, editing and publishing
+  policies, a simulator whose answer is labelled a simulation, and an instance's recorded
+  decisions and approvals. The MCP tool `atlas_instance_authorizations` reads the same
+  evidence.
 - **A task form can search a directory instead of listing it.** A textfield with an
   `atlasDataSource` block is a directory field: in the Tasks app the person types a name or
   an e-mail address, sees at most one page of matches (25 by default) from Microsoft Entra
@@ -106,6 +167,11 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **A governed SharePoint Worker asks before it acts.** When its Worker has an identity
+  policy, the SharePoint Worker asks Atlas before each action, and in delegated mode
+  calls Graph only with the token Atlas released for that action.
+- **An instance records who started it.** The instance's activation event carries the
+  signed-in account that started it; a `delegated-per-job` Worker acts as that person.
 - **New BPMN elements get readable ids.** A task, event, gateway, flow, pool, lane, data
   object, message, signal, error or escalation drawn in the Modeler, and a new diagram's
   process, is named `<type>_<yyyymmdd>_<researcher>` — `activity_20261023_heisenberg` —
@@ -155,6 +221,7 @@ _Changed_ / _Removed_ for each version.
   Modeler.** The panel showed the list and the column table only for a task with no
   operation, so a model spelling `operation="create-item"` out lost both on its next
   save, and the compiler then refused the task.
+
 
 ## [0.19.0] — 2026-10-22
 

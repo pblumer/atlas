@@ -60,6 +60,17 @@ type inflightValue struct {
 	// token movement — a throw — but holds only strings that already exist and fixed
 	// fields, so filling it allocates nothing.
 	dispatch model.DispatchValue
+	// authorization and approval ride only on an enforcement point's decision, an
+	// approver's answer and the events they emit
+	// (ADR-draft-identity-aware-worker-execution). They are pointers rather than inline
+	// values, unlike the rest of this struct, because the two records are wide — a dozen
+	// strings each — and every command and event the processor copies carries this
+	// struct: inline they would widen every token movement's copy for a record most
+	// installations write a few times an hour. Behind a pointer they cost the hot path
+	// sixteen bytes and nothing else, and the allocation falls on the governed action,
+	// which has just made a network round trip to get here.
+	authorization *model.AuthorizationValue
+	approval      *model.ActionApprovalValue
 }
 
 // asValue returns a model.Value pointing at the active field, for encoding. The
@@ -115,6 +126,14 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.message
 	case model.VTDispatch:
 		return &v.dispatch
+	case model.VTAuthorization:
+		if v.authorization != nil {
+			return v.authorization
+		}
+	case model.VTActionApproval:
+		if v.approval != nil {
+			return v.approval
+		}
 	}
 	return nil
 }
@@ -227,6 +246,14 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTDispatch:
 		if v, ok := rec.Value.(*model.DispatchValue); ok {
 			iv.dispatch = *v
+		}
+	case model.VTAuthorization:
+		if v, ok := rec.Value.(*model.AuthorizationValue); ok {
+			iv.authorization = v
+		}
+	case model.VTActionApproval:
+		if v, ok := rec.Value.(*model.ActionApprovalValue); ok {
+			iv.approval = v
 		}
 	}
 	return iv

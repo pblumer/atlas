@@ -349,6 +349,23 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_instance_authorizations",
+			Description: "Read one process instance's recorded authorization decisions " +
+				"(ADR-draft-identity-aware-worker-execution): for each governed Worker action, who initiated the " +
+				"instance, for whom and as which external identity the action ran, the Worker and Worker Instance, " +
+				"the resource and action digest, the deciding policy and version, the effect and reason code, " +
+				"whether it was enforced or shadow, and the trace that explains it. This is how to answer why an " +
+				"action was refused. An instance with no governed actions (or an unknown key) returns [].",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) whose authorization decisions to read."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/authorizations"))
+			},
+		},
+		{
 			Name: "atlas_instance_data_objects",
 			Description: "Read one process instance's BPMN data objects — each with its name, current data " +
 				"state, typed value, declared class (itemSubjectRef) and collection flag, plus the trail of " +

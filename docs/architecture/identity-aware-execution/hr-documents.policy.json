@@ -1,0 +1,25 @@
+{
+  "id": "hr-documents",
+  "description": "Deleting a document in the HR library: members of the documents group, with one manager's approval of the exact deletion, through the HR site only. Everything else falls to the default deny.",
+  "priority": 10,
+  "target": {"workerTypes": ["sharepoint"], "operations": ["delete-file", "delete-item"]},
+  "ruleCombining": "first-applicable",
+  "rules": [
+    {
+      "id": "members-with-manager-approval",
+      "effect": "Permit",
+      "reasonCode": "MEMBER_DELETE_APPROVED",
+      "when": {
+        "subjectGroupsAny": ["grp_documents"],
+        "identityModes": ["delegated-per-job", "delegated-fixed"],
+        "resourcePrefixes": ["sharepoint:site=contoso.sharepoint.com:/sites/hr;"]
+      },
+      "condition": "context.processId = \"dokument-loeschen\"",
+      "obligations": [
+        {"id": "manager", "type": "approval", "approverGroup": "grp_managers", "approvals": 1,
+         "validForSeconds": 86400, "excludeRequester": true},
+        {"id": "recent-sign-in", "type": "fresh-authentication", "maxAgeSeconds": 7776000}
+      ]
+    }
+  ]
+}

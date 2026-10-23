@@ -177,6 +177,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_list_decisions":               "GET /api/v1/decisions",
 	"atlas_decision_evaluations":         "GET /api/v1/decisions/{id}/evaluations",
 	"atlas_variable_audit":               "GET /api/v1/instances/{key}/variable-audit",
+	"atlas_instance_authorizations":      "GET /api/v1/instances/{key}/authorizations",
 	"atlas_assignable_users":             "GET /api/v1/users/assignable",
 	"atlas_infomodel_subset":             "GET /api/v1/infomodel/subset",
 	"atlas_list_information_models":      "GET /api/v1/infomodel/models",
@@ -202,6 +203,26 @@ var mcpToolRoutes = map[string]string{
 // add a matching tool (and an entry above) or record here why an agent should
 // not have it.
 var mcpOmittedRoutes = map[string]string{
+	// Identity-aware Worker execution (ADR-draft-identity-aware-worker-execution). An
+	// agent reads the decisions (atlas_instance_authorizations); everything else here is
+	// a Worker's protocol step, a person's consent or answer, or the administration of
+	// who may do what — none of it an agent's to do.
+	"POST /api/v1/jobs/{key}/authorize":                               "the worker protocol's credential-bearing step: an agent is not a Worker Instance and must never be handed a delegated credential",
+	"GET /api/v1/instances/{key}/action-approvals":                    "a person's approval worklist, filtered per caller; an agent reads what was decided through atlas_instance_authorizations",
+	"POST /api/v1/instances/{key}/action-approvals/{approval}/decide": "an approval is a person's own answer, given in their own session (ADR-0428): deciding for a person",
+	"PUT /api/v1/configured-workers/{id}/identity":                    "decides as whom a Worker acts: an administrator's act, not an agent's",
+	"DELETE /api/v1/configured-workers/{id}/identity":                 "decides as whom a Worker acts: an administrator's act, not an agent's",
+	"GET /api/v1/security/readiness":                                  "the security administrator's migration inventory, read in the Console",
+	"GET /api/v1/security/policies":                                   "security administration: the policies decide what every Worker may do as anybody",
+	"GET /api/v1/security/policies/{id}":                              "security administration: the policies decide what every Worker may do as anybody",
+	"PUT /api/v1/security/policies/{id}/draft":                        "security administration: writing a policy is an administrator's act",
+	"POST /api/v1/security/policies/{id}/publish":                     "security administration: publishing a policy is an administrator's act",
+	"POST /api/v1/security/policies/{id}/enabled":                     "security administration: switching a policy is an administrator's act",
+	"POST /api/v1/security/policies/simulate":                         "security administration's own playground for the policies it writes",
+	"GET /api/v1/me/connections":                                      "a person's linked accounts and consent: theirs to manage, not an agent's",
+	"GET /api/v1/users/{id}/connections":                              "a person's linked accounts and consent: an administrator's view, not an agent's",
+	"POST /api/v1/connections/{id}/revoke":                            "a person's consent: withdrawn by its owner or an administrator, never by an agent",
+	"PUT /api/v1/connections/{id}/workers":                            "a person's consent to which Workers act as them: theirs alone",
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
 	// The order starting its own positions (ADR-0425) is the fulfilment and approval

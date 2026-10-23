@@ -27,6 +27,20 @@ import (
 // before roles existed, so an account that keeps modeler, operator and user on
 // upgrade can still do exactly what it could yesterday: everything except these.
 var wantAdminRoutes = []string{
+	// Who may do what as whom (ADR-draft-identity-aware-worker-execution): the policies
+	// that decide every governed Worker action, the identity a Worker acts as, the
+	// readiness inventory, and the view of what can act as a given person. A modeler
+	// who deploys BPMN must not be able to change any of them.
+	"GET /api/v1/security/policies",
+	"GET /api/v1/security/policies/{id}",
+	"PUT /api/v1/security/policies/{id}/draft",
+	"POST /api/v1/security/policies/{id}/publish",
+	"POST /api/v1/security/policies/{id}/enabled",
+	"POST /api/v1/security/policies/simulate",
+	"GET /api/v1/security/readiness",
+	"PUT /api/v1/configured-workers/{id}/identity",
+	"DELETE /api/v1/configured-workers/{id}/identity",
+	"GET /api/v1/users/{id}/connections",
 	// The instance itself: its log, its data, its recovery, and the identity it
 	// presents to other servers (ADR-0189 §6). Reading that identity is open to any
 	// signed-in caller — correlation needs it — but naming this node is an operator

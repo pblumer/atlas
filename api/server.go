@@ -48,12 +48,15 @@ import (
 	"github.com/pblumer/atlas/api/capability"
 	"github.com/pblumer/atlas/api/collab"
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/identity"
 	"github.com/pblumer/atlas/api/infomodel"
 	"github.com/pblumer/atlas/api/panorama"
+	"github.com/pblumer/atlas/api/policy"
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/api/startfavourites"
 	"github.com/pblumer/atlas/api/taskfolder"
 	"github.com/pblumer/atlas/api/userprefs"
+	"github.com/pblumer/atlas/authz"
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
@@ -334,6 +337,17 @@ type Server struct {
 	// loop it was given (ADR-0143/0147).
 	processDocs  *processdoc.Service
 	decisionDocs *decisiondoc.Service
+	// identity holds linked external accounts and delegated connections and brokers
+	// their credentials; policies is the policy administration point; governed is the
+	// in-memory view of which Workers carry an identity policy, read by the
+	// enforcement point and the completion guard without a store read
+	// (ADR-draft-identity-aware-worker-execution). identity is nil when the vault is
+	// disabled: a delegated credential has nowhere else it may live.
+	identity *identity.Service
+	policies *policy.Service
+	governed atomic.Pointer[map[string]governedWorker]
+	// msLink is the Microsoft account-linking configuration, nil when not configured.
+	msLink *microsoftLink
 	// catalogs serves the self-service portal's product catalogues and the releases
 	// published from them (ADR-0312). Another
 	// area service on the ADR-0147 shape: its own store, the run loop for every
@@ -495,6 +509,14 @@ type Server struct {
 	// way to act as this principal without presenting anything
 	// (ADR-0196).
 	internalToken string
+	// brokerKey is what a supervised Worker Instance presents, beside the internal
+	// token, when it asks for a person's delegated credential
+	// (ADR-draft-identity-aware-worker-execution §11). Every supervised child holds the
+	// internal token; only the one serving a brokered Worker Type is handed this key, so
+	// a compromised child of another kind cannot obtain a person's token by leasing a
+	// job it does not serve. Minted per start, kept in memory only; empty when auth is
+	// off.
+	brokerKey string
 
 	// dmnResolver turns a DMN reference handle into model XML; dmnValidator wraps
 	// it with a temis compile for the deploy-time validation gate (ADR-0034).
@@ -2014,6 +2036,32 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 				slog.String("path", filepath.Join(dataDir, "vault.key")))
 		}
 	}
+	// Identity-aware Worker execution (ADR-draft-identity-aware-worker-execution). The
+	// policy store opens whatever state it is in — a set that will not build leaves
+	// every governed action refused rather than the server down — and the identity
+	// service exists only with a vault, where a delegated credential has to live.
+	if s.policies, err = policy.Open(s.runLoop, filepath.Join(dataDir, "policies"), time.Now); err != nil {
+		return nil, err
+	}
+	s.policies.Limits = s.budgets()
+	s.policies.SetSubjectResolver(func(id string) (authz.Subject, bool) {
+		subj, err := s.subjectOf(id)
+		return subj, err == nil && subj.Known
+	})
+	if s.vault != nil {
+		identityStores, err := identity.OpenStores(filepath.Join(dataDir, "identity"))
+		if err != nil {
+			return nil, err
+		}
+		s.identity = identity.New(s.runLoop, identityStores, s.vault, s.refreshDelegatedToken,
+			s.configuredWorkerExists, time.Now)
+		s.identity.Limits = s.budgets()
+		if s.msLink != nil {
+			s.identity.SetLinkable(identity.LinkOption{Provider: identity.ProviderMicrosoft, Start: linkMicrosoftStartPath})
+		}
+	}
+	s.refreshGoverned()
+
 	// When enforcement is on, make sure a fresh instance has an admin to log in
 	// with (ADR-0044) and mint the internal service token the in-process MCP
 	// adapter uses to authenticate its loopback calls (ADR-0049). Both run before
@@ -2035,6 +2083,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			return nil, err
 		}
 		s.internalToken = token
+		if s.brokerKey, err = randomHex(32); err != nil {
+			return nil, err
+		}
 	}
 	// Ensure the protected system project exists (ADR-0122). Like bootstrapAdmin,
 	// this runs on the constructing goroutine before the loop serves traffic, so it
@@ -3469,6 +3520,13 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 		// check in oidctoken.go.
 		mountFunc(accessPublic, roleAny, "GET "+oidcStartPath, s.handleOIDCStart)
 		mountFunc(accessPublic, roleAny, "GET "+oidcCallbackPath, s.handleOIDCCallback)
+	}
+	// Linking a Microsoft account (ADR-draft-identity-aware-worker-execution §4). Not
+	// public, unlike a login: only a person already signed in links an account, and
+	// the callback must reach the session that started it.
+	if s.msLink != nil {
+		mountFunc(accessAuthenticated, RoleUser, "GET "+linkMicrosoftStartPath, s.handleLinkMicrosoftStart)
+		mountFunc(accessAuthenticated, RoleUser, "GET "+linkMicrosoftCallbackPath, s.handleLinkMicrosoftCallback)
 	}
 
 	// Every /api/v1 route is registered from the single-source-of-truth route
