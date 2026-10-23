@@ -268,3 +268,39 @@ func TestTheMessagesOfTheInstallationAreGroupedWithTheirFindings(t *testing.T) {
 		t.Errorf("the message names route is %s, want modeler", role)
 	}
 }
+
+// TestTwoProcessesWaitingForOneNameAreListedInProcessOrder: the rows of one name and
+// kind are ordered by process before version, so the picker's line does not reshuffle
+// between two renders of the same state.
+func TestTwoProcessesWaitingForOneNameAreListedInProcessOrder(t *testing.T) {
+	srv := eventServer(t)
+	for _, id := range []string{"b-wait", "a-wait"} {
+		xml := strings.ReplaceAll(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <message id="M" name="same.name"/>
+  <process id="ID" isExecutable="true">
+    <startEvent id="go"><messageEventDefinition messageRef="M"/></startEvent>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="go" targetRef="e"/>
+  </process>
+</definitions>`, "ID", id)
+		var compErr, persistErr error
+		srv.do(func() { _, compErr, persistErr = srv.deployModel([]byte(xml), nil, 1, "", "") })
+		if compErr != nil || persistErr != nil {
+			t.Fatalf("deploy %s: %v %v", id, compErr, persistErr)
+		}
+	}
+	code, body := serveInternal(t, srv, http.MethodGet, "/api/v1/message-sources", "", "")
+	var rows []messageSourceView
+	if code != http.StatusOK || json.Unmarshal(body, &rows) != nil {
+		t.Fatalf("message sources = %d %s", code, body)
+	}
+	var order []string
+	for _, r := range rows {
+		if r.MessageName == "same.name" {
+			order = append(order, r.ProcessID)
+		}
+	}
+	if strings.Join(order, ",") != "a-wait,b-wait" {
+		t.Fatalf("same.name is waited for by %v, want a-wait before b-wait", order)
+	}
+}

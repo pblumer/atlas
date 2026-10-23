@@ -162,4 +162,17 @@ func TestACutShortEventLogRowIsAnError(t *testing.T) {
 	if _, err := decodeEventLogRow(1, key, raw); err == nil {
 		t.Error("a send row without its value was decoded")
 	}
+
+	// A reader in either direction stops at such a row and says so.
+	s := openStore(t)
+	tx := s.NewTransaction()
+	must(t, tx.b.Set(key, []byte{byte(EventLogDispatched)}, nil))
+	commit(t, tx)
+	noRow := func(EventLogEntry) error { t.Error("a cut-short row reached the reader"); return nil }
+	if err := s.EventLogAfter(1, 0, noRow); err == nil {
+		t.Error("reading forward over a cut-short row was no error")
+	}
+	if err := s.EventLogBefore(1, 0, noRow); err == nil {
+		t.Error("reading backward over a cut-short row was no error")
+	}
 }
