@@ -3,6 +3,7 @@ package archsketch
 import (
 	"bytes"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -101,7 +102,7 @@ func TestSVGIsWellFormedAndSaysWhatItIs(t *testing.T) {
 	for _, want := range []string{
 		"Architecture sketch — Rechnungswesen v7",
 		"snapshot taken 2026-10-14 17:46 UTC",
-		"mapping version 1",
+		fmt.Sprintf("mapping version %d", MappingVersion),
 		"nothing here was drawn by a person",
 		"Not shown:",
 		"Message auftrag", "starts an instance",
@@ -176,7 +177,7 @@ func TestArchiMateIsValidForPanorama(t *testing.T) {
 	text := string(out)
 	for _, want := range []string{
 		"DERIVED, NOT AUTHORED",
-		"mapping version 1",
+		fmt.Sprintf("mapping version %d", MappingVersion),
 		`<value xml:lang="en">rel-7</value>`,
 		`<value xml:lang="en">app-mahnwesen</value>`,
 		"Local decisions evaluated inside the engine (1) are not written",

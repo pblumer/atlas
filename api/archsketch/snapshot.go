@@ -10,11 +10,12 @@
 // rendering of v7 the same picture tomorrow as today: nothing it is drawn from can
 // change after the release was recorded.
 //
-// What a snapshot holds is the release's **logical part** — the part fixed by its
-// content, identical on every installation that records it. Which worker serves a name
-// on this installation, at which endpoint, and who opens which connection is the
-// physical part, and it is not here yet (ADR-0471 §1, slice S2). Every rendering says
-// so rather than drawing a guess.
+// A snapshot holds the release's **logical part** — the part fixed by its content,
+// identical on every installation that records it — and, from format version 2, the
+// recording installation's **physical part**: which worker serves each name there, at
+// which endpoint, and who opens which connection (ADR-0471 §1; see physical.go). A
+// snapshot from before that has no physical part, and its renderings say so rather
+// than drawing a guess.
 package archsketch
 
 import (
@@ -25,13 +26,20 @@ import (
 // FormatVersion versions the shape of a stored [Snapshot]. It is written into every
 // snapshot, so a reader can tell which fields a snapshot from an older build can be
 // expected to carry. A snapshot is never rewritten when this changes.
-const FormatVersion = 1
+//
+// Version 2 added the physical part and job-type dependencies.
+const FormatVersion = 2
 
 // MappingVersion versions how a snapshot is drawn and written as ArchiMate: which
 // facts become which elements and relationships. It is a small public contract — a
 // document generated under one version stays what it was — and every rendering
-// states it.
-const MappingVersion = 1
+// states it. Version 2 draws the physical part: connections from the side that opens
+// them, target systems, and job types.
+//
+// A snapshot keeps the version it was taken under, and a snapshot without a physical
+// part is drawn exactly as version 1 drew it, so the version a rendering states is
+// the snapshot's own.
+const MappingVersion = 2
 
 // Snapshot is the logical part of one release's architecture.
 type Snapshot struct {
@@ -45,6 +53,9 @@ type Snapshot struct {
 	EntryPoints []EntryPoint `json:"entryPoints"`
 	// Dependencies are what the application reaches out to.
 	Dependencies []Dependency `json:"dependencies"`
+	// Physical is the recording installation's half, absent on a snapshot taken
+	// before format version 2.
+	Physical *Physical `json:"physical,omitempty"`
 }
 
 // Process is one process the release shipped.
@@ -92,6 +103,10 @@ const (
 	// worker it reaches is decided per instance, so the snapshot holds the expression
 	// and nothing it could resolve to.
 	DependencyRuntimeWorker = "runtimeWorker"
+	// DependencyJobType is a service or send task's job type: work any worker that
+	// subscribes to the type leases from Atlas's API (ADR-0007). The model names the
+	// work, not who does it.
+	DependencyJobType = "jobType"
 	// DependencyCall is a call activity into a process this release did not ship.
 	DependencyCall = "call"
 	// DependencyDecision is a local DMN decision a business rule task evaluates. It
@@ -103,8 +118,8 @@ const (
 // Dependency is one way out.
 type Dependency struct {
 	Kind string `json:"kind"`
-	// Name is the worker name, the FEEL expression of a runtime worker, the called
-	// process id, or the decision id.
+	// Name is the worker name, the FEEL expression of a runtime worker, the job type,
+	// the called process id, or the decision id.
 	Name string `json:"name"`
 	// WorkerType is a worker's Worker Type ("rest", "mail", …) as the model's task
 	// type states it.
@@ -169,6 +184,9 @@ func (s *Snapshot) Normalize() {
 			cmp.Compare(a.Name, b.Name),
 			cmp.Compare(a.WorkerType, b.WorkerType))
 	})
+	if s.Physical != nil {
+		s.Physical.normalize()
+	}
 }
 
 // dependencyRank orders the kinds the way the sketch lists them: the dependencies
@@ -179,12 +197,14 @@ func dependencyRank(kind string) int {
 		return 0
 	case DependencyRuntimeWorker:
 		return 1
-	case DependencyCall:
+	case DependencyJobType:
 		return 2
-	case DependencyDecision:
+	case DependencyCall:
 		return 3
+	case DependencyDecision:
+		return 4
 	}
-	return 4
+	return 5
 }
 
 func normalizeUses(uses []Use) []Use {
@@ -238,11 +258,16 @@ type Meta struct {
 	Version       int32
 }
 
-// NotShown is what every rendering lists as absent, in this order. A sketch is
-// believed for everything it does not contradict, so the gaps travel inside it.
-func NotShown() []string {
+// NotShown is what a rendering of this snapshot lists as absent, in this order. A
+// sketch is believed for everything it does not contradict, so the gaps travel inside
+// it.
+func (s Snapshot) NotShown() []string {
+	first := "the physical view: which worker serves each name here, its endpoint, and who opens which connection"
+	if s.Physical != nil {
+		first = "the endpoint of a worker that keeps its own configuration, which such a worker does not report yet"
+	}
 	return []string{
-		"the physical view: which worker serves each name here, its endpoint, and who opens which connection",
+		first,
 		"this installation's own communication: outbound proxy, identity providers, exporters, metrics scraping, deployment targets",
 		"addresses a task builds at run time, and which worker a name authored as FEEL reaches",
 		"what sits behind a target system: gateways, load balancers, the systems they forward to",

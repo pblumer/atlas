@@ -4088,7 +4088,7 @@ async function openReleaseArchitecture(appID, appName, version) {
         <img src="${url}" alt="Architecture sketch of release v${version}" style="display:block; max-width:100%; height:auto">
       </div>
       <div class="modal-foot">
-        <span class="muted small">Taken when the release was recorded. The logical view: which worker serves each name here, and at which endpoint, is not part of it yet.</span>
+        <span class="muted small">Taken when the release was recorded on this installation. Endpoints and worker instances you may not see are withheld.</span>
         <a class="btn ghost" href="${base}.xml" download="${esc(file)}.xml" title="ArchiMate Open Exchange document, for Archi and other architecture tools">ArchiMate (.xml)</a>
         <a class="btn" href="${base}.svg" download="${esc(file)}.svg" title="The sketch as a standalone image">Image (.svg)</a>
       </div>

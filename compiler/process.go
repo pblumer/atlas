@@ -2299,6 +2299,29 @@ func (p *CompiledProcess) MessageReceipts() []MessageReceipt {
 	return out
 }
 
+// JobTypeRef is one service or send task and the job type it creates: work any
+// worker that subscribes to that type may lease (ADR-0007).
+type JobTypeRef struct {
+	ElementId string
+	JobType   string
+}
+
+// JobTypeRefs lists the authored job types of the process's service and send tasks,
+// in node order. A connector task is not listed: it names its worker instead of a
+// type, and [CompiledProcess.ConnectorRefs] reports it (ADR-0471).
+func (p *CompiledProcess) JobTypeRefs() []JobTypeRef {
+	var out []JobTypeRef
+	for i := range p.nodes {
+		if t := p.nodes[i].Type; t != TypeServiceTask && t != TypeSendTask {
+			continue
+		}
+		if jobType := p.Intern(p.serviceTasks[p.nodes[i].Detail].JobType); jobType != "" {
+			out = append(out, JobTypeRef{ElementId: p.ElementBpmnId(int32(i)), JobType: jobType})
+		}
+	}
+	return out
+}
+
 // MailboxUse is one mail task that reads or changes its Worker's mailbox rather than
 // sending through it: the Worker it names and the operation.
 type MailboxUse struct {

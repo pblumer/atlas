@@ -46,6 +46,20 @@ governs a Worker:
 
 ### Added
 
+- **The architecture sketch shows where a release's connections go.** A release now also
+  records what the installation that recorded it had in place for it: its name and
+  environment, its external address (`--external-url`), the public start links of its
+  processes, and for each worker whether Atlas runs it itself or a worker process leases
+  the work, the worker's endpoint reduced to scheme, host and port, and the worker
+  instances seen serving it since the server started. Service tasks with a job type are
+  part of the sketch too, with the instances that leased them. The SVG draws each
+  connection from the side that opens it and names the system a worker connects to; the
+  ArchiMate document adds the worker processes, the target systems and the connections
+  between them. An endpoint is shown only to a reader who may see that worker's
+  configuration and the instances only to an operator; everybody else is told they are
+  withheld. A worker that keeps its own configuration does not report its endpoint yet
+  ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
+
 - **A release carries its architecture sketch.** Publishing an application, and
   importing a promoted release, now takes a snapshot of how the release meets its
   environment and saves it with the release record: the messages its processes receive
@@ -56,9 +70,8 @@ governs a Worker:
   an ArchiMate Open Exchange document for Archi and other tools; the API serves it at
   `GET /api/v1/applications/{id}/releases/{version}/architecture` with `.svg` and `.xml`
   variants. The same release always renders to the same bytes, and the image says when
-  the snapshot was taken and what it does not show. It is the logical view: which worker
-  serves a name on an installation and at which endpoint comes in a later slice, and a
-  release recorded before this version has no snapshot and says so
+  the snapshot was taken and what it does not show. A release recorded before this
+  version has no snapshot and says so
   ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
 
 - **External accounts and delegated connections.** A signed-in person links a Microsoft

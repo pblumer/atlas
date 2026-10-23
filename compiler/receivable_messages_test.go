@@ -157,3 +157,32 @@ func TestMessageReceiptsNameTheElement(t *testing.T) {
 		}
 	}
 }
+
+// TestJobTypeRefsListServiceAndSendTasks: the work a process hands to whatever worker
+// subscribes to a type — an architecture sketch draws it as a way out of the
+// application (ADR-0471). A connector task names its worker and is not listed here.
+func TestJobTypeRefsListServiceAndSendTasks(t *testing.T) {
+	b := NewBuilder(1, "versand", 1)
+	start := b.AddStartEvent()
+	service := b.AddServiceTask("adresse-pruefen", 3)
+	b.SetElementBpmnId(service, "Task_Adresse")
+	send := b.AddSendTask("paket-melden", 3)
+	b.SetElementBpmnId(send, "Send_Paket")
+	end := b.AddEndEvent()
+	b.Connect(start, service)
+	b.Connect(service, send)
+	b.Connect(send, end)
+
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	got := cp.JobTypeRefs()
+	want := []JobTypeRef{
+		{ElementId: "Task_Adresse", JobType: "adresse-pruefen"},
+		{ElementId: "Send_Paket", JobType: "paket-melden"},
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("= %+v, want %+v", got, want)
+	}
+}
