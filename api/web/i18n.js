@@ -482,7 +482,7 @@ const CATALOGS = {
     "apitokens.dashboard.intro.other": "{n} API-Tokens laufen in weniger als {days} Tagen ab.",
     "apitokens.dashboard.open": "API-Tokens öffnen",
 
-    // Connected accounts and Security (ADR-draft-identity-aware-worker-execution).
+    // Connected accounts and Security (ADR-0475).
     // security_page_test.go holds both pages to these keys in both languages.
     "connections.title": "Verbundene Konten",
     "connections.intro": "Hier verknüpfst du ein externes Konto, zum Beispiel dein Microsoft-Konto, und bestimmst, welche Worker in deinem Namen handeln dürfen. Eine neue Verbindung erlaubt noch keinem Worker etwas – das entscheidest du hier.",

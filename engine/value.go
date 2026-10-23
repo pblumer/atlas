@@ -62,7 +62,7 @@ type inflightValue struct {
 	dispatch model.DispatchValue
 	// authorization and approval ride only on an enforcement point's decision, an
 	// approver's answer and the events they emit
-	// (ADR-draft-identity-aware-worker-execution). They are pointers rather than inline
+	// (ADR-0475). They are pointers rather than inline
 	// values, unlike the rest of this struct, because the two records are wide — a dozen
 	// strings each — and every command and event the processor copies carries this
 	// struct: inline they would widen every token movement's copy for a record most

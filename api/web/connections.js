@@ -1,5 +1,5 @@
 // A person's linked accounts and the delegated connections they authorize
-// (ADR-draft-identity-aware-worker-execution §5, §6).
+// (ADR-0475 §5, §6).
 //
 // This page is where consent lives. Linking an account is signing in at the provider
 // — Atlas never sees the password, and the provider's own MFA and Conditional Access

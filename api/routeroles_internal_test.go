@@ -27,7 +27,7 @@ import (
 // before roles existed, so an account that keeps modeler, operator and user on
 // upgrade can still do exactly what it could yesterday: everything except these.
 var wantAdminRoutes = []string{
-	// Who may do what as whom (ADR-draft-identity-aware-worker-execution): the policies
+	// Who may do what as whom (ADR-0475): the policies
 	// that decide every governed Worker action, the identity a Worker acts as, the
 	// readiness inventory, and the view of what can act as a given person. A modeler
 	// who deploys BPMN must not be able to change any of them.

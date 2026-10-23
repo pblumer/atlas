@@ -554,7 +554,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"errorCode": tString(), "errorMessage": tString(), "worker": tString(), "leaseToken": tInteger(), "reason": tString(),
 			}, "errorCode")),
 			resp: jsonBody("Job key", tObject())}},
-		// Identity-aware Worker execution (ADR-draft-identity-aware-worker-execution).
+		// Identity-aware Worker execution (ADR-0475).
 		{"POST", "/api/v1/jobs/{key}/authorize", s.handleAuthorizeJob, apiOp{
 			summary: "Ask, as the lease-holding worker, whether a governed job's external action may run: the decision is recorded before the answer, the answer carries the parameters it covers, and a permitted delegated action its short-lived credential (supervised Worker Instances only). A legacy Worker is answered with enforcement off", tag: "Incidents", role: RoleOperator,
 			req: jsonBody("The holding worker id and the lease token its activation returned", schemaObj(map[string]any{

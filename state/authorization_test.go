@@ -9,7 +9,7 @@ import (
 
 // Evidence is read per instance and per job, in order, isolated from other instances,
 // and it goes with the instance's history when that is purged
-// (ADR-draft-identity-aware-worker-execution §12).
+// (ADR-0475 §12).
 func TestAuthorizationEvidenceIsPerInstanceAndPurgedWithIt(t *testing.T) {
 	s := openStore(t)
 	i1, i2 := model.NewKey(1, 10), model.NewKey(1, 11)

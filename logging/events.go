@@ -493,7 +493,7 @@ var (
 	PersonalDataKeyWriteRefused = newEvent("personal_data.key_write_refused")
 )
 
-// Identity-aware Worker execution (ADR-draft-identity-aware-worker-execution). The
+// Identity-aware Worker execution (ADR-0475). The
 // decisions themselves are engine facts, durable in the log; these lines are the
 // operational trail of what happened around them — a link, a revocation, a refusal at
 // the edge — and name principals by id, never a token or a credential.

@@ -17,7 +17,7 @@ permits.** A person links their Microsoft account and chooses which Workers may 
 them; an administrator publishes versioned authorization policies; and a governed Worker
 asks Atlas before every action, which decides, records the decision on the log, and — for
 a delegated Worker — releases a short-lived token for that one action
-([ADR-draft-identity-aware-worker-execution](docs/adr/draft-identity-aware-worker-execution.md),
+([ADR-0475](docs/adr/0475-identity-aware-worker-execution.md),
 proposed). This build governs the SharePoint Worker Type only, and releases a person's
 token only to a Worker Instance Atlas supervises.
 

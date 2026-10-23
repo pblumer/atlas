@@ -341,7 +341,7 @@ type Server struct {
 	// their credentials; policies is the policy administration point; governed is the
 	// in-memory view of which Workers carry an identity policy, read by the
 	// enforcement point and the completion guard without a store read
-	// (ADR-draft-identity-aware-worker-execution). identity is nil when the vault is
+	// (ADR-0475). identity is nil when the vault is
 	// disabled: a delegated credential has nowhere else it may live.
 	identity *identity.Service
 	policies *policy.Service
@@ -511,7 +511,7 @@ type Server struct {
 	internalToken string
 	// brokerKey is what a supervised Worker Instance presents, beside the internal
 	// token, when it asks for a person's delegated credential
-	// (ADR-draft-identity-aware-worker-execution §11). Every supervised child holds the
+	// (ADR-0475 §11). Every supervised child holds the
 	// internal token; only the one serving a brokered Worker Type is handed this key, so
 	// a compromised child of another kind cannot obtain a person's token by leasing a
 	// job it does not serve. Minted per start, kept in memory only; empty when auth is
@@ -2036,7 +2036,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 				slog.String("path", filepath.Join(dataDir, "vault.key")))
 		}
 	}
-	// Identity-aware Worker execution (ADR-draft-identity-aware-worker-execution). The
+	// Identity-aware Worker execution (ADR-0475). The
 	// policy store opens whatever state it is in — a set that will not build leaves
 	// every governed action refused rather than the server down — and the identity
 	// service exists only with a vault, where a delegated credential has to live.
@@ -3521,7 +3521,7 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 		mountFunc(accessPublic, roleAny, "GET "+oidcStartPath, s.handleOIDCStart)
 		mountFunc(accessPublic, roleAny, "GET "+oidcCallbackPath, s.handleOIDCCallback)
 	}
-	// Linking a Microsoft account (ADR-draft-identity-aware-worker-execution §4). Not
+	// Linking a Microsoft account (ADR-0475 §4). Not
 	// public, unlike a login: only a person already signed in links an account, and
 	// the callback must reach the session that started it.
 	if s.msLink != nil {

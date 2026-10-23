@@ -351,7 +351,7 @@ func runtimeTools() []Tool {
 		{
 			Name: "atlas_instance_authorizations",
 			Description: "Read one process instance's recorded authorization decisions " +
-				"(ADR-draft-identity-aware-worker-execution): for each governed Worker action, who initiated the " +
+				"(ADR-0475): for each governed Worker action, who initiated the " +
 				"instance, for whom and as which external identity the action ran, the Worker and Worker Instance, " +
 				"the resource and action digest, the deciding policy and version, the effect and reason code, " +
 				"whether it was enforced or shadow, and the trace that explains it. This is how to answer why an " +

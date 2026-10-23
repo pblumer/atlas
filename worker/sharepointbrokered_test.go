@@ -14,7 +14,7 @@ import (
 	"github.com/pblumer/atlas/connector/sharepoint"
 )
 
-// Asking before acting, for SharePoint (ADR-draft-identity-aware-worker-execution §4,
+// Asking before acting, for SharePoint (ADR-0475 §4,
 // §5): a governed Worker acts only on a permit or in shadow, on the parameters the
 // decision covers, and a brokered instance acts only with the token its permit carried.
 

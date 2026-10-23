@@ -18,7 +18,7 @@ import (
 )
 
 // The enforcement point end to end, on the HTTP surface
-// (ADR-draft-identity-aware-worker-execution §5, §14): a SharePoint delete as the
+// (ADR-0475 §5, §14): a SharePoint delete as the
 // person who started the process, through their own delegated connection, refused
 // until a manager approves it and then executed with a brokered credential.
 

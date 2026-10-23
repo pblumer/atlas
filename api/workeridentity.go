@@ -18,7 +18,7 @@ import (
 )
 
 // A configured Worker's identity policy
-// (ADR-draft-identity-aware-worker-execution §11): which identity its actions run
+// (ADR-0475 §11): which identity its actions run
 // as, for whom, and whether a policy decision is recorded beside them or enforced.
 //
 // A Worker without one is legacy: it behaves exactly as before, records nothing, and
@@ -106,7 +106,7 @@ func delegatedEndpointAllowed(endpoint string) bool {
 // governed Worker's settings decide where its actions go — its endpoint is where a
 // delegated Worker sends a person's token — so changing them is the identity policy's
 // administrator's act, like the policy itself, and not a Worker editor's
-// (ADR-draft-identity-aware-worker-execution §11).
+// (ADR-0475 §11).
 func (s *Server) refuseGovernedChange(r *http.Request, rec connector) string {
 	if rec.Identity == nil {
 		return ""

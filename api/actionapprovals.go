@@ -15,7 +15,7 @@ import (
 )
 
 // Authorization evidence and action approvals as the API shows them
-// (ADR-draft-identity-aware-worker-execution §9, §12).
+// (ADR-0475 §9, §12).
 
 // authorizationView is one recorded decision.
 type authorizationView struct {

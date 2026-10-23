@@ -14,7 +14,7 @@ const digestVersion = 1
 // Digest is the identity of one action: SHA-256 over a canonical JSON of the Worker
 // Type, the Worker, the operation, the canonical resource and every material
 // parameter. An approval is of a digest, so approving one action can never be
-// replayed for another (ADR-draft-identity-aware-worker-execution §9).
+// replayed for another (ADR-0475 §9).
 //
 // The JSON is canonical because encoding/json writes map keys in sorted order and a
 // value decoded from JSON re-encodes to the same bytes. Only the server computes a

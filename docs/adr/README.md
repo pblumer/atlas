@@ -560,6 +560,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0472](0472-event-log.md) | Atlas keeps a log of the signals and messages that were sent | Accepted (2026-10-22) | Landed |
 | [0473](0473-form-remote-data-sources.md) | A form looks remote data up through an ephemeral worker query | Accepted | Landed |
 | [0474](0474-readable-element-ids.md) | Readable ids for new BPMN elements | Accepted | Landed |
+| [0475](0475-identity-aware-worker-execution.md) | Identity-aware Worker execution and policy-based authorization | Proposed | Partial |
 
 ## The two states of a record
 

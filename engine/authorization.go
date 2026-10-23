@@ -3,7 +3,7 @@ package engine
 import "github.com/pblumer/atlas/model"
 
 // Authorization evidence and approvals
-// (ADR-draft-identity-aware-worker-execution §5, §9, §12).
+// (ADR-0475 §5, §9, §12).
 //
 // The decision is made off the run loop, by the enforcement point; the engine's part
 // is to make it a fact, fenced on the lease it was made for, and to make its

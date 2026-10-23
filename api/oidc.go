@@ -288,7 +288,7 @@ func (p *oidcProvider) exchange(ctx context.Context, code, verifier, redirectURI
 }
 
 // oauthTokens is a provider's token response. A login reads only the ID token; an
-// account link (ADR-draft-identity-aware-worker-execution §4) also keeps the refresh
+// account link (ADR-0475 §4) also keeps the refresh
 // token, which goes straight to the vault.
 type oauthTokens struct {
 	IDToken      string `json:"id_token"`

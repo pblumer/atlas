@@ -203,7 +203,7 @@ var mcpToolRoutes = map[string]string{
 // add a matching tool (and an entry above) or record here why an agent should
 // not have it.
 var mcpOmittedRoutes = map[string]string{
-	// Identity-aware Worker execution (ADR-draft-identity-aware-worker-execution). An
+	// Identity-aware Worker execution (ADR-0475). An
 	// agent reads the decisions (atlas_instance_authorizations); everything else here is
 	// a Worker's protocol step, a person's consent or answer, or the administration of
 	// who may do what — none of it an agent's to do.

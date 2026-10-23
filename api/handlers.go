@@ -5512,7 +5512,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			// A governed Worker's completion stands only on a permit recorded for this
-			// very lease (ADR-draft-identity-aware-worker-execution §11): a Worker that
+			// very lease (ADR-0475 §11): a Worker that
 			// acted without asking cannot move the process on, whatever it did.
 			if s.refusesUnauthorizedCompletion(key, jv) {
 				unauthorized = true

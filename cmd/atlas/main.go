@@ -246,7 +246,7 @@ func runServe(args []string) error {
 	oidcScopes := fs.String("oidc-scopes", os.Getenv("ATLAS_OIDC_SCOPES"), "space-separated OIDC scopes to request; empty asks for \"openid profile email\" (or ATLAS_OIDC_SCOPES)")
 	oidcName := fs.String("oidc-name", os.Getenv("ATLAS_OIDC_NAME"), "what the sign-in button on the login screen says; empty uses the issuer's host (or ATLAS_OIDC_NAME)")
 	// Linking Microsoft accounts for delegated Worker execution
-	// (ADR-draft-identity-aware-worker-execution §4): an app registration of one tenant,
+	// (ADR-0475 §4): an app registration of one tenant,
 	// separate from the sign-in provider above, because what it asks for — delegated
 	// Graph scopes and offline access — is not what a login needs.
 	linkTenant := fs.String("link-microsoft-tenant", os.Getenv("ATLAS_LINK_MICROSOFT_TENANT"), "Microsoft Entra tenant id whose users may link their accounts for delegated Worker execution; empty turns linking off (or ATLAS_LINK_MICROSOFT_TENANT)")

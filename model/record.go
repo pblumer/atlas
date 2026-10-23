@@ -183,7 +183,7 @@ const (
 	VTDispatch
 	// VTAuthorization is one policy decision about one external Worker action — the
 	// evidence written before anything the action needs is released
-	// (ADR-draft-identity-aware-worker-execution §12). Append-only history keyed under
+	// (ADR-0475 §12). Append-only history keyed under
 	// its process instance, like VTOperatorAction. Appended last so every prior value
 	// type keeps its numeric value on the log.
 	VTAuthorization
@@ -570,7 +570,7 @@ const (
 
 	// IntentAuthorizationDeciding is a command-only intent: an enforcement point asks
 	// that a decision it made be recorded for a job it holds a lease on
-	// (ADR-draft-identity-aware-worker-execution §5). Its handler re-checks the lease,
+	// (ADR-0475 §5). Its handler re-checks the lease,
 	// records IntentAuthorizationDecided and, for an enforced refusal, fails the job or
 	// asks for approval in the same batch, so the decision and its consequence are
 	// durable together (I2). Appended at the end so every prior intent keeps its value.

@@ -1,5 +1,5 @@
 // Package policy is the policy administration point
-// (ADR-draft-identity-aware-worker-execution §9): administrators write policies as
+// (ADR-0475 §9): administrators write policies as
 // drafts, publish them as immutable numbered versions, switch them on and off, and
 // try them against a simulated request. What it publishes is compiled once into an
 // immutable [authz.Set] that the enforcement point reads without a lock.

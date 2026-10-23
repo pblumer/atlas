@@ -1,5 +1,5 @@
 // e2e for the Console's two identity pages (api/web/connections.js and
-// api/web/security.js, ADR-draft-identity-aware-worker-execution), against a fixture.
+// api/web/security.js, ADR-0475), against a fixture.
 //
 // What has to hold on a screen, beyond what the Go tests prove about the routes:
 //

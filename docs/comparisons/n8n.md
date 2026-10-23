@@ -312,7 +312,7 @@ than the previous comparison conveyed.
 an OAuth credential resolved at run time to the account of the person who
 triggers the workflow. A per-execution executing identity is therefore **not**
 unique to Atlas. Atlas has a proposed, partly built design
-([ADR-draft-identity-aware-worker-execution](../adr/draft-identity-aware-worker-execution.md))
+([ADR-0475](../adr/0475-identity-aware-worker-execution.md))
 in which a governed Worker asks for a decision before each action, against
 versioned policies, with approvals bound to a digest of the exact action and
 the decision recorded on the event log. It covers the SharePoint Worker Type

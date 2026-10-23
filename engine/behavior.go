@@ -1298,7 +1298,7 @@ func handleJobError(c *ProcessingContext) {
 // throwJobError throws code from the job's element: to the nearest handler that
 // catches it, or — with nowhere to go — onto an incident that keeps the job, its
 // retries spent. A worker's report and an enforcement point's request for approval
-// (ADR-draft-identity-aware-worker-execution §9) throw through here alike.
+// (ADR-0475 §9) throw through here alike.
 func throwJobError(c *ProcessingContext, key uint64, job *model.JobValue, code, message string) {
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil && errorUncaughtAtRoot(c, job.ElementInstanceKey, ei, code) {
 		// Given back as a failing worker gives it back (handleJobFailed): the lease is

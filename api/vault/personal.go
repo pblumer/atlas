@@ -76,7 +76,7 @@ var ErrErased = errors.New("vault: the data subject's key has been erased; this 
 func DataKeyName(subject string) string { return dataKeyPrefix + subject }
 
 // connectionCredentialPrefix names the region holding delegated connections' refresh
-// tokens (ADR-draft-identity-aware-worker-execution §3). Like the data keys they are
+// tokens (ADR-0475 §3). Like the data keys they are
 // not operator secrets: a person consented to them, and only the credential broker
 // reads them.
 const connectionCredentialPrefix = "atlas:connection-credential:"

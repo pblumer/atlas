@@ -166,7 +166,7 @@ var apiScopeAllowed = map[string][]string{
 	apiScopeWorker: {
 		"POST /api/v1/jobs/activate",
 		// A governed job's action is authorized for the lease its worker holds
-		// (ADR-draft-identity-aware-worker-execution §5): a worker makes this call
+		// (ADR-0475 §5): a worker makes this call
 		// before it acts, so a worker credential must be able to.
 		"POST /api/v1/jobs/{key}/authorize",
 		"POST /api/v1/jobs/{key}/complete",

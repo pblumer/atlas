@@ -13,7 +13,7 @@ import (
 )
 
 // The engine half of an enforcement point
-// (ADR-draft-identity-aware-worker-execution): a decision becomes a fact only for the
+// (ADR-0475): a decision becomes a fact only for the
 // lease it was made under, its consequence commits in the same batch, and replay
 // rebuilds the evidence without deciding anything.
 

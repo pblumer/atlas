@@ -1,5 +1,5 @@
 // Console → Administration → Security: who acts as whom, and by which policy
-// (ADR-draft-identity-aware-worker-execution §10, §12, §13, §17).
+// (ADR-0475 §10, §12, §13, §17).
 //
 // Four parts, in the order an administrator migrates through them:
 //

@@ -119,7 +119,7 @@ type Command struct {
 	// same command. Same contract as Triggered.
 	Reported *OutcomeResult
 	// Authorized is where a decision's recording is answered
-	// (ADR-draft-identity-aware-worker-execution): recorded, or refused because the
+	// (ADR-0475): recorded, or refused because the
 	// lease it was made for is gone. Same contract as Triggered.
 	Authorized *AuthorizationResult
 	// Approved is where an approver's answer is answered. Same contract as Triggered.

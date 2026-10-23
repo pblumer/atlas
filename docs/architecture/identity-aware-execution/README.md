@@ -1,6 +1,6 @@
 # Identity-aware Worker execution: the worked example
 
-The scenario of [ADR-draft-identity-aware-worker-execution](../../adr/draft-identity-aware-worker-execution.md)
+The scenario of [ADR-0475](../../adr/0475-identity-aware-worker-execution.md)
 §14, as files you can deploy: a person asks for a document in the HR library to be
 deleted, a manager approves that exact deletion, and the SharePoint Worker deletes it as
 the person who asked — through their own Microsoft account, with a token Atlas released

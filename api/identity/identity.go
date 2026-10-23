@@ -1,6 +1,6 @@
 // Package identity holds the external identities Atlas users link and the delegated
 // connections they authorize, and brokers the short-lived credentials those
-// connections yield (ADR-draft-identity-aware-worker-execution §3, §4).
+// connections yield (ADR-0475 §3, §4).
 //
 // Four concepts stay apart here. An Atlas principal is the user store's. An
 // [ExternalIdentity] is one account at a provider, bound by issuer, tenant and stable

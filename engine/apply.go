@@ -524,7 +524,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 
 	case model.VTAuthorization:
 		if h.Intent == model.IntentAuthorizationDecided && v.authorization != nil {
-			// A policy decision (ADR-draft-identity-aware-worker-execution §12). It was
+			// A policy decision (ADR-0475 §12). It was
 			// made on the command path and frozen into the event; this only stores it, so
 			// replay rebuilds the same evidence without evaluating any policy (I4/I6).
 			return tx.RecordAuthorization(h.Position, v.authorization)

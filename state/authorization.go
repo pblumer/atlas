@@ -6,7 +6,7 @@ import (
 )
 
 // Authorization evidence and approval facts
-// (ADR-draft-identity-aware-worker-execution §12).
+// (ADR-0475 §12).
 //
 // Both families are append-only history keyed under their process instance, like the
 // operator-action trail, and both go with the instance when its history is purged:

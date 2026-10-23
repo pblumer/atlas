@@ -136,7 +136,7 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 }
 
 // refuseReservedSecret answers a write or delete of a connection's credential through
-// the secrets API (ADR-draft-identity-aware-worker-execution §3) and reports whether it
+// the secrets API (ADR-0475 §3) and reports whether it
 // did. A data key has its own refusal above, with its own route to name; a connection's
 // refresh token is a person's consent, managed by revoking the connection, and an
 // operator overwriting it would make the broker act on a token nobody consented to.

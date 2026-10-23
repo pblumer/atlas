@@ -31,7 +31,7 @@ func (e AuthzEffect) String() string {
 
 // AuthorizationValue is one policy decision about one external Worker action, the
 // evidence an enforcement point writes before it releases anything the action needs
-// (ADR-draft-identity-aware-worker-execution §12).
+// (ADR-0475 §12).
 //
 // Everything in it was decided on the command path and is frozen here: applyToState
 // stores it and nothing else, so replay rebuilds the same history without evaluating
@@ -206,7 +206,7 @@ func (o ApprovalOutcome) String() string {
 }
 
 // ActionApprovalValue is one fact about an approval of one action
-// (ADR-draft-identity-aware-worker-execution §9): that it was requested, that an
+// (ADR-0475 §9): that it was requested, that an
 // approver answered, or that an answer was withdrawn. Every fact is its own event,
 // keyed under its instance and approval, so the approval's history is the sequence of
 // them and nothing is ever overwritten.

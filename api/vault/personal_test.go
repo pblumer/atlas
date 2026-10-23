@@ -427,7 +427,7 @@ func TestADataKeyFromAnotherInstallationIsNamed(t *testing.T) {
 
 // A connection's refresh token is not an operator secret any more than a data key is:
 // it belongs to the person who consented, and only the credential broker reads it
-// (ADR-draft-identity-aware-worker-execution §3).
+// (ADR-0475 §3).
 func TestConnectionCredentialsAreReservedAndUnlisted(t *testing.T) {
 	v := newTestVault(t)
 	name := ConnectionCredentialName("con_1")

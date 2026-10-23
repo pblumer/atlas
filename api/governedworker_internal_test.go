@@ -16,7 +16,7 @@ import (
 )
 
 // Where a governed Worker's credential may go, and who may change that
-// (ADR-draft-identity-aware-worker-execution §11). The identity policy is an
+// (ADR-0475 §11). The identity policy is an
 // administrator's; these tests hold the settings around it to the same standard,
 // because a Worker editor who could move a delegated Worker's endpoint would receive
 // every person's token the policy then permits.

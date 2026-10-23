@@ -1,6 +1,6 @@
 // Package authz is Atlas's policy decision point: it decides whether one external
 // Worker action may run, and why
-// (ADR-draft-identity-aware-worker-execution).
+// (ADR-0475).
 //
 // It is pure. [Set.Evaluate] reads its arguments and nothing else — no store, no
 // network, no clock (the instant is in the request) — so a decision is a function of

@@ -911,7 +911,7 @@ func (s *Server) sharepointWorkerEnv() []string {
 				continue
 			}
 			// A delegated Worker's credential is brokered per authorized job and never
-			// handed over whole (ADR-draft-identity-aware-worker-execution §4): the child
+			// handed over whole (ADR-0475 §4): the child
 			// learns only where the Graph is and that it must ask for a token, so a
 			// compromised child holds no refresh token and no app secret for it.
 			if c.Identity != nil && authz.IsDelegated(c.Identity.Mode) {

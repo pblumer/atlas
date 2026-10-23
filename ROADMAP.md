@@ -1026,7 +1026,7 @@ What it takes to run this for real.
   (`vaultSecret`), so the one the shop's system processes present never leaves the server
   ([ADR-0194](docs/adr/0194-api-tokens.md), amendment 2026-10-21)
 - 🚧 Job-worker protocol — ADR-0007: built over HTTP, with the type-keyed pull, long-poll, leases, `leaseToken` fencing, complete, fail and BPMN errors, and the activation and lease-timeout counters. A gRPC transport is not built, and whether it should be is open
-- 🚧 Authorize step in the job-worker protocol ([ADR-draft-identity-aware-worker-execution](docs/adr/draft-identity-aware-worker-execution.md)): a Worker governed by an identity policy asks `POST /api/v1/jobs/{key}/authorize` for the lease it holds before it acts, and a completion without a recorded Permit for that lease is refused (409). The shipped SharePoint Worker asks; other Worker Types and externally built Workers do not yet. A per-Worker-Instance credential, which would let the server tell instances apart beyond the shared internal token, is not built
+- 🚧 Authorize step in the job-worker protocol ([ADR-0475](docs/adr/0475-identity-aware-worker-execution.md)): a Worker governed by an identity policy asks `POST /api/v1/jobs/{key}/authorize` for the lease it holds before it acts, and a completion without a recorded Permit for that lease is refused (409). The shipped SharePoint Worker asks; other Worker Types and externally built Workers do not yet. A per-Worker-Instance credential, which would let the server tell instances apart beyond the shared internal token, is not built
 - 🚧 Worker SDK (Go first): the `worker` package is usable from Go — handlers, concurrency, `BPMNError` — but is not yet packaged and documented as an SDK
 - ✅ A worker runs the jobs of one type concurrently: `--max-jobs` places, a poll asking only
   for the free ones, and supervised built-in workers at the engine's in-process bound
@@ -1417,7 +1417,7 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   live sessions and stored nowhere, so it is presence and never an attendance history
   ([ADR-0228](docs/adr/0228-user-presence.md)).
 - 🚧 **Identity-aware Worker execution & policy-based authorization**
-  ([ADR-draft-identity-aware-worker-execution](docs/adr/draft-identity-aware-worker-execution.md),
+  ([ADR-0475](docs/adr/0475-identity-aware-worker-execution.md),
   proposed): a person links their Microsoft account (authorization code with PKCE; no
   password ever reaches Atlas) and chooses which Workers may act as them; the refresh
   token stays in the vault, and a supervised SharePoint Worker receives a short-lived

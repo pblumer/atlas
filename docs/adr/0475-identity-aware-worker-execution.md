@@ -1,4 +1,4 @@
-# ADR-DRAFT: Identity-aware Worker execution and policy-based authorization
+# ADR-0475: Identity-aware Worker execution and policy-based authorization
 
 - **Status:** Proposed
 - **Implementation:** Partial

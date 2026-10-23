@@ -721,7 +721,7 @@ const TOPNAV = {
       // behind it: issuing one is the same class of act as creating an account.
       { name: "API tokens", route: "#/console/api-tokens", role: "admin" },
       // Which Workers act as whom, by which policy: readiness, policies, the simulator
-      // and the recorded decisions (ADR-draft-identity-aware-worker-execution).
+      // and the recorded decisions (ADR-0475).
       { name: "Security", route: "#/console/security", role: "admin" },
       { name: "Audit log", route: "#/console/audit", role: "admin" },
     ] },

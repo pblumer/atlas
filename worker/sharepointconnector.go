@@ -38,7 +38,7 @@ func sharepointRegistryFromEnv(env func(string) string) (*sharepoint.Registry, [
 }
 
 // sharepointSourcesFromEnv is sharepointRegistryFromEnv plus the instances whose
-// credential is brokered per job (ADR-draft-identity-aware-worker-execution §4):
+// credential is brokered per job (ADR-0475 §4):
 // ATLAS_SHAREPOINT_<NAME>_BROKERED=1 says the worker holds no credential for that
 // instance at all and asks the server for a short-lived token each time it is allowed
 // to act. Only its endpoint is known here.
@@ -97,7 +97,7 @@ func RunSharePointJob(ctx context.Context, j Job, reg *sharepoint.Registry) (map
 	return runSharePointJob(ctx, j, reg, nil)
 }
 
-// runSharePointJob asks the server first (ADR-draft-identity-aware-worker-execution
+// runSharePointJob asks the server first (ADR-0475
 // §5). A governed Worker's action runs only on a permit or in shadow, on the
 // parameters the decision covers, and — for a brokered instance — with the credential
 // that came with the permit and nothing else.

@@ -527,7 +527,7 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 		compensableScopePrefix(piKey),
 		// Authorization evidence and approval facts explain this instance's history and
 		// are retained exactly as long as it is
-		// (ADR-draft-identity-aware-worker-execution §12).
+		// (ADR-0475 §12).
 		authorizationInstancePrefix(piKey),
 		approvalInstancePrefix(piKey),
 	} {

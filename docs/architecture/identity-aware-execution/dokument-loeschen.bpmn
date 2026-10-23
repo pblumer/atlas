@@ -7,7 +7,7 @@
                   id="defs-dokument-loeschen" targetNamespace="http://atlas/examples">
   <bpmn:error id="err-freigabe" name="Freigabe nötig" errorCode="ATLAS_APPROVAL_REQUIRED"/>
   <bpmn:process id="dokument-loeschen" name="Dokument löschen (delegiert, freigabepflichtig)" isExecutable="true">
-    <bpmn:documentation>Deletes a document in the HR library as the person who started the instance, through their own linked Microsoft account (ADR-draft-identity-aware-worker-execution). Starts from the variable docPath. The Worker sp-prod carries the identity policy delegated-per-job / actAs initiator; the policy hr-documents permits members of grp_documents only with one manager's approval of this exact deletion. Nothing in the model decides who may delete or as whom: a variable named approved would change nothing.</bpmn:documentation>
+    <bpmn:documentation>Deletes a document in the HR library as the person who started the instance, through their own linked Microsoft account (ADR-0475). Starts from the variable docPath. The Worker sp-prod carries the identity policy delegated-per-job / actAs initiator; the policy hr-documents permits members of grp_documents only with one manager's approval of this exact deletion. Nothing in the model decides who may delete or as whom: a variable named approved would change nothing.</bpmn:documentation>
     <bpmn:startEvent id="start" name="Löschung beantragt">
       <bpmn:outgoing>f1</bpmn:outgoing>
     </bpmn:startEvent>

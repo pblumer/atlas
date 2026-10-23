@@ -361,7 +361,7 @@ eine OAuth-Anmeldung, die zur Laufzeit auf das Konto der Person aufgelöst
 wird, die den Workflow auslöst. Eine ausführende Identität pro Ausführung ist
 also **kein** Alleinstellungsmerkmal von Atlas. Atlas hat einen
 vorgeschlagenen, teilweise umgesetzten Entwurf
-([ADR-draft-identity-aware-worker-execution](../adr/draft-identity-aware-worker-execution.md)),
+([ADR-0475](../adr/0475-identity-aware-worker-execution.md)),
 in dem ein geregelter Worker vor jeder Aktion einen Entscheid anfordert –
 gegen versionierte Policies, mit Genehmigungen, die an einen Digest der
 genauen Aktion gebunden sind, und mit dem Entscheid im Ereignisprotokoll.

@@ -79,7 +79,7 @@ func (s *Server) resolveConnectorSecret(ref string) string {
 	// A Worker's reference is operator input, and whatever it resolves to is handed
 	// to the Worker — into a supervised child's environment among other places. A
 	// reserved name would hand over a person's delegated refresh token or a data
-	// subject's key, so it resolves to nothing (ADR-draft-identity-aware-worker-execution
+	// subject's key, so it resolves to nothing (ADR-0475
 	// §3): delegated credentials leave Atlas only as short-lived access tokens, through
 	// the authorization endpoint.
 	if vault.IsReservedName(ref) {
@@ -323,7 +323,7 @@ func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, map[str
 		// A governed Worker never runs inside the engine: there it would act with the
 		// Worker's own credential without asking, and the engine would complete the job
 		// itself, past the completion guard
-		// (ADR-draft-identity-aware-worker-execution §11). Its tasks park here and are
+		// (ADR-0475 §11). Its tasks park here and are
 		// served only by a supervised Worker Instance that asks first.
 		if c.Identity != nil {
 			problems[c.Name] = problemGovernedInProcess
@@ -723,7 +723,7 @@ func (s *Server) connectorProblem(kind, name string) string {
 // reserved regions of the vault — a person's data key, a delegated connection's
 // refresh token — are written and read only by the code that owns them; a Worker
 // naming one could read it through its supervised environment, or have it
-// overwritten by a provisioning call (ADR-draft-identity-aware-worker-execution §6).
+// overwritten by a provisioning call (ADR-0475 §6).
 func refuseReservedRef(ref string) string {
 	if vault.IsReservedName(strings.TrimSpace(ref)) {
 		return "a Worker's credential reference may not name a reserved vault entry"

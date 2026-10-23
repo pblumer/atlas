@@ -53,7 +53,7 @@ These will be addressed as the corresponding milestones land (see the [roadmap](
 
 ## Identity-aware Worker execution: what is enforced where
 
-[ADR-draft-identity-aware-worker-execution](docs/adr/draft-identity-aware-worker-execution.md)
+[ADR-0475](docs/adr/0475-identity-aware-worker-execution.md)
 (proposed, partly built) lets a governed Worker act only after Atlas decides and records a
 Permit. How strong that guarantee is depends on the mode, and a report about it should
 say which mode it concerns:

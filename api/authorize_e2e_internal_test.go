@@ -15,7 +15,7 @@ import (
 )
 
 // The first deliverable of the record, end to end
-// (ADR-draft-identity-aware-worker-execution §22): a delegated Microsoft identity
+// (ADR-0475 §22): a delegated Microsoft identity
 // executing a policy-authorized SharePoint action within a durable BPMN process — this
 // server, the shipped `atlas worker` SharePoint code, and a Graph that records what it
 // was asked and with which token.

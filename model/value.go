@@ -373,7 +373,7 @@ type ProcessInstanceValue struct {
 	PublicPassHash string `json:"-"`
 	// StartedBy is the stable principal id ("usr_…") of whoever created the instance
 	// through an authenticated API call, frozen into the activation event from the
-	// request's principal (ADR-draft-identity-aware-worker-execution §3). It is the
+	// request's principal (ADR-0475 §3). It is the
 	// one trusted answer to "who initiated this": a variable naming the starter can be
 	// rewritten by any later step, this cannot. Empty when nobody authenticated did —
 	// a timer, a message, an open server — and on every record written before it.
@@ -1511,7 +1511,7 @@ const (
 	// incident rather than leaving the token parked behind none.
 	IncidentUnhandledError IncidentReason = 7
 	// IncidentAuthorizationDenied marks a job whose external action a policy refused
-	// (ADR-draft-identity-aware-worker-execution §5): the decision is recorded beside it
+	// (ADR-0475 §5): the decision is recorded beside it
 	// and its message names the reason and the decision. Retrying would only be refused
 	// again, so the job parks here with its retries spent; resolving it re-offers the
 	// job, and the next lease is decided afresh — under whatever the policies, the

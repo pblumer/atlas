@@ -9,7 +9,7 @@ import (
 
 // Standalone is one compiled decision held outside the registry, by a caller that owns
 // its lifecycle: an authorization policy embeds a decision table and is compiled when
-// the policy is published (ADR-draft-identity-aware-worker-execution §6).
+// the policy is published (ADR-0475 §6).
 //
 // It is not a deployment. Nothing is keyed or registered, so publishing a policy can
 // never become "a new version" of a decision a process is bound to (ADR-0319), and the

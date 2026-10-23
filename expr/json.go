@@ -95,7 +95,7 @@ func FromJSON(raw any) Value {
 
 // ContextOf builds a FEEL context from values that are already FEEL values — for a
 // binding whose members include something JSON has no image of, such as the instant
-// an authorization request is evaluated at (ADR-draft-identity-aware-worker-execution).
+// an authorization request is evaluated at (ADR-0475).
 // Members go in sorted key order, as FromJSON's do, so the context iterates the same
 // way every time.
 func ContextOf(members map[string]Value) Value {

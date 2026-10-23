@@ -18,7 +18,7 @@ import (
 	"github.com/pblumer/atlas/api/vault"
 )
 
-// Linking a Microsoft account (ADR-draft-identity-aware-worker-execution §4) against a
+// Linking a Microsoft account (ADR-0475 §4) against a
 // fake tenant that signs real tokens and checks PKCE, as Microsoft's does.
 
 type fakeTenant struct {

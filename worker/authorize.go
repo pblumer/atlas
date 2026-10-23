@@ -7,7 +7,7 @@ import (
 	"strconv"
 )
 
-// Asking before acting (ADR-draft-identity-aware-worker-execution §5).
+// Asking before acting (ADR-0475 §5).
 //
 // A handler whose Worker Type the server can govern asks, before it touches the
 // target system, whether it may — through [Authorize], which the worker puts within

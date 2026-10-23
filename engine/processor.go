@@ -610,7 +610,7 @@ func (p *Processor) CreateInstanceWithPass(defKey uint64, created *uint64, passH
 // creation command's instance value, which the activation event copies whole, so who
 // initiated the instance is durable in the same fsync as the instance and read back on
 // replay (I2, I6) — the trusted "initiated by" of
-// ADR-draft-identity-aware-worker-execution §3.
+// ADR-0475 §3.
 func (p *Processor) CreateInstanceStartedBy(defKey uint64, created *uint64, startedBy string, startVars ...model.VariableValue) {
 	p.queue = append(p.queue, Command{
 		ValueType: model.VTProcessInstance,

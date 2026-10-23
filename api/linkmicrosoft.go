@@ -19,7 +19,7 @@ import (
 )
 
 // Linking a Microsoft account to an Atlas user and authorizing a delegated connection
-// (ADR-draft-identity-aware-worker-execution §4).
+// (ADR-0475 §4).
 //
 // It is the login flow of ADR-0210 run for a different purpose and held to the same
 // checks — Authorization Code with PKCE, a single-use state, a nonce, and the ID token

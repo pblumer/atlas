@@ -11,7 +11,7 @@ import (
 	"github.com/pblumer/atlas/authz"
 )
 
-// The worked example of ADR-draft-identity-aware-worker-execution lives under
+// The worked example of ADR-0475 lives under
 // docs/architecture/identity-aware-execution as a model and two policies. Documentation
 // that does not compile teaches the wrong thing, so the model is deployed here and the
 // policies are compiled and asked the questions their descriptions answer.

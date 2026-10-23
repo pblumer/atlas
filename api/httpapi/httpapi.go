@@ -107,7 +107,7 @@ type Principal struct {
 	// application the person granted access to (an OAuth grant resolves to their id,
 	// and to their roles). A few acts are the person's alone — answering an approval,
 	// consenting to a Worker acting as them — and are refused to anything that is not
-	// their session (ADR-draft-identity-aware-worker-execution §10).
+	// their session (ADR-0475 §10).
 	Session bool
 }
 

@@ -273,7 +273,7 @@ atlas/
 ├── job/           Job store, worker subscription, gRPC streaming protocol
 ├── dmn/           DMN registry, resolver, validation, business-rule-task worker
 ├── authz/         Authorization decision point: compiled policies, fail-closed combining,
-│                  obligations, action digests (ADR-draft-identity-aware-worker-execution)
+│                  obligations, action digests (ADR-0475)
 ├── connector/     Worker Type implementations, one package per type (ADR-0203)
 │   ├── rest/          HTTP REST outbound (ADR-0067)
 │   ├── mail/          Outbound mail: SMTP, Gmail, Microsoft Graph (ADR-0079/0093)

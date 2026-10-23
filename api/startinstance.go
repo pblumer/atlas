@@ -132,7 +132,7 @@ func (s *Server) startInstance(w http.ResponseWriter, r *http.Request, key uint6
 		//
 		// Who asked rides along and is frozen into the activation event: it is the one
 		// trusted answer to "who initiated this" a later authorization decision can read
-		// (ADR-draft-identity-aware-worker-execution §3).
+		// (ADR-0475 §3).
 		s.proc.CreateInstanceStartedBy(key, &instKey, startedByOf(r), startVars...)
 		driveNeeded = true
 	})

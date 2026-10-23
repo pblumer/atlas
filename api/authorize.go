@@ -26,7 +26,7 @@ import (
 )
 
 // The policy enforcement point
-// (ADR-draft-identity-aware-worker-execution §5): a Worker Instance holding a lease
+// (ADR-0475 §5): a Worker Instance holding a lease
 // on a governed job asks, before it acts, whether it may — and is answered with a
 // decision that is already durable, the parameters it covers, and, for a delegated
 // Worker, the short-lived credential to act with.
