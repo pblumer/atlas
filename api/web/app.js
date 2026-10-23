@@ -46,7 +46,7 @@ import { runImport } from "./infomodel-import.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
 import { formRefusalNames, loadFormViewer, scrollToFirstInvalidField } from "./formviewer.js";
-import { attachRemoteSelects, taskTransport } from "./remote-select.js";
+import { attachRemoteSelects, remoteAdapter, taskTransport } from "./remote-select.js";
 // A start form does not replace the start variables declared on the process: the ones
 // it does not ask for are asked beneath it, with the Modeler's typed fields.
 import { uncoveredStartVariables, extraStartFieldsHTML, wireStartJSONEditors, readTypedDeployBody, keepConstantNameInCapitals } from "./startvars.js";
@@ -2789,7 +2789,7 @@ async function viewConsoleOrg() {
     return `<span class="pill off" title="${esc(closed)}"><span class="dot"></span>offline</span>`;
   };
 
-  // The day each account last signed in (ADR-draft-last-login-day).
+  // The day each account last signed in (ADR-0477).
   // Presence is this minute and a restart forgets it; this is what tells an account
   // somebody still uses from one nobody has opened since spring. The server keeps a
   // UTC calendar day and nothing finer, so its age is counted against today's UTC day
@@ -9271,15 +9271,17 @@ async function viewTasks(preselectKey) {
       ]);
       if (state.selected !== t.key) return; // selection moved on; drop this mount
       host.innerHTML = "";
-      const form = new Form({ container: host });
+      // A directory field searches its remote data source through this task: the
+      // server checks that this person may work on it and reads which Worker and which
+      // properties from the stored form (ADR-0473). The form's selects mount the search
+      // themselves; a directory field saved as a textfield has it attached below. A form
+      // without one asks nothing.
+      const lookups = { transport: taskTransport(t.key), data: data || {} };
+      const form = new Form({ container: host, atlasRemote: remoteAdapter(lookups) });
       await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
-      // A directory field searches its remote data source through this task: the
-      // server checks that this person may work on it and reads which Worker and which
-      // properties from the stored form (ADR-0473). A form
-      // without one attaches nothing.
-      state.mountedLookups = attachRemoteSelects(form, host, { transport: taskTransport(t.key), data: data || {} });
+      state.mountedLookups = attachRemoteSelects(form, host, lookups);
       // The variables the form was filled from, kept beside it. Completing the task
       // needs one the form does not render — which catalogue a picked logo belongs
       // to — and reading it back off the submitted data would only find the fields

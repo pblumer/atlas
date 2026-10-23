@@ -11,7 +11,7 @@ import (
 
 // This file keeps the one durable fact about signing in that the Organization page
 // needs and the session map cannot hold: the day each account last signed in
-// (ADR-draft-last-login-day).
+// (ADR-0477).
 //
 // Presence (ADR-0228) says who is here this minute, and a restart forgets it, which
 // is right for that question. It cannot answer the other one an administrator brings

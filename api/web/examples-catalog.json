@@ -3097,7 +3097,7 @@
                 }
               },
               {
-                "type": "textfield",
+                "type": "select",
                 "id": "Field_user",
                 "key": "user",
                 "label": "Person",

@@ -206,7 +206,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 // handleListUsers returns every account (public projection), oldest first, each
 // annotated with whether somebody is signed in as it right now
 // (ADR-0228) and the day it last signed in
-// (ADR-draft-last-login-day). The annotations ride along here rather than
+// (ADR-0477). The annotations ride along here rather than
 // being further calls the page has to make, so the roster's first paint is already
 // current; /api/v1/users/presence is the presence answer without the roster, for
 // the refresh.

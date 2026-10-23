@@ -138,7 +138,7 @@ var (
 	AuthLoginThrottled = newEvent("auth.login_throttled")
 	AuthLogout         = newEvent("auth.logout")
 	// AuthLoginDateUnrecorded is a login day that could not be written, read or
-	// removed (ADR-draft-last-login-day). The login itself had succeeded;
+	// removed (ADR-0477). The login itself had succeeded;
 	// what is missing or stale is the roster's "last login", which the account's next
 	// login writes again.
 	AuthLoginDateUnrecorded = newEvent("auth.login_date_unrecorded")
