@@ -71,6 +71,7 @@ import { fmtCount } from "./numfmt.js";
 // is rendered beside the fields rather than left in another tab.
 import { workerTypeDocHTML } from "./workertypedocs.js";
 import { fmtDateTime, fmtTime } from "./datefmt.js";
+import { installReadableIds, readableId, takenProcessIds, freshProcessId } from "./elementids.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -176,20 +177,25 @@ function newModeler(BpmnJS, moddle, container, extraModules) {
 // the same process — the previous diagram would appear lost. A per-diagram id
 // keeps distinct diagrams distinct; re-opening a deployment and redeploying still
 // reuses its id, which is the intended way to cut a new version.
-function blankXML() {
-  const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const pid = `Process_${suffix}`;
+//
+// The id is readable — process_<yyyymmdd>_<researcher> — and therefore checked rather
+// than random: against the process ids the installation already holds (known) and
+// the server's availability check (ADR-draft-readable-element-ids).
+async function blankXML(api, known) {
+  const pid = await freshProcessId(api, { taken: known });
+  const sid = readableId("event", { taken: (c) => c === pid });
+  const did = readableId("definitions", { taken: (c) => c === pid || c === sid });
   return `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
   xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
-  id="Definitions_${suffix}" targetNamespace="http://atlas/bpmn">
+  id="${did}" targetNamespace="http://atlas/bpmn">
   <bpmn:process id="${pid}" isExecutable="true">
-    <bpmn:startEvent id="StartEvent_1" name="Start"/>
+    <bpmn:startEvent id="${sid}" name="Start"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="${pid}">
-      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+      <bpmndi:BPMNShape id="${sid}_di" bpmnElement="${sid}">
         <dc:Bounds x="180" y="160" width="36" height="36"/>
       </bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
@@ -202,22 +208,23 @@ function blankXML() {
 // deploy/route identity), so the "＋ create new" affordance in the call-activity
 // panel scaffolds the callee the caller already points at. Whitespace in the id is
 // collapsed to underscores so it stays a valid BPMN id; an empty id falls back to a
-// unique one, like blankXML.
+// readable one, like blankXML.
 function calleeXML(pid, name) {
-  const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const id = (pid || "").trim().replace(/\s+/g, "_") || `Process_${suffix}`;
+  const id = (pid || "").trim().replace(/\s+/g, "_") || readableId("process");
+  const sid = readableId("event", { taken: (c) => c === id });
+  const did = readableId("definitions", { taken: (c) => c === id || c === sid });
   const nm = (name || id).trim();
   return `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
   xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
-  id="Definitions_${suffix}" targetNamespace="http://atlas/bpmn">
+  id="${did}" targetNamespace="http://atlas/bpmn">
   <bpmn:process id="${esc(id)}" name="${esc(nm)}" isExecutable="true">
-    <bpmn:startEvent id="StartEvent_1" name="Start"/>
+    <bpmn:startEvent id="${sid}" name="Start"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="${esc(id)}">
-      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+      <bpmndi:BPMNShape id="${sid}_di" bpmnElement="${sid}">
         <dc:Bounds x="180" y="160" width="36" height="36"/>
       </bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
@@ -848,6 +855,10 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       </div>
     </div>`;
 
+  // The process ids the installation already holds, so a new diagram, or a pool added
+  // to any diagram, does not mint one of them (ADR-draft-readable-element-ids). Loaded
+  // beside the modeler assets; a failure only costs this check.
+  const knownProcessIds = takenProcessIds(api).catch(() => new Set());
   let lib;
   try {
     lib = await loadBpmn();
@@ -856,11 +867,14 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  const known = await knownProcessIds;
   if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   const modeler = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"), [
     tokenSimulationModule(),
   ]);
+  // Every element drawn from here on is named <type>_<yyyymmdd>_<researcher>.
+  installReadableIds(modeler, { processTaken: (id) => known.has(id) });
   current = modeler;
   window.__atlasModeler = modeler; // exposed for scripted/end-to-end testing
 
@@ -870,7 +884,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       const xml = await api("GET", `/api/v1/drafts/${encodeURIComponent(draftId)}/xml`);
       await modeler.importXML(repairModel(typeof xml === "string" ? xml : String(xml)));
     } else if (key == null) {
-      await modeler.importXML(blankXML());
+      await modeler.importXML(await blankXML(api, known));
     } else {
       const xml = await api("GET", `/api/v1/processes/${key}/xml`);
       await modeler.importXML(repairModel(typeof xml === "string" ? xml : String(xml)));
@@ -7092,7 +7106,7 @@ function messageCorrelationKey(msg) {
 function createMessage(modeler, name) {
   const moddle = modeler.get("moddle");
   const msg = moddle.create("bpmn:Message");
-  msg.id = "Message_" + Math.random().toString(36).slice(2, 8);
+  msg.id = moddle.ids.nextPrefixed("Message_", msg);
   msg.name = name || "";
   const defs = definitionsOf(modeler);
   if (defs) {
@@ -7163,7 +7177,7 @@ function listSignals(modeler) {
 function createSignal(modeler, name) {
   const moddle = modeler.get("moddle");
   const sig = moddle.create("bpmn:Signal");
-  sig.id = "Signal_" + Math.random().toString(36).slice(2, 8);
+  sig.id = moddle.ids.nextPrefixed("Signal_", sig);
   sig.name = name || "";
   const defs = definitionsOf(modeler);
   if (defs) {
@@ -7373,7 +7387,7 @@ function listErrors(modeler) {
 function createError(modeler, code) {
   const moddle = modeler.get("moddle");
   const err = moddle.create("bpmn:Error");
-  err.id = "Error_" + Math.random().toString(36).slice(2, 8);
+  err.id = moddle.ids.nextPrefixed("Error_", err);
   err.errorCode = code || "";
   const defs = definitionsOf(modeler);
   if (defs) {
@@ -7520,7 +7534,7 @@ function listEscalations(modeler) {
 function createEscalation(modeler, code) {
   const moddle = modeler.get("moddle");
   const esc_ = moddle.create("bpmn:Escalation");
-  esc_.id = "Escalation_" + Math.random().toString(36).slice(2, 8);
+  esc_.id = moddle.ids.nextPrefixed("Escalation_", esc_);
   esc_.escalationCode = code || "";
   const defs = definitionsOf(modeler);
   if (defs) {
