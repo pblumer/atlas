@@ -137,6 +137,11 @@ var (
 	AuthLoginFailed    = newEvent("auth.login_failed")
 	AuthLoginThrottled = newEvent("auth.login_throttled")
 	AuthLogout         = newEvent("auth.logout")
+	// AuthLoginDateUnrecorded is a login whose day could not be written onto its
+	// account (ADR-draft-last-login-day). The login itself had already
+	// succeeded; what is missing is the roster's "last login", which the account's
+	// next login writes again.
+	AuthLoginDateUnrecorded = newEvent("auth.login_date_unrecorded")
 	// AuthDenied is an authenticated caller refused for lacking a role — an
 	// administration attempt by somebody who may not administer, which is a
 	// different and much rarer signal than an anonymous request being asked to log

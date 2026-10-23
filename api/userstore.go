@@ -202,6 +202,16 @@ type User struct {
 	// them. Set at creation from then on, so an account deliberately narrowed to
 	// `user` is never re-widened on the next start (upgradeLegacyRoles).
 	RolesUpgradedAt int64 `json:"rolesUpgradedAt,omitempty"`
+
+	// LastLoginDate is the UTC calendar day ("2006-01-02") this account last signed
+	// in, and empty when no login has been recorded since this field was introduced
+	// (ADR-draft-last-login-day).
+	//
+	// A day and not an instant, and one value overwritten rather than a list: it
+	// answers whether an account is still in use and cannot be read back as when
+	// somebody arrives at work (lastlogin.go). Written only by recordLoginDates, which
+	// leaves UpdatedAt alone — signing in is using the account, not changing it.
+	LastLoginDate string `json:"lastLoginDate,omitempty"`
 }
 
 // hasRole reports whether the user carries the given role.
@@ -234,8 +244,12 @@ type publicUser struct {
 	// needs to show the field read-only (ADR-0470).
 	ManagerID          string `json:"managerId,omitempty"`
 	ManagerDirectoryID string `json:"managerDirectoryId,omitempty"`
-	CreatedAt          int64  `json:"createdAt"`
-	UpdatedAt          int64  `json:"updatedAt"`
+	// LastLoginDate is the UTC day the account last signed in. Every route that
+	// returns this projection answers an administrator or the account itself, so
+	// it tells nobody about a colleague (ADR-draft-last-login-day).
+	LastLoginDate string `json:"lastLoginDate,omitempty"`
+	CreatedAt     int64  `json:"createdAt"`
+	UpdatedAt     int64  `json:"updatedAt"`
 }
 
 // toPublic strips the secret and normalizes Roles to a non-nil slice so the JSON
@@ -256,6 +270,7 @@ func (u User) toPublic() publicUser {
 		AvatarSource:       u.AvatarSource,
 		ManagerID:          u.ManagerID,
 		ManagerDirectoryID: u.ManagerDirectoryID,
+		LastLoginDate:      u.LastLoginDate,
 		CreatedAt:          u.CreatedAt,
 		UpdatedAt:          u.UpdatedAt,
 	}

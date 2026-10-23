@@ -478,6 +478,11 @@ type Server struct {
 	// mutex; it is not engine state and does not persist (ADR-0044).
 	sessions *sessionStore
 
+	// loginDates carries the day of each login from the sign-in path, which never
+	// waits for the run loop, to the account records, which are only written on it
+	// (ADR-draft-last-login-day, lastlogin.go).
+	loginDates *loginDates
+
 	// collab holds live collaborative-editing sessions on drafts in memory
 	// (ADR-0140). Like sessions it is reached from concurrent handler goroutines
 	// (SSE streams and POSTs), guards itself with a mutex, and never persists or
@@ -1705,6 +1710,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		discrepancies:     discrepancies,
 		recertifications:  recertifications,
 		sessions:          newSessionStore(defaultSessionTTL),
+		loginDates:        newLoginDates(),
 		oidcStates:        newOIDCStateStore(),
 		collab:            collab.NewRegistry(),
 		collabKeepalive:   collab.KeepaliveInterval,
@@ -2369,6 +2375,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// run loop: sessions own their own writers.
 	s.wg.Add(1)
 	go s.playgroundReaper(s.playgroundSweep)
+	// A login leaves the day it happened on for this writer, which puts it on the
+	// account in a run-loop turn of its own, so that signing in never waits for the
+	// loop (ADR-0265, ADR-draft-last-login-day). Tracked, because Close
+	// writes whatever the writer had not reached and must know it has stopped first.
+	s.wg.Add(1)
+	go s.loginDateWriter()
 	// The clio inbound bridge polls configured subscriptions and republishes new
 	// clio events as Atlas messages (ADR-0075). It is a separate goroutine like the
 	// timer scheduler — it does its network reads off the run loop and hands only the
@@ -3419,6 +3431,10 @@ func (s *Server) do(fn func()) { s.runLoop.Do(fn) }
 func (s *Server) Close() {
 	close(s.quit)
 	s.wg.Wait()
+	// The loop and the login-day writer have stopped, so nothing else writes the user
+	// store now: a login noted after the writer's last turn is written here rather
+	// than lost with the process (ADR-draft-last-login-day).
+	s.recordLoginDates(s.loginDates.take())
 	// After the workers have stopped, nothing is borrowing from the pool any more, so
 	// the sockets it is holding can go.
 	if s.ldapPool != nil {

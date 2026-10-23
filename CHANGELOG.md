@@ -46,6 +46,19 @@ governs a Worker:
 
 ### Added
 
+- **The user list shows when each account last signed in.** **Organization → Users** has
+  a **Last login** column beside Status and Presence: "today", "yesterday" or "N days
+  ago", with the day itself, and sorting by it puts the accounts nobody uses first — the
+  ones to disable. Password and single sign-on logins both count; refused attempts do
+  not. Atlas keeps one value per account, the UTC calendar day of its latest login, and
+  overwrites it at the next one: it says whether an account is in use, never when
+  anybody starts work, and the audit log keeps the exact time of every login. The
+  roster and `GET /api/v1/users` carry it as `lastLoginDate`; signing in still never
+  waits for the run loop. Accounts show "no login recorded" until their first login
+  after the upgrade, and an account used only through an API token or an AI client
+  never signs in here
+  ([ADR-draft-last-login-day](docs/adr/draft-last-login-day.md)).
+
 - **A release carries its architecture sketch.** Publishing an application, and
   importing a promoted release, now takes a snapshot of how the release meets its
   environment and saves it with the release record: the messages its processes receive

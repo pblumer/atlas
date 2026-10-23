@@ -143,6 +143,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	s.logins.forgive(username)
 	audit(r, logging.AuthLogin, "login",
 		slog.String("username", u.Username), slog.String("user_id", u.ID))
+	s.noteLogin(u)
 	httpapi.JSON(w, http.StatusOK, u.toPublic())
 }
 
