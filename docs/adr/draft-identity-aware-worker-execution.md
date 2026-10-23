@@ -467,7 +467,11 @@ Bypass paths and their answers:
 | Process version change / migration | the Worker name comes from the compiled task the job sits on, read at decision time |
 | Dynamic Worker names (Entra, Exchange `connector="=…"`) | out of scope for this slice; the identity policy is refused on those Worker Types until the resolved name is part of the decision input |
 | Supervised Worker restarts | a restart loses only in-memory state; decisions and approvals are in the log |
-| Calling an existing handler directly | in-process handlers are off by default (ADR-0233); the SharePoint in-process path calls the same authorization before acting |
+| Calling an existing handler directly | in-process handlers are off by default (ADR-0233); a governed SharePoint Worker gets no in-engine client at all, so `--in-process-connectors` parks its tasks instead of running them without a decision (as built; the first draft said the in-process path would call the authorization, which it did not) |
+| A Worker editor changing a governed Worker | refused: a governed Worker is changed or deleted only by an administrator, because its endpoint decides where a delegated token goes and deleting it would let a new Worker inherit the consent given its name |
+| A delegated Worker's endpoint pointed at another host | refused where it is set, and again before a token is released: a delegated Worker's endpoint is Microsoft Graph or blank |
+| Another supervised child presenting the shared internal token | refused: a delegated token is released only with the per-start broker key, which only the process serving the delegated Worker Type is handed |
+| An application the person granted access to their account (OAuth) | it may not answer approvals or consent to Workers: both need the person's own session |
 | The operator doors of `complete`/`fail` in the worker scope | pre-existing; recorded as a follow-up (narrow the worker scope to fenced reports) |
 | A modeler deploying BPMN | policies are admin-owned; a model names a Worker, not an identity; parameters are what is authorized |
 | Self-asserted worker label | recorded as `WorkerInstance`, never used to decide |
@@ -521,6 +525,13 @@ dropped; an access token already released stays valid at the provider until it e
 (Graph tokens are typically valid for about an hour; Atlas does not shorten them), and an
 operation already in flight at the provider cannot be recalled. An old Permit is never a
 capability: it is bound to a lease epoch that the next lease moves past.
+
+A release and a revocation that happen at the same moment are ordered by when the release
+read the connection's state: a release that read *active* just before the revocation was
+committed may still complete, exactly as an access token released a minute earlier stays
+valid. Every release that starts after the revocation is refused. (A refresh that is in
+flight when the revocation lands is refused too: its rotated refresh token is not written
+back and nothing is released.)
 
 ### 14. Recovery and retries
 
@@ -708,6 +719,20 @@ amendment of §19, are not decided by having built the supervised half.
   evidence.
 - **Backup.** The `identity` store is classified as a credential and `policies` as identity
   (`api/storeregistry.go`).
+
+**Hardened after an independent review** (each change with a test that fails without
+it): governed Workers are changed only by administrators; a delegated Worker's endpoint
+is bound to Microsoft Graph; delegated tokens need a per-start broker key held only by
+the supervised SharePoint process; governed Workers never run in-process; setting or
+clearing an identity policy restarts the supervised Worker; approving and consenting need
+the person's own session; the approval fold reads only answers for the action's digest,
+keeps one place per approver and never truncates (an oversized set is refused); a Worker
+may not reference a reserved vault name; resource values escape `;`, `=` and `%`, and a
+resource prefix that ends inside a value is warned about at publication. The review also
+named a window in which a cached access token can be released concurrently with a
+revocation; it is the ordinary check-then-act window the refresh path has too, a later
+release is always refused, and serializing the two would undo the stronger guarantee that
+a revocation during a refresh wins, so it is accepted and stated in §13.
 
 **Departures from the decision**
 

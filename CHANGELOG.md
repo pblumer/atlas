@@ -35,7 +35,14 @@ governs a Worker:
   The log gains two record types. 0.19.0 does not know them, and a downgrade after a
   governed Worker has recorded a decision has not been tested.
 - A delegated SharePoint Worker started by Atlas receives no credential in its
-  environment, only `ATLAS_SHAREPOINT_<NAME>_BROKERED=1`.
+  environment, only `ATLAS_SHAREPOINT_<NAME>_BROKERED=1` and a per-start
+  `ATLAS_BROKER_KEY` it presents when it asks.
+- A governed Worker is changed or deleted only by an administrator, and a delegated
+  Worker's endpoint must be Microsoft Graph (or blank).
+- With `--in-process-connectors`, a governed SharePoint Worker's tasks park instead of
+  running inside the engine: governed Workers run only on a supervised Worker Instance.
+- A Worker's `credentialsRef` may not name a reserved vault entry
+  (`atlas:connection-credential:…`, `atlas:personal-data-key:…`).
 
 ### Added
 
@@ -59,9 +66,10 @@ governs a Worker:
 - **Approval of the exact action.** A policy may require that people of a group approve
   an action: the decision throws `ATLAS_APPROVAL_REQUIRED`, an approval request bound to
   the action's digest is recorded, and a member of the group answers it at
-  `POST /api/v1/instances/{key}/action-approvals/{approval}/decide`. Nobody approves an
-  action that would run for themselves; an approval counts only for the same digest and
-  until it expires. A variable such as `approved = true` changes nothing.
+  `POST /api/v1/instances/{key}/action-approvals/{approval}/decide`, in their own
+  session. Nobody approves an action that would run for themselves; an approval counts
+  only for the same digest and until it expires. A variable such as `approved = true`
+  changes nothing.
 - **Administration → Security.** Which Workers are governed and how — shadow is labelled
   as not enforcement — setting a Worker's identity policy, editing and publishing
   policies, a simulator whose answer is labelled a simulation, and an instance's recorded
