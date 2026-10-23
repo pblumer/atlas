@@ -22,6 +22,7 @@ The question is: how can the Paperless-ngx Worker handle normal documents, inclu
 - `POST /api/documents/post_document/` takes a multipart `document` field plus optional title, date, correspondent, document type, storage path, tags and custom fields. It returns a processing task UUID, not a committed document ID. `GET /api/tasks/?task_id=...` is the follow-up.
 - `GET /api/documents/` supports pagination, `text`, `title_search`, `query` and other filters. Its response may include `content` (OCR text) and `__search_hit__.highlights`.
 - `GET /api/documents/{id}/` returns metadata and OCR text. `GET /api/documents/{id}/download/` and `preview/` return binary content; a version can be selected.
+- `GET /api/correspondents/` and `POST /api/correspondents/` list and create correspondents. The provider supports `name`, `match`, `matching_algorithm` and `is_insensitive` for matching. Its serializer refuses duplicate `name` for the same `owner`; that is a provider-side uniqueness guard, not a cross-system exactly-once transaction.
 - Paperless supports object-level owner/view/change permissions. An API service identity is not interchangeable with the person viewing the document.
 - Paperless may accept duplicate content and flag it rather than reject it. An idempotency key for document posting is not documented; do not assume exactly-once ingestion.
 
@@ -57,6 +58,7 @@ Propose option **4**, in staged vertical slices. The Worker Type is `paperless`;
 | `present-document` | Construct a canonical, authenticated Paperless UI link for an ID | `id`, `url` (without token or signature); Paperless checks the viewing user's right |
 | `list-tags` | Look up tags for authoring/selection | Bounded IDs and labels |
 | `list-correspondents` | Look up correspondents | Bounded IDs and labels |
+| `add-correspondent` | Ensure a named correspondent exists, creating it only if absent; support explicit matching rules | `id`, `name`, `created` (boolean), with no document content |
 | `update-document` | Change expressly supplied metadata only | ID and safe updated metadata |
 | `upload-document` | Stream a trusted external file into `post_document` without process-variable bytes | `uploadTaskId`, `state=accepted`; **not** `documentId` |
 | `get-upload-status` | Resolve an accepted Paperless consumption task | `uploadTaskId`, `state`, `documentId` on success, controlled error code |
@@ -66,6 +68,22 @@ Propose option **4**, in staged vertical slices. The Worker Type is `paperless`;
 The Worker MUST construct these results itself. It must never return unfiltered Paperless JSON via `map[string]any`, and tests must deliberately inject sensitive `content`, `__search_hit__.highlights`, note bodies, signed URLs and raw error responses to prove they are absent. Even a small OCR result is omitted by default.
 
 A later opt-in `read-text` operation MAY put extracted text into a named process variable under `Limits.Variable`, only when explicitly authored in the model and visibly marked as retained in WAL/history. This is a separate operation and not an `includeContent` flag silently inherited by common reads. Binary file content is never a result variable in this design.
+
+### Idempotent correspondent creation
+
+`add-correspondent` is intentionally an **ensure-style** business operation, despite its author-facing name: find the exact named correspondent under the configured Paperless identity's ownership scope, return its ID if present, otherwise `POST /api/correspondents/` and return the newly created ID. The input contract is:
+
+- Required: nonempty `name`, trimmed and validated as a bounded string.
+- Optional: `match`, `matchingAlgorithm`, `isInsensitive`. By default set `match=""` and `matchingAlgorithm=none` so creating a correspondent does not unexpectedly auto-classify unrelated documents. Do not assume Paperless's provider-side default equals this policy; send explicit values.
+- The corresponding Paperless API fields are `name`, `match`, `matching_algorithm` and `is_insensitive`. Validate algorithm values against provider-supported options and serialize the corresponding numeric enum deliberately; reject regex expressions the provider rejects rather than silently substituting another algorithm.
+- Output when a result variable is authored: `{id, name, created}`; `created` describes **this attempt**, not historical provenance. The same name used by a replay/retry resolves to the same ID, while `created` may be false on a subsequent attempt.
+- The Worker does **not** change an existing correspondent's matching rule or permissions as a side effect of ensuring its existence. A conflicting desired matching policy must be reported clearly; it must not silently overwrite an operator's choice. A distinct update operation, with authorization and explicit fields, would be needed to change an existing object.
+- On a creation race or a provider uniqueness error, re-query by **exact name and ownership scope** and accept only one unambiguous matching result. Do not guess a first match, blindly lowercase identifiers, or assume an owner outside the Worker's visible scope. If the object is inaccessible, or the provider cannot establish whether it was created after a transport failure, fail closed with a retriable error.
+- The service account must have the relevant Paperless correspondent view/add permissions. Do not use a model-provided owner/permissions field in the first slice; ownership is a provider-authorized action, not a string the process may assert.
+
+This retry discipline avoids normal duplicate creates for a single Worker identity, but does not claim a distributed exactly-once guarantee across differing owners or permissions. Test two concurrent callers and the crash after `POST` succeeded but before the Atlas job completed. All verification results are **allowlisted**: no raw provider error body, credentials, OCR text or unrelated object records may reach variables/WAL.
+
+Provider references: https://demo.paperless-ngx.com/api/schema/view/ ; https://github.com/paperless-ngx/paperless-ngx/blob/dev/src/documents/serialisers.py ; https://docs.paperless-ngx.com/advanced_usage/ .
 
 ### Reference-only upload boundary
 
@@ -102,7 +120,7 @@ The implementation must first research and test reconciliation using source chec
 This belongs to **Milestone 1 — Core BPMN / Worker Types**, with a dependency on identity-aware execution (ADR-0475) for fully governed delegated access and an unresolved external-binary transfer seam for uploads.
 
 1. **Slice A — read/present safely.** Add the Worker Type, compiler detail, registry, configuration/secret handling, Worker Instance execution, setup and handbook, package/release registry, metadata projection, search, get, present, unit and mock integration tests. Default outputs omit binary and OCR content. Deliver a usable search → human review process.
-2. **Slice B — metadata changes and async status.** Update safe metadata, list vocabularies, query consumption status; test permissions, bounded paging and state transitions.
+2. **Slice B — metadata changes, correspondents and async status.** Update safe metadata, list vocabularies, implement retry-safe `add-correspondent` (lookup/create/conflict recovery and explicit matching rules), query consumption status; test permissions, bounded paging, races and state transitions.
 3. **Slice C — external source → Paperless.** Decide source authorization first (in a separate ADR if it changes the existing worker boundary); implement streaming multipart upload, task UUID polling, idempotency/reconciliation, crash/retry tests and a complete document filing example.
 4. **Slice D — opt-in text and guarded external presentation**, only if justified by a business process; otherwise leave both out.
 
@@ -116,6 +134,7 @@ For a Mock Mode, implement a stateful `httptest` Paperless API double (token aut
 - Retry: inject failures before upload, after remote 200 but before Atlas completion, and after status transition; assert documented dedup/reconciliation behavior without an unsupported exactly-once claim.
 - Large file: multi-megabyte upload keeps engine WAL size independent of binary size; stream with bounded worker memory and no variable-limit bypass.
 - Authorization: denied Paperless principal or non-allowlisted source fails closed; tokens/share links never appear in output or logs.
+- Correspondent regression: creating the same name twice and replaying after a lost acknowledgment yields the same Paperless ID; owner scope, concurrent creation, uniqueness conflicts, invalid matching expressions, insufficient permissions and no-clobber of existing rules have deterministic mock tests.
 - Complete gate 5: `api/connectorkinds.go`, `api/releasedkinds.go`, Worker package, setup documentation and bilingual handbook, required catalog/package, changelog and roadmap.
 - Definition of done remains `go build ./...`, `go test ./...`, `go test -race -timeout=45m ./...`, `go vet ./...` and an empty `gofmt -l .`.
 
