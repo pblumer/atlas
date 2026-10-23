@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -293,5 +294,126 @@ func TestLinkingNeedsASignedInPerson(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("anonymous start = %d", resp.StatusCode)
+	}
+}
+
+// Every way a callback can be wrong ends on the same failure page, and nothing is
+// linked: the provider's own refusal, a state this browser did not start, a state
+// nobody started, no code, and a code the provider will not exchange.
+func TestEveryBrokenCallbackFailsTheSameWay(t *testing.T) {
+	f := newFakeTenant(t)
+	ts, srv := linkServer(t, f)
+	admin := signInClient(t, ts, "root", "rootpassword12")
+	start := func() string {
+		t.Helper()
+		resp, err := admin.Get(ts.URL + linkMicrosoftStartPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		_, state := f.authorize(t, resp.Header.Get("Location"))
+		return state
+	}
+	callback := func(query string) string {
+		t.Helper()
+		resp, err := admin.Get(ts.URL + linkMicrosoftCallbackPath + "?" + query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.Header.Get("Location")
+	}
+	failed := linkDonePage + "?link=failed"
+	if where := callback("error=access_denied"); where != failed {
+		t.Errorf("the provider's refusal: %q", where)
+	}
+	start()
+	if where := callback("code=x&state=not-this-browsers"); where != failed {
+		t.Errorf("a state this browser did not start: %q", where)
+	}
+	// The cookie matches but the flow was already spent by the previous callback's
+	// clearing, or never existed on the server.
+	u, _ := url.Parse(ts.URL + linkMicrosoftCallbackPath)
+	admin.Jar.SetCookies(u, []*http.Cookie{{Name: linkStateCookie, Value: "nobody-started-this", Path: linkMicrosoftCallbackPath}})
+	if where := callback("code=x&state=nobody-started-this"); where != failed {
+		t.Errorf("a state nobody started: %q", where)
+	}
+	state := start()
+	if where := callback("state=" + state); where != failed {
+		t.Errorf("no code: %q", where)
+	}
+	state = start()
+	if where := callback("code=never-issued&state=" + state); where != failed {
+		t.Errorf("a code the provider will not exchange: %q", where)
+	}
+	if ids, conns := srv.identity.ForOwner("usr_admin"); len(ids) != 0 || len(conns) != 0 {
+		t.Fatalf("a broken callback linked something: %v %v", ids, conns)
+	}
+}
+
+func TestLinkingIsOffUntilItIsConfigured(t *testing.T) {
+	srv := newServerWithOptions(t, WithMicrosoftLinking(MicrosoftLinkConfig{TenantID: "tid-1"}))
+	if srv.msLink != nil {
+		t.Fatal("a configuration without a client id and scopes turned linking on")
+	}
+	for _, h := range []http.HandlerFunc{srv.handleLinkMicrosoftStart, srv.handleLinkMicrosoftCallback} {
+		rec := httptest.NewRecorder()
+		h(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("unconfigured: %d", rec.Code)
+		}
+	}
+	if _, err := srv.refreshDelegatedToken(context.Background(), identity.Connection{ID: "con_1", Provider: identity.ProviderMicrosoft}, "rt"); err == nil {
+		t.Error("refreshed without a configuration")
+	}
+	if got := (MicrosoftLinkConfig{TenantID: "tid-1"}).issuer(); got != "https://login.microsoftonline.com/tid-1/v2.0" {
+		t.Errorf("default issuer = %q", got)
+	}
+}
+
+// A connection from another tenant is never refreshed against this one, and a
+// Worker name the store does not hold does not exist.
+func TestTheRefresherStaysInItsTenant(t *testing.T) {
+	f := newFakeTenant(t)
+	_, srv := linkServer(t, f)
+	if _, err := srv.refreshDelegatedToken(context.Background(),
+		identity.Connection{ID: "con_1", Provider: identity.ProviderMicrosoft, TenantID: "tid-2"}, "rt"); err == nil ||
+		!strings.Contains(err.Error(), "tenant") {
+		t.Fatalf("refreshed in another tenant: %v", err)
+	}
+	var exists bool
+	srv.do(func() { exists = srv.configuredWorkerExists("no-such-worker") })
+	if exists {
+		t.Fatal("a Worker that is not configured exists")
+	}
+	srv.connectors = nil
+	if srv.configuredWorkerExists("anything") {
+		t.Fatal("a server without a Worker store has Workers")
+	}
+}
+
+// Links in flight are bounded: an expired one is dropped and cannot be finished, and
+// when the table is full the oldest gives way.
+func TestLinksInFlightExpireAndAreBounded(t *testing.T) {
+	l := &microsoftLink{pending: map[string]linkPending{}}
+	now := time.Now()
+	l.begin("old", linkPending{userID: "usr_a", expires: now.Add(-time.Second)}, now.Add(-2*time.Second))
+	if _, ok := l.spend("old", now); ok {
+		t.Fatal("an expired link was finished")
+	}
+	for i := 0; i < linkMaxPending+3; i++ {
+		l.begin("s"+strconv.Itoa(i), linkPending{userID: "usr_a", expires: now.Add(time.Duration(i+1) * time.Minute)}, now)
+	}
+	if len(l.pending) != linkMaxPending {
+		t.Fatalf("%d links in flight, bounded at %d", len(l.pending), linkMaxPending)
+	}
+	if _, ok := l.spend("s0", now); ok {
+		t.Fatal("the oldest link was kept when the table was full")
+	}
+	if _, ok := l.spend("s"+strconv.Itoa(linkMaxPending+2), now); !ok {
+		t.Fatal("the newest link was dropped")
+	}
+	if _, ok := l.spend("", now); ok {
+		t.Fatal("an empty state was finished")
 	}
 }

@@ -391,3 +391,24 @@ func TestAnApproverAnswersOnceAndMayWithdraw(t *testing.T) {
 		t.Fatalf("replayed facts differ")
 	}
 }
+
+// A caller that does not want the answer may pass no result holder: the decision and
+// the approval are recorded all the same.
+func TestADecisionAndAnAnswerNeedNoResultHolder(t *testing.T) {
+	cp, jobType, _ := approvalProcess(t)
+	r := newAuthzRig(t, cp, jobType)
+	r.p.RecordAuthorization(r.decision(model.AuthzDeny, true),
+		&model.ActionApprovalValue{ApproverGroup: "grp_managers", Approvals: 1, ExpiresAt: 5000, RequestedBy: "usr_alice"},
+		"approval required", nil)
+	r.run()
+	facts := approvalFacts(t, r.h.store, r.piKey)
+	if len(authorizations(t, r.h.store, r.piKey)) != 1 || len(facts) != 1 {
+		t.Fatalf("recorded %d decisions and %d approval facts", len(authorizations(t, r.h.store, r.piKey)), len(facts))
+	}
+	r.p.RecordApprovalAnswer(model.ActionApprovalValue{ProcessInstanceKey: r.piKey, ApprovalKey: facts[0].ApprovalKey,
+		Kind: model.ApprovalDecided, Outcome: model.ApprovalOutcomeGranted, Principal: "usr_mgr", At: 2000}, nil)
+	r.run()
+	if got := approvalFacts(t, r.h.store, r.piKey); len(got) != 2 || got[1].Principal != "usr_mgr" {
+		t.Fatalf("the answer was not recorded: %+v", got)
+	}
+}

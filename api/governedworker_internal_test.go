@@ -3,12 +3,16 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/identity"
+	"github.com/pblumer/atlas/api/policy"
+	"github.com/pblumer/atlas/api/vault"
 )
 
 // Where a governed Worker's credential may go, and who may change that
@@ -258,4 +262,173 @@ func TestSettingAnIdentityPolicyRestartsTheSupervisedWorker(t *testing.T) {
 	waitFor(t, "the SharePoint Worker to restart without it", func() bool {
 		return sup.list()[0].Starts > second
 	})
+}
+
+// The readiness view says, per Worker, what its setting means — and the Console
+// translates the same cases from the fields, so each case is held here.
+func TestTheReadinessViewSaysWhatEachSettingMeans(t *testing.T) {
+	r := newPEPRig(t)
+	r.srv.do(func() {
+		for _, c := range []connector{
+			{ID: "cw_mail", Name: "mail", Kind: connectorKindMail, Enabled: true},
+			{ID: "cw_bare", Name: "sp-bare", Kind: connectorKindSharePoint, Enabled: true},
+		} {
+			if err := r.srv.connectors.Save(c); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+	rows := func() map[string]readinessRow {
+		t.Helper()
+		code, raw := r.as(r.admin, r.srv.handleSecurityReadiness, http.MethodGet, "/", "", nil)
+		if code != http.StatusOK {
+			t.Fatalf("readiness: %d %s", code, raw)
+		}
+		var out struct {
+			Workers []readinessRow `json:"workers"`
+		}
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatal(err)
+		}
+		m := map[string]readinessRow{}
+		for _, row := range out.Workers {
+			m[row.Worker] = row
+		}
+		return m
+	}
+	got := rows()
+	if m := got["mail"]; m.Governable || m.Governed || m.CredentialKind != "none" || !strings.Contains(m.Note, "cannot be governed") {
+		t.Errorf("a Worker Type this build cannot govern: %+v", m)
+	}
+	if b := got["sp-bare"]; !b.Governable || b.Governed || b.Mode != "legacy" || b.Enforcement != "off" || b.CredentialKind != "none" || b.Note != "" {
+		t.Errorf("a legacy SharePoint Worker without a credential: %+v", b)
+	}
+	if p := got["sp-prod"]; p.CredentialKind != "worker" || p.CredentialRef != "sp-bundle" {
+		t.Errorf("a Worker holding its own credential: %+v", p)
+	}
+	r.govern("service", "shadow", "")
+	if p := rows()["sp-prod"]; !p.Governed || !strings.Contains(p.Note, "not enforcement") {
+		t.Errorf("shadow: %+v", p)
+	}
+	r.linkAlice()
+	r.govern("delegated-per-job", "enforce", `,"actAs":"initiator"`)
+	if p := rows()["sp-prod"]; p.CredentialKind != "brokered" || p.ActAs != "initiator" || !strings.Contains(p.Note, "at the credential") {
+		t.Errorf("delegated: %+v", p)
+	}
+}
+
+// A fixed delegated Worker acts through one connection, as its owner — and only a
+// connection that is active and whose owner allowed this Worker.
+func TestAFixedDelegatedWorkerNeedsItsOwnersConsent(t *testing.T) {
+	r := newPEPRig(t)
+	r.linkAlice()
+	set := func(body string) (int, string) {
+		code, raw := r.as(r.admin, r.srv.handleSetWorkerIdentity, http.MethodPut, "/", body, map[string]string{"id": r.worker.ID})
+		return code, string(raw)
+	}
+	fixed := `{"mode":"delegated-fixed","enforcement":"enforce","connectionId":"` + r.conn.ID + `"}`
+	if code, raw := set(fixed); code != http.StatusOK {
+		t.Fatalf("with consent: %d %s", code, raw)
+	}
+	if code, raw := set(`{"mode":"delegated-fixed","enforcement":"enforce","connectionId":"con_x","actAs":"initiator"}`); code != http.StatusBadRequest {
+		t.Fatalf("a fixed Worker with an actAs: %d %s", code, raw)
+	}
+	if _, err := r.srv.identity.SetAllowedWorkers(r.conn.ID, "usr_alice", []string{}); err != nil {
+		t.Fatal(err)
+	}
+	if code, raw := set(fixed); code != http.StatusBadRequest || !strings.Contains(raw, "has not allowed") {
+		t.Fatalf("without consent: %d %s", code, raw)
+	}
+	if _, err := r.srv.identity.Revoke(r.conn.ID, "usr_alice", false, "done"); err != nil {
+		t.Fatal(err)
+	}
+	if code, raw := set(fixed); code != http.StatusBadRequest || !strings.Contains(raw, "revoked") {
+		t.Fatalf("a revoked connection: %d %s", code, raw)
+	}
+	// A Worker Type this build cannot govern is refused whatever the setting, and a
+	// Worker that is gone is not found by either route.
+	r.srv.do(func() {
+		if err := r.srv.connectors.Save(connector{ID: "cw_mail", Name: "mail", Kind: connectorKindMail, Enabled: true}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if code, raw := r.as(r.admin, r.srv.handleSetWorkerIdentity, http.MethodPut, "/", `{"mode":"service","enforcement":"enforce"}`,
+		map[string]string{"id": "cw_mail"}); code != http.StatusBadRequest || !strings.Contains(string(raw), "cannot be governed") {
+		t.Fatalf("a mail Worker: %d %s", code, raw)
+	}
+	if code, _ := r.as(r.admin, r.srv.handleClearWorkerIdentity, http.MethodDelete, "/", "", map[string]string{"id": "nope"}); code != http.StatusNotFound {
+		t.Fatalf("clearing a Worker that is not there: %d", code)
+	}
+}
+
+// A server without a vault has no identity service, and one built without the policy
+// service answers its routes 503 rather than panicking.
+func TestTheIdentityAndPolicyRoutesSayWhenTheirServiceIsMissing(t *testing.T) {
+	srv := newServerWithOptions(t)
+	srv.identity, srv.policies = nil, nil
+	rec := httptest.NewRecorder()
+	srv.identityRoute(func(*identity.Service) http.HandlerFunc { return nil })(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("identity: %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	srv.policyRoute(func(*policy.Service) http.HandlerFunc { return nil })(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("policy: %d", rec.Code)
+	}
+	if srv.policySet() != nil {
+		t.Error("a server without policies has a policy set")
+	}
+}
+
+// A connection's refresh token is a person's consent. The secrets API neither
+// overwrites nor deletes it, and its listing does not show it.
+func TestTheSecretsAPICannotReachAConnectionCredential(t *testing.T) {
+	r := newPEPRig(t)
+	r.linkAlice()
+	name := vault.ConnectionCredentialName(r.conn.ID)
+	for _, method := range []string{http.MethodPut, http.MethodDelete} {
+		code, raw := serveInternal(t, r.srv, method, "/api/v1/secrets/"+name, `{"value":"attacker-rt"}`, "application/json")
+		if code != http.StatusForbidden {
+			t.Errorf("%s %s: %d %s", method, name, code, raw)
+		}
+	}
+	code, raw := serveInternal(t, r.srv, http.MethodGet, "/api/v1/secrets", "", "")
+	if code != http.StatusOK || strings.Contains(string(raw), "connection-credential") {
+		t.Fatalf("listing: %d %s", code, raw)
+	}
+	// The credential is still the one the person's sign-in produced.
+	var got string
+	r.srv.do(func() { got, _, _ = r.srv.vault.Get(name) })
+	if !strings.Contains(got, `"rt"`) {
+		t.Fatalf("the credential changed: %s", got)
+	}
+}
+
+// Every identity and policy route is mounted where the route table says, through its
+// service: a request reaches the handler rather than the mux's 404 or 405.
+func TestTheIdentityAndPolicyRoutesAreMounted(t *testing.T) {
+	r := newPEPRig(t)
+	for _, tc := range []struct{ method, path, body string }{
+		{http.MethodGet, "/api/v1/security/policies", ""},
+		{http.MethodPost, "/api/v1/security/policies/simulate", `{}`},
+		{http.MethodGet, "/api/v1/security/policies/hr-documents", ""},
+		{http.MethodPut, "/api/v1/security/policies/new-one/draft", `{"id":"new-one","ruleCombining":"first-applicable","rules":[{"id":"r","effect":"Deny"}]}`},
+		{http.MethodPost, "/api/v1/security/policies/new-one/publish", ""},
+		{http.MethodPost, "/api/v1/security/policies/new-one/enabled", `{"enabled":false}`},
+		{http.MethodGet, "/api/v1/me/connections", ""},
+		{http.MethodGet, "/api/v1/users/usr_alice/connections", ""},
+		{http.MethodPost, "/api/v1/connections/con_nope/revoke", `{}`},
+		{http.MethodPut, "/api/v1/connections/con_nope/workers", `{"workers":[]}`},
+	} {
+		code, raw := serveInternal(t, r.srv, tc.method, tc.path, tc.body, "application/json")
+		if code == http.StatusNotFound && !strings.Contains(string(raw), "{") || code == http.StatusMethodNotAllowed {
+			t.Errorf("%s %s is not mounted: %d %s", tc.method, tc.path, code, raw)
+		}
+	}
+	// And the published policy is there to read back.
+	code, raw := serveInternal(t, r.srv, http.MethodGet, "/api/v1/security/policies/new-one", "", "")
+	if code != http.StatusOK || !strings.Contains(string(raw), `"version":1`) {
+		t.Fatalf("published through the routes: %d %s", code, raw)
+	}
 }
