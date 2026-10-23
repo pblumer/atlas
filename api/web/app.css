@@ -670,7 +670,10 @@ textarea::placeholder {
 .stats { display: flex; gap: 34px; flex-wrap: wrap; }
 .stat b { display: block; font-size: 30px; font-weight: 700; line-height: 1.1; }
 .stat span { font-size: 12px; color: var(--muted); }
-.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+/* A pill is a label, and like a chip it keeps to one line: its round ends are made for
+   one, and a pill folded by a narrow table column reads as a tall blob. A column too
+   narrow for it moves it under the cell's text instead. */
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
 .chip { display: inline-block; font: 12px/1.6 ui-monospace, monospace; padding: 1px 7px; border-radius: 5px; background: var(--bg); border: 1px solid var(--border); white-space: nowrap; }
 
 /* Artifact id availability (ADR-0222). A draft is stored under its
@@ -6388,7 +6391,6 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 /* The three parts of "used by" stack rather than wrap: they are three different
    statements, and a wrapped one reads as a broken line. */
 .bo-used { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; font-size: 12px; }
-.bo-used .pill { white-space: nowrap; }
 .bo-kind.businessObject { border-color: var(--accent); color: var(--accent); }
 .bo-kind.enumeration { border-style: dashed; }
 .bo-scope { margin: 10px 2px 0; font-size: 12px; color: var(--muted); max-width: 90ch; line-height: 1.5; }
@@ -7307,7 +7309,6 @@ button.im-problem:hover { background: var(--accent-soft); }
    shares a cause with, so the send reads as the head of its group. */
 .el-row.el-child td { border-top-color: transparent; }
 .el-row.el-child td:nth-child(4) { padding-left: 22px; }
-/* A send's mark (nobody received it, kept, expired unreceived) is a label, not a
-   sentence: it keeps to one line, a size below the row's text, so a narrow What column
-   moves it under the verb instead of folding it into a two-line blob. */
-.el-row .pill { white-space: nowrap; font-size: 11px; line-height: 16px; padding: 1px 7px; }
+/* A send's mark (nobody received it, kept, expired unreceived) stands a size below the
+   row's text, so it reads as a note on the verb rather than as a second headline. */
+.el-row .pill { font-size: 11px; line-height: 16px; padding: 1px 7px; }
