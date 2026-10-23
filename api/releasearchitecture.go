@@ -196,6 +196,21 @@ func (s *Server) physicalPart(shipped map[string]bool, deps []archsketch.Depende
 				site.Endpoint = archsketch.ParseEndpoint(c.Endpoint)
 				site.MailboxEndpoint = archsketch.ParseEndpoint(c.MailboxEndpoint)
 			}
+			if site.Endpoint == nil {
+				// What the instances serving the name reported, when this installation
+				// holds no endpoint for it itself — the worker that keeps its own
+				// configuration (ADR-0168). One answer is recorded; several different
+				// ones are recorded as differing, because a sketch drawing one system
+				// where the installation reaches several would be wrong in the way that
+				// matters most.
+				switch reported := s.reportedEndpointsOf(d.Name); len(reported) {
+				case 0:
+				case 1:
+					site.Endpoint, site.EndpointReported = archsketch.ParseEndpoint(reported[0]), true
+				default:
+					site.EndpointsDiffer = true
+				}
+			}
 			p.Workers = append(p.Workers, site)
 		case archsketch.DependencyJobType:
 			p.JobTypes = append(p.JobTypes, archsketch.JobTypeSite{JobType: d.Name,
@@ -222,6 +237,22 @@ func (s *Server) workerInstances(match func(*workerStat) bool) []string {
 			out = append(out, name)
 		}
 	}
+	return out
+}
+
+// reportedEndpointsOf returns the distinct endpoints the instances seen this run
+// reported for a worker name, sorted. Run-loop goroutine only.
+func (s *Server) reportedEndpointsOf(name string) []string {
+	var out []string
+	if s.workers == nil {
+		return out
+	}
+	for _, st := range s.workers.byName {
+		if e, ok := st.Endpoints[name]; ok && !slices.Contains(out, e) {
+			out = append(out, e)
+		}
+	}
+	slices.Sort(out)
 	return out
 }
 

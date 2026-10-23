@@ -686,6 +686,12 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   with enforcement off it is offered. Operations keeps its working pages and the incident
   count on the bar and puts the rest behind **Diagnostics**, whose mock tools only an
   administrator sees.
+- **`workers-endpoints.spec.mjs`**
+  ([ADR-0471](../docs/adr/0471-release-architecture-sketch.md)): **Operations → Workers**
+  against a stubbed API. A worker name a Worker Instance holds shows the endpoint the
+  instance reported for it beside the name. A name without a report shows the name alone,
+  including one that is also an inherited object property. A reported value is drawn as
+  text, never as markup.
 
 ## Rendering a conformance gallery diagram
 

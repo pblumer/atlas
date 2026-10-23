@@ -3,6 +3,7 @@ package mail
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -268,7 +269,39 @@ func MailboxOf(c Client) (Mailbox, error) {
 	case interface{ Mailbox() (Mailbox, error) }:
 		return v.Mailbox()
 	}
-	return nil, fmt.Errorf("mail: this worker's provider has no mailbox to read (the preview provider only delivers into the server's outbox)")
+	return nil, errPreviewHasNoMailbox
+}
+
+// The reasons a mail Worker has no mailbox, each said once: MailboxOf answers them for
+// a built client and CanReadMailbox for a Worker's configuration, and the two must not
+// drift into different words for the same fact.
+var (
+	errNoIMAPEndpoint = errors.New("mail: this SMTP worker has no IMAP endpoint, so it cannot read a mailbox " +
+		"(set the worker's mailbox endpoint, e.g. imaps://imap.example.com:993)")
+	errGraphHasNoSender    = errors.New("mail: graph: the worker names no sender mailbox, so there is no mailbox to read")
+	errPreviewHasNoMailbox = errors.New("mail: this worker's provider has no mailbox to read " +
+		"(the preview provider only delivers into the server's outbox)")
+)
+
+// CanReadMailbox says, from a Worker's configuration alone, why it has no mailbox to
+// read, or nil when it has one. It is MailboxOf asked before any client is built, so a
+// watch can be refused on a Worker that could never serve it rather than skipped at
+// every poll. A Worker that has a mailbox can still fail to read it — a wrong password,
+// a missing permission — and that is answered by the first read, not here.
+func CanReadMailbox(provider, sender, imapEndpoint string) error {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "", ProviderSMTP:
+		if strings.TrimSpace(imapEndpoint) == "" {
+			return errNoIMAPEndpoint
+		}
+	case ProviderMicrosoft:
+		if strings.TrimSpace(sender) == "" {
+			return errGraphHasNoSender
+		}
+	case ProviderPreview:
+		return errPreviewHasNoMailbox
+	}
+	return nil
 }
 
 // SenderAllowed reports whether a sender address passes an allow-list. An empty list

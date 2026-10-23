@@ -977,7 +977,8 @@ func runtimeTools() []Tool {
 			Description: "The messages of this installation (ADR-0446), grouped by name ('messages'): each name's " +
 				"'sources' — the deployed processes that wait for it ('process') or send it ('process-throw', " +
 				"a message throw or end event or a send task), with version, 'newest', projectId, 'system', " +
-				"'role' and 'interrupting'; the inbound watches of Workers that publish it ('inbound-watch'); " +
+				"'role' and 'interrupting'; the inbound watches of Workers that publish it ('inbound-watch', " +
+				"with 'lastError' and 'failingSince' while the watch cannot read its source); " +
 				"and the product actions that send it ('product-action', for the catalogues you maintain) — " +
 				"and its 'findings': message.unreceived (a process throw, an enabled watch or an active " +
 				"product action sends a name no newest, active definition waits for, so what it sends is " +

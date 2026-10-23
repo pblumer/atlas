@@ -346,6 +346,13 @@ var (
 	// (ADR-0438). Warned because it is a delivery gap that otherwise
 	// looks exactly like a quiet mailbox.
 	InboundWatchGap = newEvent("inbound_watch.gap")
+	// InboundWatchFailing reports a watch that cannot read its source — its Worker has
+	// no mailbox or no client, is switched off, or the source refused or did not answer
+	// the read. Logged once when the failure begins, not on every tick it repeats; the
+	// watch's listing carries the newest reason as lastError for as long as it lasts.
+	InboundWatchFailing = newEvent("inbound_watch.failing")
+	// InboundWatchRecovered reports a failing watch that read its source again.
+	InboundWatchRecovered = newEvent("inbound_watch.recovered")
 )
 
 // Push delivery of the event feed
