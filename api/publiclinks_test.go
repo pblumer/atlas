@@ -247,7 +247,7 @@ func TestAPublicWizardNeedsATimeoutToBePublished(t *testing.T) {
 }
 
 // A directory field answers only inside a task, where somebody is signed in to search it
-// and the value can be checked (ADR-draft-form-remote-data-sources). Through a public
+// and the value can be checked (ADR-0473). Through a public
 // link it fails closed: nobody can search there, and a check of a typed id would tell an
 // anonymous visitor who is in the directory.
 func TestAPublicLinkRefusesAFormWithADirectoryField(t *testing.T) {

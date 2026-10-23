@@ -349,7 +349,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
 
   // ---- Directory fields --------------------------------------------------------
   // A textfield can search a remote data source instead of taking free text
-  // (ADR-draft-form-remote-data-sources). The panel above form-js's properties
+  // (ADR-0473). The panel above form-js's properties
   // edits its atlasDataSource block; the button adds a new one. Both read what this
   // server offers — the sources and the Workers of their types — once per editor.
   let dataSources = null;

@@ -482,7 +482,7 @@ const CATALOGS = {
     "apitokens.dashboard.intro.other": "{n} API-Tokens laufen in weniger als {days} Tagen ab.",
     "apitokens.dashboard.open": "API-Tokens öffnen",
     // A directory field: a search over a remote data source inside a task form
-    // (remote-select.js, ADR-draft-form-remote-data-sources).
+    // (remote-select.js, ADR-0473).
     "remote.placeholder": "Name oder E-Mail-Adresse…",
     "remote.results": "Suchergebnisse",
     "remote.more": "Weitere laden",

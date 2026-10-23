@@ -153,7 +153,7 @@ export function workerShape(kind, provider) {
     mail,
     sql,
     // An Entra Worker can let task forms search its directory — a directory field of a
-    // form that names it (ADR-draft-form-remote-data-sources). It is a switch on the
+    // form that names it (ADR-0473). It is a switch on the
     // Worker because it puts this Worker's credential behind every such form, and that
     // is its editors' decision, not the form author's.
     formLookups: entra,

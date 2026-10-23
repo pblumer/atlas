@@ -1746,7 +1746,7 @@ the hand-written Details panel one vertical slice at a time:
   query**, the protocol's non-durable message kind beside the job, so nothing about it
   reaches the log; a Worker's editors open it with **Forms may search**. The form editor
   configures it without JSON and previews it with made-up people
-  ([ADR-draft-form-remote-data-sources](docs/adr/draft-form-remote-data-sources.md)).
+  ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
 - 🔲 Further remote data sources: Entra groups and administrative units, a `$search` mode
   for word matching, and departments discovered rather than configured — each needs a
   provider row and a query handler in its Worker Type.

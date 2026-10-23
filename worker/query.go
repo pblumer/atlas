@@ -14,7 +14,7 @@ import (
 )
 
 // QueryFunc answers one form lookup for the Worker named connector: a page of records
-// or the *lookup.Error it failed with (ADR-draft-form-remote-data-sources). Any other
+// or the *lookup.Error it failed with (ADR-0473). Any other
 // error is reported as the provider being unavailable — and only as that, because an
 // error's text is the one place a search term could leave this process.
 type QueryFunc func(ctx context.Context, connector string, q lookup.Query) (lookup.Page, error)

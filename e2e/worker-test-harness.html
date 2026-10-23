@@ -57,7 +57,7 @@
         resultBox.textContent = String(await testWorkerFlow({ api, toast, worker }));
       };
       // An Entra Worker's edit dialog, for the form-lookup switch
-      // (ADR-draft-form-remote-data-sources).
+      // (ADR-0473).
       window.__editEntra = async (formLookups) => {
         window.__posted = [];
         const { editWorkerFlow } = await import("/workerdialog.js");

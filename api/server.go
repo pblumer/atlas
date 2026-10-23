@@ -366,7 +366,7 @@ type Server struct {
 	formGen *formgen.Service
 	// formLookup serves a task form's remote data sources, and workerQueries the
 	// Worker Instances that answer them through queryBroker — the protocol's
-	// non-durable message kind beside the job (ADR-draft-form-remote-data-sources).
+	// non-durable message kind beside the job (ADR-0473).
 	// None of the three holds a run loop or reaches the log: a lookup is a query that
 	// lives as long as the request waiting on it. formlookups.go is their whole
 	// reach into this server.

@@ -12,7 +12,7 @@ import (
 )
 
 // A directory field is a form-js textfield carrying an atlasDataSource
-// (ADR-draft-form-remote-data-sources). The textfield holds what form-js holds for any
+// (ADR-0473). The textfield holds what form-js holds for any
 // input — the submitted value, its label, required, its description and its errors —
 // and the block says where its options come from. form-js ignores a member it does not
 // know, and its editor keeps one on export, so the form stays a form-js document that

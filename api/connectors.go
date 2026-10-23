@@ -868,7 +868,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		MailboxEndpoint *string `json:"mailboxEndpoint"`
 		Enabled         *bool   `json:"enabled"`
 		// FormLookups opens the Worker to task forms' directory searches, or closes it
-		// (ADR-draft-form-remote-data-sources). An editor's act, like the credential.
+		// (ADR-0473). An editor's act, like the credential.
 		FormLookups *bool `json:"formLookups"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {

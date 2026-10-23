@@ -1,4 +1,4 @@
-# ADR-DRAFT: A form looks remote data up through an ephemeral worker query
+# ADR-0473: A form looks remote data up through an ephemeral worker query
 
 - **Status:** Accepted
 - **Implementation:** Landed

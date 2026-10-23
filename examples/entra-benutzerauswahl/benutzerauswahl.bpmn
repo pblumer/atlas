@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-Entra ID: Person aus dem Verzeichnis wählen und ihren Vorgesetzten lesen. Die Auswahl sucht im Verzeichnis über den Entra-Worker (Remote-Datenquelle, ADR-draft-form-remote-data-sources), statt das Verzeichnis vorher mit list-users in eine Prozessvariable zu laden.
+Entra ID: Person aus dem Verzeichnis wählen und ihren Vorgesetzten lesen. Die Auswahl sucht im Verzeichnis über den Entra-Worker (Remote-Datenquelle, ADR-0473), statt das Verzeichnis vorher mit list-users in eine Prozessvariable zu laden.
 -->
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"

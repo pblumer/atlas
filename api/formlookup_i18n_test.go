@@ -10,7 +10,7 @@ import (
 )
 
 // TestTheDirectoryFieldSpeaksBothLanguages holds the seam between the lookup service
-// and the console's directory field (ADR-draft-form-remote-data-sources): the server
+// and the console's directory field (ADR-0473): the server
 // answers with codes, the field words them, and a code or a message the catalogue
 // lacks would show a raw key in the middle of a task form.
 func TestTheDirectoryFieldSpeaksBothLanguages(t *testing.T) {

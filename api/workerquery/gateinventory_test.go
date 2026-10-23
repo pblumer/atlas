@@ -13,7 +13,7 @@ import (
 // to a Worker Instance reporting the Worker it names, and its answer is taken only
 // with the lease token it went out under. The routes themselves are the worker
 // protocol's, reachable under the fail-closed worker scope (ADR-0194, ADR-0297) as the
-// job routes are (ADR-draft-form-remote-data-sources). Reflection supplies the actual
+// job routes are (ADR-0473). Reflection supplies the actual
 // set of handlers, so adding a route and forgetting to classify it fails the build.
 
 // gateKind says what a handler does about the object axis.

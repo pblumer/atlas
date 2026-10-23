@@ -26,7 +26,7 @@ import (
 	"github.com/pblumer/atlas/worker"
 )
 
-// The example process, run end to end (ADR-draft-form-remote-data-sources): a person
+// The example process, run end to end (ADR-0473): a person
 // opens the task, searches a directory of five thousand people through the Entra
 // Worker, picks one, completes the task, and the next service task reads that person's
 // manager — with Graph a deterministic fake, so nothing here needs a tenant.

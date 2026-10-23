@@ -536,7 +536,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 type Connectors struct {
 	Handlers map[string]Exec
 	// Queries are the form lookups the configured kinds answer, keyed by job type
-	// (ADR-draft-form-remote-data-sources). A kind that answers them serves jobs too, and
+	// (ADR-0473). A kind that answers them serves jobs too, and
 	// answers them for the same Workers.
 	Queries map[string]QueryFunc
 	Names   []string

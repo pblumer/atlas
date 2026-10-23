@@ -17,7 +17,7 @@ import (
 	"github.com/pblumer/atlas/connector/lookup"
 )
 
-// A form lookup is the interactive twin of list-users (ADR-draft-form-remote-data-sources): a
+// A form lookup is the interactive twin of list-users (ADR-0473): a
 // person types a few letters into a task form and sees the first matching people,
 // without the directory ever becoming a process variable.
 //

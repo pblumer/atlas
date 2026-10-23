@@ -260,7 +260,7 @@ var catalogSources = []catalogSource{
 	},
 	{ID: "entra-onboarding-selfservice", App: "Beispiel: Onboarding-Self-Service (Entra)", Dir: "entra-onboarding-selfservice"},
 	// A person picked from the directory by a search in the task form, not from a listing
-	// the process read first (ADR-draft-form-remote-data-sources).
+	// the process read first (ADR-0473).
 	{ID: "entra-benutzerauswahl", App: "Beispiel: Person wählen (Entra)", Dir: "entra-benutzerauswahl"},
 	{ID: "account-bestellung", App: "Beispiel: Account-Bestellung (Entra)", Dir: "account-bestellung"},
 	// No install: these three ship inside the binary and are deployed into the

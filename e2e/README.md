@@ -354,7 +354,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   with padding, since headless Chromium hides scrollbars). A double-click on either
   divider restores the column's default width.
 
-- **`remote-select.spec.mjs`** ([ADR-draft-form-remote-data-sources](../docs/adr/draft-form-remote-data-sources.md)):
+- **`remote-select.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
   the **directory field** (`api/web/remote-select.js`) on the real vendored form-js viewer,
   with a transport the test answers itself — nothing is asked before somebody types; a search
   waits for the department it is bound to and for the field's minimum length; loading, results,
@@ -364,11 +364,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   and refuses a missing choice; changing the department clears a choice it no longer admits;
   Load more continues through the server's cursor; a reopened task shows who its value stands
   for, or that the directory no longer holds it; and the preview searches made-up people.
-- **`tasks-remote-select.spec.mjs`** ([ADR-draft-form-remote-data-sources](../docs/adr/draft-form-remote-data-sources.md)):
+- **`tasks-remote-select.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
   the same field in the **real Tasks app** against a stubbed API — the search goes to the
   task's own lookup route, Complete sends `{abteilung, user}` with the object id, Complete
   without a choice sends nothing, and "Back to the list" completes nothing.
-- **`form-directory-field.spec.mjs`** ([ADR-draft-form-remote-data-sources](../docs/adr/draft-form-remote-data-sources.md)):
+- **`form-directory-field.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
   the **form editor's** directory field panel — **＋ Directory field** writes a data source
   through the Worker open to forms, a plain text field becomes one bound to the department it
   is filtered by, a Worker that does not let forms search it is named as such, an unfinished

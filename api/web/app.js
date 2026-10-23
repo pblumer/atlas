@@ -9100,7 +9100,7 @@ async function viewTasks(preselectKey) {
   // pane is re-rendered or the selection changes, so no viewer leaks.
   function destroyForm() {
     // The directory fields' searches first: they hold requests and listeners on the
-    // form being torn down (ADR-draft-form-remote-data-sources).
+    // form being torn down (ADR-0473).
     if (state.mountedLookups) {
       try { state.mountedLookups.destroy(); } catch { /* already gone */ }
       state.mountedLookups = null;
@@ -9183,7 +9183,7 @@ async function viewTasks(preselectKey) {
       state.mountedForm = form;
       // A directory field searches its remote data source through this task: the
       // server checks that this person may work on it and reads which Worker and which
-      // properties from the stored form (ADR-draft-form-remote-data-sources). A form
+      // properties from the stored form (ADR-0473). A form
       // without one attaches nothing.
       state.mountedLookups = attachRemoteSelects(form, host, { transport: taskTransport(t.key), data: data || {} });
       // The variables the form was filled from, kept beside it. Completing the task

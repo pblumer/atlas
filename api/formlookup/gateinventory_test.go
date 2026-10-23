@@ -13,7 +13,7 @@ import (
 // through one task, and only by somebody who may work on it — the question completing
 // it asks (ADR-0317), asked by the server's Task collaborator before anything else.
 // The Worker a search goes through is a second object, and it is the Worker's editors'
-// switch that opens it (ADR-0205, ADR-draft-form-remote-data-sources). The editor's
+// switch that opens it (ADR-0205, ADR-0473). The editor's
 // sources listing is the catalog entry every author may see. Reflection supplies the
 // actual set of handlers, so adding a route and forgetting to classify it fails the
 // build.

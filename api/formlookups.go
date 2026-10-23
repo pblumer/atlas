@@ -13,7 +13,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 )
 
-// What a task form's remote data source may reach (ADR-draft-form-remote-data-sources).
+// What a task form's remote data source may reach (ADR-0473).
 //
 // The lookup service holds no state and no store; these closures are its whole reach
 // into this server, written here so the single writer (I3), the task's object question

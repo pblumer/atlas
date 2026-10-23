@@ -1,6 +1,6 @@
 // Package formlookup serves a task form's remote data sources: a person types into a
 // directory field and sees the first matching entries of a directory the server never
-// copies (ADR-draft-form-remote-data-sources).
+// copies (ADR-0473).
 //
 // The form says what may be searched; this package enforces what the person may
 // access; the Worker performs the search; the browser holds one page; and the durable

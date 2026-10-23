@@ -23,7 +23,7 @@ _Changed_ / _Removed_ for each version.
   work on the task; which Worker, resource and properties are searched is read from the
   stored form, the request may name none of them, and the search is rate-limited per
   person. Nothing about a search is written to the log
-  ([ADR-draft-form-remote-data-sources](docs/adr/draft-form-remote-data-sources.md)).
+  ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
 - **The Worker protocol carries a query beside the job.** A Worker Instance long-polls
   `POST /api/v1/worker-queries/activate` and answers `POST /api/v1/worker-queries/{id}/answer`,
   under the same `worker` scope as the job routes; a query is held only in the server's

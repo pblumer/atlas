@@ -126,7 +126,7 @@
   color: var(--accent-ink);
 }
 
-/* A directory field (remote-select.js, ADR-draft-form-remote-data-sources): a form-js
+/* A directory field (remote-select.js, ADR-0473): a form-js
    textfield with a search attached. The textfield's own input still holds the submitted
    value and is hidden; its label, description and errors stay where form-js draws them,
    and the search sits in the input's place. The tokens are the console's, with the

@@ -1,4 +1,4 @@
-// The form editor's half of a directory field (ADR-draft-form-remote-data-sources): a
+// The form editor's half of a directory field (ADR-0473): a
 // panel above form-js's own properties panel that turns the selected textfield into a
 // search over a remote data source, and writes the field's atlasDataSource block.
 //

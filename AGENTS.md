@@ -113,7 +113,7 @@ api/        HTTP API, web UI, command submission and queries
               (ADR-0305)
   formlookup/ A task form's remote data sources: the directory field's schema, the
               provider registry, the task-bound lookup route and the check before
-              completion (ADR-draft-form-remote-data-sources)
+              completion (ADR-0473)
   workerquery/ The Worker protocol's non-durable query beside the job: an in-memory
               broker Worker Instances lease from, never the log
   formgen/    Writing a form from a description and from the process it belongs to

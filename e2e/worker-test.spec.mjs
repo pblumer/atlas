@@ -86,7 +86,7 @@ test("a worker that cannot be checked by sending is not asked about it", async (
 });
 
 // An Entra Worker's editors decide whether task forms may search its directory
-// (ADR-draft-form-remote-data-sources): the switch is on the Worker's dialog, it is
+// (ADR-0473): the switch is on the Worker's dialog, it is
 // sent with the save, and a kind no form can search does not show it.
 test("an Entra Worker's dialog switches form searches on and off", async ({ page }) => {
   await page.evaluate(() => window.__editEntra(false));

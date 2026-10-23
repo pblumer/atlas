@@ -7256,7 +7256,7 @@ button.im-problem:hover { background: var(--accent-soft); }
 .package-answers .package-answer { max-width: 100%; }
 
 /* The form editor's remote data source panel (remote-select-editor.js,
-   ADR-draft-form-remote-data-sources): above form-js's own properties, for a selected
+   ADR-0473): above form-js's own properties, for a selected
    textfield. */
 .atlas-ds-panel { padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--surface); font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
 .atlas-ds-panel[hidden] { display: none; }

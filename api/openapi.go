@@ -515,7 +515,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("The leased jobs, with the variables visible at each task", tObject())}},
 		// The Worker protocol's second message kind: a query a Worker Instance answers
 		// with its Worker's credential, held only in memory for as long as somebody
-		// waits on it — never an event, never a job (ADR-draft-form-remote-data-sources).
+		// waits on it — never an event, never a job (ADR-0473).
 		{"POST", "/api/v1/worker-queries/activate", s.workerQueries.HandleActivate, apiOp{
 			summary: "Lease the form lookups waiting for a Worker this Worker Instance holds, optionally long-polling — the query twin of the job pull; nothing about a query is durable", tag: "Workers", role: RoleOperator,
 			req: jsonBody("Job type, worker id, the Workers this instance holds, batch size, and how long to wait", schemaObj(map[string]any{
@@ -579,7 +579,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Completion variables", schemaObj(map[string]any{"variables": tObject()})),
 			resp: jsonBody("Task key", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/form-data/{field}/query", s.formLookup.HandleQuery, apiOp{
-			summary: "Search the remote data source of one directory field of a task's form: one bounded page of options from the Worker the form names, for a caller who may work on the task. The request carries only the term, the values of the form fields the source is bound to, a cursor and a page size; which Worker, resource and properties is the stored form's (ADR-draft-form-remote-data-sources)", tag: "Tasks", role: RoleUser,
+			summary: "Search the remote data source of one directory field of a task's form: one bounded page of options from the Worker the form names, for a caller who may work on the task. The request carries only the term, the values of the form fields the source is bound to, a cursor and a page size; which Worker, resource and properties is the stored form's (ADR-0473)", tag: "Tasks", role: RoleUser,
 			req: jsonBody("Search term, bound filter values, cursor, value to resolve, page size", schemaObj(map[string]any{
 				"search": tString(), "filters": tObject(), "cursor": tString(), "value": tString(), "limit": tInteger(),
 			})),
@@ -767,7 +767,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/forms", s.handleListForms, apiOp{
 			summary: "List form definitions", tag: "Forms", role: roleAny, resp: jsonBody("Forms", tArray())}},
 		{"GET", "/api/v1/form-data/sources", s.formLookup.HandleSources, apiOp{
-			summary: "The remote data sources a form's directory field can name, what each lets a field search, filter and show, and the Workers of those types with whether each allows forms to search through it (ADR-draft-form-remote-data-sources)", tag: "Forms", role: RoleModeler,
+			summary: "The remote data sources a form's directory field can name, what each lets a field search, filter and show, and the Workers of those types with whether each allows forms to search through it (ADR-0473)", tag: "Forms", role: RoleModeler,
 			resp: jsonBody("Sources and Workers", tObject())}},
 		{"GET", "/api/v1/forms/{id}/availability", s.handleFormIDAvailability, apiOp{
 			summary: "Report whether a form id is free — the live check behind the form editor's ID field, so a collision shows while the id is typed rather than at Save", tag: "Forms", role: RoleModeler, resp: jsonBody("Availability", tObject())}},

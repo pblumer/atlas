@@ -1,5 +1,5 @@
 // A directory field: a form-js textfield whose options come from a remote data source
-// (ADR-draft-form-remote-data-sources).
+// (ADR-0473).
 //
 // The textfield stays what form-js makes of it — it holds the submitted value, its
 // label, `required`, its description and its errors — and this module attaches a search

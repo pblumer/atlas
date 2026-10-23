@@ -1,6 +1,6 @@
 // Package workerquery is the Worker protocol's second message kind: a query, answered by
 // a Worker Instance with its Worker's credential and never written anywhere
-// (ADR-draft-form-remote-data-sources).
+// (ADR-0473).
 //
 // A job is durable work. Creating it is an event, leasing it is an event, completing it
 // is an event, and recovery replays all three — which is right for work a process

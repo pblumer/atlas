@@ -1,4 +1,4 @@
-// e2e for the directory field (api/web/remote-select.js, ADR-draft-form-remote-data-sources):
+// e2e for the directory field (api/web/remote-select.js, ADR-0473):
 // a form-js textfield whose options come from a remote data source. Driven on the real
 // vendored form-js viewer with a transport the test controls, so each property below is
 // shown rather than assumed: nothing is asked before somebody types, a search waits for

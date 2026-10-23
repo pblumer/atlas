@@ -87,7 +87,7 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 	}
 	// A directory field's data source is checked now, against what this server can
 	// honour, rather than discovered by the first person who searches
-	// (ADR-draft-form-remote-data-sources). Every other part of the schema stays
+	// (ADR-0473). Every other part of the schema stays
 	// form-js's own business.
 	if err := formlookup.Check(payload.Schema); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "the form cannot be saved: "+err.Error())

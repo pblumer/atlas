@@ -1387,7 +1387,7 @@ func runWorker(args []string) error {
 		Handlers: execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
 		Connectors: builtin.Names,
 		// The form lookups the configured kinds answer, for the same Workers
-		// (ADR-draft-form-remote-data-sources).
+		// (ADR-0473).
 		Queries: builtin.Queries,
 	}
 	if serverRoots != nil {

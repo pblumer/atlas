@@ -1,5 +1,5 @@
 // The directory field in the REAL Tasks app (api/web/app.js + remote-select.js,
-// ADR-draft-form-remote-data-sources), against a mocked /api/v1: the field's search goes
+// ADR-0473), against a mocked /api/v1: the field's search goes
 // to the task's own lookup route, the chosen id is what Complete sends, and leaving the
 // form — the inbox's "Back to the list", its cancel — completes nothing.
 import { test, expect } from "@playwright/test";

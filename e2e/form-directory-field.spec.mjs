@@ -1,5 +1,5 @@
 // The form editor's directory field (api/web/remote-select-editor.js, form-editor.js,
-// ADR-draft-form-remote-data-sources): a model author turns a textfield into a search over
+// ADR-0473): a model author turns a textfield into a search over
 // a remote data source without writing JSON, the block the panel writes is what Save
 // sends, a Worker that does not let forms search it is named as such, and the preview
 // searches made-up people — never a directory.

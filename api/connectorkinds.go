@@ -98,7 +98,7 @@ type createConnectorParams struct {
 	// itself and is echoed back — it is the setting an operator changes most often.
 	Model string `json:"model"`
 	// FormLookups lets task forms search through the Worker
-	// (ADR-draft-form-remote-data-sources); only a kind a form can search may set it.
+	// (ADR-0473); only a kind a form can search may set it.
 	FormLookups bool `json:"formLookups"`
 }
 

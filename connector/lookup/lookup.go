@@ -1,6 +1,6 @@
 // Package lookup is the wire shape of a form lookup: what the server asks a Worker Type
 // when a person searches a remote data source from a task form, and what the Worker
-// Type answers (ADR-draft-form-remote-data-sources).
+// Type answers (ADR-0473).
 //
 // A lookup is not a job. It is never written to the log, it has no element instance,
 // no retries and no incident; it lives as long as the HTTP request that asked for it.

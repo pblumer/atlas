@@ -201,7 +201,7 @@ type Options struct {
 	// types, which need no credential of their own.
 	Connectors []string
 	// Queries are the form lookups this worker answers, keyed by the job type of the
-	// Worker Type answering them (ADR-draft-form-remote-data-sources). A query is not a
+	// Worker Type answering them (ADR-0473). A query is not a
 	// job: nothing about it is durable, and it is polled on a path of its own beside the
 	// job poll, under the same identity and for the same Workers.
 	Queries map[string]QueryFunc

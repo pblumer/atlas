@@ -152,7 +152,7 @@ type configuredWorker struct {
 
 	// FormLookups lets a task form search through this Worker: a person typing into a
 	// directory field of a form that names it sees entries of its directory
-	// (ADR-draft-form-remote-data-sources). It is the Worker's editors' decision, off
+	// (ADR-0473). It is the Worker's editors' decision, off
 	// until one of them makes it, because it puts the Worker's credential behind every
 	// task form that names it — and being able to see or edit a form is not
 	// permission to search a directory with somebody else's credential. Only a kind a

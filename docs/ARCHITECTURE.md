@@ -237,7 +237,7 @@ processor never sees it. The HTTP request that asks holds the query in an in-mem
 beside the engine; a Worker Instance holding the named Worker leases it, answers with one
 bounded page under its own credential, and the broker hands the page back to the waiting
 request. Only the value the person finally submits becomes durable, through the ordinary
-task completion. See [ADR-draft-form-remote-data-sources](adr/draft-form-remote-data-sources.md).
+task completion. See [ADR-0473](adr/0473-form-remote-data-sources.md).
 
 ## BPMN coverage
 
