@@ -1317,11 +1317,6 @@ type MessageFlowValue struct {
 	ReceiverElementId          int32 // INDEX into the receiver definition's graph
 	MessageName                string
 	CorrelationKey             string
-	// Stale marks a correlation that only cleared a subscription whose element no
-	// longer waited: the collaboration replay keeps it as it always did, and the event
-	// log has no row for it (ADR-draft-event-log §2). An appended field: a record
-	// written before it ends after CorrelationKey and decodes it as false.
-	Stale bool
 }
 
 func (*MessageFlowValue) ValueType() ValueType { return VTMessageFlow }
@@ -1362,11 +1357,7 @@ func (v *MessageFlowValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.ReceiverProcessDefKey)
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ReceiverElementId))
 	dst = appendString(dst, v.MessageName)
-	dst = appendString(dst, v.CorrelationKey)
-	if v.Stale {
-		return append(dst, 1)
-	}
-	return append(dst, 0)
+	return appendString(dst, v.CorrelationKey)
 }
 
 func (v *MessageFlowValue) decode(src []byte) error {
@@ -1383,12 +1374,11 @@ func (v *MessageFlowValue) decode(src []byte) error {
 		return err
 	}
 	v.MessageName = name
-	key, rest, err := readString(rest)
+	key, _, err := readString(rest)
 	if err != nil {
 		return err
 	}
 	v.CorrelationKey = key
-	v.Stale = len(rest) > 0 && rest[0] != 0 // appended; absent on an older record
 	return nil
 }
 

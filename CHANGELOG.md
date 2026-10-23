@@ -67,6 +67,19 @@ _Changed_ / _Removed_ for each version.
   model sends no longer reads as unfed in the Modeler
   ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md)).
 
+### Fixed
+
+- **A message or signal that reaches only a left-behind subscription is no delivery.** The
+  losing branch of an event-based gateway and a boundary whose host finished leave their
+  subscription behind until the next matching send clears it. That send counted as
+  delivered: a message with `timeToLiveMs` that only such a subscription matched was not
+  kept and was lost, and the send wrote its variables into the instance, which may have
+  moved on — a running instance read values of a message or signal it never received. Now
+  such a correlation only clears the subscription: no variables, no completion, no flow in
+  the collaboration replay, and a message with a time to live is kept for the subscription
+  that opens later. What earlier versions wrote stays as it was
+  ([ADR-0370](docs/adr/0370-durable-message-buffer.md), amended 2026-10-23).
+
 ## [0.19.0] — 2026-10-22
 
 **A `superior` approval reaches the orderer's line manager, and a SharePoint task does

@@ -86,14 +86,21 @@ is a row of its own (§3).
 
 ### 2. The receptions say who sent them, and whether they were deliveries
 
-The receptions are on the log already. Two fields are appended to them, so a record written
-before decodes them as zero and a version before this one ignores them:
+The receptions are on the log already. Two fields are appended to a signal's, so a record
+written before decodes them as zero and a version before this one ignores them:
 
 - `SignalSubscriptionValue.SenderProcessInstanceKey`: the throwing instance, set on
   `SubscriptionCorrelated`.
-- `Stale` on `SignalSubscriptionValue` and on `MessageFlowValue`: the subscription's element no
-  longer waited, so the correlation only cleared it. A stale correlation is not a reception, is not
-  counted in `Reached`, and has no row.
+- `SignalSubscriptionValue.Stale`: the subscription's element no longer waited, so the correlation
+  only cleared it. A stale correlation is not a reception, is not counted in `Reached`, and has no
+  row.
+
+A message's stale correlation needs no mark: it leaves no `VTMessageFlow` record at all. Building
+the log showed that a stale correlation was treated as a delivery in two more places — it wrote
+the send's payload into an instance it never reached, and it counted as delivered, so a message
+with a time to live that only a left-behind subscription matched was lost instead of kept. Both
+are corrected with this record, for signals and messages alike, and recorded as an amendment of
+[ADR-0370](0370-durable-message-buffer.md) (2026-10-23).
 
 A signal that starts an instance was counted and nothing more. A new intent on `VTSignal`,
 `IntentSignalStarted`, records each start a broadcast causes: the definition and its start
@@ -110,7 +117,7 @@ event feed is ([ADR-0429](0429-product-actions-are-commands-with-published-outco
 | `signal.thrown`, `message.sent` | `VTDispatch` / `IntentDispatched` |
 | `signal.received` | `VTSignal` / `SubscriptionCorrelated`, not stale |
 | `signal.started` | `VTSignal` / `IntentSignalStarted` |
-| `message.received`, `message.started` | `VTMessageFlow` / `MessagePublished`, not stale; a receiving instance of zero is a start |
+| `message.received`, `message.started` | `VTMessageFlow` / `MessagePublished`; a receiving instance of zero is a start |
 | `message.kept` | `VTMessage` / `IntentMessageBuffered` |
 | `message.taken` | `VTMessage` / `IntentMessageConsumed` |
 | `message.expired` | `VTMessage` / `IntentMessageExpired`, when the message still waited |
@@ -179,7 +186,8 @@ in a project the reader cannot see. A key is a reference, not data; opening it a
 - **Positive:**
   - "Was it thrown, and where did it arrive" has an answer for every send, including a throw that
     reached nobody and a message that was lost.
-  - A stale correlation no longer reads as a delivery in the log.
+  - A stale correlation no longer reads as a delivery: not in the log, not in an instance's
+    variables, not in the buffer's decision, not in the collaboration replay.
   - The same project rule governs the log as governs the instances it describes.
 - **Negative / trade-offs accepted:**
   - One more event per send, one more row per send and per reception. The cost is per send, not
@@ -187,8 +195,6 @@ in a project the reader cannot see. A key is a reference, not data; opening it a
   - The correlation key is kept for the retention, though it may be personal.
   - The log covers sends from the upgrade on.
 - **Follow-ups / risks to watch:**
-  - Whether the stale correlation should also stop counting as a delivery for the buffer's
-    decision (ADR-0370), which today treats it as one.
   - Counters per name, if the window is not enough.
 
 ## Pros and cons of the options

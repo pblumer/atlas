@@ -9,7 +9,7 @@
 *model.InboundDeliveryValue: SourceID, SourceSeq
 *model.IncidentValue: ElementId, ElementInstanceKey, JobKey, Message, ProcessInstanceKey, RaisedAt, Reason
 *model.JobValue: Assignee, CandidateGroups, CreatedAt, Deadline, ElementInstanceKey, JobType, LeaseEpoch, LeaseExpiresAt, ProcessInstanceKey, Retries, RetryDueDate
-*model.MessageFlowValue: CorrelationKey, MessageName, ReceiverElementId, ReceiverProcessDefKey, ReceiverProcessInstanceKey, SenderProcessInstanceKey, Stale
+*model.MessageFlowValue: CorrelationKey, MessageName, ReceiverElementId, ReceiverProcessDefKey, ReceiverProcessInstanceKey, SenderProcessInstanceKey
 *model.MessageSubscriptionValue: CorrelationKey, ElementId, ElementInstanceKey, MessageName, ProcessDefKey, ProcessInstanceKey
 *model.OperatorActionValue: Actor, ElementInstanceKey, ErrorCode, FromProcessDefKey, JobKey, Kind, ProcessInstanceKey, Reason
 *model.ProcessInstanceValue: CompletedAt, CompletedPosition, CorrelationKey, CreatedAt, ExpiryDueDate, ParentElementInstanceKey, PredecessorInstanceKey, ProcessDefKey, PurgeDueDate, State, SuccessorInstanceKey

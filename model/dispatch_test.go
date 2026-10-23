@@ -22,9 +22,9 @@ func TestADispatchRoundTrips(t *testing.T) {
 	}
 }
 
-// TestTheReceptionsReadRecordsWrittenBeforeTheirSender: the sender and the stale mark
-// are appended fields, so a record written before them decodes them as zero, and the
-// fields before them are read as they always were (ADR-draft-event-log §2).
+// TestTheReceptionsReadRecordsWrittenBeforeTheirSender: a signal reception's sender and
+// stale mark are appended fields, so a record written before them decodes them as zero,
+// and the fields before them are read as they always were (ADR-draft-event-log §2).
 func TestTheReceptionsReadRecordsWrittenBeforeTheirSender(t *testing.T) {
 	sig := &SignalSubscriptionValue{ProcessInstanceKey: 1, ElementInstanceKey: 2, SignalName: "go",
 		ProcessDefKey: 3, ElementId: 4, SenderProcessInstanceKey: 5, Stale: true}
@@ -39,19 +39,5 @@ func TestTheReceptionsReadRecordsWrittenBeforeTheirSender(t *testing.T) {
 	want.SenderProcessInstanceKey, want.Stale = 0, false
 	if err != nil || *v.(*SignalSubscriptionValue) != want {
 		t.Fatalf("signal written before the fields = %+v, %v; want %+v", v, err, want)
-	}
-
-	flow := &MessageFlowValue{SenderProcessInstanceKey: 1, ReceiverProcessInstanceKey: 2, ReceiverProcessDefKey: 3,
-		ReceiverElementId: 4, MessageName: "m", CorrelationKey: "k", Stale: true}
-	full = AppendValue(nil, flow)
-	v, err = DecodeValue(VTMessageFlow, full)
-	if err != nil || *v.(*MessageFlowValue) != *flow {
-		t.Fatalf("flow round trip = %+v, %v", v, err)
-	}
-	v, err = DecodeValue(VTMessageFlow, full[:len(full)-1])
-	wantFlow := *flow
-	wantFlow.Stale = false
-	if err != nil || *v.(*MessageFlowValue) != wantFlow {
-		t.Fatalf("flow written before the field = %+v, %v; want %+v", v, err, wantFlow)
 	}
 }

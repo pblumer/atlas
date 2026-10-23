@@ -455,9 +455,8 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// can replay it. The record carries everything (receiver, message, key);
 			// the timestamp and position come from this event's header, so replay
 			// rebuilds identical history — invariant I4, ADR-0038. The event log keeps
-			// the delivery too, unless it only cleared a stale subscription
-			// (ADR-draft-event-log §2).
-			if err := tx.RecordMessageFlow(h.Timestamp, h.Position, &v.messageFlow); err != nil || v.messageFlow.Stale {
+			// the delivery too (ADR-draft-event-log §3).
+			if err := tx.RecordMessageFlow(h.Timestamp, h.Position, &v.messageFlow); err != nil {
 				return err
 			}
 			return tx.PutEventLogRow(h.PartitionId, h.Position, h.Timestamp, h.SourcePos, state.EventLogMessageDelivered, &v.messageFlow)

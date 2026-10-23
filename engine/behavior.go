@@ -2877,8 +2877,7 @@ type subscriptionMatch struct {
 // instance's scope and commands the waiting element to complete. Shared by the
 // name-correlated publish and the directed delivery to one instance, so a message
 // arrives the same way whichever of the two sent it. reached is how many of the
-// subscriptions still had a waiting element: the others only cleared a stale entry,
-// and their flow says so (ADR-draft-event-log §2).
+// subscriptions still had a waiting element: the others are only cleared.
 func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) (reached int) {
 	// A payload is attributed to the catch event that received it (below); the command
 	// driving this may itself be an element's — a throw event publishing the message — so
@@ -2886,13 +2885,18 @@ func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, n
 	prevProducer := c.producer
 	for i := range matches {
 		m := matches[i]
-		// A subscription whose element no longer waits is cleared here, lazily, and
-		// receives nothing: it is not a delivery.
-		stale := c.GetElementInstance(m.elKey) == nil
-		if !stale {
-			reached++
-		}
 		c.AppendMessageSubscriptionEvent(m.elKey, model.IntentSubscriptionCorrelated, m.sub)
+		// A subscription whose element no longer waits — the losing branch of an
+		// event-based gateway, a boundary whose host finished — was left behind to be
+		// cleared lazily, and the correlation above is that clearing and nothing more.
+		// The message reaches nobody there: it leaves no flow, writes nothing into an
+		// instance that may have moved on, and is not counted as delivered, so a
+		// message with a time to live that only such a subscription matched is kept
+		// (ADR-0370, amendment of 2026-10-23).
+		if c.GetElementInstance(m.elKey) == nil {
+			continue
+		}
+		reached++
 		// Retain the delivery to the waiting catch event for the collaboration
 		// replay (ADR-0038), before the subscription's fields are needed elsewhere.
 		c.AppendMessageFlowEvent(model.MessageFlowValue{
@@ -2902,7 +2906,6 @@ func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, n
 			ReceiverElementId:          m.sub.ElementId,
 			MessageName:                name,
 			CorrelationKey:             correlationKey,
-			Stale:                      stale,
 		})
 		// The payload is what this catch event produced for its instance, so it is
 		// attributed to the element that received it and not to whatever published the
@@ -2947,7 +2950,7 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	}))
 	reached := deliverToSubscriptions(c, matches, name, correlationKey, vars, from.piKey)
 	started := 0
-	delivered = len(matches) > 0
+	delivered = reached > 0
 	// A message also instantiates every deployed process with a matching message
 	// start event, seeded with the payload (ADR-0035). Matching is by name; the
 	// created instance additionally records the correlation key its start event
@@ -3090,10 +3093,14 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 		m := matches[i]
 		m.sub.SenderProcessInstanceKey = from.piKey
 		m.sub.Stale = c.GetElementInstance(m.elKey) == nil
-		if !m.sub.Stale {
-			reached++
-		}
 		c.AppendSignalSubscriptionEvent(m.elKey, model.IntentSubscriptionCorrelated, m.sub)
+		// As for a message (deliverToSubscriptions): a subscription whose element no
+		// longer waits is only cleared, and the broadcast writes nothing into an
+		// instance it did not reach.
+		if m.sub.Stale {
+			continue
+		}
+		reached++
 		// As in correlateMessage: the broadcast payload is the catch event's own
 		// production, not the broadcaster's, and the producer of the command that got
 		// here is put back afterwards (ADR-0219).
