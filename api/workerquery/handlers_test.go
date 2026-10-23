@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -150,5 +151,43 @@ func TestTheWorkerAPIReadsAnAnswerAsJSON(t *testing.T) {
 	s.HandleAnswer(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("%d, want 400", rec.Code)
+	}
+}
+
+// What the API passes on is held to what an asker can use: a page without items is an
+// empty page, not a missing one, and a wait longer than any provider would ask for is
+// dropped rather than shown to the person.
+func TestTheWorkerAPINormalizesWhatItPassesOn(t *testing.T) {
+	b := testBroker(newClock())
+	s := NewService(b, 1<<20)
+	present(t, b, "w1", "ucc_entra")
+
+	answer := ask(b, context.Background(), "ucc_entra")
+	l := leaseOne(t, b, "w1", "ucc_entra")
+	// A continuation longer than any provider's is refused, within a budget that holds it.
+	long, _ := json.Marshal(map[string]any{"worker": "w1", "leaseToken": l.LeaseToken,
+		"page": map[string]any{"items": []any{}, "next": strings.Repeat("n", maxNextLength+1)}})
+	if rec := serve(t, s, "POST", "/api/v1/worker-queries/"+l.ID+"/answer", string(long)); rec.Code != http.StatusBadRequest {
+		t.Fatalf("an overlong continuation: %d %s, want 400", rec.Code, rec.Body)
+	}
+	raw, _ := json.Marshal(map[string]any{"worker": "w1", "leaseToken": l.LeaseToken, "page": map[string]any{}})
+	if rec := serve(t, s, "POST", "/api/v1/worker-queries/"+l.ID+"/answer", string(raw)); rec.Code != http.StatusOK {
+		t.Fatalf("answer: %d %s", rec.Code, rec.Body)
+	}
+	if a := <-answer; a.err != nil || a.page.Items == nil || len(a.page.Items) != 0 {
+		t.Fatalf("asker got %+v, want an empty page", a)
+	}
+
+	answer = ask(b, context.Background(), "ucc_entra")
+	l = leaseOne(t, b, "w1", "ucc_entra")
+	raw, _ = json.Marshal(map[string]any{"worker": "w1", "leaseToken": l.LeaseToken,
+		"error": map[string]any{"code": "provider_throttled", "retryAfter": maxRetryAdvice + 1}})
+	if rec := serve(t, s, "POST", "/api/v1/worker-queries/"+l.ID+"/answer", string(raw)); rec.Code != http.StatusOK {
+		t.Fatalf("answer: %d %s", rec.Code, rec.Body)
+	}
+	a := <-answer
+	var le *lookup.Error
+	if !errors.As(a.err, &le) || le.Code != lookup.CodeThrottled || le.RetryAfter != 0 {
+		t.Fatalf("asker got %+v, want provider_throttled without a wait", a)
 	}
 }

@@ -1,16 +1,23 @@
 package worker_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/pblumer/atlas/api/workerquery"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/worker"
 )
 
@@ -149,5 +156,130 @@ func TestTheEntraWorkerServesLookups(t *testing.T) {
 	var le *lookup.Error
 	if !errors.As(err, &le) || le.Code != lookup.CodeUnconfigured {
 		t.Fatalf("err = %v, want %s", err, lookup.CodeUnconfigured)
+	}
+}
+
+// A running worker answers queries as they arrive, beside its jobs, and stops when it
+// is told to.
+func TestARunningWorkerAnswersQueriesUntilItIsStopped(t *testing.T) {
+	b, srv := queryServer(t)
+	w := queryWorker(srv, func(context.Context, string, lookup.Query) (lookup.Page, error) {
+		return lookup.Page{}, nil // nobody by that name
+	})
+	presentWorker(t, w)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- w.Run(ctx) }()
+	got := <-askAsync(b, lookup.Query{Resource: "users", Search: "Zz", Properties: []string{"id"}})
+	if got.err != nil || got.page.Items == nil || len(got.page.Items) != 0 {
+		t.Fatalf("asker got %+v, want an empty page", got)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Run = %v", err)
+	}
+}
+
+// syncBuffer is a log sink the worker's goroutines may write to while the test reads.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
+
+// A server older than the query protocol answers every query poll 404. The worker keeps
+// trying, and says so once per run of failures rather than once per poll, so the line
+// that explains why its tenants are not searchable is not buried.
+func TestAWorkerWhoseQueryPollsFailSaysSoOnceAndKeepsTrying(t *testing.T) {
+	logs := &syncBuffer{}
+	prev := slog.Default()
+	if err := logging.Setup(logs, logging.FormatJSON, logging.LevelWarn); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	polled := make(chan struct{}, 16)
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		select {
+		case polled <- struct{}{}:
+		default:
+		}
+		http.NotFound(rw, r)
+	}))
+	t.Cleanup(srv.Close)
+	w := worker.New(worker.Options{
+		Server: srv.URL, ID: "entra-1", Connectors: []string{"ucc_entra"}, Retry: time.Millisecond,
+		Queries: map[string]worker.QueryFunc{compiler.EntraJobType: func(context.Context, string, lookup.Query) (lookup.Page, error) {
+			return lookup.Page{}, nil
+		}},
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- w.Run(ctx) }()
+	for range 3 {
+		<-polled
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Run = %v", err)
+	}
+	if n := strings.Count(logs.String(), "a query poll failed"); n != 1 {
+		t.Errorf("logged the failing poll %d times over three polls, want once:\n%s", n, logs)
+	}
+}
+
+// What the server hands over is not trusted blindly: a query this worker cannot read
+// is answered as invalid, and one of a type it has no handler for as unconfigured —
+// neither is run.
+func TestAWorkerAnswersAQueryItCannotRunWithACode(t *testing.T) {
+	var mu sync.Mutex
+	answers := map[string]map[string]any{}
+	deadline := time.Now().Add(time.Minute).UnixMilli()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v1/worker-queries/activate", func(rw http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(rw).Encode(map[string]any{"queries": []map[string]any{
+			{"id": "garbled", "leaseToken": "t1", "type": compiler.EntraJobType, "connector": "ucc_entra", "deadline": deadline, "query": "not a query"},
+			{"id": "foreign", "leaseToken": "t2", "type": "io.atlas.other", "connector": "ucc_entra", "deadline": deadline, "query": map[string]any{}},
+		}})
+	})
+	mux.HandleFunc("POST /api/v1/worker-queries/{id}/answer", func(rw http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		answers[r.PathValue("id")] = body
+		mu.Unlock()
+		_ = json.NewEncoder(rw).Encode(map[string]any{"id": r.PathValue("id")})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	var ran atomic.Bool
+	w := queryWorker(srv, func(context.Context, string, lookup.Query) (lookup.Page, error) {
+		ran.Store(true)
+		return lookup.Page{}, nil
+	})
+	if err := w.AnswerQueriesOnce(context.Background(), 0); err != nil {
+		t.Fatal(err)
+	}
+	if ran.Load() {
+		t.Error("the handler ran a query the worker could not read")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for id, want := range map[string]string{"garbled": lookup.CodeInvalid, "foreign": lookup.CodeUnconfigured} {
+		e, _ := answers[id]["error"].(map[string]any)
+		if e["code"] != want || answers[id]["page"] != nil {
+			t.Errorf("%s answered %v, want the code %s", id, answers[id], want)
+		}
 	}
 }

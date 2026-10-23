@@ -314,3 +314,68 @@ func TestALongPollEndsWithItsRequest(t *testing.T) {
 		t.Fatalf("leased %d", len(got))
 	}
 }
+
+// A broker built without limits — or with some of them — runs under the defaults for
+// the ones it was not given, rather than with a queue of zero or an Instance that is
+// never present.
+func TestABrokerFillsInTheLimitsItWasNotGiven(t *testing.T) {
+	if got := NewBroker(Limits{}).limits; got != DefaultLimits() {
+		t.Errorf("no limits: %+v, want %+v", got, DefaultLimits())
+	}
+	d := DefaultLimits()
+	if got := NewBroker(Limits{QueuePerType: 3}).limits; got != (Limits{QueuePerType: 3, PresentFor: d.PresentFor, MaxBatch: d.MaxBatch}) {
+		t.Errorf("a queue only: %+v", got)
+	}
+}
+
+// An Instance polling for another tenant leaves the query where it is, for the
+// Instance that holds its Worker — even when it polls first.
+func TestAQueryWaitsForTheInstanceHoldingItsWorker(t *testing.T) {
+	b := testBroker(newClock())
+	present(t, b, "w1", "ucc_entra")
+	answer := ask(b, context.Background(), "ucc_entra")
+	waitQueued(t, b, 1)
+	if got := b.Lease(context.Background(), entraType, "other", []string{"contoso"}, 4, 0); len(got) != 0 {
+		t.Fatalf("the instance holding contoso leased %d queries", len(got))
+	}
+	l := leaseOne(t, b, "w1", "ucc_entra")
+	_ = b.Answer(l.ID, "w1", l.LeaseToken, Answer{Page: &lookup.Page{}})
+	if a := <-answer; a.err != nil {
+		t.Fatalf("asker got %+v", a)
+	}
+}
+
+// A query whose deadline passed while it waited is dropped by the next poll, not handed
+// to an Instance that would spend a Graph request on an asker who has gone.
+func TestAQueryPastItsDeadlineIsNotLeased(t *testing.T) {
+	c := newClock()
+	b := testBroker(c)
+	present(t, b, "w1", "ucc_entra")
+	answer := ask(b, context.Background(), "ucc_entra")
+	waitQueued(t, b, 1)
+	c.advance(6 * time.Second) // past ask's five seconds; its timer has not fired yet
+	if got := b.Lease(context.Background(), entraType, "w1", []string{"ucc_entra"}, 4, 0); len(got) != 0 {
+		t.Fatalf("leased %d expired queries", len(got))
+	}
+	c.fireAll()
+	if a := <-answer; !errors.Is(a.err, ErrTimeout) {
+		t.Fatalf("asker got %+v, want ErrTimeout", a)
+	}
+}
+
+// An answer that carries neither a page nor an error is a failure, never an empty
+// page: "nobody by that name" must not be what a broken Instance says by accident.
+func TestAnEmptyAnswerIsAFailureNotAnEmptyPage(t *testing.T) {
+	b := testBroker(newClock())
+	present(t, b, "w1", "ucc_entra")
+	answer := ask(b, context.Background(), "ucc_entra")
+	l := leaseOne(t, b, "w1", "ucc_entra")
+	if err := b.Answer(l.ID, "w1", l.LeaseToken, Answer{}); err != nil {
+		t.Fatal(err)
+	}
+	a := <-answer
+	var le *lookup.Error
+	if !errors.As(a.err, &le) || le.Code != lookup.CodeUnavailable {
+		t.Fatalf("asker got %+v, want %s", a, lookup.CodeUnavailable)
+	}
+}

@@ -2,8 +2,10 @@ package formlookup
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -139,5 +141,42 @@ func TestASubmissionErrorReadsAsAnError(t *testing.T) {
 	var se *SubmissionError
 	if !errors.As(err, &se) || err.Error() != "x" {
 		t.Fatalf("%v", err)
+	}
+}
+
+// A refused completion is written in the lookup's error shape, with the wait where one
+// helps, so the Tasks app reads both the same way.
+func TestARefusedCompletionIsWrittenLikeARefusedLookup(t *testing.T) {
+	rec := httptest.NewRecorder()
+	(&SubmissionError{Status: http.StatusServiceUnavailable, Code: "provider_throttled", Message: "wait", RetryAfter: 7}).Write(rec)
+	var body map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &body)
+	if rec.Code != http.StatusServiceUnavailable || body["code"] != "provider_throttled" || body["error"] != "wait" ||
+		rec.Header().Get("Retry-After") != "7" || body["retryAfter"] != float64(7) {
+		t.Errorf("%d %v %v", rec.Code, rec.Header(), body)
+	}
+}
+
+// A form that can no longer be read refuses its completion rather than letting an
+// unchecked value through.
+func TestAFormThatCannotBeReadCompletesNothing(t *testing.T) {
+	f := newFakes()
+	err := check(f, strings.Replace(exampleForm, `"version": 1`, `"version": 2`, 1), map[string]any{"user": anna, "abteilung": "IT"})
+	if err == nil || err.Status != http.StatusUnprocessableEntity || err.Code != "invalid_configuration" {
+		t.Fatalf("err = %+v", err)
+	}
+	if len(f.asked) != 0 {
+		t.Error("an unreadable form was looked up")
+	}
+}
+
+// When the Worker refuses the check itself, nothing completes, and the refusal is a
+// server-side one the person can retry later — never a 4xx that reads as their fault.
+func TestACheckTheWorkerRefusesIsNotThePersonsFault(t *testing.T) {
+	f := newFakes()
+	f.err = lookup.Fail(lookup.CodeInvalid)
+	err := check(f, exampleForm, map[string]any{"user": anna, "abteilung": "IT"})
+	if err == nil || err.Status != http.StatusServiceUnavailable {
+		t.Fatalf("err = %+v, want 503", err)
 	}
 }

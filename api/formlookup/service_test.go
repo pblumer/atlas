@@ -36,6 +36,12 @@ type fakes struct {
 	page    lookup.Page
 	err     error
 	allowed int
+	// timeout is what the last Ask was given; the *Err fields stand in for a store
+	// that cannot be read.
+	timeout    time.Duration
+	taskErr    error
+	workerErr  error
+	workersErr error
 }
 
 func newFakes() *fakes {
@@ -46,9 +52,14 @@ func newFakes() *fakes {
 	}
 }
 
-func (f *fakes) service() *Service {
-	return New(Config{
+func (f *fakes) service() *Service { return New(f.config()) }
+
+func (f *fakes) config() Config {
+	return Config{
 		Task: func(r *http.Request, key uint64) (Task, error) {
+			if f.taskErr != nil {
+				return Task{}, f.taskErr
+			}
 			t, ok := f.tasks[key]
 			if !ok {
 				return Task{}, ErrNoTask
@@ -60,9 +71,12 @@ func (f *fakes) service() *Service {
 		},
 		Worker: func(name string) (Worker, bool, error) {
 			w, ok := f.workers[name]
-			return w, ok, nil
+			return w, ok, f.workerErr
 		},
 		Workers: func(*http.Request) ([]Worker, error) {
+			if f.workersErr != nil {
+				return nil, f.workersErr
+			}
 			var out []Worker
 			for _, w := range f.workers {
 				out = append(out, w)
@@ -71,7 +85,7 @@ func (f *fakes) service() *Service {
 		},
 		Ask: func(ctx context.Context, jobType, connector string, q lookup.Query, timeout time.Duration) (lookup.Page, error) {
 			f.asked = append(f.asked, q)
-			f.jobType, f.conn = jobType, connector
+			f.jobType, f.conn, f.timeout = jobType, connector, timeout
 			return f.page, f.err
 		},
 		Allow: func(string) bool {
@@ -81,7 +95,7 @@ func (f *fakes) service() *Service {
 		Principal: func(r *http.Request) string { return r.Header.Get("X-User") },
 		Timeout:   time.Second,
 		MaxBody:   4096,
-	})
+	}
 }
 
 type reply struct {
@@ -92,9 +106,14 @@ type reply struct {
 
 func (f *fakes) query(t *testing.T, s *Service, user string, key uint64, field, body string) reply {
 	t.Helper()
+	return f.queryAt(t, s, user, "/api/v1/tasks/"+strconv.FormatUint(key, 10)+"/form-data/"+field+"/query", body)
+}
+
+func (f *fakes) queryAt(t *testing.T, s *Service, user, path, body string) reply {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/tasks/{key}/form-data/{field}/query", s.HandleQuery)
-	req := httptest.NewRequest("POST", "/api/v1/tasks/"+strconv.FormatUint(key, 10)+"/form-data/"+field+"/query", strings.NewReader(body))
+	req := httptest.NewRequest("POST", path, strings.NewReader(body))
 	req.Header.Set("X-User", user)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -242,22 +261,25 @@ func TestALookupRequestCannotChooseWhatTheServerDecides(t *testing.T) {
 	s := f.service()
 	long := strings.Repeat("a", lookup.MaxSearchLength+1)
 	for name, body := range map[string]string{
-		"another worker":        `{"search":"Ann","worker":"contoso"}`,
-		"another tenant":        `{"search":"Ann","tenant":"contoso.onmicrosoft.com"}`,
-		"another resource":      `{"search":"Ann","resource":"groups"}`,
-		"a Graph URL":           `{"search":"Ann","url":"https://graph.microsoft.com/v1.0/users?$filter=id ne null"}`,
-		"a raw filter":          `{"search":"Ann","$filter":"id ne null"}`,
-		"properties":            `{"search":"Ann","properties":["passwordProfile"]}`,
-		"an unbound filter":     `{"search":"Ann","filters":{"jobTitle":"CEO"}}`,
-		"an OData filter key":   `{"search":"Ann","filters":{"department eq 'IT' or id":"x"}}`,
-		"a department off list": `{"search":"Ann","filters":{"department":"HR"}}`,
-		"too short":             `{"search":"A"}`,
-		"empty":                 `{"search":""}`,
-		"too long":              `{"search":"` + long + `"}`,
-		"control characters":    `{"search":"An\u0000n"}`,
-		"a page too large":      `{"search":"Ann","limit":26}`,
-		"a value that is no id": `{"value":"anna@example.com"}`,
-		"not JSON":              `{"search":`,
+		"another worker":                  `{"search":"Ann","worker":"contoso"}`,
+		"another tenant":                  `{"search":"Ann","tenant":"contoso.onmicrosoft.com"}`,
+		"another resource":                `{"search":"Ann","resource":"groups"}`,
+		"a Graph URL":                     `{"search":"Ann","url":"https://graph.microsoft.com/v1.0/users?$filter=id ne null"}`,
+		"a raw filter":                    `{"search":"Ann","$filter":"id ne null"}`,
+		"properties":                      `{"search":"Ann","properties":["passwordProfile"]}`,
+		"an unbound filter":               `{"search":"Ann","filters":{"jobTitle":"CEO"}}`,
+		"an OData filter key":             `{"search":"Ann","filters":{"department eq 'IT' or id":"x"}}`,
+		"a department off list":           `{"search":"Ann","filters":{"department":"HR"}}`,
+		"too short":                       `{"search":"A"}`,
+		"empty":                           `{"search":""}`,
+		"too long":                        `{"search":"` + long + `"}`,
+		"control characters":              `{"search":"An\u0000n"}`,
+		"a page too large":                `{"search":"Ann","limit":26}`,
+		"a value that is no id":           `{"value":"anna@example.com"}`,
+		"a search and a value":            `{"search":"Ann","value":"` + anna + `"}`,
+		"a value with a cursor":           `{"value":"` + anna + `","cursor":"x"}`,
+		"a control character in a filter": `{"search":"Ann","filters":{"department":"I\u0001T"}}`,
+		"not JSON":                        `{"search":`,
 	} {
 		r := f.query(t, s, "anna", taskID, "user", body)
 		if r.status != http.StatusBadRequest || code(r) != "invalid_query" {
@@ -393,5 +415,149 @@ func TestTheSourcesListingSaysWhatCanBeConfigured(t *testing.T) {
 	}
 	if len(out.Workers) != 2 || out.Workers[0]["name"] != "closed" || out.Workers[0]["formLookups"] != false {
 		t.Errorf("workers = %v, want both, sorted, each saying whether forms may use it", out.Workers)
+	}
+}
+
+// A service built without a deadline or a body budget gets the defaults, not a lookup
+// that never ends or a request that is never read.
+func TestALookupRunsUnderTheDefaultsItWasNotGiven(t *testing.T) {
+	f := newFakes()
+	cfg := f.config()
+	cfg.Timeout, cfg.MaxBody = 0, 0
+	s := New(cfg)
+	if r := f.query(t, s, "anna", taskID, "user", `{"search":"Ann","filters":{"department":"IT"}}`); r.status != http.StatusOK {
+		t.Fatalf("%d %v", r.status, r.body)
+	}
+	if f.timeout != DefaultTimeout {
+		t.Errorf("asked with %v, want %v", f.timeout, DefaultTimeout)
+	}
+	huge := `{"search":"` + strings.Repeat("x", 1<<16) + `"}`
+	if r := f.query(t, s, "anna", taskID, "user", huge); r.status != http.StatusRequestEntityTooLarge {
+		t.Errorf("a body past the default budget: %d", r.status)
+	}
+}
+
+// What the lookup cannot read is said as such: no task under a key that is no number,
+// and a server error — not a forbidden or an empty result — when a store fails.
+func TestALookupSaysWhenItCannotReadWhatItNeeds(t *testing.T) {
+	f := newFakes()
+	s := f.service()
+	if r := f.queryAt(t, s, "anna", "/api/v1/tasks/abc/form-data/user/query", `{"search":"Ann"}`); r.status != http.StatusNotFound || code(r) != "not_found" {
+		t.Errorf("a key that is no number: %d %v", r.status, r.body)
+	}
+	f.taskErr = errors.New("store closed")
+	if r := f.query(t, s, "anna", taskID, "user", `{"search":"Ann"}`); r.status != http.StatusInternalServerError {
+		t.Errorf("an unreadable task: %d %v", r.status, r.body)
+	}
+	f.taskErr = nil
+	f.workerErr = errors.New("store closed")
+	if r := f.query(t, s, "anna", taskID, "user", `{"search":"Ann"}`); r.status != http.StatusInternalServerError || code(r) != "internal" {
+		t.Errorf("an unreadable Worker: %d %v", r.status, r.body)
+	}
+	f.workerErr = nil
+	// A form stored before this server's rules, or by a newer server, is not searched.
+	f.tasks[taskID] = fakeTask{schema: strings.Replace(exampleForm, `"version": 1`, `"version": 2`, 1)}
+	if r := f.query(t, s, "", taskID, "user", `{"search":"Ann"}`); r.status != http.StatusUnprocessableEntity || code(r) != "invalid_configuration" {
+		t.Errorf("a form this server cannot read: %d %v", r.status, r.body)
+	}
+	if len(f.asked) != 0 {
+		t.Errorf("%d of these reached a worker", len(f.asked))
+	}
+	f.workersErr = errors.New("store closed")
+	rec := httptest.NewRecorder()
+	s.HandleSources(rec, httptest.NewRequest("GET", "/api/v1/form-data/sources", nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("an unreadable Worker list: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestASmallerPageMayBeAskedFor(t *testing.T) {
+	f := newFakes()
+	if r := f.query(t, f.service(), "anna", taskID, "user", `{"search":"Ann","filters":{"department":"IT"},"limit":10}`); r.status != http.StatusOK {
+		t.Fatalf("%d %v", r.status, r.body)
+	}
+	if got := f.asked[0].PageSize; got != 10 {
+		t.Errorf("page size %d, want 10", got)
+	}
+}
+
+// The person typed on and the browser withdrew the request: nothing is written for it,
+// since nobody reads the answer.
+func TestAWithdrawnSearchIsNotAnswered(t *testing.T) {
+	f := newFakes()
+	f.err = context.Canceled
+	s := f.service()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest("POST", "/api/v1/tasks/42/form-data/user/query",
+		strings.NewReader(`{"search":"Ann","filters":{"department":"IT"}}`)).WithContext(ctx)
+	req.Header.Set("X-User", "anna")
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v1/tasks/{key}/form-data/{field}/query", s.HandleQuery)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Body.Len() != 0 {
+		t.Errorf("a withdrawn search was answered: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// An option shows each thing once and as text: a mail that is the display name is not
+// repeated beneath it, and a detail Graph sends as a number reads as one.
+func TestAnOptionShowsEachThingOnceAndAsText(t *testing.T) {
+	f := newFakes()
+	f.page = lookup.Page{Items: []map[string]any{
+		{"id": anna, "displayName": "service@example.com", "mail": "service@example.com", "department": float64(42)},
+	}}
+	r := f.query(t, f.service(), "anna", taskID, "user", `{"search":"ser","filters":{"department":"IT"}}`)
+	if r.status != http.StatusOK {
+		t.Fatalf("%d %v", r.status, r.body)
+	}
+	it := r.body["items"].([]any)[0].(map[string]any)
+	if it["label"] != "service@example.com" || it["description"] != nil && it["description"] != "" {
+		t.Errorf("item = %v, want the label once", it)
+	}
+	if d := it["details"].(map[string]any); d["department"] != "42" {
+		t.Errorf("details = %v", d)
+	}
+}
+
+// A required filter whose field has no label is named by its key, so the person is
+// still told which field to fill in first.
+func TestARequiredFilterIsNamedByItsKeyWhenItsFieldHasNoLabel(t *testing.T) {
+	f := newFakes()
+	schema := strings.Replace(exampleForm, `"key": "abteilung", "label": "Abteilung",`, `"key": "abteilung",`, 1)
+	schema = strings.Replace(schema, `"field": "abteilung"`, `"field": "abteilung", "required": true`, 1)
+	f.tasks[taskID] = fakeTask{schema: schema}
+	r := f.query(t, f.service(), "", taskID, "user", `{"search":"Ann"}`)
+	if msg, _ := r.body["error"].(string); r.status != http.StatusBadRequest || !strings.Contains(msg, "abteilung") {
+		t.Errorf("%d %v, want a refusal naming abteilung", r.status, r.body)
+	}
+}
+
+// A filter bound to a select whose options come from a variable has no fixed options
+// the server could hold it to, so the value is searched as given.
+func TestAFilterFromAVariableFedSelectIsSearchedAsGiven(t *testing.T) {
+	f := newFakes()
+	f.tasks[taskID] = fakeTask{schema: strings.Replace(exampleForm,
+		`"values": [{"label": "IT", "value": "IT"}, {"label": "Finanzen", "value": "Finance"}]`, `"valuesKey": "abteilungen"`, 1)}
+	r := f.query(t, f.service(), "", taskID, "user", `{"search":"Ann","filters":{"department":"HR"}}`)
+	if r.status != http.StatusOK {
+		t.Fatalf("%d %v", r.status, r.body)
+	}
+	if got := f.asked[0].Filters; len(got) != 1 || got[0].Value != "HR" {
+		t.Errorf("filters = %v", got)
+	}
+}
+
+// A provider without its Worker Type's rules refuses every query and every value; it
+// never lets one through unchecked.
+func TestAProviderWithoutItsRulesRefusesEverything(t *testing.T) {
+	var p Provider
+	var le *lookup.Error
+	if err := p.Check(lookup.Query{Resource: "users", Search: "Ann"}); !errors.As(err, &le) || le.Code != lookup.CodeInvalid {
+		t.Errorf("Check = %v", err)
+	}
+	if p.ValidValue(anna) {
+		t.Error("ValidValue accepted a value without a rule")
 	}
 }

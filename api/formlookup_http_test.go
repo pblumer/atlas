@@ -706,6 +706,50 @@ func TestADirectorySearchIsGuardedAtEveryDoor(t *testing.T) {
 			t.Fatal("the task is no longer open after refused submissions")
 		}
 	})
+	t.Run("a completion that says nothing is held to the field too", func(t *testing.T) {
+		for _, body := range []string{``, `{}`, `{"variables":`} {
+			code, b := cReq(t, world.anna, ts, "POST", fmt.Sprintf("/api/v1/tasks/%d/complete", world.task), body)
+			if code != http.StatusBadRequest {
+				t.Errorf("%q: %d %s, want 400", body, code, b)
+			}
+		}
+		if taskOf(t, world.admin, ts, world.instance) != world.task {
+			t.Fatal("the task is no longer open after an empty completion")
+		}
+	})
+	t.Run("no such task", func(t *testing.T) {
+		code, b := cReq(t, world.anna, ts, "POST", "/api/v1/tasks/999999999/form-data/user/query", `{"search":"Ann"}`)
+		if code != http.StatusNotFound || !strings.Contains(string(b), "not_found") {
+			t.Errorf("%d %s, want 404", code, b)
+		}
+	})
+	t.Run("the editor reads what a field can name, and only the editor", func(t *testing.T) {
+		code, b := cReq(t, world.admin, ts, "GET", "/api/v1/form-data/sources", "")
+		if code != http.StatusOK {
+			t.Fatalf("%d %s", code, b)
+		}
+		var out struct {
+			Providers []struct{ WorkerType, Resource string } `json:"providers"`
+			Workers   []map[string]any                        `json:"workers"`
+		}
+		if err := json.Unmarshal(b, &out); err != nil {
+			t.Fatal(err)
+		}
+		if len(out.Providers) != 1 || out.Providers[0].WorkerType != "entra" || out.Providers[0].Resource != "users" {
+			t.Errorf("providers = %+v", out.Providers)
+		}
+		if len(out.Workers) != 1 || out.Workers[0]["name"] != "ucc_entra" || out.Workers[0]["formLookups"] != true {
+			t.Errorf("workers = %v", out.Workers)
+		}
+		for _, k := range []string{"credentialsRef", "endpoint", "secret"} {
+			if strings.Contains(string(b), k) {
+				t.Errorf("the listing carries %q: %s", k, b)
+			}
+		}
+		if code, _ := cReq(t, world.anna, ts, "GET", "/api/v1/form-data/sources", ""); code != http.StatusForbidden {
+			t.Errorf("a person who may not author: %d, want 403", code)
+		}
+	})
 }
 
 // A Worker Instance holding another tenant is not asked: the query names its Worker,

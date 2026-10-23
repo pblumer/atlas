@@ -161,3 +161,31 @@ func TestASchemaThatIsNotAFormHasNoFields(t *testing.T) {
 		t.Error("an unparseable schema was accepted")
 	}
 }
+
+func TestMoreDataSourcesTheServerCannotHonourAreRefused(t *testing.T) {
+	for name, tc := range map[string]struct{ from, to, want string }{
+		"negative version":  {`"version": 1`, `"version": -1`, "not one this server reads"},
+		"control character": {`"worker": "ucc_entra"`, `"worker": "ucc\u0001entra"`, "not a Worker name"},
+		"long worker name":  {`"worker": "ucc_entra"`, `"worker": "` + strings.Repeat("w", maxWorkerName+1) + `"`, "not a Worker name"},
+		"filtered twice": {`[{"property": "department", "field": "abteilung"}]`,
+			`[{"property": "department", "field": "abteilung"}, {"property": "department", "value": "IT"}]`, "filtered twice"},
+		"fixed value":         {`"field": "abteilung"`, `"value": "I\u0000T"`, "not one a filter can carry"},
+		"fixed and required":  {`"field": "abteilung"`, `"value": "IT", "required": true`, "cannot be required"},
+		"detail not readable": {`"details": ["department"]`, `"details": ["passwordProfile"]`, "passwordProfile"},
+	} {
+		schema := strings.Replace(exampleForm, tc.from, tc.to, 1)
+		if schema == exampleForm {
+			t.Fatalf("%s: the mutation %q did not apply", name, tc.from)
+		}
+		_, err := Parse([]byte(schema))
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want it to mention %q", name, err, tc.want)
+		}
+		if cerr := Check([]byte(schema)); cerr == nil || cerr.Error() != err.Error() {
+			t.Errorf("%s: a form save would be told %v, not %v", name, cerr, err)
+		}
+	}
+	if err := Check([]byte(exampleForm)); err != nil {
+		t.Errorf("the example form may not be saved: %v", err)
+	}
+}

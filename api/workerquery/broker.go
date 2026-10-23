@@ -314,13 +314,6 @@ func (b *Broker) Answer(id, worker, leaseToken string, a Answer) error {
 	return nil
 }
 
-// Present reports whether an Instance holding connector has polled jobType lately.
-func (b *Broker) Present(jobType, connector string) bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.presentLocked(jobType, connector)
-}
-
 func (b *Broker) presentLocked(jobType, connector string) bool {
 	now := b.now()
 	for w, p := range b.seen[jobType] {

@@ -403,3 +403,80 @@ func TestGraphClientKeepsRetryAfterOnAThrottledAnswer(t *testing.T) {
 		t.Fatalf("err = %#v, want a 429 with RetryAfter 9s", err)
 	}
 }
+
+// Retry-After is advice in seconds, as Graph sends it, or an HTTP date. Anything else —
+// a date already past, a negative number, a word — is no advice, and the person is not
+// told to wait for it.
+func TestRetryAfterIsReadAsSecondsOrADate(t *testing.T) {
+	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	for h, want := range map[string]time.Duration{
+		"":                              0,
+		"10":                            10 * time.Second,
+		" 3 ":                           3 * time.Second,
+		"0":                             0,
+		"-5":                            0,
+		"soon":                          0,
+		"Fri, 23 Oct 2026 12:00:30 GMT": 30 * time.Second,
+		"Fri, 23 Oct 2026 11:59:00 GMT": 0,
+	} {
+		if got := retryAfter(h, now); got != want {
+			t.Errorf("retryAfter(%q) = %v, want %v", h, got, want)
+		}
+	}
+}
+
+// A record Graph returns without its id cannot be chosen, so it is not offered; an
+// answer whose records are not objects is a provider failure, not a short page.
+func TestLookupOffersOnlyRecordsThatCanBeChosen(t *testing.T) {
+	c := &lookupClient{resp: []any{map[string]any{"value": []any{
+		map[string]any{"id": annaID, "displayName": "Anna"},
+		map[string]any{"displayName": "Without an id"},
+	}}}}
+	page, err := RunLookup(context.Background(), "ucc_entra", userQuery("An"), lookupRegistry(c))
+	if err != nil || len(page.Items) != 1 || page.Items[0]["id"] != annaID {
+		t.Fatalf("page = %+v (%v)", page, err)
+	}
+	c = &lookupClient{resp: []any{map[string]any{"value": []any{"not a record"}}}}
+	_, err = RunLookup(context.Background(), "ucc_entra", userQuery("An"), lookupRegistry(c))
+	var le *lookup.Error
+	if !errors.As(err, &le) || le.Code != lookup.CodeUnavailable {
+		t.Fatalf("err = %v, want %s", err, lookup.CodeUnavailable)
+	}
+	// The same for a value lookup whose answer is not one record.
+	c = &lookupClient{resp: []any{[]any{}}}
+	q := userQuery("")
+	q.Value = annaID
+	if _, err := RunLookup(context.Background(), "ucc_entra", q, lookupRegistry(c)); !errors.As(err, &le) || le.Code != lookup.CodeUnavailable {
+		t.Fatalf("value lookup: err = %v, want %s", err, lookup.CodeUnavailable)
+	}
+}
+
+// A query that names no page size gets the default page, never Graph's own default.
+func TestLookupAsksForTheDefaultPageWhenNoneIsNamed(t *testing.T) {
+	c := &lookupClient{}
+	q := userQuery("An")
+	q.PageSize = 0
+	if _, err := RunLookup(context.Background(), "ucc_entra", q, lookupRegistry(c)); err != nil {
+		t.Fatal(err)
+	}
+	if _, vals := decoded(t, c.reqs[0].Path); vals.Get("$top") != "25" {
+		t.Errorf("$top = %q, want 25", vals.Get("$top"))
+	}
+}
+
+// Only an absolute link on the tenant's own endpoint continues a listing, and only a
+// known resource has a value shape.
+func TestAContinuationAndAValueAreHeldToTheResource(t *testing.T) {
+	base := "https://graph.microsoft.com/v1.0"
+	for _, next := range []string{"/v1.0/users?$skiptoken=1", "://bad", "https://graph.microsoft.com/v1.0/groups?$skiptoken=1"} {
+		if continues(base, "/users", next) {
+			t.Errorf("%q was taken for a continuation of /users", next)
+		}
+	}
+	if !continues(base, "/users", base+"/users?$skiptoken=1") {
+		t.Error("the tenant's own next link was refused")
+	}
+	if ValidLookupValue("devices", annaID) {
+		t.Error("a value was accepted for a resource that has none")
+	}
+}
