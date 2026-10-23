@@ -175,6 +175,11 @@ type Options struct {
 	ID string
 	// Token, when set, is sent as a bearer credential on every request.
 	Token string
+	// BrokerKey, when set, is presented when this worker asks whether it may act
+	// (Authorize). A server supervising this worker hands it over (ATLAS_BROKER_KEY)
+	// only to the process serving a Worker whose credential it brokers per job; without
+	// it, the server releases no person's token to this process.
+	BrokerKey string
 	// Handlers is what this worker serves, keyed by job type. A worker with none is a
 	// misconfiguration rather than a process that polls forever over nothing.
 	Handlers map[string]Exec
@@ -480,6 +485,11 @@ func (w *Worker) throwError(ctx context.Context, j Job, be *BPMNError) error {
 
 // call posts a JSON body and decodes a JSON reply into out (nil to discard it).
 func (w *Worker) call(ctx context.Context, path string, body, out any) error {
+	return w.callWith(ctx, path, nil, body, out)
+}
+
+// callWith is call with extra request headers.
+func (w *Worker) callWith(ctx context.Context, path string, header http.Header, body, out any) error {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return err
@@ -487,6 +497,9 @@ func (w *Worker) call(ctx context.Context, path string, body, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.opts.Server+path, bytes.NewReader(payload))
 	if err != nil {
 		return err
+	}
+	for k, v := range header {
+		req.Header[k] = v
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if w.opts.Token != "" {

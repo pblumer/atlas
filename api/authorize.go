@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -141,10 +142,18 @@ func (s *Server) handleAuthorizeJob(w http.ResponseWriter, r *http.Request) {
 	// A delegated credential leaves Atlas only for a Worker Instance Atlas itself
 	// supervises (§11); an external one is refused before anything is decided, so no
 	// Permit is recorded that nothing could act on.
-	if delegated && !isSupervisedWorker(r) {
+	if delegated && !s.isBrokerWorker(r) {
 		auditRefusal(r, logging.AuthorizationRefused, "refused to broker a delegated credential to a Worker Instance Atlas does not supervise",
 			slog.Uint64("job", key), slog.String("worker", snap.worker))
-		httpapi.Error(w, http.StatusForbidden, "a delegated Worker's credential is released only to Worker Instances this server supervises")
+		httpapi.Error(w, http.StatusForbidden, "a delegated Worker's credential is released only to the Worker Instance this server supervises for it")
+		return
+	}
+	// The endpoint is where the token will go. The routes that set it refuse anything
+	// but Microsoft Graph for a delegated Worker; this is the same rule where it counts.
+	if delegated && !delegatedEndpointAllowed(g.endpoint) {
+		auditRefusal(r, logging.AuthorizationRefused, "refused to broker a delegated credential to an endpoint that is not Microsoft Graph",
+			slog.Uint64("job", key), slog.String("worker", snap.worker))
+		httpapi.Error(w, http.StatusConflict, "the Worker's endpoint is not Microsoft Graph; a person's token is never sent anywhere else")
 		return
 	}
 
@@ -232,11 +241,27 @@ func (s *Server) handleAuthorizeJob(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, answer)
 }
 
+// brokerKeyEnv and brokerKeyHeader carry the broker key from the supervisor to the
+// Worker Instance and back.
+const (
+	brokerKeyEnv    = "ATLAS_BROKER_KEY"
+	brokerKeyHeader = "X-Atlas-Broker-Key"
+)
+
 // isSupervisedWorker reports whether the request carries the internal credential this
 // server hands only to the Worker Instances it starts.
 func isSupervisedWorker(r *http.Request) bool {
 	p := httpapi.PrincipalFrom(r.Context())
 	return p != nil && p.UserID == servicePrincipalName
+}
+
+// isBrokerWorker reports whether the request comes from the supervised Worker Instance
+// this server handed the broker key: the internal credential, which every supervised
+// child holds, and the key, which only the child serving a delegated Worker does.
+func (s *Server) isBrokerWorker(r *http.Request) bool {
+	got := r.Header.Get(brokerKeyHeader)
+	return isSupervisedWorker(r) && s.brokerKey != "" && got != "" &&
+		subtle.ConstantTimeCompare([]byte(got), []byte(s.brokerKey)) == 1
 }
 
 func (s *Server) policySet() *authz.Set {
@@ -284,12 +309,17 @@ func (s *Server) snapshotJob(key uint64, jv *model.JobValue) (authzSnapshot, boo
 	return snap, true
 }
 
+// resourceEscaper percent-encodes the canonical resource's separators inside a value.
+var resourceEscaper = strings.NewReplacer("%", "%25", ";", "%3B", "=", "%3D")
+
 // sharePointAction is a SharePoint job's canonical resource and material parameters:
 // everything that decides what the call does, and nothing that only shapes how it is
 // reported. An upload's content enters as its hash, so a digest stays small and the
 // content stays out of the evidence.
 func sharePointAction(fields map[string]any) (string, map[string]any) {
-	str := func(k string) string { v, _ := fields[k].(string); return v }
+	// Each value is escaped, so a value carrying ';' or '=' cannot forge a segment a
+	// policy's resource prefix would then match.
+	str := func(k string) string { v, _ := fields[k].(string); return resourceEscaper.Replace(v) }
 	res := "sharepoint:site=" + str("site")
 	if l := str("list"); l != "" {
 		res += ";list=" + l
@@ -375,7 +405,7 @@ func (s *Server) authorizationRequest(snap authzSnapshot, g governedWorker, now 
 		}
 		req.Subject = subj
 	}
-	req.Context.Approvals = s.approvalFacts(snap.approvals)
+	req.Context.Approvals = s.approvalFacts(snap.approvals, digest)
 	return req, conn, nil
 }
 
@@ -402,36 +432,50 @@ func (s *Server) subjectOf(id string) (authz.Subject, error) {
 	return authz.Subject{ID: id, Known: true, Disabled: u.Disabled, Roles: u.Roles, Groups: groups}, nil
 }
 
-// approvalFacts folds the log's approval facts into the answers that stand: each
-// approver's latest answer per request, withdrawn ones gone, with the approver's
-// groups as they are now.
-func (s *Server) approvalFacts(facts []model.ActionApprovalValue) []authz.Approval {
+// approvalFacts folds the log's approval facts into the answers that stand for the
+// action whose digest is digest: each approver's latest answer to a request for that
+// action, withdrawn ones gone, with the approver's groups as they are now. An answer
+// to a request for another action is not read at all.
+//
+// Nothing is dropped to fit: more standing answers than a decision may read are passed
+// on whole, and the decision point refuses them (authz.MaxApprovals), because the one
+// left out could be the rejection.
+func (s *Server) approvalFacts(facts []model.ActionApprovalValue, digest string) []authz.Approval {
 	type answerKey struct {
 		approval  uint64
 		principal string
 	}
-	digests := map[uint64]string{}
+	// Requests first: an answer is read only when it answers a request for this action.
+	forThis := map[uint64]bool{}
+	for _, f := range facts {
+		if f.Kind == model.ApprovalRequested && f.ActionDigest == digest {
+			forThis[f.ApprovalKey] = true
+		}
+	}
 	standing := map[answerKey]model.ActionApprovalValue{}
+	listed := map[answerKey]bool{}
 	var order []answerKey
 	for _, f := range facts {
-		switch f.Kind {
-		case model.ApprovalRequested:
-			digests[f.ApprovalKey] = f.ActionDigest
-		case model.ApprovalDecided:
-			k := answerKey{f.ApprovalKey, f.Principal}
-			if _, seen := standing[k]; !seen {
+		k := answerKey{f.ApprovalKey, f.Principal}
+		switch {
+		case !forThis[f.ApprovalKey]:
+		case f.Kind == model.ApprovalDecided:
+			// An approver's place in the order is their first answer; answering again
+			// after a withdrawal takes the same place, not another one.
+			if !listed[k] {
+				listed[k] = true
 				order = append(order, k)
 			}
 			standing[k] = f
-		case model.ApprovalRevoked:
-			delete(standing, answerKey{f.ApprovalKey, f.Principal})
+		case f.Kind == model.ApprovalRevoked:
+			delete(standing, k)
 		}
 	}
 	groupsOf := map[string][]string{}
 	var out []authz.Approval
 	for _, k := range order {
 		f, ok := standing[k]
-		if !ok || len(out) >= authz.MaxApprovals {
+		if !ok {
 			continue
 		}
 		groups, seen := groupsOf[f.Principal]
@@ -441,7 +485,7 @@ func (s *Server) approvalFacts(facts []model.ActionApprovalValue) []authz.Approv
 		}
 		out = append(out, authz.Approval{
 			ID:     strconv.FormatUint(k.approval, 10) + ":" + k.principal,
-			Digest: digests[k.approval], ApproverID: f.Principal, ApproverGroups: groups,
+			Digest: digest, ApproverID: f.Principal, ApproverGroups: groups,
 			Outcome: f.Outcome.String(), DecidedAt: f.At,
 		})
 	}

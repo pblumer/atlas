@@ -199,7 +199,7 @@ func (s *Server) handleDecideActionApproval(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	p := httpapi.PrincipalFrom(r.Context())
-	if p == nil || !strings.HasPrefix(p.UserID, "usr_") {
+	if p == nil || !strings.HasPrefix(p.UserID, "usr_") || !p.Session {
 		httpapi.Error(w, http.StatusForbidden, "an approval is a person's answer, given in their own session")
 		return
 	}

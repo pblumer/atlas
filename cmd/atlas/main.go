@@ -1398,7 +1398,10 @@ func runWorker(args []string) error {
 	}
 	opts := worker.Options{
 		Server: strings.TrimRight(*server, "/"), ID: *id, Token: *token,
-		Handlers: execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
+		// Only a server that supervises this worker sets it, and only for the process
+		// serving a Worker whose credential it brokers per job.
+		BrokerKey: os.Getenv("ATLAS_BROKER_KEY"),
+		Handlers:  execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
 		Connectors: builtin.Names,
 	}
 	if serverRoots != nil {

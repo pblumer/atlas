@@ -5,7 +5,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/pblumer/atlas/api/httpapi"
@@ -50,6 +52,7 @@ type workerIdentity struct {
 type governedWorker struct {
 	name     string
 	kind     string
+	endpoint string
 	identity workerIdentity
 }
 
@@ -71,10 +74,47 @@ func (s *Server) refreshGoverned() {
 	next := map[string]governedWorker{}
 	for _, r := range recs {
 		if r.Identity != nil {
-			next[r.Name] = governedWorker{name: r.Name, kind: r.Kind, identity: *r.Identity}
+			next[r.Name] = governedWorker{name: r.Name, kind: r.Kind, endpoint: strings.TrimSpace(r.Endpoint), identity: *r.Identity}
 		}
 	}
 	s.governed.Store(&next)
+}
+
+// graphHosts are the Microsoft Graph hosts, one per national cloud, a delegated
+// SharePoint Worker may send a person's token to. The token's audience is Graph, and
+// an endpoint is the one setting that decides where a released token goes.
+var graphHosts = map[string]bool{
+	"graph.microsoft.com":             true,
+	"graph.microsoft.us":              true,
+	"dod-graph.microsoft.us":          true,
+	"microsoftgraph.chinacloudapi.cn": true,
+}
+
+// delegatedEndpointAllowed reports whether a delegated Worker may act against
+// endpoint: the default (blank) or HTTPS to a Microsoft Graph host.
+func delegatedEndpointAllowed(endpoint string) bool {
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" {
+		return true
+	}
+	u, err := url.Parse(endpoint)
+	return err == nil && u.Scheme == "https" && u.User == nil && graphHosts[strings.ToLower(u.Hostname())] &&
+		(u.Port() == "" || u.Port() == "443")
+}
+
+// refuseGovernedChange says why the caller may not change or delete rec, or "". A
+// governed Worker's settings decide where its actions go — its endpoint is where a
+// delegated Worker sends a person's token — so changing them is the identity policy's
+// administrator's act, like the policy itself, and not a Worker editor's
+// (ADR-draft-identity-aware-worker-execution §11).
+func (s *Server) refuseGovernedChange(r *http.Request, rec connector) string {
+	if rec.Identity == nil {
+		return ""
+	}
+	if p := httpapi.PrincipalFrom(r.Context()); !s.authEnabled || (p != nil && p.HasRole(RoleAdmin)) {
+		return ""
+	}
+	return "Worker " + rec.Name + " is governed by an identity policy, which decides as whom it acts; only an administrator changes or deletes it"
 }
 
 // governedWorkerNamed is the identity policy of the Worker named name, if it has one.
@@ -115,6 +155,10 @@ func (s *Server) validateIdentity(rec connector, wi workerIdentity) string {
 	}
 	if s.identity == nil {
 		return "delegated connections are not available on this server (the vault is disabled)"
+	}
+	if !delegatedEndpointAllowed(rec.Endpoint) {
+		return "a delegated Worker sends a person's token to its endpoint, which must therefore be Microsoft Graph (or blank); Worker " +
+			rec.Name + "'s is " + strconv.Quote(rec.Endpoint)
 	}
 	if wi.Mode == authz.ModeDelegatedPerJob {
 		if wi.ConnectionID != "" {
@@ -180,17 +224,25 @@ func (s *Server) handleSetWorkerIdentity(w http.ResponseWriter, r *http.Request)
 		refusal = s.validateIdentity(rec, wi)
 	}
 	if saveErr == nil && found && refusal == "" {
-		s.do(func() {
+		// The write re-reads the record and re-checks what could have changed since the
+		// validation above; it rebuilds the in-engine registries (a governed Worker has
+		// no in-engine client) and restarts the supervised Workers, whose environment
+		// says whether a Worker is brokered.
+		s.doAndRefresh(func() {
 			cur, ok, err := s.connectors.Get(rec.ID)
 			if err != nil || !ok {
 				saveErr, found = err, ok
+				return
+			}
+			if authz.IsDelegated(wi.Mode) && !delegatedEndpointAllowed(cur.Endpoint) {
+				refusal = "the Worker's endpoint changed to one that is not Microsoft Graph"
 				return
 			}
 			wi.SetAt, wi.SetBy = s.now(), by
 			cur.Identity = &wi
 			if saveErr = s.connectors.Save(cur); saveErr == nil {
 				rec = cur
-				s.refreshGoverned()
+				saveErr = s.rebuildConnectorRegistries()
 			}
 		})
 	}
@@ -215,7 +267,7 @@ func (s *Server) handleClearWorkerIdentity(w http.ResponseWriter, r *http.Reques
 		saveErr error
 		name    string
 	)
-	s.do(func() {
+	s.doAndRefresh(func() {
 		cur, ok, err := s.connectors.Get(r.PathValue("id"))
 		if err != nil || !ok {
 			saveErr, found = err, ok
@@ -224,7 +276,7 @@ func (s *Server) handleClearWorkerIdentity(w http.ResponseWriter, r *http.Reques
 		found, name = true, cur.Name
 		cur.Identity = nil
 		if saveErr = s.connectors.Save(cur); saveErr == nil {
-			s.refreshGoverned()
+			saveErr = s.rebuildConnectorRegistries()
 		}
 	})
 	switch {

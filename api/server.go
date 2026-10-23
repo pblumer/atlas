@@ -497,6 +497,14 @@ type Server struct {
 	// way to act as this principal without presenting anything
 	// (ADR-0196).
 	internalToken string
+	// brokerKey is what a supervised Worker Instance presents, beside the internal
+	// token, when it asks for a person's delegated credential
+	// (ADR-draft-identity-aware-worker-execution §11). Every supervised child holds the
+	// internal token; only the one serving a brokered Worker Type is handed this key, so
+	// a compromised child of another kind cannot obtain a person's token by leasing a
+	// job it does not serve. Minted per start, kept in memory only; empty when auth is
+	// off.
+	brokerKey string
 
 	// dmnResolver turns a DMN reference handle into model XML; dmnValidator wraps
 	// it with a temis compile for the deploy-time validation gate (ADR-0034).
@@ -2057,6 +2065,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			return nil, err
 		}
 		s.internalToken = token
+		if s.brokerKey, err = randomHex(32); err != nil {
+			return nil, err
+		}
 	}
 	// Ensure the protected system project exists (ADR-0122). Like bootstrapAdmin,
 	// this runs on the constructing goroutine before the loop serves traffic, so it

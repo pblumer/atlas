@@ -205,6 +205,13 @@ func CompilePolicy(ctx context.Context, doc Document, version int) (*Policy, []s
 			workers: setOf(rd.When.Workers), modes: setOf(rd.When.IdentityModes),
 			processes: setOf(rd.When.ProcessIDs), prefixes: append([]string(nil), rd.When.ResourcePrefixes...),
 		}
+		for _, pfx := range rd.When.ResourcePrefixes {
+			if endsInsideValue(pfx) {
+				warnings = append(warnings, fmt.Sprintf(
+					"rule %q: resource prefix %q ends inside a value, so it also matches every value that merely "+
+						"begins with it; end it at a boundary (';' after a whole segment, or '/' in a path)", rd.ID, pfx))
+			}
+		}
 		if r.effect == Deny && len(rd.When.ResourcePrefixes) > 0 {
 			warnings = append(warnings, fmt.Sprintf(
 				"rule %q denies by resource name; a provider that spells one resource several ways "+
@@ -411,4 +418,14 @@ func refuseClockInDMN(src string) error {
 			}
 		}
 	}
+}
+
+// endsInsideValue reports whether a resource prefix stops in the middle of a segment's
+// value: it names a value (it has a '=') and does not end at a separator.
+func endsInsideValue(prefix string) bool {
+	if !strings.Contains(prefix, "=") {
+		return false
+	}
+	last := prefix[len(prefix)-1]
+	return last != ';' && last != '/'
 }

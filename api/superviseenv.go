@@ -870,6 +870,7 @@ func (s *Server) sharepointWorkerEnv() []string {
 		env       []string
 		names     []string
 		fromStore bool // a store instance contributed a name; only then must CONNECTORS be rendered
+		brokered  bool // a delegated Worker is among them; only then is the broker key handed over
 	)
 	seen := map[string]bool{}
 	addName := func(n string) {
@@ -920,7 +921,7 @@ func (s *Server) sharepointWorkerEnv() []string {
 				}
 				env = append(env, key+"BROKERED=1")
 				addName(c.Name)
-				fromStore = true
+				fromStore, brokered = true, true
 				continue
 			}
 			bundle := strings.TrimSpace(s.resolveConnectorSecret(c.CredentialsRef))
@@ -950,6 +951,11 @@ func (s *Server) sharepointWorkerEnv() []string {
 	// render the union so a host-named instance is not lost to the override.
 	if !fromStore {
 		return nil
+	}
+	// The broker key goes only to the process serving a delegated Worker: with it, and
+	// only with it, that process is handed a person's token (handleAuthorizeJob).
+	if brokered && s.brokerKey != "" {
+		env = append(env, brokerKeyEnv+"="+s.brokerKey)
 	}
 	return append(env, sharepointConnectorsEnv+"="+strings.Join(names, ","))
 }

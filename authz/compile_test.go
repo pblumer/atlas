@@ -65,7 +65,7 @@ func TestAConditionMentioningNowInAStringIsNotAClockRead(t *testing.T) {
 // spelling of the same site; a permit-list cannot. Publication says so.
 func TestADenyByResourceNameIsWarnedAbout(t *testing.T) {
 	doc, err := authz.ParseDocument([]byte(`{"id":"p","ruleCombining":"first-applicable","rules":[
-	  {"id":"no-hr","effect":"Deny","when":{"resourcePrefixes":["sharepoint:site=contoso.sharepoint.com:/sites/hr"]}}]}`))
+	  {"id":"no-hr","effect":"Deny","when":{"resourcePrefixes":["sharepoint:site=contoso.sharepoint.com:/sites/hr;"]}}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,6 +121,32 @@ func TestTheDigestIsStableAndSensitive(t *testing.T) {
 		}
 		if d == a {
 			t.Errorf("changing the %s did not change the digest", name)
+		}
+	}
+}
+
+// A prefix that ends inside a value matches every value that merely begins with it:
+// "list=Inv" also admits "list=Invoices-Secret". Publication says so, and a prefix
+// that ends at a separator is not warned about.
+func TestAPrefixThatEndsInsideAValueIsWarnedAbout(t *testing.T) {
+	for prefix, warned := range map[string]bool{
+		"sharepoint:site=contoso.sharepoint.com:/sites/hr;list=Inv":    true,
+		"sharepoint:site=contoso.sharepoint.com:/sites/hr":             true,
+		"sharepoint:site=contoso.sharepoint.com:/sites/hr;":            false,
+		"sharepoint:site=contoso.sharepoint.com:/sites/hr;path=/Docs/": false,
+		"sharepoint:": false,
+	} {
+		doc, err := authz.ParseDocument([]byte(`{"id":"p","ruleCombining":"first-applicable","rules":[
+		  {"id":"read","effect":"Permit","when":{"resourcePrefixes":["` + prefix + `"]}}]}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, warnings, err := authz.CompilePolicy(context.Background(), doc, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := len(warnings) == 1 && strings.Contains(warnings[0], "boundary"); got != warned {
+			t.Errorf("%q: warnings = %v", prefix, warnings)
 		}
 	}
 }

@@ -69,11 +69,14 @@ func newPEPRig(t *testing.T) *pepRig {
 	t.Helper()
 	srv := newServerWithOptions(t, WithOffloadedConnectorKinds(offloadableKindNames()))
 	r := &pepRig{t: t, srv: srv,
-		alice:    &httpapi.Principal{UserID: "usr_alice", Username: "alice", Roles: []string{RoleUser}},
-		bob:      &httpapi.Principal{UserID: "usr_bob", Username: "bob", Roles: []string{RoleUser}},
-		admin:    &httpapi.Principal{UserID: "usr_admin", Username: "admin", Roles: []string{RoleAdmin}},
+		alice:    &httpapi.Principal{UserID: "usr_alice", Username: "alice", Roles: []string{RoleUser}, Session: true},
+		bob:      &httpapi.Principal{UserID: "usr_bob", Username: "bob", Roles: []string{RoleUser}, Session: true},
+		admin:    &httpapi.Principal{UserID: "usr_admin", Username: "admin", Roles: []string{RoleAdmin}, Session: true},
 		internal: &httpapi.Principal{UserID: servicePrincipalName, Username: servicePrincipalName, Roles: legacyRoles(), Scope: apiScopeWorker},
 	}
+	// Auth is off in this server, so nothing minted a broker key: the rig plays the
+	// supervisor and hands the SharePoint Worker Instance one (authorize, below).
+	srv.brokerKey = "broker-key-for-the-sharepoint-worker"
 	// The identity service's refresher is the provider; here it is a fake one.
 	stores, err := identity.OpenStores(t.TempDir())
 	if err != nil {
@@ -130,7 +133,16 @@ func newPEPRig(t *testing.T) *pepRig {
 // this server, so the principal is put where the boundary would have put it.
 func (r *pepRig) as(p *httpapi.Principal, h http.HandlerFunc, method, target, body string, vals map[string]string) (int, []byte) {
 	r.t.Helper()
+	return r.asWith(p, nil, h, method, target, body, vals)
+}
+
+// asWith is as with request headers.
+func (r *pepRig) asWith(p *httpapi.Principal, header http.Header, h http.HandlerFunc, method, target, body string, vals map[string]string) (int, []byte) {
+	r.t.Helper()
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	for k, v := range header {
+		req.Header[k] = v
+	}
 	if p != nil {
 		req = req.WithContext(httpapi.WithPrincipal(req.Context(), p))
 	}
@@ -176,9 +188,24 @@ func (r *pepRig) lease() (uint64, uint64) {
 	return out.Jobs[0].JobKey, out.Jobs[0].LeaseToken
 }
 
+// authorize asks as p. The supervised SharePoint Worker Instance (r.internal) presents
+// the broker key its supervisor handed it; authorizeWithKey asks with any other.
 func (r *pepRig) authorize(p *httpapi.Principal, job, lease uint64) (int, authorizeAnswer) {
 	r.t.Helper()
-	code, raw := r.as(p, r.srv.handleAuthorizeJob, http.MethodPost, "/",
+	key := ""
+	if p == r.internal {
+		key = r.srv.brokerKey
+	}
+	return r.authorizeWithKey(p, key, job, lease)
+}
+
+func (r *pepRig) authorizeWithKey(p *httpapi.Principal, brokerKey string, job, lease uint64) (int, authorizeAnswer) {
+	r.t.Helper()
+	var header http.Header
+	if brokerKey != "" {
+		header = http.Header{brokerKeyHeader: []string{brokerKey}}
+	}
+	code, raw := r.asWith(p, header, r.srv.handleAuthorizeJob, http.MethodPost, "/",
 		fmt.Sprintf(`{"worker":"sharepoint","leaseToken":%d}`, lease), map[string]string{"key": strconv.FormatUint(job, 10)})
 	var a authorizeAnswer
 	_ = json.Unmarshal(raw, &a)
@@ -308,6 +335,11 @@ func TestADelegatedDeleteNeedsAManagersApprovalAndThenRunsAsTheRequester(t *test
 	//    approve anything.
 	if c := decide(r.alice, "granted"); c != http.StatusForbidden {
 		t.Fatalf("self-approval: %d", c)
+	}
+	// An application Bob granted access to his account resolves to his id but holds
+	// no session of his: an approval is his answer, not an application's.
+	if c := decide(&httpapi.Principal{UserID: "usr_bob", Username: "bob", Roles: []string{RoleUser}}, "granted"); c != http.StatusForbidden {
+		t.Fatalf("an application approved for bob: %d", c)
 	}
 	if c := decide(r.internal, "granted"); c != http.StatusForbidden {
 		t.Fatalf("machine approval: %d", c)

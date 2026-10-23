@@ -60,7 +60,7 @@ func supervisedFront(srv *Server, internal *httpapi.Principal) http.Handler {
 	})
 }
 
-func runSharePointWorker(t *testing.T, serverURL, graphURL string) {
+func runSharePointWorker(t *testing.T, serverURL, graphURL, brokerKey string) {
 	t.Helper()
 	env := map[string]string{
 		"ATLAS_SHAREPOINT_CONNECTORS":       "sp-prod",
@@ -71,7 +71,7 @@ func runSharePointWorker(t *testing.T, serverURL, graphURL string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := worker.New(worker.Options{Server: serverURL, ID: "sharepoint", Token: "supervised",
+	w := worker.New(worker.Options{Server: serverURL, ID: "sharepoint", Token: "supervised", BrokerKey: brokerKey,
 		Handlers: built.Handlers, Wait: 10 * time.Millisecond, Lease: time.Minute})
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -101,7 +101,7 @@ func TestTheShippedWorkerDeletesAsTheRequesterWithABrokeredToken(t *testing.T) {
 	r.govern("delegated-per-job", "enforce", `,"actAs":"initiator"`)
 	pi := r.startAsAlice()
 
-	runSharePointWorker(t, front.URL, gs.URL)
+	runSharePointWorker(t, front.URL, gs.URL, r.srv.brokerKey)
 
 	calls := graph.seen()
 	deleted := false
@@ -141,7 +141,7 @@ func TestTheShippedWorkerDoesNothingWhenRefused(t *testing.T) {
 	r.govern("delegated-per-job", "enforce", `,"actAs":"initiator"`)
 	pi := r.startAsAlice()
 
-	runSharePointWorker(t, front.URL, gs.URL)
+	runSharePointWorker(t, front.URL, gs.URL, r.srv.brokerKey)
 
 	if calls := graph.seen(); len(calls) != 0 {
 		t.Fatalf("a refused action reached Graph: %v", calls)

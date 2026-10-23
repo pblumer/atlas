@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strconv"
 )
 
@@ -66,7 +67,11 @@ func Authorize(ctx context.Context) (*Authorization, error) {
 func (w *Worker) withAuthorizer(ctx context.Context, j Job) context.Context {
 	return context.WithValue(ctx, authorizerKey{}, func(ctx context.Context) (*Authorization, error) {
 		var out Authorization
-		err := w.call(ctx, "/api/v1/jobs/"+strconv.FormatUint(j.JobKey, 10)+"/authorize",
+		var header http.Header
+		if w.opts.BrokerKey != "" {
+			header = http.Header{"X-Atlas-Broker-Key": []string{w.opts.BrokerKey}}
+		}
+		err := w.callWith(ctx, "/api/v1/jobs/"+strconv.FormatUint(j.JobKey, 10)+"/authorize", header,
 			map[string]any{"worker": w.opts.ID, "leaseToken": j.LeaseToken}, &out)
 		var se *statusError
 		if errors.As(err, &se) && se.status == 404 && se.noRoute {

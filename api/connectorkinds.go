@@ -230,7 +230,11 @@ var managedConnectorKinds = append([]managedConnectorKind{
 			if s.sharePointRegistry == nil {
 				return "", false
 			}
-			return s.sharePointRegistry.Problem(name)
+			why, ok := s.sharePointRegistry.Problem(name)
+			if ok && why == problemGovernedInProcess {
+				return "", false
+			}
+			return why, ok
 		},
 		jobTypes: []int32{compiler.SharePointJobTypeIndex, compiler.SharePointOpsJobTypeIndex},
 	},

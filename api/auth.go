@@ -447,7 +447,7 @@ func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 	if !ok {
 		return nil
 	}
-	return &httpapi.Principal{UserID: sess.userID, Username: sess.username, Roles: sess.roles, GroupIDs: sess.groupIDs}
+	return &httpapi.Principal{UserID: sess.userID, Username: sess.username, Roles: sess.roles, GroupIDs: sess.groupIDs, Session: true}
 }
 
 // bearerToken extracts the token from an "Authorization: Bearer <token>" header,

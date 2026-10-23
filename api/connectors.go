@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/authz"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/discord"
@@ -143,8 +144,12 @@ func envTemisClients() map[string]temis.Client {
 // The strings are read by an operator in an incident message and in the worker
 // list, so they say what to go and fix, not what the code decided.
 const (
-	problemDisabled   = "the worker is disabled"
-	problemNoEndpoint = "no endpoint is configured"
+	problemDisabled = "the worker is disabled"
+	// problemGovernedInProcess is why a governed Worker has no in-engine client. The
+	// Console does not show it: a governed Worker served by a supervised Worker
+	// Instance is working as intended (connectorkinds.go).
+	problemGovernedInProcess = "it is governed by an identity policy, so only a supervised Worker Instance that asks before acting runs its tasks; it never runs inside the engine (--in-process-connectors)"
+	problemNoEndpoint        = "no endpoint is configured"
 )
 
 // noteForeignKinds records, for every worker record that ended up as neither a
@@ -312,6 +317,15 @@ func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, map[str
 		}
 		if !c.Enabled {
 			problems[c.Name] = problemDisabled
+			continue
+		}
+		// A governed Worker never runs inside the engine: there it would act with the
+		// Worker's own credential without asking, and the engine would complete the job
+		// itself, past the completion guard
+		// (ADR-draft-identity-aware-worker-execution §11). Its tasks park here and are
+		// served only by a supervised Worker Instance that asks first.
+		if c.Identity != nil {
+			problems[c.Name] = problemGovernedInProcess
 			continue
 		}
 		client, err := sharepoint.NewProviderClient(sharepoint.ProviderConfig{
@@ -694,6 +708,18 @@ func (s *Server) connectorProblem(kind, name string) string {
 	return ""
 }
 
+// refuseReservedRef says why a Worker may not name ref as its credential, or "". The
+// reserved regions of the vault — a person's data key, a delegated connection's
+// refresh token — are written and read only by the code that owns them; a Worker
+// naming one could read it through its supervised environment, or have it
+// overwritten by a provisioning call (ADR-draft-identity-aware-worker-execution §6).
+func refuseReservedRef(ref string) string {
+	if vault.IsReservedName(strings.TrimSpace(ref)) {
+		return "a Worker's credential reference may not name a reserved vault entry"
+	}
+	return ""
+}
+
 // handleCreateConnector creates a managed worker and rebuilds the
 // runtime registry so a central decision referencing it starts resolving at once.
 func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
@@ -720,6 +746,10 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	p.CredentialsRef = strings.TrimSpace(p.CredentialsRef)
 	if p.Name == "" {
 		httpapi.Error(w, http.StatusBadRequest, "worker name is required")
+		return
+	}
+	if msg := refuseReservedRef(p.CredentialsRef); msg != "" {
+		httpapi.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 	kind, ok := lookupManagedConnectorKind(p.Kind)
@@ -892,11 +922,18 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 			refusedCode, refusedMsg = code, msg
 			return
 		}
+		if msg := s.refuseGovernedChange(r, rec); msg != "" {
+			refusedCode, refusedMsg = http.StatusForbidden, msg
+			return
+		}
 		if p.Endpoint != nil {
 			rec.Endpoint = strings.TrimSpace(*p.Endpoint)
 		}
 		if p.CredentialsRef != nil {
 			rec.CredentialsRef = strings.TrimSpace(*p.CredentialsRef)
+			if badRequest = refuseReservedRef(rec.CredentialsRef); badRequest != "" {
+				return
+			}
 		}
 		if p.Provider != nil {
 			rec.Provider = strings.TrimSpace(*p.Provider)
@@ -917,6 +954,12 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		// an SMTP endpoint that dials, a provider that has a credential — or the change
 		// is refused here instead of parking a token later (ADR-0150/0159).
 		if badRequest = normalizeConnectorUpdate(&rec); badRequest != "" {
+			return
+		}
+		// A delegated Worker's endpoint is where a person's token goes; even an
+		// administrator moves it only to another Microsoft Graph.
+		if rec.Identity != nil && authz.IsDelegated(rec.Identity.Mode) && !delegatedEndpointAllowed(rec.Endpoint) {
+			badRequest = "a delegated Worker's endpoint must be Microsoft Graph (or blank): it is where a person's token is sent"
 			return
 		}
 		if saveErr = s.connectors.Save(rec); saveErr != nil {
@@ -965,6 +1008,12 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 		// ever existed.
 		if found {
 			if refusedCode, refusedMsg = s.checkConnectorRole(r, rec, ScopeRoleOwner); refusedCode != 0 {
+				return
+			}
+			// Deleting a governed Worker drops its identity policy, and a Worker created
+			// again under the name would inherit the consent people gave the name.
+			if msg := s.refuseGovernedChange(r, rec); msg != "" {
+				refusedCode, refusedMsg = http.StatusForbidden, msg
 				return
 			}
 		}
@@ -1092,6 +1141,10 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 	setRef := ref == ""
 	if setRef {
 		ref = conn.Name
+	}
+	if msg := refuseReservedRef(ref); msg != "" {
+		httpapi.Error(w, http.StatusBadRequest, msg)
+		return
 	}
 	var saveErr error
 	s.doAndRefresh(func() {

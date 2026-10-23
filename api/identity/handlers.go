@@ -88,6 +88,12 @@ func (s *Service) HandleSetWorkers(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusUnauthorized, "sign in to change a connection")
 		return
 	}
+	// Consent is given in the owner's own session, never by an application they
+	// granted access to their account.
+	if !p.Session {
+		httpapi.Error(w, http.StatusForbidden, "allowing a Worker to act as you is your own act, given in your own session")
+		return
+	}
 	var body struct {
 		Workers []string `json:"workers"`
 	}
