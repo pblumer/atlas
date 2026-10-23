@@ -435,9 +435,12 @@ jobs:
     if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     # A browser job's failure mode is the hang, not the error: a stalled apt mirror or a
-    # wedged browser holds the runner for the six-hour default. Well above the ~1 minute
-    # this job takes, and far below "an afternoon of runner time".
-    timeout-minutes: 15
+    # wedged browser holds the runner for the six-hour default. The bound has to cover the
+    # Chromium install at its worst (five minutes, then the fallback below) plus the suite,
+    # which has grown to about twelve minutes: on 2026-10-23 one run passed in 14:54 and
+    # another was cancelled at 15 minutes, every test until then green, after a stalled
+    # install. Room for both, and still far below "an afternoon of runner time".
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 

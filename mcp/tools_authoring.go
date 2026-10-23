@@ -897,9 +897,13 @@ func authoringTools() []Tool {
 				"(ADR-0471): the messages its processes receive and whether each starts an instance, the " +
 				"workers they name with their Worker Type (a name authored as FEEL is reported as decided at " +
 				"run time), the local decisions they evaluate, and the calls they make into processes of other " +
-				"applications — each with the process and element that states it. The logical view: which " +
-				"worker serves a name on this installation, and at which endpoint, is not part of it. A release " +
-				"recorded before snapshots existed has none, and the error says so.",
+				"applications — each with the process and element that states it — and the job types its service " +
+				"tasks hand to subscribed workers. A release recorded since the physical view exists also carries " +
+				"what this installation had in place for it: its name and environment, its external address, the " +
+				"public start links, and per worker whether Atlas runs it or a worker process leases it, its " +
+				"endpoint as scheme, host and port, and the worker instances seen serving it. An endpoint the " +
+				"caller may not see, and the instances for a caller who is not an operator, are withheld. A " +
+				"release recorded before snapshots existed has none, and the error says so.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{

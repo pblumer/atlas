@@ -92,6 +92,7 @@ manager, because the approver may never be the person the deletion runs for.
 
 ## What this does not show
 
-The Console has no screen for answering an approval yet; the approver uses the route.
+Bob answers under **Approvals** in the account menu (or at the route above); the page
+names the exact deletion, and Alice sees it there as asked on her behalf, with no answer to give.
 Google, and every Worker Type but SharePoint, are not governed by this build. See the
 record's §11 for what is enforced at the credential and what is cooperative.

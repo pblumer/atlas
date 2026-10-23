@@ -1440,11 +1440,12 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   default deny, deny-overrides, Indeterminate refuses — with approval obligations bound to
   the action's digest and separation of duties by stable ids. Every decision and approval
   is an engine fact fenced on the job's lease, replayed without re-evaluation. The Console
-  has **Connected accounts** and **Administration → Security** (readiness, policies,
-  simulator, evidence). Built for the SharePoint Worker Type only, with brokering to
-  Atlas-supervised Worker Instances only. Next: Google, further Worker Types, a Console
-  screen for answering approvals, the evidence in the Operations instance view, and the
-  open question of brokering to external Worker Instances (an amendment of ADR-0168).
+  has **Connected accounts**, **Approvals** (a person's open action approvals across
+  instances) and **Administration → Security** (readiness, policies, simulator, evidence).
+  Built for the SharePoint Worker Type only, with brokering to Atlas-supervised Worker
+  Instances only. Next: Google, further Worker Types, the evidence in the Operations
+  instance view, and the open question of brokering to external Worker Instances (an
+  amendment of ADR-0168).
 - ✅ **Engine-internal encrypted secret vault**
   ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md),
   [ADR-0070](docs/adr/0070-vault-on-by-default-with-generated-key.md)): closes

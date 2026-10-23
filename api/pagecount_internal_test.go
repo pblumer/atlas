@@ -69,6 +69,7 @@ var cappedListings = []struct {
 	{"/api/v1/instances", maxInstanceListDefault},
 	{"/api/v1/approvals", maxFolderScan},
 	{"/api/v1/audit", defaultAuditLimit},
+	{"/api/v1/me/action-approvals", maxMyApprovals},
 	// Listed after the collection it sits under, because matchCappedListing takes the
 	// first entry whose path is a prefix and treats anything under a key as a point read.
 	{"/api/v1/instances/search", maxInstanceSearchResults},

@@ -60,6 +60,29 @@ governs a Worker:
   `GOOGLECONTACTS_CONTACT_NOT_FOUND`
   ([ADR-draft-google-contacts-worker](docs/adr/draft-google-contacts-worker.md)).
 
+- **The architecture sketch shows where a release's connections go.** A release now also
+  records what the installation that recorded it had in place for it: its name and
+  environment, its external address (`--external-url`), the public start links of its
+  processes, and for each worker whether Atlas runs it itself or a worker process leases
+  the work, the worker's endpoint reduced to scheme, host and port, and the worker
+  instances seen serving it since the server started. Service tasks with a job type are
+  part of the sketch too, with the instances that leased them. The SVG draws each
+  connection from the side that opens it and names the system a worker connects to; the
+  ArchiMate document adds the worker processes, the target systems and the connections
+  between them. An endpoint is shown only to a reader who may see that worker's
+  configuration and the instances only to an operator; everybody else is told they are
+  withheld. A worker that keeps its own configuration does not report its endpoint yet
+  ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
+
+- **Approvals in the Console.** **Approvals** (account menu, and a tile on the dashboard
+  when some wait) lists the open action approvals a person may answer and the ones asked on
+  their behalf, each with the exact operation and resource, who it would run for, the
+  policy and version, the action's fingerprint and its expiry. Approving and rejecting ask
+  first, naming the action; an answer can be withdrawn while the approval is open. Behind
+  it, `GET /api/v1/me/action-approvals` reads open requests through an index by expiry, so
+  a worklist costs what is open now rather than every approval ever recorded. The answer
+  still does not run the action: the policy reads it when the action is next tried.
+
 - **A release carries its architecture sketch.** Publishing an application, and
   importing a promoted release, now takes a snapshot of how the release meets its
   environment and saves it with the release record: the messages its processes receive
@@ -70,9 +93,8 @@ governs a Worker:
   an ArchiMate Open Exchange document for Archi and other tools; the API serves it at
   `GET /api/v1/applications/{id}/releases/{version}/architecture` with `.svg` and `.xml`
   variants. The same release always renders to the same bytes, and the image says when
-  the snapshot was taken and what it does not show. It is the logical view: which worker
-  serves a name on an installation and at which endpoint comes in a later slice, and a
-  release recorded before this version has no snapshot and says so
+  the snapshot was taken and what it does not show. A release recorded before this
+  version has no snapshot and says so
   ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
 
 - **External accounts and delegated connections.** A signed-in person links a Microsoft
@@ -233,9 +255,27 @@ governs a Worker:
   filters on `newest`; one that assumed three kinds skips the fourth. A name a deployed
   model sends no longer reads as unfed in the Modeler
   ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md)).
+- **The Events page opens a row's detail in a dialog, and its sections fold away.** The
+  detail of an event or of a name used to be drawn below its list, where under the second
+  list it opened out of sight. It now opens over the page and closes with Escape, the close
+  button or a click beside it, back on the row it was opened from. Each of the two sections
+  folds away on its own, the browser remembers which, and a folded section still says how
+  many entries it holds and what it warns about. A name no longer breaks over two lines at
+  its hyphens.
+- **The Events page speaks the Console's language.** Its headings, column titles, hints,
+  filters, summaries and dialogs come from the Console's message catalogue, in German
+  unless English was chosen under Display, and so do the words for the ids the server sends:
+  an event's kind and stability, an element's role, a finding's rule. An event's meaning and
+  each payload field's are shown in the same language, from the catalogue that writes them
+  in both. The sentences the server composes in English (who produces an event, who may
+  receive it, what a finding names) stay English and are marked as such.
 
 ### Fixed
 
+- **Authorization evidence has its own key space.** It had been given the event log's
+  column family byte, so a range read or prefix delete of one could reach the other's
+  records. It moved; evidence recorded by a development build before the move is no longer
+  read. A test now holds every column family to a value of its own.
 - **A message or signal that reaches only a left-behind subscription is no delivery.** The
   losing branch of an event-based gateway and a boundary whose host finished leave their
   subscription behind until the next matching send clears it. That send counted as
