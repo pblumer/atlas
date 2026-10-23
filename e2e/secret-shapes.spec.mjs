@@ -108,12 +108,11 @@ test("a Microsoft bundle without a tenant is refused here rather than at the fir
   await expect(error(page)).toBeHidden();
 });
 
-// A SharePoint app proves itself as an Entra app does: a client secret, a certificate
-// as PEM, or a certificate in the Windows store named by its thumbprint — exactly one,
-// because the server refuses a bundle carrying two rather than let precedence choose.
-// Mail's Microsoft bundle shares the grant but not the certificate, so it still needs
-// its secret.
-test("a SharePoint bundle may carry a certificate or a thumbprint in place of the secret, but only one", async ({ page }) => {
+// A SharePoint app may also name its certificate by thumbprint, as an Entra app may: a
+// certificate in the Windows store whose key signs there. It is one more credential in
+// place of the secret, never beside it. Mail's Microsoft bundle shares the grant but
+// not the certificate, so it still needs its secret.
+test("a SharePoint bundle may name its certificate by thumbprint in place of the secret, not beside it", async ({ page }) => {
   await name(page, "sharepoint_auth");
   await expect(page.locator(".secret-hint")).toContainText("certificateThumbprint");
   const app = { method: "clientCredentials", tenantId: "t", clientId: "c" };
@@ -125,7 +124,7 @@ test("a SharePoint bundle may carry a certificate or a thumbprint in place of th
 
   await value(page, JSON.stringify({ ...app, clientSecret: "s", certificateThumbprint: "02CB6038F2E91693AE8D31C983569366034B2100" }));
   await save(page);
-  await expect(error(page)).toContainText("exactly one");
+  await expect(error(page)).toContainText("give one, not both");
 
   await value(page, JSON.stringify(app));
   await save(page);
@@ -173,4 +172,21 @@ test("a JSON list is not a bundle", async ({ page }) => {
   await value(page, '["a","b"]');
   await save(page);
   await expect(error(page)).toContainText("not a list");
+});
+
+// A SharePoint app that runs unattended may prove itself with a certificate in place of
+// the client secret (connector/sharepoint/oauth.go). The check accepts that shape, and
+// refuses a bundle carrying both rather than letting the server pick one later.
+test("a SharePoint bundle takes a certificate in place of the secret, not beside it", async ({ page }) => {
+  await name(page, "sharepoint_auth");
+  await expect(page.locator(".secret-hint")).toContainText("certificate");
+
+  const cert = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----";
+  await value(page, JSON.stringify({ tenantId: "t", clientId: "c", certificate: cert }));
+  await save(page);
+  await expect(error(page)).toBeHidden();
+
+  await value(page, JSON.stringify({ method: "clientCredentials", tenantId: "t", clientId: "c", clientSecret: "s", certificate: cert }));
+  await save(page);
+  await expect(error(page)).toContainText("give one, not both");
 });

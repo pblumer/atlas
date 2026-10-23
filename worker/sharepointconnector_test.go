@@ -9,14 +9,14 @@ import (
 	"github.com/pblumer/atlas/connector/sharepoint"
 )
 
-// recordingSharePointClient stands in for a Graph site: it records the item a
-// resolved job asked to create and answers with what Graph would.
+// recordingSharePointClient stands in for a Graph site: it records the request a
+// resolved job made and answers with what Graph would.
 type recordingSharePointClient struct {
-	got  sharepoint.ItemRequest
+	got  sharepoint.Request
 	item any
 }
 
-func (c *recordingSharePointClient) CreateItem(_ context.Context, req sharepoint.ItemRequest) (any, error) {
+func (c *recordingSharePointClient) Do(_ context.Context, req sharepoint.Request) (any, error) {
 	c.got = req
 	return c.item, nil
 }
@@ -49,7 +49,7 @@ func TestRunSharePointJobCreatesWhatTheEngineResolved(t *testing.T) {
 		Connector: "intranet",
 		Site:      "https://contoso.sharepoint.com/sites/hr",
 		List:      "Onboarding",
-		Fields:    map[string]string{"Title": "Anna"},
+		Fields:    map[string]any{"Title": "Anna", "Headcount": json.Number("3")},
 		RequestID: "7",
 		Result:    "created",
 	})
@@ -61,6 +61,11 @@ func TestRunSharePointJobCreatesWhatTheEngineResolved(t *testing.T) {
 	if client.got.Site != "https://contoso.sharepoint.com/sites/hr" || client.got.List != "Onboarding" ||
 		client.got.Fields["Title"] != "Anna" {
 		t.Errorf("request = %+v, want the resolved site, list and fields", client.got)
+	}
+	// A column value keeps its JSON shape across the hop to the worker, so a Number
+	// column receives a number rather than its text.
+	if n, ok := client.got.Fields["Headcount"].(float64); !ok || n != 3 {
+		t.Errorf("Headcount = %#v, want the number 3", client.got.Fields["Headcount"])
 	}
 	// The job key travels as the request id, so a retry after an elapsed lease is
 	// recognizable to Graph as the same request rather than a second one.
@@ -184,5 +189,37 @@ func TestRunSharePointJobRefusesAPayloadItCannotRead(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "cannot read the resolved detail") {
 		t.Errorf("error = %v, want it to say the resolved detail could not be read", err)
+	}
+}
+
+// A job from an engine built before operations existed carries none, and is a
+// create-item — the only thing such an engine could have resolved. A job that names an
+// operation reaches the client with it and with the values it takes.
+func TestRunSharePointJobCarriesTheOperation(t *testing.T) {
+	client := &recordingSharePointClient{item: map[string]any{"deleted": true}}
+	legacy := Job{Connector: &ConnectorPayload{Kind: "sharepoint", Fields: map[string]any{
+		"connector": "intranet", "site": "s", "list": "l", "fields": map[string]any{"Title": "x"},
+		"requestId": "7", "resultVariable": "created",
+	}}}
+	if _, err := RunSharePointJob(context.Background(), legacy, sharePointRegistryWith("intranet", client)); err != nil {
+		t.Fatalf("RunSharePointJob: %v", err)
+	}
+	if client.got.Operation != "" || client.got.Fields["Title"] != "x" {
+		t.Errorf("legacy request = %+v, want the create-item it always was", client.got)
+	}
+
+	job := sharePointJobFrom(t, sharepoint.Job{
+		Connector: "intranet", Operation: "delete-file", Site: "s", List: "Akten",
+		Path: "2026/a.pdf", Result: "geloescht",
+	})
+	out, err := RunSharePointJob(context.Background(), job, sharePointRegistryWith("intranet", client))
+	if err != nil {
+		t.Fatalf("RunSharePointJob: %v", err)
+	}
+	if client.got.Operation != "delete-file" || client.got.Path != "2026/a.pdf" || client.got.List != "Akten" {
+		t.Errorf("request = %+v, want the operation and its path", client.got)
+	}
+	if res, _ := out["geloescht"].(map[string]any); res["deleted"] != true {
+		t.Errorf("geloescht = %#v, want the answer under the result variable", out["geloescht"])
 	}
 }

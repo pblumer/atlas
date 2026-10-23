@@ -67,7 +67,7 @@ func TestASharePointThumbprintBesideASecretIsRefusedWithoutAskingTheStore(t *tes
 			`"clientSecret":"s3cr3t","certificateThumbprint":"02CB6038F2E91693AE8D31C983569366034B2100"}`,
 	}
 	_, err := BuiltinConnectors(envMap(env), "sharepoint")
-	if err == nil || !strings.Contains(err.Error(), "exactly one") {
+	if err == nil || !strings.Contains(err.Error(), "give one, not both") {
 		t.Errorf("err = %v, want the bundle refused for carrying two credentials", err)
 	}
 }

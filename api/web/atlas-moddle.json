@@ -342,8 +342,17 @@
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },
       "properties": [
         { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
         { "name": "site", "type": "String", "isAttr": true },
         { "name": "list", "type": "String", "isAttr": true },
+        { "name": "itemId", "type": "String", "isAttr": true },
+        { "name": "path", "type": "String", "isAttr": true },
+        { "name": "content", "type": "String", "isAttr": true },
+        { "name": "encoding", "type": "String", "isAttr": true },
+        { "name": "filter", "type": "String", "isAttr": true },
+        { "name": "select", "type": "String", "isAttr": true },
+        { "name": "pageToken", "type": "String", "isAttr": true },
+        { "name": "maxResults", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true },
         { "name": "fields", "type": "ItemField", "isMany": true }

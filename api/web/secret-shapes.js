@@ -46,11 +46,13 @@ export const SECRET_SHAPES = {
   "sharepoint:": {
     what: "a Microsoft Graph OAuth credential bundle (JSON)",
     oauth: "microsoft",
-    // The app proves itself as an Entra app does: a clientCredentials bundle carries one
-    // of these where mail's carries clientSecret, and the worker refuses one carrying two.
-    appCredentials: ["clientSecret", "certificate", "certificateThumbprint"],
     skeleton: { method: "clientCredentials", tenantId: "…", clientId: "…", clientSecret: "…" },
-    note: "With <code>\"method\": \"clientCredentials\"</code> the app may prove itself with a <b>certificate</b> instead of a secret, as an Entra ID app does: <code>\"certificate\"</code> is the certificate and its <b>unencrypted</b> private key as one PEM text, after uploading the public part under <b>Certificates &amp; secrets &rsaquo; Certificates</b>. On a Windows server, <code>\"certificateThumbprint\"</code> may instead name a certificate already in the worker host's <code>CurrentUser\\My</code> or <code>LocalMachine\\My</code>; its key signs there and may be non-exportable. Carry exactly one of the three. A <code>refreshToken</code> bundle keeps its client secret.",
+    note: "An app that runs unattended may prove itself with a certificate instead: <code>\"certificate\"</code> — the certificate and its unencrypted private key as one PEM text — in place of <code>clientSecret</code>. On a Windows server, <code>\"certificateThumbprint\"</code> may instead name a certificate already in the worker host's <code>CurrentUser\\My</code> or <code>LocalMachine\\My</code>, as for an Entra ID worker; its key signs there and may be non-exportable. Give one of the three. A <code>refreshToken</code> bundle keeps its client secret.",
+    // connector/sharepoint/oauth.go reads a bundle without a method as clientCredentials,
+    // and a clientCredentials bundle may carry a certificate in place of the secret —
+    // as PEM, or by the thumbprint of one in the Windows certificate store.
+    certificate: true,
+    thumbprint: true,
   },
   "remedy:": {
     what: "the AR System username and password (JSON)",
@@ -167,34 +169,38 @@ export function checkSecretValue(shape, value) {
     const gone = missing(shape.fields);
     return gone.length ? `Missing ${gone.map((k) => `"${k}"`).join(" and ")}.` : "";
   }
-  const need = {
-    refreshToken: ["clientId", "clientSecret", "refreshToken"],
-    clientCredentials: ["clientId", "clientSecret"],
-    serviceAccount: ["clientEmail", "privateKey"],
-  }[parsed.method];
-  if (!need) {
-    return `"method" is ${parsed.method ? `"${parsed.method}"` : "missing"} — it must be "refreshToken", "clientCredentials" or "serviceAccount".`;
-  }
-  // A shape whose app may prove itself with a certificate takes exactly one of its
-  // credentials where the others take clientSecret — the server refuses a bundle
-  // carrying two rather than let precedence choose, and refuses a certificate on the
-  // refresh-token grant rather than ignore it.
-  const alternatives = shape.appCredentials;
-  if (alternatives && parsed.method === "clientCredentials") {
-    const present = alternatives.filter((k) => String(parsed[k] || "").trim());
-    const list = (ks) => ks.map((k) => `"${k}"`).join(", ");
-    if (present.length > 1) return `Carry exactly one of ${list(alternatives)} — this bundle has ${list(present)}.`;
-    if (!present.length) return `A "clientCredentials" bundle also needs one of ${list(alternatives)}.`;
-  }
-  if (alternatives && parsed.method === "refreshToken" &&
-      alternatives.some((k) => k !== "clientSecret" && String(parsed[k] || "").trim())) {
+  const method = parsed.method || (shape.certificate ? "clientCredentials" : "");
+  // A worker that takes a certificate takes it in place of the client secret, never
+  // beside it — the server refuses a bundle carrying two rather than pick one. Where the
+  // shape allows it, the certificate may be named by its thumbprint instead of given as
+  // PEM, and that counts as a second certificate, not as the same one.
+  const given = (k) => String(parsed[k] || "").trim() !== "";
+  const certFields = shape.certificate ? ["certificate", ...(shape.thumbprint ? ["certificateThumbprint"] : [])] : [];
+  const quote = (ks) => ks.map((k) => `"${k}"`);
+  if (method === "refreshToken" && certFields.some(given)) {
     return `A "refreshToken" bundle signs in with "clientSecret"; a certificate belongs to a "clientCredentials" bundle.`;
   }
-  const gone = missing(alternatives && parsed.method === "clientCredentials" ? need.filter((k) => k !== "clientSecret") : need);
-  if (gone.length) return `A "${parsed.method}" bundle also needs ${gone.map((k) => `"${k}"`).join(" and ")}.`;
+  const certs = method === "clientCredentials" ? certFields.filter(given) : [];
+  const credentials = [...(given("clientSecret") ? ["clientSecret"] : []), ...certs];
+  if (credentials.length === 2) return `The bundle carries ${quote(credentials).join(" and ")}; give one, not both.`;
+  if (credentials.length > 2) return `The bundle carries ${quote(credentials).join(", ")}; give one of them.`;
+  const need = {
+    refreshToken: ["clientId", "clientSecret", "refreshToken"],
+    clientCredentials: certs.length ? ["clientId", certs[0]] : ["clientId", "clientSecret"],
+    serviceAccount: ["clientEmail", "privateKey"],
+  }[method];
+  if (!need) {
+    return `"method" is ${method ? `"${method}"` : "missing"} — it must be "refreshToken", "clientCredentials" or "serviceAccount".`;
+  }
+  // A missing secret is named with the certificates that could stand in for it.
+  const gone = missing(need).map((k) =>
+    k === "clientSecret" && method === "clientCredentials" && certFields.length
+      ? `one of ${quote(["clientSecret", ...certFields.slice(0, -1)]).join(", ")} or "${certFields[certFields.length - 1]}"`
+      : `"${k}"`);
+  if (gone.length) return `A "${method}" bundle also needs ${gone.join(" and ")}.`;
   // Microsoft builds its token endpoint from the tenant; without either there is
   // nothing to call, which the server reports much later as "no token URL".
-  if (shape.oauth === "microsoft" && parsed.method === "clientCredentials" && !parsed.tenantId && !parsed.tokenUrl) {
+  if (shape.oauth === "microsoft" && method === "clientCredentials" && !parsed.tenantId && !parsed.tokenUrl) {
     return `A Microsoft bundle needs "tenantId" (or an explicit "tokenUrl").`;
   }
   return "";

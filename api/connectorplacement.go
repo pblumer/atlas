@@ -91,7 +91,7 @@ var authoredKindJobTypes = map[string][]int32{
 	connectorKindClio:         {compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
 	connectorKindMail:         {compiler.MailJobTypeIndex},
 	"csv":                     {compiler.CsvImportJobTypeIndex},
-	connectorKindSharePoint:   {compiler.SharePointJobTypeIndex},
+	connectorKindSharePoint:   {compiler.SharePointJobTypeIndex, compiler.SharePointOpsJobTypeIndex},
 	connectorKindRemedy:       {compiler.RemedyJobTypeIndex},
 	connectorKindJira:         {compiler.JiraJobTypeIndex},
 	connectorKindGoogleSheets: {compiler.GoogleSheetsJobTypeIndex},

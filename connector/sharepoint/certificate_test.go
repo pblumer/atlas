@@ -19,9 +19,9 @@ import (
 	"time"
 )
 
-// A SharePoint app may prove itself with a certificate instead of a client secret, as
-// the Entra worker's may (ADR-0141, amended): as PEM in the bundle, or named by its
-// thumbprint in the Windows certificate store, whose key signs there and is never read.
+// A SharePoint app may name its certificate by thumbprint in the Windows certificate
+// store, whose key signs there and is never read, as the Entra worker's may (ADR-0141,
+// amended). The PEM certificate beside it is TestCertificateGrant's.
 
 func spTestCertificate(t *testing.T) (*x509.Certificate, *rsa.PrivateKey, string) {
 	t.Helper()
@@ -82,25 +82,6 @@ func assertSignedBy(t *testing.T, form map[string]string, cert *x509.Certificate
 	digest := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
 	if err := rsa.VerifyPKCS1v15(cert.PublicKey.(*rsa.PublicKey), crypto.SHA256, digest[:], sig); err != nil {
 		t.Errorf("the assertion is not signed by the certificate's key: %v", err)
-	}
-}
-
-func TestClientCredentialsWithACertificate(t *testing.T) {
-	cert, _, pemText := spTestCertificate(t)
-	ts := newTokenServer(t, 3600)
-	src, err := newTokenSource(credentialBundle{
-		Method: methodClientCredentials, TokenURL: ts.srv.URL, Scope: graphScope,
-		ClientID: "app-1", Certificate: pemText,
-	}, http.DefaultClient, nil)
-	if err != nil {
-		t.Fatalf("newTokenSource: %v", err)
-	}
-	if _, err := src.Token(context.Background()); err != nil {
-		t.Fatalf("Token: %v", err)
-	}
-	assertSignedBy(t, ts.lastForm, cert)
-	if ts.lastForm["client_id"] != "app-1" || ts.lastForm["scope"] != graphScope {
-		t.Errorf("token form = %v, want the client id and the Graph scope", ts.lastForm)
 	}
 }
 
@@ -182,6 +163,7 @@ func TestAThumbprintTheStoreCannotServeIsAskedForAgain(t *testing.T) {
 
 // One credential per app: two would leave the choice to an accident of precedence, so
 // the bundle is refused naming each, and one with none names all three ways to give one.
+// A bundle naming no method is a clientCredentials bundle and held to the same rule.
 func TestClientCredentialsTakeExactlyOneCredential(t *testing.T) {
 	_, _, pemText := spTestCertificate(t)
 	stubCertStore(t, func(string) (*x509.Certificate, crypto.Signer, error) {
@@ -194,9 +176,10 @@ func TestClientCredentialsTakeExactlyOneCredential(t *testing.T) {
 		secret, cert, thumbprint string
 		want                     []string
 	}{
-		{"secret and certificate", "s", pemText, "", []string{"clientSecret", "certificate", "exactly one"}},
-		{"secret and thumbprint", "s", "", tp, []string{"clientSecret", "certificateThumbprint", "exactly one"}},
-		{"certificate and thumbprint", "", pemText, tp, []string{"certificate", "certificateThumbprint", "exactly one"}},
+		{"secret and certificate", "s", pemText, "", []string{"clientSecret", "certificate", "give one, not both"}},
+		{"secret and thumbprint", "s", "", tp, []string{"clientSecret", "certificateThumbprint", "give one, not both"}},
+		{"certificate and thumbprint", "", pemText, tp, []string{"certificate", "certificateThumbprint", "give one, not both"}},
+		{"all three", "s", pemText, tp, []string{"clientSecret", "certificate", "certificateThumbprint", "give one of them"}},
 		{"none", "", "", "", []string{"clientSecret", "certificate", "certificateThumbprint"}},
 		{"blank thumbprint", "", "", "   ", []string{"certificateThumbprint"}},
 	} {
@@ -255,10 +238,14 @@ func TestNewProviderClientWithAThumbprintDoesNotAskTheStore(t *testing.T) {
 	asked := stubCertStore(t, func(string) (*x509.Certificate, crypto.Signer, error) {
 		return nil, nil, errors.New("certstore: no certificate with this thumbprint")
 	})
-	if _, err := NewProviderClient(ProviderConfig{
-		Secret: `{"method":"clientCredentials","tenantId":"tid","clientId":"c","certificateThumbprint":"02CB6038F2E91693AE8D31C983569366034B2100"}`,
-	}); err != nil {
-		t.Fatalf("NewProviderClient: %v", err)
+	// The second names no method, which is a clientCredentials bundle.
+	for _, secret := range []string{
+		`{"method":"clientCredentials","tenantId":"tid","clientId":"c","certificateThumbprint":"02CB6038F2E91693AE8D31C983569366034B2100"}`,
+		`{"tenantId":"tid","clientId":"c","certificateThumbprint":"02CB6038F2E91693AE8D31C983569366034B2100"}`,
+	} {
+		if _, err := NewProviderClient(ProviderConfig{Secret: secret}); err != nil {
+			t.Fatalf("NewProviderClient(%s): %v", secret, err)
+		}
 	}
 	if len(*asked) != 0 {
 		t.Errorf("the store was asked %d times while the client was built", len(*asked))

@@ -14,20 +14,126 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
-- **The SharePoint worker signs in with a certificate.** A `clientCredentials` bundle may
-  carry `certificate` in place of `clientSecret` — the app's certificate and its
-  unencrypted private key as one PEM text — or, on a Windows server,
-  `certificateThumbprint`: a certificate in the worker host's `CurrentUser\My` or
-  `LocalMachine\My`, whose key signs there and is never read. These are the Entra ID
-  worker's three credentials, read the same way, so a certificate already in the host's
-  store for the Entra ID worker can be named here too. A bundle carries exactly one of
-  them, and a certificate in a `refreshToken` bundle is refused. The worker tries a
-  thumbprint's certificate when it starts and refuses to start, naming the instance and the
-  account, when the store does not hold it or the account may not use its key. The engine
-  does not open the store while it builds the client on its run loop, but on the first
-  token request. On a server that is not Windows, a thumbprint bundle is shown as the
-  Worker's problem and is not handed to the supervised worker. The Secrets panel checks
-  the new shape ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended).
+- **A SharePoint Worker can name its certificate by thumbprint.** On a Windows server the
+  vault bundle may carry `certificateThumbprint` in place of `clientSecret` or
+  `certificate`: a certificate in the worker host's `CurrentUser\My` or
+  `LocalMachine\My`, whose key signs there and is never read, so a non-exportable key
+  serves as it does for the Entra ID Worker and for PowerShell. A bundle gives one of the
+  three, and a thumbprint in a `refreshToken` bundle is refused as a certificate already
+  is. The worker tries the certificate when it starts and refuses to start, naming the
+  instance and the account, when the store does not hold it or the account may not use
+  its key. The engine does not open the store while it builds the client on its run loop,
+  but at the first token request. On a server that is not Windows a thumbprint bundle is
+  shown as the Worker's problem and is not handed to the supervised worker. The Secrets
+  panel checks the new field ([ADR-0141](docs/adr/0141-sharepoint-connector.md),
+  amended).
+
+## [0.19.0] — 2026-10-22
+
+**A `superior` approval reaches the orderer's line manager, and a SharePoint task does
+more than create a list item.** An account names its line manager — set by an
+administrator under **Console → Administration → Organization** or filled by the Entra
+mirror when its model selects `manager` — and a `superior` approval starts with it; its
+escalation moves one level up the line from whoever holds the approval now
+([ADR-0470](docs/adr/0470-the-line-manager-is-on-the-account.md)). The shipped approval
+model no longer searches a directory for a principal id no directory holds, which is why
+such an approval reached nobody before (#1311). The Entra Worker reads a person's manager
+(`get-user-manager`), and the Microsoft 365 example uses it to ask the manager of the
+person a position is for ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended
+2026-10-22). A SharePoint task reads, changes, finds and deletes list items, and uploads,
+downloads, lists, creates and deletes files and folders in a document library; it
+addresses a site by its URL, keeps the type of a FEEL value in a column, names Graph's
+error and the missing permission when a call fails, and its Worker can sign in with a
+certificate ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended 2026-10-22). The
+replay's Variables tab names the person, group, process or product an id stands for.
+
+**Read this before upgrading from 0.18.0.** These act on an existing installation:
+
+- A `superior` approval needs the orderer's line manager on the orderer's account. Where
+  there is none, where the manager's account is disabled or gone, or where the directory
+  names somebody who has no account yet, the approval refuses to start and the
+  fulfilment process shows the refusal as an incident; resolving it after the manager is
+  set starts the approval. Fill the relation before the first such order: with an Entra
+  mirror, add `manager` to the mirror model's `select`, as
+  `examples/entra-verzeichnis-abgleich.bpmn` now does, and deploy it again; without one,
+  an administrator sets *Line manager* in the Console or `managerId` with
+  `PATCH /api/v1/users/{id}`. While the mirror reports a manager, the field belongs to
+  the directory and a hand edit answers 409. The approval no longer needs an `ad` Worker
+  called `verzeichnis`. Approvals already running keep the 0.18.0 model and its
+  directory steps.
+- Upgrade a SharePoint Worker that runs apart from the server together with the server.
+  A 0.19.0 server sends a column value with the type of its FEEL value; a 0.18.0 Worker
+  reads every value as text, so a create-item task whose value computes a number, a
+  boolean, a list or a context fails with «cannot read the resolved detail», retries and
+  ends as an incident. The new operations ride a job type of their own,
+  `io.atlas.sharepoint`, which a 0.18.0 Worker does not lease: such a task waits for a
+  0.19.0 Worker rather than creating an item. A create-item task that computed a number
+  into a *text* column now relies on Graph converting it — check such a task against
+  your site.
+- A model that uses `get-user-manager`, such as the Microsoft 365 example's approval
+  model `proc_m365_genehmigung_vorgesetzter`, needs a 0.19.0 Entra Worker; a 0.18.0 one
+  fails the task with «unknown operation». The operation needs `User.Read.All`, which
+  the user reads already need.
+- Not yet confirmed against a live tenant: Graph's `manager@delta` shape on the mirror's
+  delta read, and for SharePoint a number written into a text column, the column update
+  of a document (`PATCH …/listItem/fields`), the expanded read of a path-addressed file
+  and the ceiling of 999 items per page. The tests run against a fake Graph endpoint.
+- 0.19.0 reads the data directory 0.18.0 wrote: nothing under the log, the state or the
+  record format changed. The first start deploys one new version of the system process
+  `atlas-genehmigung-vorgesetzter`. An account's record may carry `managerId` and
+  `managerDirectoryId`. No route was added: `PATCH /api/v1/users/{id}` takes `managerId`
+  (`""` clears it), and `POST /api/v1/orders/{id}/lines/{item}/escalate` takes
+  `lineManager`, which is refused together with `superior`. `vorgesetzter` in
+  `atlas.approval.requested` is now the line manager as the orderer's account records
+  it. The Entra task takes the operation `get-user-manager`; the SharePoint task takes
+  `operation` and the attributes its operations use (`itemId`, `path`, `content`,
+  `encoding`, `filter`, `select`, `pageToken`, `maxResults`), and a SharePoint vault
+  bundle may carry `certificate` in place of `clientSecret`. The MCP tools (149), the
+  `/metrics` series, the Helm chart's values and the budgets are unchanged.
+- Going back to 0.18.0 starts on the same directory only while no deployed process uses
+  `get-user-manager` or a SharePoint task that names no list: 0.18.0 cannot compile
+  either and refuses to start. It is worse for a SharePoint task that names a list:
+  0.18.0 knows only create-item and compiles such a task as one whatever its operation,
+  so a `delete-item` or `update-item` would create an item. Remove every deployed
+  version of such a process before going back, once nothing runs under it. 0.18.0
+  ignores an account's line manager, and an account it saves again loses it; its
+  `superior` approval returns to the directory lookup that reaches nobody, and an
+  approval started under 0.19.0 that escalates under 0.18.0 stalls, because 0.18.0 does
+  not read `lineManager`.
+
+### Added
+
+- **SharePoint reads, changes, finds and deletes list items, and works with document
+  libraries.** Beside creating a list item, a SharePoint task can now read one by its id
+  (`get-item`), change some of its columns (`update-item`), delete it (`delete-item`) and
+  find items by an OData filter one page at a time (`list-items`, with a
+  `nextPageToken` to carry on), and in a document library upload a file — optionally
+  with properties — (`upload-file`), download a small one into a variable
+  (`download-file`), ask whether one is there (`get-file`), list a folder
+  (`list-folder`), create a case folder with every missing one above it
+  (`create-folder`) and delete a file or folder (`delete-file`). The site may be named
+  as the browser shows it (`https://contoso.sharepoint.com/sites/hr`) or as
+  `host:/sites/name`, not only by Graph's site id; a document's content is bounded by
+  the process variable's budget and Graph's pre-authenticated download link never
+  reaches a variable. A task naming no operation is the create-item it always was. The
+  new operations ride a job type of their own, `io.atlas.sharepoint`, so a worker built
+  before them leaves those jobs for one that knows them instead of creating an item for
+  each ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended).
+- **A SharePoint Worker can sign in with a certificate.** The vault bundle may carry
+  `certificate` — the certificate and its unencrypted private key as one PEM text — in
+  place of `clientSecret`; the token comes from the same client-credentials grant with
+  a signed client assertion, so the private key never leaves the worker. A bundle
+  naming no `method` is a client-credentials bundle.
+- **The Entra Worker reads a person's manager.** A new operation, `get-user-manager`,
+  writes the manager's directory object for a `userId` into a result variable; an optional
+  `select` names which of the manager's properties come back. A person without a manager
+  is `null`, so a process can route an approval to a fallback approver; an id that belongs
+  to nobody still fails the task, because the worker reads the manager through the user
+  (`$expand=manager`) rather than from `/users/{id}/manager`, which answers 404 to both.
+  A process that catches the BPMN error `ENTRA_USER_NOT_FOUND` — an error boundary on the
+  task — gets the unknown id as that error instead, at once and without retries, and can
+  route it as well; uncaught, it stays a failure and then an incident
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended 2026-10-22).
 
 - **An account can name its line manager.** `managerId` on an account is the principal id
   of the person's line manager. An administrator sets it under Console → Administration →
@@ -56,21 +162,34 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **A SharePoint column value keeps the type of its FEEL value.** A value that
+  evaluates to a number is sent to Graph as a number, a boolean as Yes/No, a list as a
+  multi-choice and null as null, which clears the column; before, every value was sent
+  as its text, which left multi-choice, lookup and Yes/No columns unreachable. A literal
+  is still its text. A create-item task that computed a number into a *text* column now
+  relies on Graph converting it — check such a task against your site
+  ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended).
+- **SharePoint failures say what to do.** A failed Graph call names the operation and
+  Graph's own error code and message; a 401 or 403 names the permission to grant, and a
+  throttled call quotes the wait Graph asked for. Every answer is read under the process
+  variable's budget — the read used to be unbounded.
+
 - **The Microsoft 365 example asks the manager of the person a position is for.** Licence,
   team, shared mailbox and mailbox access in `examples/m365-dienste` were approved with the
-  built-in kind `superior`, which asks the manager of the person who *ordered* and finds
-  that manager only through a directory worker. They now name the example's own approval
-  model, `proc_m365_genehmigung_vorgesetzter`: it receives the order form's answers
-  (ADR-0441), reads the manager of `upn`, `besitzer` or `person` from Entra ID in a
-  PowerShell script (Microsoft Graph, app-only with a certificate), assigns the task to the
-  manager's Atlas account, and falls back to `approval.ref` or the group
-  `M365-Administration` when there is no manager, no such person or no account. It mails the
-  approver, reminds after three days and escalates to the next manager after seven. The
-  answers are declared personal data in that model, so the script and the mail worker are
-  the only places they are read in the clear. The mailbox-access order form's
-  justification is now keyed `anlass` rather than `begruendung`, the variable the inbox
-  writes a refusal's reason to. New constants `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` and
-  `ENTRA_CERTIFICATE_SUBJECT`; the README lists what the operator sets up.
+  built-in kind `superior`, which asks the line manager of the person who *ordered*, as
+  that person's account names it. They now name the example's own approval model,
+  `proc_m365_genehmigung_vorgesetzter`: it receives the order form's answers (ADR-0441),
+  reads the manager of `upn`, `besitzer` or `person` from Entra ID with the Entra Worker's
+  `get-user-manager` through `ucc_entra`, assigns the task to the manager's Atlas account,
+  and falls back to `approval.ref` or the group `M365-Administration` when there is no
+  manager, no such person (`ENTRA_USER_NOT_FOUND`, caught by an error boundary) or no
+  account. It mails the approver, reminds after three days and escalates to the next
+  manager after seven. The answers are declared personal data in that model, so the Entra
+  task's `userId`, evaluated when its job is handed to the worker, and the mail worker are
+  the only places they are read in the clear. The mailbox-access order form's justification
+  is now keyed `anlass` rather than `begruendung`, the variable the inbox writes a
+  refusal's reason to. The README lists what the operator sets up; beyond the `ucc_entra`
+  Worker the other products already use, the lookup needs nothing new.
   `TestEveryFormReferenceResolves` accepts the platform's approval form `genehmigung`,
   which an installation's own approval model names to get the inbox's Genehmigen and
   Ablehnen, for as long as the system bundle declares it.
@@ -15817,7 +15936,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/pblumer/atlas/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/pblumer/atlas/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/pblumer/atlas/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/pblumer/atlas/compare/v0.15.0...v0.16.0
