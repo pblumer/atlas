@@ -51,6 +51,17 @@ _Changed_ / _Removed_ for each version.
   says how many deployed processes receive its name, or that none does, with a link to the
   page ([ADR-0447](docs/adr/0447-the-signals-deployed-models-throw-and-receive.md),
   [ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md)).
+- **An example for the SharePoint operations: the case file.** `examples/sharepoint-fallakte`
+  turns a request entered in a SharePoint list into a case file — it reads the request
+  (`get-item`), creates its folder (`create-folder`), fills in a letter template from a
+  library (`download-file` and FEEL `replace`), files the letter with properties unless
+  `get-file` finds it there already (`upload-file`), updates the request with typed
+  columns (`update-item`) and writes a log entry (`create-item`). A second process finds
+  settled requests page by page with an OData filter (`list-items`) and deletes each
+  one's folder and entry in a parallel multi-instance (`delete-file`, `delete-item`).
+  Both run end to end in `connector/sharepoint/example_test.go` against a site kept in
+  memory, with the real compiler, engine and Graph client. The handbook's examples
+  chapter has its card.
 
 ### Changed
 
@@ -79,6 +90,10 @@ _Changed_ / _Removed_ for each version.
   the collaboration replay, and a message with a time to live is kept for the subscription
   that opens later. What earlier versions wrote stays as it was
   ([ADR-0370](docs/adr/0370-durable-message-buffer.md), amended 2026-10-23).
+- **A SharePoint task that names `create-item` keeps its list and columns in the
+  Modeler.** The panel showed the list and the column table only for a task with no
+  operation, so a model spelling `operation="create-item"` out lost both on its next
+  save, and the compiler then refused the task.
 
 ## [0.19.0] — 2026-10-22
 

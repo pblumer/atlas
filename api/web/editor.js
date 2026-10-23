@@ -4504,7 +4504,9 @@ const SERVICE_TASK_KINDS = [
     // The operation's first option is create-item under the empty value: a task authored
     // before operations existed carries no operation attribute and means exactly that,
     // and the compiler reads an empty operation the same way, so such a model keeps its
-    // meaning whatever the panel writes for it.
+    // meaning whatever the panel writes for it. A model that spells create-item out is
+    // the same task, so every field it shows for the empty value it shows for that too —
+    // a field hidden here would be dropped on the next save.
     fields: [
       { group: "SharePoint worker" },
       { key: "connector", label: "Worker", datalist: "sharepoint", placeholder: "contoso", hint: "The configured SharePoint Worker this task acts through, by the name it has under Workers in the Console. Its Graph base and OAuth credential live on the server, never in the model." },
@@ -4531,7 +4533,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "list", label: "List", placeholder: "Incidents", fx: true,
-        showIf: (v) => ["", "get-item", "update-item", "delete-item", "list-items"].includes(v.operation || ""),
+        showIf: (v) => ["", "create-item", "get-item", "update-item", "delete-item", "list-items"].includes(v.operation || ""),
         hint: "The list's title or id, as the site shows it.",
       },
       {
@@ -4564,7 +4566,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "fields", label: "Columns", type: "map", childType: "atlas:ItemField", fx: true,
-        showIf: (v) => ["", "update-item", "upload-file"].includes(v.operation || ""),
+        showIf: (v) => ["", "create-item", "update-item", "upload-file"].includes(v.operation || ""),
         hint: (v) => (v.operation === "upload-file"
           ? "Optional. Column values the uploaded file gets as its properties, by the columns' internal names."
           : "Column values by the columns' internal names. A FEEL value keeps its type: =42 is sent as a number, =true as Yes, =[\"A\", \"B\"] as a multi-choice; a lookup or person column takes the item's id under <Name>LookupId. A value that evaluates to null clears the column."),
