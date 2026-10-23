@@ -136,6 +136,12 @@ func runSharePointJob(ctx context.Context, j Job, reg *sharepoint.Registry, brok
 		one := sharepoint.NewRegistry()
 		one.Register(task.Connector, sharepoint.NewGraphClient(staticToken(auth.Credential.AccessToken), endpoint))
 		reg = one
+	} else if auth != nil && auth.Credential != nil {
+		// The server released a person's token: it recorded this action as theirs. An
+		// instance not set up to act with one — its environment predates the Worker
+		// becoming delegated — must not act as itself instead, or the evidence would
+		// name a person for what the Worker did with its own credential.
+		return nil, fmt.Errorf("sharepoint: the permit for worker %q carries a person's credential, but this Worker Instance is not set up to act with one; it acts after its restart", task.Connector)
 	}
 	res, err := sharepoint.Run(ctx, task, reg)
 	if err != nil {
