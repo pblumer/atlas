@@ -67,13 +67,16 @@ type Service struct {
 	now      func() time.Time
 	// set is the compiled published set. A nil set is one that could not be built
 	// from the stores, which the PDP answers Indeterminate — never "no policies".
-	set atomic.Pointer[authz.Set]
+	set     atomic.Pointer[authz.Set]
+	loadErr atomic.Pointer[error]
 	// resolve fills a simulated subject's attributes from the user store when the
 	// simulation names only an id. Optional.
 	resolve func(id string) (authz.Subject, bool)
 }
 
-// Open opens the stores under dir and compiles what is published.
+// Open opens the stores under dir and compiles what is published. It reads the
+// stores directly rather than through the loop: it runs while the server is being
+// built, before the loop serves anybody, and the loop is not yet running to ask.
 func Open(loop *runloop.Loop, dir string, now func() time.Time) (*Service, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("policy: %w", err)
@@ -88,9 +91,22 @@ func Open(loop *runloop.Loop, dir string, now func() time.Time) (*Service, error
 		return nil, err
 	}
 	s := &Service{loop: loop, policies: pols, versions: vers, now: now}
-	var rerr error
-	loop.Do(func() { rerr = s.rebuild() })
-	return s, rerr
+	// A set that will not build must not stop the server: every other process would
+	// go down with the governed ones. It leaves the set nil instead — every governed
+	// action Indeterminate, so refused — and says why where an administrator looks.
+	if err := s.rebuild(); err != nil {
+		s.loadErr.Store(&err)
+	}
+	return s, nil
+}
+
+// LoadError is why the published set could not be built at startup or at the last
+// publication, or nil.
+func (s *Service) LoadError() error {
+	if p := s.loadErr.Load(); p != nil {
+		return *p
+	}
+	return nil
 }
 
 // SetSubjectResolver installs the lookup a simulation uses for a subject it names by
@@ -132,6 +148,7 @@ func (s *Service) rebuild() error {
 		return err
 	}
 	s.set.Store(set)
+	s.loadErr.Store(nil)
 	return nil
 }
 

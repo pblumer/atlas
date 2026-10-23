@@ -268,7 +268,7 @@ func TestTheSimulatorTriesAnUnpublishedPolicyAndResolvesANamedSubject(t *testing
 // A set that cannot be rebuilt is no set at all: the PDP answers Indeterminate, never
 // "no policies".
 func TestABrokenStoreLeavesNoSet(t *testing.T) {
-	s, _ := newService(t)
+	s, dir := newService(t)
 	_, _ = s.SaveDraft("sp-members", []byte(members), "usr_admin")
 	_, _ = s.Publish("sp-members", "usr_admin")
 	s.loop.Do(func() {
@@ -279,6 +279,11 @@ func TestABrokenStoreLeavesNoSet(t *testing.T) {
 	})
 	if s.Set() != nil {
 		t.Fatal("a set survived a failed rebuild")
+	}
+	// Reopening over the broken store still opens — the server must start — and says why.
+	s2, err := Open(s.loop, dir, s.now)
+	if err != nil || s2.Set() != nil || s2.LoadError() == nil {
+		t.Fatalf("reopen: %v set=%v loadErr=%v", err, s2.Set(), s2.LoadError())
 	}
 	if d := s.Set().Evaluate(context.Background(), request()); d.Effect != authz.Indeterminate {
 		t.Fatalf("decided %v", d.Effect)

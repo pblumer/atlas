@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/identity"
+	"github.com/pblumer/atlas/api/policy"
 )
 
 // This file makes the /api/v1 surface self-describing (ADR-0043). The route
@@ -537,6 +539,71 @@ func (s *Server) apiRoutes() []apiRoute {
 				"errorCode": tString(), "errorMessage": tString(), "worker": tString(), "leaseToken": tInteger(), "reason": tString(),
 			}, "errorCode")),
 			resp: jsonBody("Job key", tObject())}},
+		// Identity-aware Worker execution (ADR-draft-identity-aware-worker-execution).
+		{"POST", "/api/v1/jobs/{key}/authorize", s.handleAuthorizeJob, apiOp{
+			summary: "Ask, as the lease-holding worker, whether a governed job's external action may run: the decision is recorded before the answer, the answer carries the parameters it covers, and a permitted delegated action its short-lived credential (supervised Worker Instances only). A legacy Worker is answered with enforcement off", tag: "Incidents", role: RoleOperator,
+			req: jsonBody("The holding worker id and the lease token its activation returned", schemaObj(map[string]any{
+				"worker": tString(), "leaseToken": tInteger(),
+			}, "worker", "leaseToken")),
+			resp: jsonBody("Effect, reason, decision key, policy and version, the authorized parameters, and for a permitted delegated action a bearer credential", tObject())}},
+		{"GET", "/api/v1/instances/{key}/authorizations", s.handleInstanceAuthorizations, apiOp{
+			summary: "An instance's recorded authorization decisions: who initiated it, for whom and as whom each action ran, which policy and version decided, and what it said", tag: "Authorization", role: RoleOperator,
+			resp: jsonBody("Decisions in job and log order", tArray())}},
+		{"GET", "/api/v1/instances/{key}/action-approvals", s.handleInstanceActionApprovals, apiOp{
+			summary: "The approvals an instance's actions asked for, with every answer; an operator sees all, anybody else those they may answer or that were asked on their behalf", tag: "Authorization", role: RoleUser,
+			resp: jsonBody("Approval requests with their answers", tArray())}},
+		{"POST", "/api/v1/instances/{key}/action-approvals/{approval}/decide", s.handleDecideActionApproval, apiOp{
+			summary: "Answer an action approval as a person in its approver group, or withdraw your answer; nobody approves an action that would run for themselves", tag: "Authorization", role: RoleUser,
+			req: jsonBody("granted, rejected or withdrawn, and an optional reason", schemaObj(map[string]any{
+				"outcome": tString(), "reason": tString(),
+			}, "outcome")),
+			resp: jsonBody("The answer recorded", tObject())}},
+		{"PUT", "/api/v1/configured-workers/{id}/identity", s.handleSetWorkerIdentity, apiOp{
+			summary: "Set a Worker's identity policy: service, delegated-fixed or delegated-per-job, shadow or enforced (admin-only; SharePoint Workers in this build)", tag: "Workers", role: RoleAdmin,
+			req: jsonBody("Mode, enforcement, and the connection or actAs the mode needs", schemaObj(map[string]any{
+				"mode": tString(), "enforcement": tString(), "connectionId": tString(), "actAs": tString(),
+			}, "mode", "enforcement")),
+			resp: jsonBody("The Worker", tObject())}},
+		{"DELETE", "/api/v1/configured-workers/{id}/identity", s.handleClearWorkerIdentity, apiOp{
+			summary: "Return a Worker to legacy behavior: no decision, nothing recorded (admin-only)", tag: "Workers", role: RoleAdmin, status: http.StatusNoContent}},
+		{"GET", "/api/v1/security/readiness", s.handleSecurityReadiness, apiOp{
+			summary: "Every configured Worker, whether its actions are governed and how, and where its credential is (admin-only)", tag: "Authorization", role: RoleAdmin,
+			resp: jsonBody("Workers and the policy set's load state", tObject())}},
+		{"GET", "/api/v1/security/policies", s.policyRoute(func(p *policy.Service) http.HandlerFunc { return p.HandleList }), apiOp{
+			summary: "Every authorization policy: its current version, whether it is enabled, and its draft (admin-only)", tag: "Authorization", role: RoleAdmin,
+			resp: jsonBody("Policies", tArray())}},
+		{"POST", "/api/v1/security/policies/simulate", s.policyRoute(func(p *policy.Service) http.HandlerFunc { return p.HandleSimulate }), apiOp{
+			summary: "Evaluate a simulated request against the published policies, or one unpublished policy in place of its version, and explain the answer; nothing is recorded or enforced (admin-only)", tag: "Authorization", role: RoleAdmin,
+			req:  jsonBody("The simulated subject, Worker, operation, resource, approvals and optionally a policy document", tObject()),
+			resp: jsonBody("Effect, reason, deciding policy and version, obligations, trace, and the fields ignored", tObject())}},
+		{"GET", "/api/v1/security/policies/{id}", s.policyRoute(func(p *policy.Service) http.HandlerFunc { return p.HandleGet }), apiOp{
+			summary: "One policy with every version it has published (admin-only)", tag: "Authorization", role: RoleAdmin,
+			resp: jsonBody("The policy and its versions", tObject())}},
+		{"PUT", "/api/v1/security/policies/{id}/draft", s.policyRoute(func(p *policy.Service) http.HandlerFunc { return p.HandleSaveDraft }), apiOp{
+			summary: "Save a policy document as the policy's draft; a document that does not compile is refused, and warnings are returned (admin-only)", tag: "Authorization", role: RoleAdmin,
+			req:  jsonBody("The policy document", tObject()),
+			resp: jsonBody("The policy with its draft", tObject())}},
+		{"POST", "/api/v1/security/policies/{id}/publish", s.policyRoute(func(p *policy.Service) http.HandlerFunc { return p.HandlePublish }), apiOp{
+			summary: "Publish the draft as the policy's next immutable version and enable it (admin-only)", tag: "Authorization", role: RoleAdmin,
+			resp: jsonBody("The policy", tObject())}},
+		{"POST", "/api/v1/security/policies/{id}/enabled", s.policyRoute(func(p *policy.Service) http.HandlerFunc { return p.HandleSetEnabled }), apiOp{
+			summary: "Switch a published policy on or off (admin-only)", tag: "Authorization", role: RoleAdmin,
+			req:  jsonBody("Whether it applies", schemaObj(map[string]any{"enabled": tBool()}, "enabled")),
+			resp: jsonBody("The policy", tObject())}},
+		{"GET", "/api/v1/me/connections", s.identityRoute(func(i *identity.Service) http.HandlerFunc { return i.HandleMine }), apiOp{
+			summary: "Your linked external accounts and the delegated connections they authorize, with the Workers you allowed; never a credential", tag: "Connections", role: RoleUser,
+			resp: jsonBody("Identities and connections", tObject())}},
+		{"GET", "/api/v1/users/{id}/connections", s.identityRoute(func(i *identity.Service) http.HandlerFunc { return i.HandleOfUser }), apiOp{
+			summary: "One user's linked accounts and delegated connections (admin-only)", tag: "Connections", role: RoleAdmin,
+			resp: jsonBody("Identities and connections", tObject())}},
+		{"POST", "/api/v1/connections/{id}/revoke", s.identityRoute(func(i *identity.Service) http.HandlerFunc { return i.HandleRevoke(s.principalIsAdmin) }), apiOp{
+			summary: "Revoke a delegated connection for good, deleting its credential (its owner, or an administrator)", tag: "Connections", role: RoleUser,
+			req:  jsonBody("Why", schemaObj(map[string]any{"reason": tString()})),
+			resp: jsonBody("The revoked connection", tObject())}},
+		{"PUT", "/api/v1/connections/{id}/workers", s.identityRoute(func(i *identity.Service) http.HandlerFunc { return i.HandleSetWorkers }), apiOp{
+			summary: "Choose which configured Workers may act through your connection (its owner only: this is your consent)", tag: "Connections", role: RoleUser,
+			req:  jsonBody("Worker names", schemaObj(map[string]any{"workers": map[string]any{"type": "array", "items": tString()}}, "workers")),
+			resp: jsonBody("The connection", tObject())}},
 		{"GET", "/api/v1/incidents", s.handleListIncidents, apiOp{
 			summary: "List unresolved incidents, optionally scoped to one instance (?instance=), definition (?process=), BPMN element (?element=, or ?elementIndex= for an instance whose definition is no longer deployed), kind (?type=job|timer|budget|error) or message fragment (?message=) — capped per call (?limit=, max 5000). Answers {items, total, totalExact, truncated}: on a capped page total is a floor, and GET /api/v1/incidents/summary is the reading that counts them all", tag: "Incidents", role: RoleOperator, resp: jsonBody("Incidents", tPage())}},
 		{"GET", "/api/v1/incidents/summary", s.handleIncidentSummary, apiOp{

@@ -31,6 +31,16 @@ const sharepointEnvPrefix = "ATLAS_SHAREPOINT_"
 // The credential comes from the environment and not from a flag because argv is
 // readable by anyone who can list processes.
 func sharepointRegistryFromEnv(env func(string) string) (*sharepoint.Registry, []string, error) {
+	reg, names, _, err := sharepointSourcesFromEnv(env)
+	return reg, names, err
+}
+
+// sharepointSourcesFromEnv is sharepointRegistryFromEnv plus the instances whose
+// credential is brokered per job (ADR-draft-identity-aware-worker-execution §4):
+// ATLAS_SHAREPOINT_<NAME>_BROKERED=1 says the worker holds no credential for that
+// instance at all and asks the server for a short-lived token each time it is allowed
+// to act. Only its endpoint is known here.
+func sharepointSourcesFromEnv(env func(string) string) (*sharepoint.Registry, []string, map[string]string, error) {
 	names := splitAndTrim(env(sharepointEnvPrefix + "CONNECTORS"))
 	if len(names) == 0 {
 		// Unconfigured, not misconfigured — a nil registry and no error, which the
@@ -38,21 +48,26 @@ func sharepointRegistryFromEnv(env func(string) string) (*sharepoint.Registry, [
 		// whose bundle does not build, below, is still an error: the operator named
 		// it, so the omission is a mistake to report at startup rather than a queue to
 		// lease work from and then fail.
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	reg := sharepoint.NewRegistry()
+	brokered := map[string]string{}
 	for _, name := range names {
 		key := sharepointEnvPrefix + envFold(name) + "_"
+		if env(key+"BROKERED") == "1" {
+			brokered[name] = env(key + "ENDPOINT")
+			continue
+		}
 		client, err := sharepoint.NewProviderClient(sharepoint.ProviderConfig{
 			Endpoint: env(key + "ENDPOINT"),
 			Secret:   env(key + "CREDENTIALS"),
 		})
 		if err != nil {
-			return nil, nil, fmt.Errorf("worker: sharepoint worker %q is not usable: %w (set %sCREDENTIALS to the credential bundle)", name, err, key)
+			return nil, nil, nil, fmt.Errorf("worker: sharepoint worker %q is not usable: %w (set %sCREDENTIALS to the credential bundle)", name, err, key)
 		}
 		reg.Register(name, client)
 	}
-	return reg, names, nil
+	return reg, names, brokered, nil
 }
 
 // RunSharePointJob performs a resolved SharePoint task through a registry the caller
@@ -65,16 +80,48 @@ func sharepointRegistryFromEnv(env func(string) string) (*sharepoint.Registry, [
 // disagree about what a resolved SharePoint task means — only about which instances
 // are in reach.
 func RunSharePointJob(ctx context.Context, j Job, reg *sharepoint.Registry) (map[string]any, error) {
+	return runSharePointJob(ctx, j, reg, nil)
+}
+
+// runSharePointJob asks the server first (ADR-draft-identity-aware-worker-execution
+// §5). A governed Worker's action runs only on a permit or in shadow, on the
+// parameters the decision covers, and — for a brokered instance — with the credential
+// that came with the permit and nothing else.
+func runSharePointJob(ctx context.Context, j Job, reg *sharepoint.Registry, brokered map[string]string) (map[string]any, error) {
 	if j.Connector == nil {
 		return nil, fmt.Errorf("sharepoint: the job carried no resolved connector detail; is this server offloading the sharepoint kind?")
 	}
-	raw, err := json.Marshal(j.Connector.Fields)
+	auth, err := Authorize(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("sharepoint: could not ask whether this action may run: %w", err)
+	}
+	fields := j.Connector.Fields
+	if auth.Governed() {
+		if auth.Enforced && !auth.Permitted {
+			return nil, Refused()
+		}
+		// The parameters the decision covers, not the ones handed over at lease time.
+		if auth.Job != nil {
+			fields = auth.Job
+		}
+	}
+	raw, err := json.Marshal(fields)
 	if err != nil {
 		return nil, err
 	}
 	var task sharepoint.Job
 	if err := json.Unmarshal(raw, &task); err != nil {
 		return nil, fmt.Errorf("sharepoint: cannot read the resolved detail: %w", err)
+	}
+	if endpoint, ok := brokered[task.Connector]; ok {
+		// A brokered instance acts only with the credential its permit carried: there is
+		// no other one here to fall back to, by design.
+		if auth == nil || auth.Credential == nil || auth.Credential.AccessToken == "" {
+			return nil, fmt.Errorf("sharepoint: worker %q acts only with a credential brokered for a permitted action, and none came with this job", task.Connector)
+		}
+		one := sharepoint.NewRegistry()
+		one.Register(task.Connector, sharepoint.NewGraphClient(staticToken(auth.Credential.AccessToken), endpoint))
+		reg = one
 	}
 	res, err := sharepoint.Run(ctx, task, reg)
 	if err != nil {
@@ -93,3 +140,8 @@ func RunSharePointJob(ctx context.Context, j Job, reg *sharepoint.Registry) (map
 	}
 	return out, nil
 }
+
+// staticToken is a brokered access token: valid for one job, never refreshed here.
+type staticToken string
+
+func (t staticToken) Token(context.Context) (string, error) { return string(t), nil }

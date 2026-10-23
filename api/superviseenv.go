@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/authz"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/mail"
@@ -905,6 +906,21 @@ func (s *Server) sharepointWorkerEnv() []string {
 				logging.Warn(logging.WorkerSupervisorFailed,
 					"two sharepoint workers share one environment name; the second is not handed to the supervised worker",
 					slog.String("connector", c.Name), slog.String("collidesWith", first))
+				continue
+			}
+			// A delegated Worker's credential is brokered per authorized job and never
+			// handed over whole (ADR-draft-identity-aware-worker-execution §4): the child
+			// learns only where the Graph is and that it must ask for a token, so a
+			// compromised child holds no refresh token and no app secret for it.
+			if c.Identity != nil && authz.IsDelegated(c.Identity.Mode) {
+				taken[envKey] = c.Name
+				key := sharepointEnvPrefix + envKey + "_"
+				if endpoint := strings.TrimSpace(c.Endpoint); endpoint != "" {
+					env = append(env, key+"ENDPOINT="+endpoint)
+				}
+				env = append(env, key+"BROKERED=1")
+				addName(c.Name)
+				fromStore = true
 				continue
 			}
 			bundle := strings.TrimSpace(s.resolveConnectorSecret(c.CredentialsRef))

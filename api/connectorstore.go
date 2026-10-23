@@ -167,6 +167,13 @@ type configuredWorker struct {
 	Visibility string          `json:"visibility,omitempty"` // "private" | "shared"
 	Members    []projectMember `json:"members,omitempty"`
 	UpdatedAt  int64           `json:"updatedAt,omitempty"`
+
+	// Identity is the Worker's identity policy
+	// (ADR-draft-identity-aware-worker-execution §11): as whom its actions run, for
+	// whom, and whether a decision is enforced or only recorded. Unlike the ownership
+	// fields above, the runtime does consult it — through the enforcement point. Nil
+	// is a legacy Worker, which behaves as every Worker did before.
+	Identity *workerIdentity `json:"identity,omitempty"`
 }
 
 // connector is the compatibility name used by the existing connector-oriented API

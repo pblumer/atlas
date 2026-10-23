@@ -594,6 +594,7 @@ func (s *Server) buildRemedyClients() (map[string]remedy.Client, map[string]stri
 // goroutine, inside the same s.do closure that saved the change, so the rebuild sees
 // the write.
 func (s *Server) rebuildConnectorRegistries() error {
+	s.refreshGoverned()
 	for _, k := range managedConnectorKinds {
 		// A worker-only kind has no in-engine registry to rebuild: it is served by a
 		// supervised worker, which refreshSupervisedWorkers restarts when its store
