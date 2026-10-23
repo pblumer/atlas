@@ -7331,7 +7331,9 @@ async function viewWorkers() {
             title="Show the jobs this worker ran">${w.worker ? esc(w.worker) : "(unnamed)"}</a></b></td>
           <td>${Object.keys(w.types || {}).sort()
             .map((t) => `<span class="pill-kv">${esc(t)}</span>`).join(" ") || `<span class="muted">&mdash;</span>`}</td>
-          <td>${(w.connectors || []).map((c) => `<span class="pill-kv">${esc(c)}</span>`).join(" ")
+          <td>${(w.connectors || []).map((c) => `<span class="pill-kv">${esc(c)}${
+              w.endpoints && Object.hasOwn(w.endpoints, c)
+                ? ` <span class="muted">&rarr; ${esc(w.endpoints[c])}</span>` : ""}</span>`).join(" ")
             || `<span class="muted">&mdash;</span>`}</td>
           <td class="wk-num">${w.leased}</td>
           <td class="wk-num">${w.pulled}</td>

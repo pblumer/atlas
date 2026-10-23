@@ -216,8 +216,12 @@ func ArchiMate(s Snapshot, m Meta) []byte {
 		}
 		targetProps := map[string]string{"atlas.derivedKind": "targetSystem"}
 		endpointProps(targetProps, *site.Endpoint)
+		source := "as its configuration on the recording installation names it"
+		if site.EndpointReported {
+			source = "as the worker instances serving it reported it"
+		}
 		target := add(archElement{id: fmt.Sprintf("id-target-%d", i+1), typ: "Node", name: site.Endpoint.Host,
-			doc: "The system worker " + d.Name + " connects to, as its configuration on the recording installation names it.", props: targetProps})
+			doc: "The system worker " + d.Name + " connects to, " + source + ".", props: targetProps})
 		pathProps := map[string]string{"atlas.derivedKind": "connection", "atlas.connection.initiator": initiatorKind}
 		endpointProps(pathProps, *site.Endpoint)
 		path := add(archElement{id: fmt.Sprintf("id-connection-%d", i+1), typ: "Path", name: site.Endpoint.String(),
