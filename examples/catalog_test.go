@@ -199,6 +199,8 @@ var catalogSources = []catalogSource{
 		ID: "mssql-eintrittsmeldung", App: "Beispiel: Eintrittsmeldung (MS SQL)",
 		Files: []string{"mssql-eintrittsmeldung.bpmn"},
 	},
+	{ID: "sharepoint-fallakte", App: "Beispiel: Fallakte (SharePoint)", Dir: "sharepoint-fallakte",
+		Main: "sharepoint-fallakte/sharepoint-fallakte.bpmn"},
 
 	// --- Identität & Verzeichnis ---
 	{
