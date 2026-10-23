@@ -196,6 +196,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   are both kept, and so are CSV's columns, one attribute the catalog describes twice (names,
   or name:width) with one description always hidden. Assertions are on the exported XML,
   because a hidden attribute is what the compiler refuses and the panel cannot show.
+- **`googlecontacts-modeler.spec.mjs`** (ADR-0476): the **Google
+  Contacts Worker Type in the Implement panel** — choosing it starts on Find contacts and
+  shows the query, custom field, label and bound a find takes; switching a find to an update
+  drops what only a find takes; a delete offers and writes no result variable; and a
+  contact given by a variable hides the inline values and keeps the variable across an
+  unrelated edit. Assertions are on the exported XML, which is what the compiler checks.
 - **`documentation-modeler.spec.mjs`** (ADR-0025): the **Documentation** property — every
   element (task, gateway, event, sequence flow, data object) shows the `<bpmn:documentation>`
   its model carries and writes an edit back onto that element, blanking it drops the child
@@ -684,6 +690,12 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   with enforcement off it is offered. Operations keeps its working pages and the incident
   count on the bar and puts the rest behind **Diagnostics**, whose mock tools only an
   administrator sees.
+- **`workers-endpoints.spec.mjs`**
+  ([ADR-0471](../docs/adr/0471-release-architecture-sketch.md)): **Operations → Workers**
+  against a stubbed API. A worker name a Worker Instance holds shows the endpoint the
+  instance reported for it beside the name. A name without a report shows the name alone,
+  including one that is also an inherited object property. A reported value is drawn as
+  text, never as markup.
 
 ## Rendering a conformance gallery diagram
 

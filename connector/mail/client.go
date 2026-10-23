@@ -142,8 +142,7 @@ func (c *SMTPClient) Mailbox() (Mailbox, error) {
 		return nil, c.mailboxErr
 	}
 	if c.mailbox == nil {
-		return nil, fmt.Errorf("mail: this SMTP worker has no IMAP endpoint, so it cannot read a mailbox " +
-			"(set the worker's mailbox endpoint, e.g. imaps://imap.example.com:993)")
+		return nil, errNoIMAPEndpoint
 	}
 	return c.mailbox, nil
 }

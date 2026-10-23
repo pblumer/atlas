@@ -915,6 +915,11 @@ const WORKER_TYPES = [
     refs: "ADR-0463 \u00b7 ADR-0172", status: "active", statusLabel: "configured below",
   },
   {
+    id: "googlecontacts", name: "Google Contacts", kind: "Contacts",
+    desc: "Uses a Google address book from a process: finds a contact by e-mail address, phone number or a custom field such as a customer number, reads, lists, creates, updates and deletes contacts, puts a label such as Kunden on one or takes it off, and searches the organization\u0027s Workspace directory for a colleague. A contact arrives as one flat object (email, phone, organization, address, fields, groups) rather than as Google\u0027s lists of entries. Find reads the address book itself, exact and current, so a process asking whether a customer is known does not get the stale answer Google\u0027s search cache can give. Configure each address book below: a service account acting as a Workspace user, or a person\u0027s refresh token, lives in the vault and never enters a model. Worker-only, and atlas supervises the worker for it.",
+    refs: "ADR-0476", status: "active", statusLabel: "configured below",
+  },
+  {
     id: "mssql", name: "Microsoft SQL Server", kind: "Database",
     desc: sqlWorkerTypeDesc("Microsoft SQL Server", "MSSQL", "@p1", "SQL Server is the one product of the three that also binds them by name (@id), which is why an object-shaped parameters variable is accepted here and refused by the other two."),
     refs: "ADR-0173 \u00b7 ADR-0188 \u00b7 ADR-0221", status: "active", statusLabel: "configured below",
@@ -4898,7 +4903,7 @@ function wireWorkerManagement(workers) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="teamsphone">Microsoft Teams Phone</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="teamsphone">Microsoft Teams Phone</option><option value="googlecontacts">Google Contacts</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field provider-field" style="margin:0"><span class="provider-label">Provider</span><select name="provider"></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -5254,10 +5259,13 @@ async function toggleInboundSubs(row, workerId, kind) {
   const list = subs.map((s) => `<tr data-sid="${esc(s.id)}">
       <td><code>${esc(s.jql || s.spreadsheetId || s.folderId || s.channelId || s.mailFolder || s.watchedSubject)}</code>${s.mailFolder ? ` <span class="muted">(new mail${(s.allowedSenders || []).length ? " from " + esc(s.allowedSenders.join(", ")) : " from anyone"}${s.requireDmarcPass ? ", DMARC pass" : ""}${s.includeBody ? ", with body" : ", metadata only"})</span>` : ""}${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}${s.spreadsheetId ? ` <span class="muted">(rows in ${esc(s.watchRange || "A:Z")})</span>` : ""}${s.folderId ? ` <span class="muted">(files ${esc(s.cursorField || "created")})</span>` : ""}${s.channelId ? ' <span class="muted">(new messages)</span>' : ""}</td>
       <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
-      <td>${s.enabled
-        ? '<span class="pill ok"><span class="dot"></span>on</span>'
-        : `<span class="pill warn" title="${esc(s.disabledReason || "Switched off.")}"><span class="dot"></span>off</span>`
-          + (s.disabledReason ? ` <span class="muted">${esc(s.disabledReason)}</span>` : "")}</td>
+      <td>${!s.enabled
+        ? `<span class="pill warn" title="${esc(s.disabledReason || "Switched off.")}"><span class="dot"></span>off</span>`
+          + (s.disabledReason ? ` <span class="muted">${esc(s.disabledReason)}</span>` : "")
+        : s.lastError
+        ? `<span class="pill err" title="${esc(s.lastError)}"><span class="dot"></span>not reading</span>`
+          + ` <span class="muted">since ${esc(fmtTime(s.failingSince))}: ${esc(s.lastError)}</span>`
+        : '<span class="pill ok"><span class="dot"></span>on</span>'}</td>
       <td style="text-align:right"><button class="btn ghost danger" data-sdel title="Delete this subscription">Delete</button></td>
     </tr>`).join("") || `<tr><td colspan="4" class="muted" style="padding:10px">No subscriptions. Add one below to have clio events start or wake processes.</td></tr>`;
   const isJira = kind === "jira";
@@ -5290,7 +5298,7 @@ async function toggleInboundSubs(row, workerId, kind) {
     ? `<label class="field" style="grid-column:1 / span 2;margin:0"><span>Allowed senders (optional, comma-separated)</span><input name="allowedSenders" placeholder="kunde@example.com, @lieferant.ch"/></label>
       <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center"><input type="checkbox" name="requireDmarcPass"/><span>Require a DMARC pass</span></label>
       <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center"><input type="checkbox" name="includeBody"/><span>Include the text</span></label>
-      <div class="muted" style="grid-column:1 / -1">The folder is an IMAP folder name, a Gmail label id (<code>INBOX</code>, <code>Label_…</code>) or a Microsoft folder id or well-known name (<code>inbox</code>, <code>archive</code>); empty is the inbox. The correlation key (FEEL) sees <code>messageId</code>, <code>internetMessageId</code>, <code>from</code>, <code>fromName</code>, <code>replyTo</code>, <code>to</code>, <code>cc</code>, <code>subject</code>, <code>receivedAt</code>, <code>unread</code>, <code>hasAttachments</code>, <code>attachments</code>, <code>auth</code> (<code>spf</code>, <code>dkim</code>, <code>dmarc</code>), <code>folder</code>, <code>eventType</code> — and <code>body</code> when the text is included. These are also seeded as process variables; <code>messageId</code> is what a mail task's operation addresses. A new watch is forward-only, so the mail already in the folder is skipped.</div>`
+      <div class="muted" style="grid-column:1 / -1">The folder is an IMAP folder name, a Gmail label id (<code>INBOX</code>, <code>Label_…</code>) or a Microsoft folder id or well-known name (<code>inbox</code>, <code>archive</code>); empty is the inbox. The correlation key (FEEL) sees <code>messageId</code>, <code>internetMessageId</code>, <code>from</code>, <code>fromName</code>, <code>replyTo</code>, <code>to</code>, <code>cc</code>, <code>subject</code>, <code>receivedAt</code>, <code>unread</code>, <code>hasAttachments</code>, <code>attachments</code>, <code>auth</code> (<code>spf</code>, <code>dkim</code>, <code>dmarc</code>), <code>folder</code>, <code>eventType</code> — and <code>body</code> when the text is included, by these names or under <code>mail</code> (<code>mail.internetMessageId</code>). The process receives them as one variable, <code>mail</code>: <code>mail.from</code>, <code>mail.subject</code>, <code>mail.auth.dmarc</code>; <code>mail.messageId</code> is what a mail task's operation addresses. A new watch is forward-only, so the mail already in the folder is skipped.</div>`
     : isDiscord
     ? `<div class="muted" style="grid-column:1 / -1">In Discord, enable <b>Developer Mode</b> (User Settings &rsaquo; Advanced) and use the channel's <b>Copy Channel ID</b>. A thread is itself a channel, so a thread's id works here too. The correlation key (FEEL) sees <code>messageId</code>, <code>channelId</code>, <code>content</code>, <code>authorId</code>, <code>authorName</code>, <code>authorBot</code>, <code>timestamp</code>, <code>eventType</code>, and <code>message</code> — the whole message, for anything not named here. These are also seeded as process variables on the started instance. <b>Guard against your own bot</b>: if this Worker also posts into this channel, key or condition on <code>authorBot</code>, or the watch will react to what it wrote. A new watch is forward-only, so the messages already in the channel are skipped.</div>`
     : isGoogle
@@ -7331,7 +7339,9 @@ async function viewWorkers() {
             title="Show the jobs this worker ran">${w.worker ? esc(w.worker) : "(unnamed)"}</a></b></td>
           <td>${Object.keys(w.types || {}).sort()
             .map((t) => `<span class="pill-kv">${esc(t)}</span>`).join(" ") || `<span class="muted">&mdash;</span>`}</td>
-          <td>${(w.connectors || []).map((c) => `<span class="pill-kv">${esc(c)}</span>`).join(" ")
+          <td>${(w.connectors || []).map((c) => `<span class="pill-kv">${esc(c)}${
+              w.endpoints && Object.hasOwn(w.endpoints, c)
+                ? ` <span class="muted">&rarr; ${esc(w.endpoints[c])}</span>` : ""}</span>`).join(" ")
             || `<span class="muted">&mdash;</span>`}</td>
           <td class="wk-num">${w.leased}</td>
           <td class="wk-num">${w.pulled}</td>

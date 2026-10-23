@@ -25,6 +25,7 @@ import (
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/exchange"
+	"github.com/pblumer/atlas/connector/googlecontacts"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
@@ -6489,11 +6490,18 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		// process's environment. Reporting it here is what lets the Workers view say
 		// which names deployed models reference and *nothing* can serve (ADR-0168).
 		Connectors []string `json:"connectors,omitempty"`
+		// Endpoints are where those workers connect, keyed by worker name, as the
+		// worker reduced them to scheme, host and port (ADR-0471). The server reduces
+		// them again before keeping them — a report is input, not a promise — and an
+		// architecture sketch draws them for workers the server holds no
+		// configuration for.
+		Endpoints map[string]string `json:"endpoints,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
+	reported := reportedEndpoints(body.Connectors, body.Endpoints)
 	body.Type = strings.TrimSpace(body.Type)
 	if body.Type == "" {
 		httpapi.Error(w, http.StatusBadRequest, "type is required: a worker leases by job type")
@@ -6605,7 +6613,7 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			// Recorded on every poll, not just a productive one: an idle worker still
 			// holds its workers, and it is exactly the idle case an operator is
 			// looking at when work is not moving.
-			s.workers.holdsConnectors(body.Worker, body.Connectors)
+			s.workers.holdsConnectors(body.Worker, body.Connectors, reported)
 		})
 	}
 
@@ -7046,6 +7054,21 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		return &connectorPayload{Kind: "teamsphone", Fields: map[string]any{
 			"connector": j.Connector, "operation": j.Operation, "args": j.Args,
 			"resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
+		}}
+	case compiler.GoogleContactsJobTypeIndex:
+		// Exchange's arm with an address book's operation: the evaluated values travel,
+		// and nothing that says whose address book or as whom — that and the credential
+		// exist only on the worker (ADR-0476). The codes the
+		// process catches travel too, so a missing contact can take the process's path
+		// for it (ADR-0461).
+		j, err := googlecontacts.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "googlecontacts", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "contactId": j.ContactID,
+			"query": j.Query, "field": j.Field, "group": j.Group, "contact": j.Contact,
+			"maxResults": j.MaxResults, "resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
 		}}
 	case compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex:
 		// One arm for the three clio operations: the resolved job says which it is, so

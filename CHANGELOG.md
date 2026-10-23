@@ -46,6 +46,32 @@ governs a Worker:
 
 ### Added
 
+- **A process finds, keeps and labels the people in a Google address book.** A new
+  Google Contacts Worker Type finds a contact by e-mail address, phone number or a custom
+  field such as a customer number, reads, lists, searches, creates, updates and deletes
+  contacts, puts a label such as *Kunden* on one or takes it off, and searches the
+  Workspace directory for a colleague. A contact arrives as one flat object — `email`,
+  `phone`, `organization`, `address`, `fields`, `groups` — and is written with the same
+  keys: null leaves a value as it is, `""` clears it, `email` changes the primary address
+  and keeps the others. `find-contacts` reads the address book itself, so a process asking
+  whether a customer is known is not misled by Google's search cache. The credential — a
+  service account acting as a Workspace user, or a refresh token — lives in the vault and
+  reaches only the supervised worker; a missing contact can be caught as
+  `GOOGLECONTACTS_CONTACT_NOT_FOUND`
+  ([ADR-0476](docs/adr/0476-google-contacts-worker.md)).
+
+- **A worker reports where its workers connect.** `atlas worker` now sends, beside the
+  worker names it holds, the endpoint each one's configuration names, reduced to scheme,
+  host and port before it leaves the worker, so a credential or a path in it never
+  does; any worker may do the same through the new optional `endpoints` field of
+  `POST /api/v1/jobs/activate`. The server reduces what it is told again, keeps only
+  the endpoints of names the same poll reported, and shows them in the Workers view.
+  A release's architecture sketch draws a reported endpoint, marked as reported, for a
+  worker the server holds no configuration for; instances that report different
+  endpoints for one name are recorded as disagreeing rather than one of them being
+  drawn, and a reported endpoint is shown only to operators
+  ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
+
 - **The architecture sketch shows where a release's connections go.** A release now also
   records what the installation that recorded it had in place for it: its name and
   environment, its external address (`--external-url`), the public start links of its
@@ -57,8 +83,7 @@ governs a Worker:
   ArchiMate document adds the worker processes, the target systems and the connections
   between them. An endpoint is shown only to a reader who may see that worker's
   configuration and the instances only to an operator; everybody else is told they are
-  withheld. A worker that keeps its own configuration does not report its endpoint yet
-  ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
+  withheld ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
 
 - **Approvals in the Console.** **Approvals** (account menu, and a tile on the dashboard
   when some wait) lists the open action approvals a person may answer and the ones asked on
@@ -215,7 +240,14 @@ governs a Worker:
   `package-lock.json` — by the recipe in `ATLAS-VENDORED.txt`, and a test holds both to
   the checksums recorded there. Two builds give the same bytes. The bundles they replace
   were built without a lockfile and cannot be rebuilt byte for byte.
-
+- **A mail watch hands the mail to the process as one object, `mail`.** The instance
+  receives `mail.from`, `mail.subject`, `mail.to`, `mail.auth.dmarc`, `mail.messageId`
+  and the other envelope fields under one variable, instead of each as a variable of its
+  own, which overwrote a process's own `from`, `to` or `subject` when a reply arrived at a
+  catch event. **A model that reads a mail field directly must read it under `mail`
+  now** — `from` becomes `mail.from`, and a mail task's `messageId` becomes
+  `mail.messageId`. A watch's correlation key is unchanged: it sees the flat names as
+  before, and `mail` beside them ([ADR-0438](docs/adr/0438-mailbox-worker.md)).
 - **A governed SharePoint Worker asks before it acts.** When its Worker has an identity
   policy, the SharePoint Worker asks Atlas before each action, and in delegated mode
   calls Graph only with the token Atlas released for that action.
@@ -284,6 +316,21 @@ governs a Worker:
   the collaboration replay, and a message with a time to live is kept for the subscription
   that opens later. What earlier versions wrote stays as it was
   ([ADR-0370](docs/adr/0370-durable-message-buffer.md), amended 2026-10-23).
+- **An inbound watch says why it is not reading.** A watch whose Worker had no mailbox,
+  no client or was switched off was skipped at every poll, and a read or first read its
+  source refused was retried every tick, all without a word: from outside it looked
+  exactly like a source with nothing new. Each such watch now carries `lastError` and
+  `failingSince` (unix seconds) in `GET /api/v1/connectors/{id}/inbound-subscriptions`
+  and, for a viewer of its Worker, in its `inbound-watch` row of the message sources; the
+  Console shows it as *not reading*, and the log has `inbound_watch.failing` once when it
+  begins and `inbound_watch.recovered` when a read succeeds again. The state is kept in
+  memory, not in the watch, and is learned again at the first read after a restart
+  ([ADR-0438](docs/adr/0438-mailbox-worker.md)).
+- **A mail watch on a Worker with no mailbox is refused.** An SMTP Worker without an IMAP
+  endpoint, a Preview Worker or a Graph Worker without a sender cannot read a mailbox, and
+  a watch created on one was stored and then never read anything. Creating one is now a
+  400 that says what is missing. Watches stored before are kept and report the reason as
+  their `lastError`.
 - **A SharePoint task that names `create-item` keeps its list and columns in the
   Modeler.** The panel showed the list and the column table only for a task with no
   operation, so a model spelling `operation="create-item"` out lost both on its next

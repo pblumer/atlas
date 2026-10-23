@@ -630,8 +630,11 @@ type Server struct {
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
 	// is that bridge's poll cadence (WithInboundPollInterval; 0 disables the bridge).
-	inboundSubs *inboundSubStore
-	inboundPoll time.Duration
+	// inboundHealth is why each watch that cannot read its source is not reading —
+	// runtime only, like feedPushes below.
+	inboundSubs   *inboundSubStore
+	inboundPoll   time.Duration
+	inboundHealth *inboundHealth
 	// feedSubs holds the event feed's push subscriptions and feedPush the cadence they
 	// are delivered at (WithFeedPushInterval; 0 disables delivery). feedPushes is each
 	// subscription's runtime hold after a failed delivery, feedPushClient and
@@ -1685,6 +1688,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		repository:        repositoryCatalog,
 		repositoryStore:   repositoryStore,
 		inboundSubs:       inboundSubs,
+		inboundHealth:     newInboundHealth(),
 		feedSubs:          feedSubs,
 		feedPushes:        newFeedPushState(),
 		settings:          settings,

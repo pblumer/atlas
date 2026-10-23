@@ -143,6 +143,11 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.TeamsPhone.Retries },
 		compile: compileTeamsPhoneConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.GoogleContacts != nil },
+		retries: func(st xmlServiceTask) string { return st.GoogleContacts.Retries },
+		compile: compileGoogleContactsConnectorTask,
+	},
 }
 
 // The directory-file formats and directions a model can author. They are spelled here

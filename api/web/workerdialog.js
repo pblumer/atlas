@@ -119,6 +119,10 @@ export function workerShape(kind, provider) {
   // Discord is Google Sheets' shape: one API base for everyone, so the credential is
   // the whole configuration and there is no endpoint to author.
   const discord = kind === "discord";
+  // Google Contacts is Google Sheets' shape: the People API's address is the same for
+  // everyone, so the credential bundle — which also says whose address book — is the
+  // whole configuration.
+  const googlecontacts = kind === "googlecontacts";
   // S3 is the one bundle kind whose endpoint is still worth authoring, and it carries
   // two meanings at once: empty is AWS at the region the bundle names, and anything else
   // is the store the installation runs — which is also what decides that its buckets are
@@ -148,7 +152,7 @@ export function workerShape(kind, provider) {
   const sql = kind === "postgres" || kind === "mariadb" || kind === "mssql";
   // Kinds that default their API base and authenticate with a credential bundle
   // instead of dialing a host:port. Remedy is not one: it needs both.
-  const bundle = native || sharepoint || entra || teamsphone || sql || googlesheets || discord;
+  const bundle = native || sharepoint || entra || teamsphone || sql || googlesheets || googlecontacts || discord;
   return {
     mail,
     sql,
@@ -220,6 +224,8 @@ export function workerShape(kind, provider) {
       ? "Credential reference (vault {accessKeyId, secretAccessKey, region})"
       : exchange
       ? "Credential reference (vault {organization, clientId, certificate} or {target: onprem, …})"
+      : googlecontacts
+      ? "Credential reference (vault Google auth bundle with subject)"
       : googlesheets
       ? "Credential reference (vault Google auth bundle)"
       : jira
@@ -242,6 +248,8 @@ export function workerShape(kind, provider) {
       ? "s3_archiv (vault {accessKeyId, secretAccessKey, region})"
       : exchange
       ? "exo_contoso (vault Exchange bundle)"
+      : googlecontacts
+      ? "google_contacts_verkauf (vault JSON bundle)"
       : googlesheets
       ? "google_sheets_auth (vault JSON bundle)"
       : jira
@@ -264,6 +272,8 @@ export function workerShape(kind, provider) {
       ? "The credential reference names a vault bundle holding the access key \u2014 never a value: <code>{\"accessKeyId\": \"\u2026\", \"secretAccessKey\": \"\u2026\", \"region\": \"eu-central-1\"}</code>, plus <code>\"sessionToken\"</code> for a key issued by STS. The <b>region belongs in the bundle</b> because the request signature is computed with it. Leave the <b>endpoint empty for AWS</b>; for MinIO, Ceph, Garage, R2 or Wasabi enter the store\u0027s base URL \u2014 which is also what tells atlas to address buckets in the path. The <b>bucket is not part of this record</b>: a task names it, so one key can serve several."
       : exchange
       ? "The credential reference names a vault bundle that says which organization this is and as whom \u2014 never a value. <b>Exchange Online:</b> <code>{\"organization\": \"contoso.onmicrosoft.com\", \"clientId\": \"\u2026\", \"certificate\": \"-----BEGIN CERTIFICATE-----\u2026-----BEGIN PRIVATE KEY-----\u2026\"}</code> for an app registration with <code>Exchange.ManageAsApp</code> and an Exchange role; leave the <b>endpoint empty</b>. <b>Exchange Server:</b> <code>{\"target\": \"onprem\"}</code>, with <code>username</code> and <code>password</code> unless the worker runs as a Kerberos service account, and the server\u0027s <b>Remote PowerShell URI</b> as endpoint \u2014 that worker needs PowerShell on its host, in practice a Windows domain member running <code>atlas worker --connector exchange</code>."
+      : googlecontacts
+      ? "The credential reference names a JSON auth bundle in the vault \u2014 never a secret value \u2014 and the bundle also says <b>whose address book</b> this Worker uses. In a Google Workspace: <code>{\"method\": \"serviceAccount\", \"clientEmail\": \"\u2026@\u2026.iam.gserviceaccount.com\", \"privateKey\": \"-----BEGIN PRIVATE KEY-----\u2026\", \"subject\": \"verkauf@firma.ch\"}</code>; the <b>subject is required</b>, because a service account has no contacts of its own, and the service account needs <b>domain-wide delegation</b> for the contacts scope. For a gmail.com account: <code>{\"method\": \"refreshToken\", \"clientId\": \"\u2026\", \"clientSecret\": \"\u2026\", \"refreshToken\": \"\u2026\"}</code>. Search directory needs the directory scope as well: add <code>\"scope\": \"https://www.googleapis.com/auth/contacts https://www.googleapis.com/auth/directory.readonly\"</code>. One Worker per address book."
       : googlesheets
       ? "The credential reference names a JSON auth bundle in the vault \u2014 never a secret value. A <b>service account</b> is the normal shape: <code>{\"method\": \"serviceAccount\", \"clientEmail\": \"\u2026@\u2026.iam.gserviceaccount.com\", \"privateKey\": \"-----BEGIN PRIVATE KEY-----\u2026\"}</code>, copied out of the JSON key file Google hands out. A service account owns nothing by itself: <b>share each spreadsheet or folder with its address</b>, exactly as you would with a colleague, or it will read a 403 where you see a document."
       : ad

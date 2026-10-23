@@ -2447,6 +2447,11 @@ type xmlServiceTask struct {
 	// resource account, a call queue or an auto attendant, or remove one — against a
 	// tenant an operator configured.
 	TeamsPhone *xmlTeamsPhoneConnector `xml:"extensionElements>teamsPhoneConnector"`
+	// GoogleContacts, when present, marks this service task a Google Contacts task
+	// (ADR-0476): one operation on an address book — find, read,
+	// list, create, update or delete a contact, label one, or search the organization's
+	// directory — through an account a *worker* holds the credential for.
+	GoogleContacts *xmlGoogleContactsConnector `xml:"extensionElements>googleContactsConnector"`
 	// Agent, when present, marks this service task an AI task: one call to a language
 	// model, one answer into one variable (ADR-0256). It is the same extension element an
 	// ad-hoc container carries, read for its other half — prompt and resultVariable rather
@@ -2717,6 +2722,29 @@ type xmlExchangeConnector struct {
 	ParametersVariable string `xml:"parametersVariable,attr"`
 	MaxResults         string `xml:"maxResults,attr"`
 	ResultVariable     string `xml:"resultVariable,attr"`
+	// Retries is the task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlGoogleContactsConnector is the <atlas:googleContactsConnector> extension on a
+// service task (ADR-0476). connector names the Google Contacts
+// Worker (literal-or-FEEL); there is no credential attribute, because none enters the
+// engine. operation is a row of connector/googlecontacts/catalog. contactId, query,
+// field and group are literal-or-FEEL values; contact is the contact object as a JSON
+// object whose string leaves may be =FEEL, and contactVariable names a variable holding
+// that object instead. maxResults bounds a listing; resultVariable receives the answer.
+type xmlGoogleContactsConnector struct {
+	Connector       string `xml:"connector,attr"`
+	Operation       string `xml:"operation,attr"`
+	ContactID       string `xml:"contactId,attr"`
+	Query           string `xml:"query,attr"`
+	Field           string `xml:"field,attr"`
+	Group           string `xml:"group,attr"`
+	Contact         string `xml:"contact,attr"`
+	ContactVariable string `xml:"contactVariable,attr"`
+	MaxResults      string `xml:"maxResults,attr"`
+	ResultVariable  string `xml:"resultVariable,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

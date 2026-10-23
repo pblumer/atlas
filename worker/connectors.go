@@ -28,6 +28,7 @@ import (
 	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/webscrape"
+	"github.com/pblumer/atlas/internal/endpoint"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -63,7 +64,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 	if env == nil {
 		env = func(string) string { return "" }
 	}
-	built := Connectors{Handlers: map[string]Exec{}, Queries: map[string]QueryFunc{}}
+	built := Connectors{Handlers: map[string]Exec{}, Queries: map[string]QueryFunc{}, Endpoints: map[string]string{}}
 	for _, kind := range kinds {
 		switch kind {
 		case "csv":
@@ -451,6 +452,23 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.ExchangeJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunExchangeJob(ctx, j, reg)
 			})
+		case "googlecontacts":
+			reg, names, err := googleContactsRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve Google Contacts, holding no address book. Not an error,
+				// for Exchange's reason: the kind is supervised by default, and a server
+				// where nobody has configured one yet must park its tasks rather than
+				// restart this worker forever.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.GoogleContactsJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunGoogleContactsJob(ctx, j, reg)
+			})
 		case "jira":
 			reg, names, err := jiraRegistryFromEnv(env)
 			if err != nil {
@@ -521,7 +539,52 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 		}
 	}
 	sort.Strings(built.Names)
+	noteEndpoints(&built, kinds, env)
 	return built, nil
+}
+
+// endpointKeys names, per Worker Type, the variable a held worker's endpoint is read
+// from: <prefix><NAME>_<field>, the same one the kind's loader reads. A kind absent
+// here holds no endpoint of its own to report — its tasks author their own server
+// (ldap, rest, soap, scim), it has nothing to reach (csv, script), or its address is
+// a fixed service the configuration does not name (teamsphone).
+var endpointKeys = map[string]struct{ prefix, field string }{
+	"ad":           {adDirEnvPrefix, "URL"},
+	"agent":        {agentEnvPrefix, "ENDPOINT"},
+	"clio":         {clioEnvPrefix, "ENDPOINT"},
+	"discord":      {discordEnvPrefix, "URL"},
+	"entra":        {entraEnvPrefix, "BASE_URL"},
+	"exchange":     {exchangeEnvPrefix, "URL"},
+	"googlesheets": {googleSheetsEnvPrefix, "ENDPOINT"},
+	"jira":         {jiraEnvPrefix, "URL"},
+	"mail":         {mailEnvPrefix, "ENDPOINT"},
+	"remedy":       {remedyEnvPrefix, "ENDPOINT"},
+	"s3":           {s3EnvPrefix, "URL"},
+	"sharepoint":   {sharepointEnvPrefix, "ENDPOINT"},
+	"temis":        {temisEnvPrefix, "URL"},
+	// A People API base an operator behind a proxy names; empty for most, and then
+	// nothing is reported. A block of its own so the table above keeps its alignment.
+	"googlecontacts": {googleContactsEnvPrefix, "URL"},
+}
+
+// noteEndpoints records, for each worker name this worker holds, the endpoint its
+// configuration names — reduced to scheme, host and port here, before it is ever
+// reported, so a credential or a path in the configured value never leaves this
+// process (ADR-0471). A name whose kind configures no endpoint, or whose value is not
+// an address, is left out: an architecture sketch then says the endpoint is held by
+// the worker, which is true, rather than drawing something this worker never named.
+func noteEndpoints(built *Connectors, kinds []string, env func(string) string) {
+	for _, kind := range kinds {
+		key, ok := endpointKeys[kind]
+		if !ok {
+			continue
+		}
+		for _, name := range built.Names {
+			if a, ok := endpoint.Reduce(env(key.prefix + envFold(name) + "_" + key.field)); ok {
+				built.Endpoints[name] = a.String()
+			}
+		}
+	}
 }
 
 // Connectors is what a worker was configured to serve: the handlers, keyed by the
@@ -540,6 +603,10 @@ type Connectors struct {
 	// answers them for the same Workers.
 	Queries map[string]QueryFunc
 	Names   []string
+	// Endpoints are the endpoints the held names' configurations name, reduced to
+	// scheme, host and port, keyed by worker name. A worker reports them beside the
+	// names on every poll (ADR-0471).
+	Endpoints map[string]string
 	// Unconfigured are kinds this worker was asked to serve and holds no
 	// configuration for, so it does not subscribe to them. It is reported at startup
 	// rather than swallowed: "mail is not being served here" is the answer to why a
@@ -559,7 +626,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "agent", "clio", "csv", "discord", "entra", "exchange", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "teamsphone", "temis", "webscrape"}
+	return []string{"ad", "agent", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "teamsphone", "temis", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.

@@ -133,6 +133,7 @@ var releasedKinds = []releasedKind{
 	// Every SharePoint operation but create-item, which keeps the row above
 	// (ADR-0141, amended). One package describes both.
 	{JobType: compiler.SharePointOpsJobType, ADR: 141, Class: classConnector, Package: "atlas.sharepoint-create-item"},
+	{JobType: compiler.GoogleContactsJobType, Slug: "google-contacts-worker", Class: classConnector, Package: "atlas.google-contacts"},
 }
 
 // packagesOwed is how many released connector kinds have no Repository package right
