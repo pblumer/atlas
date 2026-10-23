@@ -26,6 +26,7 @@ import (
 	"github.com/pblumer/atlas/connector/temis"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/vault"
 )
 
 // clioReadScope builds the clio scope string granting read on a subject: the exact
@@ -71,6 +72,15 @@ func envConnectorSecret(ref string) string {
 func (s *Server) resolveConnectorSecret(ref string) string {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
+		return ""
+	}
+	// A Worker's reference is operator input, and whatever it resolves to is handed
+	// to the Worker — into a supervised child's environment among other places. A
+	// reserved name would hand over a person's delegated refresh token or a data
+	// subject's key, so it resolves to nothing (ADR-draft-identity-aware-worker-execution
+	// §3): delegated credentials leave Atlas only as short-lived access tokens, through
+	// the authorization endpoint.
+	if vault.IsReservedName(ref) {
 		return ""
 	}
 	if s.vault != nil {

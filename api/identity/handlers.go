@@ -1,0 +1,118 @@
+package identity
+
+import (
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
+
+	"github.com/pblumer/atlas/api/httpapi"
+)
+
+// The identity area's routes. Who may call them is the route table's (api/openapi.go):
+// everything here is reachable by any signed-in user, and each handler narrows that to
+// the caller's own connections, or an administrator.
+
+// view is what a caller is told about their identities and connections. It carries no
+// credential and no credential reference: the record has none to carry.
+type view struct {
+	Identities  []ExternalIdentity `json:"identities"`
+	Connections []Connection       `json:"connections"`
+}
+
+// HandleMine lists the caller's own identities and connections.
+func (s *Service) HandleMine(w http.ResponseWriter, r *http.Request) {
+	p := httpapi.PrincipalFrom(r.Context())
+	if p == nil || p.UserID == "" {
+		httpapi.Error(w, http.StatusUnauthorized, "sign in to see your connections")
+		return
+	}
+	ids, conns := s.ForOwner(p.UserID)
+	httpapi.JSON(w, http.StatusOK, view{Identities: ids, Connections: conns})
+}
+
+// HandleOfUser lists one user's identities and connections, for an administrator
+// answering "what can act as this person".
+func (s *Service) HandleOfUser(w http.ResponseWriter, r *http.Request) {
+	ids, conns := s.ForOwner(r.PathValue("id"))
+	httpapi.JSON(w, http.StatusOK, view{Identities: ids, Connections: conns})
+}
+
+// HandleRevoke withdraws a connection. Its owner may, and so may an administrator.
+func (s *Service) HandleRevoke(isAdmin func(*httpapi.Principal) bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		p := httpapi.PrincipalFrom(r.Context())
+		if p == nil || p.UserID == "" {
+			httpapi.Error(w, http.StatusUnauthorized, "sign in to revoke a connection")
+			return
+		}
+		var body struct {
+			Reason string `json:"reason"`
+		}
+		if err := decode(r, &body); err != nil {
+			httpapi.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		c, err := s.Revoke(r.PathValue("id"), p.UserID, isAdmin(p), strings.TrimSpace(body.Reason))
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		httpapi.JSON(w, http.StatusOK, c)
+	}
+}
+
+// HandleSetWorkers replaces the Workers allowed to act through a connection. Only the
+// owner may: it is their consent.
+func (s *Service) HandleSetWorkers(w http.ResponseWriter, r *http.Request) {
+	p := httpapi.PrincipalFrom(r.Context())
+	if p == nil || p.UserID == "" {
+		httpapi.Error(w, http.StatusUnauthorized, "sign in to change a connection")
+		return
+	}
+	var body struct {
+		Workers []string `json:"workers"`
+	}
+	if err := decode(r, &body); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	c, err := s.SetAllowedWorkers(r.PathValue("id"), p.UserID, body.Workers)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, c)
+}
+
+func decode(r *http.Request, into any) error {
+	b, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
+	if err != nil {
+		return err
+	}
+	if len(strings.TrimSpace(string(b))) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(b, into); err != nil {
+		return errors.New("invalid JSON body: " + err.Error())
+	}
+	return nil
+}
+
+func writeError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		httpapi.Error(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, ErrNotOwner):
+		// A connection somebody else owns is answered as one that does not exist for
+		// them, so the route cannot be used to learn which ids exist.
+		httpapi.Error(w, http.StatusNotFound, ErrNotFound.Error())
+	case errors.Is(err, ErrRevoked):
+		httpapi.Error(w, http.StatusConflict, err.Error())
+	case errors.Is(err, ErrUnknownWorker):
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+	default:
+		httpapi.Error(w, http.StatusInternalServerError, err.Error())
+	}
+}
