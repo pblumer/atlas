@@ -135,6 +135,9 @@ var mcpToolRoutes = map[string]string{
 	"atlas_feed_subscriptions":           "GET /api/v1/feed-subscriptions",
 	"atlas_event_catalog":                "GET /api/v1/event-catalog",
 	"atlas_event_listeners":              "GET /api/v1/event-catalog/listeners",
+	"atlas_signals":                      "GET /api/v1/signals",
+	"atlas_message_names":                "GET /api/v1/message-names",
+	"atlas_event_log":                    "GET /api/v1/event-log",
 	"atlas_resolve_incident":             "POST /api/v1/incidents/{key}/resolve",
 	"atlas_incident_summary":             "GET /api/v1/incidents/summary",
 	"atlas_resolve_incidents":            "POST /api/v1/incidents/resolve",
@@ -761,7 +764,7 @@ var mcpOmittedRoutes = map[string]string{
 	"PATCH /api/v1/feed-subscriptions/{id}":  "where the event feed is pushed is administrator configuration, like the worker it names",
 	"DELETE /api/v1/feed-subscriptions/{id}": "where the event feed is pushed is administrator configuration, like the worker it names",
 	"GET /api/v1/events":                     "a machine-to-machine pull feed for systems beyond Atlas (a CMDB, a billing system), paged by a cursor the consumer keeps; an agent reads how a position's actions ended with atlas_order_line_outcomes",
-	"GET /api/v1/message-sources":            "the Modeler's authoring aid for picking a message name — watch configuration, product actions and deployed catches; an agent reads products with atlas_list_catalog_products and processes with atlas_get_process_xml, and publishes a message itself rather than needing one to exist",
+	"GET /api/v1/message-sources":            "the Modeler's authoring aid for picking a message name, flat for its picker — watch configuration, product actions and deployed catches and throws; an agent reads the same rows grouped by name, with their findings, through atlas_message_names (ADR-0446 §5), and publishes a message itself rather than needing one to exist",
 
 	// Repository: package management, an admin/UI concern.
 	"GET /api/v1/repository/packages":               "repository management is a UI concern",

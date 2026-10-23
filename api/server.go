@@ -668,6 +668,11 @@ type Server struct {
 	// keeps the default of 30 days. lastFeedPrune paces its prune like the receipts'.
 	eventFeedTTL  time.Duration
 	lastFeedPrune int64
+	// eventLogTTL is how long a row of the event log is kept (ADR-0472 §4);
+	// zero keeps the default of 30 days. lastEventLogPrune paces its prune like the
+	// feed's.
+	eventLogTTL       time.Duration
+	lastEventLogPrune int64
 	// messageTTLMax is the longest time to live a published message may ask for
 	// (ADR-0370); zero keeps the default of seven days. A buffered message is data a
 	// caller makes this server hold, so how long it may be held is bounded like how
@@ -2472,6 +2477,7 @@ type purgeTarget struct {
 func (s *Server) sweepRetention(now int64) {
 	s.pruneTriggerReceipts(now)
 	s.pruneEventFeed(now)
+	s.pruneEventLog(now)
 	// A transient read error just skips this tick (retried on the next), matching the
 	// silent, best-effort style of the other run-loop pollers (timerScheduler).
 	safePos, err := s.retentionSafePosition()

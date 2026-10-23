@@ -84,11 +84,17 @@ func handleDelivering(c *ProcessingContext) {
 		}
 	}
 	piKey := c.cmd.Key
-	if c.GetProcessInstance(piKey) == nil {
+	pub := c.cmd.Value.subscription
+	// Every delivery that is not a retry is a send, recorded with how far it reached
+	// (ADR-0472 §1): to an instance that is gone, to one where nothing
+	// waits, and to the elements it reached.
+	pi := c.GetProcessInstance(piKey)
+	if pi == nil {
+		c.appendDirectedDispatch(pub.MessageName, pub.CorrelationKey, piKey, 0, 0)
 		report(DeliveryGone, piKey, nil)
 		return
 	}
-	pub := c.cmd.Value.subscription
+	targetDef := pi.ProcessDefKey
 	var matches []subscriptionMatch
 	c.p.fail(c.tx.CorrelatableSubscriptions(pub.MessageName, pub.CorrelationKey, func(elKey uint64, v *model.MessageSubscriptionValue) error {
 		if v.ProcessInstanceKey == piKey {
@@ -112,11 +118,13 @@ func handleDelivering(c *ProcessingContext) {
 	}
 	matches = live
 	if len(matches) == 0 {
+		c.appendDirectedDispatch(pub.MessageName, pub.CorrelationKey, piKey, targetDef, 0)
 		report(DeliveryNotWaiting, piKey, nil)
 		return
 	}
 	// An API delivery has no sending instance, so the recorded flow's sender is 0.
-	deliverToSubscriptions(c, matches, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
+	reached := deliverToSubscriptions(c, matches, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
+	c.appendDirectedDispatch(pub.MessageName, pub.CorrelationKey, piKey, targetDef, reached)
 	// In the same batch as the correlation, so the delivery and the receipt naming
 	// it commit with one fsync (I2): a retry after a crash either replays or
 	// delivers — never both.

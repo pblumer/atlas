@@ -84,6 +84,9 @@
         if (method === "GET" && /\/drafts$/.test(url)) return [];
         if (method === "GET" && /\/decisions/.test(url)) return [];
         if (method === "GET" && /\/message-sources$/.test(url)) return [];
+        // The inventory of the deployed models' signals (ADR-0447); a test sets it
+        // before mounting, and without one the server answers as one without the route.
+        if (method === "GET" && /\/signals$/.test(url)) return window.__SIGNALS || {};
         if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
         return {};
       };
