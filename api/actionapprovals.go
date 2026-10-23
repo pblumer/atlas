@@ -199,8 +199,9 @@ type myApprovalView struct {
 }
 
 // maxMyApprovals bounds one worklist. The soonest-expiring requests come first, so
-// a person who has more open than this sees the most urgent.
-const maxMyApprovals = 200
+// a person who has more open than this sees the most urgent, and the page says it
+// is truncated. A variable so a test can reach the bound.
+var maxMyApprovals = 200
 
 // errStopScan ends the scan of open requests once a worklist is full.
 var errStopScan = errors.New("worklist full")
@@ -223,10 +224,15 @@ func standingAnswers(answers []answerView) map[string]answerView {
 // ones asked on the caller's behalf, across every instance. Open requests are read
 // through their expiry index, so the work is bounded by what is open now, not by
 // every approval ever recorded. Group membership is read now, as the decide route
-// reads it.
+// reads it. With sign-in off there is no person, and so nothing anybody may answer:
+// the page is empty rather than refused.
 func (s *Server) handleMyActionApprovals(w http.ResponseWriter, r *http.Request) {
 	p := httpapi.PrincipalFrom(r.Context())
-	if p == nil || !strings.HasPrefix(p.UserID, "usr_") {
+	if p == nil {
+		httpapi.JSON(w, http.StatusOK, httpapi.PageOf([]myApprovalView{}, false))
+		return
+	}
+	if !strings.HasPrefix(p.UserID, "usr_") {
 		httpapi.Error(w, http.StatusForbidden, "approvals are answered by people; this principal has no worklist")
 		return
 	}
@@ -236,6 +242,7 @@ func (s *Server) handleMyActionApprovals(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	out := []myApprovalView{}
+	truncated := false
 	var scanErr error
 	s.do(func() {
 		now := s.now()
@@ -266,10 +273,11 @@ func (s *Server) handleMyActionApprovals(w http.ResponseWriter, r *http.Request)
 				default:
 					continue
 				}
+				if len(out) == maxMyApprovals {
+					truncated = true
+					return errStopScan
+				}
 				out = append(out, s.myApproval(a, role, p.UserID))
-			}
-			if len(out) >= maxMyApprovals {
-				return errStopScan
 			}
 			return nil
 		})
@@ -278,7 +286,7 @@ func (s *Server) handleMyActionApprovals(w http.ResponseWriter, r *http.Request)
 		httpapi.Error(w, http.StatusInternalServerError, scanErr.Error())
 		return
 	}
-	httpapi.JSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, httpapi.PageOf(out, truncated))
 }
 
 // myApproval is an open approval as the caller reads it: names resolved, their own answer picked out, the

@@ -10504,6 +10504,36 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         <li data-l="en"><b>With authentication off, nothing is recorded</b> &ndash; with no principal there is no
           actor and no grant to audit.</li>
       </ul>
+
+      <h3 data-l="de">Eine Aktion freigeben</h3><h3 data-l="en">Approving an action</h3>
+      <p data-l="de">Eine Policy kann verlangen, dass jemand eine bestimmte Aktion eines Workers freigibt, bevor sie
+        läuft &ndash; etwa das Löschen eines Dokuments in SharePoint. Solche Genehmigungen beantwortest du unter
+        <a href="/#/console/approvals">Kontomenü&nbsp;→&nbsp;Approvals</a>; warten welche auf dich, zeigt es auch das
+        Dashboard der Console.</p>
+      <p data-l="en">A policy can require somebody to approve a particular action of a Worker before it runs &ndash;
+        deleting a document in SharePoint, for instance. You answer such approvals under
+        <a href="/#/console/approvals">account menu&nbsp;→&nbsp;Approvals</a>; when some are waiting for you, the
+        Console's dashboard says so too.</p>
+      <ul>
+        <li data-l="de">Antworten kann nur eine <b>Person in ihrer eigenen Sitzung</b>, die <b>jetzt</b> Mitglied der
+          verlangten Gruppe ist &ndash; und nie die Person, für die die Aktion laufen würde.</li>
+        <li data-l="en">Only a <b>person in their own session</b> who is a member of the required group <b>now</b> can
+          answer &ndash; and never the person the action would run for.</li>
+        <li data-l="de">Eine Genehmigung gilt für <b>genau diese Aktion</b>. Ändert sich etwa der Pfad des Dokuments,
+          zählt sie nicht.</li>
+        <li data-l="en">An approval covers <b>exactly this action</b>. If, say, the document's path changes, it does not
+          count.</li>
+        <li data-l="de">Deine Antwort <b>führt die Aktion nicht aus</b>. Die Policy liest die Antworten, wenn die Aktion
+          das nächste Mal versucht wird; wann das ist, bestimmt der Prozess. Eine stehende Ablehnung verhindert die
+          Aktion, auch wenn andere freigegeben haben.</li>
+        <li data-l="en">Your answer <b>does not run the action</b>. The policy reads the answers when the action is next
+          tried; when that is, the process decides. A rejection that stands prevents the action even if others have
+          approved it.</li>
+        <li data-l="de">Solange die Genehmigung offen ist, kannst du deine Antwort <b>zurückziehen</b> und neu geben.
+          Jede Antwort und jeder Rückzug ist ein Ereignis im Log der Instanz.</li>
+        <li data-l="en">While the approval is open you can <b>withdraw</b> your answer and give a new one. Every answer
+          and every withdrawal is an event in the instance's log.</li>
+      </ul>
     </section>
 
     <!-- ==================== DARSTELLUNG ==================== -->

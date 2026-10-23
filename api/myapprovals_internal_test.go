@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,11 +32,14 @@ func TestAPersonsWorklistHoldsTheApprovalsTheyMayAnswer(t *testing.T) {
 		if code != http.StatusOK {
 			t.Fatalf("worklist of %s: %d %s", p.UserID, code, raw)
 		}
-		var out []myApprovalView
-		if err := json.Unmarshal(raw, &out); err != nil {
+		var page httpapi.Page[myApprovalView]
+		if err := json.Unmarshal(raw, &page); err != nil {
 			t.Fatal(err)
 		}
-		return out
+		if page.Truncated || page.Total != len(page.Items) {
+			t.Fatalf("a worklist within its bound: %s", raw)
+		}
+		return page.Items
 	}
 	answer := func(outcome string) {
 		t.Helper()
@@ -82,6 +86,16 @@ func TestAPersonsWorklistHoldsTheApprovalsTheyMayAnswer(t *testing.T) {
 		t.Fatalf("after rejecting: %+v", b)
 	}
 
+	// A worklist past its bound says so.
+	bound := maxMyApprovals
+	maxMyApprovals = 0
+	_, raw := r.as(r.bob, r.srv.handleMyActionApprovals, http.MethodGet, "/", "", nil)
+	maxMyApprovals = bound
+	var page httpapi.Page[myApprovalView]
+	if err := json.Unmarshal(raw, &page); err != nil || !page.Truncated || page.TotalExact || len(page.Items) != 0 {
+		t.Fatalf("a worklist past its bound: %s", raw)
+	}
+
 	// At its expiry the request is closed and leaves every worklist.
 	r.srv.do(func() {
 		later := time.Now().Add(2 * time.Hour).UnixNano()
@@ -91,10 +105,13 @@ func TestAPersonsWorklistHoldsTheApprovalsTheyMayAnswer(t *testing.T) {
 		t.Fatalf("an expired request is still listed: %+v", b)
 	}
 
-	// Only a person has a worklist.
-	for _, p := range []*httpapi.Principal{r.internal, nil} {
-		if c, _ := r.as(p, r.srv.handleMyActionApprovals, http.MethodGet, "/", "", nil); c != http.StatusForbidden {
-			t.Errorf("worklist of %v: %d, want 403", p, c)
-		}
+	// Only a person has a worklist: a machine principal is refused, and with sign-in
+	// off there is nobody, so nothing to answer.
+	if c, _ := r.as(r.internal, r.srv.handleMyActionApprovals, http.MethodGet, "/", "", nil); c != http.StatusForbidden {
+		t.Errorf("a machine principal's worklist: %d, want 403", c)
+	}
+	if c, raw := r.as(nil, r.srv.handleMyActionApprovals, http.MethodGet, "/", "", nil); c != http.StatusOK ||
+		string(raw) == "" || !json.Valid(raw) || !strings.Contains(string(raw), `"items":[]`) {
+		t.Errorf("the worklist with sign-in off: %d %s", c, raw)
 	}
 }
