@@ -1035,6 +1035,8 @@ Event names an operator is most likely to alert on:
 | `script_worker.binary_missing` | WARN | A script language is enabled but its interpreter is absent; those tasks park |
 | `feed.push_failing` | WARN | A push subscription's endpoint refused a batch or did not answer, said once when the failures begin; delivery holds and retries on a widening interval, and nothing is skipped |
 | `feed.push_recovered` | INFO | A held push subscription's endpoint accepted a batch again |
+| `inbound_watch.failing` | WARN | An inbound watch cannot read its source — its Worker has no mailbox or no client, is switched off, or the source refused or did not answer the read — said once when it begins, with the `subscription`, `worker` and `messageName`; the watch's listing carries the newest reason as `lastError` while it lasts |
+| `inbound_watch.recovered` | INFO | A failing inbound watch read its source again |
 | `feed.subscription_disabled` | WARN | The event feed's retention dropped rows a push subscription had not delivered, so delivery switched it off with the reason; enable it again from the oldest event held or from now |
 | `auth.admin_seeded` | WARN | The bootstrap administrator was created with a generated password |
 | `auth.disabled` | WARN | The server was started with `--auth=false` and requires no login for anything |

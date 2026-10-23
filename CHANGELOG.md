@@ -217,6 +217,21 @@ governs a Worker:
   the collaboration replay, and a message with a time to live is kept for the subscription
   that opens later. What earlier versions wrote stays as it was
   ([ADR-0370](docs/adr/0370-durable-message-buffer.md), amended 2026-10-23).
+- **An inbound watch says why it is not reading.** A watch whose Worker had no mailbox,
+  no client or was switched off was skipped at every poll, and a read or first read its
+  source refused was retried every tick, all without a word: from outside it looked
+  exactly like a source with nothing new. Each such watch now carries `lastError` and
+  `failingSince` (unix seconds) in `GET /api/v1/connectors/{id}/inbound-subscriptions`
+  and, for a viewer of its Worker, in its `inbound-watch` row of the message sources; the
+  Console shows it as *not reading*, and the log has `inbound_watch.failing` once when it
+  begins and `inbound_watch.recovered` when a read succeeds again. The state is kept in
+  memory, not in the watch, and is learned again at the first read after a restart
+  ([ADR-0438](docs/adr/0438-mailbox-worker.md)).
+- **A mail watch on a Worker with no mailbox is refused.** An SMTP Worker without an IMAP
+  endpoint, a Preview Worker or a Graph Worker without a sender cannot read a mailbox, and
+  a watch created on one was stored and then never read anything. Creating one is now a
+  400 that says what is missing. Watches stored before are kept and report the reason as
+  their `lastError`.
 - **A SharePoint task that names `create-item` keeps its list and columns in the
   Modeler.** The panel showed the list and the column table only for a task with no
   operation, so a model spelling `operation="create-item"` out lost both on its next
