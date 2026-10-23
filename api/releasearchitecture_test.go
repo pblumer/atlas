@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pblumer/atlas/api/archsketch"
 	"github.com/pblumer/atlas/api/panorama"
 )
 
@@ -143,8 +144,9 @@ func TestPublishTakesTheArchitectureSnapshot(t *testing.T) {
 	if got.Application != "Rechnungswesen" || got.Version != 1 || got.ReleaseID == "" {
 		t.Errorf("names = %+v, want the billing application's v1 with its release id", got)
 	}
-	if arch.FormatVersion != 1 || arch.MappingVersion != 1 || arch.TakenAt == 0 {
-		t.Errorf("versions/time = %d/%d/%d, want 1/1/non-zero", arch.FormatVersion, arch.MappingVersion, arch.TakenAt)
+	if arch.FormatVersion != archsketch.FormatVersion || arch.MappingVersion != archsketch.MappingVersion || arch.TakenAt == 0 {
+		t.Errorf("versions/time = %d/%d/%d, want %d/%d/non-zero", arch.FormatVersion, arch.MappingVersion, arch.TakenAt,
+			archsketch.FormatVersion, archsketch.MappingVersion)
 	}
 	if len(arch.Processes) != 2 {
 		t.Errorf("processes = %+v, want the two members", arch.Processes)

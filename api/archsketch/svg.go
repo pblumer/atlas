@@ -22,30 +22,34 @@ import (
 //   - **Self-contained.** No script, no external reference, no stylesheet: the file is
 //     embedded in pages Atlas does not control, and it is served under a sandbox policy
 //     on top of that.
-//   - **Honest about what it is.** A solid arrow is a connection the environment opens
-//     towards Atlas — every way in is a route of Atlas's own API. A dashed line is a
-//     dependency and nothing more: who connects to whom on that side is the physical
-//     view, which a snapshot of the logical part does not hold, and drawing an arrow
-//     there would assert a direction nobody recorded.
+//   - **Honest about what it is.** A solid arrow is a connection, drawn from the side
+//     that opens it: every way in is a route of Atlas's own API, and a job type is
+//     leased from that API by whichever worker subscribes to it. A dashed line is a
+//     dependency and nothing more — a call inside Atlas, or a worker whose connection
+//     the snapshot does not hold. Without a physical part that is every worker, and
+//     drawing an arrow there would assert a direction nobody recorded. With one, a
+//     worker's arrow points the way its placement says the connection is opened.
 //
 // The server has no font metrics, so boxes have fixed widths and labels are cut by
 // character count, with the whole text in each box's <title>.
 
 const (
-	svgWidth   = 1120
-	colLeftX   = 24
-	colRightX  = 776
-	colWidth   = 320
-	nodeX      = 424
-	nodeWidth  = 272
-	appInset   = 20
-	boxHeight  = 56
-	boxGap     = 12
-	headerH    = 92
-	nodeHeadH  = 30
-	lineHeight = 17
-	labelChars = 36
-	fontStack  = "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+	svgWidth  = 1120
+	colLeftX  = 24
+	colRightX = 776
+	colWidth  = 320
+	nodeX     = 424
+	nodeWidth = 272
+	appInset  = 20
+	boxHeight = 56
+	// physicalBoxHeight is a box with a third line: where a worker's work goes.
+	physicalBoxHeight = 72
+	boxGap            = 12
+	headerH           = 92
+	nodeHeadH         = 30
+	lineHeight        = 17
+	labelChars        = 36
+	fontStack         = "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
 	// ArchiMate's own layer colours (ADR-0189 §6: the layer fills are never
 	// recoloured), with a neutral ink and a white sheet, because the file is pasted
@@ -62,9 +66,13 @@ const (
 func SVG(s Snapshot, m Meta) []byte {
 	left := inboundBoxes(s)
 	right := outboundBoxes(s)
+	bh := boxHeight
+	if s.Physical != nil {
+		bh = physicalBoxHeight
+	}
 
 	rows := max(len(left), len(right), 3)
-	contentH := rows*boxHeight + (rows-1)*boxGap
+	contentH := rows*bh + (rows-1)*boxGap
 	nodeTop := headerH + 18
 	top := nodeTop + nodeHeadH
 	notes := footerLines(s, m)
@@ -110,23 +118,34 @@ func SVG(s Snapshot, m Meta) []byte {
 
 	// The ways in, each with a solid arrow into the application.
 	for i, box := range left {
-		y := top + i*(boxHeight+boxGap)
-		drawBox(&b, colLeftX, y, box)
-		mid := y + boxHeight/2
+		y := top + i*(bh+boxGap)
+		drawBox(&b, colLeftX, y, bh, box)
+		mid := y + bh/2
 		fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
 			colLeftX+colWidth, mid, appX, clampY(mid, appTop, contentH), colorStroke)
 	}
 
-	// The dependencies, each with a dashed line and no arrowhead.
+	// The dependencies: a solid arrow from whichever side opens the connection, or a
+	// dashed line where no connection is recorded.
 	if len(right) == 0 {
-		fmt.Fprintf(&b, `<text x="%d" y="%d" fill="%s">No outbound dependencies.</text>`+"\n", colRightX, top+boxHeight/2+5, colorMuted)
+		fmt.Fprintf(&b, `<text x="%d" y="%d" fill="%s">No outbound dependencies.</text>`+"\n", colRightX, top+bh/2+5, colorMuted)
 	}
 	for i, box := range right {
-		y := top + i*(boxHeight+boxGap)
-		drawBox(&b, colRightX, y, box)
-		mid := y + boxHeight/2
-		fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" stroke-dasharray="6 4"/>`+"\n",
-			appX+appW, clampY(mid, appTop, contentH), colRightX, mid, colorStroke)
+		y := top + i*(bh+boxGap)
+		drawBox(&b, colRightX, y, bh, box)
+		mid := y + bh/2
+		appY := clampY(mid, appTop, contentH)
+		switch box.arrow {
+		case arrowIn:
+			fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
+				colRightX, mid, appX+appW, appY, colorStroke)
+		case arrowOut:
+			fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
+				appX+appW, appY, colRightX, mid, colorStroke)
+		default:
+			fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" stroke-dasharray="6 4"/>`+"\n",
+				appX+appW, appY, colRightX, mid, colorStroke)
+		}
 	}
 
 	// Footer: the key, and what this sketch does not show.
@@ -138,34 +157,59 @@ func SVG(s Snapshot, m Meta) []byte {
 	return []byte(b.String())
 }
 
-// box is one entry on either side: a fill for its layer, two lines of text, and the
-// whole of what it stands for in its tooltip.
+// box is one entry on either side: a fill for its layer, two or three lines of text,
+// the whole of what it stands for in its tooltip, and which way its line runs.
 type box struct {
 	fill    string
 	label   string
 	detail  string
+	site    string // the third line, drawn only on a sketch with a physical part
 	tooltip string
 	kind    string // the ArchiMate element type, written small in the corner
+	arrow   arrow
 }
 
-func drawBox(b *strings.Builder, x, y int, bx box) {
+// arrow is how a dependency's line is drawn.
+type arrow int
+
+const (
+	arrowNone arrow = iota // dashed: a dependency with no recorded connection
+	arrowIn                // the box's side opens the connection to Atlas
+	arrowOut               // Atlas opens the connection to the box's side
+)
+
+func drawBox(b *strings.Builder, x, y, height int, bx box) {
 	fmt.Fprintf(b, `<g><title>%s</title>`, esc(bx.tooltip))
-	fmt.Fprintf(b, `<rect x="%d" y="%d" width="%d" height="%d" rx="6" fill="%s" stroke="%s"/>`, x, y, colWidth, boxHeight, bx.fill, colorStroke)
+	fmt.Fprintf(b, `<rect x="%d" y="%d" width="%d" height="%d" rx="6" fill="%s" stroke="%s"/>`, x, y, colWidth, height, bx.fill, colorStroke)
 	fmt.Fprintf(b, `<text x="%d" y="%d" font-size="10" fill="%s">%s</text>`, x+12, y+14, colorMuted, esc(bx.kind))
 	fmt.Fprintf(b, `<text x="%d" y="%d" font-weight="600" fill="%s">%s</text>`, x+12, y+31, colorInk, esc(cut(bx.label, labelChars)))
-	fmt.Fprintf(b, `<text x="%d" y="%d" font-size="12" fill="%s">%s</text></g>`+"\n", x+12, y+48, colorMuted, esc(cut(bx.detail, labelChars+10)))
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-size="12" fill="%s">%s</text>`, x+12, y+48, colorMuted, esc(cut(bx.detail, labelChars+10)))
+	if bx.site != "" && height > boxHeight {
+		fmt.Fprintf(b, `<text x="%d" y="%d" font-size="12" fill="%s">%s</text>`, x+12, y+64, colorInk, esc(cut(bx.site, labelChars+10)))
+	}
+	b.WriteString("</g>\n")
 }
 
 // inboundBoxes is the left column: Atlas's API first, because every other way in is
-// one of its routes, then each message the application receives.
+// one of its routes, then each message the application receives, then the public
+// start links the recording installation had.
 func inboundBoxes(s Snapshot) []box {
-	out := []box{{
+	api := box{
 		fill:    colorTechnology,
 		label:   "Atlas API",
 		detail:  "starting instances · messages · tasks",
 		tooltip: "Atlas API — the HTTP API every way in reaches the application through",
 		kind:    "Technology interface",
-	}}
+	}
+	if p := s.Physical; p != nil {
+		if p.ExternalURL != nil {
+			api.site = "at " + p.ExternalURL.String()
+		} else {
+			api.site = "external address not configured"
+		}
+		api.tooltip += "; " + api.site
+	}
+	out := []box{api}
 	for _, e := range s.EntryPoints {
 		effect := "continues a running instance"
 		if e.Starts {
@@ -178,6 +222,17 @@ func inboundBoxes(s Snapshot) []box {
 			tooltip: "Message " + e.Name + " — " + effect + "; received at " + usesText(e.UsedBy),
 			kind:    "Application interface",
 		})
+	}
+	if p := s.Physical; p != nil {
+		for _, l := range p.PublicStartLinks {
+			out = append(out, box{
+				fill:    colorApplication,
+				label:   "Public start form " + l.ProcessID,
+				detail:  plural(l.Links, "link", "links") + " · whoever holds one may start",
+				tooltip: "Public start links of process " + l.ProcessID + " on this installation: " + plural(l.Links, "link", "links"),
+				kind:    "Application interface",
+			})
+		}
 	}
 	return out
 }
@@ -192,6 +247,26 @@ func outboundBoxes(s Snapshot) []box {
 			bx.label = d.Name
 			bx.detail = workerTypeText(d.WorkerType) + " · " + elementCount(len(d.UsedBy))
 			bx.tooltip = "Worker " + d.Name + " (" + workerTypeText(d.WorkerType) + ") — used at " + usesText(d.UsedBy)
+			if site := s.Physical.worker(d.Name, d.WorkerType); site != nil {
+				bx.site = site.siteText()
+				if site.Placement == PlacementEngine {
+					bx.detail = workerTypeText(d.WorkerType) + " · run by Atlas itself"
+					bx.arrow = arrowOut
+				} else {
+					bx.detail = workerTypeText(d.WorkerType) + " · " + site.Observers.text()
+					bx.arrow = arrowIn
+				}
+				bx.tooltip += "; " + bx.detail + "; " + bx.site
+			}
+		case DependencyJobType:
+			bx.label = "Job type " + d.Name
+			bx.detail = "leased by a subscribed worker · " + elementCount(len(d.UsedBy))
+			bx.tooltip = "Job type " + d.Name + " — any worker subscribed to it leases the work; used at " + usesText(d.UsedBy)
+			bx.arrow = arrowIn
+			if site := s.Physical.jobType(d.Name); site != nil {
+				bx.site = site.Observers.text()
+				bx.tooltip += "; " + bx.site
+			}
 		case DependencyRuntimeWorker:
 			bx.label = "Decided at run time"
 			bx.detail = workerTypeText(d.WorkerType) + " · " + d.Name
@@ -226,16 +301,20 @@ func applicationLines(s Snapshot, m Meta) []string {
 }
 
 func footerLines(s Snapshot, m Meta) []string {
+	key := "Solid arrow: a connection opened towards Atlas. Dashed line: the application depends on it — who connects to whom there is not recorded in this snapshot."
+	if s.Physical != nil {
+		key = "Solid arrow: a connection, from the side that opens it; → in a worker's box: the system that worker connects to. Dashed line: a dependency with no connection recorded."
+	}
 	lines := []string{
 		fmt.Sprintf("Generated by Atlas from release v%d of %s; nothing here was drawn by a person.", m.Version, m.Application),
-		"Solid arrow: a connection opened towards Atlas. Dashed line: the application depends on it — who connects to whom there is not recorded in this snapshot.",
+		key,
 	}
 	if n := s.UnreadProcesses(); n > 0 {
 		lines = append(lines, fmt.Sprintf("Incomplete: %s could not be read when the snapshot was taken; what they offer and need is missing.",
 			plural(n, "process", "processes")))
 	}
 	lines = append(lines, "Not shown:")
-	for _, gap := range NotShown() {
+	for _, gap := range s.NotShown() {
 		lines = append(lines, "  • "+gap)
 	}
 	return lines
@@ -246,8 +325,26 @@ func title(m Meta) string {
 }
 
 func stampLine(s Snapshot, m Meta) string {
-	return fmt.Sprintf("Logical view · snapshot taken %s · mapping version %d · release %s",
-		formatTime(s.TakenAt), s.MappingVersion, m.ReleaseID)
+	view := "Logical view"
+	if p := s.Physical; p != nil {
+		view = "Logical and physical view of " + installationName(*p)
+	}
+	return fmt.Sprintf("%s · snapshot taken %s · mapping version %d · release %s",
+		view, formatTime(s.TakenAt), s.MappingVersion, m.ReleaseID)
+}
+
+// installationName says which installation a physical part describes, in the words
+// its operator gave it, and says so when they gave none.
+func installationName(p Physical) string {
+	switch {
+	case p.Node != "" && p.Environment != "":
+		return p.Node + " (" + p.Environment + ")"
+	case p.Node != "":
+		return p.Node
+	case p.Environment != "":
+		return "an unnamed installation (" + p.Environment + ")"
+	}
+	return "an unnamed installation"
 }
 
 func formatTime(unix int64) string {
