@@ -46,6 +46,14 @@ governs a Worker:
 
 ### Added
 
+- **Approvals in the Console.** **Approvals** (account menu, and a tile on the dashboard
+  when some wait) lists the open action approvals a person may answer and the ones asked on
+  their behalf, each with the exact operation and resource, who it would run for, the
+  policy and version, the action's fingerprint and its expiry. Approving and rejecting ask
+  first, naming the action; an answer can be withdrawn while the approval is open. Behind
+  it, `GET /api/v1/me/action-approvals` reads open requests through an index by expiry, so
+  a worklist costs what is open now rather than every approval ever recorded. The answer
+  still does not run the action: the policy reads it when the action is next tried.
 - **A release carries its architecture sketch.** Publishing an application, and
   importing a promoted release, now takes a snapshot of how the release meets its
   environment and saves it with the release record: the messages its processes receive
@@ -222,6 +230,10 @@ governs a Worker:
 
 ### Fixed
 
+- **Authorization evidence has its own key space.** It had been given the event log's
+  column family byte, so a range read or prefix delete of one could reach the other's
+  records. It moved; evidence recorded by a development build before the move is no longer
+  read. A test now holds every column family to a value of its own.
 - **A message or signal that reaches only a left-behind subscription is no delivery.** The
   losing branch of an event-based gateway and a boundary whose host finished leave their
   subscription behind until the next matching send clears it. That send counted as
