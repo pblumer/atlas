@@ -70,9 +70,11 @@ governs a Worker:
 
 ### Changed
 
-- The SharePoint Worker asks Atlas before each action when its Worker is governed, and
-  in delegated mode calls Graph only with the token Atlas released for that action.
-- Starting an instance records who started it on the instance's activation event.
+- **A governed SharePoint Worker asks before it acts.** When its Worker has an identity
+  policy, the SharePoint Worker asks Atlas before each action, and in delegated mode
+  calls Graph only with the token Atlas released for that action.
+- **An instance records who started it.** The instance's activation event carries the
+  signed-in account that started it; a `delegated-per-job` Worker acts as that person.
 
 ## [0.19.0] — 2026-10-22
 
