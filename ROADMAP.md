@@ -623,7 +623,7 @@ The control-flow basics most real models use.
   menus, an existing queue's language and an existing auto attendant's settings, and a
   warm `pwsh` session per tenant.
   **Google Contacts is another Worker Type in the catalog**
-  ([ADR-draft-google-contacts-worker](docs/adr/draft-google-contacts-worker.md)): a service
+  ([ADR-0476](docs/adr/0476-google-contacts-worker.md)): a service
   task marked `<atlas:googleContactsConnector connector operation …>` finds a contact by
   e-mail address, phone number or a custom field such as a customer number, reads, lists,
   searches, creates, updates and deletes contacts, puts a label on one or takes it off, and

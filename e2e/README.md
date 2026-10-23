@@ -196,7 +196,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   are both kept, and so are CSV's columns, one attribute the catalog describes twice (names,
   or name:width) with one description always hidden. Assertions are on the exported XML,
   because a hidden attribute is what the compiler refuses and the panel cannot show.
-- **`googlecontacts-modeler.spec.mjs`** (ADR-draft-google-contacts-worker): the **Google
+- **`googlecontacts-modeler.spec.mjs`** (ADR-0476): the **Google
   Contacts Worker Type in the Implement panel** — choosing it starts on Find contacts and
   shows the query, custom field, label and bound a find takes; switching a find to an update
   drops what only a find takes; a delete offers and writes no result variable; and a

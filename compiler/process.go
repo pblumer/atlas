@@ -1120,7 +1120,7 @@ type ConnectorTaskDetail struct {
 	TeamsPhoneOp   int32
 	TeamsPhoneArgs []RestKV
 	// Google Contacts fields (JobType == GoogleContactsJobType,
-	// ADR-draft-google-contacts-worker). Connector (above) names the configured address
+	// ADR-0476). Connector (above) names the configured address
 	// book, and GoogleContactsConnector carries it as literal-or-FEEL when a model picks
 	// the account at runtime. GoogleContactsOp is the interned operation — a row of
 	// connector/googlecontacts/catalog. ContactID, Query, Field and Group are the

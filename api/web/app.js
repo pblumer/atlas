@@ -917,7 +917,7 @@ const WORKER_TYPES = [
   {
     id: "googlecontacts", name: "Google Contacts", kind: "Contacts",
     desc: "Uses a Google address book from a process: finds a contact by e-mail address, phone number or a custom field such as a customer number, reads, lists, creates, updates and deletes contacts, puts a label such as Kunden on one or takes it off, and searches the organization\u0027s Workspace directory for a colleague. A contact arrives as one flat object (email, phone, organization, address, fields, groups) rather than as Google\u0027s lists of entries. Find reads the address book itself, exact and current, so a process asking whether a customer is known does not get the stale answer Google\u0027s search cache can give. Configure each address book below: a service account acting as a Workspace user, or a person\u0027s refresh token, lives in the vault and never enters a model. Worker-only, and atlas supervises the worker for it.",
-    refs: "ADR-draft-google-contacts-worker", status: "active", statusLabel: "configured below",
+    refs: "ADR-0476", status: "active", statusLabel: "configured below",
   },
   {
     id: "mssql", name: "Microsoft SQL Server", kind: "Database",

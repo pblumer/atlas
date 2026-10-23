@@ -2448,7 +2448,7 @@ type xmlServiceTask struct {
 	// tenant an operator configured.
 	TeamsPhone *xmlTeamsPhoneConnector `xml:"extensionElements>teamsPhoneConnector"`
 	// GoogleContacts, when present, marks this service task a Google Contacts task
-	// (ADR-draft-google-contacts-worker): one operation on an address book — find, read,
+	// (ADR-0476): one operation on an address book — find, read,
 	// list, create, update or delete a contact, label one, or search the organization's
 	// directory — through an account a *worker* holds the credential for.
 	GoogleContacts *xmlGoogleContactsConnector `xml:"extensionElements>googleContactsConnector"`
@@ -2728,7 +2728,7 @@ type xmlExchangeConnector struct {
 }
 
 // xmlGoogleContactsConnector is the <atlas:googleContactsConnector> extension on a
-// service task (ADR-draft-google-contacts-worker). connector names the Google Contacts
+// service task (ADR-0476). connector names the Google Contacts
 // Worker (literal-or-FEEL); there is no credential attribute, because none enters the
 // engine. operation is a row of connector/googlecontacts/catalog. contactId, query,
 // field and group are literal-or-FEEL values; contact is the contact object as a JSON

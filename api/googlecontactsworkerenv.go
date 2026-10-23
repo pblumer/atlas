@@ -21,7 +21,7 @@ const (
 
 // googleContactsWorkerEnv renders the address books a supervised Google Contacts worker
 // needs out of the vault, one set of variables per Google Contacts Worker the store
-// holds (ADR-draft-google-contacts-worker).
+// holds (ADR-0476).
 //
 // It is Exchange's arrangement: the bundle travels whole, as one opaque JSON value, and
 // the endpoint beside it; [googlecontacts.CheckBundle] is the one reading of a bundle,

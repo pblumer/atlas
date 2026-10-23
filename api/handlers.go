@@ -7058,7 +7058,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 	case compiler.GoogleContactsJobTypeIndex:
 		// Exchange's arm with an address book's operation: the evaluated values travel,
 		// and nothing that says whose address book or as whom — that and the credential
-		// exist only on the worker (ADR-draft-google-contacts-worker). The codes the
+		// exist only on the worker (ADR-0476). The codes the
 		// process catches travel too, so a missing contact can take the process's path
 		// for it (ADR-0461).
 		j, err := googlecontacts.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)

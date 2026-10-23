@@ -3,7 +3,7 @@
 // address, phone number or a custom field, read one, list a label's members, search,
 // create, update or delete a contact, put a label on one or take it off — or searches
 // the organization's directory, through the People API
-// (ADR-draft-google-contacts-worker).
+// (ADR-0476).
 //
 // It is the Exchange Worker Type's shape (ADR-0462):
 //

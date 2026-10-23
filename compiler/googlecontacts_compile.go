@@ -11,7 +11,7 @@ import (
 
 // compileGoogleContactsConnectorTask compiles an <atlas:googleContactsConnector> task:
 // one operation on an address book through a Worker an operator configured
-// (ADR-draft-google-contacts-worker).
+// (ADR-0476).
 //
 // The operation table is connector/googlecontacts/catalog's, read here directly rather
 // than restated, for the reason Exchange's is: the catalog imports nothing of Atlas's,

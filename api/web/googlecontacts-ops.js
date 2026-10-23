@@ -1,5 +1,5 @@
 // googlecontacts-ops.js — what the Modeler knows about the Google Contacts Worker's
-// operations (ADR-draft-google-contacts-worker): each operation's label, which values it
+// operations (ADR-0476): each operation's label, which values it
 // needs and takes, what it returns, and the bound a listing takes by default and at most.
 //
 // It is a copy of connector/googlecontacts/catalog, the table the compiler and the

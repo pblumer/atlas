@@ -58,7 +58,7 @@ governs a Worker:
   service account acting as a Workspace user, or a refresh token — lives in the vault and
   reaches only the supervised worker; a missing contact can be caught as
   `GOOGLECONTACTS_CONTACT_NOT_FOUND`
-  ([ADR-draft-google-contacts-worker](docs/adr/draft-google-contacts-worker.md)).
+  ([ADR-0476](docs/adr/0476-google-contacts-worker.md)).
 
 - **A worker reports where its workers connect.** `atlas worker` now sends, beside the
   worker names it holds, the endpoint each one's configuration names, reduced to scheme,

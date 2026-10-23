@@ -1,5 +1,5 @@
 // Package catalog is the Google Contacts Worker's operation table and the contact shape
-// a model reads and writes (ADR-draft-google-contacts-worker): which values each
+// a model reads and writes (ADR-0476): which values each
 // operation needs and takes, what it returns, and which keys a contact object may carry.
 //
 // It imports nothing of Atlas's, for the reason connector/exchange/catalog gives: the

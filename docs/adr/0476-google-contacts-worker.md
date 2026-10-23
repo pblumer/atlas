@@ -1,4 +1,4 @@
-# ADR-DRAFT: A Google Contacts Worker Type — a process finds, keeps and labels the people it works with
+# ADR-0476: A Google Contacts Worker Type — a process finds, keeps and labels the people it works with
 
 - **Status:** Accepted
 - **Implementation:** Landed

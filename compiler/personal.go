@@ -199,7 +199,7 @@ var workerEvaluatedExpressions = map[string]string{
 	// attribute, so one path covers every value its operations take.
 	"connectorTasks.TeamsPhoneArgs.Val.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 
-	// The Google Contacts Worker's (ADR-draft-google-contacts-worker).
+	// The Google Contacts Worker's (ADR-0476).
 	"connectorTasks.GoogleContactsConnector.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.GoogleContactsContactID.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.GoogleContactsQuery.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",

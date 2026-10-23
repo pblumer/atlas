@@ -501,7 +501,7 @@ const SharePointOpsJobType = "io.atlas.sharepoint"
 const SharePointOpsJobTypeIndex int32 = 35
 
 // GoogleContactsJobType is the reserved job type a Google Contacts task carries
-// (ADR-draft-google-contacts-worker). One job type serves every operation on an address
+// (ADR-0476). One job type serves every operation on an address
 // book — find, read, list, create, update and delete a contact, label one, and search
 // the organization's directory — because they share an account, a credential and
 // Google's error envelope; the operation is a modeled value, as it is for Google Sheets
@@ -2358,7 +2358,7 @@ func (b *Builder) AddTeamsPhoneConnectorTask(cfg TeamsPhoneConfig) int32 {
 }
 
 // GoogleContactsConfig is the deploy-time configuration of a Google Contacts task
-// (ADR-draft-google-contacts-worker). Worker names the configured address book and
+// (ADR-0476). Worker names the configured address book and
 // WorkerExpr carries it as literal-or-FEEL when a process picks the account at runtime;
 // Op is a row of connector/googlecontacts/catalog. ContactID, Query, Field and Group are
 // literal-or-FEEL values. Contact is the authored contact object compiled to one FEEL

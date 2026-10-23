@@ -84,7 +84,7 @@ const (
 	// app never enters it.
 	connectorKindTeamsPhone = "teamsphone"
 	// connectorKindGoogleContacts is the Google Contacts Worker Type
-	// (ADR-draft-google-contacts-worker). Worker-only like Exchange: a record holds an
+	// (ADR-0476). Worker-only like Exchange: a record holds an
 	// optional endpoint — a People API base for an operator behind a proxy — and a
 	// credentialsRef naming the vault bundle that says whose address book it is and as
 	// whom (connector/googlecontacts.Bundle). The engine builds no client from it.

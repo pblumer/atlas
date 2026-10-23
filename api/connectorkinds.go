@@ -434,7 +434,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 	{
 		// A Google Contacts task finds, reads, lists, creates, updates or deletes a
 		// contact in an address book, labels one, or searches the organization's
-		// directory (ADR-draft-google-contacts-worker). Worker-only for Exchange's
+		// directory (ADR-0476). Worker-only for Exchange's
 		// reason: the credential reads a person's whole address book — a service account
 		// with domain-wide delegation, or that person's own refresh token — and has no
 		// business on the engine's run loop. The record exists so an operator can add an
