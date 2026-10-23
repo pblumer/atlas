@@ -130,20 +130,16 @@
    textfield with a search attached. The textfield's own input still holds the submitted
    value and is hidden; its label, description and errors stay where form-js draws them,
    and the search sits in the input's place. The tokens are the console's, with the
-   stock values behind them for a page that does not carry app.css. */
+   stock values behind them for a page that does not carry app.css. The preview note
+   and an unknown selection are coloured in app.css: both appear only in the console
+   (the form editor, Tasks), and the public pages declare no --warn. */
 .fjs-container .atlas-rs-host > .fjs-input-group { display: none; }
 .fjs-container .atlas-rs { display: flex; flex-direction: column; gap: 6px; }
-.fjs-container .atlas-rs-preview {
-  font-size: 12px; padding: 4px 8px; border-radius: 4px;
-  background: var(--warn-soft, #fef6e7); color: var(--warn, #b7791f);
-}
+.fjs-container .atlas-rs-preview { font-size: 12px; padding: 4px 8px; border-radius: 4px; }
 .fjs-container .atlas-rs-selected {
   display: flex; align-items: center; gap: 8px; padding: 6px 8px;
   border: 1px solid var(--accent, #0b5cff); border-radius: 4px;
   background: var(--accent-soft, #eaf0ff);
-}
-.fjs-container .atlas-rs-selected.atlas-rs-unknown {
-  border-color: var(--warn, #b7791f); background: var(--warn-soft, #fef6e7);
 }
 .fjs-container .atlas-rs-selected-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .fjs-container .atlas-rs-selected-label { font-weight: 600; }

@@ -7277,3 +7277,7 @@ button.im-problem:hover { background: var(--accent-soft); }
 .atlas-ds-hint { color: var(--muted); margin: 0; font-size: 12px; }
 .atlas-ds-warn { color: var(--warn); background: var(--warn-soft); border-radius: 4px; padding: 6px 8px; margin: 0; font-size: 12px; }
 .atlas-ds-problems { color: var(--danger); margin: 0; padding-left: 18px; font-size: 12px; }
+/* The directory field's own warn states (form-theme.css lays the field out): the
+   preview's "example data" note and a chosen id the directory no longer resolves. */
+.fjs-container .atlas-rs-preview { background: var(--warn-soft); color: var(--warn); }
+.fjs-container .atlas-rs-selected.atlas-rs-unknown { border-color: var(--warn); background: var(--warn-soft); }
