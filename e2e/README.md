@@ -308,6 +308,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   re-renders on every selection does not pepper the server; and a burst of keystrokes
   asks exactly one question.
 
+- **`element-ids.spec.mjs`** ([ADR-draft-readable-element-ids](../docs/adr/draft-readable-element-ids.md)):
+  **readable ids for new BPMN elements**, `<type>_<yyyymmdd>_<researcher>`. Drives the real
+  `elementids.js` and the real `mountEditor` against a mock `api`, on a fixed clock: a new
+  diagram's process and start event, and every task, event, gateway, flow and message
+  drawn afterwards, carry the form; four hundred tasks in one diagram never repeat an id,
+  and once every researcher is taken a counter follows the name; an id the opened diagram
+  already holds is never minted; and a process id held by a draft, by a deployment, or
+  only by the server's availability check is not chosen — for the new diagram nor for a
+  pool added to it.
+
 - **`form-doors.spec.mjs`** ([ADR-0465](../docs/adr/0465-form-doors.md)):
   the **way from a step to its form and back**, through the real app (`index.html` →
   `app.js`) against a mocked `/api/v1`, because the routing is half of it. The start

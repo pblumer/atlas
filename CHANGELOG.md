@@ -12,6 +12,19 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+
+- **New BPMN elements get readable ids.** A task, event, gateway, flow, pool, lane, data
+  object, message, signal, error or escalation drawn in the Modeler, and a new diagram's
+  process, is named `<type>_<yyyymmdd>_<researcher>` — `activity_20261023_heisenberg` —
+  instead of `Activity_0jmndkk` or `Process_<timestamp>`. No id is handed out twice in a
+  diagram: every candidate is checked against the ids the diagram holds, and once every
+  researcher is taken for a type on a day a counter follows the name (`heisenberg2`). A
+  process id is also checked against the drafts and deployed processes of the
+  installation and the server's availability check, and a draft save that still collides
+  is refused as before. Ids already in a diagram are not changed
+  ([ADR-draft-readable-element-ids](docs/adr/draft-readable-element-ids.md)).
+
 ## [0.19.0] — 2026-10-22
 
 **A `superior` approval reaches the orderer's line manager, and a SharePoint task does
