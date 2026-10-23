@@ -11781,7 +11781,11 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
         was geschehen ist, wann es ausgesendet wird, was es trägt – Personendaten markiert – und wer es empfangen
         darf. Ein Ereignis trägt nie ein Geheimnis. Die Console zeigt dieselbe Liste unter
         <a class="applink" href="/#/console/events">Console → Events</a>; Administratoren sehen dort auch, wer
-        gerade zuhört. Im Modeler bietet ein Signalfeld die Namen an, auf die ein Modell hören darf. Trägt ein
+        gerade zuhört. Die Seite folgt der Sprache, die unter <i>Display</i> eingestellt ist: Sie ist deutsch,
+        ausser du hast Englisch gewählt, und so steht dort auch die Bedeutung jedes Ereignisses und seiner Felder.
+        Englisch bleiben die Sätze, die der Server selbst schreibt: wer ein Ereignis erzeugt, wer es empfangen darf
+        und was ein Befund im Einzelnen nennt. Im Modeler bietet ein
+        Signalfeld die Namen an, auf die ein Modell hören darf. Trägt ein
         Ereignis Personendaten, darf nur eine Administratorin oder ein Administrator ein Modell deployen, das darauf
         hört; der Bereich «Probleme» meldet das schon beim Modellieren, mit der nötigen und der eigenen Rolle. Ein
         Ereignis ohne Personendaten und ein Signal, das atlas nicht katalogisiert, bleiben offen. Über die API
@@ -11795,7 +11799,10 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
         <code>feedreader</code> role or an <code>events</code> token). Each event says what has happened, when it
         is emitted, what it carries – personal data marked – and who may receive it. An event never carries a
         secret. The Console shows the same list under <a class="applink" href="/#/console/events">Console →
-        Events</a>; administrators also see who listens now. In the Modeler a signal field offers the names a
+        Events</a>; administrators also see who listens now. The page follows the language set under
+        <i>Display</i>: it is German unless English was chosen, and so is the meaning of each event and its fields.
+        The sentences the server writes itself stay English: who produces an event, who may receive it, and what a
+        finding names in detail. In the Modeler a signal field offers the names a
         model may listen to. When an event carries personal data, only an administrator may deploy a model that
         listens to it; the Problems panel says so while modelling, naming the role needed and the caller's own. An
         event without personal data, and a signal atlas does not catalogue, stay open. Over the API,
@@ -11965,12 +11972,15 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       <p data-l="de">Der Katalog oben listet, was atlas selbst aussendet. Ein Signal oder eine Nachricht, die ein eigenes Modell
         wirft, steht dort nie: Der Katalog ist ein Vertrag, gegen den Code geprüft, und ein eigenes Signal verspricht nichts.
         Es trägt jede Variable der Instanz, die es wirft. Was die deployten Modelle werfen, senden und empfangen, zeigt deshalb
-        ein zweiter Abschnitt derselben Seite, <a class="applink" href="/#/console/events">Console → Events</a>, «Signals and
-        messages of this installation» (ADR-0447, ADR-0446). Er wird bei jedem Aufruf aus den deployten Definitionen
+        ein zweiter Abschnitt derselben Seite, <a class="applink" href="/#/console/events">Console → Events</a>, «Signale und
+        Nachrichten dieser Installation» (ADR-0447, ADR-0446). Er wird bei jedem Aufruf aus den deployten Definitionen
         abgeleitet, speichert nichts und kann deshalb nicht veralten. Pro Name zeigt er, wer ihn wirft oder sendet und wer ihn
         empfängt, mit Prozess, Version, Projekt, Element und Rolle; bei einem Boundary-Event oder einem Event-Subprozess auch,
         ob er unterbricht. Bei einer Nachricht stehen auch die Quellen, die kein Modell sind: ein Inbound-Watch eines Workers
-        und eine Produktaktion des Katalogs. Ein Filter zeigt nur einen Kanal oder nur Namen mit einem Befund.</p>
+        und eine Produktaktion des Katalogs. Ein Filter zeigt nur einen Kanal oder nur Namen mit einem Befund.
+        Ein Klick auf eine Zeile öffnet die Einzelheiten in einem Dialog über der Seite, in beiden Abschnitten; Escape
+        schliesst ihn wieder. Jeder Abschnitt lässt sich einzeln einklappen, und der Browser merkt sich das. Auch
+        eingeklappt nennt ein Abschnitt die Zahl seiner Einträge und seine Warnungen.</p>
       <p data-l="en">The catalogue above lists what atlas itself emits. A signal or a message a model of your own throws is never
         in it: the catalogue is a contract, checked against the code, and an own signal promises nothing. It carries every
         variable of the instance that throws it. What the deployed models throw, send and receive is therefore a second section
@@ -11979,7 +11989,9 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
         so cannot fall behind. For each name it shows who throws or sends it and who receives it, with process, version,
         project, element and role, and for a boundary event or an event subprocess whether it interrupts. For a message it also
         shows the sources that are not models: a Worker's inbound watch and a product action of the catalogue. A filter shows
-        one channel only, or only names with a finding.</p>
+        one channel only, or only names with a finding. In both sections a click on a row opens its detail in a dialog over
+        the page; Escape closes it again. Each section folds away on its own, and the browser remembers which. A folded
+        section still states how many entries it holds and what it warns about.</p>
       <table>
         <thead><tr><th data-l="de">Befund</th><th data-l="en">Finding</th><th data-l="de">Wann</th><th data-l="en">When</th></tr></thead>
         <tbody>

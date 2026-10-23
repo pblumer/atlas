@@ -227,6 +227,20 @@ governs a Worker:
   filters on `newest`; one that assumed three kinds skips the fourth. A name a deployed
   model sends no longer reads as unfed in the Modeler
   ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md)).
+- **The Events page opens a row's detail in a dialog, and its sections fold away.** The
+  detail of an event or of a name used to be drawn below its list, where under the second
+  list it opened out of sight. It now opens over the page and closes with Escape, the close
+  button or a click beside it, back on the row it was opened from. Each of the two sections
+  folds away on its own, the browser remembers which, and a folded section still says how
+  many entries it holds and what it warns about. A name no longer breaks over two lines at
+  its hyphens.
+- **The Events page speaks the Console's language.** Its headings, column titles, hints,
+  filters, summaries and dialogs come from the Console's message catalogue, in German
+  unless English was chosen under Display, and so do the words for the ids the server sends:
+  an event's kind and stability, an element's role, a finding's rule. An event's meaning and
+  each payload field's are shown in the same language, from the catalogue that writes them
+  in both. The sentences the server composes in English (who produces an event, who may
+  receive it, what a finding names) stay English and are marked as such.
 
 ### Fixed
 
