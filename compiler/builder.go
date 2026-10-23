@@ -500,6 +500,22 @@ const SharePointOpsJobType = "io.atlas.sharepoint"
 // always 35.
 const SharePointOpsJobTypeIndex int32 = 35
 
+// GoogleContactsJobType is the reserved job type a Google Contacts task carries
+// (ADR-0476). One job type serves every operation on an address
+// book — find, read, list, create, update and delete a contact, label one, and search
+// the organization's directory — because they share an account, a credential and
+// Google's error envelope; the operation is a modeled value, as it is for Google Sheets
+// (ADR-0235).
+//
+// Like Exchange's, nothing in the engine subscribes to it: the kind is worker-only, so a
+// service account that reads a person's address book never enters the engine.
+const GoogleContactsJobType = "io.atlas.googlecontacts"
+
+// GoogleContactsJobTypeIndex is the interned index GoogleContactsJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it thirty-seventh, so it is
+// always 36.
+const GoogleContactsJobTypeIndex int32 = 36
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -543,6 +559,9 @@ var reservedJobTypes = []string{
 	ExchangeJobType,      // 33
 	TeamsPhoneJobType,    // 34
 	SharePointOpsJobType, // 35
+	// From here on a name longer than the column above gets a block of its own, so
+	// appending one does not realign every index before it.
+	GoogleContactsJobType, // 36
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -2334,6 +2353,59 @@ func (b *Builder) AddTeamsPhoneConnectorTask(cfg TeamsPhoneConfig) int32 {
 		TeamsPhoneOp:   b.intern(cfg.Operation),
 		TeamsPhoneArgs: cfg.Args,
 		Retries:        cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// GoogleContactsConfig is the deploy-time configuration of a Google Contacts task
+// (ADR-0476). Worker names the configured address book and
+// WorkerExpr carries it as literal-or-FEEL when a process picks the account at runtime;
+// Op is a row of connector/googlecontacts/catalog. ContactID, Query, Field and Group are
+// literal-or-FEEL values. Contact is the authored contact object compiled to one FEEL
+// context, ContactVar the variable holding it instead; the compiler has refused a model
+// that sets both. MaxResults bounds a listing, with its default applied, and is zero on
+// every other operation.
+type GoogleContactsConfig struct {
+	Worker     string
+	WorkerExpr RestExpr
+	Op         string
+	ContactID  RestExpr
+	Query      RestExpr
+	Field      RestExpr
+	Group      RestExpr
+	Contact    RestExpr
+	ContactVar string
+	MaxResults int32
+	ResultVar  string
+	Retries    int32
+}
+
+// AddGoogleContactsConnectorTask adds a Google Contacts task and returns its element id.
+// Like a service task it creates a job on activation and waits; the job carries the
+// reserved GoogleContactsJobType, which nothing in the engine subscribes to — the kind
+// is worker-only, so the job waits for a worker that holds the account's credential.
+func (b *Builder) AddGoogleContactsConnectorTask(cfg GoogleContactsConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:                  b.intern(GoogleContactsJobType),
+		Connector:                b.intern(cfg.Worker),
+		GoogleContactsConnector:  cfg.WorkerExpr,
+		Subject:                  -1, // not a clio task
+		EventType:                -1,
+		ClioQuery:                -1,
+		ReduceSpec:               -1,
+		Method:                   -1, // an address-book operation, not an HTTP method, is authored
+		Auth:                     -1, // the credential lives on the worker
+		ResultVar:                b.intern(cfg.ResultVar),
+		Retries:                  cfg.Retries,
+		GoogleContactsOp:         b.intern(cfg.Op),
+		GoogleContactsContactID:  cfg.ContactID,
+		GoogleContactsQuery:      cfg.Query,
+		GoogleContactsField:      cfg.Field,
+		GoogleContactsGroup:      cfg.Group,
+		GoogleContactsContact:    cfg.Contact,
+		GoogleContactsContactVar: b.intern(cfg.ContactVar),
+		GoogleContactsMaxResults: cfg.MaxResults,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

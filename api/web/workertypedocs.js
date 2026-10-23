@@ -276,7 +276,7 @@ export const WORKER_TYPE_DOCS = {
       `Going live is a change of <b>worker</b>, not of model: the task keeps naming the same worker name.`,
       `<b>To read the mailbox</b> — an inbound watch, or a task that lists, reads, files, marks, deletes or answers mail: <b>SMTP</b> names an <b>IMAP endpoint</b> (<code>imaps://imap.example.com:993</code>; plaintext is refused) and logs in as the sender with the same password. <b>Microsoft Graph</b> needs the application permission <code>Mail.Read</code> (<code>Mail.ReadWrite</code> to change the mailbox) — and because an application permission reaches every mailbox in the tenant, an Exchange Online <b>RBAC for Applications</b> assignment that confines the app to this one. <b>Gmail</b>'s delegation needs <code>gmail.readonly</code>, and <code>gmail.modify</code> to change the mailbox. <i>This step is written from the providers' documentation and has not yet been walked at a tenant.</i>`,
       `<b>Decide who may use it.</b> A task that reads or changes a mailbox deploys only for people the Worker is shared with — viewer to read, editor to change (Workers &rsaquo; ⋯ &rsaquo; Share). Keep a personal mailbox in a Worker of its own, apart from a shared sender, ideally with its own read-only credential.`,
-      `<b>Receive mail:</b> on the worker under <b>Events…</b> — a folder (empty is the inbox), a message name, and who may start a process: <b>Allowed senders</b> and <b>Require a DMARC pass</b>. The watch never changes the mailbox; a process files or marks a message with a task, addressing the <code>messageId</code> the watch published. A watch needs a mailbox: on an SMTP Worker without an IMAP endpoint, or a Preview Worker, it is refused. One that cannot read — a refused login, a missing permission — shows <b>not reading</b> in its row, with the reason, from its first poll on.`,
+      `<b>Receive mail:</b> on the worker under <b>Events…</b> — a folder (empty is the inbox), a message name, and who may start a process: <b>Allowed senders</b> and <b>Require a DMARC pass</b>. The watch never changes the mailbox; the process receives the mail as one variable, <code>mail</code> (<code>mail.from</code>, <code>mail.subject</code>, <code>mail.auth.dmarc</code>, …), and files or marks it with a task addressing <code>mail.messageId</code>. A watch needs a mailbox: on an SMTP Worker without an IMAP endpoint, or a Preview Worker, it is refused. One that cannot read — a refused login, a missing permission — shows <b>not reading</b> in its row, with the reason, from its first poll on.`,
     ],
     trap: `Send the first real batch to yourself, and check that the sender address is allowed to send (SPF/DKIM). An automation sending two hundred wrong mails is faster than any correction. And a watch publishes mail from <b>anyone</b> who can write to the address: a sender address is a claim anybody can make, so restrict the watch to allowed senders <i>and</i> require a DMARC pass.`,
   },
@@ -349,6 +349,21 @@ export const WORKER_TYPE_DOCS = {
       `<b>Share the spreadsheet with the service account.</b> It has an email address of its own and owns nothing: share every spreadsheet or folder with that address as an <b>editor</b>, exactly as you would with a colleague.`,
     ],
     trap: `The step everyone forgets is the last one: without the share, the worker answers <code>403</code> on a document you have open in front of you.`,
+  },
+
+  googlecontacts: {
+    anchor: "runbook-googlecontacts", title: "Google Contacts",
+    checked: "2026-10",
+    needs: `A configured Google Contacts Worker in ${WORKERS} per address book: a vault bundle with a service account and the Workspace user it acts as, or a refresh token. No endpoint. <i>These steps are written from Google's documentation and have not yet been walked in a Google account.</i>`,
+    steps: [
+      `<b>Google Cloud Console</b> &rarr; pick a project &rarr; <i>APIs &amp; Services</i> &rarr; enable the <b>People API</b>.`,
+      `<i>IAM &amp; Admin</i> &rarr; <b>Service accounts</b> &rarr; create one, then <i>Keys</i> &rarr; <i>Add key</i> &rarr; <b>JSON</b>. Note the account's <b>client ID</b> (the long number on its details page).`,
+      `<b>Google Workspace Admin console</b> &rarr; <i>Security</i> &rarr; <i>Access and data control</i> &rarr; <i>API controls</i> &rarr; <b>Manage domain-wide delegation</b> &rarr; add that client ID with the scope <code>https://www.googleapis.com/auth/contacts</code> — and <code>https://www.googleapis.com/auth/directory.readonly</code> beside it if a process searches the directory.`,
+      `Store the bundle in the vault: ${VAULT}, e.g. <code>google_contacts_verkauf</code> holding <code>{"method": "serviceAccount", "clientEmail": "…@….iam.gserviceaccount.com", "privateKey": "-----BEGIN PRIVATE KEY-----\\n…", "subject": "verkauf@firma.ch"}</code>. The <b>subject</b> is the person whose address book the Worker uses; for the directory, add <code>"scope"</code> naming both scopes, separated by a space.`,
+      `${WORKERS} &rarr; <b>New worker</b>: type <b>Google Contacts</b>, a name, credential reference <code>google_contacts_verkauf</code>, no endpoint. One Worker per address book.`,
+      `<b>Without a Workspace</b> (a gmail.com account): an OAuth client of type <i>Desktop app</i>, one consent with the contacts scope, and the refresh token it yields — <code>{"method": "refreshToken", "clientId": "…", "clientSecret": "…", "refreshToken": "…"}</code>.`,
+    ],
+    trap: `Delegation grants exactly the scopes listed. A scope in the bundle that is not delegated fails the token request — for every operation, not only the one that needed it. And an OAuth client still in <i>Testing</i> expires its refresh token after 7 days.`,
   },
 
   discord: {

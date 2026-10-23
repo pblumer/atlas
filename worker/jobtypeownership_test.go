@@ -50,6 +50,9 @@ var connectorJobTypes = map[string][]string{
 	"s3":           {compiler.S3JobType},
 	"scim":         {compiler.ScimJobType},
 	"script":       {compiler.PwshJobType, compiler.PythonJobType, compiler.JsJobType},
+	// A key longer than the column above, in a block of its own so the table keeps its
+	// alignment.
+	"googlecontacts": {compiler.GoogleContactsJobType},
 	// Two job types, one kind: create-item keeps the one it always had, and every other
 	// operation rides its own so an older worker is never handed one (ADR-0141, amended).
 	"sharepoint": {compiler.SharePointJobType, compiler.SharePointOpsJobType},
@@ -103,6 +106,11 @@ func configuredEnvFor(t *testing.T, kind string) map[string]string {
 		return map[string]string{
 			"ATLAS_EXCHANGE_CONNECTORS":          "contoso",
 			"ATLAS_EXCHANGE_CONTOSO_CREDENTIALS": `{"organization":"contoso.onmicrosoft.com","clientId":"app-1","clientSecret":"s3cr3t"}`,
+		}
+	case "googlecontacts":
+		return map[string]string{
+			"ATLAS_GOOGLECONTACTS_CONNECTORS":          "verkauf",
+			"ATLAS_GOOGLECONTACTS_VERKAUF_CREDENTIALS": `{"method":"refreshToken","clientId":"id","clientSecret":"s","refreshToken":"r"}`,
 		}
 	case "teamsphone":
 		return map[string]string{

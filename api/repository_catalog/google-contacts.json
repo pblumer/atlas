@@ -1,0 +1,48 @@
+{
+  "id": "atlas.google-contacts",
+  "version": "1.0.0",
+  "kind": "connector",
+  "title": "Google Contacts",
+  "author": "Atlas core",
+  "description": "Use a Google address book from a process: find a contact by e-mail address, phone number or a custom field such as a customer number, read, list, create, update or delete contacts, put a label such as Kunden on one or take it off, and search the organization's Workspace directory. A model names the Worker and the operation; the credential — a service account acting as a Workspace user through domain-wide delegation, or a refresh token — lives in the vault and reaches only the worker (ADR-0476). A contact is one flat object: email, phone, organization, address, birthday, notes, fields (the custom fields by name) and groups (the labels). Find reads the address book itself and compares exactly, so a process deciding whether a customer is known is not misled by Google's search cache. A missing contact carries the code GOOGLECONTACTS_CONTACT_NOT_FOUND and is thrown as a BPMN error when the process catches it.",
+  "engineCompat": ">=0.13",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "Google Contacts",
+    "id": "atlas.google-contacts",
+    "appliesTo": ["bpmn:ServiceTask"],
+    "properties": [
+      { "label": "Worker", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:connector" },
+        "description": "Name of the configured Google Contacts Worker (Console → Workers) whose address book the task uses, never a credential. The attribute behind this field is spelled connector like its siblings'." },
+      { "label": "Operation", "type": "Dropdown", "value": "find-contacts", "binding": { "type": "property", "name": "atlas:operation" },
+        "choices": [
+          { "name": "Find contacts (e-mail, phone or custom field)", "value": "find-contacts" },
+          { "name": "Read contact", "value": "get-contact" },
+          { "name": "Search contacts (Google search)", "value": "search-contacts" },
+          { "name": "List contacts", "value": "list-contacts" },
+          { "name": "Create contact", "value": "create-contact" },
+          { "name": "Update contact", "value": "update-contact" },
+          { "name": "Delete contact", "value": "delete-contact" },
+          { "name": "Add to label", "value": "add-to-group" },
+          { "name": "Remove from label", "value": "remove-from-group" },
+          { "name": "Search the organization's directory", "value": "search-directory" }
+        ] },
+      { "label": "Contact (read, update, delete, labels)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:contactId" },
+        "description": "The contact by the id a read, a find or a create answered with (people/c…), e.g. =kunde.id." },
+      { "label": "Query (find, search, directory)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:query" },
+        "description": "Find: an e-mail address or a phone number, compared exactly — or a custom field's value. Search and directory: a prefix Google matches against names, e-mail addresses, phone numbers and organizations; Google's search can lag behind recent changes, so decide whether a customer exists with Find." },
+      { "label": "Custom field (find)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:field" },
+        "description": "Optional. Compare the query with this custom field, e.g. Kundennummer, instead of with the e-mail addresses and phone numbers." },
+      { "label": "Label (labels; optional on find and list)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:group" },
+        "description": "A label by the name Google Contacts shows, e.g. Kunden. It must exist; a misspelt name is refused rather than created." },
+      { "label": "Contact values (create, update)", "type": "Text", "value": "", "binding": { "type": "property", "name": "atlas:contact" },
+        "description": "A JSON object with givenName, familyName, email, emails, phone, phones, organization, jobTitle, department, address, addresses, birthday, notes, fields and — on create — groups. A string starting with = is a FEEL expression. null changes nothing, \"\" clears; email, phone and address change the primary entry, emails, phones and addresses replace the list." },
+      { "label": "Contact variable (create, update)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:contactVariable" },
+        "description": "Instead of the values above: a process variable holding the contact object." },
+      { "label": "Maximum results (find, search, list, directory)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:maxResults" },
+        "description": "Find and list fail above it rather than return a short list (defaults 100 and 500); the two searches return their best matches up to it (default 10; at most 30 for contacts, 500 for the directory)." },
+      { "label": "Result variable", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:resultVariable" },
+        "description": "Receives the contact or the list of contacts. Delete and the two label operations return nothing, and the compiler refuses a result variable on them." }
+    ]
+  }
+}

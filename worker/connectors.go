@@ -452,6 +452,23 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.ExchangeJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunExchangeJob(ctx, j, reg)
 			})
+		case "googlecontacts":
+			reg, names, err := googleContactsRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve Google Contacts, holding no address book. Not an error,
+				// for Exchange's reason: the kind is supervised by default, and a server
+				// where nobody has configured one yet must park its tasks rather than
+				// restart this worker forever.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.GoogleContactsJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunGoogleContactsJob(ctx, j, reg)
+			})
 		case "jira":
 			reg, names, err := jiraRegistryFromEnv(env)
 			if err != nil {
@@ -545,6 +562,9 @@ var endpointKeys = map[string]struct{ prefix, field string }{
 	"s3":           {s3EnvPrefix, "URL"},
 	"sharepoint":   {sharepointEnvPrefix, "ENDPOINT"},
 	"temis":        {temisEnvPrefix, "URL"},
+	// A People API base an operator behind a proxy names; empty for most, and then
+	// nothing is reported. A block of its own so the table above keeps its alignment.
+	"googlecontacts": {googleContactsEnvPrefix, "URL"},
 }
 
 // noteEndpoints records, for each worker name this worker holds, the endpoint its
@@ -606,7 +626,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "agent", "clio", "csv", "discord", "entra", "exchange", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "teamsphone", "temis", "webscrape"}
+	return []string{"ad", "agent", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "teamsphone", "temis", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.

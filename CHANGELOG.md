@@ -60,6 +60,20 @@ governs a Worker:
   upgrade, and an account used only through an API token or an AI client never signs
   in here ([ADR-draft-last-login-day](docs/adr/draft-last-login-day.md)).
 
+- **A process finds, keeps and labels the people in a Google address book.** A new
+  Google Contacts Worker Type finds a contact by e-mail address, phone number or a custom
+  field such as a customer number, reads, lists, searches, creates, updates and deletes
+  contacts, puts a label such as *Kunden* on one or takes it off, and searches the
+  Workspace directory for a colleague. A contact arrives as one flat object — `email`,
+  `phone`, `organization`, `address`, `fields`, `groups` — and is written with the same
+  keys: null leaves a value as it is, `""` clears it, `email` changes the primary address
+  and keeps the others. `find-contacts` reads the address book itself, so a process asking
+  whether a customer is known is not misled by Google's search cache. The credential — a
+  service account acting as a Workspace user, or a refresh token — lives in the vault and
+  reaches only the supervised worker; a missing contact can be caught as
+  `GOOGLECONTACTS_CONTACT_NOT_FOUND`
+  ([ADR-0476](docs/adr/0476-google-contacts-worker.md)).
+
 - **A worker reports where its workers connect.** `atlas worker` now sends, beside the
   worker names it holds, the endpoint each one's configuration names, reduced to scheme,
   host and port before it leaves the worker, so a credential or a path in it never
@@ -229,6 +243,14 @@ governs a Worker:
 
 ### Changed
 
+- **A mail watch hands the mail to the process as one object, `mail`.** The instance
+  receives `mail.from`, `mail.subject`, `mail.to`, `mail.auth.dmarc`, `mail.messageId`
+  and the other envelope fields under one variable, instead of each as a variable of its
+  own, which overwrote a process's own `from`, `to` or `subject` when a reply arrived at a
+  catch event. **A model that reads a mail field directly must read it under `mail`
+  now** — `from` becomes `mail.from`, and a mail task's `messageId` becomes
+  `mail.messageId`. A watch's correlation key is unchanged: it sees the flat names as
+  before, and `mail` beside them ([ADR-0438](docs/adr/0438-mailbox-worker.md)).
 - **A governed SharePoint Worker asks before it acts.** When its Worker has an identity
   policy, the SharePoint Worker asks Atlas before each action, and in delegated mode
   calls Graph only with the token Atlas released for that action.

@@ -113,7 +113,7 @@ func (s *Server) pollInbound(ctx context.Context) {
 				sourceID: inboundSourceID(sb.kind, sb.rec, ev.MarkKey),
 				seq:      ev.Seq,
 				key:      correlationKeyOf(sb.key, ev.Fields),
-				vars:     eventVars(ev.Fields),
+				vars:     eventVars(ev.payload()),
 			}
 		}
 		name := sb.rec.MessageName
