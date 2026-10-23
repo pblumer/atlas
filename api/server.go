@@ -2017,6 +2017,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if s.policies, err = policy.Open(s.runLoop, filepath.Join(dataDir, "policies"), time.Now); err != nil {
 		return nil, err
 	}
+	s.policies.Limits = s.budgets()
 	s.policies.SetSubjectResolver(func(id string) (authz.Subject, bool) {
 		subj, err := s.subjectOf(id)
 		return subj, err == nil && subj.Known
@@ -2028,6 +2029,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		}
 		s.identity = identity.New(s.runLoop, identityStores, s.vault, s.refreshDelegatedToken,
 			s.configuredWorkerExists, time.Now)
+		s.identity.Limits = s.budgets()
+		if s.msLink != nil {
+			s.identity.SetLinkable(identity.LinkOption{Provider: identity.ProviderMicrosoft, Start: linkMicrosoftStartPath})
+		}
 	}
 	s.refreshGoverned()
 

@@ -18,10 +18,10 @@ import (
 // decides what every Worker may do as anybody, so writing one is administering the
 // installation.
 
-const maxPolicyBody = 1 << 20
-
-func readBody(r *http.Request) ([]byte, error) {
-	return io.ReadAll(io.LimitReader(r.Body, maxPolicyBody))
+// readBody reads a request body within the Definition budget: a policy document is a
+// modelled artefact, and one may carry a whole DMN decision.
+func (s *Service) readBody(r *http.Request) ([]byte, error) {
+	return io.ReadAll(io.LimitReader(r.Body, s.budgets().Definition))
 }
 
 func who(r *http.Request) string {
@@ -59,7 +59,7 @@ func (s *Service) HandleGet(w http.ResponseWriter, r *http.Request) {
 
 // HandleSaveDraft saves the body as the policy's draft, with the warnings it raises.
 func (s *Service) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
-	body, err := readBody(r)
+	body, err := s.readBody(r)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -90,7 +90,7 @@ func (s *Service) HandleSetEnabled(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Enabled bool `json:"enabled"`
 	}
-	raw, err := readBody(r)
+	raw, err := s.readBody(r)
 	if err == nil {
 		err = json.Unmarshal(raw, &body)
 	}
@@ -150,7 +150,7 @@ var known = map[string]bool{"subject": true, "identityMode": true, "worker": tru
 // and explains the answer. Nothing is recorded and nothing is enforced, and the answer
 // says so.
 func (s *Service) HandleSimulate(w http.ResponseWriter, r *http.Request) {
-	raw, err := readBody(r)
+	raw, err := s.readBody(r)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return

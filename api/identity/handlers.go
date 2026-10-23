@@ -19,6 +19,15 @@ import (
 type view struct {
 	Identities  []ExternalIdentity `json:"identities"`
 	Connections []Connection       `json:"connections"`
+	// Linkable are the providers this server can link an account with, and where the
+	// flow starts; empty when linking is not configured.
+	Linkable []LinkOption `json:"linkable"`
+}
+
+// LinkOption is one provider a person can link an account with.
+type LinkOption struct {
+	Provider string `json:"provider"`
+	Start    string `json:"start"`
 }
 
 // HandleMine lists the caller's own identities and connections.
@@ -29,14 +38,22 @@ func (s *Service) HandleMine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ids, conns := s.ForOwner(p.UserID)
-	httpapi.JSON(w, http.StatusOK, view{Identities: ids, Connections: conns})
+	linkable := s.linkable
+	if linkable == nil {
+		linkable = []LinkOption{}
+	}
+	httpapi.JSON(w, http.StatusOK, view{Identities: ids, Connections: conns, Linkable: linkable})
 }
+
+// SetLinkable says which providers this server links accounts with. Set once, while
+// the server is built.
+func (s *Service) SetLinkable(options ...LinkOption) { s.linkable = options }
 
 // HandleOfUser lists one user's identities and connections, for an administrator
 // answering "what can act as this person".
 func (s *Service) HandleOfUser(w http.ResponseWriter, r *http.Request) {
 	ids, conns := s.ForOwner(r.PathValue("id"))
-	httpapi.JSON(w, http.StatusOK, view{Identities: ids, Connections: conns})
+	httpapi.JSON(w, http.StatusOK, view{Identities: ids, Connections: conns, Linkable: []LinkOption{}})
 }
 
 // HandleRevoke withdraws a connection. Its owner may, and so may an administrator.
@@ -50,7 +67,7 @@ func (s *Service) HandleRevoke(isAdmin func(*httpapi.Principal) bool) http.Handl
 		var body struct {
 			Reason string `json:"reason"`
 		}
-		if err := decode(r, &body); err != nil {
+		if err := s.decode(r, &body); err != nil {
 			httpapi.Error(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -74,7 +91,7 @@ func (s *Service) HandleSetWorkers(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Workers []string `json:"workers"`
 	}
-	if err := decode(r, &body); err != nil {
+	if err := s.decode(r, &body); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -86,8 +103,8 @@ func (s *Service) HandleSetWorkers(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, c)
 }
 
-func decode(r *http.Request, into any) error {
-	b, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
+func (s *Service) decode(r *http.Request, into any) error {
+	b, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Request))
 	if err != nil {
 		return err
 	}

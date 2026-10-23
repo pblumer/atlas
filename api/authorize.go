@@ -92,7 +92,7 @@ func (s *Server) handleAuthorizeJob(w http.ResponseWriter, r *http.Request) {
 		Worker     string `json:"worker"`
 		LeaseToken uint64 `json:"leaseToken"`
 	}
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
+	raw, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Request))
 	if err == nil {
 		err = json.Unmarshal(raw, &body)
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/api/sidecar"
 	"github.com/pblumer/atlas/authz"
+	"github.com/pblumer/atlas/limits"
 )
 
 var (
@@ -72,6 +73,19 @@ type Service struct {
 	// resolve fills a simulated subject's attributes from the user store when the
 	// simulation names only an id. Optional.
 	resolve func(id string) (authz.Subject, bool)
+
+	// Limits are the installation's resource budgets. Open sets them to
+	// [limits.Default]; the server overwrites them with its own.
+	Limits limits.Limits
+}
+
+// budgets is how this service reads a ceiling, defaulting the zero Limits (which
+// admits nothing) to [limits.Default].
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }
 
 // Open opens the stores under dir and compiles what is published. It reads the
@@ -90,7 +104,7 @@ func Open(loop *runloop.Loop, dir string, now func() time.Time) (*Service, error
 	if err != nil {
 		return nil, err
 	}
-	s := &Service{loop: loop, policies: pols, versions: vers, now: now}
+	s := &Service{loop: loop, policies: pols, versions: vers, now: now, Limits: limits.Default()}
 	// A set that will not build must not stop the server: every other process would
 	// go down with the governed ones. It leaves the set nil instead — every governed
 	// action Indeterminate, so refused — and says why where an administrator looks.

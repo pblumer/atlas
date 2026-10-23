@@ -29,21 +29,24 @@ func (d Decision) Permitted() bool { return d.Effect == Permit }
 
 // ObligationResult is one obligation and whether the request satisfies it. An unmet
 // approval carries what an approval request needs to be opened for it.
+//
+// Its JSON names are part of the recorded evidence (an authorization's detail), so
+// they are spelled out rather than left to the field names.
 type ObligationResult struct {
-	ID            string
-	Type          string
-	PolicyID      string
-	PolicyVersion int
-	RuleID        string
-	Satisfied     bool
-	Reason        string // why it is not satisfied; empty when it is
+	ID            string `json:"id"`
+	Type          string `json:"type"`
+	PolicyID      string `json:"policyId"`
+	PolicyVersion int    `json:"policyVersion"`
+	RuleID        string `json:"ruleId,omitempty"`
+	Satisfied     bool   `json:"satisfied"`
+	Reason        string `json:"reason,omitempty"` // why it is not satisfied; empty when it is
 	// ApprovalsUsed are the ids of the approvals that satisfied it, sorted.
-	ApprovalsUsed []string
+	ApprovalsUsed []string `json:"approvalsUsed,omitempty"`
 	// What the approval asks for, so the enforcement point can open a request.
-	ApproverGroup    string
-	Approvals        int
-	ValidForSeconds  int64
-	ExcludeRequester bool
+	ApproverGroup    string `json:"approverGroup,omitempty"`
+	Approvals        int    `json:"approvals,omitempty"`
+	ValidForSeconds  int64  `json:"validForSeconds,omitempty"`
+	ExcludeRequester bool   `json:"excludeRequester,omitempty"`
 }
 
 // Step is one policy's answer.

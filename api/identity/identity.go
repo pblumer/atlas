@@ -31,6 +31,7 @@ import (
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/api/sidecar"
 	"github.com/pblumer/atlas/api/vault"
+	"github.com/pblumer/atlas/limits"
 )
 
 // Providers this build can link.
@@ -173,6 +174,21 @@ type Service struct {
 	// and a rotated refresh token is never used twice.
 	mu     sync.Mutex
 	tokens map[string]*cachedToken
+	// linkable is what HandleMine offers to link with.
+	linkable []LinkOption
+
+	// Limits are the installation's resource budgets. New sets them to
+	// [limits.Default]; the server overwrites them with its own.
+	Limits limits.Limits
+}
+
+// budgets is how this service reads a ceiling, defaulting the zero Limits (which
+// admits nothing) to [limits.Default].
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }
 
 type cachedToken struct {
@@ -186,7 +202,7 @@ type cachedToken struct {
 func New(loop *runloop.Loop, stores *Stores, secrets Secrets, refresh Refresher,
 	workerKnown func(name string) bool, now func() time.Time) *Service {
 	return &Service{loop: loop, stores: stores, secrets: secrets, refresh: refresh,
-		workerKnown: workerKnown, now: now, tokens: map[string]*cachedToken{}}
+		workerKnown: workerKnown, now: now, tokens: map[string]*cachedToken{}, Limits: limits.Default()}
 }
 
 func newID(prefix string) (string, error) {

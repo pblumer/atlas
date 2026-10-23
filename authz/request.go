@@ -142,13 +142,13 @@ type Actor struct {
 
 // Connection is the public half of a connection: never its credential.
 type Connection struct {
-	ID             string
-	OwnerID        string
-	Status         string
-	AllowedWorkers []string
+	ID             string   `json:"id"`
+	OwnerID        string   `json:"ownerId"`
+	Status         string   `json:"status"`
+	AllowedWorkers []string `json:"allowedWorkers"`
 	// LastInteractiveAuth is when its owner last signed in at the provider, Unix
 	// nanoseconds; 0 when unknown.
-	LastInteractiveAuth int64
+	LastInteractiveAuth int64 `json:"lastInteractiveAuth"`
 }
 
 // Action is the operation and the digest of everything it will do.
@@ -184,11 +184,11 @@ type Context struct {
 
 // Approval is one approver's decision about one action digest.
 type Approval struct {
-	ID             string
-	Digest         string
-	ApproverID     string
-	ApproverGroups []string // the approver's groups now, not when they decided
-	Outcome        string   // ApprovalGranted or ApprovalRejected
-	DecidedAt      int64    // Unix nanoseconds
-	Revoked        bool
+	ID             string   `json:"id"`
+	Digest         string   `json:"digest"`
+	ApproverID     string   `json:"approverId"`
+	ApproverGroups []string `json:"approverGroups"` // the approver's groups now, not when they decided
+	Outcome        string   `json:"outcome"`        // ApprovalGranted or ApprovalRejected
+	DecidedAt      int64    `json:"decidedAt"`      // Unix nanoseconds
+	Revoked        bool     `json:"revoked"`
 }

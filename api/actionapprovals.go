@@ -190,7 +190,7 @@ func (s *Server) handleDecideActionApproval(w http.ResponseWriter, r *http.Reque
 		Outcome string `json:"outcome"`
 		Reason  string `json:"reason"`
 	}
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 16<<10))
+	raw, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Request))
 	if err == nil {
 		err = json.Unmarshal(raw, &body)
 	}

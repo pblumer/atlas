@@ -153,7 +153,7 @@ func containsString(list []string, v string) bool {
 // it decides as whom the Worker acts.
 func (s *Server) handleSetWorkerIdentity(w http.ResponseWriter, r *http.Request) {
 	var wi workerIdentity
-	body, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Request))
 	if err == nil {
 		err = json.Unmarshal(body, &wi)
 	}
@@ -248,7 +248,11 @@ type readinessRow struct {
 	Enforcement string `json:"enforcement"`
 	// Credential says where the Worker's credential is, never what it is.
 	Credential string `json:"credential"`
-	Note       string `json:"note,omitempty"`
+	// CredentialKind is the same as a word a client can translate: brokered, worker
+	// or none; CredentialRef is the vault reference a Worker-held credential is under.
+	CredentialKind string `json:"credentialKind"`
+	CredentialRef  string `json:"credentialRef,omitempty"`
+	Note           string `json:"note,omitempty"`
 }
 
 // handleSecurityReadiness lists every configured Worker with whether its actions are
@@ -268,11 +272,12 @@ func (s *Server) handleSecurityReadiness(w http.ResponseWriter, _ *http.Request)
 		row := readinessRow{Worker: r.Name, Kind: r.Kind, Governable: governableKinds[r.Kind], Mode: "legacy", Enforcement: "off"}
 		switch {
 		case r.Identity != nil && authz.IsDelegated(r.Identity.Mode):
-			row.Credential = "brokered by Atlas per authorized job"
+			row.Credential, row.CredentialKind = "brokered by Atlas per authorized job", "brokered"
 		case r.CredentialsRef != "":
-			row.Credential = "held by the Worker Instance (reference " + r.CredentialsRef + ")"
+			row.Credential, row.CredentialKind = "held by the Worker Instance (reference "+r.CredentialsRef+")", "worker"
+			row.CredentialRef = r.CredentialsRef
 		default:
-			row.Credential = "none configured"
+			row.Credential, row.CredentialKind = "none configured", "none"
 		}
 		if r.Identity != nil {
 			row.Governed, row.Mode, row.Enforcement = true, r.Identity.Mode, r.Identity.Enforcement
