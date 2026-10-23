@@ -8529,6 +8529,21 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
       <p data-l="en">Inside the application, <i>Deployments</i> shows the published version, the running instances,
         and below them the <b>Release history</b>. Publishing and promoting need the <code>modeler</code> role and,
         on the application, the <i>editor</i> level.</p>
+      <p data-l="de">Jeder Release trägt eine <b>Architekturskizze</b> (ADR-0471): Beim Publizieren und beim Import
+        eines promoteten Release hält atlas fest, welche Nachrichten seine Prozesse empfangen, welche Worker sie mit
+        welchem Worker Type nennen, welche lokalen Entscheidungen sie auswerten und welche Prozesse anderer
+        Applikationen sie aufrufen – jeweils mit den Elementen, die es angeben. <i>Architecture</i> in der Release
+        history zeigt sie als Skizze und bietet sie als SVG und als ArchiMate-Open-Exchange-Dokument für Archi und
+        andere Werkzeuge an. Derselbe Release ergibt immer dieselben Bytes. Es ist die logische Sicht: Welcher Worker
+        einen Namen auf einer Installation bedient und unter welchem Endpunkt, gehört noch nicht dazu. Ein Release,
+        der vor dieser Version aufgezeichnet wurde, hat keine Skizze und sagt das.</p>
+      <p data-l="en">Every release carries an <b>architecture sketch</b> (ADR-0471): on publish, and on the import of
+        a promoted release, atlas records which messages its processes receive, which workers they name with which
+        Worker Type, which local decisions they evaluate and which processes of other applications they call – each
+        with the elements that state it. <i>Architecture</i> in the Release history shows it as a sketch and offers it
+        as an SVG and as an ArchiMate Open Exchange document for Archi and other tools. The same release always
+        produces the same bytes. It is the logical view: which worker serves a name on an installation, and at which
+        endpoint, is not part of it yet. A release recorded before this version has no sketch and says so.</p>
 
       <h3 data-l="de">Ein Ziel und sein Token</h3><h3 data-l="en">A target and its token</h3>
       <p data-l="de">Ein <b>Deployment-Ziel</b> ist ein anderer atlas-Server, an den dieser hier promotet. Es ist
@@ -8659,6 +8674,9 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           <tr><td><code>GET /api/v1/applications/{id}/releases</code></td><td><code>any</code></td>
             <td data-l="de">die Release-Historie lesen</td>
             <td data-l="en">read the release history</td></tr>
+          <tr><td><code>GET /api/v1/applications/{id}/releases/{version}/architecture</code></td><td><code>any</code></td>
+            <td data-l="de">die Architekturskizze eines Release lesen, auch als <code>.svg</code> und <code>.xml</code></td>
+            <td data-l="en">read a release's architecture sketch, also as <code>.svg</code> and <code>.xml</code></td></tr>
           <tr><td><code>GET /api/v1/applications/{id}/deployments</code></td><td><code>any</code></td>
             <td data-l="de">was hier deployt ist, mit Instanzzahlen</td>
             <td data-l="en">what is deployed here, with instance counts</td></tr>

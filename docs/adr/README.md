@@ -556,7 +556,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0468](0468-deleting-an-application-with-its-contents.md) | Deleting an application with everything it owns | Accepted | Landed |
 | [0469](0469-catalogue-purge.md) | An administrator can delete a catalogue for good, unless the server opts out | Accepted | Landed |
 | [0470](0470-the-line-manager-is-on-the-account.md) | The line manager is a reference on the account | Accepted | Landed |
-| [0471](0471-release-architecture-sketch.md) | A release carries its architecture sketch, and a worker publishes it to Confluence | Accepted | Not started |
+| [0471](0471-release-architecture-sketch.md) | A release carries its architecture sketch, and a worker publishes it to Confluence | Accepted (amended) | Partial |
 
 ## The two states of a record
 
