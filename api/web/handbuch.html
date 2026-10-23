@@ -7286,6 +7286,9 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           Postfach beschränkt; <b>Gmail</b> braucht in der Delegierung <code>gmail.readonly</code> und zum Ändern
           <code>gmail.modify</code>. <i>Diese Anbieter-Schritte stammen aus der Dokumentation der Anbieter und sind noch
           nicht an einem echten Mandanten nachvollzogen.</i>
+          Der Prozess erhält jede Mail als eine Variable <code>mail</code>: <code>mail.from</code>,
+          <code>mail.subject</code>, <code>mail.to</code>, <code>mail.auth.dmarc</code> usw., und eine Operation
+          adressiert die Mail über <code>mail.messageId</code>.
           Ein Watch auf einem Worker ohne Postfach – SMTP ohne IMAP-Endpoint oder Preview – wird abgewiesen. Kann ein
           Watch nicht lesen, etwa weil die Anmeldung abgewiesen wird oder eine Berechtigung fehlt, zeigt seine Zeile
           unter <i>Events…</i> ab dem ersten Abruf <b>not reading</b>, seit wann und den Grund.</p>
@@ -7299,6 +7302,9 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           <b>Gmail</b>'s delegation needs <code>gmail.readonly</code>, and <code>gmail.modify</code> to change.
           <i>These provider steps are taken from the providers' documentation and have not yet been walked at a real
           tenant.</i>
+          The process receives each mail as one variable, <code>mail</code>: <code>mail.from</code>,
+          <code>mail.subject</code>, <code>mail.to</code>, <code>mail.auth.dmarc</code> and so on, and an operation
+          addresses the mail by <code>mail.messageId</code>.
           A watch on a worker with no mailbox – SMTP without an IMAP endpoint, or Preview – is refused. A watch that
           cannot read, say because the login is refused or a permission is missing, shows <b>not reading</b> in its row
           under <i>Events…</i> from its first poll on, with since when and why.</p>
