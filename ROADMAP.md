@@ -930,13 +930,26 @@ Making processes wait, react, and time out.
   what waits through `GET /api/v1/messages/buffered`, the MCP tool and the Console, and
   `atlas_buffered_messages` counts it on `/metrics`. Built as the local slice; delivery
   from a peer (ADR-0372) and a time to live on a throw event are not.
+- ✅ **Overviews of the messages and signals deployed models exchange**
+  ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md),
+  [ADR-0447](docs/adr/0447-the-signals-deployed-models-throw-and-receive.md)): the Console's
+  *Events* page has a second section, *Signals and messages of this installation*, derived on
+  request from the deployed definitions (`GET /api/v1/signals`, `GET /api/v1/message-names`,
+  `modeler`): for each name who throws or sends it and who receives it, every version listed,
+  and the findings of the newest versions — a throw nobody receives, a receiver nothing throws,
+  a name that crosses projects, a model that speaks for atlas. Message-sources names a model's
+  own sends and message event subprocesses, the Modeler's pickers offer what deployed models
+  throw and send and tell a sending element who receives it, and MCP has `atlas_signals` and
+  `atlas_message_names`.
+- ✅ **The event log** ([ADR-0472](docs/adr/0472-event-log.md)): every signal
+  thrown and message sent, with its sender and how far it reached, every reception, start,
+  keeping and expiry, folded from the log into a table kept for `--event-log-ttl` (30 days).
+  *Operations → Diagnostics → Event log*, `GET /api/v1/event-log` and `atlas_event_log`; a row
+  is read as its instance is (ADR-0275). Counters per name are not built.
 
 **Still open in this milestone:**
 - 🔲 **Repeatable non-interrupting conditional events**: a non-interrupting conditional
   fires once per arm; firing again on every false→true edge is ADR-0137's follow-up.
-- 🔲 **Overviews of the messages and signals deployed models exchange**
-  ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md),
-  [ADR-0447](docs/adr/0447-the-signals-deployed-models-throw-and-receive.md), both proposed).
 - 🔲 **Lanes, layers B and C** ([ADR-0121](docs/adr/0121-bpmn-lanes.md)): a lane naming
   an Atlas group as a compile-time `candidateGroups` default, and instance-level access
   control.

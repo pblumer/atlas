@@ -746,6 +746,10 @@ const TOPNAV = {
       // What waits in the message buffer for a subscription that has not opened yet
       // (ADR-0370): the one place a message "from the past" can be seen before it arrives.
       { name: "Messages", route: "#/operations/messages", role: "operator" },
+      // What was actually sent and where it arrived (ADR-0472). Open to
+      // anybody: the route reads each row as its instance is read, so a project member
+      // sees the rows of their projects and an operator every row.
+      { name: "Event log", route: "#/operations/event-log", role: "any" },
       { name: "Outbox", route: "#/operations/outbox", role: "operator" },
       { name: "Call activities", route: "#/operations/call-activities", role: "any" },
       { name: "Mock directory", route: "#/operations/ad-mock", role: "admin" },
@@ -1163,6 +1167,7 @@ function handbookHelp(path) {
   if (path.startsWith("#/console/api-tokens")) return H("konten", "API tokens for machines");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
   if (path.startsWith("#/console/events")) return H("ereignisse", "Events");
+  if (path.startsWith("#/operations/event-log")) return H("ereignisse", "The event log");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
   // Organization pointed at the worker chapter only because the worker cards used to
   // sit on it; with those on their own page it points there instead, and Organization
@@ -11249,6 +11254,7 @@ function routeTitle(path) {
     [/^#\/console\/org$/, "Organization · Console"],
     [/^#\/console\/workers$/, "Workers · Console"],
     [/^#\/console\/events$/, "Events · Console"],
+    [/^#\/operations\/event-log$/, "Event log · Operations"],
     [/^#\/console\/api-tokens$/, "API tokens · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
@@ -11465,6 +11471,11 @@ async function route() {
     if (path === "#/operations/workers") return await viewWorkers();
     if (path === "#/operations/outbox") return await viewMailOutbox();
     if (path === "#/operations/messages") return await viewBufferedMessages();
+    if (path === "#/operations/event-log") {
+      const gen = navGen;
+      const { viewEventLog } = await import("./eventlog.js");
+      return await viewEventLog({ api, view, isSuperseded: () => superseded(gen) });
+    }
     if (path === "#/operations/ad-mock") return await viewADMockDirectory();
     if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
     if (path === "#/operations/decisions") return await viewDecisions();

@@ -7281,3 +7281,7 @@ button.im-problem:hover { background: var(--accent-soft); }
    preview's "example data" note and a chosen id the directory no longer resolves. */
 .fjs-container .atlas-rs-preview { background: var(--warn-soft); color: var(--warn); }
 .fjs-container .atlas-rs-selected.atlas-rs-unknown { border-color: var(--warn); background: var(--warn-soft); }
+/* The event log (web/eventlog.js): a reception, start or keeping sits under the send it
+   shares a cause with, so the send reads as the head of its group. */
+.el-row.el-child td { border-top-color: transparent; }
+.el-row.el-child td:nth-child(4) { padding-left: 22px; }
