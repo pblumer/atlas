@@ -46,6 +46,21 @@ governs a Worker:
 
 ### Added
 
+- **A release carries its architecture sketch.** Publishing an application, and
+  importing a promoted release, now takes a snapshot of how the release meets its
+  environment and saves it with the release record: the messages its processes receive
+  (and whether they start an instance), the workers they name with their Worker Type, the
+  local decisions they evaluate and the calls they make into processes of other
+  applications, each traced to the elements that state it. **Applications → Deployments
+  → Release history → Architecture** shows it as a sketch and offers it as an SVG and as
+  an ArchiMate Open Exchange document for Archi and other tools; the API serves it at
+  `GET /api/v1/applications/{id}/releases/{version}/architecture` with `.svg` and `.xml`
+  variants. The same release always renders to the same bytes, and the image says when
+  the snapshot was taken and what it does not show. It is the logical view: which worker
+  serves a name on an installation and at which endpoint comes in a later slice, and a
+  release recorded before this version has no snapshot and says so
+  ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
+
 - **External accounts and delegated connections.** A signed-in person links a Microsoft
   account under **Connected accounts** (account menu) with the authorization code flow and
   PKCE; Atlas never sees a password, and the tenant's multi-factor and Conditional Access

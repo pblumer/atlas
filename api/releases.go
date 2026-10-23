@@ -82,7 +82,8 @@ func (s *Server) handlePublishApplication(w http.ResponseWriter, r *http.Request
 		httpapi.Error(w, http.StatusInternalServerError, "record release: "+err.Error())
 		return
 	}
-	httpapi.JSON(w, out.status, publishResp{projectDeployResp: out.resp, Release: &rel})
+	listed := rel.listing()
+	httpapi.JSON(w, out.status, publishResp{projectDeployResp: out.resp, Release: &listed})
 }
 
 // mintRelease records the release for a successful bundle deploy: the next version
@@ -121,6 +122,9 @@ func (s *Server) mintRelease(r *http.Request, out bundleOutcome, note string) (a
 	var saveErr error
 	s.do(func() {
 		rec.Version = s.appVersions[out.proj.ID] + 1
+		// Taken here, on the loop and before the one write, so the record and its
+		// snapshot are saved together (ADR-0471 §1).
+		rec.Architecture = s.architectureSnapshot(out.proj.ID, rec.Members, rec.PublishedAt)
 		if saveErr = s.releases.Save(rec); saveErr != nil {
 			return
 		}
@@ -144,6 +148,9 @@ func (s *Server) handleListReleases(w http.ResponseWriter, r *http.Request) {
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list releases: "+loadErr.Error())
 		return
+	}
+	for i := range out {
+		out[i] = out[i].listing()
 	}
 	httpapi.JSON(w, http.StatusOK, out)
 }

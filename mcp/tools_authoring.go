@@ -892,6 +892,36 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_release_architecture",
+			Description: "Read one release's architecture snapshot, taken when the release was recorded " +
+				"(ADR-0471): the messages its processes receive and whether each starts an instance, the " +
+				"workers they name with their Worker Type (a name authored as FEEL is reported as decided at " +
+				"run time), the local decisions they evaluate, and the calls they make into processes of other " +
+				"applications — each with the process and element that states it. The logical view: which " +
+				"worker serves a name on this installation, and at which endpoint, is not part of it. A release " +
+				"recorded before snapshots existed has none, and the error says so.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      stringProp("The application id."),
+					"version": integerProp("The release version, as atlas_application_releases lists it."),
+				},
+				"required": []any{"id", "version"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				version, err := argUint(args, "version")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/applications/" + url.PathEscape(id) + "/releases/" +
+					strconv.FormatUint(version, 10) + "/architecture"))
+			},
+		},
+		{
 			Name: "atlas_application_deployments",
 			Description: "Report what a process application currently has deployed on this server: its " +
 				"published version and each definition's version, active flag, and running/finished " +
