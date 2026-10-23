@@ -128,6 +128,13 @@ _Changed_ / _Removed_ for each version.
   filters on `newest`; one that assumed three kinds skips the fourth. A name a deployed
   model sends no longer reads as unfed in the Modeler
   ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md)).
+- **The Events page opens a row's detail in a dialog, and its sections fold away.** The
+  detail of an event or of a name used to be drawn below its list, where under the second
+  list it opened out of sight. It now opens over the page and closes with Escape, the close
+  button or a click beside it, back on the row it was opened from. Each of the two sections
+  folds away on its own, the browser remembers which, and a folded section still says how
+  many entries it holds and what it warns about. A name no longer breaks over two lines at
+  its hyphens.
 
 ### Fixed
 

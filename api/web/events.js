@@ -17,9 +17,70 @@
 // with a name. They are not in the catalogue, because the catalogue is atlas's
 // contract and an own signal promises nothing; a modeler looking for a model's signal
 // in the first list is the misunderstanding that section answers.
+//
+// Each section folds away on its own, and a row's detail opens in a dialog over the
+// page. Drawn below its list, the detail of the second list opened out of sight, and
+// nothing on screen said that the click had done anything.
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// Whether a section is folded, per browser. Open unless folded here before; a browser
+// whose storage throws keeps both open.
+const FOLD_KEY = { catalog: "atlas.events.catalog", own: "atlas.events.own" };
+const isFolded = (which) => {
+  try { return localStorage.getItem(FOLD_KEY[which]) === "0"; } catch { return false; }
+};
+const rememberFold = (which, open) => {
+  try { localStorage.setItem(FOLD_KEY[which], open ? "1" : "0"); } catch { /* not storable */ }
+};
+
+// closeDetail closes the dialog open now, if one is: there is one at a time.
+let closeDetail = () => {};
+
+// openDetail shows a row's detail in the Console's dialog frame. The dialog hangs off
+// <body>, outside the view the router redraws, so a navigation closes it — a link
+// inside it leads to another page, and the dialog must not stand over that page.
+// Closing it otherwise returns the focus to the row it was opened from.
+//
+// It takes the focus itself rather than its Close button: a row opened with the space
+// bar would otherwise hand the key's release to that button, and close again at once.
+function openDetail({ title, body, cls, from }) {
+  closeDetail();
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal ev-modal ${cls}" role="dialog" aria-modal="true" aria-labelledby="ev-modal-title" tabindex="-1">
+      <div class="modal-head">
+        <h2 id="ev-modal-title">${title}</h2>
+        <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
+      </div>
+      <div class="modal-body">${body}</div>
+      <div class="modal-foot"><button type="button" class="btn" data-done title="Close this dialog">Close</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = (refocus) => {
+    ov.remove();
+    document.removeEventListener("keydown", onKey);
+    window.removeEventListener("hashchange", onNav);
+    closeDetail = () => {};
+    if (refocus && from && from.isConnected) from.focus();
+  };
+  const onKey = (e) => { if (e.key === "Escape") close(true); };
+  const onNav = () => close(false);
+  document.addEventListener("keydown", onKey);
+  window.addEventListener("hashchange", onNav);
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(true); });
+  ov.querySelector("[data-x]").addEventListener("click", () => close(true));
+  ov.querySelector("[data-done]").addEventListener("click", () => close(true));
+  closeDetail = () => close(false);
+  ov.querySelector(".modal").focus();
+}
+
+// foldable wires a section's <details> to the browser's memory of it.
+function foldable(el, which) {
+  el.addEventListener("toggle", () => rememberFold(which, el.open));
+}
 
 const CHANNEL_WHAT = {
   signal: "a BPMN signal inside the engine: zero to many listeners, not buffered",
@@ -85,9 +146,7 @@ function detailHTML(entry, ls) {
         <table><thead><tr><th>Worker</th><th>Narrowed to</th><th>State</th></tr></thead><tbody>${subs}</tbody></table>` : ""}
     </div>`;
   }
-  return `<div class="card ev-detail" style="margin-top:12px">
-    <h2><code>${esc(entry.type)}</code></h2>
-    <p>${esc((entry.meaning || {}).en)}</p>
+  return `<p>${esc((entry.meaning || {}).en)}</p>
     <p class="muted">${where}${esc(moment.producer)}</p>
     ${entry.serviceCatalogue ? `<p class="muted">Part of the service catalogue: a server whose catalogue is switched off does not emit it.</p>` : ""}
     <h3>Payload</h3>
@@ -95,8 +154,7 @@ function detailHTML(entry, ls) {
       : `<p class="muted">No fields: the event is its name.</p>`}
     <p class="muted">Never carries a secret — held by <code>${esc(entry.neverSecret)}</code>.</p>
     <h3>Who may receive it</h3><ul>${access}</ul>
-    ${listening}
-  </div>`;
+    ${listening}`;
 }
 
 // FINDING_LABEL is a finding's rule as the table's pill says it; the detail says the
@@ -189,9 +247,7 @@ function ownDetailHTML(n) {
   const unseen = n.channel === "message"
     ? `<p class="muted">A message can also be published through <code>POST /api/v1/messages</code>, which no definition shows: this page can say that nothing waits for a name, never that nothing sends it.</p>`
     : `<p class="muted">Only a model throws a signal: no route broadcasts one.</p>`;
-  return `<div class="card own-detail" style="margin-top:12px">
-    <h2>${nameHTML(n.name)} <span class="chip">${esc(n.channel)}</span></h2>
-    ${findings}
+  return `${findings}
     <h3>${sendWord}</h3>
     ${n.senders.length ? `<table>${head}<tbody>${pointRows(n.senders, false)}</tbody></table>` : `<p class="muted">No deployed model.</p>`}
     ${others}
@@ -201,8 +257,7 @@ function ownDetailHTML(n) {
     <p><a href="#/operations/event-log?name=${encodeURIComponent(n.name)}&amp;channel=${n.channel}" class="own-log-link">What was sent under this name: the event log</a></p>
     <p class="muted">Every deployed version is listed; the findings read the newest version of each process. An older
     version's running instance can still ${n.channel === "signal" ? "throw" : "send"} a name the newest version dropped, or wait for one.
-    What ${n.channel === "signal" ? "a signal" : "a message"} carries is every variable of the instance that ${n.channel === "signal" ? "throws" : "sends"} it: nothing here promises a payload.</p>
-  </div>`;
+    What ${n.channel === "signal" ? "a signal" : "a message"} carries is every variable of the instance that ${n.channel === "signal" ? "throws" : "sends"} it: nothing here promises a payload.</p>`;
 }
 
 export async function viewEvents({ api, view, isSuperseded }) {
@@ -212,35 +267,40 @@ export async function viewEvents({ api, view, isSuperseded }) {
     The second is what the models of this installation throw, send and receive: read from the deployed
     definitions, so it promises nothing and shows what is wrong. A signal or message a model of yours
     throws is in the second list, never in the first.</p>
-    <h2>Events atlas emits</h2>
-    <p class="muted">The signals and messages of atlas's system processes, the CloudEvents feed, and the log
-    lines that belong to them. Each entry says what has happened when it is emitted, what it carries — personal
-    data marked — and who may receive it. A model listens with a signal start or catch on the name; a system
-    beyond atlas reads the feed.</p>
-    <div class="card" style="padding:0">
-      <table data-dt-key="events">
-        <thead><tr id="ev-head"><th>Event</th><th>Kind</th><th>Channels</th><th>Meaning</th><th>Since</th><th>Stability</th></tr></thead>
-        <tbody id="ev-rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
-      </table>
-    </div>
-    <div id="ev-detail"></div>
-    <h2 id="own-title" style="margin-top:24px">Signals and messages of this installation</h2>
-    <p class="muted">Every signal and message name the deployed models throw, send or receive, with who does
-    which, in which project and version, and what is wrong with the name: a throw nobody receives, a receiver
-    nothing throws, a name that couples two projects, a model that speaks for atlas. A receiver of an
-    <code>atlas.*</code> name is in the first list's view of who listens, for administrators. What was
-    actually sent, and where it arrived, is in the <a href="#/operations/event-log">event log</a>.</p>
-    <div class="row" style="gap:12px;align-items:center;margin-bottom:8px">
-      <label>Channel <select id="own-channel"><option value="">All</option><option value="signal">Signals</option><option value="message">Messages</option></select></label>
-      <label><input type="checkbox" id="own-findings"> Only names with a finding</label>
-    </div>
-    <div class="card" style="padding:0">
-      <table data-dt-key="own-events">
-        <thead><tr><th>Name</th><th>Channel</th><th>Sent or thrown by</th><th>Received by</th><th>Findings</th></tr></thead>
-        <tbody id="own-rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
-      </table>
-    </div>
-    <div id="own-detail"></div>`;
+    <details class="ev-section" id="ev-section"${isFolded("catalog") ? "" : " open"}>
+      <summary><h2>Events atlas emits</h2><span class="muted small" id="ev-sum"></span></summary>
+      <p class="muted">The signals and messages of atlas's system processes, the CloudEvents feed, and the log
+      lines that belong to them. Each entry says what has happened when it is emitted, what it carries — personal
+      data marked — and who may receive it. A model listens with a signal start or catch on the name; a system
+      beyond atlas reads the feed. A row opens its detail.</p>
+      <div class="card" id="ev-card" style="padding:0">
+        <table data-dt-key="events">
+          <thead><tr id="ev-head"><th>Event</th><th>Kind</th><th>Channels</th><th>Meaning</th><th>Since</th><th>Stability</th></tr></thead>
+          <tbody id="ev-rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </details>
+    <details class="ev-section" id="own-section"${isFolded("own") ? "" : " open"}>
+      <summary><h2 id="own-title">Signals and messages of this installation</h2><span class="muted small" id="own-sum"></span></summary>
+      <p class="muted">Every signal and message name the deployed models throw, send or receive, with who does
+      which, in which project and version, and what is wrong with the name: a throw nobody receives, a receiver
+      nothing throws, a name that couples two projects, a model that speaks for atlas. A receiver of an
+      <code>atlas.*</code> name is in the first list's view of who listens, for administrators. What was
+      actually sent, and where it arrived, is in the <a href="#/operations/event-log">event log</a>. A row opens
+      its detail.</p>
+      <div class="row" style="gap:12px;align-items:center;margin-bottom:8px">
+        <label>Channel <select id="own-channel"><option value="">All</option><option value="signal">Signals</option><option value="message">Messages</option></select></label>
+        <label><input type="checkbox" id="own-findings"> Only names with a finding</label>
+      </div>
+      <div class="card" style="padding:0">
+        <table data-dt-key="own-events">
+          <thead><tr><th>Name</th><th>Channel</th><th>Sent or thrown by</th><th>Received by</th><th>Findings</th></tr></thead>
+          <tbody id="own-rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </details>`;
+  foldable(view.querySelector("#ev-section"), "catalog");
+  foldable(view.querySelector("#own-section"), "own");
 
   // The installation's own names are asked for beside the catalogue: neither waits
   // for the other, and a failure of one leaves the other's section standing.
@@ -268,7 +328,7 @@ export async function viewEvents({ api, view, isSuperseded }) {
   view.querySelector("#ev-rows").innerHTML = entries.length ? entries.map((e, i) => {
     const n = ls ? (() => { const l = listenersOf(e, ls); return l.processes.length + l.feed.length; })() : 0;
     return `<tr data-type="${esc(e.type)}" data-i="${i}" style="cursor:pointer" tabindex="0">
-      <td><code>${esc(e.type)}</code>${e.shaped ? ` <span class="pill" title="A shape: the product's author names each one">shape</span>` : ""}</td>
+      <td class="nowrap"><code>${esc(e.type)}</code>${e.shaped ? ` <span class="pill" title="A shape: the product's author names each one">shape</span>` : ""}</td>
       <td>${esc(e.kind)}</td><td>${chips(e.channels)}</td>
       <td>${esc((e.meaning || {}).en)}</td><td>${esc(e.since)}</td>
       <td>${e.stability === "stable" ? "stable" : `<span class="pill warn">${esc(e.stability)}</span>`}</td>
@@ -276,27 +336,29 @@ export async function viewEvents({ api, view, isSuperseded }) {
   }).join("") : `<tr><td colspan="${cols}" class="empty">The catalogue is empty.</td></tr>`;
 
   // An atlas.* name a model waits for that atlas never emits is a model that waits
-  // forever, and the administrator is the one who can see every project's.
-  if (ls) {
-    const stray = (ls.processes || []).filter((l) => !l.catalogued);
-    if (stray.length) {
-      view.querySelector("#ev-detail").insertAdjacentHTML("beforebegin", `<div class="card ev-stray" style="margin-top:12px; border-color:var(--warn)">
-        <b>Waiting for names atlas never emits.</b>
-        <ul>${stray.map((l) => `<li><code>${esc(l.type)}</code> — ${esc(l.processName || l.processId)} v${esc(l.version)}, <code>${esc(l.element)}</code></li>`).join("")}</ul></div>`);
-    }
+  // forever, and the administrator is the one who can see every project's. The
+  // section's summary says so too, so folding the section does not fold the warning.
+  const stray = ls ? (ls.processes || []).filter((l) => !l.catalogued) : [];
+  if (stray.length) {
+    view.querySelector("#ev-card").insertAdjacentHTML("afterend", `<div class="card ev-stray" style="margin-top:12px; border-color:var(--warn)">
+      <b>Waiting for names atlas never emits.</b>
+      <ul>${stray.map((l) => `<li><code>${esc(l.type)}</code> — ${esc(l.processName || l.processId)} v${esc(l.version)}, <code>${esc(l.element)}</code></li>`).join("")}</ul></div>`);
   }
+  view.querySelector("#ev-sum").innerHTML = `${entries.length} event${entries.length === 1 ? "" : "s"}${stray.length
+    ? ` · <span class="ev-sum-warn">${stray.length === 1
+      ? "1 receiver waits for a name" : `${stray.length} receivers wait for names`} atlas never emits</span>` : ""}`;
 
-  const show = (i) => {
-    view.querySelector("#ev-detail").innerHTML = detailHTML(entries[i], ls);
+  const show = (i, from) => {
+    openDetail({ title: `<code>${esc(entries[i].type)}</code>`, body: detailHTML(entries[i], ls), cls: "ev-detail", from });
     view.querySelectorAll("#ev-rows tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.i === String(i)));
   };
   view.querySelector("#ev-rows").addEventListener("click", (e) => {
     const tr = e.target.closest("tr[data-i]");
-    if (tr) show(Number(tr.dataset.i));
+    if (tr) show(Number(tr.dataset.i), tr);
   });
   view.querySelector("#ev-rows").addEventListener("keydown", (e) => {
     const tr = e.target.closest("tr[data-i]");
-    if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); show(Number(tr.dataset.i)); }
+    if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); show(Number(tr.dataset.i), tr); }
   });
 
   const [sig, msg] = await ownReq;
@@ -306,7 +368,7 @@ export async function viewEvents({ api, view, isSuperseded }) {
 
 // renderOwn fills the page's second section. A link from the Modeler names the name
 // and its channel in the hash (#/console/events?name=…&channel=…), and the section
-// opens on it.
+// unfolds and opens it.
 function renderOwn(view, sig, msg) {
   const rowsEl = view.querySelector("#own-rows");
   const failed = [sig, msg].find((r) => r.err);
@@ -317,6 +379,9 @@ function renderOwn(view, sig, msg) {
     return;
   }
   const names = ownNames(sig.v, msg.v);
+  const withFinding = names.filter((n) => n.findings.length).length;
+  view.querySelector("#own-sum").innerHTML = `${names.length} name${names.length === 1 ? "" : "s"}${withFinding
+    ? ` · <span class="ev-sum-warn">${withFinding} with a finding</span>` : ""}`;
   const channelEl = view.querySelector("#own-channel");
   const findingsEl = view.querySelector("#own-findings");
   const params = new URLSearchParams((location.hash.split("?")[1] || ""));
@@ -328,7 +393,7 @@ function renderOwn(view, sig, msg) {
     const shown = names.map((n, i) => ({ n, i })).filter(({ n }) =>
       (!ch || n.channel === ch) && (!findingsEl.checked || n.findings.length));
     rowsEl.innerHTML = shown.length ? shown.map(({ n, i }) => `<tr data-own="${i}" data-name="${esc(n.name)}" data-channel="${n.channel}" style="cursor:pointer" tabindex="0">
-        <td>${nameHTML(n.name)}</td>
+        <td class="nowrap">${nameHTML(n.name)}</td>
         <td><span class="chip">${esc(n.channel)}</span></td>
         <td>${[processesText(n.senders), othersText(n.others)].filter(Boolean).join(", ") || `<span class="muted">—</span>`}</td>
         <td>${processesText(n.receivers) || `<span class="muted">—</span>`}</td>
@@ -337,26 +402,30 @@ function renderOwn(view, sig, msg) {
         ? "No name matches the filter."
         : "No deployed model throws, sends or receives a signal or a message of its own."}</td></tr>`;
   };
-  const show = (i) => {
-    view.querySelector("#own-detail").innerHTML = ownDetailHTML(names[i]);
+  const show = (i, from) => {
+    const n = names[i];
+    openDetail({ title: `${nameHTML(n.name)} <span class="chip">${esc(n.channel)}</span>`, body: ownDetailHTML(n), cls: "own-detail", from });
     view.querySelectorAll("#own-rows tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.own === String(i)));
   };
   channelEl.addEventListener("change", draw);
   findingsEl.addEventListener("change", draw);
   rowsEl.addEventListener("click", (e) => {
     const tr = e.target.closest("tr[data-own]");
-    if (tr && !e.target.closest("a")) show(Number(tr.dataset.own));
+    if (tr && !e.target.closest("a")) show(Number(tr.dataset.own), tr);
   });
   rowsEl.addEventListener("keydown", (e) => {
     const tr = e.target.closest("tr[data-own]");
-    if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); show(Number(tr.dataset.own)); }
+    if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); show(Number(tr.dataset.own), tr); }
   });
   draw();
   if (want.name) {
     const i = names.findIndex((n) => n.name === want.name && (!want.channel || n.channel === want.channel));
     if (i >= 0) {
-      show(i);
-      view.querySelector("#own-title").scrollIntoView({ block: "start" });
+      // The row stays where the dialog closes onto, so its section is unfolded for it.
+      view.querySelector("#own-section").open = true;
+      const tr = rowsEl.querySelector(`tr[data-own="${i}"]`);
+      if (tr) tr.scrollIntoView({ block: "center" });
+      show(i, tr);
     }
   }
 }
