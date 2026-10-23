@@ -117,6 +117,7 @@ and it happens while a product manager is looking.
 | Approval, eligibility, `MaxDays`, order form, targets | product manager | product manager |
 | Lifecycle bindings, actions, `CommandedBy` | product manager, built by the modeler | same |
 | Structure and precedence edges | product manager | product manager |
+| Link to the wiki page per language (§ 5) | product manager | product manager |
 
 The list of supplied fields is closed, and it holds content only. Nothing a source
 supplies can widen an audience, remove an approval or rebind a process. The product
@@ -206,7 +207,63 @@ PageRef {
   one: in wikiwikibangbang a key can change when an item moves between spaces, its ID
   never does.
 
-### 5. Refreshing is an act, not a schedule
+### 5. Linking a description to its wiki page
+
+The product manager links an item to its pages on the catalogue screen. A bound item
+shows one slot per language the catalogue declares, and the primary slot is marked.
+
+**Choosing a page.** A slot takes a page in one of two ways, and both end in the same
+place:
+
+- **Search.** The product manager types part of a title. The adapter searches the
+  source (in wikiwikibangbang its search API, `GET /api/search`) and lists the hits
+  with title, space, key and workflow state.
+- **Address or key.** The product manager pastes what they already have open in the
+  wiki: the page's address (`https://wiki.example.org/#/item/SVC-12`) or its key
+  (`SVC-12`). The adapter parses it. An address of another host than the source's base
+  URL is refused, so a slot cannot point at a server the administrator did not
+  configure.
+
+**Resolving at once.** Either way Atlas reads the page immediately, through the
+source's credential. It stores the page's stable identifier rather than what was
+typed or pasted (§ 4), and shows the page's title, state and version, along with the
+description it would supply. The product manager therefore sees what they linked
+before they save. Saving writes the binding and the fetched content in one draft save,
+so a linked slot is never empty.
+
+**What linking refuses.**
+
+- A page the source's credential cannot read is reported as not found. The product
+  manager's own rights in the wiki play no part: Atlas reads as its source credential,
+  and that credential decides what can be linked.
+- A page outside the **accepted state** (§ 3) can be linked, so that work can begin
+  before the product owner releases it. It is not fetched, though, and the slot says
+  which state it waits for. A catalogue with such a slot does not publish, by the
+  existing description rule.
+- The same page in two slots of one item is refused. So is a page already bound to
+  another item, naming that item: one page describes one service, and a service is
+  one item offered by reference in as many catalogues as need it (ADR-0315).
+
+**Unlinking.** Removing a slot's page keeps the description last fetched and makes it
+editable again (§ 1). Removing the binding as a whole does the same for every field.
+
+**The link in the shop.** The shop can show "more in the wiki" under a description,
+leading to the page in the reader's language. Whether it does is a setting of the
+source, and it is **off by default**: it is useful only where the shop's orderers
+can read the wiki, and a link most readers cannot open is a broken link.
+
+**A market offering may be linked without content.** An item with parts keeps the
+product manager's own description (§ 1). It may still name a page per language as a
+link only — the offering's documentation, kept by whoever writes it — through the same
+slots. Such a link is resolved and frozen like any other, but nothing is fetched from
+it, and its fields are not read-only.
+
+**Over the API and MCP.** A binding is written through the catalogue API with a page's
+key, address or identifier, and is resolved the same way before it is stored
+([ADR-0376](0376-catalogue-maintenance-over-mcp.md)). A client that names a page
+cannot bypass the host check or the refusals above.
+
+### 6. Refreshing is an act, not a schedule
 
 A product manager **refreshes** one bound item, or every bound item of a catalogue. A
 refresh fetches every bound page of an item, maps them and writes the result into the
@@ -232,7 +289,7 @@ ADR-0046). Atlas neither polls the source nor compares versions. The binding sti
 stores each page's version, so that a check in Atlas can be added later without
 changing what is stored.
 
-### 6. Publish never calls out
+### 7. Publish never calls out
 
 Publishing proves what it proves today, on what the draft holds, and the description
 check per language included. It never contacts a source. A wiki outage therefore
@@ -259,7 +316,7 @@ page its description came from, and that holds after the wiki page has changed.
 - **Follow-ups / risks to watch:**
   - A check in Atlas that compares the stored page versions with the source, if the
     agreement between the roles turns out not to be enough.
-  - A Confluence adapter, which needs its storage format converted the way § 5
+  - A Confluence adapter, which needs its storage format converted the way § 6
     converts the block document.
   - Pushing a refresh from a source webhook (option 4) once a source can sign one,
     which would still write into the draft and not past it.
@@ -325,7 +382,8 @@ page its description came from, and that holds after the wiki page has changed.
 - relates to [ADR-0041](0041-connector-management-and-secret-store.md) — the
   source's credential lives in the secret store.
 - relates to [ADR-0376](0376-catalogue-maintenance-over-mcp.md) — a refresh carries
-  the revision precondition of a catalogue save.
+  the revision precondition of a catalogue save, and a binding written over MCP is
+  resolved like one made on the screen.
 - relates to [ADR-0425](0425-a-product-lifecycle-is-one-process-with-message-triggers.md)
   and [ADR-0429](0429-product-actions-are-commands-with-published-outcomes.md) — the
   per-service lifecycle and its service events, which this record presupposes.
