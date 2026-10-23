@@ -1,27 +1,55 @@
-// The form editor's directory field (api/web/remote-select-editor.js, form-editor.js,
-// ADR-0473): a model author turns a textfield into a search over
-// a remote data source without writing JSON, the block the panel writes is what Save
-// sends, a Worker that does not let forms search it is named as such, and the preview
-// searches made-up people — never a directory.
+// The form editor's directory field (vendor/form-js/src/atlas/editor.jsx, form-editor.js,
+// ADR-0473): a select whose options source is a remote data source, edited where any
+// select's options are — Options source ▸ Type — without writing JSON. The block the
+// panel writes is what Save sends, the source is offered on a select only, a Worker that
+// does not let forms search it is named as such, a directory field saved as a textfield is
+// converted on request, and the previews search made-up people — never a directory.
 import { test, expect } from "@playwright/test";
 
 test.use({ viewport: { width: 1500, height: 1000 } });
+
+async function open(page, opts = {}) {
+  await page.evaluate((o) => window.__mountDirectory(o), opts);
+  await expect(page.locator(".fjs-editor-container .fjs-form-field-select").first()).toBeVisible({ timeout: 25000 });
+}
 
 test.beforeEach(async ({ page }) => {
   page.__errors = [];
   page.on("pageerror", (e) => page.__errors.push(e.message));
   await page.goto("/form-editor-harness.html");
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
-  await page.evaluate(() => window.__mountDirectory());
-  await expect(page.locator(".fjs-editor-container .fjs-form-field-textfield").first()).toBeVisible({ timeout: 25000 });
-  await expect(page.locator("#form-add-directory")).toBeVisible({ timeout: 10000 });
 });
 
 test.afterEach(async ({ page }) => {
   expect(page.__errors).toEqual([]);
 });
 
-const panel = (page) => page.locator(".atlas-ds-panel");
+const props = (page) => page.locator(".fjs-properties-panel");
+const entry = (page, id) => props(page).locator(`[data-entry-id="${id}"]`);
+const typeSelect = (page) => props(page).locator("#bio-properties-panel-valuesSource-select");
+
+async function selectField(page, id) {
+  await page.locator(`.fjs-editor-container [data-id="${id}"]`).first().click();
+  await expect(props(page)).toHaveAttribute("data-field", id);
+}
+
+// openGroup opens a properties group unless it is open already.
+async function openGroup(page, id) {
+  const group = props(page).locator(`[data-group-id="group-${id}"]`);
+  await expect(group).toBeVisible();
+  const entries = group.locator(".bio-properties-panel-group-entries");
+  if (!(await entries.evaluate((el) => el.classList.contains("open")))) {
+    await group.locator(".bio-properties-panel-group-header").click();
+  }
+  await expect(entries).toHaveClass(/open/);
+}
+
+async function chooseRemote(page, id = "Field_wer") {
+  await selectField(page, id);
+  await openGroup(page, "valuesSource");
+  await typeSelect(page).selectOption("remote");
+  await expect(entry(page, "atlasRemote-worker")).toBeVisible();
+}
 
 async function save(page) {
   await page.locator("#form-save").click();
@@ -31,74 +59,108 @@ async function save(page) {
 
 const fieldOf = (schema, key) => schema.components.find((c) => c.key === key);
 
-test("adding a directory field writes a data source through the Worker open to forms", async ({ page }) => {
-  await page.locator("#form-add-directory").click();
-  await expect(panel(page)).toBeVisible();
-  await expect(panel(page).locator(".atlas-ds-head")).toContainText("Microsoft Entra ID");
-  await expect(panel(page).locator("[data-field=worker]")).toHaveValue("ucc_entra");
+test("the palette's Directory picker adds a select that searches through the Worker open to forms", async ({ page }) => {
+  await open(page);
+  const preset = page.locator('.fjs-palette-field[data-field-type="directorypicker"]');
+  await expect(preset).toBeVisible();
+  await expect(preset).toContainText("Directory picker");
+  await preset.focus();
+  await preset.press("Enter");
   const schema = await save(page);
-  const added = fieldOf(schema, "person");
-  expect(added.type).toBe("textfield");
-  expect(added.validate.required).toBe(true);
+  const added = schema.components.find((c) => c.atlasDataSource);
+  expect(added.type).toBe("select");
+  expect(added.label).toBe("Person");
+  expect(added.values).toBeUndefined();
   expect(added.atlasDataSource).toMatchObject({
     version: 1, workerType: "entra", worker: "ucc_entra", resource: "users",
     searchFields: ["displayName", "mail", "userPrincipalName"], pageSize: 25, minSearchLength: 2,
   });
 });
 
-test("a plain text field becomes a directory field, bound to the department it is filtered by", async ({ page }) => {
-  await page.locator(".fjs-editor-container .fjs-form-field-textfield").first().click();
-  await expect(panel(page)).toBeVisible();
-  await panel(page).locator("[data-act=enable]").click();
+test("a select gets its options from the remote data source under Options source ▸ Type", async ({ page }) => {
+  await open(page);
+  await chooseRemote(page);
+  // Chosen, the source is filled in from what this server offers.
+  await expect(entry(page, "atlasRemote-source").locator("select")).toHaveValue("entra/users");
+  await expect(entry(page, "atlasRemote-worker").locator("select")).toHaveValue("ucc_entra");
+  // A remote select is always searched: form-js's own "Searchable" is not offered.
+  await expect(entry(page, "searchable")).toHaveCount(0);
   // Search in display name and UPN only.
-  await panel(page).locator("[data-list=searchFields][value=mail]").uncheck();
-  await panel(page).locator("[data-act=f-add]").click();
-  await panel(page).locator(".atlas-ds-filter [data-field=f-field]").selectOption("abteilung");
-  await panel(page).locator(".atlas-ds-filter [data-field=f-required]").check();
-  await panel(page).locator("[data-list=details][value=department]").check();
-  await panel(page).locator("[data-field=pageSize]").fill("10");
-  await panel(page).locator("[data-field=pageSize]").blur();
-  await expect(panel(page).locator(".atlas-ds-problems")).toHaveCount(0);
+  await entry(page, "atlasRemote-searchFields").locator('input[name="atlasRemote-searchFields-mail"]').uncheck();
+  const pageSize = entry(page, "atlasRemote-pageSize").locator("input");
+  await pageSize.fill("10");
+  await pageSize.press("Tab");
+  await openGroup(page, "atlasRemoteFilters");
+  await props(page).getByRole("button", { name: "Add filter" }).click();
+  await entry(page, "atlasRemote-filters-0-field").locator("select").selectOption("abteilung");
+  await entry(page, "atlasRemote-filters-0-required").locator("input").check();
+  await openGroup(page, "atlasRemoteOption");
+  await entry(page, "atlasRemote-optionDetails").locator('input[name="atlasRemote-optionDetails-department"]').check();
+  await expect(props(page).locator(".bio-properties-panel-entry.has-error")).toHaveCount(0);
+
   const schema = await save(page);
-  const ds = fieldOf(schema, "wer").atlasDataSource;
+  const wer = fieldOf(schema, "wer");
+  expect(wer.type).toBe("select");
+  expect(wer.values).toBeUndefined();
+  const ds = wer.atlasDataSource;
   expect(ds.searchFields).toEqual(["displayName", "userPrincipalName"]);
   expect(ds.filters).toEqual([{ property: "department", field: "abteilung", required: true }]);
   expect(ds.option.details).toEqual(["department"]);
   expect(ds.pageSize).toBe(10);
 });
 
+test("the remote data source is offered on a select only", async ({ page }) => {
+  await open(page);
+  await selectField(page, "Field_wer");
+  await openGroup(page, "valuesSource");
+  await expect(typeSelect(page).locator('option[value="remote"]')).toHaveText("Remote data source");
+  await selectField(page, "Field_dringlichkeit");
+  await openGroup(page, "valuesSource");
+  await expect(typeSelect(page).locator("option")).toHaveText(["Static", "Input data", "Expression"]);
+});
+
 test("a Worker that does not let forms search it is named as such", async ({ page }) => {
-  await page.locator("#form-add-directory").click();
-  await panel(page).locator("[data-field=worker]").selectOption("contoso");
-  await expect(panel(page).locator(".atlas-ds-warn")).toContainText("does not let forms search");
-  await expect(panel(page).locator("[data-field=worker] option[value=contoso]")).toHaveText(/not open to forms/);
+  await open(page);
+  await chooseRemote(page);
+  const worker = entry(page, "atlasRemote-worker");
+  await expect(worker.locator('option[value="contoso"]')).toHaveText(/not open to forms/);
+  await worker.locator("select").selectOption("contoso");
+  await expect(worker.locator(".bio-properties-panel-description")).toContainText("does not let forms search");
 });
 
-test("an unfinished filter is pointed out before Save", async ({ page }) => {
-  await page.locator("#form-add-directory").click();
-  await panel(page).locator("[data-act=f-add]").click();
-  await expect(panel(page).locator(".atlas-ds-problems")).toContainText("needs a field or a fixed value");
-  await panel(page).locator(".atlas-ds-filter [data-field=f-mode]").selectOption("value");
-  await panel(page).locator(".atlas-ds-filter [data-field=f-value]").fill("IT");
-  await panel(page).locator(".atlas-ds-filter [data-field=f-value]").blur();
-  await expect(panel(page).locator(".atlas-ds-problems")).toHaveCount(0);
+test("an unfinished filter is pointed out, and a fixed value completes it", async ({ page }) => {
+  await open(page);
+  await chooseRemote(page);
+  await openGroup(page, "atlasRemoteFilters");
+  await props(page).getByRole("button", { name: "Add filter" }).click();
+  await expect(entry(page, "atlasRemote-filters-0-field").locator(".bio-properties-panel-error"))
+    .toContainText("Choose the field");
+  await entry(page, "atlasRemote-filters-0-mode").locator("select").selectOption("value");
+  const value = entry(page, "atlasRemote-filters-0-value").locator("input");
+  await value.fill("IT");
+  await value.press("Tab");
+  await expect(props(page).locator(".bio-properties-panel-entry.has-error")).toHaveCount(0);
   const schema = await save(page);
-  expect(fieldOf(schema, "person").atlasDataSource.filters).toEqual([{ property: "department", value: "IT" }]);
+  expect(fieldOf(schema, "wer").atlasDataSource.filters).toEqual([{ property: "department", value: "IT" }]);
 });
 
-test("a directory field turns back into a plain text field", async ({ page }) => {
-  await page.locator("#form-add-directory").click();
-  await panel(page).locator("[data-act=disable]").click();
-  await expect(panel(page).locator("[data-act=enable]")).toBeVisible();
+test("back to static options drops the data source", async ({ page }) => {
+  await open(page);
+  await chooseRemote(page);
+  await typeSelect(page).selectOption("static");
+  await expect(entry(page, "atlasRemote-worker")).toHaveCount(0);
   const schema = await save(page);
-  expect(fieldOf(schema, "person").atlasDataSource).toBeUndefined();
+  const wer = fieldOf(schema, "wer");
+  expect(wer.atlasDataSource).toBeUndefined();
+  expect(wer.values.length).toBeGreaterThan(0);
 });
 
 test("the Validate tab previews the field with made-up people and asks no directory", async ({ page }) => {
-  await page.locator("#form-add-directory").click();
+  await open(page);
+  await chooseRemote(page);
   await page.locator('#form-tabs button[data-ftab="validate"]').click();
   const preview = page.locator("#fv-form");
-  await expect(preview.locator(".atlas-rs-preview")).toBeVisible({ timeout: 15000 });
+  await expect(preview.locator(".atlas-remote-select .atlas-rs-preview")).toBeVisible({ timeout: 15000 });
   await preview.locator(".atlas-rs-search").fill("An");
   await expect(preview.locator(".atlas-rs-list li[role=option]").first()).toBeVisible();
   const labels = await preview.locator(".atlas-rs-list .atlas-rs-label").allTextContents();
@@ -107,50 +169,53 @@ test("the Validate tab previews the field with made-up people and asks no direct
   expect(calls.some((u) => u.includes("/form-data/") && u.endsWith("/query"))).toBe(false);
 });
 
-test("the Design pane's own preview shows the field with example data too", async ({ page }) => {
-  await page.locator("#form-add-directory").click();
+test("the Design pane's preview searches example data, and the canvas shows the field without searching", async ({ page }) => {
+  await open(page);
+  await chooseRemote(page);
   const preview = page.locator(".fjs-pgl-form-container").nth(1);
-  await expect(preview.locator(".atlas-rs-preview")).toBeVisible();
-  // The editing canvas is left as form-js draws it.
+  await expect(preview.locator(".atlas-remote-select .atlas-rs-preview")).toBeVisible();
   await expect(page.locator(".fjs-editor-container .atlas-rs")).toHaveCount(0);
+  await expect(page.locator(".fjs-editor-container .atlas-remote-plain")).toBeDisabled();
 });
 
-test("the panel sits above form-js's properties, which keep their column's full width", async ({ page }) => {
-  await page.locator("#form-add-directory").click();
-  await expect(panel(page)).toBeVisible();
-  const g = await page.evaluate(() => {
-    const box = (el) => el.getBoundingClientRect();
-    const col = document.querySelector(".fjs-pgl-properties-container");
-    return {
-      col: Math.round(box(col).width),
-      panelBottom: Math.round(box(col.querySelector(".atlas-ds-panel")).bottom),
-      props: Math.round(box(col.querySelector(".fjs-properties-container")).width),
-      propsTop: Math.round(box(col.querySelector(".fjs-properties-container")).top),
-    };
-  });
-  expect(g.props).toBe(g.col);
-  expect(g.panelBottom).toBeLessThanOrEqual(g.propsTop);
-});
-
-// A second source (ADR-0476): a Google address book. Switching to it starts the field
-// over on the address book's own defaults and its Worker open to forms, and offers no
-// switch for disabled entries an address book does not have.
-test("switching the source to Google Contacts starts on the address book's defaults", async ({ page }) => {
-  await page.locator("#form-add-directory").click();
-  await expect(panel(page).locator("[data-field=activeOnly]")).toBeVisible();
-  await panel(page).locator("[data-field=source]").selectOption("googlecontacts/contacts");
-  await expect(panel(page).locator(".atlas-ds-head")).toContainText("Google Contacts");
-  await expect(panel(page).locator("[data-field=worker]")).toHaveValue("google_verkauf");
-  await expect(panel(page).locator("[data-field=activeOnly]")).toHaveCount(0);
-  await panel(page).locator("[data-act=f-add]").click();
-  await panel(page).locator(".atlas-ds-filter [data-field=f-property]").selectOption("groups");
-  await panel(page).locator(".atlas-ds-filter [data-field=f-mode]").selectOption("value");
-  await panel(page).locator(".atlas-ds-filter [data-field=f-value]").fill("Kunden");
-  await panel(page).locator(".atlas-ds-filter [data-field=f-value]").blur();
-  await panel(page).locator("[data-list=details][value=organization]").check();
-  await expect(panel(page).locator(".atlas-ds-problems")).toHaveCount(0);
+test("a directory field saved as a textfield is converted into a select on request", async ({ page }) => {
+  await open(page, { legacy: true });
+  await selectField(page, "Field_alt");
+  await openGroup(page, "atlasRemoteLegacy");
+  await entry(page, "atlasRemote-convert").getByRole("button", { name: "Convert to select" }).click();
+  await openGroup(page, "valuesSource");
+  await expect(typeSelect(page)).toHaveValue("remote");
   const schema = await save(page);
-  const ds = fieldOf(schema, "person").atlasDataSource;
+  const alt = fieldOf(schema, "alt");
+  expect(alt.type).toBe("select");
+  expect(alt.values).toBeUndefined();
+  expect(alt.validate).toEqual({ required: true });
+  expect(alt.appearance).toBeUndefined();
+  expect(alt.atlasDataSource).toEqual({ version: 1, workerType: "entra", worker: "ucc_entra", resource: "users" });
+});
+
+// A second source (ADR-0476): a Google address book. Choosing it starts the field over on
+// the address book's own defaults and its Worker open to forms, and offers no switch for
+// disabled entries an address book does not have.
+test("choosing Google Contacts as the source starts on the address book's defaults", async ({ page }) => {
+  await open(page);
+  await chooseRemote(page);
+  await expect(entry(page, "atlasRemote-activeOnly")).toBeVisible();
+  await entry(page, "atlasRemote-source").locator("select").selectOption("googlecontacts/contacts");
+  await expect(entry(page, "atlasRemote-worker").locator("select")).toHaveValue("google_verkauf");
+  await expect(entry(page, "atlasRemote-activeOnly")).toHaveCount(0);
+  await openGroup(page, "atlasRemoteFilters");
+  await props(page).getByRole("button", { name: "Add filter" }).click();
+  await entry(page, "atlasRemote-filters-0-property").locator("select").selectOption("groups");
+  await entry(page, "atlasRemote-filters-0-mode").locator("select").selectOption("value");
+  const value = entry(page, "atlasRemote-filters-0-value").locator("input");
+  await value.fill("Kunden");
+  await value.press("Tab");
+  await openGroup(page, "atlasRemoteOption");
+  await entry(page, "atlasRemote-optionDetails").locator('input[name="atlasRemote-optionDetails-organization"]').check();
+  await expect(props(page).locator(".bio-properties-panel-entry.has-error")).toHaveCount(0);
+  const schema = await save(page);
+  const ds = fieldOf(schema, "wer").atlasDataSource;
   expect(ds).toMatchObject({
     workerType: "googlecontacts", worker: "google_verkauf", resource: "contacts",
     searchFields: ["displayName", "email", "organization"],
@@ -160,27 +225,33 @@ test("switching the source to Google Contacts starts on the address book's defau
   expect("activeOnly" in ds).toBe(false);
 });
 
-test("a new directory field starts on the source whose Worker forms may search", async ({ page }) => {
-  await page.goto("/form-editor-harness.html");
-  await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
-  await page.evaluate(() => window.__mountDirectory("contacts-only"));
-  await expect(page.locator("#form-add-directory")).toBeVisible({ timeout: 25000 });
-  await page.locator("#form-add-directory").click();
-  await expect(panel(page).locator(".atlas-ds-head")).toContainText("Google Contacts");
-  await expect(panel(page).locator("[data-field=worker]")).toHaveValue("google_verkauf");
+test("the Directory picker starts on the source whose Worker forms may search", async ({ page }) => {
+  await open(page, { contactsOnly: true });
+  const preset = page.locator('.fjs-palette-field[data-field-type="directorypicker"]');
+  await preset.focus();
+  await preset.press("Enter");
+  const schema = await save(page);
+  const added = schema.components.find((c) => c.atlasDataSource);
+  expect(added.atlasDataSource).toMatchObject({
+    workerType: "googlecontacts", worker: "google_verkauf", resource: "contacts",
+    searchFields: ["displayName", "email", "organization"],
+  });
 });
 
 test("the Validate tab previews a contacts field with made-up contacts", async ({ page }) => {
-  await page.locator("#form-add-directory").click();
-  await panel(page).locator("[data-field=source]").selectOption("googlecontacts/contacts");
-  await panel(page).locator("[data-list=details][value=organization]").check();
+  await open(page);
+  await chooseRemote(page);
+  await entry(page, "atlasRemote-source").locator("select").selectOption("googlecontacts/contacts");
+  await openGroup(page, "atlasRemoteOption");
+  await entry(page, "atlasRemote-optionDetails").locator('input[name="atlasRemote-optionDetails-organization"]').check();
   await page.locator('#form-tabs button[data-ftab="validate"]').click();
   const preview = page.locator("#fv-form");
-  await expect(preview.locator(".atlas-rs-preview")).toBeVisible({ timeout: 15000 });
+  await expect(preview.locator(".atlas-remote-select .atlas-rs-preview")).toBeVisible({ timeout: 15000 });
   await preview.locator(".atlas-rs-search").fill("Mos");
-  await expect(preview.locator(".atlas-rs-list li[role=option]").first()).toBeVisible();
-  await expect(preview.locator(".atlas-rs-list li[role=option]").first()).toContainText("Marina Moser");
-  await expect(preview.locator(".atlas-rs-list li[role=option]").first()).toContainText("Moser AG");
+  const first = preview.locator(".atlas-rs-list li[role=option]").first();
+  await expect(first).toBeVisible();
+  await expect(first).toContainText("Marina Moser");
+  await expect(first).toContainText("Moser AG");
   const calls = await page.evaluate(() => window.__calls.map((c) => c.url));
   expect(calls.some((u) => u.includes("/form-data/") && u.endsWith("/query"))).toBe(false);
 });

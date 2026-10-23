@@ -558,10 +558,10 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0470](0470-the-line-manager-is-on-the-account.md) | The line manager is a reference on the account | Accepted | Landed |
 | [0471](0471-release-architecture-sketch.md) | A release carries its architecture sketch, and a worker publishes it to Confluence | Accepted (amended) | Partial |
 | [0472](0472-event-log.md) | Atlas keeps a log of the signals and messages that were sent | Accepted (2026-10-22) | Landed |
-| [0473](0473-form-remote-data-sources.md) | A form looks remote data up through an ephemeral worker query | Accepted | Landed |
+| [0473](0473-form-remote-data-sources.md) | A form looks remote data up through an ephemeral worker query | Accepted (amended) | Landed |
 | [0474](0474-readable-element-ids.md) | Readable ids for new BPMN elements | Accepted | Landed |
 | [0475](0475-identity-aware-worker-execution.md) | Identity-aware Worker execution and policy-based authorization | Proposed | Partial |
-| [0476](0476-google-contacts-worker.md) | A Google Contacts Worker Type — a process finds, keeps and labels the people it works with | Accepted | Landed |
+| [0476](0476-google-contacts-worker.md) | A Google Contacts Worker Type — a process finds, keeps and labels the people it works with | Accepted (amended) | Landed |
 | [0477](0477-last-login-day.md) | The roster says on which day an account last signed in | Accepted | Landed |
 
 ## The two states of a record

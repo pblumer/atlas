@@ -5165,7 +5165,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           </div>
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
-            <p data-l="de">Das Feld «Person» ist ein Textfeld mit einer <b>Verzeichnisauswahl</b>
+            <p data-l="de">Das Feld «Person» ist eine Auswahlliste mit einer <b>Verzeichnisauswahl</b>
               (<code>atlasDataSource</code>): Beim Tippen fragt der Server über den Entra-Worker <code>ucc_entra</code>
               im Verzeichnis nach, gefiltert nach der gewählten Abteilung, und zeigt höchstens 25 Treffer. Übermittelt
               wird nur die Objekt-ID nach <code>user</code>; <code>get-user-manager</code> liest daraus mit
@@ -5173,7 +5173,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               Ereignisprotokoll – nur die Auswahl. Vor dem Abschluss prüft der Server die ID noch einmal im
               Verzeichnis. Das Formular kann den Worker nur nennen: Suchen darf es erst, wenn beim Worker in der
               Console «Formulare dürfen suchen» eingeschaltet ist.</p>
-            <p data-l="en">The «Person» field is a text field with a <b>directory field</b> configuration
+            <p data-l="en">The «Person» field is a select with a <b>directory field</b> configuration
               (<code>atlasDataSource</code>): as the person types, the server searches the directory through the Entra
               Worker <code>ucc_entra</code>, filtered by the chosen department, and shows at most 25 matches. Only the
               object id is submitted, into <code>user</code>; <code>get-user-manager</code> reads the manager from it
@@ -6049,22 +6049,31 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 
       <div id="verzeichnisauswahl" style="scroll-margin-top:66px"></div>
       <h4 data-l="de">Eine Person aus dem Verzeichnis wählen (Verzeichnisauswahl)</h4><h4 data-l="en">Picking a person from the directory (directory field)</h4>
-      <p data-l="de">Ein Textfeld kann statt freiem Text eine <b>Suche im Verzeichnis</b> anbieten: Im Formular-Editor
-        fügt <b>＋ Directory field</b> ein solches Feld hinzu, oder du wählst ein Textfeld und drückst im Bereich
-        <b>Remote data source</b> über seinen Eigenschaften auf <b>Search a remote data source</b>. Dort legst du fest,
-        welche Quelle und welcher Worker sucht (ein Entra-Worker im Verzeichnis oder ein Google-Contacts-Worker im
-        Adressbuch), worin gesucht wird (Name, E-Mail-Adresse, Firma …), was jeder Treffer zeigt, wie viele Treffer eine Seite hat und ob ein anderes Feld
-        die Suche eingrenzt – etwa eine Abteilung, die die Person vorher wählt. In der Aufgabe tippt die Person
-        mindestens zwei Zeichen, sieht höchstens eine Seite Treffer und wählt genau einen Eintrag. Übermittelt wird
-        nur dessen ID, nie der angezeigte Name.</p>
-      <p data-l="en">A text field can offer a <b>directory search</b> instead of free text: in the form editor,
-        <b>＋ Directory field</b> adds one, or you select a text field and press <b>Search a remote data source</b> in
-        the <b>Remote data source</b> area above its properties. There you choose which source and Worker search (an Entra
-        Worker in the directory, or a Google Contacts Worker in an address book), what is searched (name, e-mail address,
-        company …), what each match shows, how many
-        matches a page holds, and whether another field narrows the search – a department the person chooses first, for
-        instance. In the task the person types at least two characters, sees at most one page of matches and picks
-        exactly one entry. Only its id is submitted, never the name shown.</p>
+      <p data-l="de">Eine Auswahlliste (Select) kann ihre Optionen statt aus einer festen Liste aus einer
+        <b>Suche im Verzeichnis</b> beziehen: Im Formular-Editor wählst du bei der Auswahlliste unter
+        <b>Options source ▸ Type</b> die Quelle <b>Remote data source</b> – neben Static, Input data und
+        Expression. Die Palette bietet dafür auch den <b>Directory picker</b> an, der eine solche Auswahlliste mit
+        einem bereits für Formulare freigegebenen Worker anlegt. In derselben Gruppe legst du fest, welcher Worker
+        sucht (ein Entra-Worker im Verzeichnis oder ein Google-Contacts-Worker im Adressbuch), worin gesucht wird
+        (Name, E-Mail-Adresse, Firma …),
+        ab wie vielen Zeichen gesucht wird und wie viele Treffer eine Seite hat; unter <b>Remote filters</b>, ob ein
+        anderes Feld oder ein fester Wert die Suche eingrenzt – etwa eine Abteilung, die die Person vorher wählt;
+        unter <b>Option display</b>, was jeder Treffer zeigt; und unter <b>Validation</b>, wie die Wahl beim
+        Abschluss geprüft wird. In der Aufgabe tippt die Person mindestens zwei Zeichen, sieht höchstens eine Seite
+        Treffer und wählt genau einen Eintrag. Übermittelt wird nur dessen ID, nie der angezeigte Name. Ein
+        Formular, dessen Verzeichnisfeld noch als Textfeld gespeichert ist, funktioniert weiter; der Editor bietet
+        dafür <b>Convert to select</b> an.</p>
+      <p data-l="en">A select can take its options from a <b>directory search</b> instead of a fixed list: in the form
+        editor, choose <b>Remote data source</b> under the select's <b>Options source ▸ Type</b> – beside Static, Input
+        data and Expression. The palette's <b>Directory picker</b> adds such a select with a Worker already open to
+        forms. The same group chooses which Worker searches (an Entra Worker in the directory, or a Google Contacts
+        Worker in an address book), what is searched (name, e-mail address, company …), after how many characters the search starts and how many matches a
+        page holds; <b>Remote filters</b> says whether another field or a fixed value narrows the search – a department
+        the person chooses first, for instance; <b>Option display</b> what each match shows; and <b>Validation</b> how
+        the choice is checked when the task is completed. In the task the person types at least two characters, sees at
+        most one page of matches and picks exactly one entry. Only its id is submitted, never the name shown. A form
+        whose directory field is still saved as a text field keeps working; the editor offers <b>Convert to select</b>
+        for it.</p>
       <p data-l="de"><b>Was das Formular nicht entscheidet.</b> Das Formular nennt den Worker nur. Suchen darf es erst,
         wenn beim Worker in der Console <b>Forms may search</b> eingeschaltet ist – denn gesucht wird mit dessen
         Zugangsdaten. Suchen darf nur, wer die Aufgabe bearbeiten darf. Welche Eigenschaften gesucht und gezeigt werden,

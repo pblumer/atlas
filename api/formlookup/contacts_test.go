@@ -21,7 +21,7 @@ const contactsForm = `{
   "id": "google-kundenauswahl",
   "components": [
     {"type": "textfield", "key": "firma", "label": "Firma"},
-    {"type": "textfield", "key": "kunde", "label": "Kunde", "validate": {"required": true},
+    {"type": "select", "key": "kunde", "label": "Kunde", "validate": {"required": true},
      "atlasDataSource": {
        "version": 1, "workerType": "googlecontacts", "worker": "verkauf", "resource": "contacts",
        "searchFields": ["displayName", "email", "organization"],

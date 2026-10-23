@@ -1,12 +1,12 @@
-// A directory field: a form-js textfield whose options come from a remote data source
+// A directory field: a form-js select whose options come from a remote data source
 // (ADR-0473).
 //
-// The textfield stays what form-js makes of it — it holds the submitted value, its
-// label, `required`, its description and its errors — and this module attaches a search
-// to it: a box to type into, one bounded page of matches, a selection. Choosing an
-// entry writes its value into the textfield the way typing would, so validation and
-// submission remain form-js's own and the value a task completes with is the id, never
-// the label.
+// The select stays what form-js makes of it — it holds the submitted value, its label,
+// `required`, its description and its errors — and the field the vendored bundle renders
+// for it (vendor/form-js/src/atlas/viewer.jsx) mounts the search this module provides
+// into its own element: a box to type into, one bounded page of matches, a selection.
+// Choosing an entry sets the select's value, so validation and submission remain
+// form-js's own and the value a task completes with is the id, never the label.
 //
 // Nothing is loaded before somebody types: the search runs on the server, through the
 // Worker the stored form names, and the browser only ever holds the page it is showing
@@ -14,10 +14,9 @@
 // person typed and what they picked in the fields the source is bound to; which Worker,
 // which tenant and which properties is the server's to decide.
 //
-// Why not a form-js custom component: the vendored bundles inline their own Preact and
-// export none of it, so a custom component would mean rebuilding both and registering it
-// twice. Attaching to a standard field needs only the DOM form-js already renders, and a
-// form rendered anywhere without this module still works: as a plain text field.
+// Directory fields were first saved as textfields carrying the same block. Those are still
+// read: attachRemoteSelects attaches the same search to such a textfield's DOM, and the
+// form editor offers to convert one into the select it is now.
 
 import { t, plural } from "./i18n.js";
 
@@ -36,7 +35,23 @@ const DEFAULT_MIN_SEARCH = 2;
 
 let instances = 0;
 
-// directoryFields lists a schema's directory fields: key, label, and the data source.
+// isDirectoryField reports whether a component is a directory field: a select whose
+// options come from a remote data source, or a textfield carrying one — the shape such
+// fields were saved in first.
+export function isDirectoryField(c) {
+  if (!c || typeof c !== "object" || typeof c.key !== "string" || !c.key) return false;
+  const src = c[DATA_SOURCE_MEMBER];
+  if (!src || typeof src !== "object") return false;
+  if (c.type === "textfield") return true;
+  return c.type === "select" && c.values === undefined && c.valuesKey === undefined && c.valuesExpression === undefined;
+}
+
+// isLegacyDirectoryField reports a directory field saved as a textfield.
+export function isLegacyDirectoryField(c) {
+  return isDirectoryField(c) && c.type === "textfield";
+}
+
+// directoryFields lists a schema's directory fields: key, label, type and the data source.
 // The editor and the preview use it; the renderer reads the same thing from the form's
 // own field registry.
 export function directoryFields(schema) {
@@ -44,8 +59,8 @@ export function directoryFields(schema) {
   const walk = (comps) => {
     for (const c of comps || []) {
       if (!c || typeof c !== "object") continue;
-      if (c.type === "textfield" && typeof c.key === "string" && c.key && c[DATA_SOURCE_MEMBER] && typeof c[DATA_SOURCE_MEMBER] === "object") {
-        out.push({ key: c.key, id: c.id, label: c.label || c.key, source: c[DATA_SOURCE_MEMBER] });
+      if (isDirectoryField(c)) {
+        out.push({ key: c.key, id: c.id, type: c.type, label: c.label || c.key, source: c[DATA_SOURCE_MEMBER] });
       }
       if (Array.isArray(c.components)) walk(c.components);
     }
@@ -141,39 +156,152 @@ export function previewTransport(people, pageSize = 25) {
   };
 }
 
-// attachRemoteSelects attaches a search to every directory field of a mounted form.
-// It returns a handle whose destroy() detaches them; call it before the form is
-// destroyed. opts: { transport, debounceMs, preview, data, timers }.
+// remoteAdapter is the search a page gives the vendored form-js bundle, as the Form's
+// `atlasRemote` option (or the Playground's atlas.remote): every select whose options
+// come from a remote data source mounts it into its own element. opts: { transport,
+// debounceMs, preview, data, timers }.
+//
+// mount(host, ctx) is called by the field. ctx says what the field is and how to reach
+// form-js: { field, form, inputId, describedBy, getValue, setValue, onBlur, onFocus }.
+// It returns { update({ value, disabled, readonly }), destroy() }; the field calls update
+// after every render, so a value form-js sets — an import, a reset — is shown too.
+export function remoteAdapter(opts = {}) {
+  return {
+    mount(host, ctx) {
+      const field = ctx.field;
+      const form = ctx.form || null;
+      const io = {
+        inputId: ctx.inputId,
+        describedBy: ctx.describedBy,
+        getValue: () => toValue(ctx.getValue()),
+        setValue: (v) => ctx.setValue(v || null),
+        getData: () => {
+          try { return { ...form._getState().data }; } catch { return { ...(opts.data || {}) }; }
+        },
+        labelOf: (key) => labelIn(form, key),
+        onBlur: () => { if (ctx.onBlur) ctx.onBlur(); },
+        onFocus: () => { if (ctx.onFocus) ctx.onFocus(); },
+      };
+      const c = new Controller(field, opts, io);
+      host.appendChild(c.root);
+      const onChanged = (state) => c.formChanged((state && state.data) || io.getData());
+      if (form && typeof form.on === "function") form.on("changed", onChanged);
+      c.start();
+      return {
+        update(state) { c.update(state || {}); },
+        destroy() {
+          try { if (form && typeof form.off === "function") form.off("changed", onChanged); } catch { /* the form is gone already */ }
+          c.destroy();
+        },
+      };
+    },
+  };
+}
+
+// attachRemoteSelects attaches a search to every directory field a mounted form holds as
+// a textfield — the shape such fields were saved in first. A form whose directory fields
+// are selects needs none of it: the bundle mounts remoteAdapter itself. It returns a handle
+// whose destroy() detaches them; call it before the form is destroyed. opts: { transport,
+// debounceMs, preview, data, timers }.
 export function attachRemoteSelects(form, host, opts = {}) {
   let reg = null;
   try { reg = form.get("formFieldRegistry"); } catch { /* not a form-js Form */ }
-  const fields = reg ? reg.getAll().filter((f) =>
-    f && f.type === "textfield" && f.key && f[DATA_SOURCE_MEMBER] && typeof f[DATA_SOURCE_MEMBER] === "object") : [];
-  const controllers = fields.map((f) => new Controller(form, host, f, opts));
+  const fields = reg ? reg.getAll().filter(isLegacyDirectoryField) : [];
+  const controllers = fields.map((f) => new TextfieldAttachment(form, host, f, opts));
   if (!controllers.length) return { destroy() {}, fields: 0 };
   // form-js re-renders its own DOM; a field it re-creates loses what was attached to it.
   // Re-attaching on every change of the form's subtree is cheap — it is a check unless
   // something actually moved — and keeps the search across a conditional or a re-render.
-  const observer = new MutationObserver(() => controllers.forEach((c) => c.ensureMounted()));
+  const observer = new MutationObserver(() => controllers.forEach((a) => a.ensureMounted()));
   observer.observe(host, { childList: true, subtree: true });
-  const onChanged = (state) => controllers.forEach((c) => c.formChanged((state && state.data) || {}));
+  const onChanged = (state) => controllers.forEach((a) => a.c.formChanged((state && state.data) || {}));
   form.on("changed", onChanged);
-  controllers.forEach((c) => { c.ensureMounted(); c.start(); });
+  controllers.forEach((a) => { a.ensureMounted(); a.c.start(); });
   return {
     fields: controllers.length,
     destroy() {
       observer.disconnect();
       try { form.off("changed", onChanged); } catch { /* the form is gone already */ }
-      controllers.forEach((c) => c.destroy());
+      controllers.forEach((a) => a.c.destroy());
     },
   };
 }
 
-class Controller {
+function toValue(v) { return v == null ? "" : String(v); }
+
+function labelIn(form, key) {
+  try {
+    const reg = form.get("formFieldRegistry");
+    const f = reg.getAll().find((x) => x && x.key === key);
+    if (f && f.label) return f.label;
+  } catch { /* fall back to the key */ }
+  return key;
+}
+
+// TextfieldAttachment puts the search beside a textfield form-js renders, and holds the
+// value in that textfield.
+class TextfieldAttachment {
   constructor(form, host, field, opts) {
     this.form = form;
     this.host = host;
     this.field = field;
+    this.c = new Controller(field, opts, {
+      getValue: () => { const el = this.carrier(); return el ? el.value || "" : ""; },
+      setValue: (v) => this.writeCarrier(v),
+      getData: () => {
+        try { return { ...form._getState().data }; } catch { return { ...this.c.data }; }
+      },
+      labelOf: (key) => labelIn(form, key),
+    });
+  }
+
+  carrier() {
+    const suffix = "-" + this.field.id;
+    for (const el of this.host.querySelectorAll("input.fjs-input")) {
+      if (el !== this.c.input && el.id && el.id.endsWith(suffix)) return el;
+    }
+    return null;
+  }
+
+  ensureMounted() {
+    const input = this.carrier();
+    if (!input) return;
+    const root = this.c.root;
+    const wrapper = input.closest(".fjs-form-field");
+    const group = input.closest(".fjs-input-group") || input;
+    if (!wrapper) return;
+    if (root.isConnected && root.parentElement === wrapper && root.previousElementSibling === group) return;
+    wrapper.classList.add("atlas-rs-host");
+    group.after(root);
+    const label = wrapper.querySelector("label.fjs-form-field-label");
+    if (label) label.htmlFor = this.c.input.id;
+    const describedBy = input.getAttribute("aria-describedby");
+    if (describedBy) this.c.input.setAttribute("aria-describedby", describedBy);
+    this.c.setReadOnly(input.disabled || input.readOnly);
+  }
+
+  // writeCarrier puts a value into the textfield form-js owns, the way typing would:
+  // the input event is what form-js listens for, and leaving the field flushes the
+  // debounce it puts on a textfield, so the value is in the form's data the moment it
+  // is chosen. The bundled Preact listens for focusout, not blur — a blur event reaches
+  // no handler and the value would sit in the debounce until its timer ran.
+  writeCarrier(value) {
+    const input = this.carrier();
+    if (!input) return;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+    setter.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  }
+}
+
+// Controller is one directory field's search. Where its value lives, and what the rest of
+// the form holds, it asks io: { getValue, setValue, getData, labelOf, inputId?,
+// describedBy?, onBlur?, onFocus? }.
+class Controller {
+  constructor(field, opts, io) {
+    this.field = field;
+    this.io = io;
     this.src = field[DATA_SOURCE_MEMBER];
     this.transport = opts.transport || (async () => { throw Object.assign(new Error("no transport"), { code: "worker_unavailable" }); });
     this.debounceMs = Number.isFinite(opts.debounceMs) ? opts.debounceMs : DEFAULT_DEBOUNCE_MS;
@@ -193,6 +321,7 @@ class Controller {
     this.active = -1;
     this.open = false;
     this.selected = null;
+    this.readOnly = false;
     this.filterKey = JSON.stringify(this.filtersOf(this.data));
     this.build();
   }
@@ -223,17 +352,10 @@ class Controller {
     return "";
   }
 
-  labelOf(key) {
-    try {
-      const reg = this.form.get("formFieldRegistry");
-      const f = reg.getAll().find((x) => x && x.key === key);
-      if (f && f.label) return f.label;
-    } catch { /* fall back to the key */ }
-    return key;
-  }
+  labelOf(key) { return this.io.labelOf(key); }
 
   readData() {
-    try { return { ...this.form._getState().data }; } catch { return { ...this.data }; }
+    try { return this.io.getData(); } catch { return { ...this.data }; }
   }
 
   // ---------- DOM -------------------------------------------------------------
@@ -263,17 +385,20 @@ class Controller {
     this.status = root.querySelector(".atlas-rs-status");
     this.more = root.querySelector(".atlas-rs-more");
     this.chip = root.querySelector(".atlas-rs-selected");
-    this.input.id = this.uid + "-search";
+    this.clearBtn = root.querySelector(".atlas-rs-clear");
+    // The field's own label names the box when the field gives it its id — a select's
+    // label is for that id. A textfield's label is pointed at it once it is in place.
+    this.input.id = this.io.inputId || this.uid + "-search";
+    if (this.io.describedBy) this.input.setAttribute("aria-describedby", this.io.describedBy);
+    if (!this.io.inputId) this.input.setAttribute("aria-label", label);
     this.list.id = this.uid + "-list";
     this.input.setAttribute("aria-controls", this.list.id);
-    this.input.setAttribute("aria-label", label);
     this.input.placeholder = t("remote.placeholder");
     this.list.setAttribute("aria-label", t("remote.results"));
     this.more.textContent = t("remote.more");
-    const clear = root.querySelector(".atlas-rs-clear");
-    clear.textContent = "✕";
-    clear.title = t("remote.clear");
-    clear.setAttribute("aria-label", t("remote.clear"));
+    this.clearBtn.textContent = "✕";
+    this.clearBtn.title = t("remote.clear");
+    this.clearBtn.setAttribute("aria-label", t("remote.clear"));
     if (this.preview) {
       const banner = root.querySelector(".atlas-rs-preview");
       banner.hidden = false;
@@ -282,50 +407,58 @@ class Controller {
 
     this.input.addEventListener("input", () => this.schedule());
     this.input.addEventListener("keydown", (e) => this.onKey(e));
-    this.input.addEventListener("blur", () => { this.blurTimer = setTimeout(() => this.close(), 150); });
-    this.input.addEventListener("focus", () => { clearTimeout(this.blurTimer); if (this.items.length) this.show(); });
+    this.input.addEventListener("blur", () => {
+      this.blurTimer = setTimeout(() => this.close(), 150);
+      if (this.io.onBlur) this.io.onBlur();
+    });
+    this.input.addEventListener("focus", () => {
+      clearTimeout(this.blurTimer);
+      if (this.items.length) this.show();
+      if (this.io.onFocus) this.io.onFocus();
+    });
     this.list.addEventListener("mousedown", (e) => e.preventDefault()); // keep focus in the box
     this.list.addEventListener("click", (e) => {
       const li = e.target.closest("li[data-index]");
       if (li) this.choose(Number(li.dataset.index));
     });
     this.more.addEventListener("click", () => this.run(true));
-    clear.addEventListener("click", () => { this.select(null); this.input.focus(); });
+    this.clearBtn.addEventListener("click", () => { this.select(null); this.input.focus(); });
   }
 
-  carrier() {
-    const suffix = "-" + this.field.id;
-    for (const el of this.host.querySelectorAll("input.fjs-input")) {
-      if (el !== this.input && el.id && el.id.endsWith(suffix)) return el;
-    }
-    return null;
-  }
-
-  ensureMounted() {
-    const input = this.carrier();
-    if (!input) return;
-    const wrapper = input.closest(".fjs-form-field");
-    const group = input.closest(".fjs-input-group") || input;
-    if (!wrapper) return;
-    if (this.root.isConnected && this.root.parentElement === wrapper && this.root.previousElementSibling === group) return;
-    wrapper.classList.add("atlas-rs-host");
-    group.after(this.root);
-    const label = wrapper.querySelector("label.fjs-form-field-label");
-    if (label) label.htmlFor = this.input.id;
-    const describedBy = input.getAttribute("aria-describedby");
-    if (describedBy) this.input.setAttribute("aria-describedby", describedBy);
-    const readOnly = input.disabled || input.readOnly;
-    this.input.hidden = readOnly;
-    this.root.querySelector(".atlas-rs-clear").hidden = readOnly;
+  // setReadOnly shows the choice without the means to change it: a task opened to look
+  // at, a field form-js renders disabled.
+  setReadOnly(on) {
+    this.readOnly = !!on;
+    this.input.hidden = this.readOnly;
+    this.clearBtn.hidden = this.readOnly;
+    if (this.readOnly) this.close();
   }
 
   start() {
-    const current = (this.carrier() && this.carrier().value) || "";
+    const current = this.io.getValue();
     if (current) this.resolve(current);
     // A field that searches without a term lists its first page once its filters
     // allow; every other field asks nothing until somebody types.
+    if (this.readOnly) return;
     if (this.minLength() === 0 && !this.missingFilter(this.readData())) this.schedule();
     else if (!current) this.hint();
+  }
+
+  // update follows what form-js renders: whether the field may be changed, and the value
+  // it holds — which is the one chosen here, unless form-js set another.
+  update({ value, disabled, readonly } = {}) {
+    const ro = !!(disabled || readonly);
+    if (ro !== this.readOnly) this.setReadOnly(ro);
+    const v = toValue(value);
+    const shown = this.selected ? this.selected.value : "";
+    if (v === shown) return;
+    if (!v) {
+      this.selected = null;
+      this.renderChip();
+      this.renderList();
+    } else {
+      this.resolve(v);
+    }
   }
 
   destroy() {
@@ -339,23 +472,9 @@ class Controller {
 
   // ---------- the value -------------------------------------------------------
 
-  // writeCarrier puts a value into the textfield form-js owns, the way typing would:
-  // the input event is what form-js listens for, and leaving the field flushes the
-  // debounce it puts on a textfield, so the value is in the form's data the moment it
-  // is chosen. The bundled Preact listens for focusout, not blur — a blur event reaches
-  // no handler and the value would sit in the debounce until its timer ran.
-  writeCarrier(value) {
-    const input = this.carrier();
-    if (!input) return;
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-    setter.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-  }
-
   select(item, announce) {
     this.selected = item;
-    this.writeCarrier(item ? item.value : "");
+    this.io.setValue(item ? item.value : "");
     this.renderChip();
     if (announce) this.say(announce);
     else if (item) this.say(t("remote.selected", { label: item.label }));
@@ -452,6 +571,7 @@ class Controller {
 
   schedule() {
     this.clearTimer(this.timer);
+    if (this.readOnly) return;
     const data = this.readData();
     const term = this.input.value;
     if (this.missingFilter(data) || lengthOf(term) < this.minLength() || (lengthOf(term) === 0 && this.minLength() > 0)) {

@@ -1,6 +1,7 @@
 # ADR-0476: A Google Contacts Worker Type — a process finds, keeps and labels the people it works with
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-23: a task form's directory field searches the
+  address book, as the second provider of [ADR-0473](0473-form-remote-data-sources.md))
 - **Implementation:** Landed
 - **Date:** 2026-10-23
 - **Deciders:** Atlas maintainers
@@ -308,9 +309,11 @@ person's term.
   `ActiveFilter` on every row; `api/formlookup/schema.go` refuses `activeOnly` for a
   provider without disabled entries.
 - The Console's Worker dialog shows **Forms may search** for a Google Contacts Worker.
-  The form editor starts a new directory field on the first source a Worker already
-  lets forms search, hides the switch for disabled entries where there are none, and
-  previews a contacts field with made-up contacts.
+  In the form editor (`api/web/vendor/form-js/src/atlas/editor.jsx`, bundle rebuilt),
+  the palette's **Directory picker** and a newly chosen **Remote data source** start on
+  the first source a Worker already lets forms search, **Leave out disabled accounts**
+  is offered only for a source that has them, and `api/web/remote-select.js` previews a
+  contacts field with made-up contacts.
 - `examples/google-kundenauswahl` — a customer picked from the contacts labelled
   "Kunden", then read with `get-contact`.
 
