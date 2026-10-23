@@ -1,6 +1,6 @@
 # ADR-0471: A release carries its architecture sketch, and a worker publishes it to Confluence
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-10-23)
 - **Implementation:** Not started
 - **Date:** 2026-10-23
 - **Deciders:** Atlas maintainers
@@ -111,9 +111,11 @@ is recorded, and a shipped process uploads its renderings to Confluence through 
 ### 1. The architecture snapshot is part of the release
 
 When a release record is saved — on publish and on the import of a promoted release — the
-server takes an **architecture snapshot** and stores it by value in a design-time sidecar
-store keyed by release id. It is included in design-time backup and restore, written
-atomically and fsynced, and never enters the WAL. The member definitions are deployed at
+server takes an **architecture snapshot** and stores it by value on the release record
+itself, in the same atomic, fsynced write that records the release. A release therefore
+never exists without its snapshot — a store of its own would leave a crash window between
+the two writes, and a repair path for it — and the snapshot is backed up, restored and
+deleted with its release. Nothing enters the WAL. The member definitions are deployed at
 that moment by construction, so the snapshot never depends on a definition outliving its
 release. It is never recomputed: its format version and mapping version are written into
 it, and a later change to either produces different snapshots for later releases only.
@@ -198,7 +200,8 @@ fact; it is carried by the ArchiMate relationships in the export, not by the arr
 
 The renderings are served at `GET /api/v1/applications/{id}/releases/{version}/architecture`
 with `.svg` and `.xml` variants, under the application's sharing scope
-([ADR-0071](0071-sharing-scopes.md)). Endpoints appear in a response only to a caller who
+([ADR-0071](0071-sharing-scopes.md)). The release list leaves the snapshot out; it is read
+through these routes only. Endpoints appear in a response only to a caller who
 may read the worker store; for anyone else they are reported as *withheld*.
 
 ### 4. Publication: a Confluence Worker Type, driven by a shipped process
