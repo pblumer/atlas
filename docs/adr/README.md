@@ -531,8 +531,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0443](0443-publishing-warns-about-answers-in-the-clear.md) | Publishing warns about answers in the clear | Accepted | Landed |
 | [0444](0444-release-notes-from-the-changelog.md) | The Console shows the CHANGELOG as release notes, read while the server runs | Accepted | Landed |
 | [0445](0445-feel-assistant.md) | A FEEL expression is written in a conversation, and checked by the engine before anybody reads it | Accepted | Landed |
-| [0446](0446-the-messages-deployed-models-send-and-receive.md) | Atlas shows the messages its deployed models send and receive | Proposed | Not started |
-| [0447](0447-the-signals-deployed-models-throw-and-receive.md) | Atlas shows the signals its deployed models throw and receive | Proposed | Not started |
+| [0446](0446-the-messages-deployed-models-send-and-receive.md) | Atlas shows the messages its deployed models send and receive | Accepted | Landed |
+| [0447](0447-the-signals-deployed-models-throw-and-receive.md) | Atlas shows the signals its deployed models throw and receive | Accepted | Landed |
 | [0448](0448-trusted-proxies.md) | Trusted proxies — the client's address behind a load balancer, and the health check that is not news | Accepted | Landed |
 | [0449](0449-a-wizard-is-a-subprocess-one-filler-walks-through.md) | A wizard is a subprocess one filler walks through | Accepted | Landed |
 | [0450](0450-a-scope-drains-only-when-no-token-is-in-transit.md) | A scope drains only when no token is in transit into it | Accepted | Landed |

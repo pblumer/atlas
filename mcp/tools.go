@@ -937,6 +937,90 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_signals",
+			Description: "The signals this installation's own models throw and receive (ADR-0447) — not the " +
+				"events atlas emits, which are atlas_event_catalog. Grouped by name ('signals'), each with its " +
+				"'points' (processId, processName, version, 'newest', definitionKey, projectId, 'system', " +
+				"'inactive', elementId, 'role' — throw, start, catch, boundary or event-subprocess — and, for a " +
+				"boundary or an event subprocess, 'interrupting') and its 'findings', each a 'rule' and a " +
+				"'message': signal.unreceived (thrown, and no newest, active definition receives it: every " +
+				"throw is lost), signal.unthrown (received, and no deployed definition throws it), " +
+				"signal.crosses-projects (thrown in one project and received in another: every variable of " +
+				"the throwing instance goes with it) and signal.reserved-name (a model outside atlas's system " +
+				"processes throws an atlas.* name). An atlas.* name is listed only for such a throw; who " +
+				"receives one is atlas_event_listeners. Every deployed version is listed; findings read the " +
+				"newest version of each process and know nothing of running instances.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get("/api/v1/signals"))
+			},
+		},
+		{
+			Name: "atlas_message_names",
+			Description: "The messages of this installation (ADR-0446), grouped by name ('messages'): each name's " +
+				"'sources' — the deployed processes that wait for it ('process') or send it ('process-throw', " +
+				"a message throw or end event or a send task), with version, 'newest', projectId, 'system', " +
+				"'role' and 'interrupting'; the inbound watches of Workers that publish it ('inbound-watch'); " +
+				"and the product actions that send it ('product-action', for the catalogues you maintain) — " +
+				"and its 'findings': message.unreceived (a process throw, an enabled watch or an active " +
+				"product action sends a name no newest, active definition waits for, so what it sends is " +
+				"lost), message.crosses-projects (sent in one project and waited for in another) and " +
+				"message.reserved-name (a model outside atlas's system processes sends an atlas.* name). It " +
+				"never says that nothing sends a name: atlas_publish_message may send any. Findings read the " +
+				"newest version of each process.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get("/api/v1/message-names"))
+			},
+		},
+		{
+			Name: "atlas_event_log",
+			Description: "The event log (ADR-draft-event-log): what was actually sent and where it arrived, newest " +
+				"first — the runtime counterpart of atlas_signals and atlas_message_names. Each row has a 'kind': " +
+				"'signal.thrown' or 'message.sent' (a send: its 'source' — process, publish, inbound or directed — " +
+				"its 'sender' for a process, and 'reached' and 'started', both 0 for a send nobody received), " +
+				"'signal.received', 'signal.started', 'message.received', 'message.started' (a delivery: the " +
+				"'receiver' instance, definition and element, and the sending instance), or 'message.kept', " +
+				"'message.taken', 'message.expired' (the buffer). Rows sharing a 'cause' belong to one send. No " +
+				"payload is ever logged. Optional 'channel' (signal or message), 'name' and 'instance' (a process " +
+				"instance key, sending or receiving) narrow the page; 'limit' is 1–500 (default 100); 'before' " +
+				"continues to older rows from a page's 'next', 'after' to newer ones from its 'latest'. Rows are " +
+				"read as their instances are: an operator or administrator reads every row, a project member the " +
+				"rows of their projects' definitions.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"channel":  stringProp("signal or message: only rows of that channel."),
+					"name":     stringProp("Only rows of this signal or message name, exactly."),
+					"instance": stringProp("A process instance key: only rows it sent or received."),
+					"limit":    map[string]any{"type": "integer", "minimum": 1, "maximum": 500, "description": "Maximum rows to return (default 100, at most 500)."},
+					"before":   stringProp("The 'next' of a previous page, to read older rows."),
+					"after":    stringProp("The 'latest' of a previous page, to read newer rows."),
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				q := url.Values{}
+				for _, name := range []string{"channel", "name", "instance", "before", "after"} {
+					if v := optString(args, name); v != "" {
+						q.Set(name, v)
+					}
+				}
+				if v, ok := args["limit"]; ok {
+					switch n := v.(type) {
+					case float64:
+						q.Set("limit", strconv.Itoa(int(n)))
+					case string:
+						q.Set("limit", n)
+					}
+				}
+				path := "/api/v1/event-log"
+				if len(q) > 0 {
+					path += "?" + q.Encode()
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
 			Name: "atlas_list_incidents",
 			Description: "List unresolved incidents — the operator \"what's stuck\" view. Each incident carries " +
 				"its elementInstanceKey (pass it to atlas_resolve_incident), processInstanceKey, processDefKey, " +

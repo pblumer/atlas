@@ -6614,7 +6614,11 @@ function messageFieldsHTML(modeler, med, hint) {
 // too, so the author sees every source of the name in one place: the product action that
 // owns it, and the deployed processes waiting for it. Only watches are counted as
 // publishing it, which is what the line has always meant.
-function fillMessageSources(api, el, name, sources) {
+//
+// A deployed process that sends the name is a source too (ADR-0446 §1): a name a model
+// sends no longer reads as unfed. On an element that sends (sends), the line ends with
+// who receives what it sends, or that nobody does, and links to the Console's overview.
+function fillMessageSources(api, el, name, sources, sends) {
   if (!api || !el) return;
   const want = (name || "").trim();
   if (!want) return;
@@ -6623,20 +6627,31 @@ function fillMessageSources(api, el, name, sources) {
     const named = (s) => (s.messageName || "").trim() === want;
     const watches = messageSourcesOf(list, "inbound-watch").filter(named);
     const actions = messageSourcesOf(list, "product-action").filter(named);
-    const waiting = messageSourcesOf(list, "process").filter(named);
-    el.innerHTML = watchSourcesHTML(want, watches, actions.length > 0)
+    const waiting = messageSourcesOf(list, "process").filter(named).filter(newestRow);
+    const senders = messageSourcesOf(list, "process-throw").filter(named).filter(newestRow);
+    el.innerHTML = watchSourcesHTML(want, watches, actions.length > 0, senders.length > 0)
       + productOwnersHTML(actions, watches.some((s) => s.enabled))
-      + waitingProcessesHTML(waiting);
+      + sendingProcessesHTML(senders)
+      + (sends ? messageReceiversHTML(want, waiting) : waitingProcessesHTML(waiting));
   }).catch(() => { /* no hint; the field works the same */ });
+}
+
+// newestRow reports whether a process row is the newest deployed version of its process.
+// The listing names every version (ADR-0446 §1), and the Modeler asks who waits or sends
+// now. A server older than the field listed the newest version alone, so a row without a
+// version is one.
+function newestRow(s) {
+  return !!s && (s.newest === true || s.version === undefined || s.version === null);
 }
 
 // watchSourcesHTML is the hint's account of the inbound watches publishing a name. With
 // none, it says where watches are configured — unless a product action owns the name: no
 // watch may publish an action's message (ADR-0429 §1), so that advice would send the author
-// to a door that refuses them.
-function watchSourcesHTML(want, watches, ownedByProduct) {
+// to a door that refuses them — or a deployed model sends it, which is the answer the
+// advice was looking for.
+function watchSourcesHTML(want, watches, ownedByProduct, sentByModel) {
   if (!watches.length) {
-    if (ownedByProduct) return "";
+    if (ownedByProduct || sentByModel) return "";
     return `<span class="muted">No inbound event watch on this server publishes <b>${esc(want)}</b>. `
       + `That is fine when the message is thrown inside a model or posted to <code>/api/v1/messages</code> — `
       + `for a Jira or clio event, add a watch under <b>Workers → Events</b> in the Console.</span>`;
@@ -6665,6 +6680,26 @@ function productOwnersHTML(actions, alsoWatched) {
     : "";
   return `<div style="margin-top:4px">Owned by product action${owners.length > 1 ? "s" : ""} ${owners.join(", ")}`
     + ` — the order sends it.${clash}</div>`;
+}
+
+// sendingProcessesHTML names the deployed processes whose newest version sends a message
+// name (ADR-0446 §1): a throw, an end event or a send task naming it.
+function sendingProcessesHTML(senders) {
+  if (!senders.length) return "";
+  const named = [...new Set(senders.map((s) => s.processId || "?"))].sort().map((pid) => `<code>${esc(pid)}</code>`);
+  return `<div style="margin-top:4px">Sent by deployed process${named.length > 1 ? "es" : ""} ${named.join(", ")}.</div>`;
+}
+
+// messageReceiversHTML is a sending element's line (ADR-0446 §5): the deployed processes
+// whose newest version waits for the name, or that none does, linked to the Console's
+// overview. Nothing waiting is said plainly: a message is not buffered unless it is
+// published with a time to live, and a throw has none.
+function messageReceiversHTML(want, waiting) {
+  const active = waiting.filter((s) => s.enabled !== false);
+  if (!active.length) {
+    return `<div style="margin-top:4px">No deployed process waits for <b>${esc(want)}</b>: what this element sends is lost. ${eventsPageLink(want, "message")}</div>`;
+  }
+  return waitingProcessesHTML(active).replace(/<\/div>$/, ` ${eventsPageLink(want, "message")}</div>`);
 }
 
 // waitingProcessesHTML names the deployed processes whose newest version waits for a
@@ -6792,7 +6827,14 @@ function productActionChoices(sources, declared) {
 // waitingProcessChoices offers each name a deployed process waits for, labelled with the
 // process and where its newest version waits: "billing · catch".
 function waitingProcessChoices(sources, declared) {
-  return sourceChoices(messageSourcesOf(sources, "process"), declared, (s) =>
+  return sourceChoices(messageSourcesOf(sources, "process").filter(newestRow), declared, (s) =>
+    [s.processId, s.element].filter(Boolean).join(" · "));
+}
+
+// sendingProcessChoices offers each name the newest version of a deployed process sends,
+// labelled with the process: "billing · throw" (ADR-0446 §5).
+function sendingProcessChoices(sources, declared) {
+  return sourceChoices(messageSourcesOf(sources, "process-throw").filter(newestRow), declared, (s) =>
     [s.processId, s.element].filter(Boolean).join(" · "));
 }
 
@@ -6833,9 +6875,10 @@ function offerWorkerEvents(select, sources, declared, productBound) {
 
 // offerMessageSources puts the names the server knows in front of the author who would
 // otherwise have to type them, grouped by where they come from (ADR-0429 §6). An element
-// that waits for a message is offered the Worker events and the product actions; one that
-// throws is offered the deployed processes waiting for a name, and never a product action,
-// whose message is the order's to send. The name field suggests the same names, declared
+// that waits for a message is offered the Worker events, the product actions and the
+// names deployed models send (ADR-0446 §5); one that throws is offered the deployed
+// processes waiting for a name, and never a product action, whose message is the order's
+// to send. The name field suggests the same names, declared
 // ones included. Picking one declares a message of that name; the field stays free text,
 // because a message may be modelled before its source exists, and the publish checks
 // remain the last word. It runs once the listing arrives, so the picker is usable at once
@@ -6846,9 +6889,11 @@ function offerMessageSources(select, fname, datalist, sources, modeler, bo) {
   if (receivesMessages(bo)) {
     offerWorkerEvents(select, sources, declared, productBindsProcess(sources, owningProcessId(bo)));
     addSourceGroup(select, "product-actions", "Product actions", productActionChoices(sources, declared));
+    addSourceGroup(select, "sending-processes", "Messages deployed models send", sendingProcessChoices(sources, declared));
     suggested = [
       ...workerEventChoices(sources, null).map((c) => ({ name: c.name, label: c.workers })),
       ...productActionChoices(sources, null),
+      ...sendingProcessChoices(sources, null),
     ];
   } else if (throwsMessages(bo)) {
     addSourceGroup(select, "waiting-processes", "Processes waiting for it", waitingProcessChoices(sources, declared));
@@ -7163,23 +7208,73 @@ function signalFieldsHTML(modeler, sed, hint, listens) {
     <p class="muted" style="font-size:12px">Shared with every event that uses this signal — a broadcast reaches every catch, boundary, event subprocess, and start event of the same name.</p>` : "";
   // A receiving element is offered the events atlas emits as signals (ADR-0435); the
   // group is filled from the event catalogue once it answers, and #f-sigevent says
-  // what the chosen atlas.* name means and what it carries.
+  // what the chosen atlas.* name means and what it carries. It is offered the names
+  // the deployed models throw too (ADR-0447), and a throwing element is told who
+  // receives its name (#f-sigreceivers).
   return `<h3>Signal</h3>
     <label class="field"><span>Signal</span>
       <select id="f-sigref" data-listens="${listens ? "1" : ""}">
         <option value="">— none —</option>
         ${options}
         ${listens ? `<optgroup label="Events atlas emits" id="f-sig-events"></optgroup>` : ""}
+        ${listens ? `<optgroup label="Signals deployed models throw" id="f-sig-deployed"></optgroup>` : ""}
         <option value="__new__">＋ New signal…</option>
       </select></label>
     ${fields}
     <div id="f-sigevent"></div>
+    ${!listens && current ? `<p class="muted" style="font-size:12px" id="f-sigreceivers"></p>` : ""}
     <p class="muted" style="font-size:12px">${hint}</p>`;
 }
 
-// SIGNAL_EVENT_PREFIX marks a picker option that names a catalogued event rather than
-// a signal of this model; choosing it reuses or creates the model's signal of that name.
+// SIGNAL_EVENT_PREFIX marks a picker option that names a catalogued event, or a signal
+// a deployed model throws, rather than a signal of this model; choosing it reuses or
+// creates the model's signal of that name.
 const SIGNAL_EVENT_PREFIX = "__event__:";
+
+// signalInventory asks for the signals the deployed models throw and receive
+// (ADR-0447), once per panel render: unlike the catalogue it changes with every deploy.
+// A refusal, a failure or a server without the route is an empty inventory, and the
+// picker works as it did.
+function signalInventory(api) {
+  try {
+    return Promise.resolve(api("GET", "/api/v1/signals"))
+      .then((r) => (r && Array.isArray(r.signals) ? r.signals : []), () => []);
+  } catch { return Promise.resolve([]); }
+}
+
+// deployedSignalChoices offers each name the newest version of a deployed model throws,
+// labelled with the processes that throw it. An atlas.* name is not offered here: the
+// inventory lists one only where a model speaks for atlas, and the events atlas emits
+// have their own group.
+function deployedSignalChoices(signals) {
+  return signals.filter((g) => g && g.name && !String(g.name).startsWith("atlas."))
+    .map((g) => ({ name: g.name, by: [...new Set((g.points || [])
+      .filter((p) => p.role === "throw" && p.newest).map((p) => p.processId))].sort() }))
+    .filter((c) => c.by.length)
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+// eventsPageLink links a name to its row on the Console's Events page.
+function eventsPageLink(name, channel) {
+  const href = `/#/console/events?name=${encodeURIComponent(name)}&channel=${channel}`;
+  return `<a href="${esc(href)}" target="_blank" rel="noopener">Events ↗</a>`;
+}
+
+// signalReceiversHTML is a throwing element's one line (ADR-0447 §6): how many deployed
+// processes receive its name — the newest, active version of each — or that none does.
+// An atlas.* name says nothing here: signalEventNote already says the name is atlas's,
+// and who receives one is an administrator's view.
+function signalReceiversHTML(signals, name) {
+  const n = String(name || "").trim();
+  if (!n || n.startsWith("atlas.")) return "";
+  const g = signals.find((x) => x && x.name === n);
+  const by = [...new Set(((g && g.points) || [])
+    .filter((p) => p.role !== "throw" && p.newest && !p.inactive).map((p) => p.processId))].sort();
+  if (!by.length) {
+    return `No deployed process receives it: a signal is not buffered, so every throw is lost until one is deployed. ${eventsPageLink(n, "signal")}`;
+  }
+  return `Received by ${by.length} deployed process${by.length > 1 ? "es" : ""}: ${by.map(esc).join(", ")}. ${eventsPageLink(n, "signal")}`;
+}
 
 // eventCatalog is the event catalogue, asked for once per page (ADR-0435). A modeler
 // may read it; a refusal or a server without it leaves the picker as it was.
@@ -10645,13 +10740,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     const fmsgname = body.querySelector("#f-msgname");
     if (fmsgname) {
-      fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value, msgSources);
+      const sends = throwsMessages(msgBo);
+      fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value, msgSources, sends);
       fmsgname.addEventListener("change", () => {
         const med = messageRefHolder(element.businessObject);
         if (med && med.messageRef) med.messageRef.name = (fmsgname.value || "").trim();
         // Renaming the message changes which watches feed it, so the line is redrawn for
         // the new name from the same listing, rather than left describing the old one.
-        fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value, msgSources);
+        fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value, msgSources, sends);
       });
     }
     const fcorrkey = body.querySelector("#f-corrkey");
@@ -10662,9 +10758,26 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       });
     }
     const fsigref = body.querySelector("#f-sigref");
+    // The deployed models' signals serve the picker's group and the throw's line, so a
+    // render asks once.
+    const sigInventory = fsigref ? signalInventory(api) : null;
     if (fsigref) {
       const listens = fsigref.dataset.listens === "1";
       const sigNote = body.querySelector("#f-sigevent");
+      sigInventory.then((signals) => {
+        if (!fsigref.isConnected) return;
+        const group = fsigref.querySelector("#f-sig-deployed");
+        if (group) {
+          const mine = new Set(listSignals(modeler).map((x) => x.name));
+          group.innerHTML = deployedSignalChoices(signals)
+            .map((c) => `<option value="${esc(SIGNAL_EVENT_PREFIX + c.name)}">${
+              esc(c.name)} — ${esc(c.by.join(", "))}${mine.has(c.name) ? "" : " — new"}</option>`).join("");
+          if (!group.children.length) group.remove();
+        }
+        const line = body.querySelector("#f-sigreceivers");
+        const sed = signalDefOf(element.businessObject);
+        if (line && sed && sed.signalRef) line.innerHTML = signalReceiversHTML(signals, sed.signalRef.name);
+      });
       eventCatalog(api).then((entries) => {
         if (!fsigref.isConnected) return;
         const group = fsigref.querySelector("#f-sig-events");
@@ -10688,7 +10801,8 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           } else if (v === "") {
             linkSignal(modeler, element, sed, null);
           } else if (v.startsWith(SIGNAL_EVENT_PREFIX)) {
-            // A catalogued event: the model's signal of that name, made once.
+            // A catalogued event or a deployed model's signal: the model's signal of
+            // that name, made once.
             const name = v.slice(SIGNAL_EVENT_PREFIX.length);
             linkSignal(modeler, element, sed, listSignals(modeler).find((x) => x.name === name) || createSignal(modeler, name));
           } else {
@@ -10710,6 +10824,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           eventCatalog(api).then((entries) => {
             if (note.isConnected) note.innerHTML = signalEventNote(entries, fsigname.value, sel.dataset.listens === "1");
           });
+        }
+        // And who receives it is asked of the renamed signal, from the same inventory.
+        const line = body.querySelector("#f-sigreceivers");
+        if (line && sigInventory) {
+          sigInventory.then((signals) => { if (line.isConnected) line.innerHTML = signalReceiversHTML(signals, fsigname.value); });
         }
       });
     }
