@@ -17,7 +17,7 @@ import (
 	"github.com/pblumer/atlas/wal"
 )
 
-// The day an account last signed in (ADR-draft-last-login-day): what the roster
+// The day an account last signed in (ADR-0477): what the roster
 // shows, when it is written, and what it never becomes.
 
 // lateEveningInZurich is half past midnight on 24 October in Zurich, which is still

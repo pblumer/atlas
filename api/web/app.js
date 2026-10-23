@@ -2789,7 +2789,7 @@ async function viewConsoleOrg() {
     return `<span class="pill off" title="${esc(closed)}"><span class="dot"></span>offline</span>`;
   };
 
-  // The day each account last signed in (ADR-draft-last-login-day).
+  // The day each account last signed in (ADR-0477).
   // Presence is this minute and a restart forgets it; this is what tells an account
   // somebody still uses from one nobody has opened since spring. The server keeps a
   // UTC calendar day and nothing finer, so its age is counted against today's UTC day

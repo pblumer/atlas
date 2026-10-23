@@ -1,4 +1,4 @@
-// The day each account last signed in, from the browser (ADR-draft-last-login-day;
+// The day each account last signed in, from the browser (ADR-0477;
 // the Users card in app.js, viewConsoleOrg).
 //
 // What only a real DOM proves: the column turns the stored UTC day into an age a

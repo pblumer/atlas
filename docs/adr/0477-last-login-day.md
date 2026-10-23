@@ -1,4 +1,4 @@
-# ADR-DRAFT: The roster says on which day an account last signed in
+# ADR-0477: The roster says on which day an account last signed in
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -58,7 +58,7 @@ governs a Worker:
   gains a store, `last-logins`, which a whole-instance snapshot carries with the
   accounts. Accounts show "no login recorded" until their first login after the
   upgrade, and an account used only through an API token or an AI client never signs
-  in here ([ADR-draft-last-login-day](docs/adr/draft-last-login-day.md)).
+  in here ([ADR-0477](docs/adr/0477-last-login-day.md)).
 
 - **A process finds, keeps and labels the people in a Google address book.** A new
   Google Contacts Worker Type finds a contact by e-mail address, phone number or a custom

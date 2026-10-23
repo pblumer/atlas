@@ -480,7 +480,7 @@ type Server struct {
 
 	// lastLogins is the day each account last signed in, beside the account rather
 	// than on it. Written by the sign-in path off the run loop and serialised by its
-	// own mutex, like sessions (ADR-draft-last-login-day, lastlogin.go).
+	// own mutex, like sessions (ADR-0477, lastlogin.go).
 	lastLogins *lastLoginStore
 
 	// collab holds live collaborative-editing sessions on drafts in memory
