@@ -56,18 +56,16 @@ Three decisions already taken constrain any answer:
 - **A release proves its texts.** A description present in one of the catalogue's
   languages and missing in another does not publish.
 
-The product owner's condition also has a second half that is not about content: every
+The product owner's condition has a second half that is not about content: every
 service carries its own lifecycle, and its preconditions are caught by Atlas's
 orchestration. The lifecycle half already holds. Every item needs a provisioning and a
 deprovisioning binding to publish, or one lifecycle process
 ([ADR-0425](0425-a-product-lifecycle-is-one-process-with-message-triggers.md)), and
 further service events are product actions
 ([ADR-0429](0429-product-actions-are-commands-with-published-outcomes.md)). The
-precondition half does not fully hold. A `requires` edge orders lines **within one
-order**. A precondition that the order does not carry is deliberately not checked
-(`api/order/advance.go`: "whether the recipient already holds it is the provisioning
-process's question"). So somebody can order a Teams add-on without holding the
-licence it requires, and Atlas does not notice before the provisioning process does.
+precondition half does not fully hold today. It is decided in its own record,
+[ADR-draft-a-missing-precondition-is-added-to-the-basket](draft-a-missing-precondition-is-added-to-the-basket.md),
+because it changes how orders behave whether or not a content source is configured.
 
 ## Decision drivers
 
@@ -88,7 +86,6 @@ licence it requires, and Atlas does not notice before the provisioning process d
   without the catalogue knowing either.
 - **Foreign content is never markup.** Text from a source reaches the shop as text,
   never as HTML.
-- **A precondition is caught before provisioning, not by it.**
 
 ## Considered options
 
@@ -221,41 +218,13 @@ The release freezes the fetched content together with the binding (`Ref`, `Versi
 `URL`). An order can therefore say which version of which wiki item its description
 came from, and that holds after the wiki page has changed.
 
-### 7. A missing precondition is added to the basket
-
-When a line `requires` a service that the order does not carry, the basket **adds the
-precondition as a position of its own** and shows it to the orderer with its price.
-The existing rule then applies: a service the recipient already holds is marked as
-held and skipped (ADR-0312). The Teams add-on thus brings its licence into the basket,
-or finds it held.
-
-- Where the precondition cannot be ordered for this recipient — it is not in the
-  catalogue they see, or eligibility excludes them
-  ([ADR-0347](0347-product-eligibility.md)) — the line that requires it is refused at
-  placement, and the refusal names the precondition.
-- The added position is approved like any other line, under its own rule.
-- Pulling the precondition in is preferred to refusing the order. An inventory that
-  is not yet complete — the commissioning load of
-  [ADR-0333](0333-inventory-commissioning-load.md) has not run, or did not attribute
-  the right — would otherwise refuse orders from people who do hold the licence. In
-  that case the precondition's provisioning finds the right present and succeeds
-  without doing anything, which is the property a provisioning process needs anyway.
-- What the lifecycle process checks against the target system stays its own
-  business. This rule catches what Atlas can know; the process catches what only the
-  target system knows.
-
-This section changes order semantics independently of content sources and could
-stand as a record of its own. It is kept here because the product owner's condition
-names both halves together. Reviewers may ask for it to be split.
-
 ### Consequences
 
 - **Positive:** the product owner maintains one description, in the wiki, and the
   shop shows it without retyping. The product manager can assemble market offerings
   from services whose content they do not own, and cannot change that content by
   accident. A release, an approval and an order keep exactly the guarantees they
-  have today. An installation without a source sees no difference. A missing licence
-  is noticed in the basket, where the orderer can still act on it.
+  have today. An installation without a source sees no difference.
 - **Negative / trade-offs accepted:** the shop is not live. A wiki edit reaches the
   shop only after a refresh and a publish, and that delay is the point: it is the
   product manager's decision to republish. Two people now share one service, and a
@@ -334,9 +303,8 @@ names both halves together. Reviewers may ask for it to be split.
 - relates to [ADR-0425](0425-a-product-lifecycle-is-one-process-with-message-triggers.md)
   and [ADR-0429](0429-product-actions-are-commands-with-published-outcomes.md) — the
   per-service lifecycle and its service events, which this record presupposes.
-- relates to [ADR-0333](0333-inventory-commissioning-load.md) and
-  [ADR-0347](0347-product-eligibility.md) — why a missing precondition is added rather
-  than refused, and when it is refused.
+- relates to [ADR-draft-a-missing-precondition-is-added-to-the-basket](draft-a-missing-precondition-is-added-to-the-basket.md)
+  — the precondition half of the product owner's condition, split out of this record.
 - external: wikiwikibangbang's
   [ADR-0001](https://github.com/dbuchs7/wikiwikibangbang/blob/main/docs/adr/0001-unified-item-data-model.md)
   (item model),
