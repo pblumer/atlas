@@ -316,6 +316,11 @@ governs a Worker:
 
 ### Fixed
 
+- **A pill keeps to one line.** A status pill in a column narrower than its label folded
+  inside itself, and its round ends turned the two lines into a tall blob: the expiry and
+  vault pills on *API tokens*, the findings on *Events* and the marks on the *Event log*.
+  A pill now stays on one line, as a chip already did, and moves under the cell's text
+  when the column is narrow; the *Event log*'s marks also stand a size smaller.
 - **Authorization evidence has its own key space.** It had been given the event log's
   column family byte, so a range read or prefix delete of one could reach the other's
   records. It moved; evidence recorded by a development build before the move is no longer
