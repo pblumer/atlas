@@ -1,7 +1,7 @@
 # ADR-DRAFT: Identity-aware Worker execution and policy-based authorization
 
 - **Status:** Proposed
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-23
 - **Deciders:** Atlas maintainers
 - **Open question:** whether an *external* (not Atlas-supervised) Worker Instance may
@@ -556,9 +556,11 @@ interpreter); a user trying to self-approve; an attacker able to start a linking
 ### 16. Performance trade-offs
 
 - **Engine**: one extra event per authorized job, appended through the processor in the
-  batch the PEP submits; jobs of ungoverned Workers pay nothing. The two value types widen
-  the by-value `inflightValue` the processor reuses, as every earlier value type did; no
-  per-command allocation is added.
+  batch the PEP submits; jobs of ungoverned Workers pay nothing. The two value types ride
+  on the processor's `inflightValue` behind pointers rather than inline: inline, a dozen
+  strings each would widen every token movement's copy. The hot path pays sixteen bytes and
+  no allocation; the allocation falls on the governed action, which has just made a
+  network round trip (as built; the first draft of this section assumed inline values).
 - **PDP**: off the run loop, on the request goroutine; an immutable compiled set; no network
   call; bounded inputs (at most 256 groups and roles, 64 approvals, 4 KiB detail). FEEL and
   temis evaluation has no step budget in Atlas ([expr](../../expr/expr.go) passes none), so
@@ -579,8 +581,9 @@ interpreter); a user trying to self-approve; an attacker able to start a linking
 - Persistent jobs and deployed models need no change: the identity policy is Worker
   configuration, and the decision is a step the Worker takes.
 - Protocol: an Atlas worker built before this record never calls `authorize`. In `enforce`
-  mode its completion is refused, which surfaces the version gap instead of hiding it; the
-  readiness report names it. No deadline is imposed by this record; the roadmap carries the
+  mode its completion is refused, which surfaces the version gap instead of hiding it: the
+  409 and its audit entry name it. (As built, the readiness report does not know a Worker
+  Instance's version, so it cannot name the gap in advance.) No deadline is imposed by this record; the roadmap carries the
   milestones (legacy reported → shadow → enforce for delegated Workers by default).
 - Existing on-disk records decode unchanged: the new fields and value types are appended.
 
@@ -651,6 +654,107 @@ built by this record):
 Four layers stay distinct in every row: authenticating to the provider, Atlas allowing a
 Worker's use, the provider allowing the resource, and the business policy allowing the
 action.
+
+### As built, first slice
+
+Phases 1 to 6 of §20 landed together for the SharePoint Worker Type, with the departures and
+gaps listed below. The status stays *Proposed*: the open question above, and the ADR-0168
+amendment of §19, are not decided by having built the supervised half.
+
+**What exists**
+
+- **Identities and connections** (`api/identity`). An external identity is keyed by provider,
+  tenant and the provider's immutable subject (Microsoft's `oid`), never by e-mail. A new
+  connection allows no Worker; only its owner changes that, and only to configured Workers.
+  Its owner or an administrator revokes it, which deletes the vault credential for good. A
+  provider's `invalid_grant` marks it `reauth_required`. The refresh token lives in the vault
+  under the reserved prefix `atlas:connection-credential:`. The secret routes, API-token
+  sealing and Worker secret resolution refuse that prefix, and vault listings hide it. The
+  broker serializes each connection's refreshes and persists a rotated refresh token before
+  it releases the access token. A revocation that lands during a refresh wins.
+- **The decision point** (`authz`). It is pure: no clock, no I/O. The built-in guards run
+  before any policy (§7), then each policy's rule combining, then deny-overrides across
+  policies. Indeterminate and NotApplicable refuse. Two obligations exist, approval and fresh
+  authentication. Conditions are FEEL, and `now()`/`today()` are refused at compile. A rule
+  may delegate to a DMN decision through `dmn.CompileStandalone`. The action digest is
+  SHA-256 over canonical JSON. Published versions are immutable (`api/policy`), and a set
+  that will not build leaves every governed action refused, not the server down.
+- **Evidence** (`model`, `state`, `engine`). `VTAuthorization` (`AuthorizationDecided`) and
+  `VTActionApproval` (`ApprovalRecorded`) are engine facts, fenced on the job's lease holder
+  and epoch. `ProcessInstanceValue.StartedBy` records who started an instance. A refusal's
+  consequence is appended in the decision's own batch: an incident
+  (`IncidentAuthorizationDenied`), or the BPMN error `ATLAS_APPROVAL_REQUIRED` with an
+  approval request bound to the digest. Recovery folds the facts and evaluates nothing.
+  Purging an instance's history deletes both column families.
+- **The enforcement point** (`api/authorize.go`). `POST /api/v1/jobs/{key}/authorize` decides
+  for the lease the Worker holds. A governed Worker's completion without a recorded Permit
+  for its lease is refused (409). A delegated Permit releases an access token, only to a
+  Worker Instance Atlas supervises, with `Cache-Control: no-store`. The shipped SharePoint
+  Worker asks before every action (`worker/authorize.go`). In delegated mode it receives no
+  credential at start (`ATLAS_SHAREPOINT_<NAME>_BROKERED=1`) and calls Graph only with the
+  brokered token.
+- **Approvals** (`api/actionapprovals.go`). A person answers through
+  `POST /api/v1/instances/{key}/action-approvals/{approval}/decide`. Only a person (`usr_`)
+  may answer, never the one the action runs for. The approver must be in the approver group
+  at the moment of answering, and again at the next decision, which reads current membership.
+  An approval counts only for the same digest and only until it expires.
+- **Linking** (`api/linkmicrosoft.go`). Authorization code with PKCE and `prompt=select_account`,
+  bound to the Atlas session that started it. The ID token's issuer, audience, expiry, `tid`
+  and `oid` are checked with the ADR-0210 verifier. No password is collected and there is no
+  ROPC.
+- **Console.** *Connected accounts* (account menu) and *Administration → Security*: readiness,
+  identity policy per Worker, policy drafts and publication, the simulator, and an instance's
+  decisions and approvals by key. The MCP tool `atlas_instance_authorizations` reads the same
+  evidence.
+- **Backup.** The `identity` store is classified as a credential and `policies` as identity
+  (`api/storeregistry.go`).
+
+**Departures from the decision**
+
+- The evidence view is on the Security page, looked up by instance key, not in the
+  Operations instance view (§20, phase 6).
+- Shadow is refused for the delegated modes. A delegated credential is released only on a
+  Permit, so shadow would either release a person's credential on a refusal or not be
+  shadow.
+- There is no Console screen for answering an approval; the approver uses the route.
+
+**Not built**
+
+- Google (designed in §4, no adapter); Apple (investigated in §4 only).
+- Brokering to external Worker Instances (the open question), the egress gateway,
+  per-Worker-Instance credentials.
+- Worker Types other than SharePoint, and Workers whose name a model computes (§19).
+- A request step distinct from instance start: the per-job subject is the instance's
+  starter.
+- A durable login audit, per-user recent activity, and refresh ownership across nodes.
+
+**Evidence that it holds**
+
+- `authz`: `go test ./authz` (99 % statement coverage), including the fail-closed paths.
+- Engine: `engine/authorization_test.go` covers lease fencing, consequences in the same batch,
+  and replay without evaluation.
+- Routes: `api/authorize_internal_test.go` runs the full approval loop and its refusals.
+- End to end: `api/authorize_e2e_internal_test.go` runs the shipped Worker against a fake
+  Graph. A refused action makes no Graph call.
+- Linking: `api/linkmicrosoft_internal_test.go` runs against a fake tenant and covers every
+  refusal of §4.
+- Worked example: `api/identitysample_internal_test.go` holds the documentation's model and
+  policies.
+- Console: `e2e/console-identity.spec.mjs`.
+
+**Measured** with `go test -bench . -benchmem ./authz` on a 4-core development container, one
+decision per operation. These are single runs, taken while other tests were running, so
+read them as orders of magnitude; repeated runs varied by up to about a quarter.
+
+| Policy | Time | Allocations |
+|---|---|---|
+| matchers only | 0.41 µs | 2 |
+| with an approval obligation | 0.79 µs | 4 |
+| with a FEEL condition | 7.9 µs | 81 |
+| with a DMN rule | 30 µs | 204 |
+
+All of this runs on the HTTP goroutine of the authorize route, outside the run loop. The
+engine only appends the decided event, so invariant I1 is untouched.
 
 ### Consequences
 

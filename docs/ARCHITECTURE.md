@@ -263,6 +263,8 @@ atlas/
 ├── expr/          FEEL expression compilation and evaluation
 ├── job/           Job store, worker subscription, gRPC streaming protocol
 ├── dmn/           DMN registry, resolver, validation, business-rule-task worker
+├── authz/         Authorization decision point: compiled policies, fail-closed combining,
+│                  obligations, action digests (ADR-draft-identity-aware-worker-execution)
 ├── connector/     Worker Type implementations, one package per type (ADR-0203)
 │   ├── rest/          HTTP REST outbound (ADR-0067)
 │   ├── mail/          Outbound mail: SMTP, Gmail, Microsoft Graph (ADR-0079/0093)
@@ -283,6 +285,8 @@ atlas/
 │   │                  diagram onto a deployed model (ADR-0124/0127)
 │   ├── collab/        Live collaborative modeling sessions (ADR-0140)
 │   ├── vault/         Encrypted secret store (ADR-0069/0070)
+│   ├── identity/      Linked external accounts, delegated connections, the token broker
+│   ├── policy/        Authorization policies: drafts, immutable versions, the simulator
 │   ├── sidecar/       Store[T]: the durable one-file-per-record store behind every design-time store
 │   ├── processdoc/    Process documentation (ADR-0143), the first per-area service (ADR-0147)
 │   └── formgen/       Writing a form from a description and from the process it belongs

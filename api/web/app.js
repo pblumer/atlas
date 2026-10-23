@@ -719,8 +719,8 @@ const TOPNAV = {
       // The credentials machines sign in with (ADR-0194). Admin, like the three routes
       // behind it: issuing one is the same class of act as creating an account.
       { name: "API tokens", route: "#/console/api-tokens", role: "admin" },
-      // Which Workers act as whom, by which policy (ADR-draft-identity-aware-worker-
-      // execution): readiness, policies, the simulator and the recorded decisions.
+      // Which Workers act as whom, by which policy: readiness, policies, the simulator
+      // and the recorded decisions (ADR-draft-identity-aware-worker-execution).
       { name: "Security", route: "#/console/security", role: "admin" },
       { name: "Audit log", route: "#/console/audit", role: "admin" },
     ] },

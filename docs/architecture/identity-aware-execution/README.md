@@ -24,7 +24,8 @@ the code does.
    per-site grant.
 2. **Authentication is on** and the SharePoint Worker runs **supervised**: a delegated
    credential is released only to a Worker Instance Atlas started.
-3. **A configured Worker `sp-prod`** of type SharePoint, with its identity policy set:
+3. **A configured Worker `sp-prod`** of type SharePoint, with its identity policy set
+   (Console → Administration → *Security*, or):
 
    ```http
    PUT /api/v1/configured-workers/{id}/identity
@@ -32,14 +33,14 @@ the code does.
    ```
 
 4. **Groups** `grp_documents` (the requesters) and `grp_managers` (the approvers).
-5. **The policy published**:
+5. **The policy published** (Console → Administration → *Security*, or):
 
    ```http
    PUT  /api/v1/security/policies/hr-documents/draft     (body: hr-documents.policy.json)
    POST /api/v1/security/policies/hr-documents/publish
    ```
 
-6. **Each requester links their account** (Console → *Connections*, or
+6. **Each requester links their account** (account menu → *Connected accounts*, or
    `GET /auth/link/microsoft/start` while signed in) and **allows `sp-prod`** to act through it:
 
    ```http
