@@ -4402,19 +4402,27 @@ const SERVICE_TASK_KINDS = [
           { v: "mark-unread", l: "Mark as unread" },
           { v: "delete", l: "Delete message (to the trash)" },
           { v: "reply", l: "Reply to message" },
+          // The three that hand a document on (ADR-draft-mail-documents-leave-the-mailbox).
+          { v: "forward", l: "Forward message (with its attachments)" },
+          { v: "get-attachment", l: "Read attachment into a variable" },
+          { v: "export-attachment", l: "Export attachment to an S3 Worker" },
         ],
       },
-      { group: "Message", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" },
-      { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, showIf: (v) => !v.operation || v.operation === "send", hint: "Comma-separated recipients. A value may be a FEEL expression (fx)." },
-      { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
-      { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send", hint: "Delivered but never shown in the message headers." },
+      { group: "Message", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward" },
+      { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "forward", hint: (v) => (v.operation === "forward"
+        ? "Who receives the forwarded message, attachments included. Comma-separated; a person or group this server knows may be named by reference. Forwarding writes from the mailbox, so a deploy needs editor access to the Worker."
+        : "Comma-separated recipients. A value may be a FEEL expression (fx).") },
+      { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "forward" },
+      { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "forward", hint: "Delivered but never shown in the message headers." },
       { key: "from", label: "From", placeholder: "leave empty for the Worker's default sender", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
       { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
-      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply", hint: (v) => (v.operation === "reply"
+      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: (v) => (v.operation === "reply"
         ? "The reply's text. It goes to the original's Reply-To, or its From, under \"Re: \" and its subject, threaded beneath it."
-        : "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion.") },
-      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
-      { group: "Mailbox", showIf: (v) => !!v.operation && v.operation !== "send" && v.operation !== "reply" },
+        : v.operation === "forward"
+          ? "Optional. The note written above the forwarded message, which follows under \"Fwd: \" and its subject. Every attachment is inspected before anything is sent; one that is refused stops the whole forward."
+          : "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion.") },
+      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
+      { group: "Mailbox", showIf: (v) => !!v.operation && v.operation !== "send" && v.operation !== "reply" && v.operation !== "forward" },
       {
         key: "folder", label: "Folder", placeholder: "INBOX", fx: true, showIf: (v) => v.operation === "list",
         hint: "The folder to list — an IMAP folder name, a Gmail label id (INBOX, Label_…) or a Microsoft folder id or well-known name (inbox, archive). Empty is the inbox.",
@@ -4439,17 +4447,42 @@ const SERVICE_TASK_KINDS = [
       {
         key: "includeBody", label: "Text", type: "select", showIf: (v) => v.operation === "list" || v.operation === "get",
         options: [{ v: "", l: "Envelope only" }, { v: "true", l: "Include the text" }],
-        hint: "The envelope is sender, recipients, subject, date, attachment names and sizes and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB; attachment content is never read. What a process receives, every operator of a shared server can read — include the text only where the process needs it.",
+        hint: "The envelope is sender, recipients, subject, date, each attachment's id, name and size and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB; attachment content is read only by the attachment operations. What a process receives, every operator of a shared server can read — include the text only where the process needs it.",
       },
-      { group: "Output", showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" },
+      { group: "Attachment", showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment" },
+      {
+        key: "attachmentId", label: "Attachment", placeholder: "=mail.attachments[1].id", fx: true,
+        showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment",
+        hint: "The attachment to read: the id an envelope's attachments list carries — usually a FEEL expression (fx), e.g. =mail.attachments[1].id, or an item of a multi-instance loop over them.",
+      },
+      {
+        key: "allowedTypes", label: "Accepted types", placeholder: "application/pdf, image/*",
+        showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment",
+        hint: "Optional. Comma-separated media types the task accepts, judged from the document's content rather than from what the sender called it. Anything else ends the task with the error code MAIL_ATTACHMENT_REJECTED. Programs, scripts, macro documents, encrypted archives and PDFs that run code are refused in any case, and a Worker with a malware scanner scans every attachment first.",
+      },
+      { group: "Object store", showIf: (v) => v.operation === "export-attachment" },
+      {
+        key: "store", label: "S3 Worker", datalist: "s3", placeholder: "belege", showIf: (v) => v.operation === "export-attachment",
+        hint: "The S3 Worker the attachment is put into, by its name under Workers. Written as a name, not an expression: a deploy needs editor access to it as well as to the mailbox. The document goes from the mailbox to the store without passing through the process.",
+      },
+      { key: "bucket", label: "Bucket", placeholder: "eingang", fx: true, showIf: (v) => v.operation === "export-attachment" },
+      {
+        key: "key", label: "Object key", placeholder: "=\"rechnungen/\" + mail.messageId + \".pdf\"", fx: true, showIf: (v) => v.operation === "export-attachment",
+        hint: "Where the attachment is stored. Build it from values that stay the same on a retry — a key computed from now() writes a second object when the task runs again.",
+      },
+      { group: "Output", showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" || v.operation === "get-attachment" || v.operation === "export-attachment" },
       {
         key: "resultVariable", label: "Result variable",
         resultType: (v) => (v.operation === "list" ? "array" : v.operation === "move" ? "string" : "object"),
         placeholder: "mail",
-        showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move",
+        showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" || v.operation === "get-attachment" || v.operation === "export-attachment",
         hint: (v) => (v.operation === "move"
           ? "Optional. Receives the message's id in its new folder — the same id for Gmail and Microsoft, a new one for IMAP."
-          : "Receives what the mailbox answered: " + (v.operation === "list" ? "a list of messages, newest first." : "the message.")),
+          : v.operation === "get-attachment"
+            ? "Receives the attachment: content (base64), name, contentType as detected from the content, declaredType as the sender wrote it, size, and inspection. Limited to what fits a process variable (1 MiB); a larger document needs Export attachment."
+            : v.operation === "export-attachment"
+              ? "Optional. Receives where the document went — bucket, key, etag — with its detected type and the inspection. Mint a link for a user task with an S3 presign-get on that key."
+              : "Receives what the mailbox answered: " + (v.operation === "list" ? "a list of messages, newest first." : "the message.")),
       },
     ],
   },

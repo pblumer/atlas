@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/limits"
 )
 
 // imapMailbox is an SMTP Worker's mailbox, read over IMAP with the same mailbox
@@ -652,6 +654,139 @@ func trashFolder(ic *imapConn) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// findSection is the part of a structure a section names.
+func (p *mimePart) findSection(section string) (*mimePart, bool) {
+	if p.Section == section && len(p.Children) == 0 {
+		return p, true
+	}
+	for i := range p.Children {
+		if found, ok := p.Children[i].findSection(section); ok {
+			return found, true
+		}
+	}
+	return nil, false
+}
+
+// documentWireLimit is how large a document may be on the wire, where base64 has
+// grown it by a third: the literal a session fetching one must accept.
+func documentWireLimit() int {
+	l := limits.Default()
+	return int(l.Document/3*4 + l.Request)
+}
+
+// Attachment reads one attachment, addressed by its body section. The structure is
+// fetched first, so the section is known to be a leaf and its encoded size is checked
+// before its content is asked for.
+func (m *imapMailbox) Attachment(ctx context.Context, id, attachmentID string) (Document, error) {
+	section := strings.TrimSpace(attachmentID)
+	if section == "" || strings.Trim(section, "0123456789.") != "" {
+		return Document{}, fmt.Errorf("mail: imap: %q is not a body section (use an attachment id the envelope listed)", attachmentID)
+	}
+	var out Document
+	err := m.session(ctx, func(ic *imapConn) error {
+		uid, _, err := openMessage(ic, id, false)
+		if err != nil {
+			return err
+		}
+		resp, err := ic.cmd(fmt.Sprintf("UID FETCH %d (BODYSTRUCTURE)", uid))
+		if err != nil {
+			return err
+		}
+		var root mimePart
+		for _, r := range resp {
+			if items := fetchItems(r); items != nil && items["BODYSTRUCTURE"] != nil {
+				root = parseBodyStructure(items["BODYSTRUCTURE"], "", true)
+			}
+		}
+		part, ok := root.findSection(section)
+		if !ok {
+			return fmt.Errorf("message %s has no body section %s", id, section)
+		}
+		name := part.filename()
+		if name == "" {
+			name = "attachment"
+		}
+		wire := documentWireLimit()
+		if part.Size > int64(wire) {
+			return documentTooLarge(name, part.Size, limits.Default().Document)
+		}
+		ic.maxLiteral = wire
+		resp, err = ic.cmd(fmt.Sprintf("UID FETCH %d (BODY.PEEK[%s])", uid, section))
+		if err != nil {
+			return err
+		}
+		var raw []byte
+		key := "BODY[" + section + "]"
+		for _, r := range resp {
+			if v, ok := fetchItems(r)[key]; ok {
+				raw = []byte(fieldString(v))
+			}
+		}
+		data, err := decodeTransfer(raw, part.Encoding)
+		if err != nil {
+			return err
+		}
+		if limit := limits.Default().Document; int64(len(data)) > limit {
+			return documentTooLarge(name, int64(len(data)), limit)
+		}
+		out = Document{ID: section, Name: name, ContentType: part.contentType(), Data: data}
+		return nil
+	})
+	return out, err
+}
+
+// Forward reads the whole message, frames the forward from it and sends it through
+// the worker's SMTP side. The IMAP session is closed before the send, so a slow
+// submission server does not hold the mailbox.
+func (m *imapMailbox) Forward(ctx context.Context, id string, f Forward) error {
+	if len(f.To) == 0 {
+		return fmt.Errorf("mail: a forward needs a recipient")
+	}
+	if m.send == nil {
+		return errors.New("mail: imap: this worker cannot send a forward")
+	}
+	var raw []byte
+	err := m.session(ctx, func(ic *imapConn) error {
+		uid, _, err := openMessage(ic, id, false)
+		if err != nil {
+			return err
+		}
+		ic.maxLiteral = int(limits.Default().Document)
+		resp, err := ic.cmd(fmt.Sprintf("UID FETCH %d (BODY.PEEK[])", uid))
+		if err != nil {
+			return err
+		}
+		for _, r := range resp {
+			if v, ok := fetchItems(r)["BODY[]"]; ok {
+				raw = []byte(fieldString(v))
+			}
+		}
+		if raw == nil {
+			return fmt.Errorf("message %s no longer exists", id)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if f.Inspect != nil {
+		docs, err := rawDocuments(raw)
+		if err != nil {
+			return err
+		}
+		for _, d := range docs {
+			if err := f.Inspect(d); err != nil {
+				return err
+			}
+		}
+	}
+	msg, err := forwardMessage(raw, f, m.user)
+	if err != nil {
+		return err
+	}
+	return m.send(ctx, Message{From: m.user, To: f.To, Cc: f.Cc, Bcc: f.Bcc, MessageID: f.MessageID, Raw: msg})
 }
 
 // Reply answers a message through the worker's SMTP side, threaded under it.

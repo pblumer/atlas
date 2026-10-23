@@ -2,12 +2,19 @@ package mail
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/nettimeout"
+	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/limits"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
@@ -65,6 +72,29 @@ type Job struct {
 	IncludeBody    bool   `json:"includeBody,omitempty"`
 	UnreadOnly     bool   `json:"unreadOnly,omitempty"`
 	ResultVariable string `json:"resultVariable,omitempty"`
+	// The documents half (ADR-draft-mail-documents-leave-the-mailbox). Attachment is the
+	// attachment get-attachment and export-attachment address, by the id the envelope
+	// listed it under; AllowedTypes the media types the task accepts, empty for any the
+	// inspection admits. Store, Bucket and Key are where export-attachment puts the
+	// document — Store an S3 Worker's *name*, like Connector, which whoever runs the
+	// job resolves against the Workers it holds.
+	Attachment   string   `json:"attachment,omitempty"`
+	AllowedTypes []string `json:"allowedTypes,omitempty"`
+	Store        string   `json:"store,omitempty"`
+	Bucket       string   `json:"bucket,omitempty"`
+	Key          string   `json:"key,omitempty"`
+	// ErrorCodes are the codes the task's process catches, of the ones this Worker Type
+	// throws. A refused document is thrown as a BPMN error only when its code is among
+	// them, and fails the job otherwise (ADR-0461). They travel with the job because a
+	// worker has no compiled process to ask.
+	ErrorCodes []string `json:"errorCodes,omitempty"`
+}
+
+// DocumentStore puts a document into an object store a named Worker reaches. It is how
+// export-attachment hands a document to an S3 Worker without the mail package knowing
+// S3: whoever runs mail jobs and holds S3 Workers passes an adapter (s3.Documents).
+type DocumentStore interface {
+	PutDocument(ctx context.Context, worker, bucket, key, contentType, disposition string, data []byte, metadata map[string]string) (map[string]any, error)
 }
 
 // Directory resolves a recipient that is not a mail address — a person or a group
@@ -122,6 +152,34 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		if detail.ResultVar >= 0 {
 			j.ResultVariable = cp.Intern(detail.ResultVar)
 		}
+		if detail.MailOp == OpForward {
+			// A forward's recipients are resolved like a send's: a reference to a
+			// person this installation knows becomes their address here, at send time.
+			for _, r := range []struct {
+				expr compiler.RestExpr
+				into *[]string
+			}{{detail.To, &j.To}, {detail.Cc, &j.Cc}, {detail.Bcc, &j.Bcc}} {
+				if *r.into, err = lookUp(splitAddrs(resolveValue(r.expr, piKey, scopeVars)), dir); err != nil {
+					return Job{}, err
+				}
+			}
+		}
+		if detail.MailOp == OpGetAttachment || detail.MailOp == OpExportAttachment {
+			j.Attachment = strings.TrimSpace(resolveValue(detail.MailAttachment, piKey, scopeVars))
+			j.AllowedTypes = detail.MailAllowedTypes
+		}
+		if detail.MailOp == OpExportAttachment {
+			j.Store = detail.MailStore
+			j.Bucket = strings.TrimSpace(resolveValue(detail.MailBucket, piKey, scopeVars))
+			j.Key = strings.TrimSpace(resolveValue(detail.MailKey, piKey, scopeVars))
+		}
+		if HandsOnDocuments(detail.MailOp) {
+			for _, code := range Codes {
+				if cp.CatchesErrorCode(code) {
+					j.ErrorCodes = append(j.ErrorCodes, code)
+				}
+			}
+		}
 		return j, nil
 	}
 	to, err := lookUp(splitAddrs(resolveValue(detail.To, piKey, scopeVars)), dir)
@@ -159,6 +217,23 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 // the two failures a job can carry here, and reporting it ahead of an empty
 // recipient list keeps the message an operator sees pointed at the fix.
 func Run(ctx context.Context, j Job, reg *Registry) (any, error) {
+	return RunWith(ctx, j, reg, nil)
+}
+
+// RunWith is [Run] with the object stores export-attachment may put a document into;
+// nil holds none, and an export then fails naming the store it could not reach. A
+// document inspection refuses ends the job in [CodeAttachmentRejected] when the task's
+// process catches it, and fails it otherwise.
+func RunWith(ctx context.Context, j Job, reg *Registry, docs DocumentStore) (any, error) {
+	res, err := run(ctx, j, reg, docs)
+	var rej *Rejection
+	if errors.As(err, &rej) && slices.Contains(j.ErrorCodes, CodeAttachmentRejected) {
+		return nil, &job.BPMNError{Code: CodeAttachmentRejected, Message: rej.Error()}
+	}
+	return res, err
+}
+
+func run(ctx context.Context, j Job, reg *Registry, docs DocumentStore) (any, error) {
 	client, ok := reg.Client(j.Connector)
 	if !ok {
 		return nil, reg.Unresolved("mail", j.Connector)
@@ -186,6 +261,10 @@ func Run(ctx context.Context, j Job, reg *Registry) (any, error) {
 	// list of twenty-five is twenty-six requests to Gmail, not twenty-six budgets.
 	ctx, cancel := context.WithTimeout(ctx, nettimeout.Default)
 	defer cancel()
+	if HandsOnDocuments(j.Operation) {
+		in := inspector{scanner: ScannerOf(client), allowed: j.AllowedTypes}
+		return runDocuments(ctx, mb, j, in, docs)
+	}
 	return runMailbox(ctx, mb, j)
 }
 
@@ -230,6 +309,114 @@ func runMailbox(ctx context.Context, mb Mailbox, j Job) (any, error) {
 		return nil, mb.Reply(ctx, j.Target, Reply{Body: j.Body, HTML: j.HTML, MessageID: j.MessageID})
 	}
 	return nil, fmt.Errorf("mail: unknown operation %q", j.Operation)
+}
+
+// runDocuments performs one of the three operations that hand a document on. Each
+// inspects every document before it leaves; none hands on one inspection refused.
+func runDocuments(ctx context.Context, mb Mailbox, j Job, in inspector, docs DocumentStore) (any, error) {
+	if j.Target == "" {
+		return nil, fmt.Errorf("mail: %s: the task's messageId resolved to nothing", j.Operation)
+	}
+	if j.Operation == OpForward {
+		if len(j.To) == 0 {
+			return nil, fmt.Errorf("mail: forward: the task resolved no recipient")
+		}
+		return nil, mb.Forward(ctx, j.Target, Forward{
+			To: j.To, Cc: j.Cc, Bcc: j.Bcc, Body: j.Body, HTML: j.HTML, MessageID: j.MessageID,
+			Inspect: func(d Document) error {
+				_, err := in.inspect(ctx, d)
+				return err
+			},
+		})
+	}
+	if j.Attachment == "" {
+		return nil, fmt.Errorf("mail: %s: the task's attachmentId resolved to nothing", j.Operation)
+	}
+	if j.Operation == OpExportAttachment && docs == nil {
+		// Before the mailbox is read: a Worker Instance that cannot reach the store
+		// should not first pull a document across the network to throw it away.
+		return nil, fmt.Errorf("mail: export-attachment: this Worker Instance holds no S3 Worker, so it cannot reach %q "+
+			"(serve the s3 kind beside mail, or configure the S3 Worker on this worker's host)", j.Store)
+	}
+	d, err := mb.Attachment(ctx, j.Target, j.Attachment)
+	if err != nil {
+		return nil, err
+	}
+	v, err := in.inspect(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	switch j.Operation {
+	case OpGetAttachment:
+		return attachmentContent(d, v)
+	case OpExportAttachment:
+		return exportAttachment(ctx, j, d, v, docs)
+	}
+	return nil, fmt.Errorf("mail: unknown operation %q", j.Operation)
+}
+
+// attachmentContent is get-attachment's answer: the document base64-encoded, with what
+// inspection found. The content type it reports is the detected one — the sender's
+// claim is kept beside it as declaredType, never in its place.
+//
+// It refuses a document whose answer would not fit a process variable rather than
+// letting the engine refuse the completion: here the attachment and the alternative
+// are both still in view.
+func attachmentContent(d Document, v Verdict) (any, error) {
+	encoded := base64.StdEncoding.EncodeToString(d.Data)
+	l := limits.Default()
+	if int64(len(encoded)) > l.Variable-l.ErrorBody {
+		return nil, fmt.Errorf("mail: get-attachment: attachment %q is %d bytes, %d once base64 has grown it, which does not fit "+
+			"a process variable (%d bytes, ATLAS_LIMIT_VARIABLE); use export-attachment to put it into an object store instead",
+			d.Name, len(d.Data), len(encoded), l.Variable)
+	}
+	return map[string]any{
+		"id":           d.ID,
+		"name":         d.Name,
+		"contentType":  v.DetectedType,
+		"declaredType": d.ContentType,
+		"size":         json.Number(strconv.Itoa(len(d.Data))),
+		"encoding":     "base64",
+		"content":      encoded,
+		"inspection":   v.Fields(),
+	}, nil
+}
+
+// exportAttachment puts the document into the store and answers where it went. The
+// object is stored under its detected type, so a presigned link opens what the bytes
+// are and not what the sender called them, and a document a browser would run as a
+// page is stored to download rather than to open. What inspection found is written
+// into the object's metadata, so whoever presents it later can see how far it was
+// checked.
+func exportAttachment(ctx context.Context, j Job, d Document, v Verdict, docs DocumentStore) (any, error) {
+	if j.Bucket == "" || j.Key == "" {
+		return nil, fmt.Errorf("mail: export-attachment: the task's bucket and key must both resolve to a value")
+	}
+	disposition := "inline"
+	if v.Active {
+		disposition = "attachment"
+	}
+	disposition += "; filename*=UTF-8''" + url.PathEscape(d.Name)
+	meta := map[string]string{
+		"atlas-detected-type": v.DetectedType,
+		"atlas-scanned":       strconv.FormatBool(v.Scanned),
+	}
+	if v.Scanner != "" {
+		meta["atlas-scanner"] = v.Scanner
+	}
+	put, err := docs.PutDocument(ctx, j.Store, j.Bucket, j.Key, v.DetectedType, disposition, d.Data, meta)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]any{}
+	for k, val := range put {
+		out[k] = val
+	}
+	out["name"] = d.Name
+	out["contentType"] = v.DetectedType
+	out["declaredType"] = d.ContentType
+	out["inspection"] = v.Fields()
+	return out, nil
 }
 
 // lookUp turns a recipient list into addresses: an entry with an "@" is already

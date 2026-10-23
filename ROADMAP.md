@@ -652,7 +652,7 @@ The control-flow basics most real models use.
   history and the Microsoft Graph messages API for those providers — and a mail task's
   `operation` lists, reads, moves, marks, deletes (to the trash) or answers mail by the
   `messageId` a watch or a list answered. A process receives the envelope by default and
-  the text only on request; attachment content never. A watch admits `allowedSenders` and,
+  the text only on request; attachment content only through the operations below. A watch admits `allowedSenders` and,
   optionally, only a DMARC pass, and never changes the mailbox. A task that reads a mail
   Worker's mailbox deploys only for a viewer of it and one that changes it for an editor,
   at every deploy door — the application import included, which also gained ADR-0205's
@@ -660,6 +660,19 @@ The control-flow basics most real models use.
   than by role (ADR-0275), so what a process receives is not yet hidden from the
   installation's other operators; IMAP `XOAUTH2`; push instead of polling (IMAP `IDLE`,
   Graph change notifications).
+  **A mail's documents leave the mailbox, inspected**
+  ([ADR-draft-mail-documents-leave-the-mailbox](docs/adr/draft-mail-documents-leave-the-mailbox.md)):
+  `forward` sends a mail with its attachments to new recipients, `get-attachment` reads one
+  attachment into a variable under the variable budget, and `export-attachment` carries one
+  from the mailbox straight into a named S3 Worker, so a user task can open it through a
+  presigned link — for IMAP, Gmail and Graph alike. Every document they hand on is judged
+  from its content first (programs, scripts, macros, encrypted archives, PDFs that run code,
+  disguised names are refused; `allowedTypes` narrows further), and a mail Worker that
+  names a ClamAV `scanner` has every document scanned, failing closed when the scanner does
+  not answer. A refusal is the BPMN error `MAIL_ATTACHMENT_REJECTED` where the process
+  catches it. Still open: an ICAP client for antivirus gateways that do not speak clamd;
+  the Graph and Gmail calls walked at a live tenant; re-checking a stored object's verdict
+  before presenting it long after its export.
   The same reader also runs the other way: `atlas openapi-template --spec x.yaml --out
   dir` writes one element-template package per operation, in the repository catalog's
   own shape ([ADR-0300](docs/adr/0300-openapi-element-templates.md)) —

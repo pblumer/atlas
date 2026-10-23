@@ -1852,6 +1852,14 @@ type MailConfig struct {
 	IncludeBody bool
 	UnreadOnly  bool
 	ResultVar   string
+	// The documents half (ADR-draft-mail-documents-leave-the-mailbox): the attachment an
+	// operation addresses, the media types it accepts, and for an export the S3 Worker,
+	// bucket and key the document goes to.
+	Attachment   RestExpr
+	AllowedTypes []string
+	Store        string
+	Bucket       RestExpr
+	Key          RestExpr
 }
 
 // AddMailConnectorTask adds an outbound mail task and returns its element
@@ -1892,6 +1900,12 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 		MailMaxResults:  cfg.MaxResults,
 		MailIncludeBody: cfg.IncludeBody,
 		MailUnreadOnly:  cfg.UnreadOnly,
+		// The documents half.
+		MailAttachment:   cfg.Attachment,
+		MailAllowedTypes: cfg.AllowedTypes,
+		MailStore:        cfg.Store,
+		MailBucket:       cfg.Bucket,
+		MailKey:          cfg.Key,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

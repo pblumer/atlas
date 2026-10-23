@@ -50,6 +50,10 @@ func (f *fakeMailbox) Move(context.Context, string, string) (string, error) { re
 func (f *fakeMailbox) SetRead(context.Context, string, bool) error          { return nil }
 func (f *fakeMailbox) Delete(context.Context, string) error                 { return nil }
 func (f *fakeMailbox) Reply(context.Context, string, mail.Reply) error      { return nil }
+func (f *fakeMailbox) Forward(context.Context, string, mail.Forward) error  { return nil }
+func (f *fakeMailbox) Attachment(context.Context, string, string) (mail.Document, error) {
+	return mail.Document{}, nil
+}
 
 func received(seq uint64, from, dmarc, subject string) mail.Received {
 	return mail.Received{MarkKey: "INBOX#7", Seq: seq, Envelope: mail.Envelope{

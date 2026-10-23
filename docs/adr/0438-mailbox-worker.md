@@ -335,3 +335,12 @@ stood. An administrator passes, because an administrator reaches every Worker.
 - the read gap it does not close: [ADR-0275](0275-instance-visibility.md)
 - erasure of what a process did receive: [ADR-0314](0314-portal-personal-data.md)
 - the Worker vocabulary: [ADR-0203](0203-worker-execution-model.md)
+
+## Amendment (2026-10-23): three operations hand a document on
+
+[ADR-draft-mail-documents-leave-the-mailbox](draft-mail-documents-leave-the-mailbox.md) adds
+`forward`, `get-attachment` and `export-attachment`. The rule above — attachment content is
+never included — still holds for the watch and for every operation this record decided; it
+no longer holds for `get-attachment`, which puts one document into one variable, bounded by
+the variable budget, because the model asked for exactly that. The envelope's attachments now
+carry an `id` each, and every document one of the three hands on is inspected first.

@@ -1298,7 +1298,7 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if !ok {
 		return 0, fmt.Errorf("compiler: mail task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(MailOperations(), ", "))
 	}
-	if op == mailOpSend && strings.TrimSpace(cn.To) == "" {
+	if (op == mailOpSend || spec.forward) && strings.TrimSpace(cn.To) == "" {
 		return 0, fmt.Errorf("compiler: mail task %q needs a to recipient", st.Id)
 	}
 	// One pass over every authored value, as for Discord: required where the operation
@@ -1311,13 +1311,13 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		allowed  bool
 		why      string
 	}{
-		{"to", cn.To, false, spec.send, "the recipients of a message this task sends"},
-		{"cc", cn.Cc, false, spec.send, "copy recipients of a message this task sends"},
-		{"bcc", cn.Bcc, false, spec.send, "blind-copy recipients of a message this task sends"},
-		{"from", cn.From, false, spec.send, "the sender of a message this task sends"},
-		{"subject", cn.Subject, false, spec.send, "the subject of a message this task sends; a reply takes the original's"},
-		{"body", cn.Body, false, spec.send || spec.reply, "the text of a message or a reply"},
-		{"bodyHtml", cn.BodyHtml, false, spec.send || spec.reply, "the HTML of a message or a reply"},
+		{"to", cn.To, false, spec.send || spec.forward, "the recipients of a message this task sends or forwards"},
+		{"cc", cn.Cc, false, spec.send || spec.forward, "copy recipients of a message this task sends or forwards"},
+		{"bcc", cn.Bcc, false, spec.send || spec.forward, "blind-copy recipients of a message this task sends or forwards"},
+		{"from", cn.From, false, spec.send, "the sender of a message this task sends; a forward goes out from the Worker's own mailbox"},
+		{"subject", cn.Subject, false, spec.send, "the subject of a message this task sends; a reply and a forward take the original's"},
+		{"body", cn.Body, false, spec.send || spec.reply || spec.forward, "the text of a message, a reply, or the note above a forward"},
+		{"bodyHtml", cn.BodyHtml, false, spec.send || spec.reply || spec.forward, "the HTML of a message, a reply, or the note above a forward"},
 		{"folder", cn.Folder, false, spec.list, "the folder a list reads"},
 		{"messageId", cn.MessageID, spec.message, spec.message, "the message the operation acts on — the messageId a watch or a list answered"},
 		{"destination", cn.Destination, spec.destination, spec.destination, "the folder a move files the message into"},
@@ -1325,6 +1325,11 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		{"unreadOnly", cn.UnreadOnly, false, spec.list, "whether a list answers only unread messages"},
 		{"includeBody", cn.IncludeBody, false, spec.list || spec.get, "whether the text of a message is read along with it"},
 		{"resultVariable", cn.ResultVariable, spec.needsResult, spec.takesResult, "the process variable receiving what the mailbox answered"},
+		{"attachmentId", cn.AttachmentID, spec.attachment, spec.attachment, "the attachment the operation reads — the id an envelope's attachments list carries"},
+		{"allowedTypes", cn.AllowedTypes, false, spec.attachment, "the media types the task accepts, judged from the document's content"},
+		{"store", cn.Store, spec.export, spec.export, "the S3 Worker the attachment is put into"},
+		{"bucket", cn.Bucket, spec.export, spec.export, "the bucket the attachment is put into"},
+		{"key", cn.Key, spec.export, spec.export, "the object key the attachment is stored under"},
 	} {
 		set := strings.TrimSpace(v.raw) != ""
 		if v.required && !set {
@@ -1342,11 +1347,21 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		Connector: strings.TrimSpace(cn.Connector),
 		Retries:   retries,
 		ResultVar: strings.TrimSpace(cn.ResultVariable),
+		Store:     strings.TrimSpace(cn.Store),
+	}
+	// The store is a Worker's name and stays literal, as the worker attribute does: the
+	// deploy check has to see which Worker a model writes into, and a name computed at
+	// run time would be one it could not check.
+	if strings.HasPrefix(cfg.Store, "=") {
+		return 0, fmt.Errorf("compiler: mail task %q names its store with an expression; store names an S3 Worker and must be written as its name", st.Id)
+	}
+	var err error
+	if cfg.AllowedTypes, err = mailAllowedTypes(st.Id, cn.AllowedTypes); err != nil {
+		return 0, err
 	}
 	if op != mailOpSend {
 		cfg.Operation = op
 	}
-	var err error
 	if spec.list {
 		if cfg.MaxResults, err = mailMaxResults(st.Id, cn.MaxResults); err != nil {
 			return 0, err
@@ -1375,6 +1390,9 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		{"folder", cn.Folder, &cfg.Folder},
 		{"messageId", cn.MessageID, &cfg.Message},
 		{"destination", cn.Destination, &cfg.Destination},
+		{"attachmentId", cn.AttachmentID, &cfg.Attachment},
+		{"bucket", cn.Bucket, &cfg.Bucket},
+		{"key", cn.Key, &cfg.Key},
 	} {
 		if *v.into, err = restValue(b.gate(), st.Id, v.what, v.raw); err != nil {
 			return 0, err
@@ -1401,17 +1419,43 @@ type mailOp struct {
 	send, reply, list, get   bool
 	message, destination     bool
 	needsResult, takesResult bool
+	// forward, attachment and export are the operations that hand a document on
+	// (ADR-draft-mail-documents-leave-the-mailbox).
+	forward, attachment, export bool
 }
 
 var mailOps = map[string]mailOp{
-	mailOpSend:    {send: true},
-	"list":        {list: true, needsResult: true, takesResult: true},
-	"get":         {get: true, message: true, needsResult: true, takesResult: true},
-	"move":        {message: true, destination: true, takesResult: true},
-	"mark-read":   {message: true},
-	"mark-unread": {message: true},
-	"delete":      {message: true},
-	"reply":       {reply: true, message: true},
+	mailOpSend:          {send: true},
+	"list":              {list: true, needsResult: true, takesResult: true},
+	"get":               {get: true, message: true, needsResult: true, takesResult: true},
+	"move":              {message: true, destination: true, takesResult: true},
+	"mark-read":         {message: true},
+	"mark-unread":       {message: true},
+	"delete":            {message: true},
+	"reply":             {reply: true, message: true},
+	"forward":           {forward: true, message: true},
+	"get-attachment":    {attachment: true, message: true, needsResult: true, takesResult: true},
+	"export-attachment": {attachment: true, export: true, message: true, takesResult: true},
+}
+
+// mailAllowedTypes reads an allowedTypes value: comma-separated media types, each exact
+// ("application/pdf") or a family ("image/*"). It is normalized here, once, so the
+// worker compares and never parses (I5); a value that is not a media type is refused
+// by name, because a typo would otherwise be a rule that quietly accepts nothing.
+func mailAllowedTypes(taskID, raw string) ([]string, error) {
+	var out []string
+	for _, p := range strings.Split(raw, ",") {
+		t := strings.ToLower(strings.TrimSpace(p))
+		if t == "" {
+			continue
+		}
+		typ, sub, ok := strings.Cut(t, "/")
+		if !ok || typ == "" || sub == "" || typ == "*" || strings.ContainsAny(t, " ;=\"") || strings.Count(t, "/") != 1 {
+			return nil, fmt.Errorf("compiler: mail task %q: allowedTypes entry %q is not a media type (want e.g. application/pdf or image/*)", taskID, p)
+		}
+		out = append(out, t)
+	}
+	return out, nil
 }
 
 // MailOperations lists the operations a mail task may name, sorted.
