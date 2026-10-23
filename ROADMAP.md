@@ -1429,7 +1429,10 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   supervised worker authenticates with. The roster now also says **who is signed in
   right now** — `online` / `idle` / `offline` per account, admin-only, read from the
   live sessions and stored nowhere, so it is presence and never an attendance history
-  ([ADR-0228](docs/adr/0228-user-presence.md)).
+  ([ADR-0228](docs/adr/0228-user-presence.md)) — and **the day each account last
+  signed in**, kept beside the account as a UTC calendar day and nothing finer, so an
+  account nobody uses any more stands out without the roster learning when anybody
+  starts work ([ADR-draft-last-login-day](docs/adr/draft-last-login-day.md)).
 - 🚧 **Identity-aware Worker execution & policy-based authorization**
   ([ADR-0475](docs/adr/0475-identity-aware-worker-execution.md),
   proposed): a person links their Microsoft account (authorization code with PKCE; no

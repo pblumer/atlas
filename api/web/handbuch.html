@@ -10372,6 +10372,38 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         to <code>admin</code> only. It is explicitly not an attendance history; who signed in when is in the
         <a href="/#/console/audit">audit log</a>.</p>
 
+      <h3 data-l="de">Wann sich ein Konto zuletzt angemeldet hat</h3><h3 data-l="en">When an account last signed in</h3>
+      <p data-l="de">Die Spalte <b>Last login</b> zeigt, an welchem Tag sich ein Konto zuletzt angemeldet hat:
+        «today», «yesterday» oder «N days ago», darunter das Datum. So findest du Konten, die niemand mehr
+        braucht. Sortierst du nach dieser Spalte, stehen Konten ohne erfasste Anmeldung und die am längsten
+        unbenutzten zuoberst. Solche Konten solltest du deaktivieren: Ein Konto, das niemand benutzt, nimmt
+        trotzdem Passwörter an, und ein Missbrauch fiele niemandem auf.</p>
+      <p data-l="en">The <b>Last login</b> column shows on which day an account last signed in: "today",
+        "yesterday" or "N days ago", with the date beneath. This is how you find accounts nobody needs any
+        more. Sort by the column and the accounts with no recorded login, then the ones unused the longest, come
+        first. Disable those: an account nobody uses still accepts a password, and nobody would notice it being
+        misused.</p>
+      <p data-l="de">Gezählt werden erfolgreiche Anmeldungen, mit Passwort und über einen Identitätsanbieter;
+        abgewiesene Versuche zählen nicht. Atlas speichert pro Konto genau einen Wert, den Kalendertag (UTC) der
+        letzten Anmeldung, und überschreibt ihn bei der nächsten. Eine Uhrzeit wird nicht gespeichert und auch
+        keine Liste früherer Tage: Die Spalte sagt, ob ein Konto benutzt wird, nicht, wann jemand mit der Arbeit
+        beginnt. Die genaue Zeit jeder Anmeldung steht im <a href="/#/console/audit">Audit-Log</a>. Weil der Tag
+        in UTC gezählt wird, kann eine Anmeldung kurz nach Mitternacht Schweizer Zeit noch auf den Vortag
+        fallen.</p>
+      <p data-l="en">Successful logins count, by password and through an identity provider; refused attempts do
+        not. Atlas stores exactly one value per account, the calendar day (UTC) of its latest login, and
+        overwrites it at the next one. No time of day is stored, and no list of earlier days: the column says
+        whether an account is in use, not when anybody starts work. The exact time of every login is in the
+        <a href="/#/console/audit">audit log</a>. Because the day is counted in UTC, a login shortly after
+        midnight Swiss time can still fall on the previous day.</p>
+      <p data-l="de">Ein Konto, das sich seit dem Update noch nicht angemeldet hat, zeigt «—». Ebenso ein Konto,
+        das nur über einen API-Token oder einen KI-Client benutzt wird: Es meldet sich hier nie an, auch wenn sein
+        Token täglich arbeitet. Prüfe bei einem solchen Konto die Tokens und Freigaben, bevor du es
+        deaktivierst.</p>
+      <p data-l="en">An account that has not signed in since the upgrade shows "—". So does an account used only
+        through an API token or an AI client: it never signs in here, even when its token works every day. Check
+        such an account's tokens and grants before you disable it.</p>
+
       <h3 data-l="de">Anmelden mit einem Identitätsanbieter</h3><h3 data-l="en">Signing in with an identity provider</h3>
       <p data-l="de">Optional, und aus, solange niemand einen Anbieter konfiguriert. Ist einer eingerichtet, trägt
         die Anmeldemaske zusätzlich eine Schaltfläche <b>«Sign in with …»</b>: Die Person authentisiert sich dort,

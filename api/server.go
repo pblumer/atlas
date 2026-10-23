@@ -478,6 +478,11 @@ type Server struct {
 	// mutex; it is not engine state and does not persist (ADR-0044).
 	sessions *sessionStore
 
+	// lastLogins is the day each account last signed in, beside the account rather
+	// than on it. Written by the sign-in path off the run loop and serialised by its
+	// own mutex, like sessions (ADR-draft-last-login-day, lastlogin.go).
+	lastLogins *lastLoginStore
+
 	// collab holds live collaborative-editing sessions on drafts in memory
 	// (ADR-0140). Like sessions it is reached from concurrent handler goroutines
 	// (SSE streams and POSTs), guards itself with a mutex, and never persists or
@@ -1526,6 +1531,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	lastLogins, err := newLastLoginStore(filepath.Join(dataDir, "last-logins"), users)
+	if err != nil {
+		return nil, err
+	}
 	groups, err := newGroupStore(filepath.Join(dataDir, "groups"))
 	if err != nil {
 		return nil, err
@@ -1703,6 +1712,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		checkpointKeep:    checkpointKeepDefault,    // published checkpoints kept; WithCheckpointRetention overrides (ADR-0131)
 		vaultEnabled:      true,                     // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:             users,
+		lastLogins:        lastLogins,
 		groups:            groups,
 		directorySync:     directorySync,
 		inventoryLoads:    inventoryLoads,
@@ -2081,6 +2091,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// carries the marker that says it has been through this.
 		if err := s.upgradeLegacyRoles(time.Now().Unix()); err != nil {
 			return nil, err
+		}
+		// A login day left behind by an account that is gone is removed before anybody
+		// can sign in (lastlogin.go). Reported and not fatal: it is a convenience
+		// column, and it must not be what keeps a server from starting.
+		if err := s.lastLogins.prune(); err != nil {
+			logging.Warn(logging.AuthLoginDateUnrecorded, "login days of deleted accounts could not be pruned",
+				slog.String("error", err.Error()))
 		}
 		token, err := randomHex(32)
 		if err != nil {

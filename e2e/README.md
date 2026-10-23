@@ -402,6 +402,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   column is absent. Drives the real app shell against a routed mock, with Playwright's
   clock driving both intervals — the timing is part of what is being tested.
 
+- **`user-last-login.spec.mjs`** ([ADR-draft-last-login-day](../docs/adr/draft-last-login-day.md)):
+  **when each account last signed in**, in the same Users card. The column turns the
+  stored UTC day into "today" / "yesterday" / "N days ago" with the date beneath, says
+  "no login recorded" rather than inventing a date, sorts the accounts nobody uses to the
+  top, and is absent with enforcement off. The browser sits in Zurich with the clock
+  fixed half an hour after local midnight, when the local and the UTC calendar disagree:
+  the age must be counted in UTC, as the day was.
+
 - **`catalog-actions.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
   the **product's actions** in the catalogue editor. A product that still carries the
   operation map opens as the actions it means — the order's provision and return first, key

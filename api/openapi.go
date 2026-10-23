@@ -2068,7 +2068,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		{"GET", "/api/v1/users", s.handleListUsers, apiOp{
-			summary: "List user accounts, each with whether somebody is signed in as it right now (ADR-0228)", tag: "Users", role: RoleAdmin, resp: jsonBody("Users", tArray())}},
+			summary: "List user accounts, each with whether somebody is signed in as it right now (ADR-0228) and the UTC day it last signed in, lastLoginDate (ADR-draft-last-login-day)", tag: "Users", role: RoleAdmin, resp: jsonBody("Users", tArray())}},
 		{"GET", "/api/v1/users/presence", s.handleUserPresence, apiOp{
 			summary: "Who is signed in right now: one entry per account holding a live session, online / idle / offline (ADR-0228)", tag: "Users", role: RoleAdmin,
 			resp: jsonBody("Presence", tArray())}},

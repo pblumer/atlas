@@ -59,7 +59,7 @@ import { viewAIAccess } from "./aiaccess.js";
 // star beside a diagram in the lists. Its own module for the reason aiaccess.js is.
 import { installDiagramShortcuts, setShortcutsEnabled, starButton, noteDiagramOpened } from "./diagram-shortcuts.js";
 import { renderKeyFeatures, paintKeyFeatures } from "./key-features.js";
-import { fmtDateTime } from "./datefmt.js";
+import { fmtDate, fmtDateTime } from "./datefmt.js";
 import { prefs, loadPrefs } from "./prefs.js";
 import { renderDisplaySettings } from "./displaysettings.js";
 
@@ -2789,6 +2789,28 @@ async function viewConsoleOrg() {
     return `<span class="pill off" title="${esc(closed)}"><span class="dot"></span>offline</span>`;
   };
 
+  // The day each account last signed in (ADR-draft-last-login-day).
+  // Presence is this minute and a restart forgets it; this is what tells an account
+  // somebody still uses from one nobody has opened since spring. The server keeps a
+  // UTC calendar day and nothing finer, so its age is counted against today's UTC day
+  // as well — that makes "today" and "3 days ago" right for every reader, whichever
+  // time zone they chose. Shown with the same condition as presence: with login not
+  // enforced, nobody signs in and every row would say so.
+  const showLastLogin = AUTH.enabled;
+  const lastLoginCell = (u) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(u.lastLoginDate || "");
+    if (!m) {
+      return `<td class="muted" data-sort="" title="No login recorded for this account. Logins are recorded from this release on, and an account used only through an API token or an AI client never signs in here.">—</td>`;
+    }
+    const day = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    const now = new Date();
+    const age = Math.round((Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - day) / 86400000);
+    const when = age <= 0 ? "today" : age === 1 ? "yesterday" : `${age} days ago`;
+    const date = fmtDate(day, { timeZone: "UTC" });
+    return `<td class="nowrap" data-sort="${esc(u.lastLoginDate)}" title="Last signed in on ${esc(date)} (a UTC calendar day — Atlas keeps the day, not the time)">${esc(when)}
+        <div class="muted" style="font-size:12px">${esc(date)}</div></td>`;
+  };
+
   const roleChips = (roles) => (roles || []).map((r) => `<span class="chip">${esc(r)}</span>`).join(" ");
   const statusPill = (u) => u.disabled
     ? `<span class="pill warn"><span class="dot"></span>disabled</span>`
@@ -2807,6 +2829,7 @@ async function viewConsoleOrg() {
       <td>${esc(u.displayName || "—")}${u.email ? `<div class="muted" style="font-size:12px">${esc(u.email)}</div>` : ""}</td>
       <td>${roleChips(u.roles)}</td>
       <td>${statusPill(u)}</td>
+      ${showLastLogin ? lastLoginCell(u) : ""}
       ${showPresence ? `<td class="presence-cell">${presencePill(u.presence)}</td>` : ""}
       <td style="text-align:right; white-space:nowrap">
         <button class="btn ghost" data-act="edit" title="Edit this user’s details and roles">Edit</button>
@@ -2833,13 +2856,17 @@ async function viewConsoleOrg() {
           carries, and nothing more.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
           administrators see it: <b>online</b> means somebody did something in the last five minutes,
           <b>idle</b> that a session is open but untouched, <b>offline</b> that no browser is reporting.
-          It is read from the live sessions and never stored — a restart shows nobody.` : ""}</p>
+          It is read from the live sessions and never stored — a restart shows nobody.` : ""}${showLastLogin ? ` <b>Last login</b>
+          is the day an account last signed in, kept per account so that an account nobody uses any more
+          stands out. It is a calendar day (UTC) and nothing finer: it says whether an account is in use, not
+          when anybody starts work — the audit log has the exact time of every login.` : ""}</p>
         <div id="user-form-slot" style="padding:0 18px"></div>
         <table data-dt-key="users">
           <thead><tr><th>User</th><th>Name</th><th>Roles</th><th>Status</th>${
+            showLastLogin ? "<th>Last login</th>" : ""}${
             showPresence ? "<th>Presence</th>" : ""}<th></th></tr></thead>
           <tbody id="user-rows">${(users || []).map(userRow).join("")
-            || `<tr><td colspan="${showPresence ? 6 : 5}" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
+            || `<tr><td colspan="${5 + (showLastLogin ? 1 : 0) + (showPresence ? 1 : 0)}" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
         </table>
       </div>`;
 

@@ -46,6 +46,20 @@ governs a Worker:
 
 ### Added
 
+- **The user list shows when each account last signed in.** **Organization → Users** has
+  a **Last login** column beside Status and Presence: "today", "yesterday" or "N days
+  ago", with the day itself, and sorting by it puts the accounts nobody uses first — the
+  ones to disable. Password and single sign-on logins both count; refused attempts do
+  not. Atlas keeps one value per account, the UTC calendar day of its latest login, and
+  overwrites it at the next one: it says whether an account is in use, never when
+  anybody starts work, and the audit log keeps the exact time of every login. The
+  roster and `GET /api/v1/users` carry it as `lastLoginDate`; signing in still never
+  waits for the run loop, and never rewrites the account record. The data directory
+  gains a store, `last-logins`, which a whole-instance snapshot carries with the
+  accounts. Accounts show "no login recorded" until their first login after the
+  upgrade, and an account used only through an API token or an AI client never signs
+  in here ([ADR-draft-last-login-day](docs/adr/draft-last-login-day.md)).
+
 - **A process finds, keeps and labels the people in a Google address book.** A new
   Google Contacts Worker Type finds a contact by e-mail address, phone number or a custom
   field such as a customer number, reads, lists, searches, creates, updates and deletes
