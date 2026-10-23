@@ -628,7 +628,9 @@ The control-flow basics most real models use.
   Internet Options settings, by .NET's rules, so a group-policy proxy needs no
   configuration; and the Entra Worker signs with a certificate from the Windows
   certificate store by thumbprint, its key never read
-  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended). Still open: both are
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended), as does the SharePoint
+  Worker, which also takes a certificate as PEM
+  ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended). Still open: both are
   exercised on the CI's Windows runner, not yet behind a real group-policy proxy.
   **The mail Worker reads its mailbox** ([ADR-0438](docs/adr/0438-mailbox-worker.md)):
   an inbound watch on a mail Worker publishes the new mail of one folder as an Atlas
@@ -928,13 +930,26 @@ Making processes wait, react, and time out.
   what waits through `GET /api/v1/messages/buffered`, the MCP tool and the Console, and
   `atlas_buffered_messages` counts it on `/metrics`. Built as the local slice; delivery
   from a peer (ADR-0372) and a time to live on a throw event are not.
+- ✅ **Overviews of the messages and signals deployed models exchange**
+  ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md),
+  [ADR-0447](docs/adr/0447-the-signals-deployed-models-throw-and-receive.md)): the Console's
+  *Events* page has a second section, *Signals and messages of this installation*, derived on
+  request from the deployed definitions (`GET /api/v1/signals`, `GET /api/v1/message-names`,
+  `modeler`): for each name who throws or sends it and who receives it, every version listed,
+  and the findings of the newest versions — a throw nobody receives, a receiver nothing throws,
+  a name that crosses projects, a model that speaks for atlas. Message-sources names a model's
+  own sends and message event subprocesses, the Modeler's pickers offer what deployed models
+  throw and send and tell a sending element who receives it, and MCP has `atlas_signals` and
+  `atlas_message_names`.
+- ✅ **The event log** ([ADR-0472](docs/adr/0472-event-log.md)): every signal
+  thrown and message sent, with its sender and how far it reached, every reception, start,
+  keeping and expiry, folded from the log into a table kept for `--event-log-ttl` (30 days).
+  *Operations → Diagnostics → Event log*, `GET /api/v1/event-log` and `atlas_event_log`; a row
+  is read as its instance is (ADR-0275). Counters per name are not built.
 
 **Still open in this milestone:**
 - 🔲 **Repeatable non-interrupting conditional events**: a non-interrupting conditional
   fires once per arm; firing again on every false→true edge is ADR-0137's follow-up.
-- 🔲 **Overviews of the messages and signals deployed models exchange**
-  ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md),
-  [ADR-0447](docs/adr/0447-the-signals-deployed-models-throw-and-receive.md), both proposed).
 - 🔲 **Lanes, layers B and C** ([ADR-0121](docs/adr/0121-bpmn-lanes.md)): a lane naming
   an Atlas group as a compile-time `candidateGroups` default, and instance-level access
   control.
@@ -1739,6 +1754,18 @@ the hand-written Details panel one vertical slice at a time:
   kept per person on the server; the process listing names each row's application where
   the caller may see it
   ([ADR-0466](docs/adr/0466-start-view-groups-and-favourites.md)).
+- ✅ **Remote data sources in task forms**: a textfield with an `atlasDataSource` block
+  searches a directory through the Worker the stored form names — Microsoft Entra ID users
+  first — and submits only the chosen object id. One bounded page per request, filters
+  bound to another field or fixed, a sealed cursor for the next page, a per-person rate
+  limit, and a check of the value before the task completes. The search is a **worker
+  query**, the protocol's non-durable message kind beside the job, so nothing about it
+  reaches the log; a Worker's editors open it with **Forms may search**. The form editor
+  configures it without JSON and previews it with made-up people
+  ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
+- 🔲 Further remote data sources: Entra groups and administrative units, a `$search` mode
+  for word matching, and departments discovered rather than configured — each needs a
+  provider row and a query handler in its Worker Type.
 
 **Publication** ([ADR-0029](docs/adr/0029-public-process-start-links.md)):
 - ✅ Opt-in, revocable public start links: a scoped, unauthenticated

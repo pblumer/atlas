@@ -1271,6 +1271,14 @@ type SignalSubscriptionValue struct {
 	// own state index entry (invariant I4), mirroring MessageSubscriptionValue.
 	ProcessDefKey uint64
 	ElementId     int32
+	// SenderProcessInstanceKey is the instance whose throw a correlation delivered,
+	// set on SubscriptionCorrelated and on IntentSignalStarted (ADR-0472 §2).
+	// Stale marks a correlation that only cleared a subscription whose element no
+	// longer waited: no delivery, so no row in the event log. Both are appended
+	// fields: a record written before them ends after ElementId and decodes them as
+	// zero, and a version before them stops reading where they begin.
+	SenderProcessInstanceKey uint64
+	Stale                    bool
 }
 
 func (*SignalSubscriptionValue) ValueType() ValueType { return VTSignal }
@@ -1280,7 +1288,12 @@ func (v *SignalSubscriptionValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
 	dst = appendString(dst, v.SignalName)
 	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
-	return binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
+	dst = binary.LittleEndian.AppendUint64(dst, v.SenderProcessInstanceKey)
+	if v.Stale {
+		return append(dst, 1)
+	}
+	return append(dst, 0)
 }
 
 func (v *SignalSubscriptionValue) decode(src []byte) error {
@@ -1300,6 +1313,11 @@ func (v *SignalSubscriptionValue) decode(src []byte) error {
 	}
 	v.ProcessDefKey = binary.LittleEndian.Uint64(rest[0:])
 	v.ElementId = int32(binary.LittleEndian.Uint32(rest[8:]))
+	// The sender and the stale mark are appended fields (above).
+	if rest = rest[12:]; len(rest) >= 9 {
+		v.SenderProcessInstanceKey = binary.LittleEndian.Uint64(rest[0:])
+		v.Stale = rest[8] != 0
+	}
 	return nil
 }
 
@@ -1631,6 +1649,8 @@ func newValue(vt ValueType) Value {
 		return &TriggerReceiptValue{}
 	case VTMessage:
 		return &MessageValue{}
+	case VTDispatch:
+		return &DispatchValue{}
 	case VTAuthorization:
 		return &AuthorizationValue{}
 	case VTActionApproval:

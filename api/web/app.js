@@ -46,6 +46,7 @@ import { runImport } from "./infomodel-import.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
 import { formRefusalNames, loadFormViewer, scrollToFirstInvalidField } from "./formviewer.js";
+import { attachRemoteSelects, taskTransport } from "./remote-select.js";
 // A start form does not replace the start variables declared on the process: the ones
 // it does not ask for are asked beneath it, with the Modeler's typed fields.
 import { uncoveredStartVariables, extraStartFieldsHTML, wireStartJSONEditors, readTypedDeployBody, keepConstantNameInCapitals } from "./startvars.js";
@@ -749,6 +750,10 @@ const TOPNAV = {
       // What waits in the message buffer for a subscription that has not opened yet
       // (ADR-0370): the one place a message "from the past" can be seen before it arrives.
       { name: "Messages", route: "#/operations/messages", role: "operator" },
+      // What was actually sent and where it arrived (ADR-0472). Open to
+      // anybody: the route reads each row as its instance is read, so a project member
+      // sees the rows of their projects and an operator every row.
+      { name: "Event log", route: "#/operations/event-log", role: "any" },
       { name: "Outbox", route: "#/operations/outbox", role: "operator" },
       { name: "Call activities", route: "#/operations/call-activities", role: "any" },
       { name: "Mock directory", route: "#/operations/ad-mock", role: "admin" },
@@ -1168,6 +1173,7 @@ function handbookHelp(path) {
   if (path.startsWith("#/console/security")) return H("konten", "Security: identities and policies");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
   if (path.startsWith("#/console/events")) return H("ereignisse", "Events");
+  if (path.startsWith("#/operations/event-log")) return H("ereignisse", "The event log");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
   // Organization pointed at the worker chapter only because the worker cards used to
   // sit on it; with those on their own page it points there instead, and Organization
@@ -8478,6 +8484,7 @@ async function viewTasks(preselectKey) {
     me: authOn ? ((AUTH.user && AUTH.user.username) || "") : (localStorage.getItem("atlas.tasks.me") || ""),
     assignable: [], // enabled users a task can be assigned to, for the picker
     mountedForm: null, // the live form-js viewer instance for the selected task, if any
+    mountedLookups: null, // the searches attached to its directory fields, if any
     mountedProc: null, // the read-only process-view handle for the selected task, if mounted
     detailTab: "form", // which detail tab shows — "form" | "process" (kept across selections)
     query: "", // free-text filter over the visible tasks (name/process/assignee/…)
@@ -9098,6 +9105,12 @@ async function viewTasks(preselectKey) {
   // destroyForm tears down the live form-js instance (if any) before the detail
   // pane is re-rendered or the selection changes, so no viewer leaks.
   function destroyForm() {
+    // The directory fields' searches first: they hold requests and listeners on the
+    // form being torn down (ADR-0473).
+    if (state.mountedLookups) {
+      try { state.mountedLookups.destroy(); } catch { /* already gone */ }
+      state.mountedLookups = null;
+    }
     if (state.mountedForm) {
       try { state.mountedForm.destroy(); } catch { /* already gone */ }
       state.mountedForm = null;
@@ -9174,6 +9187,11 @@ async function viewTasks(preselectKey) {
       await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
+      // A directory field searches its remote data source through this task: the
+      // server checks that this person may work on it and reads which Worker and which
+      // properties from the stored form (ADR-0473). A form
+      // without one attaches nothing.
+      state.mountedLookups = attachRemoteSelects(form, host, { transport: taskTransport(t.key), data: data || {} });
       // The variables the form was filled from, kept beside it. Completing the task
       // needs one the form does not render — which catalogue a picked logo belongs
       // to — and reading it back off the submitted data would only find the fields
@@ -11242,6 +11260,7 @@ function routeTitle(path) {
     [/^#\/console\/org$/, "Organization · Console"],
     [/^#\/console\/workers$/, "Workers · Console"],
     [/^#\/console\/events$/, "Events · Console"],
+    [/^#\/operations\/event-log$/, "Event log · Operations"],
     [/^#\/console\/api-tokens$/, "API tokens · Console"],
     [/^#\/console\/connections/, "Connected accounts · Console"],
     [/^#\/console\/security$/, "Security · Console"],
@@ -11470,6 +11489,11 @@ async function route() {
     if (path === "#/operations/workers") return await viewWorkers();
     if (path === "#/operations/outbox") return await viewMailOutbox();
     if (path === "#/operations/messages") return await viewBufferedMessages();
+    if (path === "#/operations/event-log") {
+      const gen = navGen;
+      const { viewEventLog } = await import("./eventlog.js");
+      return await viewEventLog({ api, view, isSuperseded: () => superseded(gen) });
+    }
     if (path === "#/operations/ad-mock") return await viewADMockDirectory();
     if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
     if (path === "#/operations/decisions") return await viewDecisions();

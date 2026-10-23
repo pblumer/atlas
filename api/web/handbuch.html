@@ -2218,12 +2218,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">43</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">45</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">43</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">45</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -2456,6 +2456,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <td data-l="de">Fachbereich bestellt selbst, Admin gibt frei</td><td data-l="en">The department orders, an admin approves</td>
             <td><span class="tag err">Entra&nbsp;ID</span></td>
             <td data-l="de">Optionale Schritte übersprungen, ohne Zweigwald</td><td data-l="en">Optional steps skipped without a thicket of branches</td></tr>
+          <tr><td><a href="#bsp-entra-benutzerauswahl" data-l="de">Person wählen</a><a href="#bsp-entra-benutzerauswahl" data-l="en">Pick a person</a></td>
+            <td data-l="de">Eine Person aus dem Verzeichnis wählen und ihren Vorgesetzten lesen</td><td data-l="en">Pick a person from the directory and read their manager</td>
+            <td><span class="tag err">Entra&nbsp;ID</span></td>
+            <td data-l="de">Im Formular suchen statt das Verzeichnis in eine Variable laden</td><td data-l="en">Search in the form instead of loading the directory into a variable</td></tr>
           <tr><td><a href="#bsp-account-bestellung">Account-Bestellung</a></td>
             <td data-l="de">Bestellung von einer beliebigen Website aus, DMN bestimmt das Profil</td><td data-l="en">Ordering from any website, with DMN deciding the profile</td>
             <td><span class="tag err">Entra&nbsp;ID</span></td>
@@ -4180,6 +4184,92 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             engine is never to hold it.</p>
         </details>
       </div>
+      <div class="bsp" id="bsp-sharepoint-fallakte">
+        <h4><span class="rz-emoji" aria-hidden="true">🗂️</span>
+          <span data-l="de">Fallakte: eine SharePoint-Liste und ihre Ablage</span><span data-l="en">Case file: a SharePoint list and its documents</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">SharePoint</span>
+          <span class="tag">list-items</span><span class="tag">upload-file</span><span class="tag">update-item</span>
+          <span class="tag" data-l="de">typisierte Spalten</span><span class="tag" data-l="en">typed columns</span>
+          <span class="tag" data-l="de">Seiten</span><span class="tag" data-l="en">paging</span>
+          <span class="tag">examples/sharepoint-fallakte/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Anträge werden in einer SharePoint-Liste erfasst, im Listenformular, das alle kennen. Zu
+              jedem Antrag legt atlas eine Fallakte an: einen Ordner in der Dokumentbibliothek mit einer
+              ausgefüllten Eingangsbestätigung darin. Der Antrag bekommt den Status «In Bearbeitung», eine
+              Markierung, wenn der Betrag hoch ist, und den Link auf seinen Ordner, und ein Protokoll hält fest,
+              dass die Akte angelegt wurde. Ist ein Antrag erledigt, räumt ein zweiter Prozess Ordner und Eintrag
+              wieder ab.</p>
+            <p data-l="en">Requests are entered in a SharePoint list, through the list form everybody knows. For
+              each request atlas creates a case file: a folder in the document library with a filled-in
+              confirmation letter in it. The request gets the status "In Bearbeitung", a flag when the amount is
+              high and the link to its folder, and a log records that the file was created. Once a request is
+              settled, a second process removes its folder and its entry again.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Eine Kette von <code>atlas:sharePointConnector</code>-Tasks, alle auf denselben Worker
+              <code>intranet</code>. <code>get-item</code> liest den Antrag über seine <code>antragId</code>,
+              <code>create-folder</code> legt den Ordner an, <code>download-file</code> holt die Briefvorlage,
+              ein FEEL-Script setzt mit <code>replace</code> Kunde und Nummer ein, <code>get-file</code> fragt,
+              ob der Brief schon abgelegt ist, <code>upload-file</code> legt ihn mit zwei Eigenschaften ab, und
+              <code>update-item</code> und <code>create-item</code> schreiben in die Listen. Der zweite Prozess
+              findet erledigte Anträge mit einem OData-Filter Seite für Seite (<code>list-items</code>,
+              <code>pageToken</code>) und löscht je Antrag in einer <b>parallelen Multi-Instance</b> erst den
+              Ordner, dann den Eintrag. Site und Listennamen stehen an einer Stelle, im ersten Script-Task.</p>
+            <p data-l="en">A chain of <code>atlas:sharePointConnector</code> tasks, all on the same worker
+              <code>intranet</code>. <code>get-item</code> reads the request by its <code>antragId</code>,
+              <code>create-folder</code> creates the folder, <code>download-file</code> fetches the letter
+              template, a FEEL script fills in customer and number with <code>replace</code>,
+              <code>get-file</code> asks whether the letter is already filed, <code>upload-file</code> files it
+              with two properties, and <code>update-item</code> and <code>create-item</code> write to the lists.
+              The second process finds settled requests with an OData filter page by page
+              (<code>list-items</code>, <code>pageToken</code>) and, in a <b>parallel multi-instance</b>, deletes
+              each one's folder first and its entry second. The site and the list names are in one place, the
+              first script task.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="bsp-more">
+          <summary><span data-l="de">Inbetriebnahme &amp; die Fallen im Modell</span><span data-l="en">Commissioning &amp; the traps in the model</span></summary>
+          <p data-l="de">App-Registrierung, Secret und Worker stehen im <a href="#runbook-sharepoint">Runbook
+            SharePoint</a>; der Worker heisst hier <code>intranet</code>. Welche Listen, Bibliotheken und Spalten
+            die Site braucht, steht in der Dokumentation des Prozesses und im README des Beispiels. Spalten
+            nennst du mit ihrem internen Namen, nicht mit der Überschrift, die die Liste zeigt.</p>
+          <p data-l="en">App registration, secret and worker are in the <a href="#runbook-sharepoint">SharePoint
+            runbook</a>; the worker is called <code>intranet</code> here. Which lists, libraries and columns the
+            site needs is in the process documentation and in the example's README. Columns are named by their
+            internal name, not by the heading the list shows.</p>
+          <p data-l="de"><b>Drei Dinge, die das Modell vormacht.</b> Ein Spaltenwert behält den Typ seines
+            FEEL-Werts: <code>=antrag.fields.Betrag &gt; 10000</code> kommt in der Ja/Nein-Spalte als Ja oder
+            Nein an, <code>=number(antragId)</code> in der Zahlenspalte als Zahl, und ein Ausdruck, der
+            <code>null</code> ergibt, leert die Spalte. Fehlt die Spalte Kunde, ist auch
+            <code>replace(…, null)</code> <code>null</code> – das <code>if</code> im Script verhindert einen
+            leeren Brief. Und ein Upload ersetzt, was am Pfad liegt; deshalb fragt <code>get-file</code> vorher,
+            damit ein von Hand angepasster Brief einen zweiten Lauf übersteht.</p>
+          <p data-l="en"><b>Three things the model shows.</b> A column value keeps the type of its FEEL value:
+            <code>=antrag.fields.Betrag &gt; 10000</code> arrives in the Yes/No column as Yes or No,
+            <code>=number(antragId)</code> in the number column as a number, and an expression that evaluates to
+            <code>null</code> clears the column. When the Kunde column is empty, <code>replace(…, null)</code> is
+            <code>null</code> too – the <code>if</code> in the script keeps the letter from being empty. And an
+            upload replaces what is at its path; that is why <code>get-file</code> asks first, so a letter edited
+            by hand survives a second run.</p>
+          <p data-l="de">Bis auf das Protokoll lässt sich jeder Schritt gefahrlos wiederholen: Ein vorhandener
+            Ordner gilt als angelegt, und ein Löschauftrag ohne Gegenstand meldet <code>deleted=false</code>
+            statt zu scheitern. <code>create-item</code> legt bei einem zweiten Lauf einen zweiten Eintrag an.
+            Wo das nicht tragbar ist, fragst du vorher mit <code>list-items</code> nach einer Spalte mit der
+            Antragsnummer.</p>
+          <p data-l="en">Every step but the log is safe to repeat: an existing folder counts as created, and a
+            delete with nothing to delete answers <code>deleted=false</code> instead of failing.
+            <code>create-item</code> creates a second entry on a second run. Where that is not acceptable, ask
+            with <code>list-items</code> for a column holding the request number first.</p>
+        </details>
+      </div>
       <h3 class="rz-group"><span data-l="de">Identität &amp; Verzeichnis</span><span data-l="en">Identity &amp; directory</span></h3>
       <p data-l="de">Der Bereich, in dem atlas am tiefsten steckt: Konten anlegen, berechtigen, überprüfen und
         wieder abbauen. Wer aus der Welt von Microsoft Identity Manager, einem IAM-Werkzeug oder einer Sammlung
@@ -5049,6 +5139,69 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="rz-status" role="status" aria-live="polite"></div>
       </div>
 
+      <div class="bsp" id="bsp-entra-benutzerauswahl">
+        <h4><span class="rz-emoji" aria-hidden="true">🔎</span>
+          <span data-l="de">Person wählen: im Verzeichnis suchen statt es laden</span><span data-l="en">Pick a person: search the directory instead of loading it</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">Entra ID</span>
+          <span class="tag" data-l="de">Verzeichnisauswahl</span><span class="tag" data-l="en">directory field</span>
+          <span class="tag">get-user-manager</span>
+          <span class="tag">examples/entra-benutzerauswahl/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Jemand wählt in einer Aufgabe zuerst eine Abteilung und sucht dann nach Name oder
+              E-Mail-Adresse eine Person aus Microsoft Entra ID; danach liest der Prozess ihren Vorgesetzten. Die
+              frühere Fassung las dafür mit <code>list-users</code> zuerst das ganze Verzeichnis in eine Variable. Bei
+              einigen tausend Konten stand das Verzeichnis dann im Verlauf, im Zustand und in jeder Sicherung, und das
+              Formular filterte eine Liste, die schon veraltet war, als die Aufgabe geöffnet wurde.</p>
+            <p data-l="en">Someone in a task first chooses a department and then searches Microsoft Entra ID for a
+              person by name or e-mail address; the process then reads that person's manager. The earlier version read
+              the whole directory into a variable with <code>list-users</code> first. With a few thousand accounts the
+              directory then sat in the history, in the state and in every backup, and the form filtered a list that
+              was out of date by the time the task was opened.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Das Feld «Person» ist ein Textfeld mit einer <b>Verzeichnisauswahl</b>
+              (<code>atlasDataSource</code>): Beim Tippen fragt der Server über den Entra-Worker <code>ucc_entra</code>
+              im Verzeichnis nach, gefiltert nach der gewählten Abteilung, und zeigt höchstens 25 Treffer. Übermittelt
+              wird nur die Objekt-ID nach <code>user</code>; <code>get-user-manager</code> liest daraus mit
+              <code>userId="= user"</code> den Vorgesetzten nach <code>vorgesetzter</code>. Die Suchen landen nicht im
+              Ereignisprotokoll – nur die Auswahl. Vor dem Abschluss prüft der Server die ID noch einmal im
+              Verzeichnis. Das Formular kann den Worker nur nennen: Suchen darf es erst, wenn beim Worker in der
+              Console «Formulare dürfen suchen» eingeschaltet ist.</p>
+            <p data-l="en">The «Person» field is a text field with a <b>directory field</b> configuration
+              (<code>atlasDataSource</code>): as the person types, the server searches the directory through the Entra
+              Worker <code>ucc_entra</code>, filtered by the chosen department, and shows at most 25 matches. Only the
+              object id is submitted, into <code>user</code>; <code>get-user-manager</code> reads the manager from it
+              with <code>userId="= user"</code> into <code>vorgesetzter</code>. The searches never reach the event log
+              – only the choice does. Before the task completes, the server checks the id in the directory once more.
+              The form can only name the Worker: searching works once «Forms may search» is switched on for the Worker
+              in the Console.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="bsp-more">
+          <summary><span data-l="de">Was du vor der Inbetriebnahme einrichtest</span><span data-l="en">What to set up before you use it</span></summary>
+          <p data-l="de">Den Entra-Worker <code>ucc_entra</code> mit der Anwendungsberechtigung
+            <code>User.Read.All</code>, in der Console mit eingeschaltetem «Formulare dürfen suchen». Die Abteilungen im
+            Formular sind feste Werte und müssen so geschrieben sein wie das Attribut <code>department</code> im
+            Verzeichnis: Microsoft Graph kennt keine Abfrage, die alle vorkommenden Abteilungen liefert. Die Suche
+            beginnt mit dem Anfang von Anzeigename, E-Mail-Adresse oder Benutzerprinzipalname; «Müller» findet «Anna
+            Müller» also über die E-Mail-Adresse oder den Nachnamen, wenn du <code>surname</code> mitsuchen lässt.</p>
+          <p data-l="en">The Entra Worker <code>ucc_entra</code> with the application permission
+            <code>User.Read.All</code>, with «Forms may search» switched on in the Console. The departments in the form
+            are fixed values and must be spelled as the directory's <code>department</code> attribute: Microsoft Graph
+            has no query that returns every department in use. The search matches the start of the display name, the
+            e-mail address or the user principal name; «Müller» therefore finds «Anna Müller» through her e-mail
+            address, or through her surname if you let the field search <code>surname</code> too.</p>
+        </details>
+      </div>
+
       <div class="bsp" id="bsp-entra-onboarding-selfservice">
         <h4><span class="rz-emoji" aria-hidden="true">🙋</span>
           <span data-l="de">Onboarding-Self-Service mit Freigabe</span><span data-l="en">Onboarding self-service with an approval</span></h4>
@@ -5832,6 +5985,49 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         one that answers inside a running process — one address, one key in the vault, one place to change the model.
         The browser never sees the key, and <b>no case data from running instances</b> goes to a model this way: what
         is read is the process's model, not its operation.</p>
+
+      <div id="verzeichnisauswahl" style="scroll-margin-top:66px"></div>
+      <h4 data-l="de">Eine Person aus dem Verzeichnis wählen (Verzeichnisauswahl)</h4><h4 data-l="en">Picking a person from the directory (directory field)</h4>
+      <p data-l="de">Ein Textfeld kann statt freiem Text eine <b>Suche im Verzeichnis</b> anbieten: Im Formular-Editor
+        fügt <b>＋ Directory field</b> ein solches Feld hinzu, oder du wählst ein Textfeld und drückst im Bereich
+        <b>Remote data source</b> über seinen Eigenschaften auf <b>Search a remote data source</b>. Dort legst du fest,
+        welcher Worker sucht (heute ein Entra-Worker), worin gesucht wird (Anzeigename, E-Mail-Adresse,
+        Benutzerprinzipalname …), was jeder Treffer zeigt, wie viele Treffer eine Seite hat und ob ein anderes Feld
+        die Suche eingrenzt – etwa eine Abteilung, die die Person vorher wählt. In der Aufgabe tippt die Person
+        mindestens zwei Zeichen, sieht höchstens eine Seite Treffer und wählt genau einen Eintrag. Übermittelt wird
+        nur dessen ID, nie der angezeigte Name.</p>
+      <p data-l="en">A text field can offer a <b>directory search</b> instead of free text: in the form editor,
+        <b>＋ Directory field</b> adds one, or you select a text field and press <b>Search a remote data source</b> in
+        the <b>Remote data source</b> area above its properties. There you choose which Worker searches (an Entra Worker
+        today), what is searched (display name, e-mail address, user principal name …), what each match shows, how many
+        matches a page holds, and whether another field narrows the search – a department the person chooses first, for
+        instance. In the task the person types at least two characters, sees at most one page of matches and picks
+        exactly one entry. Only its id is submitted, never the name shown.</p>
+      <p data-l="de"><b>Was das Formular nicht entscheidet.</b> Das Formular nennt den Worker nur. Suchen darf es erst,
+        wenn beim Worker in der Console <b>Forms may search</b> eingeschaltet ist – denn gesucht wird mit dessen
+        Zugangsdaten. Suchen darf nur, wer die Aufgabe bearbeiten darf. Welche Eigenschaften gesucht und gezeigt werden,
+        liest der Server aus dem gespeicherten Formular; eine Anfrage, die einen anderen Worker, Mandanten oder eine
+        Adresse nennt, wird abgelehnt. Die Suchen werden nicht gespeichert und landen nicht im Verlauf – nur die
+        gewählte ID. Vor dem Abschluss prüft der Server sie noch einmal im Verzeichnis; gibt es den Eintrag nicht mehr,
+        wird die Aufgabe nicht abgeschlossen, und ist das Verzeichnis gerade nicht erreichbar, auch nicht.</p>
+      <p data-l="en"><b>What the form does not decide.</b> The form only names the Worker. It may search once
+        <b>Forms may search</b> is switched on for that Worker in the Console – the search runs with its credentials.
+        Only somebody who may work on the task may search. Which properties are searched and shown, the server reads from
+        the stored form; a request naming another Worker, tenant or address is refused. Searches are not stored and do
+        not reach the history – only the chosen id does. Before the task completes, the server checks it in the
+        directory once more; if the entry is gone, the task is not completed, and neither is it while the directory
+        cannot be reached.</p>
+      <p data-l="de"><b>Grenzen.</b> Die Verzeichnisauswahl gibt es in Aufgabenformularen. In einem Startformular und
+        in einem öffentlichen Formular ist niemand angemeldet, der suchen dürfte: Dort ist das Feld ein gewöhnliches
+        Textfeld, und ein öffentlicher Link lehnt ein solches Formular ab. Abteilungen sind feste Auswahlwerte, weil
+        Microsoft Graph keine Abfrage aller vorkommenden Abteilungen kennt. Im Editor und in der Vorschau sucht das Feld
+        in erfundenen Beispieldaten, nie im echten Verzeichnis. Ein Beispiel ist
+        <a href="#bsp-entra-benutzerauswahl">Person wählen</a>.</p>
+      <p data-l="en"><b>Limits.</b> The directory field works in task forms. In a start form and in a public form
+        nobody is signed in who could search: there the field is an ordinary text field, and a public link refuses such
+        a form. Departments are fixed choices, because Microsoft Graph has no query for every department in use. In the
+        editor and its preview the field searches made-up example data, never the real directory. An example is
+        <a href="#bsp-entra-benutzerauswahl">Pick a person</a>.</p>
 
       <div id="wizards" style="scroll-margin-top:66px"></div>
       <h4 data-l="de">Mehrstufige Formulare (Wizards)</h4><h4 data-l="en">Multi-step forms (wizards)</h4>
@@ -7241,6 +7437,25 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           holds the certificate and its unencrypted private key as one PEM text. Upload the certificate to the app
           registration under <i>Certificates &amp; secrets</i>. Microsoft recommends this for apps that run unattended:
           the private key never leaves the worker, and only an assertion signed with it reaches the token endpoint.</p>
+        <p data-l="de">Auf einem Windows-Server kann <code>"certificateThumbprint"</code> stattdessen ein Zertifikat
+          nennen, das bereits im Speicher liegt (<code>CurrentUser\My</code> des Dienstkontos oder
+          <code>LocalMachine\My</code>), wie beim <a href="#runbook-entra">Entra-ID-Worker</a>. Der Schlüssel
+          signiert dort, auch wenn er als nicht exportierbar markiert ist. Das Secret enthält genau eine der drei
+          Angaben, und ein Zertifikat gilt nur bei <code>"method": "clientCredentials"</code>. Der Worker prüft das
+          Zertifikat beim Start; fehlt es oder darf das Dienstkonto den Schlüssel nicht lesen, startet er nicht und
+          nennt den Grund.</p>
+        <p data-l="en">On a Windows server, <code>"certificateThumbprint"</code> may instead name a certificate already
+          in the store (the service account's <code>CurrentUser\My</code>, or <code>LocalMachine\My</code>), as for
+          the <a href="#runbook-entra">Entra&nbsp;ID worker</a>. Its key signs there and may be non-exportable. The
+          secret carries exactly one of the three, and a certificate only with <code>"method":
+          "clientCredentials"</code>. The worker tries the certificate when it starts; if it is missing, or the
+          service account may not read its key, the worker does not start and says why.</p>
+        <p data-l="de">Die Rechte hängen an der App-Registrierung, nicht am Zertifikat: Meldet sich der
+          SharePoint-Worker mit der App des Entra-ID-Workers an, darf er auch Konten anlegen und sperren. Eine eigene
+          App nur mit den SharePoint-Berechtigungen trennt das.</p>
+        <p data-l="en">The rights belong to the app registration, not to the certificate: if the SharePoint worker
+          signs in as the Entra&nbsp;ID worker's app, it may also create and disable accounts. An app of its own,
+          holding only the SharePoint permissions, keeps the two apart.</p>
         <p data-l="de">Im Task nennst du die <b>Site</b> so, wie der Browser sie zeigt
           (<code>https://contoso.sharepoint.com/sites/hr</code>), als <code>contoso.sharepoint.com:/sites/hr</code>
           oder mit der Site-ID von Graph (<code>contoso.sharepoint.com,&lt;siteId&gt;,&lt;webId&gt;</code>). Gemeint
@@ -11524,7 +11739,8 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
         Ereignis ohne Personendaten und ein Signal, das atlas nicht katalogisiert, bleiben offen. Über die API
         liest <code>GET /api/v1/event-catalog</code> (ab Rolle <code>modeler</code>) den Katalog und
         <code>GET /api/v1/event-catalog/listeners</code> (nur <code>admin</code>), wer zuhört; über MCP tun das
-        <code>atlas_event_catalog</code> und <code>atlas_event_listeners</code>.</p>
+        <code>atlas_event_catalog</code> und <code>atlas_event_listeners</code>. Die Signale und Nachrichten der eigenen
+        Modelle stehen nicht im Katalog, sondern im <a href="#ev-installation">zweiten Abschnitt</a> derselben Seite.</p>
       <p data-l="en">What atlas emits, in one place (ADR-0435): the signals and messages of its system processes,
         the CloudEvents feed at <code>/api/v1/events</code>, and the log lines that belong to them. A model listens
         with a signal start or catch on the name; a system beyond atlas reads the feed (the
@@ -11537,7 +11753,9 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
         event without personal data, and a signal atlas does not catalogue, stay open. Over the API,
         <code>GET /api/v1/event-catalog</code> (role <code>modeler</code> and
         above) reads the catalogue and <code>GET /api/v1/event-catalog/listeners</code> (<code>admin</code> only)
-        who listens; over MCP, <code>atlas_event_catalog</code> and <code>atlas_event_listeners</code> do.</p>
+        who listens; over MCP, <code>atlas_event_catalog</code> and <code>atlas_event_listeners</code> do. The signals
+        and messages of your own models are not in the catalogue but in the <a href="#ev-installation">second section</a>
+        of the same page.</p>
       <!-- eventcatalog:begin (generated by go test ./eventcatalog -update) -->
       <h3 id="ev-atlas-order-placed"><code>atlas.order.placed</code></h3>
       <p data-l="de">Eine Bestellung wurde aufgegeben; ihre Erfüllung kann beginnen.</p>
@@ -11695,6 +11913,97 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
         </tbody>
       </table>
       <!-- eventcatalog:end -->
+      <h3 id="ev-installation" data-l="de">Signale und Nachrichten dieser Installation</h3><h3 data-l="en">Signals and messages of this installation</h3>
+      <p data-l="de">Der Katalog oben listet, was atlas selbst aussendet. Ein Signal oder eine Nachricht, die ein eigenes Modell
+        wirft, steht dort nie: Der Katalog ist ein Vertrag, gegen den Code geprüft, und ein eigenes Signal verspricht nichts.
+        Es trägt jede Variable der Instanz, die es wirft. Was die deployten Modelle werfen, senden und empfangen, zeigt deshalb
+        ein zweiter Abschnitt derselben Seite, <a class="applink" href="/#/console/events">Console → Events</a>, «Signals and
+        messages of this installation» (ADR-0447, ADR-0446). Er wird bei jedem Aufruf aus den deployten Definitionen
+        abgeleitet, speichert nichts und kann deshalb nicht veralten. Pro Name zeigt er, wer ihn wirft oder sendet und wer ihn
+        empfängt, mit Prozess, Version, Projekt, Element und Rolle; bei einem Boundary-Event oder einem Event-Subprozess auch,
+        ob er unterbricht. Bei einer Nachricht stehen auch die Quellen, die kein Modell sind: ein Inbound-Watch eines Workers
+        und eine Produktaktion des Katalogs. Ein Filter zeigt nur einen Kanal oder nur Namen mit einem Befund.</p>
+      <p data-l="en">The catalogue above lists what atlas itself emits. A signal or a message a model of your own throws is never
+        in it: the catalogue is a contract, checked against the code, and an own signal promises nothing. It carries every
+        variable of the instance that throws it. What the deployed models throw, send and receive is therefore a second section
+        of the same page, <a class="applink" href="/#/console/events">Console → Events</a>, "Signals and messages of this
+        installation" (ADR-0447, ADR-0446). It is derived from the deployed definitions on every request, stores nothing, and
+        so cannot fall behind. For each name it shows who throws or sends it and who receives it, with process, version,
+        project, element and role, and for a boundary event or an event subprocess whether it interrupts. For a message it also
+        shows the sources that are not models: a Worker's inbound watch and a product action of the catalogue. A filter shows
+        one channel only, or only names with a finding.</p>
+      <table>
+        <thead><tr><th data-l="de">Befund</th><th data-l="en">Finding</th><th data-l="de">Wann</th><th data-l="en">When</th></tr></thead>
+        <tbody>
+          <tr><td><code>signal.unreceived</code></td><td data-l="de">Ein Name wird geworfen, und keine neueste, aktive Definition empfängt ihn. Ein Signal wird nicht gepuffert: Jeder Wurf geht verloren.</td><td data-l="en">A name is thrown, and no newest, active definition receives it. A signal is not buffered: every throw is lost.</td></tr>
+          <tr><td><code>signal.unthrown</code></td><td data-l="de">Ein Name wird empfangen, und keine deployte Definition wirft ihn. Keine Route sendet ein Signal; der Empfänger wartet, bis ein Modell deployt ist, das ihn wirft. Ein Tippfehler zeigt sich als dieses Paar.</td><td data-l="en">A name is received, and no deployed definition throws it. No route broadcasts a signal; the receiver waits until a model that throws it is deployed. A typo shows as this pair.</td></tr>
+          <tr><td><code>signal.crosses-projects</code>, <code>message.crosses-projects</code></td><td data-l="de">Ein Name wird in einem Projekt geworfen oder gesendet und in einem anderen empfangen, oder von einer Definition ohne Projekt. Kein Fehler, aber jede Variable der werfenden Instanz landet in einer Instanz des anderen Projekts, deren Mitglieder sie lesen dürfen. Ein unterbrechender Empfänger dort bricht die Arbeit ab, die er bewacht.</td><td data-l="en">A name is thrown or sent in one project and received in another, or by a definition without a project. Not an error, but every variable of the throwing instance arrives in an instance of the other project, whose members may read it. An interrupting receiver there cancels the work it guards.</td></tr>
+          <tr><td><code>signal.reserved-name</code>, <code>message.reserved-name</code></td><td data-l="de">Ein Modell ausserhalb der Systemprozesse von atlas wirft oder sendet einen Namen <code>atlas.*</code>. Es spricht damit für atlas. Der Modeler warnt schon vor dem Deploy.</td><td data-l="en">A model outside atlas's system processes throws or sends an <code>atlas.*</code> name. It speaks for atlas. The Modeler already warns before the deploy.</td></tr>
+          <tr><td><code>message.unreceived</code></td><td data-l="de">Ein Wurf eines Prozesses, ein eingeschalteter Inbound-Watch oder eine aktive Produktaktion sendet einen Namen, auf den keine neueste, aktive Definition wartet. Was gesendet wird, geht verloren; aufbewahrt wird eine Nachricht nur, wenn sie über <code>POST /api/v1/messages</code> mit <code>timeToLiveMs</code> veröffentlicht wird.</td><td data-l="en">A process's throw, an enabled inbound watch or an active product action sends a name no newest, active definition waits for. What it sends is lost; a message is kept only when it is published through <code>POST /api/v1/messages</code> with <code>timeToLiveMs</code>.</td></tr>
+        </tbody>
+      </table>
+      <p data-l="de">Alle deployten Versionen sind aufgeführt, die neueste markiert. Die Befunde lesen nur die neueste Version
+        jedes Prozesses und wissen nichts von laufenden Instanzen: Eine Instanz einer älteren Version kann einen Namen noch
+        werfen, den die neueste nicht mehr kennt, oder auf einen warten. Bei einer Nachricht sagt die Seite nie, dass nichts
+        sie sendet, denn <code>POST /api/v1/messages</code> kann jeden Namen senden, und das zeigt keine Definition. Die Befunde
+        sind keine Validierung eines Modells und stehen nicht im Bereich «Probleme»: Ob ein Empfänger existiert, hängt von
+        anderen Deployments ab, und deren Reihenfolge ist frei. Wer einen Empfänger eines Namens <code>atlas.*</code> sucht,
+        findet ihn in der Sicht «wer hört zu» des Katalogs, nur für Administratoren.</p>
+      <p data-l="en">Every deployed version is listed, the newest marked. The findings read the newest version of each
+        process only and know nothing of running instances: an instance of an older version can still throw a name the newest
+        no longer knows, or wait for one. For a message the page never says that nothing sends it, because
+        <code>POST /api/v1/messages</code> can send any name, and no definition shows that. The findings are no validation of
+        a model and are not in the Problems panel: whether a receiver exists depends on other deployments, and their order is
+        free. A receiver of an <code>atlas.*</code> name is in the catalogue's view of who listens, for administrators only.</p>
+      <p data-l="de">Im Modeler bietet ein empfangendes Signalelement neben den Ereignissen von atlas die Namen an, die
+        deployte Modelle werfen, und ein werfendes sagt, wie viele deployte Prozesse seinen Namen empfangen, oder dass keiner
+        es tut, mit einem Link auf die Seite. Ein empfangendes Nachrichtenelement bietet die Namen an, die deployte Modelle
+        senden, und ein sendendes sagt, wer darauf wartet. Ein Name, den ein deploytes Modell sendet, gilt damit als gespeist.
+        Wer die Seite sehen darf: ab Rolle <code>modeler</code>, über alle Projekte, weil dieselben Angaben im XML jeder
+        deployten Definition stehen. Über die API liefern <code>GET /api/v1/signals</code> und
+        <code>GET /api/v1/message-names</code> dasselbe, über MCP <code>atlas_signals</code> und
+        <code>atlas_message_names</code>.</p>
+      <p data-l="en">In the Modeler, a receiving signal element offers the names deployed models throw beside atlas's events,
+        and a throwing one says how many deployed processes receive its name, or that none does, with a link to the page. A
+        receiving message element offers the names deployed models send, and a sending one says who waits for it. A name a
+        deployed model sends thereby counts as fed. Who may see the page: role <code>modeler</code> and above, across every
+        project, because the same facts are in the XML of every deployed definition. Over the API,
+        <code>GET /api/v1/signals</code> and <code>GET /api/v1/message-names</code> answer the same; over MCP,
+        <code>atlas_signals</code> and <code>atlas_message_names</code> do.</p>
+      <h3 id="ev-protokoll" data-l="de">Das Ereignisprotokoll</h3><h3 data-l="en">The event log</h3>
+      <p data-l="de">Die Übersicht oben zeigt, was die Modelle austauschen <i>könnten</i>. Was tatsächlich geschah,
+        zeigt das Ereignisprotokoll unter <a class="applink" href="/#/operations/event-log">Operations → Diagnostics →
+        Event log</a> (ADR-0472): jedes geworfene Signal und jede gesendete Nachricht, neueste zuerst, mit
+        Absender, Zeitpunkt und Reichweite, also wie viele wartende Elemente sie erreicht und wie viele Instanzen sie
+        gestartet hat. Darunter steht, wo sie ankam: der Empfang mit Prozess, Element und Instanz, ein Start, und bei
+        einer Nachricht mit Lebensdauer, dass der Puffer sie aufbewahrt, später übergeben oder verfallen lassen hat. Ein
+        Senden, das niemand empfing, ist markiert; genau diesen Fall soll das Protokoll sichtbar machen. Filter grenzen
+        auf einen Kanal, einen Namen oder eine Instanz ein, «Live» lädt neue Zeilen alle paar Sekunden nach, und auf der
+        Seite <a class="applink" href="/#/console/events">Events</a> führt jeder Name direkt ins gefilterte
+        Protokoll.</p>
+      <p data-l="en">The overview above shows what the models <i>could</i> exchange. What actually happened is in the
+        event log under <a class="applink" href="/#/operations/event-log">Operations → Diagnostics → Event log</a>
+        (ADR-0472): every signal thrown and every message sent, newest first, with its sender, its moment and
+        its reach, that is how many waiting elements it reached and how many instances it started. Under it stands where
+        it arrived: the reception with process, element and instance, a start, and for a message with a time to live
+        that the buffer kept it, handed it over later or let it expire. A send nobody received is marked; that is the
+        case the log exists to show. Filters narrow to a channel, a name or an instance, Live reads new rows every few
+        seconds, and on the <a class="applink" href="/#/console/events">Events</a> page every name leads straight to the
+        filtered log.</p>
+      <p data-l="de">Das Protokoll speichert nie, was eine Instanz enthielt, sondern nur Namen, Schlüssel und Zeitpunkte.
+        Der Korrelationsschlüssel einer Nachricht wird gezeigt, weil «welcher Auftrag» meist die erste Frage ist.
+        Zeilen bleiben 30 Tage erhalten (<code>--event-log-ttl</code>). Jede Zeile wird gelesen wie die Instanz, um die
+        es geht: Operatoren und Administratoren sehen alle, Projektmitglieder die Zeilen der Definitionen ihrer Projekte,
+        und eine Zeile ohne Definition, etwa ein Senden über die Route oder einen Watch, nur die ersten. Über die API
+        liest <code>GET /api/v1/event-log</code> das Protokoll, über MCP <code>atlas_event_log</code>. Es beginnt mit
+        dem Upgrade auf diese Version; was davor gesendet wurde, steht nicht darin.</p>
+      <p data-l="en">The log never stores what an instance held, only names, keys and moments. A message's correlation
+        key is shown, because "which order" is usually the first question. Rows are kept for 30 days
+        (<code>--event-log-ttl</code>). Each row is read as the instance it is about: operators and administrators see
+        every row, project members the rows of their projects' definitions, and a row that names no definition, such
+        as a send through the route or a watch, only the former. Over the API, <code>GET /api/v1/event-log</code> reads
+        the log; over MCP, <code>atlas_event_log</code> does. It starts with the upgrade to this version; what was sent
+        before is not in it.</p>
     </section>
 
     <!-- ==================== GLOSSARY ==================== -->
@@ -11744,7 +12053,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">43</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">43</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">45</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">45</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>

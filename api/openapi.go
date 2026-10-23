@@ -515,6 +515,21 @@ func (s *Server) apiRoutes() []apiRoute {
 				"type": tString(), "worker": tString(), "leaseMs": tInteger(), "maxJobs": tInteger(), "waitMs": tInteger(),
 			}, "type")),
 			resp: jsonBody("The leased jobs, with the variables visible at each task", tObject())}},
+		// The Worker protocol's second message kind: a query a Worker Instance answers
+		// with its Worker's credential, held only in memory for as long as somebody
+		// waits on it — never an event, never a job (ADR-0473).
+		{"POST", "/api/v1/worker-queries/activate", s.workerQueries.HandleActivate, apiOp{
+			summary: "Lease the form lookups waiting for a Worker this Worker Instance holds, optionally long-polling — the query twin of the job pull; nothing about a query is durable", tag: "Workers", role: RoleOperator,
+			req: jsonBody("Job type, worker id, the Workers this instance holds, batch size, and how long to wait", schemaObj(map[string]any{
+				"type": tString(), "worker": tString(), "connectors": tArray(), "maxQueries": tInteger(), "waitMs": tInteger(),
+			}, "type", "worker")),
+			resp: jsonBody("The leased queries", tObject())}},
+		{"POST", "/api/v1/worker-queries/{id}/answer", s.workerQueries.HandleAnswer, apiOp{
+			summary: "Answer a leased form lookup with one page or a failure code, fenced by its lease token; 404 once its asker has stopped waiting", tag: "Workers", role: RoleOperator,
+			req: jsonBody("The holding worker id and lease token, and exactly one of page and error", schemaObj(map[string]any{
+				"worker": tString(), "leaseToken": tString(), "page": tObject(), "error": tObject(),
+			}, "worker", "leaseToken")),
+			resp: jsonBody("Query id", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/activate", s.handleActivateJob, apiOp{
 			summary: "Lease a job to an external worker for a bounded time (ADR-0007)", tag: "Incidents", role: RoleOperator,
 			req: jsonBody("Worker id and how long to hold the job", schemaObj(map[string]any{
@@ -630,6 +645,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Complete a user task", tag: "Tasks", role: RoleUser,
 			req:  jsonBody("Completion variables", schemaObj(map[string]any{"variables": tObject()})),
 			resp: jsonBody("Task key", tObject())}},
+		{"POST", "/api/v1/tasks/{key}/form-data/{field}/query", s.formLookup.HandleQuery, apiOp{
+			summary: "Search the remote data source of one directory field of a task's form: one bounded page of options from the Worker the form names, for a caller who may work on the task. The request carries only the term, the values of the form fields the source is bound to, a cursor and a page size; which Worker, resource and properties is the stored form's (ADR-0473)", tag: "Tasks", role: RoleUser,
+			req: jsonBody("Search term, bound filter values, cursor, value to resolve, page size", schemaObj(map[string]any{
+				"search": tString(), "filters": tObject(), "cursor": tString(), "value": tString(), "limit": tInteger(),
+			})),
+			resp: jsonBody("Options and the cursor of the next page", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/claim", s.handleClaimTask, apiOp{
 			summary: "Claim a user task (self, or assign a named user)", tag: "Tasks", role: RoleUser,
 			req:  jsonBody("Optional assignee (empty claims for the signed-in user)", schemaObj(map[string]any{"assignee": tString()})),
@@ -812,6 +833,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Save a form definition. \"from\" names the form being edited (empty for a never-saved one): a changed id then renames the form instead of leaving a second copy behind, and a save onto an id another form already holds is refused with 409 (ADR-0222). Omit \"from\" for the plain upsert-by-id an import or an agent wants", tag: "Forms", role: RoleModeler, req: jsonBody("Form", tObject()), resp: jsonBody("Saved form", tObject())}},
 		{"GET", "/api/v1/forms", s.handleListForms, apiOp{
 			summary: "List form definitions", tag: "Forms", role: roleAny, resp: jsonBody("Forms", tArray())}},
+		{"GET", "/api/v1/form-data/sources", s.formLookup.HandleSources, apiOp{
+			summary: "The remote data sources a form's directory field can name, what each lets a field search, filter and show, and the Workers of those types with whether each allows forms to search through it (ADR-0473)", tag: "Forms", role: RoleModeler,
+			resp: jsonBody("Sources and Workers", tObject())}},
 		{"GET", "/api/v1/forms/{id}/availability", s.handleFormIDAvailability, apiOp{
 			summary: "Report whether a form id is free — the live check behind the form editor's ID field, so a collision shows while the id is typed rather than at Save", tag: "Forms", role: RoleModeler, resp: jsonBody("Availability", tObject())}},
 		{"GET", "/api/v1/forms/{id}", s.handleGetForm, apiOp{
@@ -1895,7 +1919,16 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Who listens to atlas's events in this installation (ADR-0435 §7): every deployed definition with a signal start, catch, boundary or event subprocess, or a message receiver, on an atlas.* name — with process, version, project, element and the personal-data fields it receives — and every feed subscription. A map of where personal data flows across every project, so administrator-only", tag: "Events", role: RoleAdmin,
 			resp: jsonBody("Event listeners", schemaObj(map[string]any{"processes": tArray(), "feed": tArray(), "feedTypes": tArray(), "catalogueWithheld": map[string]any{"type": "boolean"}}))}},
 		{"GET", "/api/v1/message-sources", s.handleListMessageSources, apiOp{
-			summary: "List every message name with where it comes from (ADR-0429 §6), each row tagged by `sourceKind`: `inbound-watch` — a Worker's event, with the worker and, for a viewer of it, the watch; `product-action` — a product's action, with the product, the action's key, effect and triggers and the process the product binds it to, for the catalogues the caller maintains; `process` — where the newest deployed version of a process waits for it, at a message `start` or a `catch`. The Modeler groups its message picker by these and tells a model whether its message has a source", tag: "Workers", role: RoleModeler, resp: jsonBody("Message sources", tArray())}},
+			summary: "List every message name with where it comes from (ADR-0429 §6, ADR-0446 §1), each row tagged by `sourceKind`: `inbound-watch` — a Worker's event, with the worker and, for a viewer of it, the watch; `product-action` — a product's action, with the product, the action's key, effect and triggers and the process the product binds it to, for the catalogues the caller maintains; `process` — where a deployed version of a process waits for it; `process-throw` — where one sends it, at a message throw or end event or a send task naming a message. A process row carries `version`, `newest`, `definitionKey`, `projectId`, `system`, `role` (start, catch, boundary, event-subprocess or throw) and, for a boundary or an event subprocess, `interrupting`; every deployed version is listed. The Modeler groups its message picker by these and tells a model whether its message has a source", tag: "Workers", role: RoleModeler, resp: jsonBody("Message sources", tArray())}},
+		{"GET", "/api/v1/message-names", s.handleListMessageNames, apiOp{
+			summary: "The messages of this installation (ADR-0446): the rows of /api/v1/message-sources, under the same filters, grouped by message name, each with its `findings` — `message.unreceived` (a process throw of the newest version, an enabled inbound watch or an active product action sends a name no newest, active definition waits for), `message.crosses-projects` (sent in one project, waited for in another or without one) and `message.reserved-name` (a model outside atlas's system processes sends an atlas.* name). Never 'nothing sends it': the publish route may send any name. Findings read the newest version of each process; every version is listed", tag: "Events", role: RoleModeler,
+			resp: jsonBody("Message names", schemaObj(map[string]any{"messages": tArray()}))}},
+		{"GET", "/api/v1/event-log", s.handleEventLog, apiOp{
+			summary: "The event log (ADR-0472): every signal thrown and message sent, and where each arrived, newest first. A row's `kind` is `signal.thrown` or `message.sent` (a send, with `source` — process, publish, inbound or directed — and how many waiting elements it `reached` and instances it `started`, both 0 for a send that reached nobody), `signal.received`, `signal.started`, `message.received`, `message.started` (a delivery, with the `receiver` and the sending instance), or `message.kept`, `message.taken` and `message.expired` (the buffer, ADR-0370). Rows that share a `cause` were written while one command was processed: a send and what it reached. Never a payload. `before` reads older rows than a cursor (the `next` of a page), `after` newer ones (its `latest`); `limit` 1–500, default 100; `channel` (signal or message), `name` and `instance` narrow the page, and a page reads at most 10000 rows, so a narrow one can be short with `more`. Rows are read as their instances are (ADR-0275): an operator or an administrator reads every row, a project member the rows of definitions deployed from a project they may view, and a row naming no definition only the first; so the route is open to every signed-in caller and the rows decide. Rows are kept for `--event-log-ttl` (30 days); `prunedThrough` says how far", tag: "Events", role: roleAny,
+			resp: jsonBody("Event log page", schemaObj(map[string]any{"rows": tArray(), "next": tString(), "latest": tString(), "more": map[string]any{"type": "boolean"}, "prunedThrough": tString()}))}},
+		{"GET", "/api/v1/signals", s.handleListSignals, apiOp{
+			summary: "The signals of this installation (ADR-0447): every signal name the deployed definitions throw or receive outside atlas.*, and an atlas.* name thrown by a model outside atlas's system processes, each with its `points` (process, name, version, `newest`, definition key, project, `system`, `inactive`, element and `role` — throw, start, catch, boundary or event-subprocess — and, for a boundary or an event subprocess, `interrupting`) and its `findings`: `signal.unreceived`, `signal.unthrown`, `signal.crosses-projects`, `signal.reserved-name`. Derived from the definitions on request, not stored, and blind to running instances: findings read the newest version of each process. A receiver of an atlas.* name is the administrator's view at /api/v1/event-catalog/listeners", tag: "Events", role: RoleModeler,
+			resp: jsonBody("Signals", schemaObj(map[string]any{"signals": tArray()}))}},
 
 		{"PUT", "/api/v1/connectors/{id}/members/{principalId}", s.handleSetConnectorMember, apiOp{
 			summary: "Share a worker with a user or a group, or change their role (ADR-0205); owner only", tag: "Workers", role: RoleModeler, req: jsonBody("Member role", tObject()), resp: jsonBody("Updated worker", tObject())}},

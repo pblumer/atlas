@@ -164,7 +164,7 @@ test("the Operations pages for looking into something sit behind Diagnostics", a
   await page.locator("#topnav .topnav-group-btn", { hasText: "Diagnostics" }).click();
   const menu = page.locator("#topnav .topnav-group .dropdown-menu");
   await expect(menu).toBeVisible();
-  await expect(menu.locator("a")).toHaveText(["Messages", "Outbox", "Call activities", "Mock directory", "Mock database"]);
+  await expect(menu.locator("a")).toHaveText(["Messages", "Event log", "Outbox", "Call activities", "Mock directory", "Mock database"]);
   await menu.locator("a", { hasText: "Outbox" }).click();
   await expect(page).toHaveURL(/#\/operations\/outbox$/);
   await expect(page.locator("#topnav .topnav-group-btn")).toHaveClass(/active/);
@@ -176,5 +176,5 @@ test("an operator's Diagnostics has no mock tools, which are an administrator's"
   await boot(page, OPERATOR, { hash: "#/operations" });
   expect(await barNames(page)).toEqual(["Instances", "Incidents", "Workers", "Decisions", "Reconciliation", "Diagnostics"]);
   await page.locator("#topnav .topnav-group-btn").click();
-  await expect(page.locator("#topnav .topnav-group .dropdown-menu a")).toHaveText(["Messages", "Outbox", "Call activities"]);
+  await expect(page.locator("#topnav .topnav-group .dropdown-menu a")).toHaveText(["Messages", "Event log", "Outbox", "Call activities"]);
 });

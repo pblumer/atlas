@@ -56,6 +56,10 @@ type inflightValue struct {
 	// (ADR-0370). Its payload is a slice, so like migration it is a non-hot-path
 	// field: no token movement populates it.
 	message model.MessageValue
+	// dispatch rides on the record of a send (ADR-0472 §1). It is written on
+	// token movement — a throw — but holds only strings that already exist and fixed
+	// fields, so filling it allocates nothing.
+	dispatch model.DispatchValue
 	// authorization and approval ride only on an enforcement point's decision, an
 	// approver's answer and the events they emit
 	// (ADR-draft-identity-aware-worker-execution). They are pointers rather than inline
@@ -120,6 +124,8 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.feedRetention
 	case model.VTMessage:
 		return &v.message
+	case model.VTDispatch:
+		return &v.dispatch
 	case model.VTAuthorization:
 		if v.authorization != nil {
 			return v.authorization
@@ -236,6 +242,10 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTMessage:
 		if v, ok := rec.Value.(*model.MessageValue); ok {
 			iv.message = *v
+		}
+	case model.VTDispatch:
+		if v, ok := rec.Value.(*model.DispatchValue); ok {
+			iv.dispatch = *v
 		}
 	case model.VTAuthorization:
 		if v, ok := rec.Value.(*model.AuthorizationValue); ok {

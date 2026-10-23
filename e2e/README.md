@@ -354,6 +354,28 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   with padding, since headless Chromium hides scrollbars). A double-click on either
   divider restores the column's default width.
 
+- **`remote-select.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
+  the **directory field** (`api/web/remote-select.js`) on the real vendored form-js viewer,
+  with a transport the test answers itself — nothing is asked before somebody types; a search
+  waits for the department it is bound to and for the field's minimum length; loading, results,
+  an empty answer and a failure each say so; keystrokes are debounced into one request; a newer
+  term aborts the older request and a late answer is ignored; the keyboard moves through the
+  results and Enter chooses without submitting; the form submits the chosen id, not its label,
+  and refuses a missing choice; changing the department clears a choice it no longer admits;
+  Load more continues through the server's cursor; a reopened task shows who its value stands
+  for, or that the directory no longer holds it; and the preview searches made-up people.
+- **`tasks-remote-select.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
+  the same field in the **real Tasks app** against a stubbed API — the search goes to the
+  task's own lookup route, Complete sends `{abteilung, user}` with the object id, Complete
+  without a choice sends nothing, and "Back to the list" completes nothing.
+- **`form-directory-field.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
+  the **form editor's** directory field panel — **＋ Directory field** writes a data source
+  through the Worker open to forms, a plain text field becomes one bound to the department it
+  is filtered by, a Worker that does not let forms search it is named as such, an unfinished
+  filter is pointed out before Save, the field turns back into a plain one, and both the
+  Validate tab and the Design preview search made-up people and ask no directory.
+  `worker-test.spec.mjs` covers the Worker dialog's **Forms may search** switch.
+
 - **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):
   **who is signed in**, in the Users card under Organization. The column must render the
   three states from what the roster carries, and keep itself current *without* reloading
@@ -478,7 +500,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   product action, and stays selectable. The name field suggests the same names; the line
   under it names the watches, the product action that owns the name and the processes
   waiting for it, and stops suggesting a watch for a name a product owns. A listing that
-  fails leaves a throw's picker as it was. Shares `message-sources-harness.html` with the
+  fails leaves a throw's picker as it was. A newer server's rows
+  ([ADR-0446](../docs/adr/0446-the-messages-deployed-models-send-and-receive.md)): a waiting
+  element is offered «Messages deployed models send», newest versions only, and a name a model
+  sends no longer reads as unfed; a sending element is told who waits for it, or that nobody
+  does, with a link to the Events page. Shares `message-sources-harness.html` with the
   next spec.
 
 - **`shop-badges-modeler.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
@@ -514,6 +540,19 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
     is not sent an incident, which belongs to none;
   - says, with the shop switched off, that the feed passes over the catalogue's events while
     the engine's still reach every subscription.
+
+  Its second section ([ADR-0447](../docs/adr/0447-the-signals-deployed-models-throw-and-receive.md),
+  [ADR-0446](../docs/adr/0446-the-messages-deployed-models-send-and-receive.md)) lists the
+  installation's own signals and messages beside the catalogue, never in it: each name with who
+  sends and receives it, an older version named by its number, and its findings; a channel
+  filter and a filter for names with a finding; a detail with the interrupting receivers, a
+  link to each deployed version and the watches that send a message. A link naming a name and a
+  channel opens it, and a server without the routes leaves the catalogue standing.
+- **`operations-eventlog.spec.mjs`** ([ADR-0472](../docs/adr/0472-event-log.md)):
+  the Operations page **Event log**. A send heads its group with the receptions and starts it
+  caused under it; a send nobody received is marked unless the buffer kept it, and an expiry is
+  marked; instances and definitions link to their pages; the filters travel as query parameters,
+  *Older* pages back with `before`, and Live puts what came `after` the newest row on top.
 - **`signal-events-modeler.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):
   the **events atlas emits in the Modeler's signal picker**, driven through the real
   vendored bpmn-js.
@@ -523,6 +562,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   - An `atlas.*` name that is no event, and a throw on an `atlas.*` name, are warned about.
   - The catalogue is asked for once. A catalogue that cannot be read leaves the picker as it
     was.
+  - The signals the newest versions of deployed models throw are offered in a group of their
+    own, without `atlas.*` names; a throw says how many deployed processes receive its name, or
+    that none does, with a link to the Events page
+    ([ADR-0447](../docs/adr/0447-the-signals-deployed-models-throw-and-receive.md)).
 - **`timer-fx-modeler.spec.mjs`** ([ADR-0055](../docs/adr/0055-feel-expression-timer-schedules.md)):
   the **fx switch on a timer's schedule field**, driven through the real vendored bpmn-js.
   - A literal duration opens as a literal and an `=` value as an expression; the switch flips

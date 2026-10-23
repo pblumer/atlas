@@ -16,7 +16,9 @@ const sharepointEnvPrefix = "ATLAS_SHAREPOINT_"
 // ATLAS_SHAREPOINT_CONNECTORS lists the names; each name contributes
 // ATLAS_SHAREPOINT_<NAME>_ENDPOINT (the Graph base URL, blank for the default) and
 // ATLAS_SHAREPOINT_<NAME>_CREDENTIALS — the two values [sharepoint.ProviderConfig] is
-// built from, so a worker builds the identical client the engine would have.
+// built from, so a worker builds the identical client the engine would have. A
+// clientCredentials bundle proves the app with a client secret, a certificate as PEM,
+// or the thumbprint of a certificate in this Windows host's store (ADR-0141, amended).
 //
 // The credential arrives as *the whole bundle*, one opaque JSON value, rather than as
 // one variable per field. That is the SQL kinds' arrangement and it is chosen for
@@ -58,12 +60,24 @@ func sharepointSourcesFromEnv(env func(string) string) (*sharepoint.Registry, []
 			brokered[name] = env(key + "ENDPOINT")
 			continue
 		}
+		secret := env(key + "CREDENTIALS")
 		client, err := sharepoint.NewProviderClient(sharepoint.ProviderConfig{
 			Endpoint: env(key + "ENDPOINT"),
-			Secret:   env(key + "CREDENTIALS"),
+			Secret:   secret,
 		})
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("worker: sharepoint worker %q is not usable: %w (set %sCREDENTIALS to the credential bundle)", name, err, key)
+		}
+		// A certificate named by its thumbprint is asked for now, as the Entra worker asks
+		// for its own (ADR-0172, amended): one the store does not hold, or a key this
+		// account may not use, is a startup error while the operator is watching rather
+		// than a failed token request in the middle of a run. The client asks the store
+		// again on its first token request; it does not ask while it is built, because the
+		// engine builds the same client on its run loop (ADR-0141, amended).
+		if thumbprint := sharepoint.CertificateThumbprint(secret); thumbprint != "" {
+			if _, _, err := openStoreCertificate(thumbprint); err != nil {
+				return nil, nil, nil, fmt.Errorf("worker: sharepoint worker %q: %w", name, err)
+			}
 		}
 		reg.Register(name, client)
 	}

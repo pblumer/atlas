@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Entra ID: Person aus dem Verzeichnis wählen und ihren Vorgesetzten lesen. Die Auswahl sucht im Verzeichnis über den Entra-Worker (Remote-Datenquelle, ADR-0473), statt das Verzeichnis vorher mit list-users in eine Prozessvariable zu laden.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_entra_benutzerauswahl" targetNamespace="http://atlas/beispiel/entra-benutzerauswahl">
+  <bpmn:process id="Process_mvjoqvisfajk" name="Entra ID: Person wählen und Vorgesetzten lesen" isExecutable="true">
+    <bpmn:documentation>Eine Person wählt in einer Aufgabe eine Abteilung und darin eine Person aus Microsoft Entra ID; danach liest der Prozess deren Vorgesetzten.
+
+Warum so: Die frühere Fassung las mit list-users zuerst das ganze Verzeichnis in die Variable userList und bot es im Formular zur Auswahl an. Bei mehreren tausend Konten stand damit das Verzeichnis im Ereignisprotokoll, im Zustand, in jedem Verlaufsschritt und in jeder Sicherung, und list-users bricht über seinem maxUsers-Grenzwert absichtlich ab. Diese Fassung braucht den Schritt Activity_getUser nicht mehr: Das Feld «Person» des Formulars ist eine Verzeichnisauswahl (atlasDataSource). Es sucht beim Tippen über den Entra-Worker ucc_entra im Verzeichnis, zeigt höchstens 25 Treffer und übermittelt nur die unveränderliche Objekt-ID der gewählten Person.
+
+Variablen: abteilung und user schreibt das Formular; vorgesetzter schreibt der Entra-Schritt. Der Prozess startet ohne Variablen.
+
+Voraussetzungen beim Betreiber: der Entra-Worker ucc_entra mit User.Read.All, in der Console mit eingeschaltetem «Formulare dürfen suchen» (formLookups). Ohne diesen Schalter verweigert der Server die Suche, auch wenn das Formular den Worker nennt. Die Abteilungen im Formular müssen so geschrieben sein wie das Attribut department im Verzeichnis.</bpmn:documentation>
+    <bpmn:startEvent id="StartEvent_1" name="Auswahl nötig">
+      <bpmn:outgoing>Flow_start_choose</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Activity_chooseUser" name="User auswählen">
+      <bpmn:documentation>Abteilung wählen, dann nach Name oder E-Mail-Adresse suchen und genau eine Person auswählen. Die Suche fragt das Verzeichnis bei jeder Eingabe (verzögert), nicht eine vorher geladene Liste; nichts davon wird gespeichert. Übermittelt werden nur abteilung und user (die Objekt-ID). Vor dem Abschluss prüft der Server die ID noch einmal im Verzeichnis (verify: lookup): Gibt es die Person nicht mehr oder gehört sie nicht zur gewählten Abteilung, wird die Aufgabe nicht abgeschlossen.
+
+Lehrreich: Abbrechen schliesst die Aufgabe nicht ab und bricht sie nicht ab; es verlässt nur das Formular.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:formDefinition formId="entra-benutzerauswahl" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_start_choose</bpmn:incoming>
+      <bpmn:outgoing>Flow_choose_manager</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Activity_1jjn1v5" name="Vorgesetzten lesen (Entra ID)">
+      <bpmn:documentation>get-user-manager im Entra-Worker ucc_entra für die gewählte Person: userId ist die Objekt-ID aus dem Formular (= user). Das Ergebnis vorgesetzter ist das Verzeichnisobjekt des Vorgesetzten, hier nur mit seiner id (select="id"); hat die Person keinen Vorgesetzten, ist vorgesetzter null. Die Auswahl im Formular ist kein Vorgesetzter: Zwischen Auswahl und diesem Schritt kann sich das Verzeichnis ändern.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="ucc_entra" operation="get-user-manager" userId="= user" select="id" resultVariable="vorgesetzter" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_choose_manager</bpmn:incoming>
+      <bpmn:outgoing>Flow_manager_end</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="EndEvent_1" name="Vorgesetzter bekannt">
+      <bpmn:incoming>Flow_manager_end</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_start_choose" sourceRef="StartEvent_1" targetRef="Activity_chooseUser" />
+    <bpmn:sequenceFlow id="Flow_choose_manager" sourceRef="Activity_chooseUser" targetRef="Activity_1jjn1v5" />
+    <bpmn:sequenceFlow id="Flow_manager_end" sourceRef="Activity_1jjn1v5" targetRef="EndEvent_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_mvjoqvisfajk">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="152" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="134" y="225" width="72" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_chooseUser_di" bpmnElement="Activity_chooseUser">
+        <dc:Bounds x="250" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1jjn1v5_di" bpmnElement="Activity_1jjn1v5">
+        <dc:Bounds x="400" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
+        <dc:Bounds x="562" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="526" y="225" width="108" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_start_choose_di" bpmnElement="Flow_start_choose">
+        <di:waypoint x="188" y="200" />
+        <di:waypoint x="250" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_choose_manager_di" bpmnElement="Flow_choose_manager">
+        <di:waypoint x="350" y="200" />
+        <di:waypoint x="400" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_manager_end_di" bpmnElement="Flow_manager_end">
+        <di:waypoint x="500" y="200" />
+        <di:waypoint x="562" y="200" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
