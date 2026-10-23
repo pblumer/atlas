@@ -15,17 +15,17 @@ import (
 type Operation string
 
 const (
-	Activate         Operation = "activate-subscription"
-	PortNumber       Operation = "port-number"
-	ConfigureOptions Operation = "configure-options"
-	ConfigureRoaming Operation = "configure-roaming"
-	OrderSIM         Operation = "order-sim"
-	ActivateSIM      Operation = "activate-sim"
-	GetPUK           Operation = "get-puk"
-	ListInventory    Operation = "list-inventory"
-	GetSubscription  Operation = "get-subscription"
-	GetOrder         Operation = "get-order"
-	Report           Operation = "report"
+	Activate	Operation = "activate-subscription"
+	PortNumber	Operation = "port-number"
+	ConfigureOptions	Operation = "configure-options"
+	ConfigureRoaming	Operation = "configure-roaming"
+	OrderSIM	Operation = "order-sim"
+	ActivateSIM	Operation = "activate-sim"
+	GetPUK	Operation = "get-puk"
+	ListInventory	Operation = "list-inventory"
+	GetSubscription	Operation = "get-subscription"
+	GetOrder	Operation = "get-order"
+	Report	Operation = "report"
 )
 
 var ErrUnsupportedLive = errors.New("swisscomnatelgo: live API is disabled until official API contract is available")
@@ -34,41 +34,41 @@ var ErrConflict = errors.New("swisscomnatelgo: resource already exists")
 var ErrInvalid = errors.New("swisscomnatelgo: invalid request")
 
 type Request struct {
-	Operation      Operation       `json:"operation"`
-	SubscriptionID string          `json:"subscriptionId,omitempty"`
-	Number         string          `json:"number,omitempty"`
-	SimID          string          `json:"simId,omitempty"`
-	SIMType        string          `json:"simType,omitempty"`
-	Options        map[string]bool `json:"options,omitempty"`
-	Roaming        map[string]bool `json:"roaming,omitempty"`
-	IdempotencyKey string          `json:"idempotencyKey,omitempty"`
+	Operation	Operation	`json:"operation"`
+	SubscriptionID	string	`json:"subscriptionId,omitempty"`
+	Number	string	`json:"number,omitempty"`
+	SimID	string	`json:"simId,omitempty"`
+	SIMType	string	`json:"simType,omitempty"`
+	Options	map[string]bool	`json:"options,omitempty"`
+	Roaming	map[string]bool	`json:"roaming,omitempty"`
+	IdempotencyKey	string	`json:"idempotencyKey,omitempty"`
 }
 
 type Subscription struct {
-	ID      string          `json:"id"`
-	Number  string          `json:"number"`
-	Status  string          `json:"status"`
-	Options map[string]bool `json:"options"`
-	Roaming map[string]bool `json:"roaming"`
-	SIMIDs  []string        `json:"simIds"`
+	ID	string	`json:"id"`
+	Number	string	`json:"number"`
+	Status	string	`json:"status"`
+	Options	map[string]bool	`json:"options"`
+	Roaming	map[string]bool	`json:"roaming"`
+	SIMIDs	[]string	`json:"simIds"`
 }
 
 type SIM struct {
-	ID             string `json:"id"`
-	SubscriptionID string `json:"subscriptionId"`
-	Type           string `json:"type"`
-	Status         string `json:"status"`
+	ID	string	`json:"id"`
+	SubscriptionID	string	`json:"subscriptionId"`
+	Type	string	`json:"type"`
+	Status	string	`json:"status"`
 }
 
 type Result struct {
-	Subscription *Subscription  `json:"subscription,omitempty"`
-	SIM          *SIM           `json:"sim,omitempty"`
-	Inventory    []Subscription `json:"inventory,omitempty"`
-	OrderID      string         `json:"orderId,omitempty"`
-	OrderStatus  string         `json:"orderStatus,omitempty"`
+	Subscription	*Subscription	`json:"subscription,omitempty"`
+	SIM	*SIM	`json:"sim,omitempty"`
+	Inventory	[]Subscription	`json:"inventory,omitempty"`
+	OrderID	string	`json:"orderId,omitempty"`
+	OrderStatus	string	`json:"orderStatus,omitempty"`
 	// A mock PUK is synthetic and must never be used as a real security credential.
-	PUK   string `json:"puk,omitempty"`
-	Count int    `json:"count,omitempty"`
+	PUK	string	`json:"puk,omitempty"`
+	Count	int	`json:"count,omitempty"`
 }
 
 type Client interface {
@@ -82,12 +82,12 @@ func (Live) Do(context.Context, Request) (Result, error) {
 }
 
 type Mock struct {
-	mu     sync.Mutex
-	next   uint64
-	subs   map[string]Subscription
-	sims   map[string]SIM
-	orders map[string]Result
-	idem   map[string]Result
+	mu	sync.Mutex
+	next	uint64
+	subs	map[string]Subscription
+	sims	map[string]SIM
+	orders	map[string]Result
+	idem	map[string]Result
 }
 
 func NewMock() *Mock {
