@@ -24,6 +24,7 @@ import (
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/temis"
+	"github.com/pblumer/atlas/internal/certstore"
 
 	"github.com/pblumer/atlas/api/httpapi"
 )
@@ -304,12 +305,22 @@ func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, map[str
 			problems[c.Name] = problemDisabled
 			continue
 		}
+		secret := s.resolveConnectorSecret(c.CredentialsRef)
 		client, err := sharepoint.NewProviderClient(sharepoint.ProviderConfig{
 			Endpoint: strings.TrimSpace(c.Endpoint),
-			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
+			Secret:   secret,
 		})
 		if err != nil {
 			problems[c.Name] = err.Error() // its tasks park until it is fixed (ADR-0141)
+			continue
+		}
+		// A thumbprint names a certificate in the Windows certificate store, so on a host
+		// without one the record is reported rather than served: neither this client nor a
+		// supervised worker, which sharepointWorkerEnv leaves it out of, could ever sign
+		// with it. On Windows the client is built without the store being asked — that
+		// happens on its first token request, off this loop (ADR-0141, amended).
+		if sharepoint.CertificateThumbprint(secret) != "" && !certStoreSupported {
+			problems[c.Name] = "sharepoint: " + certstore.ErrUnsupported.Error()
 			continue
 		}
 		clients[c.Name] = client

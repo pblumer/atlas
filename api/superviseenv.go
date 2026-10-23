@@ -12,6 +12,7 @@ import (
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/s3"
+	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/internal/certstore"
 	"github.com/pblumer/atlas/logging"
 )
@@ -395,12 +396,12 @@ type entraBundle struct {
 	CertificateThumbprint string `json:"certificateThumbprint"`
 }
 
-// entraCertStoreSupported says whether a supervised Entra worker on this host has a
-// certificate store to find a thumbprint in. Only Windows has one; elsewhere a thumbprint
-// bundle is left out like any that does not resolve, because handing it over would make
-// the worker refuse to start — for every tenant it serves, not only this one. A variable
-// so both answers are testable on one platform.
-var entraCertStoreSupported = certstore.Supported
+// certStoreSupported says whether a supervised Entra or SharePoint worker on this host
+// has a certificate store to find a thumbprint in. Only Windows has one; elsewhere a
+// thumbprint bundle is left out like any that does not resolve, because handing it over
+// would make the worker refuse to start — for every tenant or instance it serves, not
+// only this one. A variable so both answers are testable on one platform.
+var certStoreSupported = certstore.Supported
 
 // entraBundleParse parses a vault bundle value. An empty value, invalid JSON, a missing
 // field, more than one credential, or a thumbprint on a host without a certificate store
@@ -427,7 +428,7 @@ func entraBundleParse(raw string) (entraBundle, bool) {
 	if credentials != 1 {
 		return entraBundle{}, false // none, or more than one
 	}
-	if b.CertificateThumbprint != "" && !entraCertStoreSupported {
+	if b.CertificateThumbprint != "" && !certStoreSupported {
 		return entraBundle{}, false
 	}
 	return b, true
@@ -914,6 +915,13 @@ func (s *Server) sharepointWorkerEnv() []string {
 			// it serves. Left out, it is simply not served, and the Console shows it as
 			// configured-not-working.
 			if bundle == "" {
+				continue
+			}
+			// A certificate named by its thumbprint on a host without a certificate store
+			// is left out for the same reason, as an Entra tenant's is (entraBundleParse):
+			// the worker could only refuse it. buildSharePointClients reports why, so the
+			// Console shows the instance as configured-not-working (ADR-0141, amended).
+			if sharepoint.CertificateThumbprint(bundle) != "" && !certStoreSupported {
 				continue
 			}
 			taken[envKey] = c.Name

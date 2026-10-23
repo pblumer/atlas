@@ -7327,6 +7327,25 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           holds the certificate and its unencrypted private key as one PEM text. Upload the certificate to the app
           registration under <i>Certificates &amp; secrets</i>. Microsoft recommends this for apps that run unattended:
           the private key never leaves the worker, and only an assertion signed with it reaches the token endpoint.</p>
+        <p data-l="de">Auf einem Windows-Server kann <code>"certificateThumbprint"</code> stattdessen ein Zertifikat
+          nennen, das bereits im Speicher liegt (<code>CurrentUser\My</code> des Dienstkontos oder
+          <code>LocalMachine\My</code>), wie beim <a href="#runbook-entra">Entra-ID-Worker</a>. Der Schlüssel
+          signiert dort, auch wenn er als nicht exportierbar markiert ist. Das Secret enthält genau eine der drei
+          Angaben, und ein Zertifikat gilt nur bei <code>"method": "clientCredentials"</code>. Der Worker prüft das
+          Zertifikat beim Start; fehlt es oder darf das Dienstkonto den Schlüssel nicht lesen, startet er nicht und
+          nennt den Grund.</p>
+        <p data-l="en">On a Windows server, <code>"certificateThumbprint"</code> may instead name a certificate already
+          in the store (the service account's <code>CurrentUser\My</code>, or <code>LocalMachine\My</code>), as for
+          the <a href="#runbook-entra">Entra&nbsp;ID worker</a>. Its key signs there and may be non-exportable. The
+          secret carries exactly one of the three, and a certificate only with <code>"method":
+          "clientCredentials"</code>. The worker tries the certificate when it starts; if it is missing, or the
+          service account may not read its key, the worker does not start and says why.</p>
+        <p data-l="de">Die Rechte hängen an der App-Registrierung, nicht am Zertifikat: Meldet sich der
+          SharePoint-Worker mit der App des Entra-ID-Workers an, darf er auch Konten anlegen und sperren. Eine eigene
+          App nur mit den SharePoint-Berechtigungen trennt das.</p>
+        <p data-l="en">The rights belong to the app registration, not to the certificate: if the SharePoint worker
+          signs in as the Entra&nbsp;ID worker's app, it may also create and disable accounts. An app of its own,
+          holding only the SharePoint permissions, keeps the two apart.</p>
         <p data-l="de">Im Task nennst du die <b>Site</b> so, wie der Browser sie zeigt
           (<code>https://contoso.sharepoint.com/sites/hr</code>), als <code>contoso.sharepoint.com:/sites/hr</code>
           oder mit der Site-ID von Graph (<code>contoso.sharepoint.com,&lt;siteId&gt;,&lt;webId&gt;</code>). Gemeint
