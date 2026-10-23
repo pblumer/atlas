@@ -211,10 +211,13 @@ governs a Worker:
   folds away on its own, the browser remembers which, and a folded section still says how
   many entries it holds and what it warns about. A name no longer breaks over two lines at
   its hyphens.
-- **The Events page states an event's meaning in the Console's language.** The catalogue
-  writes every meaning, an event's and each payload field's, in German and English, and the
-  page showed only the English. It now shows the language set under Display, German unless
-  English was chosen; the rest of the page is still English.
+- **The Events page speaks the Console's language.** Its headings, column titles, hints,
+  filters, summaries and dialogs come from the Console's message catalogue, in German
+  unless English was chosen under Display, and so do the words for the ids the server sends:
+  an event's kind and stability, an element's role, a finding's rule. An event's meaning and
+  each payload field's are shown in the same language, from the catalogue that writes them
+  in both. The sentences the server composes in English (who produces an event, who may
+  receive it, what a finding names) stay English and are marked as such.
 
 ### Fixed
 

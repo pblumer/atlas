@@ -564,8 +564,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   button and a click beside it close it back onto the row, and a navigation closes it. Each
   section folds away, is still folded on the next visit, and says while folded how many entries
   it holds and what it warns about. A hyphenated name stays on one line beside a long column.
-  An event's meaning, and a payload field's, reads in the Console's language: German by default,
-  English when chosen.
+  The page reads in the Console's language: German for a viewer who chose none, with German words
+  for the server's ids and no raw message key left on screen, and English when chosen; an event's
+  meaning and a payload field's follow it, and the server's own English sentences are marked
+  `lang="en"`. The other cases check the wiring in English.
 - **`operations-eventlog.spec.mjs`** ([ADR-0472](../docs/adr/0472-event-log.md)):
   the Operations page **Event log**. A send heads its group with the receptions and starts it
   caused under it; a send nobody received is marked unless the buffer kept it, and an expiry is

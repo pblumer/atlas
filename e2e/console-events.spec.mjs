@@ -110,7 +110,11 @@ const LONG_MESSAGES = {
   ],
 };
 
-function installMock(page, { admin, catalogueWithheld = false, own = false, messages = MESSAGES }) {
+// The page is German unless English was chosen (ADR-0267). These tests check the
+// wiring in English, the one remembered choice installMock makes for them; the tests
+// of the page's language pass lang: null and read it as a viewer who chose nothing.
+function installMock(page, { admin, catalogueWithheld = false, own = false, messages = MESSAGES, lang = "en" }) {
+  if (lang) page.addInitScript((l) => { try { localStorage.setItem("atlas.locale", l); } catch { /* none */ } }, lang);
   const calls = [];
   page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -158,8 +162,7 @@ test("a modeler reads every entry and has no listening-now column", async ({ pag
 
   await page.locator('#ev-rows tr[data-type="atlas.user.requested"]').click();
   const detail = page.locator(".ev-detail");
-  // The meaning reads in the Console's language, German unless English was chosen.
-  await expect(detail).toContainText("Jemand hat ein Benutzerkonto beantragt.");
+  await expect(detail).toContainText("Somebody asked for a <user> account.");
   // Where it is thrown: each place, process and element.
   await expect(detail).toContainText("proc_benutzer_aufnahme at beantragt_melden — the intake process");
   await expect(detail.locator("tr", { hasText: "vorname" }).locator(".pill.warn")).toHaveText("personal");
@@ -417,7 +420,7 @@ test("a name stays on one line however long the column beside it", async ({ page
 });
 
 test("an event's meaning reads in the Console's language: German by default, English when chosen", async ({ page }) => {
-  installMock(page, { admin: false });
+  installMock(page, { admin: false, lang: null });
   await openEvents(page);
   const meaning = page.locator('#ev-rows tr[data-type="atlas.order.placed"] td').nth(3);
   await expect(meaning).toHaveText("Eine Bestellung wurde aufgegeben.");
@@ -436,5 +439,57 @@ test("an event's meaning reads in the Console's language: German by default, Eng
   await expect(detail).toContainText("Somebody asked for a <user> account.");
   // A payload field's meaning follows the same choice.
   await expect(detail.locator("tr", { hasText: "atlasInstance" })).toContainText("the atlasInstance");
+  expect(page.__errors).toEqual([]);
+});
+
+test("the page reads in German for a viewer who chose no language", async ({ page }) => {
+  installMock(page, { admin: true, own: true, lang: null });
+  await openEvents(page);
+  await expect(page.locator("h1")).toHaveText("Ereignisse");
+  await expect(page.locator("details#ev-section summary h2")).toHaveText("Ereignisse, die atlas aussendet");
+  await expect(page.locator("details#own-section summary h2")).toHaveText("Signale und Nachrichten dieser Installation");
+  await expect(page.locator("#ev-head th")).toHaveText(["Ereignis", "Art", "Kanäle", "Bedeutung", "Seit", "Stabilität", "Zuhörende"]);
+  await expect(page.locator('#own-rows').locator("xpath=ancestor::table").locator("thead tr").first().locator("th"))
+    .toHaveText(["Name", "Kanal", "Gesendet oder geworfen von", "Empfangen von", "Befunde"]);
+  // The words for the server's ids: a kind, a stability, a shape, a finding.
+  const entry = (type) => page.locator(`#ev-rows tr[data-type="${type}"]`);
+  await expect(entry("atlas.order.placed")).toContainText("fachlich");
+  await expect(entry("atlas.incident.raised")).toContainText("Plattform");
+  await expect(entry("atlas.user.requested").locator(".pill.warn")).toHaveText("experimentell");
+  await expect(entry("atlas.entitlement.granted")).toContainText("noch nicht veröffentlicht");
+  await expect(entry("<message>.<outcome>")).toContainText("Namensmuster");
+  await expect(page.locator('#own-rows tr[data-name="typo.sent"]')).toContainText("wird nicht empfangen");
+  await expect(page.locator('#own-rows tr[data-name="invoice.ready"]')).toContainText("Watch von Ledger");
+  await expect(page.locator("details#ev-section summary")).toContainText("5 Ereignisse");
+  await expect(page.locator("details#ev-section summary")).toContainText("1 Empfänger wartet auf einen Namen, den atlas nie aussendet");
+  await expect(page.locator("details#own-section summary")).toContainText("6 Namen");
+  await expect(page.locator("details#own-section summary")).toContainText("4 mit Befund");
+  await expect(page.locator("#own-channel option")).toHaveText(["Alle", "Signale", "Nachrichten"]);
+  // The page says which language it is in, inside a Console whose document is English.
+  await expect(page.locator("#ev-section").locator("xpath=ancestor::*[@lang][1]")).toHaveAttribute("lang", "de");
+
+  await entry("atlas.user.requested").click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toHaveAttribute("lang", "de");
+  await expect(dialog).toContainText("Nutzdaten");
+  await expect(dialog).toContainText("Wer es empfangen darf");
+  await expect(dialog).toContainText("Wer gerade zuhört");
+  await expect(dialog).toContainText("Empfangene Personendaten");
+  await expect(dialog.locator("tr", { hasText: "vorname" }).locator(".pill.warn")).toHaveText("Personendaten");
+  // What the server writes in English stays English, and says so.
+  await expect(dialog.locator('[lang="en"]', { hasText: "the intake process" })).toHaveCount(1);
+  await expect(dialog.getByRole("button", { name: "Schliessen", exact: true })).toHaveCount(2);
+  await page.keyboard.press("Escape");
+
+  await page.locator('#own-rows tr[data-name="order.cancelled"]').click();
+  await expect(dialog).toContainText("Geworfen von");
+  await expect(dialog).toContainText("Empfangen von");
+  await expect(dialog).toContainText("Boundary-Event, unterbrechend");
+  await expect(dialog).toContainText("Nur ein Modell wirft ein Signal");
+  await expect(dialog.locator("a.own-log-link")).toHaveText("Was unter diesem Namen gesendet wurde: das Event log");
+  await page.keyboard.press("Escape");
+
+  // No message the page asks for is missing: a missing one renders as its key.
+  expect(await page.locator("main").innerText()).not.toMatch(/\b(events|common)\.[a-z]/);
   expect(page.__errors).toEqual([]);
 });
