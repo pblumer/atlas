@@ -4,12 +4,6 @@
 - **Implementation:** Not started
 - **Date:** 2026-10-23
 - **Deciders:** Atlas maintainers
-- **Open question:** How a multilingual description is kept in wikiwikibangbang. Its own
-  records leave translatable user content open (its ADR-0017), so a source has no
-  per-language field to read, and this record maps one source field per language
-  instead. If wikiwikibangbang settles translatable content, the mapping should follow
-  it rather than the convention assumed here.
-- **Question checked:** 2026-10
 
 ## Context and problem statement
 
@@ -43,6 +37,10 @@ wikiwikibangbang is a typed item model (its ADR-0001): an item carries typed
 `properties`, an optional workflow `state`, a block-document `body` (not HTML or
 Markdown), and a `version` that counts every change to the item. Its API is
 authenticated, and an API token can be limited to scope `read` (its ADR-0027).
+Translatable user content is an open question there (its ADR-0017), so the product
+owner keeps a service as **one page per language** — "Service X-DE", "Service X-FR" —
+each possibly with child pages. The same service is therefore several pages in the
+source.
 
 Three decisions already taken constrain any answer:
 
@@ -57,15 +55,17 @@ Three decisions already taken constrain any answer:
   languages and missing in another does not publish.
 
 The product owner's condition has a second half that is not about content: every
-service carries its own lifecycle, and its preconditions are caught by Atlas's
-orchestration. The lifecycle half already holds. Every item needs a provisioning and a
+service carries its own lifecycle, and its preconditions are caught in the
+orchestration. The lifecycle already exists. Every item needs a provisioning and a
 deprovisioning binding to publish, or one lifecycle process
 ([ADR-0425](0425-a-product-lifecycle-is-one-process-with-message-triggers.md)), and
 further service events are product actions
-([ADR-0429](0429-product-actions-are-commands-with-published-outcomes.md)). The
-precondition half does not fully hold today. It is decided in its own record,
-[ADR-draft-a-missing-precondition-is-added-to-the-basket](draft-a-missing-precondition-is-added-to-the-basket.md),
-because it changes how orders behave whether or not a content source is configured.
+([ADR-0429](0429-product-actions-are-commands-with-published-outcomes.md)). A
+precondition — a Teams add-on that needs its licence — is ensured by the **modeler**
+in the service's lifecycle process. Atlas does not check it on its own: a `requires`
+edge orders the lines of one order (ADR-0312), and whether the recipient holds a
+precondition the order does not carry stays the lifecycle process's question, as
+`api/order/advance.go` already says. This record changes nothing about that.
 
 ## Decision drivers
 
@@ -153,9 +153,9 @@ has:
 - a `credentialsRef` into the secret store
   ([ADR-0041](0041-connector-management-and-secret-store.md)), never a secret in the
   catalogue (for wikiwikibangbang, a token of scope `read`);
-- a **mapping** from the source's own fields to the fields of § 1, per language for
-  the description (for example `description-de` → `de`), and from a property of kind
-  number or text to `Cost`;
+- a **mapping** from the source's own fields to the fields of § 1: the description
+  is a language page's body, and `Cost` is read from a property of kind number or
+  text (§ 4 says from which page);
 - optionally an **accepted state**: only an item in that workflow state is fetched (for
   example `released`), so that a product owner's draft in the wiki never reaches a
   catalogue.
@@ -164,7 +164,7 @@ The mapping is owned by Atlas and lives in this configuration, for the reason
 [ADR-0387](0387-the-catalogue-against-the-standards-boundary.md) gives: Atlas keeps
 its own model and owns the translation from somebody else's. A `kind` is an adapter
 behind one interface. Given a reference, it returns the mapped fields, the picture
-bytes, the source's version of the item and its URL. Confluence is a second adapter
+bytes, the source's version of the page and its URL. Confluence is a second adapter
 and changes nothing else.
 
 The source is off until an administrator configures one. Without one, the binding
@@ -172,28 +172,49 @@ does not appear on the catalogue screen at all.
 
 ### 4. The binding on an item
 
+A service is bound to **one page per language**, because that is how the product owner
+keeps it (Context). The binding names one of them as the **primary page**; the
+language-neutral fields — production cost and picture — are read from it.
+
 ```
 ContentSource {
-  Source    string    // the content source's id
-  Ref       string    // the item in the source, e.g. "SVC-12"
-  Version   int       // the source's version at the last fetch
+  Source  string                 // the content source's id
+  Primary string                 // the language whose page supplies cost and picture
+  Pages   map[string]PageRef     // per language tag, e.g. "de" -> "Service X-DE"
+}
+
+PageRef {
+  Ref       string    // the page in the source
+  Version   int       // the source's version of that page at the last fetch
   FetchedAt time.Time
   URL       string    // where the product owner edits it
 }
 ```
 
-The reference is the source's stable identifier, not its key, where the source has
-one: in wikiwikibangbang a key can change when an item moves between spaces, its ID
-never does.
+- **Description.** Each language's description is the body of that language's page.
+  Child pages are not fetched: they are the wiki's further documentation, and the shop
+  links to the language page for whoever may read it there. A description that needs
+  more than the page itself belongs on the page.
+- **Keywords** are the union of the keywords on every language page. Atlas keeps
+  keywords as one flat list on purpose (ADR-0355), and a searcher's language is not
+  the catalogue's.
+- **Languages are proven at publish, as today.** A catalogue declaring German and
+  French needs a page bound for each. A language the catalogue declares and the
+  binding lacks does not publish, which is the existing description rule applied to
+  the source.
+- **The reference is the page's stable identifier**, not its key, where the source has
+  one: in wikiwikibangbang a key can change when an item moves between spaces, its ID
+  never does.
 
 ### 5. Refreshing is an act, not a schedule
 
 A product manager **refreshes** one bound item, or every bound item of a catalogue. A
-refresh fetches, maps and writes the result into the **draft** item, carrying the
+refresh fetches every bound page of an item, maps them and writes the result into the
+**draft** item, carrying the
 revision precondition every catalogue save carries
 ([ADR-0376](0376-catalogue-maintenance-over-mcp.md)). Per item it is all or nothing.
-A refresh that cannot read an item names the item and the reason, and leaves that
-item exactly as it was.
+A refresh that cannot read one of an item's pages names the page and the reason, and
+leaves that item exactly as it was.
 
 - **Text is converted to text.** A block document or a Confluence page becomes
   paragraphs of plain text on the server. Unknown constructs are dropped, and the drop
@@ -204,9 +225,12 @@ item exactly as it was.
   any command and outside the processor. What it writes is ordinary catalogue data.
   Nothing is fetched during replay, so I2, I4 and I6 are untouched.
 
-A separate **check** compares each bound item's stored `Version` with the source's
-current one, and marks the items whose source is newer. The check only reads; it
-changes nothing.
+**Knowing when to refresh is organisational for now.** The product owner and the
+product manager agree on it between their roles, or the product manager **watches**
+the bound pages in the wiki and is notified of a change there (wikiwikibangbang's
+ADR-0046). Atlas neither polls the source nor compares versions. The binding still
+stores each page's version, so that a check in Atlas can be added later without
+changing what is stored.
 
 ### 6. Publish never calls out
 
@@ -214,9 +238,9 @@ Publishing proves what it proves today, on what the draft holds, and the descrip
 check per language included. It never contacts a source. A wiki outage therefore
 cannot block a release, and the same draft always publishes to the same release.
 
-The release freezes the fetched content together with the binding (`Ref`, `Version`,
-`URL`). An order can therefore say which version of which wiki item its description
-came from, and that holds after the wiki page has changed.
+The release freezes the fetched content together with the binding (each page's
+`Ref`, `Version` and `URL`). An order can therefore say which version of which wiki
+page its description came from, and that holds after the wiki page has changed.
 
 ### Consequences
 
@@ -227,13 +251,14 @@ came from, and that holds after the wiki page has changed.
   have today. An installation without a source sees no difference.
 - **Negative / trade-offs accepted:** the shop is not live. A wiki edit reaches the
   shop only after a refresh and a publish, and that delay is the point: it is the
-  product manager's decision to republish. Two people now share one service, and a
-  product owner who changes a description must tell the product manager or rely on
-  the check. Conversion to plain text loses formatting that the wiki can show. The
-  shop still links to the wiki page (`URL`) for whoever is allowed to read it there.
+  product manager's decision to republish. Two people now share one service, and
+  whether a change reaches the shop depends on their agreement or on the product
+  manager watching the pages. Atlas does not notice a stale description. Conversion to plain text loses formatting that the wiki can show. The
+  shop still links to the language page (`URL`) for whoever is allowed to read it
+  there. A service in three languages is three pages to bind.
 - **Follow-ups / risks to watch:**
-  - A notification when the check finds newer content, so that a product manager
-    does not have to remember to look.
+  - A check in Atlas that compares the stored page versions with the source, if the
+    agreement between the roles turns out not to be enough.
   - A Confluence adapter, which needs its storage format converted the way § 5
     converts the block document.
   - Pushing a refresh from a source webhook (option 4) once a source can sign one,
@@ -262,8 +287,8 @@ came from, and that holds after the wiki page has changed.
 - Good: the source supplies the content and Atlas keeps its guarantees. The only
   contact with the source is an act somebody watches. Publish stays deterministic and
   independent of the source. Sources differ only behind an adapter.
-- Bad: content can be stale, and only the check and the product manager's discipline
-  close that gap. A second copy of the content exists, by design.
+- Bad: content can be stale, and only the agreement between the roles closes that
+  gap. A second copy of the content exists, by design.
 
 ### Option 4 — the source pushes into Atlas
 - Good: the strongest alternative. The wiki knows when its content changes, so a push
@@ -290,6 +315,7 @@ came from, and that holds after the wiki page has changed.
   manager's role and the home catalogue.
 - relates to [ADR-0361](0361-product-price.md) — the price stays the product
   manager's, and production cost takes its shape.
+- relates to [ADR-0355](0355-catalogue-search.md) — keywords stay one flat list.
 - relates to [ADR-0391](0391-product-picture.md) — a fetched picture is copied into
   its store, for the reasons that record refused an external URL.
 - relates to [ADR-0387](0387-the-catalogue-against-the-standards-boundary.md) — Atlas
@@ -303,12 +329,14 @@ came from, and that holds after the wiki page has changed.
 - relates to [ADR-0425](0425-a-product-lifecycle-is-one-process-with-message-triggers.md)
   and [ADR-0429](0429-product-actions-are-commands-with-published-outcomes.md) — the
   per-service lifecycle and its service events, which this record presupposes.
-- relates to [ADR-draft-a-missing-precondition-is-added-to-the-basket](draft-a-missing-precondition-is-added-to-the-basket.md)
-  — the precondition half of the product owner's condition, split out of this record.
 - external: wikiwikibangbang's
   [ADR-0001](https://github.com/dbuchs7/wikiwikibangbang/blob/main/docs/adr/0001-unified-item-data-model.md)
   (item model),
   [ADR-0014](https://github.com/dbuchs7/wikiwikibangbang/blob/main/docs/adr/0014-closed-renderer-for-user-content.md)
-  (content is never markup) and
+  (content is never markup),
+  [ADR-0017](https://github.com/dbuchs7/wikiwikibangbang/blob/main/docs/adr/0017-internationalisation-via-message-catalogue.md)
+  (translatable content is open),
+  [ADR-0046](https://github.com/dbuchs7/wikiwikibangbang/blob/main/docs/adr/0046-watching-and-notifications-from-the-log.md)
+  (watching a page) and
   [ADR-0027](https://github.com/dbuchs7/wikiwikibangbang/blob/main/docs/adr/0027-local-accounts-sessions-and-api-tokens.md)
   (read-only API tokens).
