@@ -2251,6 +2251,54 @@ func (p *CompiledProcess) ReceivableMessageNames() []string {
 	return out
 }
 
+// MessageReceipt is one element that waits for a message by name: a place a message
+// published to this server under that name can reach.
+type MessageReceipt struct {
+	ElementId   string
+	MessageName string
+	// Starts is set on a root-scope message start event, where a message arriving
+	// under this name creates an instance rather than continuing one.
+	Starts bool
+}
+
+// MessageReceipts lists every element that receives a message, in node order — the
+// same five places [CompiledProcess.ReceivableMessageNames] reads, one entry per
+// element rather than one per name, so a reader can trace a name back to the element
+// that states it (ADR-0471).
+//
+// A message start nested in an event subprocess is not listed on its own: the event
+// subprocess carries the trigger, and it is listed once, as the subprocess element.
+func (p *CompiledProcess) MessageReceipts() []MessageReceipt {
+	var out []MessageReceipt
+	for i := range p.nodes {
+		n := &p.nodes[i]
+		var name string
+		starts := false
+		switch {
+		case n.EventSub >= 0:
+			if d := p.eventSubProcesses[n.EventSub]; d.Kind == BoundaryMessage {
+				name = d.MessageName
+			}
+		case n.Type == TypeMessageStartEvent:
+			if n.FlowScope == -1 {
+				name, starts = p.messageStarts[n.Detail].MessageName, true
+			}
+		case n.Type == TypeMessageCatchEvent:
+			name = p.messageCatches[n.Detail].MessageName
+		case n.Type == TypeReceiveTask:
+			name = p.receiveTasks[n.Detail].MessageName
+		case n.Type == TypeBoundaryEvent:
+			if d := p.boundaryEventDets[n.Detail]; d.Kind == BoundaryMessage {
+				name = d.MessageName
+			}
+		}
+		if name != "" {
+			out = append(out, MessageReceipt{ElementId: p.ElementBpmnId(int32(i)), MessageName: name, Starts: starts})
+		}
+	}
+	return out
+}
+
 // MailboxUse is one mail task that reads or changes its Worker's mailbox rather than
 // sending through it: the Worker it names and the operation.
 type MailboxUse struct {

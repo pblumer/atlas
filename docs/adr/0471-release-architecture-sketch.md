@@ -1,7 +1,8 @@
 # ADR-0471: A release carries its architecture sketch, and a worker publishes it to Confluence
 
-- **Status:** Accepted (2026-10-23)
-- **Implementation:** Not started
+- **Status:** Accepted (2026-10-23; amended 2026-10-23 — public start links belong to the
+  physical part, and the Atlas node is composed of its System Software; see the note below)
+- **Implementation:** Partial
 - **Date:** 2026-10-23
 - **Deciders:** Atlas maintainers
 - **Open question:** The Confluence contract this record builds on is not established from
@@ -10,6 +11,27 @@
   each takes, and whether both render an SVG attachment embedded in a page. §4's file
   naming and §3's choice of SVG over PNG rest on that gap.
 - **Question checked:** 2026-10
+
+> **Implementation status and amendment (2026-10-23): S1 has landed.** A release records
+> its snapshot on publish and on import (`api/releasearchitecture.go`), the three routes
+> serve it, and the Console's release history shows it. The snapshot model and both
+> renderings are `api/archsketch`; the per-element message enumeration is
+> `compiler.CompiledProcess.MessageReceipts`. S2 to S4 are not started.
+>
+> Two details of the text below changed while building it, both for the reason the
+> record itself gives for the split between the two parts:
+>
+> - **Public start links are physical, not logical.** §1 listed them among the entry
+>   points of the logical part. A link is created on an installation, independently of
+>   any release, and one that exists on DEV need not exist in PROD — exactly the kind of
+>   fact §1 assigns to the physical part. They are recorded with it, in S2. The logical
+>   part's entry points are the messages the release's processes receive.
+> - **The Atlas node is composed of its System Software.** §3's table said the System
+>   Software is assigned to the node. ArchiMate assigns active structure to behaviour or,
+>   in the technology layer, to what is deployed on it; a node and its system software
+>   are both active structure, so the relationship is composition, which is also what
+>   Panorama's own authoring rules accept (`panorama.MayConnect`). The release's Artifact
+>   is still assigned to the node.
 
 ## Context and problem statement
 

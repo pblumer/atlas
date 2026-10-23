@@ -4031,8 +4031,8 @@ async function renderAppDeployments(id) {
     <td class="muted" data-sort="${r.publishedAt || 0}">${esc(fmtTime(r.publishedAt))}</td>
     <td class="muted">${(r.members || []).length}</td>
     <td class="muted">${esc(r.note || "—")}</td>
-    <td class="row-actions">${targets.length
-      ? `<button class="btn ghost sm" data-promote="${r.version}" title="Ship this release to a deployment target">Promote…</button>`
+    <td class="row-actions"><button class="btn ghost sm" data-architecture="${r.version}" title="How this release reaches and is reached by its environment">Architecture</button>${targets.length
+      ? ` <button class="btn ghost sm" data-promote="${r.version}" title="Ship this release to a deployment target">Promote…</button>`
       : ""}</td>
   </tr>`;
 
@@ -4064,9 +4064,51 @@ async function renderAppDeployments(id) {
 
   for (const b of host.querySelectorAll("button[data-promote]"))
     b.addEventListener("click", () => promoteRelease(id, Number(b.dataset.promote), targets));
+  for (const b of host.querySelectorAll("button[data-architecture]"))
+    b.addEventListener("click", () => openReleaseArchitecture(id, view.name, Number(b.dataset.architecture)));
   // This pane loads lazily on its first open, long after the route enhanced the view's
   // tables — without this its lists would be the only ones with no sorting or filters.
   enhanceViewTables();
+}
+
+// openReleaseArchitecture shows one release's architecture sketch (ADR-0471): the SVG
+// the server rendered from the snapshot the release carries, and the two files a
+// reader takes away. The picture is the server's rendering, not one drawn here, so the
+// dialog shows exactly what a download contains — and it is shown through an <img>,
+// where an SVG cannot run anything even if a label in it tried to.
+async function openReleaseArchitecture(appID, appName, version) {
+  const base = `/api/v1/applications/${encodeURIComponent(appID)}/releases/${version}/architecture`;
+  let svg;
+  try {
+    svg = await api("GET", base + ".svg");
+  } catch (e) { toast(e.message, "err"); return; }
+  const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+  const file = `architecture-${(appName || "application").replace(/[^A-Za-z0-9._-]+/g, "-")}-v${version}`;
+
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Architecture of v${version}" style="width:min(1180px, 96vw)">
+      <div class="modal-head">
+        <h2>Architecture of v${version}</h2>
+        <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
+      </div>
+      <div class="modal-body" style="overflow:auto; background:#fff">
+        <img src="${url}" alt="Architecture sketch of release v${version}" style="display:block; max-width:100%; height:auto">
+      </div>
+      <div class="modal-foot">
+        <span class="muted small">Taken when the release was recorded. The logical view: which worker serves each name here, and at which endpoint, is not part of it yet.</span>
+        <a class="btn ghost" href="${base}.xml" download="${esc(file)}.xml" title="ArchiMate Open Exchange document, for Archi and other architecture tools">ArchiMate (.xml)</a>
+        <a class="btn" href="${base}.svg" download="${esc(file)}.svg" title="The sketch as a standalone image">Image (.svg)</a>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+
+  const close = () => { ov.remove(); URL.revokeObjectURL(url); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
+  ov.querySelector("[data-x]").addEventListener("click", close);
 }
 
 // promoteRelease ships an existing release to a chosen target (ADR-0129). The

@@ -556,7 +556,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0468](0468-deleting-an-application-with-its-contents.md) | Deleting an application with everything it owns | Accepted | Landed |
 | [0469](0469-catalogue-purge.md) | An administrator can delete a catalogue for good, unless the server opts out | Accepted | Landed |
 | [0470](0470-the-line-manager-is-on-the-account.md) | The line manager is a reference on the account | Accepted | Landed |
-| [0471](0471-release-architecture-sketch.md) | A release carries its architecture sketch, and a worker publishes it to Confluence | Accepted | Not started |
+| [0471](0471-release-architecture-sketch.md) | A release carries its architecture sketch, and a worker publishes it to Confluence | Accepted (amended) | Partial |
 | [0472](0472-event-log.md) | Atlas keeps a log of the signals and messages that were sent | Accepted (2026-10-22) | Landed |
 | [0473](0473-form-remote-data-sources.md) | A form looks remote data up through an ephemeral worker query | Accepted | Landed |
 | [0474](0474-readable-element-ids.md) | Readable ids for new BPMN elements | Accepted | Landed |

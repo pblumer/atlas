@@ -1569,7 +1569,19 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Publish options", schemaObj(map[string]any{"note": tString()})),
 			resp: jsonBody("Publish result with the minted release", tObject())}},
 		{"GET", "/api/v1/applications/{id}/releases", s.handleListReleases, apiOp{
-			summary: "An application's release history, newest first (ADR-0128)", tag: "Applications", role: roleAny, resp: jsonBody("Releases", tArray())}},
+			summary: "An application's release history, newest first (ADR-0128). Each release's architecture snapshot is left out; the architecture routes serve it", tag: "Applications", role: roleAny, resp: jsonBody("Releases", tArray())}},
+		{"GET", "/api/v1/applications/{id}/releases/{version}/architecture", s.handleReleaseArchitecture, apiOp{
+			summary: "A release's architecture snapshot, taken when the release was recorded (ADR-0471): the messages its processes receive, the workers they name, the local decisions they evaluate and the calls they make into processes the release did not ship, each with the elements that state it. The logical part only — which worker serves a name here and at which endpoint is not recorded yet. 404 names a release recorded before snapshots existed", tag: "Applications", role: roleAny,
+			resp: jsonBody("The release and its architecture snapshot", schemaObj(map[string]any{
+				"applicationId": tString(), "application": tString(), "releaseId": tString(),
+				"version": tInteger(), "publishedAt": tInteger(), "architecture": tObject(),
+			}, "applicationId", "version", "architecture"))}},
+		{"GET", "/api/v1/applications/{id}/releases/{version}/architecture.svg", s.handleReleaseArchitectureSVG, apiOp{
+			summary: "A release's architecture sketch as a standalone SVG (ADR-0471): the ways in on the left, the application on its Atlas node in the middle, the dependencies on the right, with the release, the moment the snapshot was taken and what the sketch does not show written into the image. The same snapshot always renders to the same bytes", tag: "Applications", role: roleAny,
+			resp: &bodySpec{mediaType: "image/svg+xml", schema: tString(), desc: "The architecture sketch"}}},
+		{"GET", "/api/v1/applications/{id}/releases/{version}/architecture.xml", s.handleReleaseArchitectureXML, apiOp{
+			summary: "A release's architecture snapshot as an ArchiMate Open Exchange document (ADR-0471), for Archi and other architecture tools: the Atlas node, the release as an artifact realising the application component, the messages as application interfaces, the workers as application services and calls into other applications as their components. Generated, never authored, and it says so in its documentation", tag: "Applications", role: roleAny,
+			resp: &bodySpec{mediaType: "application/xml", schema: tString(), desc: "The ArchiMate Model Exchange document"}}},
 		{"GET", "/api/v1/applications/{id}/audit", s.handleListProjectAudit, apiOp{
 			summary: "An application's access-control history — shares, revokes, visibility flips, and ownership transfers, newest first; owner-only (ADR-0071)", tag: "Applications", role: RoleModeler, resp: jsonBody("Grant audit events", tArray())}},
 		{"GET", "/api/v1/applications/{id}/constants", s.handleGetApplicationConstants, apiOp{
