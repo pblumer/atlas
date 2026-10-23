@@ -42,6 +42,17 @@ _Changed_ / _Removed_ for each version.
 - **Example: pick a person and read their manager.** `examples/entra-benutzerauswahl` is the
   process `Process_mvjoqvisfajk` without its `list-users` step: a department, a directory
   search, the object id into `user`, and `get-user-manager` with `userId="= user"`.
+- **An example for the SharePoint operations: the case file.** `examples/sharepoint-fallakte`
+  turns a request entered in a SharePoint list into a case file — it reads the request
+  (`get-item`), creates its folder (`create-folder`), fills in a letter template from a
+  library (`download-file` and FEEL `replace`), files the letter with properties unless
+  `get-file` finds it there already (`upload-file`), updates the request with typed
+  columns (`update-item`) and writes a log entry (`create-item`). A second process finds
+  settled requests page by page with an OData filter (`list-items`) and deletes each
+  one's folder and entry in a parallel multi-instance (`delete-file`, `delete-item`).
+  Both run end to end in `connector/sharepoint/example_test.go` against a site kept in
+  memory, with the real compiler, engine and Graph client. The handbook's examples
+  chapter has its card.
 
 ### Changed
 
@@ -55,6 +66,13 @@ _Changed_ / _Removed_ for each version.
 - **A form is checked for its directory fields when it is saved.** An `atlasDataSource`
   naming a source, a property or a version this server cannot honour is refused with the
   reason.
+
+### Fixed
+
+- **A SharePoint task that names `create-item` keeps its list and columns in the
+  Modeler.** The panel showed the list and the column table only for a task with no
+  operation, so a model spelling `operation="create-item"` out lost both on its next
+  save, and the compiler then refused the task.
 
 ## [0.19.0] — 2026-10-22
 

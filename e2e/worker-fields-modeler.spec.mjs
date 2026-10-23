@@ -156,3 +156,19 @@ test("switching a SharePoint task to a file operation drops what an item operati
   expect(task).toContain('site="https://contoso.sharepoint.com/sites/hr"');
   expect(page.__errors).toEqual([]);
 });
+
+test("a SharePoint task that names create-item outright keeps its list and columns", async ({ page }) => {
+  // operation="create-item" is the same task as no operation at all. Were the panel to
+  // show the list and the columns only for the empty value, the next save would drop
+  // them as fields the operation does not use, and the compiler would refuse the task.
+  await select(page, "Activity_sp_explicit");
+  await expect(page.locator("#f-st-list")).toHaveValue("Protokoll");
+  await page.locator("#f-st-resultVariable").fill("eintrag");
+  await page.locator("#f-st-resultVariable").blur();
+
+  const task = await taskXML(page, "Activity_sp_explicit");
+  expect(task).toContain('list="Protokoll"');
+  expect(task).toContain('name="Title"');
+  expect(task).not.toMatch(/operation="(?!create-item"|")/);
+  expect(page.__errors).toEqual([]);
+});
