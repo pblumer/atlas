@@ -3662,6 +3662,28 @@ tr[hidden] { display: none; }
 .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--border); }
 .modal-actions { display: flex; align-items: center; gap: 8px; }
 
+/* The Events page (events.js): each of its two sections is a <details> that folds away,
+   its summary the section's heading with a caret that turns, and beside it a line saying
+   what the section holds and warns about — readable while the section is folded. A row's
+   detail is a dialog wide enough for the tables in it. */
+.ev-section { margin-top: 18px; }
+.ev-section > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 10px;
+}
+.ev-section > summary::-webkit-details-marker { display: none; }
+.ev-section > summary::before {
+  content: "\25B8"; display: inline-block; font-size: 12px; color: var(--muted); transition: transform .12s ease;
+}
+.ev-section[open] > summary::before { transform: rotate(90deg); }
+.ev-section > summary h2 { margin: 0; }
+.ev-section > summary:hover h2 { color: var(--accent); }
+.ev-sum-warn { color: var(--warn); font-weight: 600; }
+.modal.ev-modal { width: min(960px, 100%); }
+.modal.ev-modal:focus { outline: none; }
+.ev-modal .modal-head h2 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ev-modal .modal-foot { justify-content: flex-end; }
+
 /* Deleting an application (deletedialog.js): two modes, and for the irreversible one
    the server's preview of what goes and what stops working outside it. */
 .modal.purge-modal { width: min(640px, 100%); }

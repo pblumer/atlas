@@ -243,6 +243,7 @@ function updateAccount() {
       `<div class="mlabel">Signed in as <b>${esc(AUTH.user.username)}</b></div>` +
       `<a href="#/console/settings" title="Number format, time zone and language — yours, not this server's">Display settings</a>` +
       `<a href="#/console/connections" title="The external accounts you linked, and which Workers may act as you">Connected accounts</a>` +
+      `<a href="#/console/approvals" title="The actions waiting for your approval, and the ones asked on your behalf">Approvals</a>` +
       `<button type="button" data-act="logout" title="Sign out of atlas">Log out</button>`;
   } else {
     // Nobody is signed in — which is two different things. With enforcement off the
@@ -1170,6 +1171,7 @@ function handbookHelp(path) {
   if (path.startsWith("#/console/ai-access")) return H("konten", "Connecting an AI assistant");
   if (path.startsWith("#/console/api-tokens")) return H("konten", "API tokens for machines");
   if (path.startsWith("#/console/connections")) return H("konten", "Connected accounts");
+  if (path.startsWith("#/console/approvals")) return H("konten", "Approving an action");
   if (path.startsWith("#/console/security")) return H("konten", "Security: identities and policies");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
   if (path.startsWith("#/console/events")) return H("ereignisse", "Events");
@@ -1599,6 +1601,7 @@ async function viewConsoleDashboard() {
   view.innerHTML = `
     <div id="catalogue-stranded-slot"></div>
     <div id="api-tokens-expiring-slot"></div>
+    <div id="approvals-waiting-slot"></div>
     <div class="card">
       <div class="welcome-head">
         <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
@@ -1647,6 +1650,12 @@ async function viewConsoleDashboard() {
   // person who may read the list and mint the replacement. Silent otherwise.
   if (mayUse("admin")) {
     import("./apitokens.js").then((m) => m.renderExpiringTokens(document.getElementById("api-tokens-expiring-slot"), { api }))
+      .catch(() => {});
+  }
+  // Action approvals waiting for this person's answer (ADR-0475 §9): asked only when
+  // somebody is signed in, because only a person answers one. Silent otherwise.
+  if (AUTH.enabled && AUTH.user) {
+    import("./approvals.js").then((m) => m.renderWaitingApprovals(document.getElementById("approvals-waiting-slot"), { api }))
       .catch(() => {});
   }
   renderReleaseNotes(document.getElementById("release-notes-slot")); // fills its own slot; safe if it fails
@@ -11332,6 +11341,7 @@ function routeTitle(path) {
     [/^#\/operations\/event-log$/, "Event log · Operations"],
     [/^#\/console\/api-tokens$/, "API tokens · Console"],
     [/^#\/console\/connections/, "Connected accounts · Console"],
+    [/^#\/console\/approvals$/, "Approvals · Console"],
     [/^#\/console\/security$/, "Security · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
@@ -11442,6 +11452,12 @@ async function route() {
       const gen = navGen;
       const { viewConnections } = await import("./connections.js");
       return await viewConnections({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
+    if (path === "#/console/approvals") {
+      const gen = navGen;
+      const { viewApprovals } = await import("./approvals.js");
+      return await viewApprovals({ api, toast, view, isSuperseded: () => superseded(gen),
+        signedIn: !!(AUTH.enabled && AUTH.user), canOperate: mayUse("operator") });
     }
     if (path === "#/console/security") {
       const gen = navGen;
