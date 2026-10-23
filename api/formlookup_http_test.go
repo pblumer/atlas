@@ -675,6 +675,42 @@ func TestADirectorySearchIsGuardedAtEveryDoor(t *testing.T) {
 		if code != http.StatusBadRequest || !strings.Contains(string(b), "formLookups") {
 			t.Errorf("%d %s, want 400", code, b)
 		}
+		// Nor can an existing Worker of such a kind be opened afterwards.
+		code, b = cReq(t, world.admin, ts, "POST", "/api/v1/connectors",
+			`{"name":"mailer","kind":"mail","endpoint":"smtp://localhost:25","sender":"a@example.com"}`)
+		if code != http.StatusOK && code != http.StatusCreated {
+			t.Fatalf("create the mail Worker: %d %s", code, b)
+		}
+		id := connectorID(t, world.admin, ts, "mailer")
+		if code, b := cReq(t, world.admin, ts, "PATCH", "/api/v1/connectors/"+id, `{"formLookups":true}`); code != http.StatusBadRequest || !strings.Contains(string(b), "formLookups") {
+			t.Errorf("open a mail Worker to forms: %d %s, want 400", code, b)
+		}
+	})
+	t.Run("a task without a form has no directory field", func(t *testing.T) {
+		const plain = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="d_ohne_form" targetNamespace="http://atlas.test">
+  <bpmn:process id="ohne_form" isExecutable="true">
+    <bpmn:startEvent id="s"/><bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="Activity_chooseUser"/>
+    <bpmn:userTask id="Activity_chooseUser" name="Ohne Formular"/><bpmn:sequenceFlow id="f2" sourceRef="Activity_chooseUser" targetRef="e"/>
+    <bpmn:endEvent id="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+		if code, b := cReq(t, world.admin, ts, "POST", "/api/v1/deployments", plain); code != http.StatusOK {
+			t.Fatalf("deploy: %d (%s)", code, b)
+		}
+		code, b := cReq(t, world.admin, ts, "POST", "/api/v1/instances", `{"processId":"ohne_form"}`)
+		if code != http.StatusOK {
+			t.Fatalf("start: %d (%s)", code, b)
+		}
+		var started struct {
+			InstanceKey uint64 `json:"instanceKey"`
+		}
+		_ = json.Unmarshal(b, &started)
+		task := taskOf(t, world.admin, ts, started.InstanceKey)
+		code, b = cReq(t, world.anna, ts, "POST", fmt.Sprintf("/api/v1/tasks/%d/form-data/user/query", task), `{"search":"Ann"}`)
+		if code != http.StatusNotFound || !strings.Contains(string(b), "not_found") {
+			t.Errorf("%d %s, want 404", code, b)
+		}
 	})
 	t.Run("a form naming what the server cannot honour is not saved", func(t *testing.T) {
 		bad := strings.Replace(exampleFile(t, "form-entra-benutzerauswahl.json"), `"userPrincipalName"]`, `"passwordProfile"]`, 1)
