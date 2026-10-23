@@ -22,8 +22,22 @@
 // page. Drawn below its list, the detail of the second list opened out of sight, and
 // nothing on screen said that the click had done anything.
 
+import { locale } from "./i18n.js";
+
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// said renders a catalogue sentence — an event's meaning, a payload field's — in the
+// Console's language (ADR-0267): German unless English was chosen. The catalogue's
+// tests hold every sentence to both languages; the fallback to the other one only
+// keeps a gap from rendering as nothing. The page around it is still English; the sentence is
+// catalogue content, like a model's name, not interface text. It carries its
+// language, so a screen reader reads it in the right voice.
+function said(text) {
+  const t = text || {};
+  const lang = [locale(), "en", "de"].find((l) => t[l]);
+  return lang ? `<span lang="${lang}">${esc(t[lang])}</span>` : "";
+}
 
 // Whether a section is folded, per browser. Open unless folded here before; a browser
 // whose storage throws keeps both open.
@@ -117,7 +131,7 @@ function detailHTML(entry, ls) {
       <td><code>${esc(f.name)}</code></td><td>${esc(f.type)}</td>
       <td>${f.always ? "always" : "optional"}</td>
       <td>${f.data === "personal" ? `<span class="pill warn" title="Personal data (ADR-0314): a receiver that keeps it keeps somebody's data">personal</span>` : ""}</td>
-      <td>${esc((f.meaning || {}).en)}</td></tr>`).join("");
+      <td>${said(f.meaning)}</td></tr>`).join("");
   const access = Object.entries(entry.access || {}).map(([ch, who]) =>
     `<li><b>${esc(ch)}</b> — ${esc(who)}</li>`).join("");
   const moment = entry.moment || {};
@@ -146,7 +160,7 @@ function detailHTML(entry, ls) {
         <table><thead><tr><th>Worker</th><th>Narrowed to</th><th>State</th></tr></thead><tbody>${subs}</tbody></table>` : ""}
     </div>`;
   }
-  return `<p>${esc((entry.meaning || {}).en)}</p>
+  return `<p>${said(entry.meaning)}</p>
     <p class="muted">${where}${esc(moment.producer)}</p>
     ${entry.serviceCatalogue ? `<p class="muted">Part of the service catalogue: a server whose catalogue is switched off does not emit it.</p>` : ""}
     <h3>Payload</h3>
@@ -330,7 +344,7 @@ export async function viewEvents({ api, view, isSuperseded }) {
     return `<tr data-type="${esc(e.type)}" data-i="${i}" style="cursor:pointer" tabindex="0">
       <td class="nowrap"><code>${esc(e.type)}</code>${e.shaped ? ` <span class="pill" title="A shape: the product's author names each one">shape</span>` : ""}</td>
       <td>${esc(e.kind)}</td><td>${chips(e.channels)}</td>
-      <td>${esc((e.meaning || {}).en)}</td><td>${esc(e.since)}</td>
+      <td>${said(e.meaning)}</td><td>${esc(e.since)}</td>
       <td>${e.stability === "stable" ? "stable" : `<span class="pill warn">${esc(e.stability)}</span>`}</td>
       ${ls ? `<td class="ev-count">${n}</td>` : ""}</tr>`;
   }).join("") : `<tr><td colspan="${cols}" class="empty">The catalogue is empty.</td></tr>`;

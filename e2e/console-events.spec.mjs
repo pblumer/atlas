@@ -158,7 +158,8 @@ test("a modeler reads every entry and has no listening-now column", async ({ pag
 
   await page.locator('#ev-rows tr[data-type="atlas.user.requested"]').click();
   const detail = page.locator(".ev-detail");
-  await expect(detail).toContainText("Somebody asked for a <user> account.");
+  // The meaning reads in the Console's language, German unless English was chosen.
+  await expect(detail).toContainText("Jemand hat ein Benutzerkonto beantragt.");
   // Where it is thrown: each place, process and element.
   await expect(detail).toContainText("proc_benutzer_aufnahme at beantragt_melden — the intake process");
   await expect(detail.locator("tr", { hasText: "vorname" }).locator(".pill.warn")).toHaveText("personal");
@@ -412,5 +413,28 @@ test("a name stays on one line however long the column beside it", async ({ page
   await expect(page.locator('#own-rows tr[data-name="laptop-apple-hw.deprovision"]')).toBeVisible();
   expect(await lines(page.locator('#own-rows tr[data-name="laptop-apple-hw.deprovision"] td:first-child code'))).toBe(1);
   expect(await lines(page.locator('#ev-rows tr[data-type="atlas.entitlement.granted"] td:first-child code'))).toBe(1);
+  expect(page.__errors).toEqual([]);
+});
+
+test("an event's meaning reads in the Console's language: German by default, English when chosen", async ({ page }) => {
+  installMock(page, { admin: false });
+  await openEvents(page);
+  const meaning = page.locator('#ev-rows tr[data-type="atlas.order.placed"] td').nth(3);
+  await expect(meaning).toHaveText("Eine Bestellung wurde aufgegeben.");
+  await expect(meaning.locator('[lang="de"]')).toHaveCount(1);
+  await page.locator('#ev-rows tr[data-type="atlas.user.requested"]').click();
+  const detail = page.locator(".ev-detail");
+  await expect(detail).toContainText("Jemand hat ein Benutzerkonto beantragt.");
+  await expect(detail).not.toContainText("Somebody asked for a <user> account.");
+
+  await page.evaluate(() => localStorage.setItem("atlas.locale", "en"));
+  await page.reload();
+  await expect(page.locator("#ev-rows tr[data-i]").first()).toBeVisible({ timeout: 15000 });
+  await expect(meaning).toHaveText("An order was placed.");
+  await expect(meaning.locator('[lang="en"]')).toHaveCount(1);
+  await page.locator('#ev-rows tr[data-type="atlas.user.requested"]').click();
+  await expect(detail).toContainText("Somebody asked for a <user> account.");
+  // A payload field's meaning follows the same choice.
+  await expect(detail.locator("tr", { hasText: "atlasInstance" })).toContainText("the atlasInstance");
   expect(page.__errors).toEqual([]);
 });

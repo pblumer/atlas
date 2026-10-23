@@ -211,6 +211,10 @@ governs a Worker:
   folds away on its own, the browser remembers which, and a folded section still says how
   many entries it holds and what it warns about. A name no longer breaks over two lines at
   its hyphens.
+- **The Events page states an event's meaning in the Console's language.** The catalogue
+  writes every meaning, an event's and each payload field's, in German and English, and the
+  page showed only the English. It now shows the language set under Display, German unless
+  English was chosen; the rest of the page is still English.
 
 ### Fixed
 

@@ -11733,7 +11733,9 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
         was geschehen ist, wann es ausgesendet wird, was es trägt – Personendaten markiert – und wer es empfangen
         darf. Ein Ereignis trägt nie ein Geheimnis. Die Console zeigt dieselbe Liste unter
         <a class="applink" href="/#/console/events">Console → Events</a>; Administratoren sehen dort auch, wer
-        gerade zuhört. Im Modeler bietet ein Signalfeld die Namen an, auf die ein Modell hören darf. Trägt ein
+        gerade zuhört. Die Bedeutung eines Ereignisses und seiner Felder steht dort in der Sprache, die unter
+        <i>Display</i> eingestellt ist: auf Deutsch, ausser du hast Englisch gewählt. Im Modeler bietet ein
+        Signalfeld die Namen an, auf die ein Modell hören darf. Trägt ein
         Ereignis Personendaten, darf nur eine Administratorin oder ein Administrator ein Modell deployen, das darauf
         hört; der Bereich «Probleme» meldet das schon beim Modellieren, mit der nötigen und der eigenen Rolle. Ein
         Ereignis ohne Personendaten und ein Signal, das atlas nicht katalogisiert, bleiben offen. Über die API
@@ -11747,7 +11749,8 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
         <code>feedreader</code> role or an <code>events</code> token). Each event says what has happened, when it
         is emitted, what it carries – personal data marked – and who may receive it. An event never carries a
         secret. The Console shows the same list under <a class="applink" href="/#/console/events">Console →
-        Events</a>; administrators also see who listens now. In the Modeler a signal field offers the names a
+        Events</a>; administrators also see who listens now. There an event's meaning and its fields' are in the
+        language set under <i>Display</i>, German unless English was chosen. In the Modeler a signal field offers the names a
         model may listen to. When an event carries personal data, only an administrator may deploy a model that
         listens to it; the Problems panel says so while modelling, naming the role needed and the caller's own. An
         event without personal data, and a signal atlas does not catalogue, stay open. Over the API,
