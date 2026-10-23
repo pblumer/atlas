@@ -66,6 +66,12 @@ type messageSourceView struct {
 	// CorrelationKey is the FEEL the watch correlates on, under the same rule as
 	// Description.
 	CorrelationKey string `json:"correlationKey,omitempty"`
+	// LastError and FailingSince say, while a watch cannot read its source, why and
+	// since when (unix seconds) — under the same rule as Description, since the reason
+	// names the Worker's configuration. An enabled watch that is failing feeds its name
+	// as little as a disabled one, and only this tells the two apart from a quiet source.
+	LastError    string `json:"lastError,omitempty"`
+	FailingSince int64  `json:"failingSince,omitempty"`
 
 	// ProductID, ProductName, Action, Effect and Triggers describe a product action:
 	// the product, its name in the catalogue's first language, the action's key and
@@ -165,6 +171,9 @@ func (s *Server) messageSources(r *http.Request) ([]messageSourceView, error) {
 			if code, _ := s.checkConnectorRole(r, c, ScopeRoleViewer); code == 0 {
 				v.Description = describeInboundWatch(c.Kind, sub)
 				v.CorrelationKey = sub.CorrelationKey
+				if f, failing := s.inboundHealth.failure(sub.ID); failing {
+					v.LastError, v.FailingSince = f.LastError, f.FailingSince
+				}
 			}
 			out = append(out, v)
 		}

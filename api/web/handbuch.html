@@ -7285,7 +7285,10 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           erreicht – eine Zuweisung über <b>RBAC for Applications</b> in Exchange Online, die die App auf dieses
           Postfach beschränkt; <b>Gmail</b> braucht in der Delegierung <code>gmail.readonly</code> und zum Ändern
           <code>gmail.modify</code>. <i>Diese Anbieter-Schritte stammen aus der Dokumentation der Anbieter und sind noch
-          nicht an einem echten Mandanten nachvollzogen.</i></p>
+          nicht an einem echten Mandanten nachvollzogen.</i>
+          Ein Watch auf einem Worker ohne Postfach – SMTP ohne IMAP-Endpoint oder Preview – wird abgewiesen. Kann ein
+          Watch nicht lesen, etwa weil die Anmeldung abgewiesen wird oder eine Berechtigung fehlt, zeigt seine Zeile
+          unter <i>Events…</i> ab dem ersten Abruf <b>not reading</b>, seit wann und den Grund.</p>
         <p data-l="en"><b>Reading the mailbox.</b> The same worker can read its mailbox too: a <b>watch</b> under
           <i>Events…</i> publishes a folder's new mail as messages, and a mail task with an <b>operation</b> lists,
           reads, moves, marks, deletes (to the trash) or answers mail. That needs read access: <b>SMTP</b> names an
@@ -7295,7 +7298,10 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           the tenant – an Exchange Online <b>RBAC for Applications</b> assignment confining the app to this mailbox;
           <b>Gmail</b>'s delegation needs <code>gmail.readonly</code>, and <code>gmail.modify</code> to change.
           <i>These provider steps are taken from the providers' documentation and have not yet been walked at a real
-          tenant.</i></p>
+          tenant.</i>
+          A watch on a worker with no mailbox – SMTP without an IMAP endpoint, or Preview – is refused. A watch that
+          cannot read, say because the login is refused or a permission is missing, shows <b>not reading</b> in its row
+          under <i>Events…</i> from its first poll on, with since when and why.</p>
         <p data-l="de"><b>Wer darf mitlesen?</b> Ein Mail-Worker gehört dem, der ihn angelegt hat, und ist privat, bis
           er geteilt wird. Ein Prozess, der ein Postfach liest oder ändert, lässt sich nur deployen, wenn der Worker mit
           dir geteilt ist – lesen braucht <i>darf sehen</i>, ändern <i>darf ändern</i>. Der Watch beansprucht seinen
