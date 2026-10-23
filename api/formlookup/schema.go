@@ -11,15 +11,24 @@ import (
 	"github.com/pblumer/atlas/connector/lookup"
 )
 
-// A directory field is a form-js textfield carrying an atlasDataSource
-// (ADR-0473). The textfield holds what form-js holds for any
-// input — the submitted value, its label, required, its description and its errors —
-// and the block says where its options come from. form-js ignores a member it does not
-// know, and its editor keeps one on export, so the form stays a form-js document that
-// renders, as a plain text field, anywhere form-js renders.
+// A directory field is a form-js select whose options come from a remote data source,
+// named by its atlasDataSource block (ADR-0473). The select holds what form-js holds for
+// any input — the submitted value, its label, required, its description and its errors —
+// and the block says where its options come from, in place of the select's own `values`,
+// `valuesKey` or `valuesExpression`. form-js keeps a member it does not know on export,
+// so the form stays a form-js document; the vendored bundle renders the block as a
+// search, and form-js rendered anywhere else shows a box for the chosen id.
+//
+// Directory fields were first saved as textfields carrying the same block. Those are
+// read as they were: the form editor offers to convert one, nothing converts it behind
+// its author's back.
 
-// DataSourceMember is the component member that makes a textfield a directory field.
+// DataSourceMember is the component member that makes a select a directory field.
 const DataSourceMember = "atlasDataSource"
+
+// optionSources are the members by which form-js gives a select its options. A directory
+// field takes its options from its data source, and from nothing else.
+var optionSources = []string{"values", "valuesKey", "valuesExpression"}
 
 // Version is the one version of the block this server reads. A form written for a newer
 // one is refused at save with that reason, rather than half-understood.
@@ -295,8 +304,17 @@ func field(comp map[string]any, inPath bool, form *Form, counts map[string]int) 
 	if key == "" {
 		return fail("a directory field needs a key: it is the variable the chosen value is submitted as")
 	}
-	if typ, _ := comp["type"].(string); typ != "textfield" {
-		return fail("a directory field is a textfield, which holds the submitted value; this one is a %q", typ)
+	switch typ, _ := comp["type"].(string); typ {
+	case "select":
+		for _, m := range optionSources {
+			if _, ok := comp[m]; ok {
+				return fail("a select takes its options from one source: this one names %s as well as the remote data source", m)
+			}
+		}
+	case "textfield":
+		// The shape directory fields were saved in first; still read.
+	default:
+		return fail("a directory field is a select, which holds the submitted value; this one is a %q", typ)
 	}
 	if inPath {
 		return fail("a directory field cannot repeat or sit inside a group with a path: it submits one value under its own key")

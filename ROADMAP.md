@@ -1754,15 +1754,18 @@ the hand-written Details panel one vertical slice at a time:
   kept per person on the server; the process listing names each row's application where
   the caller may see it
   ([ADR-0466](docs/adr/0466-start-view-groups-and-favourites.md)).
-- ✅ **Remote data sources in task forms**: a textfield with an `atlasDataSource` block
+- ✅ **Remote data sources in task forms**: a select whose options source is a remote data
+  source (an `atlasDataSource` block)
   searches a directory through the Worker the stored form names — Microsoft Entra ID users
   first — and submits only the chosen object id. One bounded page per request, filters
   bound to another field or fixed, a sealed cursor for the next page, a per-person rate
   limit, and a check of the value before the task completes. The search is a **worker
   query**, the protocol's non-durable message kind beside the job, so nothing about it
   reaches the log; a Worker's editors open it with **Forms may search**. The form editor
-  configures it without JSON and previews it with made-up people
-  ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
+  configures it under the select's own Options source, without JSON, and previews it with
+  made-up people ([ADR-0473](docs/adr/0473-form-remote-data-sources.md), amended).
+- 🔲 A tag list whose options come from a remote data source: several entries, and a
+  submission check over a list of ids.
 - 🔲 Further remote data sources: Entra groups and administrative units, a `$search` mode
   for word matching, and departments discovered rather than configured — each needs a
   provider row and a query handler in its Worker Type.

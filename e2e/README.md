@@ -365,8 +365,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   divider restores the column's default width.
 
 - **`remote-select.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
-  the **directory field** (`api/web/remote-select.js`) on the real vendored form-js viewer,
-  with a transport the test answers itself — nothing is asked before somebody types; a search
+  the **directory field** (`api/web/remote-select.js`, `vendor/form-js/src/atlas/viewer.jsx`)
+  on the real vendored form-js viewer, with a transport the test answers itself, each property
+  shown for the select the editor writes and for a directory field saved as a textfield —
+  nothing is asked before somebody types; a search
   waits for the department it is bound to and for the field's minimum length; loading, results,
   an empty answer and a failure each say so; keystrokes are debounced into one request; a newer
   term aborts the older request and a late answer is ignored; the keyboard moves through the
@@ -375,15 +377,19 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   Load more continues through the server's cursor; a reopened task shows who its value stands
   for, or that the directory no longer holds it; and the preview searches made-up people.
 - **`tasks-remote-select.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
-  the same field in the **real Tasks app** against a stubbed API — the search goes to the
+  the same field, as a select and as a textfield, in the **real Tasks app** against a stubbed
+  API — the search goes to the
   task's own lookup route, Complete sends `{abteilung, user}` with the object id, Complete
   without a choice sends nothing, and "Back to the list" completes nothing.
 - **`form-directory-field.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
-  the **form editor's** directory field panel — **＋ Directory field** writes a data source
-  through the Worker open to forms, a plain text field becomes one bound to the department it
-  is filtered by, a Worker that does not let forms search it is named as such, an unfinished
-  filter is pointed out before Save, the field turns back into a plain one, and both the
-  Validate tab and the Design preview search made-up people and ask no directory.
+  the **form editor's** directory field (`vendor/form-js/src/atlas/editor.jsx`) — the palette's
+  **Directory picker** adds a select searching through the Worker open to forms; a static
+  select gets its options from the remote source under Options source ▸ Type, bound to the
+  department it is filtered by; the source is offered on a select only; a Worker that does not
+  let forms search it is named as such; an unfinished filter is pointed out and a fixed value
+  completes it; back to static options drops the block; both the Validate tab and the Design
+  preview search made-up people and ask no directory, while the canvas shows the field without
+  searching; and a directory field saved as a textfield is converted into a select on request.
   `worker-test.spec.mjs` covers the Worker dialog's **Forms may search** switch.
 
 - **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):

@@ -1,0 +1,19 @@
+{
+  "name": "atlas-form-js-vendor-build",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Build inputs for api/web/vendor/form-js/form-viewer.js and form-playground.js. Nothing here is installed or built by Atlas itself; see ATLAS-VENDORED.txt.",
+  "license": "MIT",
+  "dependencies": {
+    "@bpmn-io/form-js-editor": "1.24.0",
+    "@bpmn-io/form-js-playground": "1.24.0",
+    "@bpmn-io/form-js-viewer": "1.24.0",
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  },
+  "overrides": {
+    "feelers": "3.1.0"
+  }
+}
