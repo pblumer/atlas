@@ -1,5 +1,5 @@
 // Readable ids for new BPMN elements: <type>_<yyyymmdd>_<researcher>, for example
-// activity_20261023_heisenberg (ADR-draft-readable-element-ids).
+// activity_20261023_heisenberg (ADR-0474).
 //
 // bpmn-js names a new element Activity_0jmndkk, and the Modeler named a new diagram's
 // process Process_<timestamp+random>. Those ids are what the canvas, the properties

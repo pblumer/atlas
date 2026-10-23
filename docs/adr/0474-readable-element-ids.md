@@ -1,4 +1,4 @@
-# ADR-DRAFT: Readable ids for new BPMN elements
+# ADR-0474: Readable ids for new BPMN elements
 
 - **Status:** Accepted
 - **Implementation:** Landed

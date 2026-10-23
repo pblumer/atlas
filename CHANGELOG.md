@@ -115,7 +115,7 @@ _Changed_ / _Removed_ for each version.
   process id is also checked against the drafts and deployed processes of the
   installation and the server's availability check, and a draft save that still collides
   is refused as before. Ids already in a diagram are not changed
-  ([ADR-draft-readable-element-ids](docs/adr/draft-readable-element-ids.md)).
+  ([ADR-0474](docs/adr/0474-readable-element-ids.md)).
 - **Completing a task checks a directory field's value first.** A value that is not an
   object id, or an object where an id was expected, is refused with 400; by default the
   entry is looked up once more under the field's filters, and one the directory no longer

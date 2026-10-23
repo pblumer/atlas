@@ -180,7 +180,7 @@ function newModeler(BpmnJS, moddle, container, extraModules) {
 //
 // The id is readable — process_<yyyymmdd>_<researcher> — and therefore checked rather
 // than random: against the process ids the installation already holds (known) and
-// the server's availability check (ADR-draft-readable-element-ids).
+// the server's availability check (ADR-0474).
 async function blankXML(api, known) {
   const pid = await freshProcessId(api, { taken: known });
   const sid = readableId("event", { taken: (c) => c === pid });
@@ -856,7 +856,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     </div>`;
 
   // The process ids the installation already holds, so a new diagram, or a pool added
-  // to any diagram, does not mint one of them (ADR-draft-readable-element-ids). Loaded
+  // to any diagram, does not mint one of them (ADR-0474). Loaded
   // beside the modeler assets; a failure only costs this check.
   const knownProcessIds = takenProcessIds(api).catch(() => new Set());
   let lib;

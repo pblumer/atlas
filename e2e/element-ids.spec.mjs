@@ -1,4 +1,4 @@
-// e2e for readable element ids (api/web/elementids.js, ADR-draft-readable-element-ids).
+// e2e for readable element ids (api/web/elementids.js, ADR-0474).
 //
 // A new BPMN element is named <type>_<yyyymmdd>_<researcher> — activity_20261023_heisenberg
 // — instead of bpmn-js's Activity_0jmndkk, and a new diagram's process the same way

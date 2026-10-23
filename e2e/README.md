@@ -308,7 +308,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   re-renders on every selection does not pepper the server; and a burst of keystrokes
   asks exactly one question.
 
-- **`element-ids.spec.mjs`** ([ADR-draft-readable-element-ids](../docs/adr/draft-readable-element-ids.md)):
+- **`element-ids.spec.mjs`** ([ADR-0474](../docs/adr/0474-readable-element-ids.md)):
   **readable ids for new BPMN elements**, `<type>_<yyyymmdd>_<researcher>`. Drives the real
   `elementids.js` and the real `mountEditor` against a mock `api`, on a fixed clock: a new
   diagram's process and start event, and every task, event, gateway, flow and message
