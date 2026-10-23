@@ -513,6 +513,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Lease the next jobs of a named job type to an external worker — the type-keyed pull, optionally long-polling (ADR-0007)", tag: "Incidents", role: RoleOperator,
 			req: jsonBody("Job type, worker id, lease, batch size, and how long to wait for work before answering empty", schemaObj(map[string]any{
 				"type": tString(), "worker": tString(), "leaseMs": tInteger(), "maxJobs": tInteger(), "waitMs": tInteger(),
+				// What the worker serves with its own configuration (ADR-0168), and where
+				// each of those connects, as scheme://host:port (ADR-0471).
+				"connectors": tArray(), "endpoints": tObject(),
 			}, "type")),
 			resp: jsonBody("The leased jobs, with the variables visible at each task", tObject())}},
 		// The Worker protocol's second message kind: a query a Worker Instance answers

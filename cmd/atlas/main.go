@@ -1408,6 +1408,7 @@ func runWorker(args []string) error {
 		BrokerKey: os.Getenv("ATLAS_BROKER_KEY"),
 		Handlers:  execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
 		Connectors: builtin.Names,
+		Endpoints:  builtin.Endpoints,
 		// The form lookups the configured kinds answer, for the same Workers
 		// (ADR-0473).
 		Queries: builtin.Queries,

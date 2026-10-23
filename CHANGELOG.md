@@ -46,6 +46,18 @@ governs a Worker:
 
 ### Added
 
+- **A worker reports where its workers connect.** `atlas worker` now sends, beside the
+  worker names it holds, the endpoint each one's configuration names, reduced to scheme,
+  host and port before it leaves the worker, so a credential or a path in it never
+  does; any worker may do the same through the new optional `endpoints` field of
+  `POST /api/v1/jobs/activate`. The server reduces what it is told again, keeps only
+  the endpoints of names the same poll reported, and shows them in the Workers view.
+  A release's architecture sketch draws a reported endpoint, marked as reported, for a
+  worker the server holds no configuration for; instances that report different
+  endpoints for one name are recorded as disagreeing rather than one of them being
+  drawn, and a reported endpoint is shown only to operators
+  ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
+
 - **The architecture sketch shows where a release's connections go.** A release now also
   records what the installation that recorded it had in place for it: its name and
   environment, its external address (`--external-url`), the public start links of its
@@ -57,8 +69,7 @@ governs a Worker:
   ArchiMate document adds the worker processes, the target systems and the connections
   between them. An endpoint is shown only to a reader who may see that worker's
   configuration and the instances only to an operator; everybody else is told they are
-  withheld. A worker that keeps its own configuration does not report its endpoint yet
-  ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
+  withheld ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
 
 - **Approvals in the Console.** **Approvals** (account menu, and a tile on the dashboard
   when some wait) lists the open action approvals a person may answer and the ones asked on

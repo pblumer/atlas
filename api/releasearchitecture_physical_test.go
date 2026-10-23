@@ -229,3 +229,104 @@ func TestEachReaderSeesWhatTheyMaySee(t *testing.T) {
 		}
 	}
 }
+
+// reportedBPMN names two workers this server holds no configuration for: the
+// workers that serve them keep their own (ADR-0168), and report where they connect.
+const reportedBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs">
+  <bpmn:process id="meldung" isExecutable="true">
+    <bpmn:startEvent id="Start"/>
+    <bpmn:serviceTask id="Fremd">
+      <bpmn:extensionElements><atlas:clioConnector connector="fremd" subject="a" eventType="A"/></bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Zwei">
+      <bpmn:extensionElements><atlas:clioConnector connector="zwei" subject="b" eventType="B"/></bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Melden">
+      <bpmn:extensionElements><zeebe:taskDefinition type="melden"/></bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Start" targetRef="Fremd"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="Fremd" targetRef="Zwei"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="Zwei" targetRef="Melden"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="Melden" targetRef="End"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
+// TestAReleaseRecordsTheEndpointsWorkersReport: a worker that keeps its own
+// configuration reports where it connects, and the release records that — as
+// reported, for operators only — and records two instances that disagree as
+// disagreeing rather than picking one.
+func TestAReleaseRecordsTheEndpointsWorkersReport(t *testing.T) {
+	ts := newServerOn(t, t.TempDir())
+	admin := signedInClient(t, ts.URL)
+	createUser(t, admin, ts.URL, "anna")
+	bertID := createUserWithRoles(t, admin, ts.URL, "bert", `["modeler","user"]`)
+	anna := signInAs(t, ts.URL, "anna", "a-password-that-is-long")
+	bert := signInAs(t, ts.URL, "bert", "a-password-that-is-long")
+
+	var app struct{ ID string }
+	if err := json.Unmarshal(mustCall(t, anna, http.MethodPost, ts.URL+"/api/v1/applications", `{"name":"Meldungen"}`, "application/json", http.StatusOK), &app); err != nil {
+		t.Fatal(err)
+	}
+	mustCall(t, anna, http.MethodPost, ts.URL+"/api/v1/drafts?projectId="+app.ID, reportedBPMN, "application/xml", http.StatusOK)
+	// v1 makes the job type known; the workers poll it; v2 records what they said.
+	mustCall(t, anna, http.MethodPost, ts.URL+"/api/v1/applications/"+app.ID+"/publish", `{}`, "application/json", http.StatusOK)
+	mustCall(t, anna, http.MethodPost, ts.URL+"/api/v1/jobs/activate",
+		`{"type":"melden","worker":"w1","connectors":["fremd","zwei"],"endpoints":{"fremd":"https://u:p@fremd.example.com:9443/x","zwei":"zwei-a.example.com:25"},"waitMs":0}`,
+		"application/json", http.StatusOK)
+	mustCall(t, anna, http.MethodPost, ts.URL+"/api/v1/jobs/activate",
+		`{"type":"melden","worker":"w2","connectors":["zwei"],"endpoints":{"zwei":"zwei-b.example.com:25"},"waitMs":0}`,
+		"application/json", http.StatusOK)
+	mustCall(t, anna, http.MethodPost, ts.URL+"/api/v1/applications/"+app.ID+"/publish", `{}`, "application/json", http.StatusOK)
+	mustCall(t, anna, http.MethodPut, ts.URL+"/api/v1/applications/"+app.ID+"/members/"+bertID, `{"role":"viewer"}`, "application/json", http.StatusOK)
+
+	type site struct {
+		Name     string `json:"name"`
+		Endpoint *struct {
+			Scheme, Host, Port string
+			Withheld           bool
+		} `json:"endpoint"`
+		EndpointReported bool `json:"endpointReported"`
+		EndpointsDiffer  bool `json:"endpointsDiffer"`
+	}
+	read := func(c *http.Client) map[string]site {
+		raw := mustCall(t, c, http.MethodGet, ts.URL+"/api/v1/applications/"+app.ID+"/releases/2/architecture", "", "", http.StatusOK)
+		var out struct {
+			Architecture struct {
+				Physical struct {
+					Workers []site `json:"workers"`
+				} `json:"physical"`
+			} `json:"architecture"`
+		}
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatal(err)
+		}
+		byName := map[string]site{}
+		for _, w := range out.Architecture.Physical.Workers {
+			byName[w.Name] = w
+		}
+		return byName
+	}
+
+	operator := read(anna)
+	if f := operator["fremd"]; f.Endpoint == nil || f.Endpoint.Host != "fremd.example.com" || f.Endpoint.Port != "9443" || !f.EndpointReported {
+		t.Errorf("fremd = %+v, want the reported endpoint, reduced and marked as reported", f)
+	}
+	if z := operator["zwei"]; z.Endpoint != nil || !z.EndpointsDiffer {
+		t.Errorf("zwei = %+v, want no endpoint and the disagreement recorded", z)
+	}
+	_, svg := call(t, anna, http.MethodGet, ts.URL+"/api/v1/applications/"+app.ID+"/releases/2/architecture.svg", "", "")
+	for _, want := range []string{"→ https://fremd.example.com:9443 (reported)", "workers report different endpoints"} {
+		if !strings.Contains(string(svg), want) {
+			t.Errorf("SVG lacks %q", want)
+		}
+	}
+
+	viewer := read(bert)
+	if f := viewer["fremd"]; f.Endpoint == nil || !f.Endpoint.Withheld || f.Endpoint.Host != "" {
+		t.Errorf("a non-operator reads fremd = %+v, want the reported endpoint withheld", f)
+	}
+}

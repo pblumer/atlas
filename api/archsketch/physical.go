@@ -2,10 +2,10 @@ package archsketch
 
 import (
 	"cmp"
-	"net"
-	"net/url"
 	"slices"
 	"strings"
+
+	"github.com/pblumer/atlas/internal/endpoint"
 )
 
 // The physical part of a snapshot (ADR-0471 §1): what the installation that recorded
@@ -45,52 +45,18 @@ type Endpoint struct {
 	Withheld bool `json:"withheld,omitempty"`
 }
 
-// ParseEndpoint reduces a configured endpoint to scheme, host and port. It accepts
-// the shapes the Worker Types store — a URL, "host:port", or a bare host — and returns
-// nil for an empty value.
+// ParseEndpoint reduces a configured endpoint to scheme, host and port
+// (internal/endpoint), and returns nil for an empty value. A value that cannot be an
+// address is recorded as unparseable and not kept.
 func ParseEndpoint(raw string) *Endpoint {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
+	if strings.TrimSpace(raw) == "" {
 		return nil
 	}
-	if strings.Contains(raw, "://") {
-		u, err := url.Parse(raw)
-		if err != nil || u.Hostname() == "" || !validHost(u.Hostname()) {
-			return &Endpoint{Unparseable: true}
-		}
-		return &Endpoint{Scheme: strings.ToLower(u.Scheme), Host: strings.ToLower(u.Hostname()), Port: u.Port()}
-	}
-	if i := strings.IndexAny(raw, "/?#"); i >= 0 {
-		raw = raw[:i]
-	}
-	if i := strings.LastIndex(raw, "@"); i >= 0 {
-		raw = raw[i+1:]
-	}
-	host, port := raw, ""
-	if h, p, err := net.SplitHostPort(raw); err == nil {
-		host, port = h, p
-	}
-	if !validHost(host) {
+	a, ok := endpoint.Reduce(raw)
+	if !ok {
 		return &Endpoint{Unparseable: true}
 	}
-	return &Endpoint{Host: strings.ToLower(host), Port: port}
-}
-
-// validHost refuses what cannot be a host name or an address, so a value that only
-// looks parsed — a sentence, a credential pasted into the wrong field — is reported as
-// unparseable instead of being drawn as a machine.
-func validHost(h string) bool {
-	if h == "" || len(h) > 253 {
-		return false
-	}
-	for _, r := range h {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '-', r == ':', r == '_':
-		default:
-			return false
-		}
-	}
-	return true
+	return &Endpoint{Scheme: a.Scheme, Host: a.Host, Port: a.Port}
 }
 
 // String renders the endpoint as a reader writes an address.
@@ -101,17 +67,7 @@ func (e Endpoint) String() string {
 	case e.Unparseable:
 		return "endpoint not readable as an address"
 	}
-	host := e.Host
-	if strings.Contains(host, ":") {
-		host = "[" + host + "]"
-	}
-	if e.Port != "" {
-		host += ":" + e.Port
-	}
-	if e.Scheme != "" {
-		return e.Scheme + "://" + host
-	}
-	return host
+	return endpoint.Address{Scheme: e.Scheme, Host: e.Host, Port: e.Port}.String()
 }
 
 // Placements: who opens the connection to a worker's target system.
@@ -159,6 +115,14 @@ type WorkerSite struct {
 	ConfiguredID    string    `json:"configuredId,omitempty"`
 	Endpoint        *Endpoint `json:"endpoint,omitempty"`
 	MailboxEndpoint *Endpoint `json:"mailboxEndpoint,omitempty"`
+	// EndpointReported is set when Endpoint is not the installation's configuration
+	// but what the worker instances serving the name reported (format version 3).
+	// It is then information about those instances, and a read treats it as such.
+	EndpointReported bool `json:"endpointReported,omitempty"`
+	// EndpointsDiffer is set when the instances serving the name reported different
+	// endpoints. None of them is recorded then: picking one would draw a single
+	// system where the installation reaches several.
+	EndpointsDiffer bool `json:"endpointsDiffer,omitempty"`
 	Observers
 }
 
@@ -219,7 +183,14 @@ func (p Physical) Redacted(mayViewWorker func(configuredID string) bool, mayView
 	out := p
 	out.Workers = make([]WorkerSite, len(p.Workers))
 	for i, w := range p.Workers {
-		if !mayViewWorker(w.ConfiguredID) {
+		// A reported endpoint is what worker instances said, and goes to whoever may
+		// see the instances; a configured one is the worker's configuration, and goes
+		// to whoever may see that.
+		mayView := mayViewWorker(w.ConfiguredID)
+		if w.EndpointReported {
+			mayView = mayViewInstances
+		}
+		if !mayView {
 			w.Endpoint = withheld(w.Endpoint)
 			w.MailboxEndpoint = withheld(w.MailboxEndpoint)
 		}
@@ -270,8 +241,12 @@ func (p *Physical) jobType(jobType string) *JobTypeSite {
 // siteText is the third line of a worker's box: where its work goes.
 func (w WorkerSite) siteText() string {
 	switch {
+	case w.Endpoint != nil && w.EndpointReported && !w.Endpoint.Withheld:
+		return "→ " + w.Endpoint.String() + " (reported)"
 	case w.Endpoint != nil:
 		return "→ " + w.Endpoint.String()
+	case w.EndpointsDiffer:
+		return "workers report different endpoints"
 	case w.ConfiguredID == "" && w.Placement == PlacementWorker:
 		return "endpoint held by the worker itself"
 	default:
