@@ -182,6 +182,15 @@ governs a Worker:
   installation and the server's availability check, and a draft save that still collides
   is refused as before. Ids already in a diagram are not changed
   ([ADR-0474](docs/adr/0474-readable-element-ids.md)).
+- **Naming an element names its id.** Typing "Microsoft Teams bestellen" as an element's
+  name, in the properties panel or on the canvas, renames its id to
+  `activity_microsoft_teams_bestellen`; a second element of the same type with the same
+  name gets `_01`, a third `_02`. The id follows later renames, and one undo takes back
+  name and id together. It moves only while it is automatic — the readable placeholder,
+  bpmn-js's random id, or the one the previous name produced — and never when a deployed
+  version of the process carries it, so instances, migration and bindings keep their
+  handle. An id typed by the author and a process's own id are not touched
+  ([ADR-0474](docs/adr/0474-readable-element-ids.md), amended 2026-10-23).
 - **Completing a task checks a directory field's value first.** A value that is not an
   object id, or an object where an id was expected, is refused with 400; by default the
   entry is looked up once more under the field's filters, and one the directory no longer
