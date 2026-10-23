@@ -7307,3 +7307,7 @@ button.im-problem:hover { background: var(--accent-soft); }
    shares a cause with, so the send reads as the head of its group. */
 .el-row.el-child td { border-top-color: transparent; }
 .el-row.el-child td:nth-child(4) { padding-left: 22px; }
+/* A send's mark (nobody received it, kept, expired unreceived) is a label, not a
+   sentence: it keeps to one line, a size below the row's text, so a narrow What column
+   moves it under the verb instead of folding it into a two-line blob. */
+.el-row .pill { white-space: nowrap; font-size: 11px; line-height: 16px; padding: 1px 7px; }
