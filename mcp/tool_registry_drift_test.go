@@ -210,6 +210,7 @@ var mcpOmittedRoutes = map[string]string{
 	// who may do what — none of it an agent's to do.
 	"POST /api/v1/jobs/{key}/authorize":                               "the worker protocol's credential-bearing step: an agent is not a Worker Instance and must never be handed a delegated credential",
 	"GET /api/v1/instances/{key}/action-approvals":                    "a person's approval worklist, filtered per caller; an agent reads what was decided through atlas_instance_authorizations",
+	"GET /api/v1/me/action-approvals":                                 "a person's own approval worklist across instances, for the Console; an approval is answered by a person in their own session (ADR-0428), so an agent has nothing to act on there",
 	"POST /api/v1/instances/{key}/action-approvals/{approval}/decide": "an approval is a person's own answer, given in their own session (ADR-0428): deciding for a person",
 	"PUT /api/v1/configured-workers/{id}/identity":                    "decides as whom a Worker acts: an administrator's act, not an agent's",
 	"DELETE /api/v1/configured-workers/{id}/identity":                 "decides as whom a Worker acts: an administrator's act, not an agent's",

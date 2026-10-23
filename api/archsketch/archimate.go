@@ -27,7 +27,22 @@ import (
 //     component — "the mail worker serves the invoice application", which is the
 //     statement ADR-0211 already makes for a worker;
 //   - a call into another application's process is that application's Application
-//     Component serving this one.
+//     Component serving this one;
+//   - a job type is an Application Service serving the component, bound by the
+//     panorama binding key atlas.jobType.
+//
+// And with a physical part:
+//
+//   - each public start link a process had is an Application Interface;
+//   - a worker run by a worker process is System Software realising its Application
+//     Service, joined to the Atlas node by a Path — the lease, opened by the worker;
+//   - a target system is a Node, joined by a Path to whichever side opens the
+//     connection: the worker process, or the Atlas node itself for a Worker Type the
+//     engine runs. Each Path carries atlas.connection.initiator and the endpoint's
+//     scheme, host and port.
+//
+// Path is ArchiMate 3.2 and outside Panorama's authoring subset; an imported document
+// round-trips it (ADR-0189 §2).
 //
 // Every relationship is one Panorama's own authoring rules accept
 // (panorama.MayConnect), so a document exported here and imported into Panorama is
@@ -59,6 +74,11 @@ func ArchiMate(s Snapshot, m Meta) []byte {
 	node := add(archElement{id: "id-atlas-node", typ: "Node", name: "Atlas",
 		doc:   "The Atlas server the release was recorded on.",
 		props: map[string]string{"atlas.derivedKind": "node"}})
+	if p := s.Physical; p != nil {
+		elements[len(elements)-1].name = "Atlas — " + installationName(*p)
+		elements[len(elements)-1].props["atlas.node"] = p.Node
+		elements[len(elements)-1].props["atlas.environment"] = p.Environment
+	}
 	software := add(archElement{id: "id-atlas-software", typ: "SystemSoftware", name: "Atlas",
 		doc:   "The Atlas workflow engine.",
 		props: map[string]string{"atlas.derivedKind": "systemSoftware"}})
@@ -79,9 +99,13 @@ func ArchiMate(s Snapshot, m Meta) []byte {
 	relate("Assignment", node, release)
 	relate("Realization", release, app)
 
+	apiProps := map[string]string{"atlas.derivedKind": "api"}
+	if p := s.Physical; p != nil && p.ExternalURL != nil {
+		endpointProps(apiProps, *p.ExternalURL)
+	}
 	api := add(archElement{id: "id-atlas-api", typ: "TechnologyInterface", name: "Atlas API",
 		doc:   "The HTTP API every way into the application goes through: starting instances, publishing messages, completing tasks.",
-		props: map[string]string{"atlas.derivedKind": "api"}})
+		props: apiProps})
 	relate("Composition", node, api)
 	relate("Serving", api, app)
 
@@ -97,6 +121,18 @@ func ArchiMate(s Snapshot, m Meta) []byte {
 				"atlas.messageName": e.Name,
 			}})
 		relate("Composition", app, id)
+	}
+	if p := s.Physical; p != nil {
+		for i, l := range p.PublicStartLinks {
+			id := add(archElement{id: fmt.Sprintf("id-startlink-%d", i+1), typ: "ApplicationInterface", name: "Public start form " + l.ProcessID,
+				doc: "Public start links of process " + l.ProcessID + " on the recording installation: " + plural(l.Links, "link", "links") + ". Whoever holds one may start an instance.",
+				props: map[string]string{
+					"atlas.derivedKind":      "publicStartLink",
+					panorama.KeyProcessID:    l.ProcessID,
+					"atlas.publicStartLinks": fmt.Sprint(l.Links),
+				}})
+			relate("Composition", app, id)
+		}
 	}
 
 	for i, d := range s.Outbound() {
@@ -118,6 +154,16 @@ func ArchiMate(s Snapshot, m Meta) []byte {
 					"atlas.workerExpression": d.Name,
 					"atlas.workerType":       d.WorkerType,
 				}}
+		case DependencyJobType:
+			e = archElement{typ: "ApplicationService", name: "Job type " + d.Name,
+				doc: "Work any worker subscribed to job type " + d.Name + " leases from the Atlas API. Used at " + usesText(d.UsedBy) + ".",
+				props: map[string]string{
+					"atlas.derivedKind": "jobType",
+					panorama.KeyJobType: d.Name,
+				}}
+			if site := s.Physical.jobType(d.Name); site != nil {
+				e.doc += " On the recording installation: " + site.Observers.text() + "."
+			}
 		case DependencyCall:
 			name := "Process " + d.Name
 			props := map[string]string{"atlas.derivedKind": "call", panorama.KeyProcessID: d.Name}
@@ -133,7 +179,51 @@ func ArchiMate(s Snapshot, m Meta) []byte {
 			continue
 		}
 		e.id = fmt.Sprintf("id-dependency-%d", i+1)
-		relate("Serving", add(e), app)
+		service := add(e)
+		relate("Serving", service, app)
+
+		site := s.Physical.worker(d.Name, d.WorkerType)
+		if d.Kind != DependencyWorker || site == nil {
+			continue
+		}
+		// Who opens the connection to the target: the worker process, joined to Atlas
+		// by its lease, or the Atlas node itself.
+		initiator, initiatorKind := node, "atlas"
+		if site.Placement == PlacementWorker {
+			initiatorKind = "worker"
+			initiator = add(archElement{id: fmt.Sprintf("id-worker-%d", i+1), typ: "SystemSoftware", name: "Worker for " + d.Name,
+				doc: "The worker process that serves " + d.Name + ": it leases the work from the Atlas API and connects to the target system. On the recording installation: " + site.Observers.text() + ".",
+				props: map[string]string{
+					"atlas.derivedKind": "workerProcess",
+					"atlas.workerName":  d.Name,
+					"atlas.observedBy":  strings.Join(site.ObservedBy, ", "),
+				}})
+			relate("Realization", initiator, service)
+			lease := add(archElement{id: fmt.Sprintf("id-lease-%d", i+1), typ: "Path", name: "Lease of " + d.Name,
+				doc: "The worker opens this connection to the Atlas API to lease its jobs.",
+				props: map[string]string{
+					"atlas.derivedKind":          "lease",
+					"atlas.connection.initiator": "worker",
+				}})
+			relate("Association", lease, initiator)
+			relate("Association", lease, node)
+		}
+		if site.Endpoint == nil || site.Endpoint.Withheld || site.Endpoint.Unparseable {
+			if site.Endpoint != nil {
+				elements[len(elements)-1].doc += " Its target endpoint is not in this document: " + site.Endpoint.String() + "."
+			}
+			continue
+		}
+		targetProps := map[string]string{"atlas.derivedKind": "targetSystem"}
+		endpointProps(targetProps, *site.Endpoint)
+		target := add(archElement{id: fmt.Sprintf("id-target-%d", i+1), typ: "Node", name: site.Endpoint.Host,
+			doc: "The system worker " + d.Name + " connects to, as its configuration on the recording installation names it.", props: targetProps})
+		pathProps := map[string]string{"atlas.derivedKind": "connection", "atlas.connection.initiator": initiatorKind}
+		endpointProps(pathProps, *site.Endpoint)
+		path := add(archElement{id: fmt.Sprintf("id-connection-%d", i+1), typ: "Path", name: site.Endpoint.String(),
+			doc: "Opened by the " + map[string]string{"atlas": "Atlas server", "worker": "worker process"}[initiatorKind] + ".", props: pathProps})
+		relate("Association", path, initiator)
+		relate("Association", path, target)
 	}
 
 	var out strings.Builder
@@ -191,8 +281,8 @@ func archiProvenance(s Snapshot, m Meta) string {
 	fmt.Fprintf(&b, "Generated by Atlas from release v%d of %s (release %s), snapshot taken %s. ",
 		m.Version, m.Application, m.ReleaseID, formatTime(s.TakenAt))
 	fmt.Fprintf(&b, "DERIVED, NOT AUTHORED: nothing in this model was drawn by a person. It is the "+
-		"release's logical architecture in ArchiMate's vocabulary at mapping version %d — the same "+
-		"release always produces this document, and editing it here changes nothing in Atlas.\n\n", MappingVersion)
+		"release's %s in ArchiMate's vocabulary at mapping version %d — the same "+
+		"snapshot always produces this document, and editing it here changes nothing in Atlas.\n\n", view(s), s.MappingVersion)
 	if n := s.LocalDecisions(); n > 0 {
 		fmt.Fprintf(&b, "Local decisions evaluated inside the engine (%d) are not written as elements: they do not cross the application's boundary. ", n)
 	}
@@ -201,10 +291,26 @@ func archiProvenance(s Snapshot, m Meta) string {
 			plural(n, "process", "processes"))
 	}
 	b.WriteString("No diagram: the importing tool's own layout is the better one.\n\nNot shown:\n")
-	for _, gap := range NotShown() {
+	for _, gap := range s.NotShown() {
 		b.WriteString("  • " + gap + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// view names what the document holds, the way the image's stamp does.
+func view(s Snapshot) string {
+	if p := s.Physical; p != nil {
+		return "logical architecture and the physical one of " + installationName(*p)
+	}
+	return "logical architecture"
+}
+
+// endpointProps writes an endpoint's three parts as the descriptive properties a
+// reader of the document finds them under.
+func endpointProps(props map[string]string, e Endpoint) {
+	props["atlas.endpoint.scheme"] = e.Scheme
+	props["atlas.endpoint.host"] = e.Host
+	props["atlas.endpoint.port"] = e.Port
 }
 
 func workerTypeName(t string) string {
