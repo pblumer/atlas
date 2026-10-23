@@ -605,6 +605,22 @@ func (p *Processor) CreateInstanceWithPass(defKey uint64, created *uint64, passH
 	})
 }
 
+// CreateInstanceStartedBy is [Processor.CreateInstanceReporting] for a start an
+// authenticated principal asked for: startedBy, their stable principal id, rides on the
+// creation command's instance value, which the activation event copies whole, so who
+// initiated the instance is durable in the same fsync as the instance and read back on
+// replay (I2, I6) — the trusted "initiated by" of
+// ADR-draft-identity-aware-worker-execution §3.
+func (p *Processor) CreateInstanceStartedBy(defKey uint64, created *uint64, startedBy string, startVars ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		ValueType: model.VTProcessInstance,
+		Intent:    model.IntentActivating,
+		Value:     inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: defKey, StartedBy: startedBy}},
+		StartVars: startVars,
+		Created:   created,
+	})
+}
+
 // CompleteJob enqueues completion of a job by a worker, optionally carrying the
 // output variables the worker produced (e.g. a business rule task's decision
 // result). The outputs are written into the job's process instance scope when the
