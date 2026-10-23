@@ -316,6 +316,11 @@ governs a Worker:
 
 ### Fixed
 
+- **A PowerShell command name completes past its dash.** The script editor read every
+  `-` as the start of an operator, so `Get-` offered `-and`, `-eq` and the rest, and
+  choosing `Get-ChildItem` after `Get-Ch` wrote `GetGet-ChildItem`. A dash glued to a
+  word now continues the command name; after a space, a bracket or a value such as
+  `$a-` it still offers the operators.
 - **Authorization evidence has its own key space.** It had been given the event log's
   column family byte, so a range read or prefix delete of one could reach the other's
   records. It moved; evidence recorded by a development build before the move is no longer

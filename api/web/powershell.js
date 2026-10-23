@@ -270,6 +270,12 @@ function psPrefix(before) {
   // (ADR-0456).
   m = /\$(?:(?:application|server)\.[A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*|)$/.exec(before);
   if (m) return { text: m[0], start: before.length - m[0].length, mode: "var" };
+  // A dash glued to a bare word is part of a Verb-Noun command name, as the tokenizer
+  // reads it: `Get-` and `Get-Ch` complete Get-ChildItem, not -eq. A dash starts an
+  // operator or parameter only after whitespace, a bracket or a value — `$a-eq`,
+  // `$_.Name-`, `)-and` — so a word led by `$`, `:`, `.` or `-` is not a command.
+  m = /(?:^|[^$\w:.-])([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*-[A-Za-z0-9]*)$/.exec(before);
+  if (m) return { text: m[1], start: before.length - m[1].length, mode: "cmd" };
   m = /-[A-Za-z]*$/.exec(before);
   if (m) return { text: m[0], start: before.length - m[0].length, mode: "op" };
   m = /[A-Za-z][A-Za-z0-9]*(-[A-Za-z0-9]*)?$/.exec(before);
