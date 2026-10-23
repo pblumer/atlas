@@ -8749,16 +8749,25 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
         welchem Worker Type nennen, welche lokalen Entscheidungen sie auswerten und welche Prozesse anderer
         Applikationen sie aufrufen – jeweils mit den Elementen, die es angeben. <i>Architecture</i> in der Release
         history zeigt sie als Skizze und bietet sie als SVG und als ArchiMate-Open-Exchange-Dokument für Archi und
-        andere Werkzeuge an. Derselbe Release ergibt immer dieselben Bytes. Es ist die logische Sicht: Welcher Worker
-        einen Namen auf einer Installation bedient und unter welchem Endpunkt, gehört noch nicht dazu. Ein Release,
-        der vor dieser Version aufgezeichnet wurde, hat keine Skizze und sagt das.</p>
+        andere Werkzeuge an. Derselbe Release ergibt immer dieselben Bytes. Neben der logischen Sicht hält die Skizze
+        fest, was die aufzeichnende Installation in diesem Moment bereitstellte: ihren Namen und ihre Umgebung, ihre
+        externe Adresse, die öffentlichen Start-Links und pro Worker, ob atlas ihn selbst ausführt oder ein
+        Worker-Prozess die Arbeit abholt, seinen Endpunkt (nur Schema, Host und Port) und die Worker-Instanzen, die
+        ihn seit dem Start bedient haben. Ein Pfeil zeigt von der Seite, die die Verbindung öffnet. Einen Endpunkt
+        sieht nur, wer die Konfiguration dieses Workers sehen darf, die Worker-Instanzen nur die Rolle
+        <code>operator</code>. Ein Release, der vor dieser Version aufgezeichnet wurde, hat keine Skizze und sagt
+        das.</p>
       <p data-l="en">Every release carries an <b>architecture sketch</b> (ADR-0471): on publish, and on the import of
         a promoted release, atlas records which messages its processes receive, which workers they name with which
         Worker Type, which local decisions they evaluate and which processes of other applications they call – each
         with the elements that state it. <i>Architecture</i> in the Release history shows it as a sketch and offers it
         as an SVG and as an ArchiMate Open Exchange document for Archi and other tools. The same release always
-        produces the same bytes. It is the logical view: which worker serves a name on an installation, and at which
-        endpoint, is not part of it yet. A release recorded before this version has no sketch and says so.</p>
+        produces the same bytes. Beside the logical view the sketch records what the installation that recorded it had
+        in place at that moment: its name and environment, its external address, the public start links, and per
+        worker whether atlas runs it itself or a worker process leases the work, its endpoint (scheme, host and port
+        only) and the worker instances that served it since the start. An arrow points from the side that opens the
+        connection. An endpoint is shown only to whoever may see that worker's configuration, the worker instances
+        only to the <code>operator</code> role. A release recorded before this version has no sketch and says so.</p>
 
       <h3 data-l="de">Ein Ziel und sein Token</h3><h3 data-l="en">A target and its token</h3>
       <p data-l="de">Ein <b>Deployment-Ziel</b> ist ein anderer atlas-Server, an den dieser hier promotet. Es ist
