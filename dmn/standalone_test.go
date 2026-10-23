@@ -59,3 +59,60 @@ func TestAStandaloneDecisionRefusesAModelItCannotRun(t *testing.T) {
 		t.Errorf("a decision the model does not provide: err = %v", err)
 	}
 }
+
+// A model that is not DMN at all, and one temis parses but reports errors in, are both
+// refused at compilation — where a policy's author can still fix them — and each says
+// which of the two it was.
+func TestAStandaloneDecisionRefusesAModelThatDoesNotCompile(t *testing.T) {
+	_, err := dmn.CompileStandalone(context.Background(), []byte(malformedModel), "access")
+	if err == nil || !strings.Contains(err.Error(), "dmn: compile") {
+		t.Errorf("malformed XML: err = %v, want a compile error", err)
+	}
+	_, err = dmn.CompileStandalone(context.Background(), []byte(erroneousModel), "Dec")
+	if err == nil || !strings.Contains(err.Error(), "the model has errors") {
+		t.Errorf("a model with diagnostics: err = %v, want its errors reported", err)
+	}
+}
+
+// An evaluation that cannot run is an error, not a result: a value of the wrong type is
+// refused rather than quietly missing every rule, a missing input is named, and a
+// cancelled caller gets nothing.
+func TestAStandaloneDecisionReportsAnEvaluationItCannotRun(t *testing.T) {
+	d, err := dmn.CompileStandalone(context.Background(), []byte(accessModel), "access")
+	if err != nil {
+		t.Fatalf("CompileStandalone: %v", err)
+	}
+	for name, tc := range map[string]struct {
+		ctx  func() context.Context
+		in   map[string]any
+		want string
+	}{
+		"an input of the wrong type": {
+			ctx:  context.Background,
+			in:   map[string]any{"operation": 42, "role": "manager"},
+			want: `input "operation" expects string`,
+		},
+		"a missing input": {
+			ctx:  context.Background,
+			in:   map[string]any{"operation": "delete-file"},
+			want: `missing required input "role"`,
+		},
+		"a cancelled caller": {
+			ctx: func() context.Context {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx
+			},
+			in:   map[string]any{"operation": "delete-file", "role": "manager"},
+			want: "access",
+		},
+	} {
+		res, err := d.Evaluate(tc.ctx(), tc.in)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: Evaluate = %v, %v; want an error naming %q", name, res, err, tc.want)
+		}
+		if res != nil {
+			t.Errorf("%s: an evaluation that failed answered %v", name, res)
+		}
+	}
+}

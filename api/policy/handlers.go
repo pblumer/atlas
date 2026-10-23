@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"sort"
@@ -65,8 +66,12 @@ func (s *Service) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out, err := s.SaveDraft(r.PathValue("id"), body, who(r))
-	if err != nil {
+	switch {
+	case errors.Is(err, ErrInvalid):
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	case err != nil:
+		httpapi.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, out)
@@ -208,8 +213,12 @@ func (s *Service) HandleSimulate(w http.ResponseWriter, r *http.Request) {
 	set := s.Set()
 	if len(sim.Policy) > 0 {
 		set, err = s.withCandidate(sim.Policy)
-		if err != nil {
+		switch {
+		case errors.Is(err, errBadCandidate):
 			httpapi.Error(w, http.StatusBadRequest, err.Error())
+			return
+		case err != nil:
+			httpapi.Error(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 	}
@@ -249,10 +258,15 @@ func ignoredBecause(ignored []string) string {
 
 // withCandidate is the published set with one document compiled in place of its
 // published version, as version 0 so nobody mistakes it for a published one.
+//
+// A published policy that cannot be read fails the simulation rather than being left
+// out: enforcement has no set at all then and refuses every governed action, and a
+// simulation without the unreadable policy could answer Permit where enforcement
+// refuses.
 func (s *Service) withCandidate(raw json.RawMessage) (*authz.Set, error) {
 	doc, err := authz.ParseDocument(bytes.TrimSpace(raw))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", errBadCandidate, err)
 	}
 	var published []authz.Published
 	var lerr error
@@ -267,12 +281,18 @@ func (s *Service) withCandidate(raw json.RawMessage) (*authz.Set, error) {
 				continue
 			}
 			v, ok, err := s.versions.Get(versionKey(r.ID, r.Current))
-			if err != nil || !ok {
-				continue
+			if err == nil && !ok {
+				err = fmt.Errorf("version %d is missing", r.Current)
 			}
-			if d, err := authz.ParseDocument(v.Document); err == nil {
-				published = append(published, authz.Published{Document: d, Version: v.Version})
+			var d authz.Document
+			if err == nil {
+				d, err = authz.ParseDocument(v.Document)
 			}
+			if err != nil {
+				lerr = fmt.Errorf("published policy %s cannot be read, so enforcement refuses every governed action and a simulation would mislead: %w", r.ID, err)
+				return
+			}
+			published = append(published, authz.Published{Document: d, Version: v.Version})
 		}
 	})
 	if lerr != nil {
@@ -281,8 +301,18 @@ func (s *Service) withCandidate(raw json.RawMessage) (*authz.Set, error) {
 	// A candidate carries the version after its current one, which is what it would be
 	// published as; the answer is labeled a simulation either way.
 	published = append(published, authz.Published{Document: doc, Version: 1 + s.currentOf(doc.ID)})
-	return authz.CompileSet(context.Background(), published)
+	set, err := authz.CompileSet(context.Background(), published)
+	if err != nil {
+		// Every published document compiled when it was published; what does not
+		// compile now is the candidate.
+		return nil, fmt.Errorf("%w: %w", errBadCandidate, err)
+	}
+	return set, nil
 }
+
+// errBadCandidate marks a simulated candidate the caller got wrong, as against a
+// published set the server cannot read.
+var errBadCandidate = errors.New("the candidate policy is invalid")
 
 func (s *Service) currentOf(id string) int {
 	cur := 0

@@ -34,6 +34,9 @@ var (
 	ErrNotFound   = errors.New("policy: no such policy")
 	ErrNoDraft    = errors.New("policy: there is no draft to publish")
 	ErrIDMismatch = errors.New("policy: the document's id is not the policy's")
+	// ErrInvalid marks a document that does not parse or does not compile: the
+	// caller's to fix, as against a store that could not be read or written.
+	ErrInvalid = errors.New("policy: invalid document")
 )
 
 // record is one policy's administrative state.
@@ -209,14 +212,14 @@ func (s *Service) List() ([]Summary, error) {
 func (s *Service) SaveDraft(id string, src []byte, by string) (Summary, error) {
 	doc, err := authz.ParseDocument(src)
 	if err != nil {
-		return Summary{}, err
+		return Summary{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	if doc.ID != id {
-		return Summary{}, fmt.Errorf("%w: %q in a document saved as %q", ErrIDMismatch, doc.ID, id)
+		return Summary{}, fmt.Errorf("%w: %w: %q in a document saved as %q", ErrInvalid, ErrIDMismatch, doc.ID, id)
 	}
 	_, warnings, err := authz.CompilePolicy(context.Background(), doc, 1)
 	if err != nil {
-		return Summary{}, err
+		return Summary{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	canonical, err := json.Marshal(doc)
 	if err != nil {
