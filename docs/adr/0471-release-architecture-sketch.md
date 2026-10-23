@@ -1,4 +1,4 @@
-# ADR-DRAFT: A release carries its architecture sketch, and a worker publishes it to Confluence
+# ADR-0471: A release carries its architecture sketch, and a worker publishes it to Confluence
 
 - **Status:** Proposed
 - **Implementation:** Not started
