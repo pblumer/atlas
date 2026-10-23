@@ -12,6 +12,27 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **An example for the SharePoint operations: the case file.** `examples/sharepoint-fallakte`
+  turns a request entered in a SharePoint list into a case file — it reads the request
+  (`get-item`), creates its folder (`create-folder`), fills in a letter template from a
+  library (`download-file` and FEEL `replace`), files the letter with properties unless
+  `get-file` finds it there already (`upload-file`), updates the request with typed
+  columns (`update-item`) and writes a log entry (`create-item`). A second process finds
+  settled requests page by page with an OData filter (`list-items`) and deletes each
+  one's folder and entry in a parallel multi-instance (`delete-file`, `delete-item`).
+  Both run end to end in `connector/sharepoint/example_test.go` against a site kept in
+  memory, with the real compiler, engine and Graph client. The handbook's examples
+  chapter has its card.
+
+### Fixed
+
+- **A SharePoint task that names `create-item` keeps its list and columns in the
+  Modeler.** The panel showed the list and the column table only for a task with no
+  operation, so a model spelling `operation="create-item"` out lost both on its next
+  save, and the compiler then refused the task.
+
 ## [0.19.0] — 2026-10-22
 
 **A `superior` approval reaches the orderer's line manager, and a SharePoint task does
@@ -86,18 +107,6 @@ replay's Variables tab names the person, group, process or product an id stands 
   not read `lineManager`.
 
 ### Added
-
-- **An example for the SharePoint operations: the case file.** `examples/sharepoint-fallakte`
-  turns a request entered in a SharePoint list into a case file — it reads the request
-  (`get-item`), creates its folder (`create-folder`), fills in a letter template from a
-  library (`download-file` and FEEL `replace`), files the letter with properties unless
-  `get-file` finds it there already (`upload-file`), updates the request with typed
-  columns (`update-item`) and writes a log entry (`create-item`). A second process finds
-  settled requests page by page with an OData filter (`list-items`) and deletes each
-  one's folder and entry in a parallel multi-instance (`delete-file`, `delete-item`).
-  Both run end to end in `connector/sharepoint/example_test.go` against a site kept in
-  memory, with the real compiler, engine and Graph client. The handbook's examples
-  chapter has its card.
 
 - **SharePoint reads, changes, finds and deletes list items, and works with document
   libraries.** Beside creating a list item, a SharePoint task can now read one by its id
@@ -191,11 +200,6 @@ replay's Variables tab names the person, group, process or product an id stands 
   Ablehnen, for as long as the system bundle declares it.
 
 ### Fixed
-
-- **A SharePoint task that names `create-item` keeps its list and columns in the
-  Modeler.** The panel showed the list and the column table only for a task with no
-  operation, so a model spelling `operation="create-item"` out lost both on its next
-  save, and the compiler then refused the task.
 
 - **A `superior` approval reaches the orderer's line manager.** The system process
   `atlas-genehmigung-vorgesetzter` searched the directory with
