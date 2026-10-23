@@ -150,3 +150,25 @@ test("a Gmail create carries no IMAP endpoint, even with one left in the hidden 
   expect(body.provider).toBe("gmail");
   expect(body).not.toHaveProperty("mailboxEndpoint");
 });
+
+// A SharePoint Worker is Microsoft Graph unless it is the mockup, whose site atlas keeps
+// in its own memory (ADR-draft-sharepoint-mock-mode). Graph has no provider name, so
+// only the mockup sends one — and the mockup asks for no credential, which is the
+// point of it.
+test("a SharePoint mockup create carries its provider and asks for no credential", async ({ page }) => {
+  const body = await build(page, { kind: "sharepoint", name: "intranet", provider: "mock", credentialsRef: "" });
+  expect(body.provider).toBe("mock");
+  const sh = await page.evaluate(() => window.shape("sharepoint", "mock"));
+  expect(sh.credRef).toBe("none");
+  expect(sh.provider, "the provider select is shown").toBe(true);
+  expect(sh.hint).toContain("Mockups");
+});
+
+test("a SharePoint Graph create carries no provider and requires a credential", async ({ page }) => {
+  const body = await build(page, { kind: "sharepoint", name: "intranet", provider: "", credentialsRef: "sharepoint_auth" });
+  expect(body).not.toHaveProperty("provider");
+  expect(body.credentialsRef).toBe("sharepoint_auth");
+  const sh = await page.evaluate(() => window.shape("sharepoint", ""));
+  expect(sh.credRef).toBe("required");
+  expect(sh.providerOptions.map(([v]) => v)).toEqual(["", "mock"]);
+});

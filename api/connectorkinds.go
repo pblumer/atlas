@@ -213,7 +213,12 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		// the vault at build time (ADR-0041).
 		name:           connectorKindSharePoint,
 		validateCreate: validateSharePointConnector,
-		newRegistry:    func(s *Server) { s.sharePointRegistry = sharepoint.NewRegistry() },
+		newRegistry: func(s *Server) {
+			s.sharePointRegistry = sharepoint.NewRegistry()
+			// The mockups outlive every rebuild, as the preview outbox does: a rebuild
+			// re-binds the clients and must not empty a site a run has written to.
+			s.sharePointMocks = sharepoint.NewMockSites(nil)
+		},
 		registerHandlers: func(s *Server, store *state.Store) {
 			for _, jobType := range []int32{compiler.SharePointJobTypeIndex, compiler.SharePointOpsJobTypeIndex} {
 				s.jobRunner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
@@ -907,11 +912,24 @@ func validateS3Connector(p *createConnectorParams) string {
 
 // validateSharePointConnector validates a SharePoint create request: it defaults its
 // Graph API base (endpoint is an optional override) and needs a credentialsRef
-// naming a vault OAuth auth bundle (ADR-0141). Provider/Sender are mail-only.
+// naming a vault OAuth auth bundle (ADR-0141) — unless the provider is the mockup,
+// which needs neither (ADR-draft-sharepoint-mock-mode). Sender is mail-only.
 func validateSharePointConnector(p *createConnectorParams) string {
-	p.Provider, p.Sender = "", ""
+	p.Sender = ""
+	if p.Provider == sharepoint.MockProvider {
+		// A mockup reaches no tenant and authenticates against nothing, so an endpoint
+		// or a credential written into the form would be dead configuration that reads
+		// as if it were in use — the preview mail provider's rule
+		// (ADR-draft-sharepoint-mock-mode).
+		p.Endpoint, p.CredentialsRef = "", ""
+		return ""
+	}
+	// Anything else is Microsoft Graph, which has no provider name of its own: a record
+	// stored before the mockup existed has none, and a client that sends one — the
+	// Console once sent the mail form's — must still create the same Worker.
+	p.Provider = ""
 	if p.CredentialsRef == "" {
-		return "a sharepoint worker requires a credentialsRef naming a vault auth bundle"
+		return "a sharepoint worker requires a credentialsRef naming a vault auth bundle (or provider \"mock\" for a mockup that reaches no tenant)"
 	}
 	return ""
 }
@@ -1024,6 +1042,10 @@ func normalizeConnectorUpdate(rec *connector) string {
 		validate = validateAgentConnector
 	case connectorKindCloudEvents:
 		validate = validateCloudEventsConnector
+	case connectorKindSharePoint:
+		// Switching to or from the mockup changes what is required: Graph needs a
+		// credential, the mockup takes none.
+		validate = validateSharePointConnector
 	default:
 		return ""
 	}

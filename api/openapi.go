@@ -1899,6 +1899,15 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Report a mockup journal (used by a SQL worker running in mockup mode)", tag: "Workers", role: RoleOperator,
 			req: jsonBody("Mock journal", tObject()), status: http.StatusNoContent}},
 
+		{"GET", "/api/v1/mocks", s.handleMockReports, apiOp{
+			summary: "Show the mockups this server can see, one report each — kind, holder, target, summary and the kind's own data (today the SharePoint mockups: their sites and the operations each was asked). Admin-gated: what a process writes into a mockup is shaped like the real thing", tag: "Workers", role: RoleAdmin,
+			resp: jsonBody("Mock reports", schemaObj(map[string]any{"reports": tArray()}))}},
+		{"POST", "/api/v1/sharepoint/mock-sites/{worker}", s.handleSharePointMockOperation, apiOp{
+			summary: "Perform one SharePoint operation against a mockup Worker's site (used by a SharePoint worker running in mockup mode); a refusal answers 422 with the site's reason", tag: "Workers", role: RoleOperator,
+			req: jsonBody("SharePoint operation", tObject()), resp: jsonBody("What the site answered", schemaObj(map[string]any{"answer": tObject()}))}},
+		{"DELETE", "/api/v1/sharepoint/mock-sites/{worker}", s.handleClearSharePointMockSite, apiOp{
+			summary: "Empty a mockup Worker's site and its journal", tag: "Workers", role: RoleAdmin, status: http.StatusNoContent}},
+
 		{"GET", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleListInboundSubscriptions, apiOp{
 			summary: "List a worker's inbound event watches — clio, Jira, Google, Discord and mail Workers carry them", tag: "Workers", role: RoleModeler, resp: jsonBody("Subscriptions", tArray())}},
 		{"POST", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleCreateInboundSubscription, apiOp{

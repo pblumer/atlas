@@ -4358,6 +4358,23 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .sqlmock-detail { margin-top: 2px; font-size: 12px; color: var(--err, #b3261e); overflow-wrap: anywhere; }
 .sqlmock-table tr + tr > td, .sqlmock-table tr + tr > th { padding-top: 8px; }
 
+/* ---------- Mockups (ADR-0216) and the SharePoint card (ADR-draft-sharepoint-mock-mode) ---------- */
+/* Between its two siblings: a site has state, drawn as one table per list or library,
+   and a journal, drawn as the mock database draws its sequence. */
+.spmock-list { margin-top: 8px; }
+.spmock-list > summary { cursor: pointer; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.spmock-list > summary::marker { color: var(--muted); }
+.spmock-table { width: 100%; margin: 4px 0 0; }
+.spmock-table thead th { border-bottom: 1px solid var(--border); padding: 2px 12px 2px 0; }
+.spmock-table td { padding: 2px 12px 2px 0; }
+.spmock-folder td:first-child code { font-weight: 600; }
+.spmock-size { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
+.spmock-journal .spmock-at { white-space: nowrap; width: 1%; padding-right: 12px; font-size: 12px; }
+/* A kind with no card of its own yet (ADR-0216): its data as served, plainly. */
+.mockups-data {
+  margin: 8px 0 0; max-height: 360px; overflow: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 /* ---------- Secret shape hints (ADR-0155) ---------- */
 /* A vault secret is a name and an opaque string, so the form has to say what the
    string is for: which worker resolves it and what shape that worker needs. */

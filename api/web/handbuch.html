@@ -4245,6 +4245,16 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             runbook</a>; the worker is called <code>intranet</code> here. Which lists, libraries and columns the
             site needs is in the process documentation and in the example's README. Columns are named by their
             internal name, not by the heading the list shows.</p>
+          <p data-l="de"><b>Ohne Tenant:</b> Lege den Worker <code>intranet</code> mit dem Provider <b>Mockup</b> an,
+            starte zuerst «Testdaten anlegen» (<code>sharepoint-testdaten.bpmn</code>) und dann «Fallakte anlegen» mit
+            der <code>antragId</code>, die dieser Lauf hinterlassen hat. Was entstanden ist, zeigt
+            <a href="/#/operations/mockups">Betrieb &rsaquo; Diagnostics &rsaquo; Mockups</a>
+            (<a href="#sharepoint-mockup">mehr zum Mockup</a>).</p>
+          <p data-l="en"><b>Without a tenant:</b> create the worker <code>intranet</code> with the provider
+            <b>Mockup</b>, start "Testdaten anlegen" (<code>sharepoint-testdaten.bpmn</code>) first and then
+            "Fallakte anlegen" with the <code>antragId</code> that run left behind. What came of it is shown under
+            <a href="/#/operations/mockups">Operations &rsaquo; Diagnostics &rsaquo; Mockups</a>
+            (<a href="#sharepoint-mockup">more on the mockup</a>).</p>
           <p data-l="de"><b>Drei Dinge, die das Modell vormacht.</b> Ein Spaltenwert behält den Typ seines
             FEEL-Werts: <code>=antrag.fields.Betrag &gt; 10000</code> kommt in der Ja/Nein-Spalte als Ja oder
             Nein an, <code>=number(antragId)</code> in der Zahlenspalte als Zahl, und ein Ausdruck, der
@@ -7428,6 +7438,15 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           <a href="#runbook-entra">Entra&nbsp;ID</a>: an app registration, a client secret, admin consent. Secret:
           <code>{"method": "clientCredentials", "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code>, no
           endpoint.</p>
+        <p data-l="de"><b>Ohne Tenant ausprobieren:</b> Wähle beim Anlegen des Workers den Provider
+          <b>Mockup</b>. Er braucht weder App-Registrierung noch Secret noch Endpoint; jede Operation läuft
+          gegen eine Site im Arbeitsspeicher von atlas. Der Weg in die Produktion ist ein Wechsel des
+          Workers auf <b>Microsoft Graph</b> mit einer Credential-Referenz, das Modell bleibt, wie es ist.
+          Mehr dazu unter <a href="#testen">Testen &amp; Simulieren</a>.</p>
+        <p data-l="en"><b>Trying it without a tenant:</b> choose the provider <b>Mockup</b> when you create the
+          worker. It needs no app registration, no secret and no endpoint; every operation runs against a site
+          in atlas's memory. Going live is switching the worker to <b>Microsoft Graph</b> with a credential
+          reference; the model stays as it is. More under <a href="#testen">Test &amp; simulate</a>.</p>
         <p data-l="de">Statt des Client-Secrets kann das Secret ein <b>Zertifikat</b> tragen:
           <code>"certificate"</code> enthält das Zertifikat und seinen unverschlüsselten privaten Schlüssel als einen
           PEM-Text. Das Zertifikat lädst du in der App-Registrierung unter <i>Zertifikate &amp; Geheimnisse</i> hoch.
@@ -8672,6 +8691,85 @@ atlas worker --connector mssql</code></pre>
           a hand-written SQL subset would differ from the real SQL Server exactly where statements go wrong, and
           the difference would surface in production. It is good for trying a process out; it is not a test
           database.</p>
+      </div>
+
+      <div id="sharepoint-mockup" style="scroll-margin-top:66px"></div>
+      <h3 data-l="de">Eine SharePoint-Site ausprobieren, ohne Tenant</h3>
+      <h3 data-l="en">Trying a SharePoint site without a tenant</h3>
+      <p data-l="de">Ein SharePoint-Worker mit dem Provider <b>Mockup</b> erreicht kein Microsoft 365. Jede
+        Operation läuft gegen eine Site, die atlas in seinem Arbeitsspeicher hält: im Server, auch wenn ein
+        überwachter Worker die Jobs ausführt — der reicht jede Operation an den Server weiter. Deshalb übersteht
+        die Site einen Neustart des Workers, aber nicht einen Neustart von atlas. Anlegen unter
+        <a href="/#/console/workers">Console → Workers</a> → <b>New worker</b>: Typ <b>Microsoft SharePoint</b>,
+        Provider <b>Mockup</b>, ein Name — sonst nichts.</p>
+      <p data-l="en">A SharePoint worker with the provider <b>Mockup</b> reaches no Microsoft 365. Every operation
+        runs against a site atlas holds in its memory: in the server, even when a supervised worker runs the
+        jobs — that worker hands each operation on to the server. So the site survives a restart of the worker,
+        but not a restart of atlas. Create it under <a href="/#/console/workers">Console → Workers</a> →
+        <b>New worker</b>: type <b>Microsoft SharePoint</b>, provider <b>Mockup</b>, a name — nothing else.</p>
+      <p data-l="de">Das Mockup antwortet in den Formen, in denen Graph antwortet: ein Eintrag mit seinen Spalten
+        unter <code>fields</code>, eine Seite mit <code>items</code>, <code>hasMore</code> und
+        <code>nextPageToken</code>, eine Datei mit <code>webUrl</code> und ihren Eigenschaften unter
+        <code>listItem.fields</code>. Und es lehnt ab, was SharePoint ablehnt: einen Eintrag oder eine Datei, die
+        es nicht gibt, einen Listeneintrag in einer Dokumentbibliothek, eine Datei, wo ein Ordner verlangt ist,
+        einen Filter auf eine Spalte, die die Liste nicht hat. Was fehlt, beantwortet es wie der echte Worker:
+        <code>deleted=false</code> beim Löschen, <code>exists=false</code> bei <code>get-file</code>, sonst
+        scheitert die Aufgabe mit dem Grund.</p>
+      <p data-l="en">The mockup answers in the shapes Graph answers in: an item with its columns under
+        <code>fields</code>, a page with <code>items</code>, <code>hasMore</code> and <code>nextPageToken</code>,
+        a file with <code>webUrl</code> and its properties under <code>listItem.fields</code>. And it refuses
+        what SharePoint refuses: an item or a file that is not there, a list item in a document library, a file
+        where a folder is asked for, a filter on a column the list does not have. Something missing is answered
+        as the real worker answers it: <code>deleted=false</code> on a delete, <code>exists=false</code> on
+        <code>get-file</code>, and otherwise the task fails with the reason.</p>
+      <p data-l="de"><b>Wo es nachsichtiger ist als SharePoint:</b> Eine Liste oder Bibliothek entsteht, wenn ein
+        Task zum ersten Mal in sie schreibt — <code>create-item</code> legt eine Liste an,
+        <code>upload-file</code> und <code>create-folder</code> eine Bibliothek —, und ihre Spalten sind die, in
+        die geschrieben wurde. Auf einer echten Site legt das eine Person vorher an. Eine Liste, in die noch nie
+        geschrieben wurde, gibt es auch im Mockup nicht. Für das Beispiel <a href="#bsp-sharepoint-fallakte">Fallakte</a>
+        übernimmt der Prozess <code>sharepoint-testdaten.bpmn</code> diese Rolle: Er legt einen Antrag und die
+        Briefvorlage an, danach läuft «Fallakte anlegen» mit der <code>antragId</code>, die er hinterlässt.</p>
+      <p data-l="en"><b>Where it is more forgiving than SharePoint:</b> a list or library comes into being the
+        first time a task writes to it — <code>create-item</code> makes a list, <code>upload-file</code> and
+        <code>create-folder</code> a library — and its columns are the ones written to. On a real site a person
+        makes those beforehand. A list nobody has written to does not exist in the mockup either. For the
+        <a href="#bsp-sharepoint-fallakte">case file</a> example the process <code>sharepoint-testdaten.bpmn</code>
+        plays that part: it creates a request and the letter template, after which "Fallakte anlegen" runs with
+        the <code>antragId</code> it leaves behind.</p>
+      <p data-l="de"><b>Der Filter</b> von <code>list-items</code> ist eine benannte Teilmenge von OData:
+        <code>fields/Spalte eq|ne|gt|ge|lt|le Wert</code> mit Text in einfachen Anführungszeichen, einer Zahl,
+        <code>true</code>, <code>false</code> oder <code>null</code>; <code>startswith(fields/Spalte,'Text')</code>;
+        <code>and</code>, <code>or</code>, <code>not</code> und Klammern. Text wird ohne Rücksicht auf Gross- und
+        Kleinschreibung verglichen. Alles andere lehnt das Mockup ab, statt zu raten, was gemeint sein könnte.</p>
+      <p data-l="en"><b>The filter</b> of <code>list-items</code> is a stated subset of OData:
+        <code>fields/column eq|ne|gt|ge|lt|le value</code> with text in single quotes, a number, <code>true</code>,
+        <code>false</code> or <code>null</code>; <code>startswith(fields/column,'text')</code>; <code>and</code>,
+        <code>or</code>, <code>not</code> and parentheses. Text compares without regard to case. Anything else
+        the mockup refuses rather than guess what it might mean.</p>
+      <p data-l="de"><b>Was ein Lauf getan hat</b>, steht unter
+        <a href="/#/operations/mockups">Betrieb &rsaquo; Diagnostics &rsaquo; Mockups</a>: pro Worker eine Karte mit
+        jeder Liste als Tabelle ihrer Einträge, jeder Bibliothek mit ihren Dateien und Eigenschaften und darunter
+        die letzten 200 Operationen — abgelehnte rot, mit dem Grund. <b>Empty site</b> leert die Site für den
+        nächsten Versuch. Die Ansicht ist Administratoren vorbehalten, aus dem Grund, aus dem es das
+        Mock-Verzeichnis ist: Was ein Prozess hineinschreibt, ist erfunden, sieht aber aus wie echte Daten.</p>
+      <p data-l="en"><b>What a run did</b> is under
+        <a href="/#/operations/mockups">Operations &rsaquo; Diagnostics &rsaquo; Mockups</a>: one card per worker,
+        each list as a table of its items, each library with its files and properties, and underneath the newest
+        200 operations — refused ones in red, with the reason. <b>Empty site</b> clears the site for the next try.
+        The view is admin-only, for the reason the mock directory is: what a process writes into it is invented
+        but looks like real data.</p>
+
+      <div class="note warn">
+        <span class="lbl" data-l="de">Was das Mockup nicht kann</span><span class="lbl" data-l="en">What the mockup cannot do</span>
+        <p data-l="de" style="margin:.3em 0 0">Die Dateien einer Bibliothek sind im Mockup nicht als Listeneinträge
+          erreichbar (<code>get-item</code> auf eine Bibliothek wird abgelehnt), was SharePoint erlaubt. Berechtigungen,
+          Versionen und Inhaltstypen gibt es nicht, und ein Filter, den das Mockup annimmt, kann auf einer echten Site
+          trotzdem scheitern — etwa an einer Spalte ohne Index. Ein Prozess, der auf dem Mockup durchläuft, ist
+          ausprobiert, nicht abgenommen.</p>
+        <p data-l="en" style="margin:.3em 0 0">A library's files are not reachable as list items in the mockup
+          (<code>get-item</code> on a library is refused), which SharePoint allows. There are no permissions, versions
+          or content types, and a filter the mockup accepts can still fail on a real site — on a column without an
+          index, for instance. A process that runs through on the mockup has been tried out, not signed off.</p>
       </div>
 
       <div class="note">
