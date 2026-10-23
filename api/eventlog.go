@@ -15,7 +15,7 @@ import (
 )
 
 // The event log: the signals and messages that were sent, and where each arrived
-// (ADR-draft-event-log).
+// (ADR-0472).
 //
 // applyToState folds a row from every send, every reception, every start a send
 // caused, and every message the buffer kept, handed over or let expire. This route
@@ -44,7 +44,7 @@ const (
 var eventLogScan = 10_000
 
 // WithEventLogRetention sets how long a row of the event log is kept
-// (ADR-draft-event-log §4); the default is 30 days.
+// (ADR-0472 §4); the default is 30 days.
 func WithEventLogRetention(d time.Duration) Option {
 	return func(s *Server) {
 		if d > 0 {

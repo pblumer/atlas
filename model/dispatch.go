@@ -29,7 +29,7 @@ const (
 )
 
 // DispatchValue is the fact that a signal was broadcast or a message published, by
-// whom, and how far it reached (ADR-draft-event-log §1). It is written once per send,
+// whom, and how far it reached (ADR-0472 §1). It is written once per send,
 // on the command path and after the deliveries, so the counts are what the send did:
 // Reached the subscriptions whose element still waited, Started the instances it
 // started. A send that reached nobody is written with both zero.

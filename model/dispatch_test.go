@@ -3,7 +3,7 @@ package model
 import "testing"
 
 // TestADispatchRoundTrips: every field of a send comes back as it went in, a send that
-// reached nobody included (ADR-draft-event-log §1).
+// reached nobody included (ADR-0472 §1).
 func TestADispatchRoundTrips(t *testing.T) {
 	for _, in := range []*DispatchValue{
 		{Channel: DispatchSignal, Source: DispatchFromProcess, Name: "order.cancelled",
@@ -24,7 +24,7 @@ func TestADispatchRoundTrips(t *testing.T) {
 
 // TestTheReceptionsReadRecordsWrittenBeforeTheirSender: a signal reception's sender and
 // stale mark are appended fields, so a record written before them decodes them as zero,
-// and the fields before them are read as they always were (ADR-draft-event-log §2).
+// and the fields before them are read as they always were (ADR-0472 §2).
 func TestTheReceptionsReadRecordsWrittenBeforeTheirSender(t *testing.T) {
 	sig := &SignalSubscriptionValue{ProcessInstanceKey: 1, ElementInstanceKey: 2, SignalName: "go",
 		ProcessDefKey: 3, ElementId: 4, SenderProcessInstanceKey: 5, Stale: true}

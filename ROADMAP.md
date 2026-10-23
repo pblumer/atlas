@@ -941,7 +941,7 @@ Making processes wait, react, and time out.
   own sends and message event subprocesses, the Modeler's pickers offer what deployed models
   throw and send and tell a sending element who receives it, and MCP has `atlas_signals` and
   `atlas_message_names`.
-- ✅ **The event log** ([ADR-draft-event-log](docs/adr/draft-event-log.md)): every signal
+- ✅ **The event log** ([ADR-0472](docs/adr/0472-event-log.md)): every signal
   thrown and message sent, with its sender and how far it reached, every reception, start,
   keeping and expiry, folded from the log into a table kept for `--event-log-ttl` (30 days).
   *Operations → Diagnostics → Event log*, `GET /api/v1/event-log` and `atlas_event_log`; a row

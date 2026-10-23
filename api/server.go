@@ -668,7 +668,7 @@ type Server struct {
 	// keeps the default of 30 days. lastFeedPrune paces its prune like the receipts'.
 	eventFeedTTL  time.Duration
 	lastFeedPrune int64
-	// eventLogTTL is how long a row of the event log is kept (ADR-draft-event-log §4);
+	// eventLogTTL is how long a row of the event log is kept (ADR-0472 §4);
 	// zero keeps the default of 30 days. lastEventLogPrune paces its prune like the
 	// feed's.
 	eventLogTTL       time.Duration

@@ -29,7 +29,7 @@ func readEventLogBefore(t *testing.T, s *Store, partition uint16, before uint64)
 // TestTheEventLogHoldsEveryKindInPositionOrder: each kind of row comes back with its
 // time, its cause and its value, in position order from a cursor and newest first
 // before one, one partition's never among another's; a row cannot carry a value its
-// kind does not name, nor a message's payload (ADR-draft-event-log §3).
+// kind does not name, nor a message's payload (ADR-0472 §3).
 func TestTheEventLogHoldsEveryKindInPositionOrder(t *testing.T) {
 	s := openStore(t)
 	tx := s.NewTransaction()
@@ -87,7 +87,7 @@ func TestTheEventLogHoldsEveryKindInPositionOrder(t *testing.T) {
 
 // TestTheEventLogIsCutByItsRetention: the sweep's cut stops at the first row recorded
 // at or after the cutoff; a prune drops through its position and remembers the cut,
-// and a lower cut later changes nothing (ADR-draft-event-log §4).
+// and a lower cut later changes nothing (ADR-0472 §4).
 func TestTheEventLogIsCutByItsRetention(t *testing.T) {
 	s := openStore(t)
 	sent := &model.DispatchValue{Channel: model.DispatchMessage, Source: model.DispatchFromPublish, Name: "m"}

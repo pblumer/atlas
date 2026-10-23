@@ -745,7 +745,7 @@ const TOPNAV = {
       // What waits in the message buffer for a subscription that has not opened yet
       // (ADR-0370): the one place a message "from the past" can be seen before it arrives.
       { name: "Messages", route: "#/operations/messages", role: "operator" },
-      // What was actually sent and where it arrived (ADR-draft-event-log). Open to
+      // What was actually sent and where it arrived (ADR-0472). Open to
       // anybody: the route reads each row as its instance is read, so a project member
       // sees the rows of their projects and an operator every row.
       { name: "Event log", route: "#/operations/event-log", role: "any" },

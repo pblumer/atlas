@@ -7,7 +7,7 @@ import (
 
 // TestTheEventLogAndTheInventoriesViaTools: a message published through the tools is
 // in the event log, narrowed by channel, name and limit, and the grouped views of the
-// installation's own names answer through theirs (ADR-draft-event-log, ADR-0446,
+// installation's own names answer through theirs (ADR-0472, ADR-0446,
 // ADR-0447).
 func TestTheEventLogAndTheInventoriesViaTools(t *testing.T) {
 	ts := newAtlas(t)

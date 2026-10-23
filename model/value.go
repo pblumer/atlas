@@ -1254,7 +1254,7 @@ type SignalSubscriptionValue struct {
 	ProcessDefKey uint64
 	ElementId     int32
 	// SenderProcessInstanceKey is the instance whose throw a correlation delivered,
-	// set on SubscriptionCorrelated and on IntentSignalStarted (ADR-draft-event-log §2).
+	// set on SubscriptionCorrelated and on IntentSignalStarted (ADR-0472 §2).
 	// Stale marks a correlation that only cleared a subscription whose element no
 	// longer waited: no delivery, so no row in the event log. Both are appended
 	// fields: a record written before them ends after ElementId and decodes them as

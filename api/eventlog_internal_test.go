@@ -10,7 +10,7 @@ import (
 
 // TestTheEventLogIsPrunedByTheRetentionSweep: the sweep drops the rows older than the
 // retention through a prune fact, at most once an hour, and the page says how far it
-// was pruned (ADR-draft-event-log §4).
+// was pruned (ADR-0472 §4).
 func TestTheEventLogIsPrunedByTheRetentionSweep(t *testing.T) {
 	srv := eventServer(t, WithEventLogRetention(time.Hour))
 	var compErr, persistErr error

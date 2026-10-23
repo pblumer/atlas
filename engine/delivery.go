@@ -86,7 +86,7 @@ func handleDelivering(c *ProcessingContext) {
 	piKey := c.cmd.Key
 	pub := c.cmd.Value.subscription
 	// Every delivery that is not a retry is a send, recorded with how far it reached
-	// (ADR-draft-event-log §1): to an instance that is gone, to one where nothing
+	// (ADR-0472 §1): to an instance that is gone, to one where nothing
 	// waits, and to the elements it reached.
 	pi := c.GetProcessInstance(piKey)
 	if pi == nil {

@@ -12,7 +12,7 @@ import (
 
 // TestEveryEventLogRowRendersAsItsKind: each kind of row the table holds is answered
 // under its own kind, with the parties and the facts that kind has, and is read under
-// the definition it is about (ADR-draft-event-log §3, §5).
+// the definition it is about (ADR-0472 §3, §5).
 func TestEveryEventLogRowRendersAsItsKind(t *testing.T) {
 	defs := map[uint64]eventLogDef{2: {processID: "billing", name: "Billing", projectID: "p-1", version: 3}}
 	directed := &model.DispatchValue{Channel: model.DispatchMessage, Source: model.DispatchDirected, Name: "tool.reset",

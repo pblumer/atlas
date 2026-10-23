@@ -107,7 +107,7 @@
 > - **Replay is unchanged.** What earlier versions wrote stays on the log and replays as it
 >   was; the rule changes what is written from this version on.
 >
-> Found while building the event log ([ADR-draft-event-log](draft-event-log.md)), which
+> Found while building the event log ([ADR-0472](0472-event-log.md)), which
 > showed such a send as "reached 0" with no message kept. Tests:
 > `engine/stale_subscription_test.go`.
 

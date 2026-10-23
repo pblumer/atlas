@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// The event log (ADR-draft-event-log): what was sent and where it arrived, read as the
+// The event log (ADR-0472): what was sent and where it arrived, read as the
 // instances it is about are read (ADR-0275).
 
 const pingCatcherBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">

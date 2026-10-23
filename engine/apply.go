@@ -398,7 +398,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		// message's key, its expiry and its id — was frozen into the event at command
 		// time, so replay keeps and drops exactly what the live run did (I4, I6).
 		//
-		// Each also folds an event-log row (ADR-draft-event-log §3): a message kept, taken
+		// Each also folds an event-log row (ADR-0472 §3): a message kept, taken
 		// from the buffer, or expired while it still waited — never with its payload.
 		switch h.Intent {
 		case model.IntentMessageBuffered:
@@ -436,7 +436,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		//
 		// A correlation is a reception and an event-log row, unless it only cleared a
 		// subscription whose element no longer waited; a start a broadcast caused is a
-		// row and nothing else (ADR-draft-event-log §2).
+		// row and nothing else (ADR-0472 §2).
 		switch h.Intent {
 		case model.IntentSubscriptionCreated:
 			return tx.PutSignalSubscription(&v.signalSub)
@@ -455,7 +455,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// can replay it. The record carries everything (receiver, message, key);
 			// the timestamp and position come from this event's header, so replay
 			// rebuilds identical history — invariant I4, ADR-0038. The event log keeps
-			// the delivery too (ADR-draft-event-log §3).
+			// the delivery too (ADR-0472 §3).
 			if err := tx.RecordMessageFlow(h.Timestamp, h.Position, &v.messageFlow); err != nil {
 				return err
 			}
@@ -465,7 +465,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 	case model.VTDispatch:
 		if h.Intent == model.IntentDispatched {
 			// A send, with how far it reached, frozen into the event at command time
-			// (ADR-draft-event-log §1). It is a row of the event log and nothing else.
+			// (ADR-0472 §1). It is a row of the event log and nothing else.
 			return tx.PutEventLogRow(h.PartitionId, h.Position, h.Timestamp, h.SourcePos, state.EventLogDispatched, &v.dispatch)
 		}
 
@@ -487,7 +487,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.PruneFeed(h.PartitionId, v.feedRetention.Through)
 		}
 		if h.Intent == model.IntentEventLogPruned {
-			// The event log's cut, frozen the same way (ADR-draft-event-log §4).
+			// The event log's cut, frozen the same way (ADR-0472 §4).
 			return tx.PruneEventLog(h.PartitionId, v.feedRetention.Through)
 		}
 

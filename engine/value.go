@@ -56,7 +56,7 @@ type inflightValue struct {
 	// (ADR-0370). Its payload is a slice, so like migration it is a non-hot-path
 	// field: no token movement populates it.
 	message model.MessageValue
-	// dispatch rides on the record of a send (ADR-draft-event-log §1). It is written on
+	// dispatch rides on the record of a send (ADR-0472 §1). It is written on
 	// token movement — a throw — but holds only strings that already exist and fixed
 	// fields, so filling it allocates nothing.
 	dispatch model.DispatchValue

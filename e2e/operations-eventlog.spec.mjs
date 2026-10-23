@@ -1,4 +1,4 @@
-// End-to-end coverage for the Operations page *Event log* (ADR-draft-event-log). Drives
+// End-to-end coverage for the Operations page *Event log* (ADR-0472). Drives
 // the REAL page against a mocked /api/v1: a send stands at the head of its group with
 // the receptions it caused under it, a send nobody received is marked unless the buffer
 // kept it, an expiry is marked, instances and definitions link to their pages, the

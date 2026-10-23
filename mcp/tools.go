@@ -975,7 +975,7 @@ func runtimeTools() []Tool {
 		},
 		{
 			Name: "atlas_event_log",
-			Description: "The event log (ADR-draft-event-log): what was actually sent and where it arrived, newest " +
+			Description: "The event log (ADR-0472): what was actually sent and where it arrived, newest " +
 				"first — the runtime counterpart of atlas_signals and atlas_message_names. Each row has a 'kind': " +
 				"'signal.thrown' or 'message.sent' (a send: its 'source' — process, publish, inbound or directed — " +
 				"its 'sender' for a process, and 'reached' and 'started', both 0 for a send nobody received), " +

@@ -2,7 +2,7 @@ package engine
 
 import "github.com/pblumer/atlas/model"
 
-// The record a send leaves on the log (ADR-draft-event-log §1).
+// The record a send leaves on the log (ADR-0472 §1).
 //
 // A signal broadcast and a message publish each write one VTDispatch event after their
 // deliveries, so it says how far the send reached: the subscriptions whose element
@@ -45,7 +45,7 @@ func (c *ProcessingContext) appendDirectedDispatch(name, correlationKey string, 
 }
 
 // PruneEventLog enqueues dropping every event-log row of this partition at or before
-// through, a log position (ADR-draft-event-log §4). The cut is a fact, as the event
+// through, a log position (ADR-0472 §4). The cut is a fact, as the event
 // feed's is (feed.go): the event carries it and applyToState drops the rows, live and
 // on replay alike.
 func (p *Processor) PruneEventLog(through uint64) {

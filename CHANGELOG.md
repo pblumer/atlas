@@ -30,7 +30,7 @@ _Changed_ / _Removed_ for each version.
   correlation that only cleared a subscription whose element no longer waited is marked stale
   and is no reception. The log starts at the upgrade. A version before this one skips the new
   records on replay, so going back loses the log and nothing else
-  ([ADR-draft-event-log](docs/adr/draft-event-log.md)).
+  ([ADR-0472](docs/adr/0472-event-log.md)).
 - **The Events page shows the signals and messages of this installation.** Beside the
   catalogue of what atlas emits, the Console's *Events* page has a second section that
   lists every signal and message name the deployed models throw, send and receive: who

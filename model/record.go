@@ -168,7 +168,7 @@ const (
 	VTActionOutcome
 
 	// VTFeedRetention records how far a table folded from facts has been pruned: the
-	// event feed (ADR-0429 §5) with IntentFeedPruned, the event log (ADR-draft-event-log)
+	// event feed (ADR-0429 §5) with IntentFeedPruned, the event log (ADR-0472)
 	// with IntentEventLogPruned. Every row of the partition at or before Through is
 	// gone. Such a table is shortened by a fact of its own rather than by a delete
 	// nobody replays (I4). Appended last so every prior value type keeps its numeric
@@ -176,7 +176,7 @@ const (
 	VTFeedRetention
 
 	// VTDispatch is the fact that a signal was broadcast or a message published: by
-	// whom, under which name, and how far it reached (ADR-draft-event-log §1). One
+	// whom, under which name, and how far it reached (ADR-0472 §1). One
 	// record per send, a send that reached nobody included. It carries no payload.
 	// Appended last so every prior value type keeps its numeric value on the log; a
 	// version before it decodes it to no value and skips it on replay.
@@ -538,16 +538,16 @@ const (
 	// waited, and its id are gone.
 	IntentMessageExpired
 	// IntentDispatched is the fact that a signal was broadcast or a message published
-	// (VTDispatch, ADR-draft-event-log §1). Appended at the end so every prior intent
+	// (VTDispatch, ADR-0472 §1). Appended at the end so every prior intent
 	// keeps its numeric value on the log.
 	IntentDispatched
 	// IntentSignalStarted is the fact that a broadcast started an instance of a
 	// definition with a matching signal start event: the definition, its start
-	// element, the signal and the sender (VTSignal, ADR-draft-event-log §2). It changes
+	// element, the signal and the sender (VTSignal, ADR-0472 §2). It changes
 	// no subscription; the event log folds a row from it.
 	IntentSignalStarted
 	// IntentEventLogPruning is a command-only intent: the retention sweep asks the event
-	// log to drop its rows through a log position (ADR-draft-event-log §4).
+	// log to drop its rows through a log position (ADR-0472 §4).
 	IntentEventLogPruning
 	// IntentEventLogPruned is the fact that it did, with the position it was pruned
 	// through (VTFeedRetention).

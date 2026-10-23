@@ -1,4 +1,4 @@
-// The event log (ADR-draft-event-log): every signal thrown and message sent, and where
+// The event log (ADR-0472): every signal thrown and message sent, and where
 // each arrived, newest first.
 //
 // The Events page says what the deployed models could exchange; this page says what

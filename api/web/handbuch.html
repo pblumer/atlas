@@ -11863,7 +11863,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       <h3 id="ev-protokoll" data-l="de">Das Ereignisprotokoll</h3><h3 data-l="en">The event log</h3>
       <p data-l="de">Die Übersicht oben zeigt, was die Modelle austauschen <i>könnten</i>. Was tatsächlich geschah,
         zeigt das Ereignisprotokoll unter <a class="applink" href="/#/operations/event-log">Operations → Diagnostics →
-        Event log</a> (ADR-draft-event-log): jedes geworfene Signal und jede gesendete Nachricht, neueste zuerst, mit
+        Event log</a> (ADR-0472): jedes geworfene Signal und jede gesendete Nachricht, neueste zuerst, mit
         Absender, Zeitpunkt und Reichweite, also wie viele wartende Elemente sie erreicht und wie viele Instanzen sie
         gestartet hat. Darunter steht, wo sie ankam: der Empfang mit Prozess, Element und Instanz, ein Start, und bei
         einer Nachricht mit Lebensdauer, dass der Puffer sie aufbewahrt, später übergeben oder verfallen lassen hat. Ein
@@ -11873,7 +11873,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
         Protokoll.</p>
       <p data-l="en">The overview above shows what the models <i>could</i> exchange. What actually happened is in the
         event log under <a class="applink" href="/#/operations/event-log">Operations → Diagnostics → Event log</a>
-        (ADR-draft-event-log): every signal thrown and every message sent, newest first, with its sender, its moment and
+        (ADR-0472): every signal thrown and every message sent, newest first, with its sender, its moment and
         its reach, that is how many waiting elements it reached and how many instances it started. Under it stands where
         it arrived: the reception with process, element and instance, a start, and for a message with a time to live
         that the buffer kept it, handed it over later or let it expire. A send nobody received is marked; that is the

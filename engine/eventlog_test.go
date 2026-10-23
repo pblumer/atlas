@@ -13,7 +13,7 @@ import (
 	"github.com/pblumer/atlas/wal"
 )
 
-// The event log (ADR-draft-event-log): every send, every reception, every start a send
+// The event log (ADR-0472): every send, every reception, every start a send
 // caused, folded from the log into a table, oldest first here.
 
 func eventLog(t *testing.T, s *state.Store) []state.EventLogEntry {
@@ -138,7 +138,7 @@ func TestAThrowThatReachesNobodyIsLogged(t *testing.T) {
 // TestAStaleSubscriptionIsNoReception: a boundary whose host finished leaves its
 // subscription behind until a later broadcast clears it (lazy cleanup). That clearing is
 // no delivery: the correlation says it is stale, the log has no reception, and the send
-// counts nobody reached (ADR-draft-event-log §2).
+// counts nobody reached (ADR-0472 §2).
 func TestAStaleSubscriptionIsNoReception(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -270,7 +270,7 @@ func TestADeliveredMessageWithAnIdLeavesNoExpiry(t *testing.T) {
 }
 
 // TestTheEventLogIsPrunedByAFact: a prune through a position drops the rows up to it
-// and remembers the cut (ADR-draft-event-log §4).
+// and remembers the cut (ADR-0472 §4).
 func TestTheEventLogIsPrunedByAFact(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)

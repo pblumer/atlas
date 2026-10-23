@@ -2941,7 +2941,7 @@ func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, n
 // it reports so, and a publish with a time to live then buffers it (ADR-0370).
 // delivered is whether a subscription received the message or an instance was started
 // from it. from is who sent it: the send is recorded once, after its deliveries, with
-// how far it reached (ADR-draft-event-log §1).
+// how far it reached (ADR-0472 §1).
 func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue, from sender) (delivered bool) {
 	var matches []subscriptionMatch
 	c.p.fail(c.tx.CorrelatableSubscriptions(name, correlationKey, func(elKey uint64, v *model.MessageSubscriptionValue) error {
@@ -3076,7 +3076,7 @@ func (signalEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei 
 // from is the throwing element. Every correlation names it, a correlation that only
 // clears a subscription whose element no longer waits says so, each start the
 // broadcast causes is recorded, and the broadcast itself is recorded last, with how
-// far it reached (ADR-draft-event-log §1, §2).
+// far it reached (ADR-0472 §1, §2).
 func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableValue, from sender) {
 	type match struct {
 		elKey uint64

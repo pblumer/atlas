@@ -10,7 +10,7 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
-// The event log (ADR-draft-event-log §3): the signals and messages that were sent, and
+// The event log (ADR-0472 §3): the signals and messages that were sent, and
 // where each arrived, as state.
 //
 // applyToState folds one row per record — a send, a reception, a start, a message kept,

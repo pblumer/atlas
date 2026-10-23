@@ -270,7 +270,7 @@ func runServe(args []string) error {
 	// of finished instances behind is why they are reachable at all.
 	retentionInterval := fs.Duration("retention-interval", envDurationOr("ATLAS_RETENTION_INTERVAL", api.DefaultRetentionInterval), "how often the retention sweep runs (ADR-0115); with --retention-batch this bounds the drain rate of a backlog")
 	eventFeedTTL := fs.Duration("event-feed-ttl", envDuration("ATLAS_EVENT_FEED_TTL"), "how long a row of the event feed GET /api/v1/events serves is kept (ADR-0429 §5): a consumer whose cursor is older is answered 410 with the oldest cursor still held; 0 keeps the default of 720h")
-	eventLogTTL := fs.Duration("event-log-ttl", envDuration("ATLAS_EVENT_LOG_TTL"), "how long a row of the event log GET /api/v1/event-log serves is kept (ADR-draft-event-log §4): every signal thrown, message sent and where each arrived; 0 keeps the default of 720h")
+	eventLogTTL := fs.Duration("event-log-ttl", envDuration("ATLAS_EVENT_LOG_TTL"), "how long a row of the event log GET /api/v1/event-log serves is kept (ADR-0472 §4): every signal thrown, message sent and where each arrived; 0 keeps the default of 720h")
 	messageTTLMax := fs.Duration("message-ttl-max", envDuration("ATLAS_MESSAGE_TTL_MAX"), "the longest timeToLiveMs a published message may ask for (ADR-0370): a message nothing waits for yet is kept that long for a subscription that opens later, and a publish asking for more is refused with 400; 0 keeps the default of 168h")
 	triggerReceiptTTL := fs.Duration("trigger-receipt-ttl", envDuration("ATLAS_TRIGGER_RECEIPT_TTL"), "how long a directed trigger's receipt is kept (ADR-0425): a sender retrying the same triggerId within it gets the first instance back, one retrying after it starts a new one; 0 keeps the default of 720h")
 	retentionBatch := fs.Int("retention-batch", envIntOr("ATLAS_RETENTION_BATCH", api.DefaultRetentionBatch), "how many finished instances one retention sweep evaluates (ADR-0115); the cap keeps a sweep from blocking the run loop, so raise it with the loop's headroom in mind")
@@ -515,7 +515,7 @@ type retentionConfig struct {
 	// feedTTL is how long a row of the event feed is kept (ADR-0429 §5); zero keeps
 	// the default of 30 days.
 	feedTTL time.Duration
-	// logTTL is how long a row of the event log is kept (ADR-draft-event-log §4); zero
+	// logTTL is how long a row of the event log is kept (ADR-0472 §4); zero
 	// keeps the default of 30 days.
 	logTTL time.Duration
 	// messageTTLMax is the longest time to live a published message may ask for

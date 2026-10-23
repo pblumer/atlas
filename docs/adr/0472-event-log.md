@@ -1,4 +1,4 @@
-# ADR-DRAFT: Atlas keeps a log of the signals and messages that were sent
+# ADR-0472: Atlas keeps a log of the signals and messages that were sent
 
 - **Status:** Accepted (2026-10-22)
 - **Implementation:** Landed
