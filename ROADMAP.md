@@ -628,7 +628,9 @@ The control-flow basics most real models use.
   Internet Options settings, by .NET's rules, so a group-policy proxy needs no
   configuration; and the Entra Worker signs with a certificate from the Windows
   certificate store by thumbprint, its key never read
-  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended). Still open: both are
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended), as does the SharePoint
+  Worker, which also takes a certificate as PEM
+  ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended). Still open: both are
   exercised on the CI's Windows runner, not yet behind a real group-policy proxy.
   **The mail Worker reads its mailbox** ([ADR-0438](docs/adr/0438-mailbox-worker.md)):
   an inbound watch on a mail Worker publishes the new mail of one folder as an Atlas

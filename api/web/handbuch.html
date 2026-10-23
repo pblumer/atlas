@@ -2218,12 +2218,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">43</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">44</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">43</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">44</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -4178,6 +4178,92 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             (<a href="#runbook-sql">runbook</a>). Note: the SQL types are <b>worker-only</b> – the engine builds no
             client and registers no handler for them, because the connection string <i>is</i> the credential, and the
             engine is never to hold it.</p>
+        </details>
+      </div>
+      <div class="bsp" id="bsp-sharepoint-fallakte">
+        <h4><span class="rz-emoji" aria-hidden="true">🗂️</span>
+          <span data-l="de">Fallakte: eine SharePoint-Liste und ihre Ablage</span><span data-l="en">Case file: a SharePoint list and its documents</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">SharePoint</span>
+          <span class="tag">list-items</span><span class="tag">upload-file</span><span class="tag">update-item</span>
+          <span class="tag" data-l="de">typisierte Spalten</span><span class="tag" data-l="en">typed columns</span>
+          <span class="tag" data-l="de">Seiten</span><span class="tag" data-l="en">paging</span>
+          <span class="tag">examples/sharepoint-fallakte/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Anträge werden in einer SharePoint-Liste erfasst, im Listenformular, das alle kennen. Zu
+              jedem Antrag legt atlas eine Fallakte an: einen Ordner in der Dokumentbibliothek mit einer
+              ausgefüllten Eingangsbestätigung darin. Der Antrag bekommt den Status «In Bearbeitung», eine
+              Markierung, wenn der Betrag hoch ist, und den Link auf seinen Ordner, und ein Protokoll hält fest,
+              dass die Akte angelegt wurde. Ist ein Antrag erledigt, räumt ein zweiter Prozess Ordner und Eintrag
+              wieder ab.</p>
+            <p data-l="en">Requests are entered in a SharePoint list, through the list form everybody knows. For
+              each request atlas creates a case file: a folder in the document library with a filled-in
+              confirmation letter in it. The request gets the status "In Bearbeitung", a flag when the amount is
+              high and the link to its folder, and a log records that the file was created. Once a request is
+              settled, a second process removes its folder and its entry again.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Eine Kette von <code>atlas:sharePointConnector</code>-Tasks, alle auf denselben Worker
+              <code>intranet</code>. <code>get-item</code> liest den Antrag über seine <code>antragId</code>,
+              <code>create-folder</code> legt den Ordner an, <code>download-file</code> holt die Briefvorlage,
+              ein FEEL-Script setzt mit <code>replace</code> Kunde und Nummer ein, <code>get-file</code> fragt,
+              ob der Brief schon abgelegt ist, <code>upload-file</code> legt ihn mit zwei Eigenschaften ab, und
+              <code>update-item</code> und <code>create-item</code> schreiben in die Listen. Der zweite Prozess
+              findet erledigte Anträge mit einem OData-Filter Seite für Seite (<code>list-items</code>,
+              <code>pageToken</code>) und löscht je Antrag in einer <b>parallelen Multi-Instance</b> erst den
+              Ordner, dann den Eintrag. Site und Listennamen stehen an einer Stelle, im ersten Script-Task.</p>
+            <p data-l="en">A chain of <code>atlas:sharePointConnector</code> tasks, all on the same worker
+              <code>intranet</code>. <code>get-item</code> reads the request by its <code>antragId</code>,
+              <code>create-folder</code> creates the folder, <code>download-file</code> fetches the letter
+              template, a FEEL script fills in customer and number with <code>replace</code>,
+              <code>get-file</code> asks whether the letter is already filed, <code>upload-file</code> files it
+              with two properties, and <code>update-item</code> and <code>create-item</code> write to the lists.
+              The second process finds settled requests with an OData filter page by page
+              (<code>list-items</code>, <code>pageToken</code>) and, in a <b>parallel multi-instance</b>, deletes
+              each one's folder first and its entry second. The site and the list names are in one place, the
+              first script task.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="bsp-more">
+          <summary><span data-l="de">Inbetriebnahme &amp; die Fallen im Modell</span><span data-l="en">Commissioning &amp; the traps in the model</span></summary>
+          <p data-l="de">App-Registrierung, Secret und Worker stehen im <a href="#runbook-sharepoint">Runbook
+            SharePoint</a>; der Worker heisst hier <code>intranet</code>. Welche Listen, Bibliotheken und Spalten
+            die Site braucht, steht in der Dokumentation des Prozesses und im README des Beispiels. Spalten
+            nennst du mit ihrem internen Namen, nicht mit der Überschrift, die die Liste zeigt.</p>
+          <p data-l="en">App registration, secret and worker are in the <a href="#runbook-sharepoint">SharePoint
+            runbook</a>; the worker is called <code>intranet</code> here. Which lists, libraries and columns the
+            site needs is in the process documentation and in the example's README. Columns are named by their
+            internal name, not by the heading the list shows.</p>
+          <p data-l="de"><b>Drei Dinge, die das Modell vormacht.</b> Ein Spaltenwert behält den Typ seines
+            FEEL-Werts: <code>=antrag.fields.Betrag &gt; 10000</code> kommt in der Ja/Nein-Spalte als Ja oder
+            Nein an, <code>=number(antragId)</code> in der Zahlenspalte als Zahl, und ein Ausdruck, der
+            <code>null</code> ergibt, leert die Spalte. Fehlt die Spalte Kunde, ist auch
+            <code>replace(…, null)</code> <code>null</code> – das <code>if</code> im Script verhindert einen
+            leeren Brief. Und ein Upload ersetzt, was am Pfad liegt; deshalb fragt <code>get-file</code> vorher,
+            damit ein von Hand angepasster Brief einen zweiten Lauf übersteht.</p>
+          <p data-l="en"><b>Three things the model shows.</b> A column value keeps the type of its FEEL value:
+            <code>=antrag.fields.Betrag &gt; 10000</code> arrives in the Yes/No column as Yes or No,
+            <code>=number(antragId)</code> in the number column as a number, and an expression that evaluates to
+            <code>null</code> clears the column. When the Kunde column is empty, <code>replace(…, null)</code> is
+            <code>null</code> too – the <code>if</code> in the script keeps the letter from being empty. And an
+            upload replaces what is at its path; that is why <code>get-file</code> asks first, so a letter edited
+            by hand survives a second run.</p>
+          <p data-l="de">Bis auf das Protokoll lässt sich jeder Schritt gefahrlos wiederholen: Ein vorhandener
+            Ordner gilt als angelegt, und ein Löschauftrag ohne Gegenstand meldet <code>deleted=false</code>
+            statt zu scheitern. <code>create-item</code> legt bei einem zweiten Lauf einen zweiten Eintrag an.
+            Wo das nicht tragbar ist, fragst du vorher mit <code>list-items</code> nach einer Spalte mit der
+            Antragsnummer.</p>
+          <p data-l="en">Every step but the log is safe to repeat: an existing folder counts as created, and a
+            delete with nothing to delete answers <code>deleted=false</code> instead of failing.
+            <code>create-item</code> creates a second entry on a second run. Where that is not acceptable, ask
+            with <code>list-items</code> for a column holding the request number first.</p>
         </details>
       </div>
       <h3 class="rz-group"><span data-l="de">Identität &amp; Verzeichnis</span><span data-l="en">Identity &amp; directory</span></h3>
@@ -7241,6 +7327,25 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           holds the certificate and its unencrypted private key as one PEM text. Upload the certificate to the app
           registration under <i>Certificates &amp; secrets</i>. Microsoft recommends this for apps that run unattended:
           the private key never leaves the worker, and only an assertion signed with it reaches the token endpoint.</p>
+        <p data-l="de">Auf einem Windows-Server kann <code>"certificateThumbprint"</code> stattdessen ein Zertifikat
+          nennen, das bereits im Speicher liegt (<code>CurrentUser\My</code> des Dienstkontos oder
+          <code>LocalMachine\My</code>), wie beim <a href="#runbook-entra">Entra-ID-Worker</a>. Der Schlüssel
+          signiert dort, auch wenn er als nicht exportierbar markiert ist. Das Secret enthält genau eine der drei
+          Angaben, und ein Zertifikat gilt nur bei <code>"method": "clientCredentials"</code>. Der Worker prüft das
+          Zertifikat beim Start; fehlt es oder darf das Dienstkonto den Schlüssel nicht lesen, startet er nicht und
+          nennt den Grund.</p>
+        <p data-l="en">On a Windows server, <code>"certificateThumbprint"</code> may instead name a certificate already
+          in the store (the service account's <code>CurrentUser\My</code>, or <code>LocalMachine\My</code>), as for
+          the <a href="#runbook-entra">Entra&nbsp;ID worker</a>. Its key signs there and may be non-exportable. The
+          secret carries exactly one of the three, and a certificate only with <code>"method":
+          "clientCredentials"</code>. The worker tries the certificate when it starts; if it is missing, or the
+          service account may not read its key, the worker does not start and says why.</p>
+        <p data-l="de">Die Rechte hängen an der App-Registrierung, nicht am Zertifikat: Meldet sich der
+          SharePoint-Worker mit der App des Entra-ID-Workers an, darf er auch Konten anlegen und sperren. Eine eigene
+          App nur mit den SharePoint-Berechtigungen trennt das.</p>
+        <p data-l="en">The rights belong to the app registration, not to the certificate: if the SharePoint worker
+          signs in as the Entra&nbsp;ID worker's app, it may also create and disable accounts. An app of its own,
+          holding only the SharePoint permissions, keeps the two apart.</p>
         <p data-l="de">Im Task nennst du die <b>Site</b> so, wie der Browser sie zeigt
           (<code>https://contoso.sharepoint.com/sites/hr</code>), als <code>contoso.sharepoint.com:/sites/hr</code>
           oder mit der Site-ID von Graph (<code>contoso.sharepoint.com,&lt;siteId&gt;,&lt;webId&gt;</code>). Gemeint
@@ -11762,7 +11867,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">43</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">43</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">44</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">44</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>
