@@ -432,6 +432,20 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes:       []int32{compiler.TeamsPhoneJobTypeIndex},
 	},
 	{
+		// A Google Contacts task finds, reads, lists, creates, updates or deletes a
+		// contact in an address book, labels one, or searches the organization's
+		// directory (ADR-draft-google-contacts-worker). Worker-only for Exchange's
+		// reason: the credential reads a person's whole address book — a service account
+		// with domain-wide delegation, or that person's own refresh token — and has no
+		// business on the engine's run loop. The record exists so an operator can add an
+		// address book in the Console and the supervised worker be provisioned from it
+		// (googleContactsWorkerEnv).
+		name:           connectorKindGoogleContacts,
+		workerOnly:     true,
+		validateCreate: validateGoogleContactsConnector,
+		jobTypes:       []int32{compiler.GoogleContactsJobTypeIndex},
+	},
+	{
 		// An Active Directory task performs one directory operation against a
 		// domain controller an operator configured here
 		// (ADR-0206). The URL lives in the record and the
@@ -693,7 +707,7 @@ func DefaultOffloadedKinds() []string {
 // flag, no restart of Atlas. That is what makes the tenant a Console entry rather than a
 // deployment change.
 func DefaultSupervisedWorkerOnlyKinds() []string {
-	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
+	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindGoogleContacts, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
 }
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
@@ -978,6 +992,19 @@ func validateTeamsPhoneConnector(p *createConnectorParams) string {
 	}
 	if p.CredentialsRef == "" {
 		return "a teamsphone worker requires a credentialsRef naming a vault bundle {tenantId, clientId, certificate} or {tenantId, clientId, certificateThumbprint}"
+	}
+	return ""
+}
+
+// validateGoogleContactsConnector checks an address book a Console operator is adding.
+// Whose address book it is and as whom lives in the vault bundle the credentialsRef
+// names — a service account with the Workspace user it acts as, or a refresh token — so
+// a record without one has nothing to read with. The endpoint is optional: empty is the
+// People API itself.
+func validateGoogleContactsConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if p.CredentialsRef == "" {
+		return "a googlecontacts worker requires a credentialsRef naming a vault bundle: {method: serviceAccount, clientEmail, privateKey, subject} or {method: refreshToken, clientId, clientSecret, refreshToken}"
 	}
 	return ""
 }

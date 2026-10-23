@@ -1119,6 +1119,25 @@ type ConnectorTaskDetail struct {
 	// task; ResultVar (above) receives the operation's answer.
 	TeamsPhoneOp   int32
 	TeamsPhoneArgs []RestKV
+	// Google Contacts fields (JobType == GoogleContactsJobType,
+	// ADR-draft-google-contacts-worker). Connector (above) names the configured address
+	// book, and GoogleContactsConnector carries it as literal-or-FEEL when a model picks
+	// the account at runtime. GoogleContactsOp is the interned operation — a row of
+	// connector/googlecontacts/catalog. ContactID, Query, Field and Group are the
+	// literal-or-FEEL values the operation takes; GoogleContactsContact is the authored
+	// contact object compiled from the model's JSON template to one FEEL context at
+	// deploy (I5), and GoogleContactsContactVar names the variable holding it instead.
+	// GoogleContactsMaxResults bounds a listing, with its default applied, and is zero on
+	// every other operation. All are the zero value for a task of another kind.
+	GoogleContactsConnector  RestExpr
+	GoogleContactsOp         int32
+	GoogleContactsContactID  RestExpr
+	GoogleContactsQuery      RestExpr
+	GoogleContactsField      RestExpr
+	GoogleContactsGroup      RestExpr
+	GoogleContactsContact    RestExpr
+	GoogleContactsContactVar int32
+	GoogleContactsMaxResults int32
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

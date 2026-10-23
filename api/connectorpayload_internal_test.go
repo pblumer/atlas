@@ -17,6 +17,7 @@ import (
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/exchange"
+	"github.com/pblumer/atlas/connector/googlecontacts"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
@@ -653,6 +654,7 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 		{"compiler.S3JobTypeIndex", s3.Job{}},
 		{"compiler.ExchangeJobTypeIndex", exchange.Job{}},
 		{"compiler.TeamsPhoneJobTypeIndex", teamsphone.Job{}},
+		{"compiler.GoogleContactsJobTypeIndex", googlecontacts.Job{}},
 	} {
 		t.Run(tc.arm, func(t *testing.T) {
 			sent, ok := arms[tc.arm]
@@ -846,6 +848,8 @@ func payloadArmCases(t *testing.T) map[int32]bool {
 		"ExchangeJobTypeIndex":      compiler.ExchangeJobTypeIndex,
 		"TeamsPhoneJobTypeIndex":    compiler.TeamsPhoneJobTypeIndex,
 		"SharePointOpsJobTypeIndex": compiler.SharePointOpsJobTypeIndex,
+
+		"GoogleContactsJobTypeIndex": compiler.GoogleContactsJobTypeIndex,
 	}
 	if len(indexByConstName) != int(compiler.ReservedJobTypeCount()) {
 		t.Fatalf("this table names %d job-type constants but the compiler reserves %d; "+
