@@ -288,6 +288,14 @@ stood. An administrator passes, because an administrator reaches every Worker.
   is not written into the record: a failure is a fact about now, a restart learns it again
   at the next read, and persisting it would put fsyncs on the single writer for a value
   nothing replays.
+- **The process receives the mail as one object, `mail`** (changed 2026-10-23). The
+  envelope above was seeded as that many top-level variables, so a message catch event
+  waiting for a reply overwrote any process variable called `from`, `to` or `subject`, and
+  the mail could not be handed on whole to a form, a decision or a subprocess. The
+  instance now receives exactly one variable, `mail` (`mail.from`, `mail.auth.dmarc`,
+  `mail.messageId`), with the same fields as before. A watch's correlation key binds the
+  flat names as it did and `mail` beside them, so a key written as `internetMessageId`
+  keeps correlating. A model that read `from` directly reads `mail.from` now.
 - **What could not be verified here** is the open question above: the provider-side setup,
   and Graph answering `internetMessageHeaders` on a list. The handbook and the setup panel
   say in so many words that those steps come from the providers' documentation.

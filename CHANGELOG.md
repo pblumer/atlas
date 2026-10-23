@@ -215,6 +215,14 @@ governs a Worker:
 
 ### Changed
 
+- **A mail watch hands the mail to the process as one object, `mail`.** The instance
+  receives `mail.from`, `mail.subject`, `mail.to`, `mail.auth.dmarc`, `mail.messageId`
+  and the other envelope fields under one variable, instead of each as a variable of its
+  own, which overwrote a process's own `from`, `to` or `subject` when a reply arrived at a
+  catch event. **A model that reads a mail field directly must read it under `mail`
+  now** — `from` becomes `mail.from`, and a mail task's `messageId` becomes
+  `mail.messageId`. A watch's correlation key is unchanged: it sees the flat names as
+  before, and `mail` beside them ([ADR-0438](docs/adr/0438-mailbox-worker.md)).
 - **A governed SharePoint Worker asks before it acts.** When its Worker has an identity
   policy, the SharePoint Worker asks Atlas before each action, and in delegated mode
   calls Graph only with the token Atlas released for that action.
