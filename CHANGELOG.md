@@ -14,6 +14,34 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A task form can search a directory instead of listing it.** A textfield with an
+  `atlasDataSource` block is a directory field: in the Tasks app the person types a name or
+  an e-mail address, sees at most one page of matches (25 by default) from Microsoft Entra
+  ID, narrowed by another field of the form such as the department, and the task completes
+  with the chosen entry's object id — never its label, and never a listing in a process
+  variable. `POST /api/v1/tasks/{key}/form-data/{field}/query` answers only somebody who may
+  work on the task; which Worker, resource and properties are searched is read from the
+  stored form, the request may name none of them, and the search is rate-limited per
+  person. Nothing about a search is written to the log
+  ([ADR-draft-form-remote-data-sources](docs/adr/draft-form-remote-data-sources.md)).
+- **The Worker protocol carries a query beside the job.** A Worker Instance long-polls
+  `POST /api/v1/worker-queries/activate` and answers `POST /api/v1/worker-queries/{id}/answer`,
+  under the same `worker` scope as the job routes; a query is held only in the server's
+  memory while somebody waits on it, routed to an Instance reporting the Worker it names,
+  and fenced by a lease token. The Entra Worker answers user lookups with `startswith`
+  over allowlisted properties and equality filters, OData literals escaped, one page and
+  Graph's own continuation, sealed into an opaque cursor before it reaches the browser.
+- **Forms may search, per Worker.** An Entra Worker's dialog in the Console has a
+  **Forms may search** switch (`formLookups`), off until its editors turn it on: a form
+  can name any Worker, but only one opened this way answers its searches.
+- **The form editor configures a directory field without JSON.** **＋ Directory field**
+  adds one, and a panel above the properties of a selected text field chooses the source,
+  the Worker, the properties searched and shown, filters bound to another field or fixed,
+  the page size and how the choice is checked. The Validate tab and the Design preview
+  search made-up people and say so; no directory is asked while a form is designed.
+- **Example: pick a person and read their manager.** `examples/entra-benutzerauswahl` is the
+  process `Process_mvjoqvisfajk` without its `list-users` step: a department, a directory
+  search, the object id into `user`, and `get-user-manager` with `userId="= user"`.
 - **The event log shows what was sent and where it arrived.** *Operations → Diagnostics →
   Event log* lists every signal thrown and every message sent, newest first: the sender, the
   moment, how many waiting elements it reached and how many instances it started, and under
@@ -64,7 +92,6 @@ _Changed_ / _Removed_ for each version.
   shown as the Worker's problem and is not handed to the supervised worker. The Secrets
   panel checks the new field ([ADR-0141](docs/adr/0141-sharepoint-connector.md),
   amended).
-
 - **An example for the SharePoint operations: the case file.** `examples/sharepoint-fallakte`
   turns a request entered in a SharePoint list into a case file — it reads the request
   (`get-item`), creates its folder (`create-folder`), fills in a letter template from a
@@ -79,6 +106,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Completing a task checks a directory field's value first.** A value that is not an
+  object id, or an object where an id was expected, is refused with 400; by default the
+  entry is looked up once more under the field's filters, and one the directory no longer
+  holds is refused with 422, while a directory that cannot be asked is a 503 that completes
+  nothing. A form without a directory field completes exactly as before.
+- **A public link refuses a form with a directory field.** Nobody is signed in there to
+  search, and checking a typed id would tell an anonymous visitor who is in the directory.
+- **A form is checked for its directory fields when it is saved.** An `atlasDataSource`
+  naming a source, a property or a version this server cannot honour is refused with the
+  reason.
 - **Message sources name what a model sends, and every deployed version.**
   `GET /api/v1/message-sources` has a fourth kind of row, `process-throw`: a deployed
   process that sends the name with a message throw or end event or a send task. A message

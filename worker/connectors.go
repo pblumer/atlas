@@ -15,9 +15,11 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/envname"
 	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
+	"github.com/pblumer/atlas/connector/lookup"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/rest"
@@ -61,7 +63,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 	if env == nil {
 		env = func(string) string { return "" }
 	}
-	built := Connectors{Handlers: map[string]Exec{}}
+	built := Connectors{Handlers: map[string]Exec{}, Queries: map[string]QueryFunc{}}
 	for _, kind := range kinds {
 		switch kind {
 		case "csv":
@@ -293,6 +295,12 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.EntraJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunEntraJob(ctx, j, reg)
 			})
+			// The same tenants answer a form's directory search, under the same
+			// credential and never anywhere else: the server routes a query only to an
+			// Instance reporting the tenant it names.
+			built.Queries[compiler.EntraJobType] = func(ctx context.Context, connector string, q lookup.Query) (lookup.Page, error) {
+				return entra.RunLookup(ctx, connector, q, reg)
+			}
 		case "teamsphone":
 			reg, names, err := teamsPhoneRegistryFromEnv(env)
 			if err != nil {
@@ -527,7 +535,11 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 // to show the names configured nowhere (ADR-0168).
 type Connectors struct {
 	Handlers map[string]Exec
-	Names    []string
+	// Queries are the form lookups the configured kinds answer, keyed by job type
+	// (ADR-draft-form-remote-data-sources). A kind that answers them serves jobs too, and
+	// answers them for the same Workers.
+	Queries map[string]QueryFunc
+	Names   []string
 	// Unconfigured are kinds this worker was asked to serve and holds no
 	// configuration for, so it does not subscribe to them. It is reported at startup
 	// rather than swallowed: "mail is not being served here" is the answer to why a

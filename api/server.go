@@ -94,12 +94,14 @@ import (
 	"github.com/pblumer/atlas/api/decisiondoc"
 	"github.com/pblumer/atlas/api/feelgen"
 	"github.com/pblumer/atlas/api/formgen"
+	"github.com/pblumer/atlas/api/formlookup"
 	"github.com/pblumer/atlas/api/order"
 	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
 	"github.com/pblumer/atlas/api/releasenotes"
 	"github.com/pblumer/atlas/api/token"
 	"github.com/pblumer/atlas/api/vault"
+	"github.com/pblumer/atlas/api/workerquery"
 )
 
 // dmnResolverFromEnv picks the DMN model source. When ATLAS_DMN_RESOLVER_URL is
@@ -362,6 +364,16 @@ type Server struct {
 	// loop, because it owns no state: it stores nothing, and the three closures in
 	// formgeneration.go are its whole reach into this server.
 	formGen *formgen.Service
+	// formLookup serves a task form's remote data sources, and workerQueries the
+	// Worker Instances that answer them through queryBroker — the protocol's
+	// non-durable message kind beside the job (ADR-draft-form-remote-data-sources).
+	// None of the three holds a run loop or reaches the log: a lookup is a query that
+	// lives as long as the request waiting on it. formlookups.go is their whole
+	// reach into this server.
+	formLookup    *formlookup.Service
+	workerQueries *workerquery.Service
+	queryBroker   *workerquery.Broker
+	lookupRate    *rateLimiter
 	// feelGen writes a FEEL expression from a conversation with the author
 	// (ADR-0445). Like formGen it owns no state and holds no run
 	// loop; feelgeneration.go is its whole reach into this server.
@@ -1940,6 +1952,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	for _, opt := range opts {
 		opt(s)
 	}
+	s.newFormLookups()
 	// The Playground's sandboxes are engines of their own, so the registry is not
 	// behind this server's run loop — but *finding* the model a session runs is
 	// design-time state and authorization, and both stay here

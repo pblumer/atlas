@@ -200,6 +200,13 @@ type Options struct {
 	// configured nowhere (ADR-0168). Empty for a worker that serves only plain job
 	// types, which need no credential of their own.
 	Connectors []string
+	// Queries are the form lookups this worker answers, keyed by the job type of the
+	// Worker Type answering them (ADR-draft-form-remote-data-sources). A query is not a
+	// job: nothing about it is durable, and it is polled on a path of its own beside the
+	// job poll, under the same identity and for the same Workers.
+	Queries map[string]QueryFunc
+	// MaxQueries is how many queries of one type this worker answers at once.
+	MaxQueries int
 	// HTTP is the client to use; nil means a default one bounded by Lease + Wait.
 	HTTP *http.Client
 }
@@ -212,6 +219,10 @@ const (
 	DefaultWait    = 30 * time.Second
 	DefaultMaxJobs = 1
 	DefaultRetry   = 5 * time.Second
+	// DefaultMaxQueries is higher than DefaultMaxJobs on purpose: a query is one short
+	// read that a person is waiting on, and a second person searching should not wait
+	// for the first.
+	DefaultMaxQueries = 4
 )
 
 // Worker leases jobs of the types it handles and reports what happened. Build one
@@ -220,6 +231,8 @@ type Worker struct {
 	opts  Options
 	http  *http.Client
 	types []string
+	// queryTypes are the job types this worker answers queries for, sorted.
+	queryTypes []string
 }
 
 // New builds a worker, filling in defaults.
@@ -236,6 +249,9 @@ func New(opts Options) *Worker {
 	if opts.Retry <= 0 {
 		opts.Retry = DefaultRetry
 	}
+	if opts.MaxQueries <= 0 {
+		opts.MaxQueries = DefaultMaxQueries
+	}
 	w := &Worker{opts: opts, http: opts.HTTP}
 	if w.http == nil {
 		// One request may block for a whole poll and is followed by the work itself, so
@@ -246,6 +262,10 @@ func New(opts Options) *Worker {
 		w.types = append(w.types, t)
 	}
 	sort.Strings(w.types) // stable order, so a run is reproducible
+	for t := range opts.Queries {
+		w.queryTypes = append(w.queryTypes, t)
+	}
+	sort.Strings(w.queryTypes)
 	return w
 }
 
@@ -253,7 +273,7 @@ func New(opts Options) *Worker {
 // slow queue never starves another, and each type runs up to MaxJobs jobs at once.
 // Run returns only once every job it started has returned.
 func (w *Worker) Run(ctx context.Context) error {
-	if len(w.types) == 0 {
+	if len(w.types) == 0 && len(w.queryTypes) == 0 {
 		return errors.New("worker: no job types to handle; give it at least one --handle type=command")
 	}
 	var wg sync.WaitGroup
@@ -262,6 +282,13 @@ func (w *Worker) Run(ctx context.Context) error {
 		go func() {
 			defer wg.Done()
 			w.serve(ctx, jobType)
+		}()
+	}
+	for _, jobType := range w.queryTypes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w.serveQueries(ctx, jobType)
 		}()
 	}
 	wg.Wait()

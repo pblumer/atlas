@@ -5777,6 +5777,13 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	if s.refuseTaskWork(w, auth, authErr) {
 		return
 	}
+	// A directory field's value is the business decision, so it is checked before it
+	// becomes one: its shape, and by default the directory once more
+	// (ADR-draft-form-remote-data-sources). Off the run loop; a form without such a
+	// field is not looked at.
+	if s.checkTaskSubmission(w, r, key, body) {
+		return
+	}
 	var (
 		found  bool
 		runErr error
