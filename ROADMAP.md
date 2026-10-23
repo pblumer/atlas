@@ -637,8 +637,9 @@ The control-flow basics most real models use.
   account (the record's open question), and a form-lookup provider so a person picks a
   customer in a task form ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
   **Proposed: Paperless-ngx Worker** ([ADR draft](docs/adr/draft-paperless-ngx-worker.md)):
-  reference-only document search, authenticated presentation and safe metadata operations
-  before a separately designed streamed upload path. OCR text and document bytes must
+  reference-only document search, authenticated presentation, safe metadata operations
+  and retry-safe `add-correspondent` (lookup/create with conflict recovery) before a
+  separately designed streamed upload path. OCR text and document bytes must
   not enter process variables/WAL by default. Slice A is an executable search →
   human-review workflow; Slice C depends on an explicitly authorized external
   document source and retry/duplicate reconciliation. No implementation has landed.
