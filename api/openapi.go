@@ -567,6 +567,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/action-approvals", s.handleInstanceActionApprovals, apiOp{
 			summary: "The approvals an instance's actions asked for, with every answer; an operator sees all, anybody else those they may answer or that were asked on their behalf", tag: "Authorization", role: RoleUser,
 			resp: jsonBody("Approval requests with their answers", tArray())}},
+		{"GET", "/api/v1/me/action-approvals", s.handleMyActionApprovals, apiOp{
+			summary: "The open approvals the caller may answer and those asked on their behalf, across every instance, soonest-expiring first, with the caller's own standing answer (people only)", tag: "Authorization", role: RoleUser,
+			resp: jsonBody("Open approval requests with their answers, the caller's role and answer, and the standing grants", tArray())}},
 		{"POST", "/api/v1/instances/{key}/action-approvals/{approval}/decide", s.handleDecideActionApproval, apiOp{
 			summary: "Answer an action approval as a person in its approver group, or withdraw your answer; nobody approves an action that would run for themselves", tag: "Authorization", role: RoleUser,
 			req: jsonBody("granted, rejected or withdrawn, and an optional reason", schemaObj(map[string]any{

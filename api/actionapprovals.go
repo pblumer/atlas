@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -83,32 +84,36 @@ func (s *Server) handleInstanceAuthorizations(w http.ResponseWriter, r *http.Req
 
 // approvalView is one approval request with every answer it has had.
 type approvalView struct {
-	ApprovalKey   uint64       `json:"approvalKey"`
-	JobKey        uint64       `json:"jobKey"`
-	DecisionKey   uint64       `json:"decisionKey"`
-	RequestedAt   int64        `json:"requestedAt"`
-	ExpiresAt     int64        `json:"expiresAt"`
-	RequestedBy   string       `json:"requestedBy"`
-	ApproverGroup string       `json:"approverGroup"`
-	Approvals     uint8        `json:"approvals"`
-	PolicyID      string       `json:"policyId"`
-	PolicyVersion uint32       `json:"policyVersion"`
-	ObligationID  string       `json:"obligationId"`
-	Worker        string       `json:"worker"`
-	Operation     string       `json:"operation"`
-	Resource      string       `json:"resource"`
-	ActionDigest  string       `json:"actionDigest"`
-	Answers       []answerView `json:"answers"`
-	Open          bool         `json:"open"`
-	request       model.ActionApprovalValue
+	ProcessInstanceKey uint64       `json:"processInstanceKey"`
+	ApprovalKey        uint64       `json:"approvalKey"`
+	JobKey             uint64       `json:"jobKey"`
+	DecisionKey        uint64       `json:"decisionKey"`
+	RequestedAt        int64        `json:"requestedAt"`
+	ExpiresAt          int64        `json:"expiresAt"`
+	RequestedBy        string       `json:"requestedBy"`
+	ApproverGroup      string       `json:"approverGroup"`
+	Approvals          uint8        `json:"approvals"`
+	PolicyID           string       `json:"policyId"`
+	PolicyVersion      uint32       `json:"policyVersion"`
+	ObligationID       string       `json:"obligationId"`
+	Worker             string       `json:"worker"`
+	Operation          string       `json:"operation"`
+	Resource           string       `json:"resource"`
+	ActionDigest       string       `json:"actionDigest"`
+	Answers            []answerView `json:"answers"`
+	Open               bool         `json:"open"`
+	request            model.ActionApprovalValue
 }
 
 type answerView struct {
 	Kind      string `json:"kind"`
 	Principal string `json:"principal"`
-	Outcome   string `json:"outcome,omitempty"`
-	At        int64  `json:"at"`
-	Reason    string `json:"reason,omitempty"`
+	// Name is the principal as a person reads it; only the caller's own worklist
+	// resolves it.
+	Name    string `json:"name,omitempty"`
+	Outcome string `json:"outcome,omitempty"`
+	At      int64  `json:"at"`
+	Reason  string `json:"reason,omitempty"`
 }
 
 // approvalsOf folds an instance's approval facts into requests with their answers.
@@ -118,7 +123,7 @@ func approvalsOf(facts []model.ActionApprovalValue, now int64) []approvalView {
 	for _, f := range facts {
 		if f.Kind == model.ApprovalRequested {
 			byKey[f.ApprovalKey] = &approvalView{
-				ApprovalKey: f.ApprovalKey, JobKey: f.JobKey, DecisionKey: f.DecisionKey, RequestedAt: f.At,
+				ProcessInstanceKey: f.ProcessInstanceKey, ApprovalKey: f.ApprovalKey, JobKey: f.JobKey, DecisionKey: f.DecisionKey, RequestedAt: f.At,
 				ExpiresAt: f.ExpiresAt, RequestedBy: f.RequestedBy, ApproverGroup: f.ApproverGroup,
 				Approvals: f.Approvals, PolicyID: f.PolicyID, PolicyVersion: f.PolicyVersion, ObligationID: f.ObligationID,
 				Worker: f.Worker, Operation: f.Operation, Resource: f.Resource, ActionDigest: f.ActionDigest,
@@ -172,6 +177,138 @@ func (s *Server) handleInstanceActionApprovals(w http.ResponseWriter, r *http.Re
 		}
 	}
 	httpapi.JSON(w, http.StatusOK, out)
+}
+
+// myApprovalView is an open approval as the person reading their worklist sees it:
+// what they may do about it, what they already said, and where it stands.
+type myApprovalView struct {
+	approvalView
+	ProcessID         string `json:"processId,omitempty"`
+	RequestedByName   string `json:"requestedByName"`
+	ApproverGroupName string `json:"approverGroupName"`
+	// Role is "approver" when the caller is in the approver group and may answer, and
+	// "requester" when the action would run for the caller, who may never answer it.
+	Role string `json:"role"`
+	// MyAnswer is the caller's standing answer; a withdrawn one is no answer.
+	MyAnswer *answerView `json:"myAnswer,omitempty"`
+	// Granted counts the people whose grant stands, Rejected says whether a rejection
+	// does. They describe the answers given, not the decision: the policy decides when
+	// the action is next authorized, on the approvers' group membership at that time.
+	Granted  int  `json:"granted"`
+	Rejected bool `json:"rejected"`
+}
+
+// maxMyApprovals bounds one worklist. The soonest-expiring requests come first, so
+// a person who has more open than this sees the most urgent.
+const maxMyApprovals = 200
+
+// errStopScan ends the scan of open requests once a worklist is full.
+var errStopScan = errors.New("worklist full")
+
+// standingAnswers folds an approval's answers into each principal's standing one: a
+// withdrawal cancels the answer before it.
+func standingAnswers(answers []answerView) map[string]answerView {
+	out := map[string]answerView{}
+	for _, a := range answers {
+		if a.Kind == model.ApprovalDecided.String() {
+			out[a.Principal] = a
+		} else {
+			delete(out, a.Principal)
+		}
+	}
+	return out
+}
+
+// handleMyActionApprovals lists the open approvals the caller may answer, and the
+// ones asked on the caller's behalf, across every instance. Open requests are read
+// through their expiry index, so the work is bounded by what is open now, not by
+// every approval ever recorded. Group membership is read now, as the decide route
+// reads it.
+func (s *Server) handleMyActionApprovals(w http.ResponseWriter, r *http.Request) {
+	p := httpapi.PrincipalFrom(r.Context())
+	if p == nil || !strings.HasPrefix(p.UserID, "usr_") {
+		httpapi.Error(w, http.StatusForbidden, "approvals are answered by people; this principal has no worklist")
+		return
+	}
+	groups, err := s.groups.idsForUser(p.UserID)
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out := []myApprovalView{}
+	var scanErr error
+	s.do(func() {
+		now := s.now()
+		seen := map[uint64][]approvalView{}
+		scanErr = s.store.OpenApprovalRequests(now, func(piKey, approvalKey uint64) error {
+			all, read := seen[piKey]
+			if !read {
+				var facts []model.ActionApprovalValue
+				if err := s.store.ApprovalFacts(piKey, func(v *model.ActionApprovalValue) error {
+					facts = append(facts, *v)
+					return nil
+				}); err != nil {
+					return err
+				}
+				all = approvalsOf(facts, now)
+				seen[piKey] = all
+			}
+			for _, a := range all {
+				if a.ApprovalKey != approvalKey || !a.Open {
+					continue
+				}
+				role := ""
+				switch {
+				case a.RequestedBy == p.UserID:
+					role = "requester"
+				case containsString(groups, a.ApproverGroup):
+					role = "approver"
+				default:
+					continue
+				}
+				out = append(out, s.myApproval(a, role, p.UserID))
+			}
+			if len(out) >= maxMyApprovals {
+				return errStopScan
+			}
+			return nil
+		})
+	})
+	if scanErr != nil && !errors.Is(scanErr, errStopScan) {
+		httpapi.Error(w, http.StatusInternalServerError, scanErr.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, out)
+}
+
+// myApproval is an open approval as the caller reads it: names resolved, their own answer picked out, the
+// standing answers counted. Run on the loop.
+func (s *Server) myApproval(a approvalView, role, caller string) myApprovalView {
+	v := myApprovalView{approvalView: a, Role: role,
+		RequestedByName: s.principalName(a.RequestedBy), ApproverGroupName: s.groupNames(a.ApproverGroup)}
+	if pi, ok, err := s.store.ProcessInstance(a.ProcessInstanceKey); err == nil && ok {
+		if d, ok := s.deployments[pi.ProcessDefKey]; ok {
+			v.ProcessID = d.ProcessID
+		}
+	}
+	v.Answers = make([]answerView, len(a.Answers))
+	for i, ans := range a.Answers {
+		ans.Name = s.principalName(ans.Principal)
+		v.Answers[i] = ans
+	}
+	for principal, ans := range standingAnswers(v.Answers) {
+		switch ans.Outcome {
+		case model.ApprovalOutcomeGranted.String():
+			v.Granted++
+		case model.ApprovalOutcomeRejected.String():
+			v.Rejected = true
+		}
+		if principal == caller {
+			mine := ans
+			v.MyAnswer = &mine
+		}
+	}
+	return v
 }
 
 // handleDecideActionApproval records a person's answer to an approval, or the

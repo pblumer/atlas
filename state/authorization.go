@@ -1,6 +1,8 @@
 package state
 
 import (
+	"encoding/binary"
+
 	"github.com/cockroachdb/pebble"
 	"github.com/pblumer/atlas/model"
 )
@@ -14,6 +16,12 @@ import (
 //
 //	authz:<piKey>:<jobKey>:<pos>    → AuthorizationValue
 //	apr:<piKey>:<approvalKey>:<pos> → ActionApprovalValue
+//	aprExp:<expiresAt>:<approvalKey> → piKey
+//
+// The third is an index: every approval request, by when it expires. "Which approvals
+// are open now" — the approver's inbox, across every instance — is then a range read
+// from now, as long as the open requests and no longer, rather than a scan of every
+// approval fact ever recorded.
 //
 // The job key sits before the position so "was this job's current lease permitted" is
 // a scan of one job's decisions, not of the instance's. Both families are declared with
@@ -45,10 +53,43 @@ func (t *Tx) RecordAuthorization(pos uint64, v *model.AuthorizationValue) error 
 	return t.b.Set(keyAuthorization(v.ProcessInstanceKey, v.JobKey, pos), t.encodeValue(v), nil)
 }
 
-// RecordApprovalFact retains one fact about an approval. Written from applyToState
-// only.
+func keyApprovalExpiry(expiresAt int64, approvalKey uint64) []byte {
+	if expiresAt < 0 {
+		expiresAt = 0
+	}
+	return appendBE64(appendBE64([]byte{byte(cfApprovalExpiry)}, uint64(expiresAt)), approvalKey)
+}
+
+// RecordApprovalFact retains one fact about an approval, and indexes a request by its
+// expiry. Written from applyToState only.
 func (t *Tx) RecordApprovalFact(pos uint64, v *model.ActionApprovalValue) error {
-	return t.b.Set(keyApprovalFact(v.ProcessInstanceKey, v.ApprovalKey, pos), t.encodeValue(v), nil)
+	if err := t.b.Set(keyApprovalFact(v.ProcessInstanceKey, v.ApprovalKey, pos), t.encodeValue(v), nil); err != nil {
+		return err
+	}
+	if v.Kind != model.ApprovalRequested {
+		return nil
+	}
+	return t.b.Set(keyApprovalExpiry(v.ExpiresAt, v.ApprovalKey), appendBE64(nil, v.ProcessInstanceKey), nil)
+}
+
+// deleteApprovalExpiries removes the expiry index entries of an instance's requests,
+// before its approval facts — which say where those entries are — are purged.
+func (t *Tx) deleteApprovalExpiries(piKey uint64) error {
+	var keys [][]byte
+	if err := t.ApprovalFactsInBatch(piKey, func(v *model.ActionApprovalValue) error {
+		if v.Kind == model.ApprovalRequested {
+			keys = append(keys, keyApprovalExpiry(v.ExpiresAt, v.ApprovalKey))
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	for _, k := range keys {
+		if err := t.b.Delete(k, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ApprovalFactsInBatch folds an instance's approval facts as this transaction sees
@@ -102,5 +143,18 @@ func (q queries) ApprovalFacts(piKey uint64, fn func(v *model.ActionApprovalValu
 			return err
 		}
 		return fn(&v)
+	})
+}
+
+// OpenApprovalRequests calls fn with every approval request still open at now — one
+// that expires after now — soonest-expiring first, until the requests run out or fn
+// returns an error.
+func (q queries) OpenApprovalRequests(now int64, fn func(piKey, approvalKey uint64) error) error {
+	lower := keyApprovalExpiry(now, ^uint64(0))
+	return q.scanRange(prefixEnd(lower), prefixEnd([]byte{byte(cfApprovalExpiry)}), func(k, v []byte) error {
+		if len(v) < 8 {
+			return nil
+		}
+		return fn(binary.BigEndian.Uint64(v), trailingKey(k))
 	})
 }
