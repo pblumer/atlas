@@ -351,6 +351,21 @@ export const WORKER_TYPE_DOCS = {
     trap: `The step everyone forgets is the last one: without the share, the worker answers <code>403</code> on a document you have open in front of you.`,
   },
 
+  googlecontacts: {
+    anchor: "runbook-googlecontacts", title: "Google Contacts",
+    checked: "2026-10",
+    needs: `A configured Google Contacts Worker in ${WORKERS} per address book: a vault bundle with a service account and the Workspace user it acts as, or a refresh token. No endpoint. <i>These steps are written from Google's documentation and have not yet been walked in a Google account.</i>`,
+    steps: [
+      `<b>Google Cloud Console</b> &rarr; pick a project &rarr; <i>APIs &amp; Services</i> &rarr; enable the <b>People API</b>.`,
+      `<i>IAM &amp; Admin</i> &rarr; <b>Service accounts</b> &rarr; create one, then <i>Keys</i> &rarr; <i>Add key</i> &rarr; <b>JSON</b>. Note the account's <b>client ID</b> (the long number on its details page).`,
+      `<b>Google Workspace Admin console</b> &rarr; <i>Security</i> &rarr; <i>Access and data control</i> &rarr; <i>API controls</i> &rarr; <b>Manage domain-wide delegation</b> &rarr; add that client ID with the scope <code>https://www.googleapis.com/auth/contacts</code> — and <code>https://www.googleapis.com/auth/directory.readonly</code> beside it if a process searches the directory.`,
+      `Store the bundle in the vault: ${VAULT}, e.g. <code>google_contacts_verkauf</code> holding <code>{"method": "serviceAccount", "clientEmail": "…@….iam.gserviceaccount.com", "privateKey": "-----BEGIN PRIVATE KEY-----\\n…", "subject": "verkauf@firma.ch"}</code>. The <b>subject</b> is the person whose address book the Worker uses; for the directory, add <code>"scope"</code> naming both scopes, separated by a space.`,
+      `${WORKERS} &rarr; <b>New worker</b>: type <b>Google Contacts</b>, a name, credential reference <code>google_contacts_verkauf</code>, no endpoint. One Worker per address book.`,
+      `<b>Without a Workspace</b> (a gmail.com account): an OAuth client of type <i>Desktop app</i>, one consent with the contacts scope, and the refresh token it yields — <code>{"method": "refreshToken", "clientId": "…", "clientSecret": "…", "refreshToken": "…"}</code>.`,
+    ],
+    trap: `Delegation grants exactly the scopes listed. A scope in the bundle that is not delegated fails the token request — for every operation, not only the one that needed it. And an OAuth client still in <i>Testing</i> expires its refresh token after 7 days.`,
+  },
+
   discord: {
     anchor: "runbook-discord", title: "Discord",
     checked: "2026-09",

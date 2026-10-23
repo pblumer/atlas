@@ -25,6 +25,7 @@ import (
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/exchange"
+	"github.com/pblumer/atlas/connector/googlecontacts"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
@@ -7046,6 +7047,21 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		return &connectorPayload{Kind: "teamsphone", Fields: map[string]any{
 			"connector": j.Connector, "operation": j.Operation, "args": j.Args,
 			"resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
+		}}
+	case compiler.GoogleContactsJobTypeIndex:
+		// Exchange's arm with an address book's operation: the evaluated values travel,
+		// and nothing that says whose address book or as whom — that and the credential
+		// exist only on the worker (ADR-draft-google-contacts-worker). The codes the
+		// process catches travel too, so a missing contact can take the process's path
+		// for it (ADR-0461).
+		j, err := googlecontacts.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "googlecontacts", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "contactId": j.ContactID,
+			"query": j.Query, "field": j.Field, "group": j.Group, "contact": j.Contact,
+			"maxResults": j.MaxResults, "resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
 		}}
 	case compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex:
 		// One arm for the three clio operations: the resolved job says which it is, so

@@ -6659,6 +6659,96 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           server.</p>
         <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked September 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
       </div>
+      <div class="card" id="runbook-googlecontacts">
+        <h4>Google Contacts</h4>
+        <p data-l="de">Ein Google-Contacts-Worker steht für <b>ein Adressbuch</b>: das einer Person in einem
+          Google Workspace oder das eines gmail.com-Kontos. Ein Prozess findet darin einen Kunden anhand seiner
+          E-Mail-Adresse, Telefonnummer oder einer Kundennummer in einem benutzerdefinierten Feld, liest, legt an,
+          ändert und löscht Kontakte, setzt ein Label wie <i>Kunden</i> und sucht Kolleginnen und Kollegen im
+          Verzeichnis der Organisation. <i>Die Schritte sind aus der Dokumentation von Google geschrieben und noch
+          nicht in einem Google-Konto durchgegangen worden.</i></p>
+        <p data-l="en">A Google Contacts worker stands for <b>one address book</b>: that of a person in a Google
+          Workspace, or that of a gmail.com account. A process finds a customer in it by e-mail address, phone number
+          or a customer number in a custom field, reads, creates, changes and deletes contacts, puts a label such as
+          <i>Kunden</i> on one and searches the organization's directory for colleagues. <i>These steps are written
+          from Google's documentation and have not yet been walked in a Google account.</i></p>
+        <ol>
+          <li data-l="de">In der <b>Google Cloud Console</b> ein Projekt wählen und unter <i>APIs &amp; Dienste</i> die
+            <b>People API</b> aktivieren.</li>
+          <li data-l="en">In the <b>Google Cloud Console</b> pick a project and, under <i>APIs &amp; Services</i>,
+            enable the <b>People API</b>.</li>
+          <li data-l="de"><i>IAM &amp; Verwaltung → Dienstkonten → Dienstkonto erstellen</i>, danach <i>Schlüssel →
+            Schlüssel hinzufügen → JSON</i>. Die <b>Client-ID</b> des Kontos notieren – die lange Zahl auf seiner
+            Detailseite.</li>
+          <li data-l="en"><i>IAM &amp; Admin → Service accounts → Create service account</i>, then <i>Keys → Add key →
+            JSON</i>. Note the account's <b>client ID</b> – the long number on its details page.</li>
+          <li data-l="de">In der <b>Admin-Konsole</b> von Google Workspace unter <i>Sicherheit → Zugriffs- und
+            Datenkontrolle → API-Steuerung → Domainweite Delegierung verwalten</i> diese Client-ID mit dem Scope
+            <code>https://www.googleapis.com/auth/contacts</code> eintragen – und
+            <code>https://www.googleapis.com/auth/directory.readonly</code> dazu, wenn ein Prozess das Verzeichnis
+            durchsucht.</li>
+          <li data-l="en">In the Google Workspace <b>Admin console</b>, under <i>Security → Access and data control →
+            API controls → Manage domain-wide delegation</i>, add that client ID with the scope
+            <code>https://www.googleapis.com/auth/contacts</code> – and
+            <code>https://www.googleapis.com/auth/directory.readonly</code> beside it if a process searches the
+            directory.</li>
+          <li data-l="de">Secret anlegen, z.&nbsp;B. <code>google_contacts_verkauf</code>:
+            <code>{"method": "serviceAccount", "clientEmail": "…@….iam.gserviceaccount.com", "privateKey":
+            "-----BEGIN PRIVATE KEY-----\n…", "subject": "verkauf@firma.ch"}</code>. Das <b>subject</b> ist die
+            Person, deren Adressbuch der Worker verwendet; es ist Pflicht, weil ein Dienstkonto selbst keine Kontakte
+            hat. Für die Verzeichnissuche zusätzlich <code>"scope"</code> mit beiden Scopes, durch ein Leerzeichen
+            getrennt.</li>
+          <li data-l="en">Create a secret, e.g. <code>google_contacts_verkauf</code>:
+            <code>{"method": "serviceAccount", "clientEmail": "…@….iam.gserviceaccount.com", "privateKey":
+            "-----BEGIN PRIVATE KEY-----\n…", "subject": "verkauf@firma.ch"}</code>. The <b>subject</b> is the person
+            whose address book the worker uses; it is required, because a service account has no contacts of its
+            own. For the directory search, also add <code>"scope"</code> naming both scopes, separated by a
+            space.</li>
+          <li data-l="de">Worker anlegen: Typ <b>Google Contacts</b>, ein Name (den ein Task nennt),
+            Credential-Referenz <code>google_contacts_verkauf</code>, <b>kein Endpoint</b>. Pro Adressbuch ein
+            Worker. Speichern genügt; atlas startet den beaufsichtigten Worker mit der neuen Umgebung selbst neu.</li>
+          <li data-l="en">Create the worker: type <b>Google Contacts</b>, a name (which a task states), credential
+            reference <code>google_contacts_verkauf</code>, <b>no endpoint</b>. One worker per address book. Saving is
+            enough; atlas restarts the supervised worker with the new environment by itself.</li>
+        </ol>
+        <p data-l="de"><b>Ohne Workspace</b> (ein gmail.com-Konto) gibt es keine Delegierung. Dann braucht es einen
+          OAuth-Client vom Typ <i>Desktop-App</i>, eine einmalige Zustimmung mit dem Contacts-Scope und das
+          Refresh-Token daraus: <code>{"method": "refreshToken", "clientId": …, "clientSecret": …, "refreshToken":
+          …}</code>.</p>
+        <p data-l="en"><b>Without a Workspace</b> (a gmail.com account) there is no delegation. You then need an OAuth
+          client of type <i>Desktop app</i>, one consent with the contacts scope and the refresh token it yields:
+          <code>{"method": "refreshToken", "clientId": …, "clientSecret": …, "refreshToken": …}</code>.</p>
+        <div class="note warn">
+          <span class="lbl" data-l="de">Ob ein Kunde bekannt ist: <i>Kontakte finden</i>, nicht <i>Kontakte suchen</i></span><span class="lbl" data-l="en">Whether a customer is known: <i>Find contacts</i>, not <i>Search contacts</i></span>
+          <p data-l="de" style="margin:.3em 0 0">Die Suche von Google beantwortet eine Anfrage aus einem
+            Zwischenspeicher, der Änderungen erst nach einiger Zeit enthält. Ein Kontakt, der vor einer Minute angelegt
+            wurde, fehlt dort womöglich noch – ein Prozess, der daraus «unbekannt» schliesst, legt den Kunden ein
+            zweites Mal an. <i>Kontakte finden</i> liest stattdessen das Adressbuch selbst und vergleicht E-Mail-Adresse
+            oder Telefonnummer exakt; das kostet bei einem grossen Adressbuch mehrere Anfragen, ist aber aktuell.</p>
+          <p data-l="en" style="margin:.3em 0 0">Google's search answers from a cache that includes changes only after
+            a while. A contact created a minute ago may still be missing there – and a process that concludes
+            "unknown" creates the customer a second time. <i>Find contacts</i> reads the address book itself instead
+            and compares the e-mail address or phone number exactly; for a large address book that costs several
+            requests, but the answer is current.</p>
+        </div>
+        <p data-l="de"><b>Doppelte Kontakte:</b> Bricht die Verbindung ab, nachdem Google einen Kontakt angelegt hat,
+          aber bevor der Job abgeschlossen ist, legt die Wiederholung ihn ein zweites Mal an – Google kennt keine
+          Anfrage-ID, an der es das erkennen könnte. Wer das nicht hinnehmen kann, lässt <i>Kontakte finden</i> vor
+          <i>Kontakt anlegen</i> laufen. Alle anderen Operationen sind wiederholbar: Ein bereits gelöschter Kontakt
+          gilt als gelöscht, ein zweites Mal gesetztes Label ist ein Label.</p>
+        <p data-l="en"><b>Duplicate contacts:</b> if the connection breaks after Google created a contact but before
+          the job completed, the retry creates it a second time – Google has no request id it could recognize it by. If
+          you cannot accept that, run <i>Find contacts</i> before <i>Create contact</i>. Every other operation is safe
+          to repeat: a contact already deleted counts as deleted, a label set twice is one label.</p>
+        <p data-l="de"><b>Fehlende Kontakte abfangen:</b> Existiert ein Kontakt nicht mehr, endet <i>Kontakt
+          lesen</i>, <i>Kontakt ändern</i> oder eine Label-Änderung mit dem Fehlercode
+          <code>GOOGLECONTACTS_CONTACT_NOT_FOUND</code>, wenn der Prozess ihn mit einem Fehler-Grenzereignis abfängt;
+          sonst entsteht ein Vorfall.</p>
+        <p data-l="en"><b>Catching missing contacts:</b> if a contact no longer exists, <i>Read contact</i>, <i>Update
+          contact</i> or a label change ends with the error code <code>GOOGLECONTACTS_CONTACT_NOT_FOUND</code> when the
+          process catches it with an error boundary event; otherwise an incident is raised.</p>
+        <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked October 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
+      </div>
 
       <div class="card" id="runbook-entra">
         <h4>Microsoft Entra ID</h4>

@@ -10,6 +10,7 @@ import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
 import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } from "./entra-attrmask.js";
 import { exchangeOperationOptions, exchangeParametersPlaceholder, exchangeParametersHint, exchangeIsListing, exchangeResultType, exchangeResultShape } from "./exchange-ops.js";
+import { googleContactsOperationOptions, googleContactsUses, googleContactsResultType, googleContactsResultShape, googleContactsMaxPlaceholder, googleContactsMaxHint, googleContactsQueryHint, googleContactsContactPlaceholder } from "./googlecontacts-ops.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { lookupSamples, sampleFor } from "./instance-samples.js";
 import { devLang } from "./dev-lang.js";
@@ -4879,6 +4880,76 @@ const SERVICE_TASK_KINDS = [
               return "What Google returned is written into this process variable (leave empty to discard it).";
           }
         },
+      },
+    ],
+  },
+  {
+    id: "googlecontacts", name: "Google Contacts", group: "Applications",
+    desc: "Find, read, list, create, update and delete contacts in a Google address book, put a label such as Kunden on one or take it off, and search the organization's Workspace directory",
+    icon: "C",
+    // A person on Google blue: the contact this Worker Type is about, beside Sheets'
+    // grid in the same group.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#1a73e8"/><circle cx="8" cy="6.2" r="2.3" fill="#fff"/><path d="M3.8 12.6c.5-2.2 2.2-3.4 4.2-3.4s3.7 1.2 4.2 3.4z" fill="#fff"/></svg>`,
+    ext: "atlas:GoogleContactsConnector",
+    fields: [
+      { group: "Address book" },
+      {
+        key: "connector", label: "Worker", datalist: "googlecontacts", placeholder: "verkauf",
+        hint: "The configured Google Contacts Worker whose address book this task uses, by its name under Workers in the Console. Its credential — a service account acting as a Workspace user, or a person's refresh token — reaches that worker and never the engine. A value starting with = is a FEEL expression, so one process can choose the address book at runtime, e.g. the account manager's.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: googleContactsOperationOptions(),
+      },
+      {
+        key: "contactId", label: "Contact", placeholder: "=kunde.id", fx: true,
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "contactId"),
+        hint: "The contact, by the id a read, a find or a create answered with (people/c…). Usually a FEEL expression (fx) naming that variable, e.g. =kunde.id.",
+      },
+      {
+        key: "query", label: "Query", placeholder: "=anfrage.absender", fx: true,
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "query"),
+        hint: (v) => googleContactsQueryHint(v.operation || "find-contacts"),
+      },
+      {
+        key: "field", label: "Custom field", placeholder: "Kundennummer",
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "field"),
+        hint: "Optional. The name of a custom field (as Google Contacts shows it under \"Custom field\"), e.g. Kundennummer: the query is then compared with that field's value instead of with the e-mail addresses and phone numbers.",
+      },
+      {
+        key: "group", label: "Label", placeholder: "Kunden", fx: true,
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "group"),
+        hint: (v) => (["add-to-group", "remove-from-group"].includes(v.operation)
+          ? "The label, by the name Google Contacts shows it under, e.g. Kunden. It must exist: a misspelt name is refused rather than created."
+          : "Optional. Only the contacts with this label, by the name Google Contacts shows it under, e.g. Kunden."),
+      },
+      {
+        key: "contact", label: "Contact values", type: "json", rows: 8,
+        // Inline JSON and a variable are mutually exclusive (the compiler refuses both).
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "contact") && !v.contactVariable,
+        placeholder: (v) => googleContactsContactPlaceholder(v.operation || "create-contact"),
+        hint: (v) => "Keys: givenName, familyName, email, emails, phone, phones, organization, jobTitle, department, address, addresses, birthday (1980-05-17, or --05-17 without a year), notes, fields (custom fields by name)" +
+          (v.operation === "create-contact" ? " and groups (labels by name)." : "; labels change through Add to label and Remove from label.") +
+          " A string starting with = is a FEEL expression. A value that is null changes nothing, \"\" clears; email, phone and address change the primary entry and keep the others, emails, phones and addresses replace the list.",
+      },
+      {
+        key: "contactVariable", label: "Contact variable", placeholder: "neukunde",
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "contact") && !v.contact,
+        hint: "Instead of the values above: a process variable holding the contact object, for a process that assembles it itself — a form's answers, say. Its keys are checked when the task runs rather than at deploy.",
+      },
+      {
+        key: "maxResults", label: "Maximum results",
+        placeholder: (v) => googleContactsMaxPlaceholder(v.operation || "find-contacts"),
+        showIf: (v) => !!googleContactsMaxPlaceholder(v.operation || "find-contacts"),
+        hint: (v) => googleContactsMaxHint(v.operation || "find-contacts"),
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "kunden",
+        resultType: (v) => googleContactsResultType(v.operation || "find-contacts"),
+        showIf: (v) => !!googleContactsResultType(v.operation || "find-contacts"),
+        hint: (v) => googleContactsResultShape(v.operation || "find-contacts"),
       },
     ],
   },

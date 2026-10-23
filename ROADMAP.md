@@ -622,6 +622,20 @@ The control-flow basics most real models use.
   explains every operation. Still open: a run against a live tenant, business hours and
   menus, an existing queue's language and an existing auto attendant's settings, and a
   warm `pwsh` session per tenant.
+  **Google Contacts is another Worker Type in the catalog**
+  ([ADR-draft-google-contacts-worker](docs/adr/draft-google-contacts-worker.md)): a service
+  task marked `<atlas:googleContactsConnector connector operation …>` finds a contact by
+  e-mail address, phone number or a custom field such as a customer number, reads, lists,
+  searches, creates, updates and deletes contacts, puts a label on one or takes it off, and
+  searches the Workspace directory — ten operations in one table
+  (`connector/googlecontacts/catalog`) that the compiler and the worker both read. A contact
+  is one flat object; null leaves a value as it is, `""` clears it, and an update writes
+  under the etag it read. `find-contacts` reads the address book rather than Google's search
+  cache, so a process deciding whether a customer is known is not told "no" about one
+  created a minute ago. Worker-only and supervised by default; the credential is the Google
+  Sheets bundle with the Workspace user it acts as. Still open: a run against a real
+  account (the record's open question), and a form-lookup provider so a person picks a
+  customer in a task form ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
   **On Windows, the Go Workers take the route PowerShell takes**
   ([ADR-0464](docs/adr/0464-windows-system-proxy.md)): outbound
   HTTP follows a proxy variable when one is set and otherwise the account's PAC, WPAD or

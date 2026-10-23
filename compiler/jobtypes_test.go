@@ -49,6 +49,8 @@ func TestReservedJobTypesMatchTheirIndices(t *testing.T) {
 		ExchangeJobType:      ExchangeJobTypeIndex,
 		TeamsPhoneJobType:    TeamsPhoneJobTypeIndex,
 		SharePointOpsJobType: SharePointOpsJobTypeIndex,
+
+		GoogleContactsJobType: GoogleContactsJobTypeIndex,
 	}
 
 	reserved := ReservedJobTypes()
