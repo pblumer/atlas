@@ -1021,6 +1021,36 @@ SAML, falls eIAM es verlangt.
 
 ---
 
+### M13 — Identität, Policy und Autorisierung je Worker-Aktion (Teilimplementierung)
+
+Seit Oktober 2026 schliesst [ADR-0475](../adr/0475-identity-aware-worker-execution.md)
+eine weitere Lücke zwischen einer authentisierten Person, einem freigegebenen
+Worker und der konkreten Operation. M13 ist **kein Ersatz** für M9
+(Endpoint-Rollen) oder M11 (Worker-Eigentümer und Nachrichtenzustellung).
+
+| Element | Stand | Sicherheitsgrenze |
+|---|---|---|
+| Verbundene Microsoft-Konten | Eigentümer erlaubt explizit die Nutzung durch einzelne Worker; Refresh-Credential im reservierten Vault-Bereich | Widerruf, Reauth, Provider-Scopes und Access-Token-Lebensdauer prüfen |
+| Policy-Administration / PAP | versionierte, unveränderliche veröffentlichte Policies und Simulator | fachliche Policy-Freigabe im Betrieb organisieren |
+| Policy Decision Point / PDP | Default-Deny, Deny-overrides, Fail-closed, FEEL/DMN und Obligationen | syntaktische Prüfung ersetzt keine fachliche Regelabnahme |
+| Policy Enforcement Point / PEP | Permit pro Job-Lease, verweigerter Abschluss ohne Permit; Entscheid im WAL/State | **nur SharePoint** wird als Worker-Typ damit durchgesetzt |
+| Action Approval | eigener Console-Arbeitsvorrat, Digest-Bindung, Ablauf, keine Selbstgenehmigung | eine Genehmigung startet keine Aktion; erneuter Policy-Entscheid nötig |
+| `service` + `shadow` | Entscheidungen protokolliert | **keine** Durchsetzung; darf nicht als Sicherheitsgrenze abgenommen werden |
+| `service` + `enforce` | Verweigerung verhindert den erfolgreichen Jobabschluss | Service-Credential verbleibt beim Worker; Providerzugriff ist **kooperativ** geschützt |
+| `delegated-fixed` / `delegated-per-job` | Broker vermittelt kurzlebigen Graph-Token nur nach Permit an den Atlas-beaufsichtigten SharePoint-Prozess | nicht für externe Worker; bereits ausgegebene Tokens bleiben bis zum Provider-Ablauf gültig |
+
+**Abnahmekriterien:** Negativtests für fehlende Policies, falsche Ressourcen,
+Selbstgenehmigung, Widerruf und geänderte Gruppenmitgliedschaften; Nachweis,
+dass eine Dienstidentität nicht an einem Policy-Deny vorbei ins Zielsystem
+schreiben kann; Scope-Minimierung in Microsoft Graph und Prüfung der
+Audit-/Aufbewahrungsfristen für Authorization-/Approval-Fakten.
+
+**Noch nicht implementiert:** Durchsetzung bei anderen Worker-Typen, externe
+Tokenbrokerage (benötigt neue ADR-0168-Entscheidung), Egress-Gateway,
+per-Worker-Instance-Credentials und allgemeine dynamische Workernamen.
+Ein erfolgreiches SharePoint-Szenario ist kein globaler Zero-Trust-Nachweis.
+
+---
 ## 4 Stufenplan
 
 ### Stufe 0 — der Zustand vor Stufe 1
@@ -1224,13 +1254,15 @@ Neu und noch offen:
 
 ## 8 Zusammenfassung in drei Sätzen
 
-Der Prüfbefund trifft zu, und bei `/mcp` ist die Lage schärfer als beschrieben:
-der Endpunkt ist nicht nur ungeschützt, sondern bringt unter `--auth` sein eigenes
-gültiges Credential mit — 71 Werkzeuge inklusive Deploy, und damit Codeausführung,
-für jeden, der den Port erreicht. Die Ursache ist strukturell und deshalb billig zu
-beheben: die Schranke entscheidet nach Pfadpräfix statt nach einer erklärten
-Zugriffsklasse, und der MCP-Adapter setzt eine eigene Identität ein, statt die des
-Aufrufers durchzureichen. Acht kleine Massnahmen — zusammen deutlich unter dem
-Aufwand einer Föderationsanbindung — machen aus «ist sicher, wenn der Betrieb alles
-richtig konfiguriert» ein **«ist sicher, und ein Test beweist es»**, und das ist
-genau die Schwelle, ab der ein produktiver PoC vertretbar wird.
+Der ursprüngliche Befund eines ungeschützten MCP-Transports ist mit M1–M8
+behoben: deklarierte Zugriffsklassen, `/mcp` unter dem Credential des
+Aufrufers und ein `/metrics`-Token mit Scope `metrics` werden getestet;
+bewusst öffentliche, tokengebundene Routen bleiben erhalten.
+OIDC-Föderation, Rollen und Worker-Berechtigungen sind hinzugekommen;
+ADR-0475 verbindet erstmals Menschen, Policy-Versionen, konkrete
+Aktionen und dauerhafte Genehmigungs-/Entscheidnachweise, aber heute
+**nur für den SharePoint-Worker**, je nach Ausführungsmodus verschieden stark.
+Eine Freigabe für den Bundesbetrieb verlangt weiterhin eine Installation
+mit geprüften Providerrechten und Konfiguration, ein separates
+Penetrationstest-/Abnahmeprotokoll, Datenschutzprüfung und die
+ausdrückliche Akzeptanz der verbleibenden Risiken.
