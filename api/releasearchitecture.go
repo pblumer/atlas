@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -16,11 +17,17 @@ import (
 // rides on the record, so the one atomic write that records a release records its
 // snapshot too. A release never exists without one, and nothing here enters the WAL.
 //
-// What the snapshot holds is fixed by the release's content: the messages its
-// processes receive, the workers they name, the local decisions they evaluate and the
-// calls they make into processes the release did not ship. Where those workers are,
-// and who connects to whom, is the physical part and comes in a later slice; the
-// renderings say so.
+// The logical part is fixed by the release's content: the messages its processes
+// receive, the workers they name, the job types they hand out, the local decisions
+// they evaluate and the calls they make into processes the release did not ship. The
+// physical part is this installation's, at that moment: its name and environment, the
+// address it is configured to be reached under, the public start links its processes
+// have, and for each worker name and job type what serves it here (ADR-0471 §1).
+//
+// What a reader sees of the physical part is decided when it is read, not when it is
+// recorded: a worker's endpoint only by a reader who may see that worker's
+// configuration (ADR-0205), the worker instances only by a reader who may see the
+// Workers view. See redactedArchitecture.
 
 // architectureSnapshot reads the release's process members from their compiled forms.
 // Run-loop goroutine only: it reads the deployment registry and the project store.
@@ -39,6 +46,7 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 		Dependencies:   []archsketch.Dependency{},
 	}
 	shipped := map[string]bool{}
+	placement := map[[2]string]string{}
 	for _, m := range members {
 		if m.Kind == "process" {
 			shipped[m.Ref] = true
@@ -81,8 +89,22 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 			}
 			if name := strings.TrimSpace(ref.Connector); strings.HasPrefix(name, "=") {
 				dep.Kind, dep.Name = archsketch.DependencyRuntimeWorker, name
+			} else {
+				// Who opens the connection to the target is decided by where this
+				// server runs the work: an in-process handler connects itself, and any
+				// other job is leased by a worker process (ADR-0164, ADR-0168).
+				placement[[2]string{dep.Name, kind}] = archsketch.PlacementWorker
+				if s.jobRunner != nil && s.jobRunner.Handles(ref.JobType) {
+					placement[[2]string{dep.Name, kind}] = archsketch.PlacementEngine
+				}
 			}
 			snap.Dependencies = append(snap.Dependencies, dep)
+		}
+
+		for _, ref := range cp.JobTypeRefs() {
+			snap.Dependencies = append(snap.Dependencies, archsketch.Dependency{
+				Kind: archsketch.DependencyJobType, Name: ref.JobType, UsedBy: use(ref.ElementId),
+			})
 		}
 
 		for _, ref := range cp.BusinessRuleDecisionRefs() {
@@ -110,8 +132,160 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 			snap.Dependencies = append(snap.Dependencies, dep)
 		}
 	}
+	snap.Physical = s.physicalPart(shipped, snap.Dependencies, placement)
 	snap.Normalize()
 	return snap
+}
+
+// physicalPart records what this installation has in place for the release, now.
+// Run-loop goroutine only: it reads the node identity, the public-link and worker
+// stores, and the worker registry.
+//
+// A store that cannot be read leaves the whole physical part out rather than a hole
+// in it: a missing worker record would otherwise read as "this worker keeps its own
+// configuration", which is a claim, and the renderings of a snapshot with no physical
+// part say plainly that it has none.
+func (s *Server) physicalPart(shipped map[string]bool, deps []archsketch.Dependency, placement map[[2]string]string) *archsketch.Physical {
+	links, err := s.publicLinks.LoadAll()
+	if err != nil {
+		return nil
+	}
+	recs, err := s.connectors.LoadAll()
+	if err != nil {
+		return nil
+	}
+	p := &archsketch.Physical{
+		ExternalURL:      archsketch.ParseEndpoint(s.externalURL),
+		PublicStartLinks: []archsketch.StartLinks{},
+		Workers:          []archsketch.WorkerSite{},
+		JobTypes:         []archsketch.JobTypeSite{},
+	}
+	if id, err := s.nodeIdentity(); err == nil {
+		p.Node, p.Environment = id.Name, id.Environment
+	}
+
+	counts := map[string]int{}
+	for _, l := range links {
+		if shipped[l.ProcessID] {
+			counts[l.ProcessID]++
+		}
+	}
+	for pid, n := range counts {
+		p.PublicStartLinks = append(p.PublicStartLinks, archsketch.StartLinks{ProcessID: pid, Links: n})
+	}
+
+	configured := make(map[[2]string]connector, len(recs))
+	for _, c := range recs {
+		configured[[2]string{c.Name, c.Kind}] = c
+	}
+	seen := map[[2]string]bool{}
+	for _, d := range deps {
+		key := [2]string{d.Kind + "/" + d.Name, d.WorkerType}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		switch d.Kind {
+		case archsketch.DependencyWorker:
+			site := archsketch.WorkerSite{
+				Name: d.Name, WorkerType: d.WorkerType, Placement: placement[[2]string{d.Name, d.WorkerType}],
+				Observers: archsketch.Observers{ObservedBy: s.workerInstances(func(st *workerStat) bool { return slices.Contains(st.Connectors, d.Name) })},
+			}
+			if c, ok := configured[[2]string{d.Name, d.WorkerType}]; ok {
+				site.ConfiguredID = c.ID
+				site.Endpoint = archsketch.ParseEndpoint(c.Endpoint)
+				site.MailboxEndpoint = archsketch.ParseEndpoint(c.MailboxEndpoint)
+			}
+			if site.Endpoint == nil {
+				// What the instances serving the name reported, when this installation
+				// holds no endpoint for it itself — the worker that keeps its own
+				// configuration (ADR-0168). One answer is recorded; several different
+				// ones are recorded as differing, because a sketch drawing one system
+				// where the installation reaches several would be wrong in the way that
+				// matters most.
+				switch reported := s.reportedEndpointsOf(d.Name); len(reported) {
+				case 0:
+				case 1:
+					site.Endpoint, site.EndpointReported = archsketch.ParseEndpoint(reported[0]), true
+				default:
+					site.EndpointsDiffer = true
+				}
+			}
+			p.Workers = append(p.Workers, site)
+		case archsketch.DependencyJobType:
+			p.JobTypes = append(p.JobTypes, archsketch.JobTypeSite{JobType: d.Name,
+				Observers: archsketch.Observers{ObservedBy: s.workerInstances(func(st *workerStat) bool { return slices.Contains(st.Serves, d.Name) })}})
+		}
+	}
+	return p
+}
+
+// workerInstances names the worker instances seen this run that match. The registry
+// is runtime state a restart empties (api/workers.go), which is why a snapshot calls
+// these observed rather than serving. Run-loop goroutine only.
+func (s *Server) workerInstances(match func(*workerStat) bool) []string {
+	var out []string
+	if s.workers == nil {
+		return out
+	}
+	for _, st := range s.workers.byName {
+		if match(st) {
+			name := st.Worker
+			if name == "" {
+				name = "an unnamed worker"
+			}
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// reportedEndpointsOf returns the distinct endpoints the instances seen this run
+// reported for a worker name, sorted. Run-loop goroutine only.
+func (s *Server) reportedEndpointsOf(name string) []string {
+	var out []string
+	if s.workers == nil {
+		return out
+	}
+	for _, st := range s.workers.byName {
+		if e, ok := st.Endpoints[name]; ok && !slices.Contains(out, e) {
+			out = append(out, e)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// redactedArchitecture is the snapshot as this reader may see it: a worker's endpoint
+// only for a reader who may see that worker's configuration, and the worker instances
+// only for a reader who may see the Workers view. Run-loop goroutine only: it reads
+// the worker store.
+//
+// A worker that no longer exists is judged as an ownerless one, which only an
+// administrator may see (connectorRole) — its endpoint was somebody's configuration,
+// and that it was deleted since is no reason to show it to everybody.
+func (s *Server) redactedArchitecture(r *http.Request, snap *archsketch.Snapshot) *archsketch.Snapshot {
+	if snap == nil || snap.Physical == nil {
+		return snap
+	}
+	out := *snap
+	mayViewWorker := func(id string) bool {
+		if id == "" {
+			return true
+		}
+		c, ok, err := s.connectors.Get(id)
+		if err != nil {
+			return false
+		}
+		if !ok {
+			c = connector{}
+		}
+		code, _ := s.checkConnectorRole(r, c, ScopeRoleViewer)
+		return code == 0
+	}
+	red := snap.Physical.Redacted(mayViewWorker, mayReach(httpapi.PrincipalFrom(r.Context()), RoleOperator))
+	out.Physical = &red
+	return &out
 }
 
 // releaseArchitectureResp is the JSON answer: the release's names beside the snapshot,
@@ -167,6 +341,7 @@ func (s *Server) serveReleaseArchitecture(w http.ResponseWriter, r *http.Request
 		for i := range rels {
 			if rels[i].Version == version {
 				rel = &rels[i]
+				rel.Architecture = s.redactedArchitecture(r, rel.Architecture)
 				return
 			}
 		}

@@ -835,6 +835,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--checkpoint-interval` | `5m` | How often to snapshot applied state so restarts replay less log; `0` disables |
 | `--checkpoint-keep` | `3` | How many checkpoints to retain |
 | `--compact-wal` | `false` | Delete WAL segments already covered by a checkpoint and every consumer watermark. Irreversible, so opt-in; requires checkpointing |
+| `--storage-reserve-mb` | `1024` | Disk space, in MiB, the server keeps free under the data directory. Below it the server refuses new writes with HTTP 507 and starts no work of its own — timers wait, the retention sweep and the inbound bridge pause, in-process workers lease nothing — while reads, sign-ins, checkpoints and the reports of jobs already leased go on; it resumes by itself once the reserve and a quarter of it are free. The Console's dashboard shows the disk, the reserve and a forecast to an administrator, `GET /api/v1/storage` answers the same, and `/metrics` carries `atlas_storage_*`. `0` keeps the monitoring and turns the freeze off ([ADR-0481](adr/0481-storage-guard.md)). Also `ATLAS_STORAGE_RESERVE_MB` |
 | `--metrics` | `true` | Serve the Prometheus exposition at `/metrics`. Gated by `--auth` like every other route — give the scraper an API token scoped `metrics` (see [Credentials for machines](#credentials-for-machines)) |
 | `--log-format` | `text` | `text` for a terminal, `json` for a log shipper — see [Logs](#logs) |
 | `--log-level` | `info` | Least severe line written: `debug`, `info`, `warn` or `error` — see [Logs](#logs) |
@@ -919,6 +920,7 @@ away.
 | `ATLAS_LIMIT_GENERATED` | 2 MiB | A document this server produced or renders back |
 | `ATLAS_LIMIT_MODEL_UPLOAD` | 4 MiB | A BPMN, DMN or XOML document |
 | `ATLAS_LIMIT_PAYLOAD` | 8 MiB | The largest thing that travels in one piece: a model provider's answer, a script's output |
+| `ATLAS_LIMIT_DOCUMENT` | 35 MiB | One document a Worker carries between two outside systems without it becoming a variable — a mail attachment exported to an object store, a message read to be forwarded. Held in the Worker Instance's memory, never the engine's |
 | `ATLAS_LIMIT_DATA_UPLOAD` | 16 MiB | A CSV or a playground scenario |
 | `ATLAS_LIMIT_IMPORT` | 24 MiB | A document imported from another tool |
 | `ATLAS_LIMIT_APP_BUNDLE` | 32 MiB | An application's whole source or export |
@@ -1035,6 +1037,8 @@ Event names an operator is most likely to alert on:
 | `script_worker.binary_missing` | WARN | A script language is enabled but its interpreter is absent; those tasks park |
 | `feed.push_failing` | WARN | A push subscription's endpoint refused a batch or did not answer, said once when the failures begin; delivery holds and retries on a widening interval, and nothing is skipped |
 | `feed.push_recovered` | INFO | A held push subscription's endpoint accepted a batch again |
+| `inbound_watch.failing` | WARN | An inbound watch cannot read its source — its Worker has no mailbox or no client, is switched off, or the source refused or did not answer the read — said once when it begins, with the `subscription`, `worker` and `messageName`; the watch's listing carries the newest reason as `lastError` while it lasts |
+| `inbound_watch.recovered` | INFO | A failing inbound watch read its source again |
 | `feed.subscription_disabled` | WARN | The event feed's retention dropped rows a push subscription had not delivered, so delivery switched it off with the reason; enable it again from the oldest event held or from now |
 | `auth.admin_seeded` | WARN | The bootstrap administrator was created with a generated password |
 | `auth.disabled` | WARN | The server was started with `--auth=false` and requires no login for anything |

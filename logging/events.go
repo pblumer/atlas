@@ -137,6 +137,11 @@ var (
 	AuthLoginFailed    = newEvent("auth.login_failed")
 	AuthLoginThrottled = newEvent("auth.login_throttled")
 	AuthLogout         = newEvent("auth.logout")
+	// AuthLoginDateUnrecorded is a login day that could not be written, read or
+	// removed (ADR-0477). The login itself had succeeded;
+	// what is missing or stale is the roster's "last login", which the account's next
+	// login writes again.
+	AuthLoginDateUnrecorded = newEvent("auth.login_date_unrecorded")
 	// AuthDenied is an authenticated caller refused for lacking a role — an
 	// administration attempt by somebody who may not administer, which is a
 	// different and much rarer signal than an anonymous request being asked to log
@@ -320,6 +325,26 @@ var (
 	WALCompactionSegmentsDeleted = newEvent("wal_compaction.segments_deleted")
 )
 
+// The storage monitor and the engine halt (ADR-0481).
+var (
+	// StorageLow is the disk crossing into the warning band: less room above the
+	// reserve than the warning margin, or a forecast that reaches the reserve within a
+	// week. Logged once per crossing, not on every reading.
+	StorageLow = newEvent("storage.low")
+	// StorageFrozen is the disk falling below the reserve: from here the server refuses
+	// new writes until there is room again. An error, because work is being turned away.
+	StorageFrozen = newEvent("storage.frozen")
+	// StorageResumed is the disk regaining the reserve and its margin, and the server
+	// taking writes again.
+	StorageResumed = newEvent("storage.resumed")
+	// StorageUnreadable is a reading of the file system failing. Nothing changes on it —
+	// a frozen server stays frozen, an open one stays open — so it is a warning.
+	StorageUnreadable = newEvent("storage.unreadable")
+	// EngineHalted is the engine stopping after a batch could not be made durable. It
+	// processes nothing more until the server is restarted.
+	EngineHalted = newEvent("engine.halted")
+)
+
 // Backup, restore, and streaming exports (ADR-0107/0108/0109).
 var (
 	RestoreApplied                = newEvent("restore.applied")
@@ -341,6 +366,13 @@ var (
 	// (ADR-0438). Warned because it is a delivery gap that otherwise
 	// looks exactly like a quiet mailbox.
 	InboundWatchGap = newEvent("inbound_watch.gap")
+	// InboundWatchFailing reports a watch that cannot read its source — its Worker has
+	// no mailbox or no client, is switched off, or the source refused or did not answer
+	// the read. Logged once when the failure begins, not on every tick it repeats; the
+	// watch's listing carries the newest reason as lastError for as long as it lasts.
+	InboundWatchFailing = newEvent("inbound_watch.failing")
+	// InboundWatchRecovered reports a failing watch that read its source again.
+	InboundWatchRecovered = newEvent("inbound_watch.recovered")
 )
 
 // Push delivery of the event feed

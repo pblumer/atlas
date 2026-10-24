@@ -116,6 +116,9 @@ api/        HTTP API, web UI, command submission and queries
               completion (ADR-0473)
   workerquery/ The Worker protocol's non-durable query beside the job: an in-memory
               broker Worker Instances lease from, never the log
+  storage/    The disk under the data directory: the monitor that reads it off the run
+              loop, the reserve below which writes are refused, and the forecast
+              (ADR-0481)
   formgen/    Writing a form from a description and from the process it belongs to
               (ADR-0260) — design-time authoring against the agent
               Worker an operator configured; it owns no state, so it holds no run loop
@@ -135,6 +138,8 @@ internal/trustedproxy/ The client's address behind a load balancer: --trusted-pr
 internal/sysproxy/ The outbound proxy, chosen as .NET chooses it: a proxy variable, else on
             Windows the account's PAC, WPAD or Internet Options settings
             (ADR-0464)
+internal/diskspace/ How large a directory's file system is and how much this process may
+            still write: statfs on Unix, GetDiskFreeSpaceExW on Windows
 internal/certstore/ Signing with a key in the Windows certificate store, named by its
             certificate's thumbprint, without reading the key out (ADR-0172, amended)
 ```
@@ -154,6 +159,7 @@ connector/jira/        Atlassian Jira issues (ADR-0201)
 connector/googlesheets/ Google Sheets and Drive (ADR-0235)
 connector/s3/          S3-compatible object storage (ADR-0442)
 connector/exchange/    Microsoft Exchange Online and Exchange Server administration (ADR-0462)
+connector/googlecontacts/ Google Contacts: find, keep and label contacts, search the directory (ADR-0476)
 connector/webscrape/   Web scraping (ADR-0118)
 connector/clio/        clio event store: read, write, query (ADR-0036)
 connector/temis/       temis decision service (ADR-0050)

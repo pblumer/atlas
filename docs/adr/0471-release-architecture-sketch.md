@@ -1,7 +1,8 @@
 # ADR-0471: A release carries its architecture sketch, and a worker publishes it to Confluence
 
 - **Status:** Accepted (2026-10-23; amended 2026-10-23 — public start links belong to the
-  physical part, and the Atlas node is composed of its System Software; see the note below)
+  physical part, the Atlas node is composed of its System Software, and job types belong to
+  the logical part; see the notes below)
 - **Implementation:** Partial
 - **Date:** 2026-10-23
 - **Deciders:** Atlas maintainers
@@ -32,6 +33,37 @@
 >   are both active structure, so the relationship is composition, which is also what
 >   Panorama's own authoring rules accept (`panorama.MayConnect`). The release's Artifact
 >   is still assigned to the node.
+
+> **Implementation status and amendment (2026-10-23, second): S2 has landed, without the
+> worker protocol extension.** A snapshot now carries the physical part §1 describes —
+> the installation's name and environment, its external URL, the public start links, and
+> per worker name its placement, the configured endpoint reduced to scheme, host and port
+> (`archsketch.ParseEndpoint`), and the worker instances the registry saw holding the
+> name. The renderings draw each connection from the side that opens it (§2), and a read
+> withholds an endpoint from a caller who may not see that worker's configuration and the
+> instances from a caller without the operator role (§3, §5). The snapshot's format and
+> mapping versions are 2; a version-1 snapshot is drawn as before. What remains of S2 is
+> the additive `endpoints` field on job activation, so a worker that keeps its own
+> configuration can report where it connects; until then such a worker is drawn as
+> holding its endpoint itself.
+>
+> **Update (2026-10-23): the worker protocol extension has landed, and S2 with it.**
+> `atlas worker` reduces the endpoint each held name's configuration names
+> (`internal/endpoint`, shared with the server so both mean the same by "scheme, host
+> and port") and sends it in the additive `endpoints` field of job activation. The
+> server reduces it again, keeps it only for names the same poll reported, and bounds
+> it. A snapshot draws a reported endpoint for a worker the installation holds no
+> configuration for, marked as reported; instances that disagree are recorded as
+> disagreeing; and a reported endpoint, being information about instances, is read by
+> operators only. Format and mapping version 3; a version-2 snapshot is drawn as before.
+>
+> One addition to §1's logical part, found while building it: **job types.** A service or
+> send task with a job type hands its work to whichever worker subscribes to that type
+> (ADR-0007) — the plain external job worker, which §1 did not name because it is reached
+> by a type rather than a worker name. It is a way out of the application all the same,
+> so the logical part records each job type with the elements that state it, and the
+> physical part records the instances seen leasing it. Its connection is always opened
+> by the worker, so it is drawn as one in both views.
 
 ## Context and problem statement
 

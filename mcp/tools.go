@@ -625,6 +625,19 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_storage",
+			Description: "Read the disk under the server's data directory: each file system it writes to with " +
+				"its size and free space, the reserve below which the server refuses new writes (HTTP 507) " +
+				"until space is back, the resulting state (ok, warn, frozen, halted, unknown), what the WAL " +
+				"and the state store hold, and a forecast of when the reserve is reached. Ask it when a write " +
+				"is refused with 507 or 503: frozen means free space and retry; halted means a write to disk " +
+				"failed and the server needs a restart. Administrators only.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/storage"))
+			},
+		},
+		{
 			Name: "atlas_publish_message",
 			Description: "Publish a message for correlation: any instance waiting at a message catch event " +
 				"whose correlation key matches is delivered the message and advances. Provide the message " +
@@ -977,7 +990,8 @@ func runtimeTools() []Tool {
 			Description: "The messages of this installation (ADR-0446), grouped by name ('messages'): each name's " +
 				"'sources' — the deployed processes that wait for it ('process') or send it ('process-throw', " +
 				"a message throw or end event or a send task), with version, 'newest', projectId, 'system', " +
-				"'role' and 'interrupting'; the inbound watches of Workers that publish it ('inbound-watch'); " +
+				"'role' and 'interrupting'; the inbound watches of Workers that publish it ('inbound-watch', " +
+				"with 'lastError' and 'failingSince' while the watch cannot read its source); " +
 				"and the product actions that send it ('product-action', for the catalogues you maintain) — " +
 				"and its 'findings': message.unreceived (a process throw, an enabled watch or an active " +
 				"product action sends a name no newest, active definition waits for, so what it sends is " +

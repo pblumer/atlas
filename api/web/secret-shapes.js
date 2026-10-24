@@ -11,7 +11,8 @@
 // connector/sharepoint/oauth.go's, api/connectors.go's remedyCredentials, and
 // connector/jira/rest.go's, connector/googlesheets/oauth.go's,
 // connector/discord/rest.go's and connector/s3/rest.go's credentialBundle, and
-// connector/exchange/config.go's Bundle. A field added there is a field added here.
+// connector/exchange/config.go's and connector/googlecontacts/config.go's Bundle. A field
+// added there is a field added here.
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -80,6 +81,21 @@ export const SECRET_SHAPES = {
       privateKey: "-----BEGIN PRIVATE KEY-----\u2026",
     },
     note: "Copied out of the JSON key file Google hands out for a service account (<code>client_email</code> and <code>private_key</code>, camel-cased here). Atlas fills in <code>tokenUrl</code> and the Sheets and Drive <code>scope</code>. Add <code>\"subject\"</code> to act as a Workspace user through domain-wide delegation. Pasting the whole key file is the common mistake: it is that file's two fields, not the file.",
+  },
+  "googlecontacts:": {
+    what: "a Google OAuth credential bundle (JSON): a service account's signing key with the Workspace user whose address book it reads, or a consumer account's refresh token",
+    oauth: "google",
+    // anyOf for Google Sheets' reason — two grants — with the subject required beside the
+    // key: a service account has no address book of its own, and the worker refuses one
+    // without it.
+    anyOf: [["clientEmail", "privateKey", "subject"], ["clientId", "clientSecret", "refreshToken"]],
+    skeleton: {
+      method: "serviceAccount",
+      clientEmail: "atlas@\u2026.iam.gserviceaccount.com",
+      privateKey: "-----BEGIN PRIVATE KEY-----\u2026",
+      subject: "verkauf@firma.ch",
+    },
+    note: "<code>clientEmail</code> and <code>privateKey</code> are <code>client_email</code> and <code>private_key</code> from the service account's JSON key file. <code>subject</code> is the Workspace user whose contacts the Worker reads and changes; the service account needs <b>domain-wide delegation</b> for <code>https://www.googleapis.com/auth/contacts</code> (Admin console &rsaquo; Security &rsaquo; API controls). Search directory also needs <code>directory.readonly</code>: name both in <code>\"scope\"</code>, separated by a space, and delegate both. A gmail.com account has no delegation: store <code>{\"method\": \"refreshToken\", \"clientId\", \"clientSecret\", \"refreshToken\"}</code> instead.",
   },
   "entra:": {
     what: "a Microsoft Entra ID app credential bundle (JSON): {tenantId, clientId} with a clientSecret, a certificate or a certificateThumbprint",

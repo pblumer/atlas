@@ -237,6 +237,24 @@ func (s *Server) apiRoutes() []apiRoute {
 				"segmentsRemoved": tInteger(), "compactionError": tString(), "note": tString(),
 			}))}},
 
+		{"GET", "/api/v1/storage", s.storage.HandleGet, apiOp{
+			summary: "The disk under the data directory: each file system the server writes to with its size, use and free space, the reserve below which the server refuses new writes (507) until space is back, the state that follows (ok, warn, frozen, halted after a failed write, unknown), what the WAL and the state store hold, and a forecast of when the reserve is reached, from a consumption rate smoothed over about six hours (admin-only when auth is on) (ADR-0481)", tag: "System", role: RoleAdmin,
+			resp: jsonBody("Storage status", schemaObj(map[string]any{
+				"state": tString(), "reason": tString(), "sampledAt": tString(),
+				"reserveBytes": tInteger(), "resumeBytes": tInteger(),
+				"fileSystems": map[string]any{"type": "array", "items": schemaObj(map[string]any{
+					"paths": tArray(), "totalBytes": tInteger(), "usedBytes": tInteger(), "availableBytes": tInteger(),
+					"usedPercent": map[string]any{"type": "number"}, "warnBelowBytes": tInteger(), "decides": tBool(),
+					"forecast": tObject(),
+				})},
+				"forecast": schemaObj(map[string]any{
+					"bytesPerSecond": map[string]any{"type": "number"}, "bytesPerDay": map[string]any{"type": "number"},
+					"secondsUntilFreeze": map[string]any{"type": "number"}, "basisSeconds": map[string]any{"type": "number"},
+				}),
+				"atlas":        schemaObj(map[string]any{"walBytes": tInteger(), "walSegments": tInteger(), "stateBytes": tInteger()}),
+				"engineHalted": tString(), "error": tString(),
+			}, "state", "reason", "reserveBytes", "fileSystems"))}},
+
 		{"POST", "/api/v1/feel/validate", s.handleValidateFeel, apiOp{
 			summary: "Validate a FEEL expression: that it compiles, and that every call in it is one this build can make", tag: "FEEL", role: RoleModeler,
 			req: jsonBody("FEEL expression", schemaObj(map[string]any{"expression": tString()}, "expression")),
@@ -513,6 +531,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Lease the next jobs of a named job type to an external worker — the type-keyed pull, optionally long-polling (ADR-0007)", tag: "Incidents", role: RoleOperator,
 			req: jsonBody("Job type, worker id, lease, batch size, and how long to wait for work before answering empty", schemaObj(map[string]any{
 				"type": tString(), "worker": tString(), "leaseMs": tInteger(), "maxJobs": tInteger(), "waitMs": tInteger(),
+				// What the worker serves with its own configuration (ADR-0168), and where
+				// each of those connects, as scheme://host:port (ADR-0471).
+				"connectors": tArray(), "endpoints": tObject(),
 			}, "type")),
 			resp: jsonBody("The leased jobs, with the variables visible at each task", tObject())}},
 		// The Worker protocol's second message kind: a query a Worker Instance answers
@@ -1571,7 +1592,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/applications/{id}/releases", s.handleListReleases, apiOp{
 			summary: "An application's release history, newest first (ADR-0128). Each release's architecture snapshot is left out; the architecture routes serve it", tag: "Applications", role: roleAny, resp: jsonBody("Releases", tArray())}},
 		{"GET", "/api/v1/applications/{id}/releases/{version}/architecture", s.handleReleaseArchitecture, apiOp{
-			summary: "A release's architecture snapshot, taken when the release was recorded (ADR-0471): the messages its processes receive, the workers they name, the local decisions they evaluate and the calls they make into processes the release did not ship, each with the elements that state it. The logical part only — which worker serves a name here and at which endpoint is not recorded yet. 404 names a release recorded before snapshots existed", tag: "Applications", role: roleAny,
+			summary: "A release's architecture snapshot, taken when the release was recorded (ADR-0471): the messages its processes receive, the workers they name, the local decisions they evaluate and the calls they make into processes the release did not ship and the job types they hand to subscribed workers, each with the elements that state it; and, from format version 2, what the recording installation had in place for it — its name, environment and external address, the public start links, and per worker its placement, its endpoint as scheme, host and port, and the worker instances seen serving it. A worker's endpoint is withheld from a caller who may not see that worker's configuration, the instances from a caller who is not an operator. 404 names a release recorded before snapshots existed", tag: "Applications", role: roleAny,
 			resp: jsonBody("The release and its architecture snapshot", schemaObj(map[string]any{
 				"applicationId": tString(), "application": tString(), "releaseId": tString(),
 				"version": tInteger(), "publishedAt": tInteger(), "architecture": tObject(),
@@ -1909,9 +1930,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Empty a mockup Worker's site and its journal", tag: "Workers", role: RoleAdmin, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleListInboundSubscriptions, apiOp{
-			summary: "List a worker's inbound event watches — clio, Jira, Google, Discord and mail Workers carry them", tag: "Workers", role: RoleModeler, resp: jsonBody("Subscriptions", tArray())}},
+			summary: "List a worker's inbound event watches — clio, Jira, Google, Discord and mail Workers carry them — each with `lastError` and `failingSince` (unix seconds) while it cannot read its source", tag: "Workers", role: RoleModeler, resp: jsonBody("Subscriptions", tArray())}},
 		{"POST", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleCreateInboundSubscription, apiOp{
-			summary: "Create an inbound event watch on a worker; what it names follows the worker's kind (a clio subject, a JQL, a sheet or Drive folder, a Discord channel, a mail folder with its allowedSenders, requireDmarcPass and includeBody)", tag: "Workers", role: RoleModeler, req: jsonBody("Subscription", tObject()), resp: jsonBody("Created subscription", tObject())}},
+			summary: "Create an inbound event watch on a worker; what it names follows the worker's kind (a clio subject, a JQL, a sheet or Drive folder, a Discord channel, a mail folder with its allowedSenders, requireDmarcPass and includeBody). A mail watch is refused on a Worker with no mailbox to read: SMTP without an IMAP endpoint, preview, or Graph without a sender", tag: "Workers", role: RoleModeler, req: jsonBody("Subscription", tObject()), resp: jsonBody("Created subscription", tObject())}},
 		{"PATCH", "/api/v1/inbound-subscriptions/{id}", s.handleUpdateInboundSubscription, apiOp{
 			summary: "Update an inbound event subscription", tag: "Workers", role: RoleModeler, req: jsonBody("Subscription update", tObject()), resp: jsonBody("Updated subscription", tObject())}},
 		{"DELETE", "/api/v1/inbound-subscriptions/{id}", s.handleDeleteInboundSubscription, apiOp{
@@ -2074,7 +2095,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		{"GET", "/api/v1/users", s.handleListUsers, apiOp{
-			summary: "List user accounts, each with whether somebody is signed in as it right now (ADR-0228)", tag: "Users", role: RoleAdmin, resp: jsonBody("Users", tArray())}},
+			summary: "List user accounts, each with whether somebody is signed in as it right now (ADR-0228) and the UTC day it last signed in, lastLoginDate (ADR-0477)", tag: "Users", role: RoleAdmin, resp: jsonBody("Users", tArray())}},
 		{"GET", "/api/v1/users/presence", s.handleUserPresence, apiOp{
 			summary: "Who is signed in right now: one entry per account holding a live session, online / idle / offline (ADR-0228)", tag: "Users", role: RoleAdmin,
 			resp: jsonBody("Presence", tArray())}},

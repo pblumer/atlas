@@ -22,8 +22,7 @@ import { makeIdCheck } from "./idcheck.js";
 import { generationWorkers, openFormGenerator } from "./formgen-dialog.js";
 import { ensureFormStyles } from "./formviewer.js";
 import { fromTail, noteFormSaved } from "./form-return.js";
-import { attachRemoteSelects, previewTransport } from "./remote-select.js";
-import { addDirectoryField, attachDataSourcePanel } from "./remote-select-editor.js";
+import { attachRemoteSelects, previewTransport, remoteAdapter } from "./remote-select.js";
 
 const FORM_CSS = "vendor/form-js/form-playground.css";
 
@@ -119,8 +118,6 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
         <span class="id-warn" id="form-id-warn" hidden></span>
         <div style="flex:1"></div>
         <span class="muted" id="form-status"></span>
-        <button class="btn ghost" id="form-add-directory" hidden
-          title="Add a field that searches a directory and submits the id of the entry chosen">＋ Directory field</button>
         <button class="btn ghost" id="form-generate" hidden
           title="Write this form from a description and from the process it belongs to">✨ Generate</button>
         <button class="btn" id="form-save" title="Save this form">Save</button>
@@ -217,10 +214,17 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
   let rev = 0;
   let schemaSource = null;
 
+  // What this server offers a select's remote options source (ADR-0473): the sources
+  // and the Workers of their types. The properties panel and the palette offer what it
+  // lists, so it is asked for beside the bundle rather than after it. Not being allowed
+  // to ask, or the server not answering, leaves the editor as form-js ships it.
+  const sourcesReady = api("GET", "/api/v1/form-data/sources").catch(() => null);
+
   // The Playground is the Design pane; build it now (it is the default tab).
   let Playground;
+  let dataSources = null;
   try {
-    ({ Playground } = await loadPlayground());
+    [{ Playground }, dataSources] = await Promise.all([loadPlayground(), sourcesReady]);
   } catch (e) {
     if (gen !== generation) return;
     container.innerHTML = `<p class="muted err" style="padding:20px">Failed to load the form editor: ${esc(e.message)}</p>`;
@@ -232,7 +236,12 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
   container.innerHTML = "";
   let playground;
   try {
-    playground = new Playground({ container, schema, data: {} });
+    // The preview searches made-up people and says so: a design-time preview must not
+    // reach a production Worker.
+    playground = new Playground({
+      container, schema, data: {},
+      atlas: { sources: dataSources, remote: remoteAdapter({ transport: previewTransport(), preview: true }) },
+    });
   } catch (e) {
     container.innerHTML = `<p class="muted err" style="padding:20px">Could not open this form: ${esc(e.message)}</p>`;
     return;
@@ -341,32 +350,20 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     if (ed && typeof ed.on === "function") {
       ed.on("changed", syncIdentity);
       if (baseline === null) baseline = snapshot(); // the form as opened, as form-js holds it
-      wireDirectoryFields(ed);
+      wireLegacyPreview();
       return;
     }
     if (tries < 40) idWatchTimer = setTimeout(() => followDesignEdits(tries + 1), 50);
   })();
 
-  // ---- Directory fields --------------------------------------------------------
-  // A textfield can search a remote data source instead of taking free text
-  // (ADR-0473). The panel above form-js's properties
-  // edits its atlasDataSource block; the button adds a new one. Both read what this
-  // server offers — the sources and the Workers of their types — once per editor.
-  let dataSources = null;
-  let dsPanel = null;
+  // ---- Directory fields saved as textfields -------------------------------------
+  // A directory field is a select whose options source is a remote data source; the
+  // bundle's properties panel edits it and its preview searches made-up people (above).
+  // A form saved before then holds it as a textfield, which the panel offers to convert.
+  // Until it is converted, the Design pane's preview attaches the same made-up search to
+  // it, as the Tasks app attaches the live one.
   let designPreview = null;
-  async function wireDirectoryFields(ed) {
-    try { dataSources = await api("GET", "/api/v1/form-data/sources"); } catch { dataSources = null; }
-    if (gen !== generation || !dataSources) return;
-    dsPanel = attachDataSourcePanel(container, ed, dataSources);
-    const addBtn = root.querySelector("#form-add-directory");
-    addBtn.hidden = !(dataSources.providers && dataSources.providers.length);
-    addBtn.addEventListener("click", async () => {
-      if (activeTab !== "design") await setTab("design");
-      addDirectoryField(ed, dataSources);
-    });
-    // The Design pane's own preview shows the field with made-up people too, never a
-    // live directory: a design-time preview must not reach a production Worker.
+  function wireLegacyPreview() {
     try {
       const pf = panes.design.pg.getForm();
       const attach = () => {
@@ -527,13 +524,14 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     catch (e) { host.innerHTML = `<p class="muted err">Failed to load the form viewer: ${esc(e.message)}</p>`; return; }
     try {
       if (!p.viewer) {
-        p.viewer = new Form({ container: host });
+        p.viewer = new Form({ container: host, atlasRemote: remoteAdapter({ transport: previewTransport(), preview: true }) });
         p.viewer.on("changed", (ev) => renderOutput(ev.data, ev.errors));
       }
       if (p.lookups) { p.lookups.destroy(); p.lookups = null; }
       await p.viewer.importSchema(schema, currentInputData());
       // A directory field previews with made-up people and says so; nothing is asked
-      // of a directory while a form is being designed.
+      // of a directory while a form is being designed. A select mounts that search
+      // itself (above); one saved as a textfield has it attached.
       p.lookups = attachRemoteSelects(p.viewer, host, { transport: previewTransport(), preview: true, data: currentInputData() });
       renderOutput(currentInputData(), null);
     } catch (e) {
@@ -763,7 +761,6 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
       clearTimeout(reseedTimer);
       clearTimeout(idWatchTimer);
       idCheck.dispose();
-      if (dsPanel) { try { dsPanel.destroy(); } catch { /* ignore */ } }
       if (designPreview) { try { designPreview.destroy(); } catch { /* ignore */ } }
       if (panes.validate.lookups) { try { panes.validate.lookups.destroy(); } catch { /* ignore */ } }
       if (panes.design.pg) { try { panes.design.pg.destroy(); } catch { /* ignore */ } }

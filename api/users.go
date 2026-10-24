@@ -143,6 +143,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	s.logins.forgive(username)
 	audit(r, logging.AuthLogin, "login",
 		slog.String("username", u.Username), slog.String("user_id", u.ID))
+	s.recordLogin(u)
 	httpapi.JSON(w, http.StatusOK, u.toPublic())
 }
 
@@ -204,10 +205,11 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 
 // handleListUsers returns every account (public projection), oldest first, each
 // annotated with whether somebody is signed in as it right now
-// (ADR-0228). The annotation rides along here rather than being a
-// second call the page has to make, so the roster's first paint is already
-// current; /api/v1/users/presence is the same answer without the roster, for the
-// refresh.
+// (ADR-0228) and the day it last signed in
+// (ADR-0477). The annotations ride along here rather than
+// being further calls the page has to make, so the roster's first paint is already
+// current; /api/v1/users/presence is the presence answer without the roster, for
+// the refresh.
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	list := []publicUser{}
 	var loadErr error
@@ -222,7 +224,8 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "list users: "+loadErr.Error())
 		return
 	}
-	httpapi.JSON(w, http.StatusOK, withPresence(list, s.sessions.presenceByUser()))
+	// The login days are read off the loop, like the login that writes them (lastlogin.go).
+	httpapi.JSON(w, http.StatusOK, s.withLastLogins(withPresence(list, s.sessions.presenceByUser())))
 }
 
 // handleListAssignableUsers returns the accounts a task can be assigned to — a
@@ -580,6 +583,13 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	default:
 		s.sessions.destroyUser(id)
 		s.revokeUserGrants(id)
+		// After the account, never before: a login racing this delete then finds the
+		// account gone and writes no day for it (lastlogin.go). A failure leaves one
+		// behind for the next start to prune, and does not undo the delete.
+		if err := s.lastLogins.forget(id); err != nil {
+			logging.Warn(logging.AuthLoginDateUnrecorded, "the login day of a deleted account could not be removed",
+				slog.String("user_id", id), slog.String("error", err.Error()))
+		}
 		audit(r, logging.AuthUserDeleted, "user deleted", slog.String("user_id", id))
 		w.WriteHeader(http.StatusNoContent)
 	}

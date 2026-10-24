@@ -46,7 +46,7 @@ import { runImport } from "./infomodel-import.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
 import { formRefusalNames, loadFormViewer, scrollToFirstInvalidField } from "./formviewer.js";
-import { attachRemoteSelects, taskTransport } from "./remote-select.js";
+import { attachRemoteSelects, remoteAdapter, taskTransport } from "./remote-select.js";
 // A start form does not replace the start variables declared on the process: the ones
 // it does not ask for are asked beneath it, with the Modeler's typed fields.
 import { uncoveredStartVariables, extraStartFieldsHTML, wireStartJSONEditors, readTypedDeployBody, keepConstantNameInCapitals } from "./startvars.js";
@@ -59,7 +59,7 @@ import { viewAIAccess } from "./aiaccess.js";
 // star beside a diagram in the lists. Its own module for the reason aiaccess.js is.
 import { installDiagramShortcuts, setShortcutsEnabled, starButton, noteDiagramOpened } from "./diagram-shortcuts.js";
 import { renderKeyFeatures, paintKeyFeatures } from "./key-features.js";
-import { fmtDateTime } from "./datefmt.js";
+import { fmtDate, fmtDateTime } from "./datefmt.js";
 import { mockupsHTML } from "./mockups.js";
 import { prefs, loadPrefs } from "./prefs.js";
 import { renderDisplaySettings } from "./displaysettings.js";
@@ -919,6 +919,11 @@ const WORKER_TYPES = [
     refs: "ADR-0463 \u00b7 ADR-0172", status: "active", statusLabel: "configured below",
   },
   {
+    id: "googlecontacts", name: "Google Contacts", kind: "Contacts",
+    desc: "Uses a Google address book from a process: finds a contact by e-mail address, phone number or a custom field such as a customer number, reads, lists, creates, updates and deletes contacts, puts a label such as Kunden on one or takes it off, and searches the organization\u0027s Workspace directory for a colleague. A contact arrives as one flat object (email, phone, organization, address, fields, groups) rather than as Google\u0027s lists of entries. Find reads the address book itself, exact and current, so a process asking whether a customer is known does not get the stale answer Google\u0027s search cache can give. Configure each address book below: a service account acting as a Workspace user, or a person\u0027s refresh token, lives in the vault and never enters a model. Worker-only, and atlas supervises the worker for it.",
+    refs: "ADR-0476", status: "active", statusLabel: "configured below",
+  },
+  {
     id: "mssql", name: "Microsoft SQL Server", kind: "Database",
     desc: sqlWorkerTypeDesc("Microsoft SQL Server", "MSSQL", "@p1", "SQL Server is the one product of the three that also binds them by name (@id), which is why an object-shaped parameters variable is accepted here and refused by the other two."),
     refs: "ADR-0173 \u00b7 ADR-0188 \u00b7 ADR-0221", status: "active", statusLabel: "configured below",
@@ -1603,6 +1608,7 @@ function paintReleaseNotes(slot, lang) {
 // ---------- Views ----------
 async function viewConsoleDashboard() {
   view.innerHTML = `
+    <div id="storage-alert-slot"></div>
     <div id="catalogue-stranded-slot"></div>
     <div id="api-tokens-expiring-slot"></div>
     <div id="approvals-waiting-slot"></div>
@@ -1644,6 +1650,7 @@ async function viewConsoleDashboard() {
         </div>
       </div>
     </div>
+    <div id="storage-card-slot"></div>
     <div id="key-features-slot"></div>`;
   view.querySelector("[data-system-overview]").addEventListener("click", () => openSystemOverview());
   // What switching the catalogue off strands (ADR-0434): asked only where it can have
@@ -1655,6 +1662,17 @@ async function viewConsoleDashboard() {
   if (mayUse("admin")) {
     import("./apitokens.js").then((m) => m.renderExpiringTokens(document.getElementById("api-tokens-expiring-slot"), { api }))
       .catch(() => {});
+  }
+  // The disk under the data directory (ADR-0481): asked only by an
+  // administrator, the one person the route answers and the one who can free space.
+  // The card is always shown to them; the alert above the dashboard only when the room
+  // runs low, the server is frozen below its reserve, or the engine has halted.
+  if (mayUse("admin")) {
+    import("./storage.js").then((m) => m.renderStorage({
+      alertSlot: document.getElementById("storage-alert-slot"),
+      cardSlot: document.getElementById("storage-card-slot"),
+      api,
+    })).catch(() => {});
   }
   // Action approvals waiting for this person's answer (ADR-0475 §9): asked only when
   // somebody is signed in, because only a person answers one. Silent otherwise.
@@ -2788,6 +2806,28 @@ async function viewConsoleOrg() {
     return `<span class="pill off" title="${esc(closed)}"><span class="dot"></span>offline</span>`;
   };
 
+  // The day each account last signed in (ADR-0477).
+  // Presence is this minute and a restart forgets it; this is what tells an account
+  // somebody still uses from one nobody has opened since spring. The server keeps a
+  // UTC calendar day and nothing finer, so its age is counted against today's UTC day
+  // as well — that makes "today" and "3 days ago" right for every reader, whichever
+  // time zone they chose. Shown with the same condition as presence: with login not
+  // enforced, nobody signs in and every row would say so.
+  const showLastLogin = AUTH.enabled;
+  const lastLoginCell = (u) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(u.lastLoginDate || "");
+    if (!m) {
+      return `<td class="muted" data-sort="" title="No login recorded for this account. Logins are recorded from this release on, and an account used only through an API token or an AI client never signs in here.">—</td>`;
+    }
+    const day = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    const now = new Date();
+    const age = Math.round((Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - day) / 86400000);
+    const when = age <= 0 ? "today" : age === 1 ? "yesterday" : `${age} days ago`;
+    const date = fmtDate(day, { timeZone: "UTC" });
+    return `<td class="nowrap" data-sort="${esc(u.lastLoginDate)}" title="Last signed in on ${esc(date)} (a UTC calendar day — Atlas keeps the day, not the time)">${esc(when)}
+        <div class="muted" style="font-size:12px">${esc(date)}</div></td>`;
+  };
+
   const roleChips = (roles) => (roles || []).map((r) => `<span class="chip">${esc(r)}</span>`).join(" ");
   const statusPill = (u) => u.disabled
     ? `<span class="pill warn"><span class="dot"></span>disabled</span>`
@@ -2806,6 +2846,7 @@ async function viewConsoleOrg() {
       <td>${esc(u.displayName || "—")}${u.email ? `<div class="muted" style="font-size:12px">${esc(u.email)}</div>` : ""}</td>
       <td>${roleChips(u.roles)}</td>
       <td>${statusPill(u)}</td>
+      ${showLastLogin ? lastLoginCell(u) : ""}
       ${showPresence ? `<td class="presence-cell">${presencePill(u.presence)}</td>` : ""}
       <td style="text-align:right; white-space:nowrap">
         <button class="btn ghost" data-act="edit" title="Edit this user’s details and roles">Edit</button>
@@ -2832,13 +2873,17 @@ async function viewConsoleOrg() {
           carries, and nothing more.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
           administrators see it: <b>online</b> means somebody did something in the last five minutes,
           <b>idle</b> that a session is open but untouched, <b>offline</b> that no browser is reporting.
-          It is read from the live sessions and never stored — a restart shows nobody.` : ""}</p>
+          It is read from the live sessions and never stored — a restart shows nobody.` : ""}${showLastLogin ? ` <b>Last login</b>
+          is the day an account last signed in, kept per account so that an account nobody uses any more
+          stands out. It is a calendar day (UTC) and nothing finer: it says whether an account is in use, not
+          when anybody starts work — the audit log has the exact time of every login.` : ""}</p>
         <div id="user-form-slot" style="padding:0 18px"></div>
         <table data-dt-key="users">
           <thead><tr><th>User</th><th>Name</th><th>Roles</th><th>Status</th>${
+            showLastLogin ? "<th>Last login</th>" : ""}${
             showPresence ? "<th>Presence</th>" : ""}<th></th></tr></thead>
           <tbody id="user-rows">${(users || []).map(userRow).join("")
-            || `<tr><td colspan="${showPresence ? 6 : 5}" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
+            || `<tr><td colspan="${5 + (showLastLogin ? 1 : 0) + (showPresence ? 1 : 0)}" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
         </table>
       </div>`;
 
@@ -4101,7 +4146,7 @@ async function openReleaseArchitecture(appID, appName, version) {
         <img src="${url}" alt="Architecture sketch of release v${version}" style="display:block; max-width:100%; height:auto">
       </div>
       <div class="modal-foot">
-        <span class="muted small">Taken when the release was recorded. The logical view: which worker serves each name here, and at which endpoint, is not part of it yet.</span>
+        <span class="muted small">Taken when the release was recorded on this installation. Endpoints and worker instances you may not see are withheld.</span>
         <a class="btn ghost" href="${base}.xml" download="${esc(file)}.xml" title="ArchiMate Open Exchange document, for Archi and other architecture tools">ArchiMate (.xml)</a>
         <a class="btn" href="${base}.svg" download="${esc(file)}.svg" title="The sketch as a standalone image">Image (.svg)</a>
       </div>
@@ -4902,12 +4947,13 @@ function wireWorkerManagement(workers) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="teamsphone">Microsoft Teams Phone</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="teamsphone">Microsoft Teams Phone</option><option value="googlecontacts">Google Contacts</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field provider-field" style="margin:0"><span class="provider-label">Provider</span><select name="provider"></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
         <label class="field mailbox-field" style="margin:0;flex:1 1 200px" title="Lets this Worker read the mailbox it sends from: a watch, or a task that lists, files or answers mail. Logs in as the sender, always over TLS."><span>IMAP endpoint (optional)</span><input name="mailboxEndpoint" placeholder="imaps://imap.example.com:993"/></label>
+        <label class="field scanner-field" style="margin:0;flex:1 1 200px" title="Every attachment this Worker forwards, reads into a variable or exports into a store is scanned by this ClamAV daemon first. A scanner that does not answer stops the task rather than letting the attachment through."><span>Malware scanner (optional)</span><input name="scanner" placeholder="clamd://clamav.internal:3310"/></label>
         <label class="field model-field" style="margin:0;flex:1 1 180px"><span>Default model</span><input name="model" title="What a step that names no model of its own asks. A task or an agent container may name one, and then that one runs (ADR-0256)."/></label>
         <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
@@ -4950,6 +4996,7 @@ function wireWorkerManagement(workers) {
         const sh = workerShape(kindSel.value, providerSel.value);
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = sh.mail ? "" : "none"; });
         form.querySelector(".mailbox-field").style.display = sh.mailbox ? "" : "none";
+        form.querySelector(".scanner-field").style.display = sh.scanner ? "" : "none";
         form.querySelector(".provider-field").style.display = sh.provider ? "" : "none";
         form.querySelector(".provider-label").textContent = sh.model ? "Wire format" : "Provider";
         const modelField = form.querySelector(".model-field");
@@ -5258,10 +5305,13 @@ async function toggleInboundSubs(row, workerId, kind) {
   const list = subs.map((s) => `<tr data-sid="${esc(s.id)}">
       <td><code>${esc(s.jql || s.spreadsheetId || s.folderId || s.channelId || s.mailFolder || s.watchedSubject)}</code>${s.mailFolder ? ` <span class="muted">(new mail${(s.allowedSenders || []).length ? " from " + esc(s.allowedSenders.join(", ")) : " from anyone"}${s.requireDmarcPass ? ", DMARC pass" : ""}${s.includeBody ? ", with body" : ", metadata only"})</span>` : ""}${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}${s.spreadsheetId ? ` <span class="muted">(rows in ${esc(s.watchRange || "A:Z")})</span>` : ""}${s.folderId ? ` <span class="muted">(files ${esc(s.cursorField || "created")})</span>` : ""}${s.channelId ? ' <span class="muted">(new messages)</span>' : ""}</td>
       <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
-      <td>${s.enabled
-        ? '<span class="pill ok"><span class="dot"></span>on</span>'
-        : `<span class="pill warn" title="${esc(s.disabledReason || "Switched off.")}"><span class="dot"></span>off</span>`
-          + (s.disabledReason ? ` <span class="muted">${esc(s.disabledReason)}</span>` : "")}</td>
+      <td>${!s.enabled
+        ? `<span class="pill warn" title="${esc(s.disabledReason || "Switched off.")}"><span class="dot"></span>off</span>`
+          + (s.disabledReason ? ` <span class="muted">${esc(s.disabledReason)}</span>` : "")
+        : s.lastError
+        ? `<span class="pill err" title="${esc(s.lastError)}"><span class="dot"></span>not reading</span>`
+          + ` <span class="muted">since ${esc(fmtTime(s.failingSince))}: ${esc(s.lastError)}</span>`
+        : '<span class="pill ok"><span class="dot"></span>on</span>'}</td>
       <td style="text-align:right"><button class="btn ghost danger" data-sdel title="Delete this subscription">Delete</button></td>
     </tr>`).join("") || `<tr><td colspan="4" class="muted" style="padding:10px">No subscriptions. Add one below to have clio events start or wake processes.</td></tr>`;
   const isJira = kind === "jira";
@@ -5294,7 +5344,7 @@ async function toggleInboundSubs(row, workerId, kind) {
     ? `<label class="field" style="grid-column:1 / span 2;margin:0"><span>Allowed senders (optional, comma-separated)</span><input name="allowedSenders" placeholder="kunde@example.com, @lieferant.ch"/></label>
       <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center"><input type="checkbox" name="requireDmarcPass"/><span>Require a DMARC pass</span></label>
       <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center"><input type="checkbox" name="includeBody"/><span>Include the text</span></label>
-      <div class="muted" style="grid-column:1 / -1">The folder is an IMAP folder name, a Gmail label id (<code>INBOX</code>, <code>Label_…</code>) or a Microsoft folder id or well-known name (<code>inbox</code>, <code>archive</code>); empty is the inbox. The correlation key (FEEL) sees <code>messageId</code>, <code>internetMessageId</code>, <code>from</code>, <code>fromName</code>, <code>replyTo</code>, <code>to</code>, <code>cc</code>, <code>subject</code>, <code>receivedAt</code>, <code>unread</code>, <code>hasAttachments</code>, <code>attachments</code>, <code>auth</code> (<code>spf</code>, <code>dkim</code>, <code>dmarc</code>), <code>folder</code>, <code>eventType</code> — and <code>body</code> when the text is included. These are also seeded as process variables; <code>messageId</code> is what a mail task's operation addresses. A new watch is forward-only, so the mail already in the folder is skipped.</div>`
+      <div class="muted" style="grid-column:1 / -1">The folder is an IMAP folder name, a Gmail label id (<code>INBOX</code>, <code>Label_…</code>) or a Microsoft folder id or well-known name (<code>inbox</code>, <code>archive</code>); empty is the inbox. The correlation key (FEEL) sees <code>messageId</code>, <code>internetMessageId</code>, <code>from</code>, <code>fromName</code>, <code>replyTo</code>, <code>to</code>, <code>cc</code>, <code>subject</code>, <code>receivedAt</code>, <code>unread</code>, <code>hasAttachments</code>, <code>attachments</code>, <code>auth</code> (<code>spf</code>, <code>dkim</code>, <code>dmarc</code>), <code>folder</code>, <code>eventType</code> — and <code>body</code> when the text is included, by these names or under <code>mail</code> (<code>mail.internetMessageId</code>). The process receives them as one variable, <code>mail</code>: <code>mail.from</code>, <code>mail.subject</code>, <code>mail.auth.dmarc</code>; <code>mail.messageId</code> is what a mail task's operation addresses. A new watch is forward-only, so the mail already in the folder is skipped.</div>`
     : isDiscord
     ? `<div class="muted" style="grid-column:1 / -1">In Discord, enable <b>Developer Mode</b> (User Settings &rsaquo; Advanced) and use the channel's <b>Copy Channel ID</b>. A thread is itself a channel, so a thread's id works here too. The correlation key (FEEL) sees <code>messageId</code>, <code>channelId</code>, <code>content</code>, <code>authorId</code>, <code>authorName</code>, <code>authorBot</code>, <code>timestamp</code>, <code>eventType</code>, and <code>message</code> — the whole message, for anything not named here. These are also seeded as process variables on the started instance. <b>Guard against your own bot</b>: if this Worker also posts into this channel, key or condition on <code>authorBot</code>, or the watch will react to what it wrote. A new watch is forward-only, so the messages already in the channel are skipped.</div>`
     : isGoogle
@@ -7335,7 +7385,9 @@ async function viewWorkers() {
             title="Show the jobs this worker ran">${w.worker ? esc(w.worker) : "(unnamed)"}</a></b></td>
           <td>${Object.keys(w.types || {}).sort()
             .map((t) => `<span class="pill-kv">${esc(t)}</span>`).join(" ") || `<span class="muted">&mdash;</span>`}</td>
-          <td>${(w.connectors || []).map((c) => `<span class="pill-kv">${esc(c)}</span>`).join(" ")
+          <td>${(w.connectors || []).map((c) => `<span class="pill-kv">${esc(c)}${
+              w.endpoints && Object.hasOwn(w.endpoints, c)
+                ? ` <span class="muted">&rarr; ${esc(w.endpoints[c])}</span>` : ""}</span>`).join(" ")
             || `<span class="muted">&mdash;</span>`}</td>
           <td class="wk-num">${w.leased}</td>
           <td class="wk-num">${w.pulled}</td>
@@ -9327,15 +9379,17 @@ async function viewTasks(preselectKey) {
       ]);
       if (state.selected !== t.key) return; // selection moved on; drop this mount
       host.innerHTML = "";
-      const form = new Form({ container: host });
+      // A directory field searches its remote data source through this task: the
+      // server checks that this person may work on it and reads which Worker and which
+      // properties from the stored form (ADR-0473). The form's selects mount the search
+      // themselves; a directory field saved as a textfield has it attached below. A form
+      // without one asks nothing.
+      const lookups = { transport: taskTransport(t.key), data: data || {} };
+      const form = new Form({ container: host, atlasRemote: remoteAdapter(lookups) });
       await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
-      // A directory field searches its remote data source through this task: the
-      // server checks that this person may work on it and reads which Worker and which
-      // properties from the stored form (ADR-0473). A form
-      // without one attaches nothing.
-      state.mountedLookups = attachRemoteSelects(form, host, { transport: taskTransport(t.key), data: data || {} });
+      state.mountedLookups = attachRemoteSelects(form, host, lookups);
       // The variables the form was filled from, kept beside it. Completing the task
       // needs one the form does not render — which catalogue a picked logo belongs
       // to — and reading it back off the submitted data would only find the fields

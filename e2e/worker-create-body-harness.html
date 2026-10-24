@@ -30,6 +30,7 @@
       <select name="provider">
         <option value="smtp">smtp</option>
         <option value="gmail">gmail</option>
+        <option value="preview">preview</option>
         <option value="">(graph)</option>
         <option value="mock">mock</option>
       </select>
@@ -41,6 +42,11 @@
            provider (ADR-0438) -->
       <label class="mailbox-field" style="display:none">
         <input name="mailboxEndpoint" />
+      </label>
+      <!-- the malware scanner is every mailbox-holding mail Worker's
+           (ADR-0478) -->
+      <label class="scanner-field">
+        <input name="scanner" />
       </label>
     </form>
     <pre id="out"></pre>

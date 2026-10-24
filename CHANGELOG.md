@@ -57,10 +57,115 @@ governs a Worker:
   from the first task that writes to it; the site is gone when the server restarts.
   **Operations → Diagnostics → Mockups** shows each mockup's lists, libraries and newest 200
   operations, and empties a site for the next run; it reads `GET /api/v1/mocks`, the first
-  part of the one mockup view [ADR-0216](docs/adr/0216-mockups-are-one-view.md) decided. A mockup is never delegated. The new
+  part of the one mockup view [ADR-0216](docs/adr/0216-mockups-are-one-view.md) decided.
+  A mockup is never delegated. The new
   `examples/sharepoint-fallakte/sharepoint-testdaten.bpmn` fills an empty site so the case
   file example runs on a mockup Worker named `intranet`
   ([ADR-draft-sharepoint-mock-mode](docs/adr/draft-sharepoint-mock-mode.md)).
+
+- **The dashboard shows the disk, and the server keeps a reserve free on it.** An
+  administrator sees each file system the server writes to on the Console's dashboard: how
+  much is used and free, where the reserve begins, what the WAL and the state store hold,
+  and when the reserve will be reached at the current consumption. An alert above the
+  dashboard appears when the room runs low, when the server is frozen, or when the engine
+  has halted. Below the reserve (`--storage-reserve-mb`, default 1024, `0` turns the
+  freeze off) the server refuses new writes with 507 and `Retry-After` before they reach
+  the engine, starts no work of its own — timers wait, retention and the inbound bridge
+  pause, in-process workers lease nothing — and keeps answering reads, sign-ins,
+  checkpoints and the reports of jobs already leased; it resumes by itself once the
+  reserve and a quarter of it are free. The forecast keeps no history: two numbers per
+  file system, smoothed over about six hours. The same readings are in
+  `GET /api/v1/storage`, the `atlas_storage` MCP tool and `/metrics`
+  (`atlas_storage_*`, `atlas_engine_halted`), where `predict_linear` forecasts over as long
+  a window as Prometheus keeps
+  ([ADR-0481](docs/adr/0481-storage-guard.md)).
+- **The PowerShell editor completes a cmdlet's parameters.** After a cmdlet, `-` offers
+  its own parameters, then the common ones (`-ErrorAction`, `-Verbose` and the rest), less
+  those it already has: `Get-ChildItem -Re` offers `-Recurse`, and `Where-Object Name -`
+  offers `-Like` and `-EQ`. In an expression — `$a -`, `if ($x -`, `{ $_.Name -` — it still
+  offers the operators. The catalogue's cmdlets carry the parameters a script reaches for,
+  as PowerShell 7.4 names them, not each one's full set; a command outside it, such as a
+  function of the script, is offered the common parameters.
+- **Worker Type operations can declare versioned technical capabilities.** A Worker Type manifest can now attach optional `capabilities` metadata (namespaced ID, semantic contract version and provider profile) to an operation. Invalid and duplicate claims are rejected at admission; existing manifests and runtime routing remain unchanged. These are descriptive claims, not a statement of cross-provider equivalence or an authorization grant ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
+- **A mail task forwards a message, reads an attachment, or exports one into an S3 Worker.**
+  Three new mail operations hand a mail's document on. **Forward message** sends the mail
+  with its attachments to new recipients, with a note above it — server-side through
+  Microsoft Graph, framed by the Worker for IMAP and Gmail. **Read attachment** puts one
+  attachment base64-encoded into a variable, bounded by the variable budget and refused
+  with a pointer to the export beyond it. **Export attachment** carries one attachment from
+  the mailbox straight into a named S3 Worker without it ever entering the process, stored
+  under its detected content type, so an S3 `presign-get` can show it to a person in a user
+  task. The envelope's `attachments` list now carries an `id` per entry, which is how the
+  two attachment operations address one. Forwarding and exporting deploy only for editors
+  of the mail Worker, and an export also only for editors of the S3 Worker it names; a
+  supervised mail worker is handed exactly the S3 Workers its deployed models export into.
+  A document is bounded by a new budget, `ATLAS_LIMIT_DOCUMENT` (35 MiB)
+  ([ADR-0478](docs/adr/0478-mail-documents-leave-the-mailbox.md)).
+- **Attachments are inspected before they leave the mailbox, and a mail Worker can name a
+  malware scanner.** Every document the three operations hand on is judged from its
+  content, never its name: programs and scripts under any name, shortcuts and disk images,
+  Office documents with macros, encrypted archives and archives carrying programs, PDFs
+  with JavaScript or a launch action, a document whose name claims a format its content is
+  not, and names with bidirectional control characters are refused. A task can narrow the
+  accepted types further (`allowedTypes="application/pdf, image/*"`). A mail Worker's new
+  **Malware scanner** field names a ClamAV daemon (`clamd://host:3310` or a Unix socket);
+  every document is then scanned as well, a scanner that does not answer stops the task
+  rather than letting the document through, and **Test connection** checks it. A refused
+  document ends the task with `MAIL_ATTACHMENT_REJECTED` where the process catches that
+  code, and with an incident naming the reason otherwise; what inspection found travels in
+  the result as `inspection` and in an exported object's metadata.
+- **The user list shows when each account last signed in.** **Organization → Users** has
+  a **Last login** column beside Status and Presence: "today", "yesterday" or "N days
+  ago", with the day itself, and sorting by it puts the accounts nobody uses first — the
+  ones to disable. Password and single sign-on logins both count; refused attempts do
+  not. Atlas keeps one value per account, the UTC calendar day of its latest login, and
+  overwrites it at the next one: it says whether an account is in use, never when
+  anybody starts work, and the audit log keeps the exact time of every login. The
+  roster and `GET /api/v1/users` carry it as `lastLoginDate`; signing in still never
+  waits for the run loop, and never rewrites the account record. The data directory
+  gains a store, `last-logins`, which a whole-instance snapshot carries with the
+  accounts. Accounts show "no login recorded" until their first login after the
+  upgrade, and an account used only through an API token or an AI client never signs
+  in here ([ADR-0477](docs/adr/0477-last-login-day.md)).
+
+- **A process finds, keeps and labels the people in a Google address book.** A new
+  Google Contacts Worker Type finds a contact by e-mail address, phone number or a custom
+  field such as a customer number, reads, lists, searches, creates, updates and deletes
+  contacts, puts a label such as *Kunden* on one or takes it off, and searches the
+  Workspace directory for a colleague. A contact arrives as one flat object — `email`,
+  `phone`, `organization`, `address`, `fields`, `groups` — and is written with the same
+  keys: null leaves a value as it is, `""` clears it, `email` changes the primary address
+  and keeps the others. `find-contacts` reads the address book itself, so a process asking
+  whether a customer is known is not misled by Google's search cache. The credential — a
+  service account acting as a Workspace user, or a refresh token — lives in the vault and
+  reaches only the supervised worker; a missing contact can be caught as
+  `GOOGLECONTACTS_CONTACT_NOT_FOUND`
+  ([ADR-0476](docs/adr/0476-google-contacts-worker.md)).
+
+- **A worker reports where its workers connect.** `atlas worker` now sends, beside the
+  worker names it holds, the endpoint each one's configuration names, reduced to scheme,
+  host and port before it leaves the worker, so a credential or a path in it never
+  does; any worker may do the same through the new optional `endpoints` field of
+  `POST /api/v1/jobs/activate`. The server reduces what it is told again, keeps only
+  the endpoints of names the same poll reported, and shows them in the Workers view.
+  A release's architecture sketch draws a reported endpoint, marked as reported, for a
+  worker the server holds no configuration for; instances that report different
+  endpoints for one name are recorded as disagreeing rather than one of them being
+  drawn, and a reported endpoint is shown only to operators
+  ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
+
+- **The architecture sketch shows where a release's connections go.** A release now also
+  records what the installation that recorded it had in place for it: its name and
+  environment, its external address (`--external-url`), the public start links of its
+  processes, and for each worker whether Atlas runs it itself or a worker process leases
+  the work, the worker's endpoint reduced to scheme, host and port, and the worker
+  instances seen serving it since the server started. Service tasks with a job type are
+  part of the sketch too, with the instances that leased them. The SVG draws each
+  connection from the side that opens it and names the system a worker connects to; the
+  ArchiMate document adds the worker processes, the target systems and the connections
+  between them. An endpoint is shown only to a reader who may see that worker's
+  configuration and the instances only to an operator; everybody else is told they are
+  withheld ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
 
 - **Approvals in the Console.** **Approvals** (account menu, and a tile on the dashboard
   when some wait) lists the open action approvals a person may answer and the ones asked on
@@ -70,6 +175,7 @@ governs a Worker:
   it, `GET /api/v1/me/action-approvals` reads open requests through an index by expiry, so
   a worklist costs what is open now rather than every approval ever recorded. The answer
   still does not run the action: the policy reads it when the action is next tried.
+
 - **A release carries its architecture sketch.** Publishing an application, and
   importing a promoted release, now takes a snapshot of how the release meets its
   environment and saves it with the release record: the messages its processes receive
@@ -80,9 +186,8 @@ governs a Worker:
   an ArchiMate Open Exchange document for Archi and other tools; the API serves it at
   `GET /api/v1/applications/{id}/releases/{version}/architecture` with `.svg` and `.xml`
   variants. The same release always renders to the same bytes, and the image says when
-  the snapshot was taken and what it does not show. It is the logical view: which worker
-  serves a name on an installation and at which endpoint comes in a later slice, and a
-  release recorded before this version has no snapshot and says so
+  the snapshot was taken and what it does not show. A release recorded before this
+  version has no snapshot and says so
   ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
 
 - **External accounts and delegated connections.** A signed-in person links a Microsoft
@@ -114,9 +219,9 @@ governs a Worker:
   policies, a simulator whose answer is labelled a simulation, and an instance's recorded
   decisions and approvals. The MCP tool `atlas_instance_authorizations` reads the same
   evidence.
-- **A task form can search a directory instead of listing it.** A textfield with an
-  `atlasDataSource` block is a directory field: in the Tasks app the person types a name or
-  an e-mail address, sees at most one page of matches (25 by default) from Microsoft Entra
+- **A task form can search a directory instead of listing it.** A select whose options
+  source is a remote data source is a directory field: in the Tasks app the person types a
+  name or an e-mail address, sees at most one page of matches (25 by default) from Microsoft Entra
   ID, narrowed by another field of the form such as the department, and the task completes
   with the chosen entry's object id — never its label, and never a listing in a process
   variable. `POST /api/v1/tasks/{key}/form-data/{field}/query` answers only somebody who may
@@ -134,11 +239,16 @@ governs a Worker:
 - **Forms may search, per Worker.** An Entra Worker's dialog in the Console has a
   **Forms may search** switch (`formLookups`), off until its editors turn it on: a form
   can name any Worker, but only one opened this way answers its searches.
-- **The form editor configures a directory field without JSON.** **＋ Directory field**
-  adds one, and a panel above the properties of a selected text field chooses the source,
-  the Worker, the properties searched and shown, filters bound to another field or fixed,
-  the page size and how the choice is checked. The Validate tab and the Design preview
-  search made-up people and say so; no directory is asked while a form is designed.
+- **A select's options can come from a remote data source.** In the form editor, a
+  select's **Options source ▸ Type** offers **Remote data source** beside Static, Input data
+  and Expression, and the same group chooses the source, the Worker, the properties
+  searched, after how many characters and how many results per page; **Remote filters**
+  binds the search to another field or a fixed value, **Option display** says what each
+  result shows, and **Validation** how the choice is checked when the task is completed.
+  The palette's **Directory picker** adds such a select, already searching through a
+  Worker open to forms. The Validate tab and the Design preview search made-up people and
+  say so; no directory is asked while a form is designed. A directory field saved as a
+  text field keeps working everywhere, and the editor offers **Convert to select** for it.
 - **Example: pick a person and read their manager.** `examples/entra-benutzerauswahl` is the
   process `Process_mvjoqvisfajk` without its `list-users` step: a department, a directory
   search, the object id into `user`, and `get-user-manager` with `userId="= user"`.
@@ -206,6 +316,32 @@ governs a Worker:
 
 ### Changed
 
+- **The engine halts after a write it could not make durable.** A failed WAL sync, or a
+  failure to commit state after the log has the batch, stops the engine: every later write
+  is answered 503 until the server is restarted, reads go on, and the log says
+  `event=engine.halted` once. It had carried on, and ran the failed batch's commands again
+  with the next request — after their callers had been told they failed. The restart
+  recovers exactly what was acknowledged
+  ([ADR-0481](docs/adr/0481-storage-guard.md)).
+- **The server stops taking writes below a 1 GiB storage reserve by default.** A disk
+  with less than that available under the data directory now answers writes with 507
+  where it used to take them until it failed. Set `--storage-reserve-mb` to size the
+  reserve, or `0` to keep the old behaviour with the dashboard's warnings.
+
+- **The vendored form-js bundles are built from a lockfile, and checked.**
+  `form-viewer.js` and `form-playground.js` are now built from
+  `api/web/vendor/form-js/src/` — the entries, Atlas's form-js modules and a
+  `package-lock.json` — by the recipe in `ATLAS-VENDORED.txt`, and a test holds both to
+  the checksums recorded there. Two builds give the same bytes. The bundles they replace
+  were built without a lockfile and cannot be rebuilt byte for byte.
+- **A mail watch hands the mail to the process as one object, `mail`.** The instance
+  receives `mail.from`, `mail.subject`, `mail.to`, `mail.auth.dmarc`, `mail.messageId`
+  and the other envelope fields under one variable, instead of each as a variable of its
+  own, which overwrote a process's own `from`, `to` or `subject` when a reply arrived at a
+  catch event. **A model that reads a mail field directly must read it under `mail`
+  now** — `from` becomes `mail.from`, and a mail task's `messageId` becomes
+  `mail.messageId`. A watch's correlation key is unchanged: it sees the flat names as
+  before, and `mail` beside them ([ADR-0438](docs/adr/0438-mailbox-worker.md)).
 - **A governed SharePoint Worker asks before it acts.** When its Worker has an identity
   policy, the SharePoint Worker asks Atlas before each action, and in delegated mode
   calls Graph only with the token Atlas released for that action.
@@ -260,6 +396,23 @@ governs a Worker:
 
 ### Fixed
 
+- **A server that ran its disk full restarts again.** A WAL write cut short by a full
+  disk left its torn bytes in the segment, and the next batch was written behind them;
+  the restart then found damage with data after it and refused to start until the log was
+  repaired by hand. A failed write is now cut off again and its batch dropped, a failed
+  fsync stops the log, and nothing is written behind a torn batch. A batch that failed is
+  also no longer written a second time with the next one
+  ([ADR-0481](docs/adr/0481-storage-guard.md)).
+- **A PowerShell command name completes past its dash.** The script editor read every
+  `-` as the start of an operator, so `Get-` offered `-and`, `-eq` and the rest, and
+  choosing `Get-ChildItem` after `Get-Ch` wrote `GetGet-ChildItem`. A dash glued to a
+  word now continues the command name; after a space, a bracket or a value such as
+  `$a-` it still offers the operators.
+- **A pill keeps to one line.** A status pill in a column narrower than its label folded
+  inside itself, and its round ends turned the two lines into a tall blob: the expiry and
+  vault pills on *API tokens*, the findings on *Events* and the marks on the *Event log*.
+  A pill now stays on one line, as a chip already did, and moves under the cell's text
+  when the column is narrow; the *Event log*'s marks also stand a size smaller.
 - **Authorization evidence has its own key space.** It had been given the event log's
   column family byte, so a range read or prefix delete of one could reach the other's
   records. It moved; evidence recorded by a development build before the move is no longer
@@ -274,6 +427,21 @@ governs a Worker:
   the collaboration replay, and a message with a time to live is kept for the subscription
   that opens later. What earlier versions wrote stays as it was
   ([ADR-0370](docs/adr/0370-durable-message-buffer.md), amended 2026-10-23).
+- **An inbound watch says why it is not reading.** A watch whose Worker had no mailbox,
+  no client or was switched off was skipped at every poll, and a read or first read its
+  source refused was retried every tick, all without a word: from outside it looked
+  exactly like a source with nothing new. Each such watch now carries `lastError` and
+  `failingSince` (unix seconds) in `GET /api/v1/connectors/{id}/inbound-subscriptions`
+  and, for a viewer of its Worker, in its `inbound-watch` row of the message sources; the
+  Console shows it as *not reading*, and the log has `inbound_watch.failing` once when it
+  begins and `inbound_watch.recovered` when a read succeeds again. The state is kept in
+  memory, not in the watch, and is learned again at the first read after a restart
+  ([ADR-0438](docs/adr/0438-mailbox-worker.md)).
+- **A mail watch on a Worker with no mailbox is refused.** An SMTP Worker without an IMAP
+  endpoint, a Preview Worker or a Graph Worker without a sender cannot read a mailbox, and
+  a watch created on one was stored and then never read anything. Creating one is now a
+  400 that says what is missing. Watches stored before are kept and report the reason as
+  their `lastError`.
 - **A SharePoint task that names `create-item` keeps its list and columns in the
   Modeler.** The panel showed the list and the column table only for a task with no
   operation, so a model spelling `operation="create-item"` out lost both on its next

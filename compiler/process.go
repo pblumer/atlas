@@ -602,6 +602,16 @@ type ConnectorTaskDetail struct {
 	MailMaxResults  int32
 	MailIncludeBody bool
 	MailUnreadOnly  bool
+	// The documents half (ADR-0478). MailAttachment is
+	// the attachment get-attachment and export-attachment address, literal-or-FEEL;
+	// MailAllowedTypes the media types the task accepts, normalized here (I5); MailStore
+	// the S3 Worker an export puts the document into — a literal name, so the deploy
+	// check can see it — and MailBucket and MailKey where in it.
+	MailAttachment   RestExpr
+	MailAllowedTypes []string
+	MailStore        string
+	MailBucket       RestExpr
+	MailKey          RestExpr
 	// CSV worker fields (JobType == CsvImportJobType, ADR-0139). CsvSource is the
 	// interned name of the process variable holding the raw CSV text (-1 → the
 	// default "csvText"); CsvResult the variable the parsed rows are written to
@@ -1119,6 +1129,25 @@ type ConnectorTaskDetail struct {
 	// task; ResultVar (above) receives the operation's answer.
 	TeamsPhoneOp   int32
 	TeamsPhoneArgs []RestKV
+	// Google Contacts fields (JobType == GoogleContactsJobType,
+	// ADR-0476). Connector (above) names the configured address
+	// book, and GoogleContactsConnector carries it as literal-or-FEEL when a model picks
+	// the account at runtime. GoogleContactsOp is the interned operation — a row of
+	// connector/googlecontacts/catalog. ContactID, Query, Field and Group are the
+	// literal-or-FEEL values the operation takes; GoogleContactsContact is the authored
+	// contact object compiled from the model's JSON template to one FEEL context at
+	// deploy (I5), and GoogleContactsContactVar names the variable holding it instead.
+	// GoogleContactsMaxResults bounds a listing, with its default applied, and is zero on
+	// every other operation. All are the zero value for a task of another kind.
+	GoogleContactsConnector  RestExpr
+	GoogleContactsOp         int32
+	GoogleContactsContactID  RestExpr
+	GoogleContactsQuery      RestExpr
+	GoogleContactsField      RestExpr
+	GoogleContactsGroup      RestExpr
+	GoogleContactsContact    RestExpr
+	GoogleContactsContactVar int32
+	GoogleContactsMaxResults int32
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a
@@ -2299,12 +2328,39 @@ func (p *CompiledProcess) MessageReceipts() []MessageReceipt {
 	return out
 }
 
+// JobTypeRef is one service or send task and the job type it creates: work any
+// worker that subscribes to that type may lease (ADR-0007).
+type JobTypeRef struct {
+	ElementId string
+	JobType   string
+}
+
+// JobTypeRefs lists the authored job types of the process's service and send tasks,
+// in node order. A connector task is not listed: it names its worker instead of a
+// type, and [CompiledProcess.ConnectorRefs] reports it (ADR-0471).
+func (p *CompiledProcess) JobTypeRefs() []JobTypeRef {
+	var out []JobTypeRef
+	for i := range p.nodes {
+		if t := p.nodes[i].Type; t != TypeServiceTask && t != TypeSendTask {
+			continue
+		}
+		if jobType := p.Intern(p.serviceTasks[p.nodes[i].Detail].JobType); jobType != "" {
+			out = append(out, JobTypeRef{ElementId: p.ElementBpmnId(int32(i)), JobType: jobType})
+		}
+	}
+	return out
+}
+
 // MailboxUse is one mail task that reads or changes its Worker's mailbox rather than
 // sending through it: the Worker it names and the operation.
 type MailboxUse struct {
 	ElementID string
 	Worker    string
 	Operation string
+	// Store is the S3 Worker an export-attachment writes into, "" for every other
+	// operation: a second Worker the task uses, and so a second one the deployer must
+	// be able to reach (ADR-0478).
+	Store string
 }
 
 // MailboxUses lists the mail tasks whose operation is not send, in node order. It is
@@ -2321,7 +2377,7 @@ func (p *CompiledProcess) MailboxUses() []MailboxUse {
 		if d.JobType != MailJobTypeIndex || d.MailOp == "" {
 			continue
 		}
-		out = append(out, MailboxUse{ElementID: p.ElementBpmnId(int32(i)), Worker: p.Intern(d.Connector), Operation: d.MailOp})
+		out = append(out, MailboxUse{ElementID: p.ElementBpmnId(int32(i)), Worker: p.Intern(d.Connector), Operation: d.MailOp, Store: d.MailStore})
 	}
 	return out
 }

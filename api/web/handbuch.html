@@ -5175,7 +5175,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           </div>
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
-            <p data-l="de">Das Feld «Person» ist ein Textfeld mit einer <b>Verzeichnisauswahl</b>
+            <p data-l="de">Das Feld «Person» ist eine Auswahlliste mit einer <b>Verzeichnisauswahl</b>
               (<code>atlasDataSource</code>): Beim Tippen fragt der Server über den Entra-Worker <code>ucc_entra</code>
               im Verzeichnis nach, gefiltert nach der gewählten Abteilung, und zeigt höchstens 25 Treffer. Übermittelt
               wird nur die Objekt-ID nach <code>user</code>; <code>get-user-manager</code> liest daraus mit
@@ -5183,7 +5183,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               Ereignisprotokoll – nur die Auswahl. Vor dem Abschluss prüft der Server die ID noch einmal im
               Verzeichnis. Das Formular kann den Worker nur nennen: Suchen darf es erst, wenn beim Worker in der
               Console «Formulare dürfen suchen» eingeschaltet ist.</p>
-            <p data-l="en">The «Person» field is a text field with a <b>directory field</b> configuration
+            <p data-l="en">The «Person» field is a select with a <b>directory field</b> configuration
               (<code>atlasDataSource</code>): as the person types, the server searches the directory through the Entra
               Worker <code>ucc_entra</code>, filtered by the chosen department, and shows at most 25 matches. Only the
               object id is submitted, into <code>user</code>; <code>get-user-manager</code> reads the manager from it
@@ -5998,21 +5998,30 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 
       <div id="verzeichnisauswahl" style="scroll-margin-top:66px"></div>
       <h4 data-l="de">Eine Person aus dem Verzeichnis wählen (Verzeichnisauswahl)</h4><h4 data-l="en">Picking a person from the directory (directory field)</h4>
-      <p data-l="de">Ein Textfeld kann statt freiem Text eine <b>Suche im Verzeichnis</b> anbieten: Im Formular-Editor
-        fügt <b>＋ Directory field</b> ein solches Feld hinzu, oder du wählst ein Textfeld und drückst im Bereich
-        <b>Remote data source</b> über seinen Eigenschaften auf <b>Search a remote data source</b>. Dort legst du fest,
-        welcher Worker sucht (heute ein Entra-Worker), worin gesucht wird (Anzeigename, E-Mail-Adresse,
-        Benutzerprinzipalname …), was jeder Treffer zeigt, wie viele Treffer eine Seite hat und ob ein anderes Feld
-        die Suche eingrenzt – etwa eine Abteilung, die die Person vorher wählt. In der Aufgabe tippt die Person
-        mindestens zwei Zeichen, sieht höchstens eine Seite Treffer und wählt genau einen Eintrag. Übermittelt wird
-        nur dessen ID, nie der angezeigte Name.</p>
-      <p data-l="en">A text field can offer a <b>directory search</b> instead of free text: in the form editor,
-        <b>＋ Directory field</b> adds one, or you select a text field and press <b>Search a remote data source</b> in
-        the <b>Remote data source</b> area above its properties. There you choose which Worker searches (an Entra Worker
-        today), what is searched (display name, e-mail address, user principal name …), what each match shows, how many
-        matches a page holds, and whether another field narrows the search – a department the person chooses first, for
-        instance. In the task the person types at least two characters, sees at most one page of matches and picks
-        exactly one entry. Only its id is submitted, never the name shown.</p>
+      <p data-l="de">Eine Auswahlliste (Select) kann ihre Optionen statt aus einer festen Liste aus einer
+        <b>Suche im Verzeichnis</b> beziehen: Im Formular-Editor wählst du bei der Auswahlliste unter
+        <b>Options source ▸ Type</b> die Quelle <b>Remote data source</b> – neben Static, Input data und
+        Expression. Die Palette bietet dafür auch den <b>Directory picker</b> an, der eine solche Auswahlliste mit
+        einem bereits für Formulare freigegebenen Worker anlegt. In derselben Gruppe legst du fest, welcher Worker
+        sucht (heute ein Entra-Worker), worin gesucht wird (Anzeigename, E-Mail-Adresse, Benutzerprinzipalname …),
+        ab wie vielen Zeichen gesucht wird und wie viele Treffer eine Seite hat; unter <b>Remote filters</b>, ob ein
+        anderes Feld oder ein fester Wert die Suche eingrenzt – etwa eine Abteilung, die die Person vorher wählt;
+        unter <b>Option display</b>, was jeder Treffer zeigt; und unter <b>Validation</b>, wie die Wahl beim
+        Abschluss geprüft wird. In der Aufgabe tippt die Person mindestens zwei Zeichen, sieht höchstens eine Seite
+        Treffer und wählt genau einen Eintrag. Übermittelt wird nur dessen ID, nie der angezeigte Name. Ein
+        Formular, dessen Verzeichnisfeld noch als Textfeld gespeichert ist, funktioniert weiter; der Editor bietet
+        dafür <b>Convert to select</b> an.</p>
+      <p data-l="en">A select can take its options from a <b>directory search</b> instead of a fixed list: in the form
+        editor, choose <b>Remote data source</b> under the select's <b>Options source ▸ Type</b> – beside Static, Input
+        data and Expression. The palette's <b>Directory picker</b> adds such a select with a Worker already open to
+        forms. The same group chooses which Worker searches (an Entra Worker today), what is searched (display name,
+        e-mail address, user principal name …), after how many characters the search starts and how many matches a
+        page holds; <b>Remote filters</b> says whether another field or a fixed value narrows the search – a department
+        the person chooses first, for instance; <b>Option display</b> what each match shows; and <b>Validation</b> how
+        the choice is checked when the task is completed. In the task the person types at least two characters, sees at
+        most one page of matches and picks exactly one entry. Only its id is submitted, never the name shown. A form
+        whose directory field is still saved as a text field keeps working; the editor offers <b>Convert to select</b>
+        for it.</p>
       <p data-l="de"><b>Was das Formular nicht entscheidet.</b> Das Formular nennt den Worker nur. Suchen darf es erst,
         wenn beim Worker in der Console <b>Forms may search</b> eingeschaltet ist – denn gesucht wird mit dessen
         Zugangsdaten. Suchen darf nur, wer die Aufgabe bearbeiten darf. Welche Eigenschaften gesucht und gezeigt werden,
@@ -6351,6 +6360,16 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         variables it carries into the process and advances the token. A human can instead complete or fail a job by
         hand – with a <code>reason</code> in place of <code>worker</code>/<code>leaseToken</code>; that is the
         <code>operator</code> role and it is recorded.</p>
+      <p data-l="de">Optional nennt ein Worker bei jedem Aufruf in <code>connectors</code> die Worker-Namen, die er
+        mit eigener Konfiguration bedient, und in <code>endpoints</code> je Name, wohin er sich verbindet – nur
+        Schema, Host und Port, etwa <code>{"erp":"https://erp.example.com:8443"}</code>. atlas reduziert die
+        Angaben erneut, zeigt sie in der Worker-Übersicht und hält sie in der Architekturskizze eines Release fest,
+        wo atlas den Endpunkt selbst nicht kennt (ADR-0471). <code>atlas worker</code> meldet beides von selbst.</p>
+      <p data-l="en">Optionally a worker names, on every call, the worker names it serves with its own configuration
+        in <code>connectors</code>, and where each connects in <code>endpoints</code> – scheme, host and port only,
+        for instance <code>{"erp":"https://erp.example.com:8443"}</code>. atlas reduces them again, shows them in the
+        Workers view and records them in a release's architecture sketch where atlas does not know the endpoint
+        itself (ADR-0471). <code>atlas worker</code> reports both on its own.</p>
 
       <h4 data-l="de">Mindestens einmal – also idempotent</h4>
       <h4 data-l="en">At least once – so, idempotent</h4>
@@ -6668,6 +6687,96 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           under <i>⇄ Events</i> – atlas polls, once a minute by default; nothing from outside has to reach this
           server.</p>
         <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked September 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
+      </div>
+      <div class="card" id="runbook-googlecontacts">
+        <h4>Google Contacts</h4>
+        <p data-l="de">Ein Google-Contacts-Worker steht für <b>ein Adressbuch</b>: das einer Person in einem
+          Google Workspace oder das eines gmail.com-Kontos. Ein Prozess findet darin einen Kunden anhand seiner
+          E-Mail-Adresse, Telefonnummer oder einer Kundennummer in einem benutzerdefinierten Feld, liest, legt an,
+          ändert und löscht Kontakte, setzt ein Label wie <i>Kunden</i> und sucht Kolleginnen und Kollegen im
+          Verzeichnis der Organisation. <i>Die Schritte sind aus der Dokumentation von Google geschrieben und noch
+          nicht in einem Google-Konto durchgegangen worden.</i></p>
+        <p data-l="en">A Google Contacts worker stands for <b>one address book</b>: that of a person in a Google
+          Workspace, or that of a gmail.com account. A process finds a customer in it by e-mail address, phone number
+          or a customer number in a custom field, reads, creates, changes and deletes contacts, puts a label such as
+          <i>Kunden</i> on one and searches the organization's directory for colleagues. <i>These steps are written
+          from Google's documentation and have not yet been walked in a Google account.</i></p>
+        <ol>
+          <li data-l="de">In der <b>Google Cloud Console</b> ein Projekt wählen und unter <i>APIs &amp; Dienste</i> die
+            <b>People API</b> aktivieren.</li>
+          <li data-l="en">In the <b>Google Cloud Console</b> pick a project and, under <i>APIs &amp; Services</i>,
+            enable the <b>People API</b>.</li>
+          <li data-l="de"><i>IAM &amp; Verwaltung → Dienstkonten → Dienstkonto erstellen</i>, danach <i>Schlüssel →
+            Schlüssel hinzufügen → JSON</i>. Die <b>Client-ID</b> des Kontos notieren – die lange Zahl auf seiner
+            Detailseite.</li>
+          <li data-l="en"><i>IAM &amp; Admin → Service accounts → Create service account</i>, then <i>Keys → Add key →
+            JSON</i>. Note the account's <b>client ID</b> – the long number on its details page.</li>
+          <li data-l="de">In der <b>Admin-Konsole</b> von Google Workspace unter <i>Sicherheit → Zugriffs- und
+            Datenkontrolle → API-Steuerung → Domainweite Delegierung verwalten</i> diese Client-ID mit dem Scope
+            <code>https://www.googleapis.com/auth/contacts</code> eintragen – und
+            <code>https://www.googleapis.com/auth/directory.readonly</code> dazu, wenn ein Prozess das Verzeichnis
+            durchsucht.</li>
+          <li data-l="en">In the Google Workspace <b>Admin console</b>, under <i>Security → Access and data control →
+            API controls → Manage domain-wide delegation</i>, add that client ID with the scope
+            <code>https://www.googleapis.com/auth/contacts</code> – and
+            <code>https://www.googleapis.com/auth/directory.readonly</code> beside it if a process searches the
+            directory.</li>
+          <li data-l="de">Secret anlegen, z.&nbsp;B. <code>google_contacts_verkauf</code>:
+            <code>{"method": "serviceAccount", "clientEmail": "…@….iam.gserviceaccount.com", "privateKey":
+            "-----BEGIN PRIVATE KEY-----\n…", "subject": "verkauf@firma.ch"}</code>. Das <b>subject</b> ist die
+            Person, deren Adressbuch der Worker verwendet; es ist Pflicht, weil ein Dienstkonto selbst keine Kontakte
+            hat. Für die Verzeichnissuche zusätzlich <code>"scope"</code> mit beiden Scopes, durch ein Leerzeichen
+            getrennt.</li>
+          <li data-l="en">Create a secret, e.g. <code>google_contacts_verkauf</code>:
+            <code>{"method": "serviceAccount", "clientEmail": "…@….iam.gserviceaccount.com", "privateKey":
+            "-----BEGIN PRIVATE KEY-----\n…", "subject": "verkauf@firma.ch"}</code>. The <b>subject</b> is the person
+            whose address book the worker uses; it is required, because a service account has no contacts of its
+            own. For the directory search, also add <code>"scope"</code> naming both scopes, separated by a
+            space.</li>
+          <li data-l="de">Worker anlegen: Typ <b>Google Contacts</b>, ein Name (den ein Task nennt),
+            Credential-Referenz <code>google_contacts_verkauf</code>, <b>kein Endpoint</b>. Pro Adressbuch ein
+            Worker. Speichern genügt; atlas startet den beaufsichtigten Worker mit der neuen Umgebung selbst neu.</li>
+          <li data-l="en">Create the worker: type <b>Google Contacts</b>, a name (which a task states), credential
+            reference <code>google_contacts_verkauf</code>, <b>no endpoint</b>. One worker per address book. Saving is
+            enough; atlas restarts the supervised worker with the new environment by itself.</li>
+        </ol>
+        <p data-l="de"><b>Ohne Workspace</b> (ein gmail.com-Konto) gibt es keine Delegierung. Dann braucht es einen
+          OAuth-Client vom Typ <i>Desktop-App</i>, eine einmalige Zustimmung mit dem Contacts-Scope und das
+          Refresh-Token daraus: <code>{"method": "refreshToken", "clientId": …, "clientSecret": …, "refreshToken":
+          …}</code>.</p>
+        <p data-l="en"><b>Without a Workspace</b> (a gmail.com account) there is no delegation. You then need an OAuth
+          client of type <i>Desktop app</i>, one consent with the contacts scope and the refresh token it yields:
+          <code>{"method": "refreshToken", "clientId": …, "clientSecret": …, "refreshToken": …}</code>.</p>
+        <div class="note warn">
+          <span class="lbl" data-l="de">Ob ein Kunde bekannt ist: <i>Kontakte finden</i>, nicht <i>Kontakte suchen</i></span><span class="lbl" data-l="en">Whether a customer is known: <i>Find contacts</i>, not <i>Search contacts</i></span>
+          <p data-l="de" style="margin:.3em 0 0">Die Suche von Google beantwortet eine Anfrage aus einem
+            Zwischenspeicher, der Änderungen erst nach einiger Zeit enthält. Ein Kontakt, der vor einer Minute angelegt
+            wurde, fehlt dort womöglich noch – ein Prozess, der daraus «unbekannt» schliesst, legt den Kunden ein
+            zweites Mal an. <i>Kontakte finden</i> liest stattdessen das Adressbuch selbst und vergleicht E-Mail-Adresse
+            oder Telefonnummer exakt; das kostet bei einem grossen Adressbuch mehrere Anfragen, ist aber aktuell.</p>
+          <p data-l="en" style="margin:.3em 0 0">Google's search answers from a cache that includes changes only after
+            a while. A contact created a minute ago may still be missing there – and a process that concludes
+            "unknown" creates the customer a second time. <i>Find contacts</i> reads the address book itself instead
+            and compares the e-mail address or phone number exactly; for a large address book that costs several
+            requests, but the answer is current.</p>
+        </div>
+        <p data-l="de"><b>Doppelte Kontakte:</b> Bricht die Verbindung ab, nachdem Google einen Kontakt angelegt hat,
+          aber bevor der Job abgeschlossen ist, legt die Wiederholung ihn ein zweites Mal an – Google kennt keine
+          Anfrage-ID, an der es das erkennen könnte. Wer das nicht hinnehmen kann, lässt <i>Kontakte finden</i> vor
+          <i>Kontakt anlegen</i> laufen. Alle anderen Operationen sind wiederholbar: Ein bereits gelöschter Kontakt
+          gilt als gelöscht, ein zweites Mal gesetztes Label ist ein Label.</p>
+        <p data-l="en"><b>Duplicate contacts:</b> if the connection breaks after Google created a contact but before
+          the job completed, the retry creates it a second time – Google has no request id it could recognize it by. If
+          you cannot accept that, run <i>Find contacts</i> before <i>Create contact</i>. Every other operation is safe
+          to repeat: a contact already deleted counts as deleted, a label set twice is one label.</p>
+        <p data-l="de"><b>Fehlende Kontakte abfangen:</b> Existiert ein Kontakt nicht mehr, endet <i>Kontakt
+          lesen</i>, <i>Kontakt ändern</i> oder eine Label-Änderung mit dem Fehlercode
+          <code>GOOGLECONTACTS_CONTACT_NOT_FOUND</code>, wenn der Prozess ihn mit einem Fehler-Grenzereignis abfängt;
+          sonst entsteht ein Vorfall.</p>
+        <p data-l="en"><b>Catching missing contacts:</b> if a contact no longer exists, <i>Read contact</i>, <i>Update
+          contact</i> or a label change ends with the error code <code>GOOGLECONTACTS_CONTACT_NOT_FOUND</code> when the
+          process catches it with an error boundary event; otherwise an incident is raised.</p>
+        <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked October 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
       </div>
 
       <div class="card" id="runbook-entra">
@@ -7285,7 +7394,13 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           erreicht – eine Zuweisung über <b>RBAC for Applications</b> in Exchange Online, die die App auf dieses
           Postfach beschränkt; <b>Gmail</b> braucht in der Delegierung <code>gmail.readonly</code> und zum Ändern
           <code>gmail.modify</code>. <i>Diese Anbieter-Schritte stammen aus der Dokumentation der Anbieter und sind noch
-          nicht an einem echten Mandanten nachvollzogen.</i></p>
+          nicht an einem echten Mandanten nachvollzogen.</i>
+          Der Prozess erhält jede Mail als eine Variable <code>mail</code>: <code>mail.from</code>,
+          <code>mail.subject</code>, <code>mail.to</code>, <code>mail.auth.dmarc</code> usw., und eine Operation
+          adressiert die Mail über <code>mail.messageId</code>.
+          Ein Watch auf einem Worker ohne Postfach – SMTP ohne IMAP-Endpoint oder Preview – wird abgewiesen. Kann ein
+          Watch nicht lesen, etwa weil die Anmeldung abgewiesen wird oder eine Berechtigung fehlt, zeigt seine Zeile
+          unter <i>Events…</i> ab dem ersten Abruf <b>not reading</b>, seit wann und den Grund.</p>
         <p data-l="en"><b>Reading the mailbox.</b> The same worker can read its mailbox too: a <b>watch</b> under
           <i>Events…</i> publishes a folder's new mail as messages, and a mail task with an <b>operation</b> lists,
           reads, moves, marks, deletes (to the trash) or answers mail. That needs read access: <b>SMTP</b> names an
@@ -7295,21 +7410,29 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           the tenant – an Exchange Online <b>RBAC for Applications</b> assignment confining the app to this mailbox;
           <b>Gmail</b>'s delegation needs <code>gmail.readonly</code>, and <code>gmail.modify</code> to change.
           <i>These provider steps are taken from the providers' documentation and have not yet been walked at a real
-          tenant.</i></p>
+          tenant.</i>
+          The process receives each mail as one variable, <code>mail</code>: <code>mail.from</code>,
+          <code>mail.subject</code>, <code>mail.to</code>, <code>mail.auth.dmarc</code> and so on, and an operation
+          addresses the mail by <code>mail.messageId</code>.
+          A watch on a worker with no mailbox – SMTP without an IMAP endpoint, or Preview – is refused. A watch that
+          cannot read, say because the login is refused or a permission is missing, shows <b>not reading</b> in its row
+          under <i>Events…</i> from its first poll on, with since when and why.</p>
         <p data-l="de"><b>Wer darf mitlesen?</b> Ein Mail-Worker gehört dem, der ihn angelegt hat, und ist privat, bis
           er geteilt wird. Ein Prozess, der ein Postfach liest oder ändert, lässt sich nur deployen, wenn der Worker mit
           dir geteilt ist – lesen braucht <i>darf sehen</i>, ändern <i>darf ändern</i>. Der Watch beansprucht seinen
           Message-Namen: Ein fremder Prozess, der auf denselben Namen wartet, wird beim Deploy abgewiesen. Zwei Grenzen
           bleiben: Was ein Prozess erhält, sehen auf einem geteilten Server alle mit der Rolle <i>Operator</i> (Timeline,
-          Suche) – deshalb liefert ein Watch standardmässig nur den Umschlag, den Text nur auf Wunsch und Anhänge nie
-          mit Inhalt. Und Administratoren sehen alles; davor schützt nur eine eigene Instanz.</p>
+          Suche) – deshalb liefert ein Watch standardmässig nur den Umschlag, den Text nur auf Wunsch und den Inhalt
+          eines Anhangs nur, wenn ein Task ihn mit <i>Read attachment</i> ausdrücklich holt. Und Administratoren sehen
+          alles; davor schützt nur eine eigene Instanz.</p>
         <p data-l="en"><b>Who may read along?</b> A mail worker belongs to whoever created it and is private until
           shared. A process that reads or changes a mailbox deploys only when the worker is shared with you – reading
           needs <i>may see it</i>, changing <i>may change it</i>. The watch claims its message name: somebody else's
           process waiting for the same name is refused at deploy. Two limits remain: what a process receives, everyone
           with the <i>operator</i> role on a shared server can see (timeline, search) – which is why a watch delivers
-          only the envelope by default, the text only on request and attachments never with their content. And
-          administrators see everything; only an installation of your own protects against that.</p>
+          only the envelope by default, the text only on request and an attachment's content only when a task fetches
+          it explicitly with <i>Read attachment</i>. And administrators see everything; only an installation of your
+          own protects against that.</p>
         <p data-l="de"><b>Wer darf einen Prozess auslösen?</b> Jede Person, die an die Adresse schreiben kann. Eine
           Absenderadresse ist eine Behauptung, die jede und jeder aufstellen kann – beschränke den Watch auf
           <b>erlaubte Absender</b> <i>und</i> verlange ein <b>DMARC pass</b>. Das Urteil stammt aus dem obersten
@@ -7318,6 +7441,62 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           claim anybody can make – restrict the watch to <b>allowed senders</b> <i>and</i> require a <b>DMARC
           pass</b>. The verdict is read from the topmost <code>Authentication-Results</code> header, the one your
           receiving server wrote.</p>
+        <p data-l="de"><b>Anhänge weitergeben.</b> Drei Operationen geben das Dokument einer Mail weiter, und jede steht
+          sichtbar im Modell. <i>Forward message</i> leitet die Mail samt Anhängen an neue Empfänger weiter, mit einer
+          Notiz darüber. <i>Read attachment</i> holt einen Anhang Base64-codiert in eine Variable – höchstens so gross,
+          wie eine Prozessvariable sein darf (1&nbsp;MiB), und damit im Ereignisprotokoll, solange der Server seine
+          Geschichte aufbewahrt. <i>Export attachment</i> legt einen Anhang direkt in einem S3-Worker ab, ohne dass er
+          je im Prozess landet; einer Person zeigst du ihn danach mit einem S3-Task <code>presign-get</code> als Link
+          im User-Task. Welcher Anhang gemeint ist, sagt seine <code>id</code> aus <code>mail.attachments</code>.
+          Weiterleiten und Exportieren schreiben aus dem Postfach hinaus und brauchen deshalb beim Deploy
+          <i>darf ändern</i> auf dem Mail-Worker, ein Export zusätzlich <i>darf ändern</i> auf dem S3-Worker. Ein
+          Dokument ist auf 35&nbsp;MiB begrenzt (<code>ATLAS_LIMIT_DOCUMENT</code>).</p>
+        <p data-l="en"><b>Handing attachments on.</b> Three operations hand a mail's document on, and each is visible
+          in the model. <i>Forward message</i> forwards the mail with its attachments to new recipients, with a note
+          above it. <i>Read attachment</i> fetches one attachment base64-encoded into a variable – at most as large as
+          a process variable may be (1&nbsp;MiB), and therefore in the event log for as long as the server keeps its
+          history. <i>Export attachment</i> puts one attachment straight into an S3 Worker without it ever reaching
+          the process; to show it to a person, mint a link with an S3 <code>presign-get</code> task and put it in the
+          user task. Which attachment is meant is its <code>id</code> from <code>mail.attachments</code>. Forwarding
+          and exporting write out of the mailbox, so a deploy needs <i>may change it</i> on the mail Worker, and an
+          export also <i>may change it</i> on the S3 Worker. A document is limited to 35&nbsp;MiB
+          (<code>ATLAS_LIMIT_DOCUMENT</code>).</p>
+        <p data-l="de"><b>Schutz vor Schadcode.</b> Ein Anhang stammt von jemandem, der an die Adresse schreiben kann,
+          also potenziell von irgendwem. Deshalb wird jedes Dokument geprüft, bevor eine der drei Operationen es
+          weitergibt. Die eingebaute Prüfung entscheidet nach dem Inhalt, nie nach Name oder angegebenem Typ, und
+          weist ab: Programme und Skripte unter jedem Namen, Verknüpfungen und Datenträgerabbilder, Office-Dokumente mit
+          Makros, verschlüsselte Archive und Archive mit Programmen darin, PDFs mit JavaScript oder einer
+          Launch-Aktion, ein Dokument, dessen Name etwas anderes behauptet als sein Inhalt (eine
+          <code>rechnung.pdf</code>, die kein PDF ist), und Namen mit Steuerzeichen, die <code>exe.pdf</code> als
+          <code>fdp.exe</code> erscheinen lassen. Mit <i>Accepted types</i> schränkst du einen Task zusätzlich auf
+          bestimmte Typen ein, etwa <code>application/pdf, image/*</code>. Schadsoftware findet diese Prüfung nicht;
+          dafür trägst du beim Worker einen Virenscanner ein (Feld <b>Malware scanner</b>): einen ClamAV-Daemon,
+          <code>clamd://clamav.intern:3310</code> oder <code>clamd:///run/clamav/clamd.ctl</code>. Dann wird jedes
+          Dokument zusätzlich gescannt, und antwortet der Scanner nicht, bleibt der Task stehen, statt das Dokument
+          durchzulassen. Der Knopf <i>Test connection</i> prüft den Scanner mit. Ein abgewiesenes Dokument beendet den
+          Task mit dem Fehlercode <code>MAIL_ATTACHMENT_REJECTED</code>, wenn der Prozess ihn mit einem
+          Fehler-Grenzereignis abfängt, sonst mit einem Incident, der den Grund nennt. Was die Prüfung gefunden hat,
+          steht im Ergebnis unter <code>inspection</code> und beim Export in den Metadaten des Objekts. Ein Dokument,
+          das ein Browser als Seite ausführen würde (HTML, SVG), wird so abgelegt, dass ein Link es herunterlädt statt
+          es zu öffnen. Einen eigenen Scanner ersetzt der Schutz des Anbieters nicht: Microsoft Defender und Gmail
+          prüfen beim Empfang, und beides zusammen ist besser als eines allein.</p>
+        <p data-l="en"><b>Protection against malware.</b> An attachment comes from whoever can write to the address,
+          which may be anybody. So every document is inspected before one of the three operations hands it on. The
+          built-in inspection decides by content, never by name or declared type, and refuses: programs and scripts
+          under any name, shortcuts and disk images, Office documents with macros, encrypted archives and archives
+          carrying programs, PDFs with JavaScript or a launch action, a document whose name claims something its
+          content is not (a <code>rechnung.pdf</code> that is no PDF), and names with control characters that make
+          <code>exe.pdf</code> show as <code>fdp.exe</code>. With <i>Accepted types</i> you narrow a task further to
+          given types, such as <code>application/pdf, image/*</code>. This inspection does not find malware; for that
+          you name a <b>malware scanner</b> on the Worker: a ClamAV daemon, <code>clamd://clamav.internal:3310</code> or
+          <code>clamd:///run/clamav/clamd.ctl</code>. Every document is then scanned as well, and a scanner that does
+          not answer stops the task rather than letting the document through. <i>Test connection</i> checks the
+          scanner too. A refused document ends the task with the error code <code>MAIL_ATTACHMENT_REJECTED</code> when
+          the process catches it with an error boundary event, and with an incident naming the reason otherwise. What
+          the inspection found is in the result under <code>inspection</code>, and for an export in the object's
+          metadata. A document a browser would run as a page (HTML, SVG) is stored so that a link downloads it rather
+          than opening it. The provider's own protection does not replace a scanner of your own: Microsoft Defender
+          and Gmail check on receipt, and both together are better than either alone.</p>
         <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked September 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
       </div>
 
@@ -8847,16 +9026,25 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
         welchem Worker Type nennen, welche lokalen Entscheidungen sie auswerten und welche Prozesse anderer
         Applikationen sie aufrufen – jeweils mit den Elementen, die es angeben. <i>Architecture</i> in der Release
         history zeigt sie als Skizze und bietet sie als SVG und als ArchiMate-Open-Exchange-Dokument für Archi und
-        andere Werkzeuge an. Derselbe Release ergibt immer dieselben Bytes. Es ist die logische Sicht: Welcher Worker
-        einen Namen auf einer Installation bedient und unter welchem Endpunkt, gehört noch nicht dazu. Ein Release,
-        der vor dieser Version aufgezeichnet wurde, hat keine Skizze und sagt das.</p>
+        andere Werkzeuge an. Derselbe Release ergibt immer dieselben Bytes. Neben der logischen Sicht hält die Skizze
+        fest, was die aufzeichnende Installation in diesem Moment bereitstellte: ihren Namen und ihre Umgebung, ihre
+        externe Adresse, die öffentlichen Start-Links und pro Worker, ob atlas ihn selbst ausführt oder ein
+        Worker-Prozess die Arbeit abholt, seinen Endpunkt (nur Schema, Host und Port) und die Worker-Instanzen, die
+        ihn seit dem Start bedient haben. Ein Pfeil zeigt von der Seite, die die Verbindung öffnet. Einen Endpunkt
+        sieht nur, wer die Konfiguration dieses Workers sehen darf, die Worker-Instanzen nur die Rolle
+        <code>operator</code>. Ein Release, der vor dieser Version aufgezeichnet wurde, hat keine Skizze und sagt
+        das.</p>
       <p data-l="en">Every release carries an <b>architecture sketch</b> (ADR-0471): on publish, and on the import of
         a promoted release, atlas records which messages its processes receive, which workers they name with which
         Worker Type, which local decisions they evaluate and which processes of other applications they call – each
         with the elements that state it. <i>Architecture</i> in the Release history shows it as a sketch and offers it
         as an SVG and as an ArchiMate Open Exchange document for Archi and other tools. The same release always
-        produces the same bytes. It is the logical view: which worker serves a name on an installation, and at which
-        endpoint, is not part of it yet. A release recorded before this version has no sketch and says so.</p>
+        produces the same bytes. Beside the logical view the sketch records what the installation that recorded it had
+        in place at that moment: its name and environment, its external address, the public start links, and per
+        worker whether atlas runs it itself or a worker process leases the work, its endpoint (scheme, host and port
+        only) and the worker instances that served it since the start. An arrow points from the side that opens the
+        connection. An endpoint is shown only to whoever may see that worker's configuration, the worker instances
+        only to the <code>operator</code> role. A release recorded before this version has no sketch and says so.</p>
 
       <h3 data-l="de">Ein Ziel und sein Token</h3><h3 data-l="en">A target and its token</h3>
       <p data-l="de">Ein <b>Deployment-Ziel</b> ist ein anderer atlas-Server, an den dieser hier promotet. Es ist
@@ -9359,6 +9547,100 @@ groups:
       - alert: AtlasApiTokenExpiresThisWeek
         expr: atlas_api_token_next_expiry_timestamp_seconds - time() &lt; 7 * 86400
         labels: { severity: critical }</code></pre>
+
+      <div id="speicher" style="scroll-margin-top:66px"></div>
+      <h4 data-l="de">Speicherplatz</h4><h4 data-l="en">Disk space</h4>
+      <p data-l="de">Ein Administrator sieht auf dem <a href="/#/console">Dashboard</a> jedes Dateisystem, auf das
+        der Server schreibt: das Datenverzeichnis, das WAL und den Zustandsspeicher, zusammengefasst, wenn sie auf
+        demselben Gerät liegen. Angezeigt werden belegter und freier Platz, wo die Reserve beginnt und wie viel davon
+        das WAL und der Zustandsspeicher belegen. Atlas liest die Zahlen alle fünf Sekunden beim Betriebssystem ab
+        (<code>statfs</code> unter Linux und macOS, <code>GetDiskFreeSpaceExW</code> unter Windows) und rechnet die
+        Belegung wie <code>df</code>: belegt geteilt durch belegt plus verfügbar. Dieselben Werte liefern
+        <code>GET /api/v1/storage</code>, das MCP-Tool <code>atlas_storage</code> und <code>/metrics</code>.</p>
+      <p data-l="en">An administrator sees on the <a href="/#/console">dashboard</a> every file system the server
+        writes to: the data directory, the WAL and the state store, shown once when they share a device. It shows
+        what is used and free, where the reserve begins, and how much of it the WAL and the state store take. Atlas
+        asks the operating system for these numbers every five seconds (<code>statfs</code> on Linux and macOS,
+        <code>GetDiskFreeSpaceExW</code> on Windows) and computes the share in use the way <code>df</code> does:
+        used divided by used plus available. <code>GET /api/v1/storage</code>, the MCP tool
+        <code>atlas_storage</code> and <code>/metrics</code> report the same values.</p>
+      <p data-l="de"><b>Die Reserve.</b> Sinkt der freie Platz unter die Reserve (<code>--storage-reserve-mb</code>,
+        Standard 1024), nimmt der Server keine neuen Schreibvorgänge mehr an. Neue Instanzen, Deployments und
+        Änderungen beantwortet er mit <i>507</i> und <code>Retry-After</code>, bevor sie die Engine erreichen: Es wird
+        nichts verändert, und der Aufrufer behält seine Daten. Weiter funktionieren Lesen, An- und Abmelden,
+        <code>POST /api/v1/checkpoints</code> und die Rückmeldungen bereits geleaster Jobs, denn deren Arbeit ist
+        schon geschehen. Der Server beginnt auch selbst nichts Neues: Fällige Timer warten, Aufbewahrung und
+        Inbound-Bridge pausieren, Worker im Serverprozess leasen keine neuen Jobs. Sobald die Reserve und ein Viertel
+        davon wieder frei sind, nimmt er von selbst wieder an; ein Neustart ist nicht nötig. Die Reserve deckt, was
+        der Zustandsspeicher, ein Checkpoint und das WAL nach dem Anhalten noch schreiben müssen. Mit <code>0</code>
+        schaltest du das Einfrieren aus; Anzeige und Warnungen bleiben.</p>
+      <p data-l="en"><b>The reserve.</b> Once the free space falls below the reserve
+        (<code>--storage-reserve-mb</code>, default 1024), the server takes no new writes. New instances,
+        deployments and changes are answered with <i>507</i> and <code>Retry-After</code> before they reach the
+        engine: nothing is changed, and the caller keeps its data. Reading, signing in and out,
+        <code>POST /api/v1/checkpoints</code> and the reports of jobs already leased go on — the work behind a report
+        has already happened. The server also starts nothing of its own: due timers wait, retention and the inbound
+        bridge pause, and workers inside the server lease no new jobs. Once the reserve and a quarter of it are free
+        again, it takes writes again by itself; no restart is needed. The reserve covers what the state store, a
+        checkpoint and the WAL still have to write after the server stops. <code>0</code> turns the freeze off; the
+        display and the warnings stay.</p>
+      <p data-l="de"><b>Wenn ein Schreibvorgang trotzdem scheitert.</b> Füllt ein anderes Programm die Platte
+        schneller, als Atlas misst, kann ein Schreibvorgang dennoch fehlschlagen. Dann hält die Engine an: Sie
+        verarbeitet nichts mehr, beantwortet Schreibvorgänge mit <i>503</i>, und das Log meldet einmal
+        <code>event=engine.halted</code>. Lesen funktioniert weiter. Gib Platz frei und starte den Server neu; der
+        Neustart stellt genau den bestätigten Stand wieder her. Ohne Neustart weiterzumachen wäre falsch: Befehle,
+        deren Aufrufer bereits einen Fehler erhalten haben, würden später doch noch ausgeführt.</p>
+      <p data-l="en"><b>When a write fails anyway.</b> If another program fills the disk faster than Atlas measures,
+        a write can still fail. The engine then halts: it processes nothing more, answers writes with <i>503</i>, and
+        the log says <code>event=engine.halted</code> once. Reading goes on. Free space and restart the server; the
+        restart recovers exactly what was acknowledged. Carrying on without a restart would be wrong: commands whose
+        callers had already been given an error would run later after all.</p>
+      <p data-l="de"><b>Platz freigeben.</b> Lösche Dateien ausserhalb des Datenverzeichnisses oder vergrössere das
+        Volume. Im Datenverzeichnis selbst löschst du nichts von Hand. Das WAL wächst, solange
+        <code>--compact-wal</code> ausgeschaltet ist, und das ist der Standard. Mit Checkpoints und
+        <code>--compact-wal</code> gibt jeder Checkpoint die Segmente frei, die er abdeckt;
+        <code>POST /api/v1/checkpoints</code> löst das sofort aus, auch im eingefrorenen Zustand.</p>
+      <p data-l="en"><b>Freeing space.</b> Delete files outside the data directory, or grow the volume. Inside the
+        data directory, delete nothing by hand. The WAL grows for as long as <code>--compact-wal</code> is off, which
+        is the default. With checkpoints and <code>--compact-wal</code>, each checkpoint frees the segments it
+        covers; <code>POST /api/v1/checkpoints</code> takes one at once, also while the server is frozen.</p>
+      <p data-l="de"><b>Prognose.</b> Atlas glättet den Verbrauch je Dateisystem über etwa sechs Stunden und hält dafür
+        nur zwei Zahlen im Speicher. Eine Prognose erscheint nach einer Stunde Beobachtung und beginnt bei jedem
+        Neustart von vorn. Erreicht sie die Reserve innerhalb einer Woche, zeigt das Dashboard eine Warnung. Für einen
+        längeren Zeitraum nimmst du Prometheus, das die Verlaufsdaten ohnehin hält:</p>
+      <p data-l="en"><b>Forecast.</b> Atlas smooths each file system's consumption over about six hours and keeps
+        only two numbers in memory for it. A forecast appears after an hour of observation and starts over with every
+        restart. If it reaches the reserve within a week, the dashboard shows a warning. For a longer view, use
+        Prometheus, which keeps the history anyway:</p>
+      <pre><code>groups:
+  - name: atlas-storage
+    rules:
+      # Reserve in einer Woche erreicht  ·  reserve reached within a week
+      - alert: AtlasStorageReserveWithinAWeek
+        expr: predict_linear(atlas_storage_available_bytes[1d], 7 * 86400) &lt; atlas_storage_reserve_bytes
+        for: 1h
+        labels: { severity: warning }
+      - alert: AtlasStorageFrozen
+        expr: atlas_storage_frozen == 1
+        labels: { severity: critical }
+      - alert: AtlasEngineHalted
+        expr: atlas_engine_halted == 1
+        labels: { severity: critical }</code></pre>
+      <p data-l="de"><b>Wo die Zahl nicht stimmt.</b> Atlas zeigt, was das Dateisystem meldet. Auf einem Volume, das
+        ein Blockgerät ist (etwa Ceph RBD, EBS, Azure Disk oder Longhorn), und unter Windows ist das die tatsächliche
+        Grösse. Abweichen kann sie bei Netzlaufwerken (NFS, CephFS, EFS und Azure Files melden oft den ganzen Pool),
+        bei <code>hostPath</code>- und <code>local-path</code>-Volumes (bei k3s der Standard: gemeldet wird die Platte
+        des Knotens, die Grösse des PVC wird nicht durchgesetzt), bei Docker ohne gemountetes Volume unter
+        <code>/data</code> (gemeldet wird die Platte des Hosts) und bei Thin Provisioning, das mehr melden kann, als
+        physisch vorhanden ist. Benutzer-Quotas unter Linux sind nicht berücksichtigt, Projekt-Quotas unter XFS und
+        ext4 schon.</p>
+      <p data-l="en"><b>Where the number is wrong.</b> Atlas shows what the file system reports. On a volume that is
+        a block device (Ceph RBD, EBS, Azure Disk or Longhorn, say) and on Windows, that is the real size. It can
+        differ on network shares (NFS, CephFS, EFS and Azure Files often report the whole pool), on
+        <code>hostPath</code> and <code>local-path</code> volumes (the k3s default: they report the node's disk, and
+        the PVC's size is not enforced), on Docker without a volume mounted at <code>/data</code> (it reports the
+        host's disk), and with thin provisioning, which can report more than physically exists. Linux user quotas
+        are not counted; XFS and ext4 project quotas are.</p>
 
       <h4 data-l="de">Ereignisse exportieren</h4><h4 data-l="en">Exporting events</h4>
       <p data-l="de">Für Auswertung und Aufbewahrung über die Instanz hinaus spiegelt ein Exporter das
@@ -10348,6 +10630,38 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         signed in either. It is deliberately coarse (three states, never which page or which action) and visible
         to <code>admin</code> only. It is explicitly not an attendance history; who signed in when is in the
         <a href="/#/console/audit">audit log</a>.</p>
+
+      <h3 data-l="de">Wann sich ein Konto zuletzt angemeldet hat</h3><h3 data-l="en">When an account last signed in</h3>
+      <p data-l="de">Die Spalte <b>Last login</b> zeigt, an welchem Tag sich ein Konto zuletzt angemeldet hat:
+        «today», «yesterday» oder «N days ago», darunter das Datum. So findest du Konten, die niemand mehr
+        braucht. Sortierst du nach dieser Spalte, stehen Konten ohne erfasste Anmeldung und die am längsten
+        unbenutzten zuoberst. Solche Konten solltest du deaktivieren: Ein Konto, das niemand benutzt, nimmt
+        trotzdem Passwörter an, und ein Missbrauch fiele niemandem auf.</p>
+      <p data-l="en">The <b>Last login</b> column shows on which day an account last signed in: "today",
+        "yesterday" or "N days ago", with the date beneath. This is how you find accounts nobody needs any
+        more. Sort by the column and the accounts with no recorded login, then the ones unused the longest, come
+        first. Disable those: an account nobody uses still accepts a password, and nobody would notice it being
+        misused.</p>
+      <p data-l="de">Gezählt werden erfolgreiche Anmeldungen, mit Passwort und über einen Identitätsanbieter;
+        abgewiesene Versuche zählen nicht. Atlas speichert pro Konto genau einen Wert, den Kalendertag (UTC) der
+        letzten Anmeldung, und überschreibt ihn bei der nächsten. Eine Uhrzeit wird nicht gespeichert und auch
+        keine Liste früherer Tage: Die Spalte sagt, ob ein Konto benutzt wird, nicht, wann jemand mit der Arbeit
+        beginnt. Die genaue Zeit jeder Anmeldung steht im <a href="/#/console/audit">Audit-Log</a>. Weil der Tag
+        in UTC gezählt wird, kann eine Anmeldung kurz nach Mitternacht Schweizer Zeit noch auf den Vortag
+        fallen.</p>
+      <p data-l="en">Successful logins count, by password and through an identity provider; refused attempts do
+        not. Atlas stores exactly one value per account, the calendar day (UTC) of its latest login, and
+        overwrites it at the next one. No time of day is stored, and no list of earlier days: the column says
+        whether an account is in use, not when anybody starts work. The exact time of every login is in the
+        <a href="/#/console/audit">audit log</a>. Because the day is counted in UTC, a login shortly after
+        midnight Swiss time can still fall on the previous day.</p>
+      <p data-l="de">Ein Konto, das sich seit dem Update noch nicht angemeldet hat, zeigt «—». Ebenso ein Konto,
+        das nur über einen API-Token oder einen KI-Client benutzt wird: Es meldet sich hier nie an, auch wenn sein
+        Token täglich arbeitet. Prüfe bei einem solchen Konto die Tokens und Freigaben, bevor du es
+        deaktivierst.</p>
+      <p data-l="en">An account that has not signed in since the upgrade shows "—". So does an account used only
+        through an API token or an AI client: it never signs in here, even when its token works every day. Check
+        such an account's tokens and grants before you disable it.</p>
 
       <h3 data-l="de">Anmelden mit einem Identitätsanbieter</h3><h3 data-l="en">Signing in with an identity provider</h3>
       <p data-l="de">Optional, und aus, solange niemand einen Anbieter konfiguriert. Ist einer eingerichtet, trägt

@@ -318,7 +318,12 @@
         { "name": "maxResults", "type": "String", "isAttr": true },
         { "name": "includeBody", "type": "String", "isAttr": true },
         { "name": "unreadOnly", "type": "String", "isAttr": true },
-        { "name": "resultVariable", "type": "String", "isAttr": true }
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "attachmentId", "type": "String", "isAttr": true },
+        { "name": "allowedTypes", "type": "String", "isAttr": true },
+        { "name": "store", "type": "String", "isAttr": true },
+        { "name": "bucket", "type": "String", "isAttr": true },
+        { "name": "key", "type": "String", "isAttr": true }
       ]
     },
     {
@@ -508,6 +513,24 @@
       "properties": [
         { "name": "name", "type": "String", "isAttr": true },
         { "name": "value", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "GoogleContactsConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "contactId", "type": "String", "isAttr": true },
+        { "name": "query", "type": "String", "isAttr": true },
+        { "name": "field", "type": "String", "isAttr": true },
+        { "name": "group", "type": "String", "isAttr": true },
+        { "name": "contact", "type": "String", "isAttr": true },
+        { "name": "contactVariable", "type": "String", "isAttr": true },
+        { "name": "maxResults", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
       ]
     },
     {
