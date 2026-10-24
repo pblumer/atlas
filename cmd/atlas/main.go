@@ -35,12 +35,14 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api"
+	"github.com/pblumer/atlas/api/storage"
 	"github.com/pblumer/atlas/checkpoint"
 	remedymock "github.com/pblumer/atlas/connector/remedy/mock"
 	"github.com/pblumer/atlas/connector/rest/openapimock"
 	"github.com/pblumer/atlas/connector/rest/openapitemplate"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/internal/diskspace"
 	"github.com/pblumer/atlas/internal/trustedproxy"
 	"github.com/pblumer/atlas/jobtype"
 	"github.com/pblumer/atlas/limits"
@@ -297,6 +299,11 @@ func runServe(args []string) error {
 			"stall — which stalls the run loop, and with it every request. A larger buffer means "+
 			"recovery replays a longer log suffix after a crash; it costs recovery time, never "+
 			"durability (ADR-0005). 0 leaves Pebble's default")
+	storageReserveMB := fs.Int("storage-reserve-mb", envIntOr("ATLAS_STORAGE_RESERVE_MB", int(storage.DefaultReserve>>20)),
+		"disk space to keep free under the data directory, in MiB. Below it the server refuses new "+
+			"writes (HTTP 507) and starts no work of its own, so the state store and the checkpoints "+
+			"that give WAL space back still have room; it resumes by itself once the reserve and a "+
+			"quarter of it are free. 0 keeps the monitoring and turns the freeze off")
 	checkpointKeep := fs.Int("checkpoint-keep", 3, "how many recovery checkpoints to keep; each pins the state files it captured, so this bounds their disk (ADR-0131)")
 	// WAL compaction (ADR-0131): opt-in, off by default. Unlike checkpointing it deletes
 	// data, so — like history retention (ADR-0115) — an operator turns it on deliberately.
@@ -395,7 +402,7 @@ func runServe(args []string) error {
 		Instance: strings.TrimSpace(*metricsInstance),
 	}
 	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch, receiptTTL: *triggerReceiptTTL, feedTTL: *eventFeedTTL, logTTL: *eventLogTTL, messageTTLMax: *messageTTLMax}
-	storeCfg := storeConfig{cacheMB: *stateCacheMB, memtableMB: *stateMemtableMB}
+	storeCfg := storeConfig{cacheMB: *stateCacheMB, memtableMB: *stateMemtableMB, reserveMB: *storageReserveMB}
 	trace := tracing.Config{
 		Endpoint:    *traceEndpoint,
 		ServiceName: envOr("OTEL_SERVICE_NAME", "atlas"),
@@ -545,6 +552,18 @@ type retentionConfig struct {
 type storeConfig struct {
 	cacheMB    int
 	memtableMB int
+	// reserveMB is the disk the storage guard keeps free (ADR-0481). It
+	// rides here because it is a decision about the same disk; it is not a Pebble
+	// option, so options() leaves it out.
+	reserveMB int
+}
+
+// reserve is the storage reserve in bytes; a negative flag means none.
+func (c storeConfig) reserve() uint64 {
+	if c.reserveMB <= 0 {
+		return 0
+	}
+	return uint64(c.reserveMB) << 20
 }
 
 // options renders the config as the state package's open options. A zero or negative
@@ -749,6 +768,18 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		logging.Info(logging.RetentionEnabled, "history retention enabled",
 			slog.Duration("maxAge", retention.maxAge), slog.String("gate", gate),
 			slog.Int("batch", retention.batch), slog.Duration("interval", retention.interval))
+	}
+	// The storage guard (ADR-0481): on by default, because the failure it
+	// prevents is a state store that ends the process mid-write. A disk smaller than a
+	// few reserves is said once at start, since the server would pause early on it.
+	apiOpts = append(apiOpts, api.WithStorageReserve(storeCfg.reserve()))
+	if reserve := storeCfg.reserve(); reserve > 0 {
+		if u, err := diskspace.Of(dataDir); err == nil && u.Total < 4*reserve {
+			logging.Warn(logging.StorageLow,
+				"the data directory's file system is small for its storage reserve; the server will stop taking "+
+					"writes early — lower --storage-reserve-mb only if you know the state store needs less",
+				slog.Uint64("totalBytes", u.Total), slog.Uint64("reserveBytes", reserve))
+		}
 	}
 	// Periodic recovery checkpoints keep restart time a function of the cadence rather
 	// than of the whole log's length (ADR-0131). Nothing is deleted by them.

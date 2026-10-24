@@ -9450,6 +9450,100 @@ groups:
         expr: atlas_api_token_next_expiry_timestamp_seconds - time() &lt; 7 * 86400
         labels: { severity: critical }</code></pre>
 
+      <div id="speicher" style="scroll-margin-top:66px"></div>
+      <h4 data-l="de">Speicherplatz</h4><h4 data-l="en">Disk space</h4>
+      <p data-l="de">Ein Administrator sieht auf dem <a href="/#/console">Dashboard</a> jedes Dateisystem, auf das
+        der Server schreibt: das Datenverzeichnis, das WAL und den Zustandsspeicher, zusammengefasst, wenn sie auf
+        demselben Gerät liegen. Angezeigt werden belegter und freier Platz, wo die Reserve beginnt und wie viel davon
+        das WAL und der Zustandsspeicher belegen. Atlas liest die Zahlen alle fünf Sekunden beim Betriebssystem ab
+        (<code>statfs</code> unter Linux und macOS, <code>GetDiskFreeSpaceExW</code> unter Windows) und rechnet die
+        Belegung wie <code>df</code>: belegt geteilt durch belegt plus verfügbar. Dieselben Werte liefern
+        <code>GET /api/v1/storage</code>, das MCP-Tool <code>atlas_storage</code> und <code>/metrics</code>.</p>
+      <p data-l="en">An administrator sees on the <a href="/#/console">dashboard</a> every file system the server
+        writes to: the data directory, the WAL and the state store, shown once when they share a device. It shows
+        what is used and free, where the reserve begins, and how much of it the WAL and the state store take. Atlas
+        asks the operating system for these numbers every five seconds (<code>statfs</code> on Linux and macOS,
+        <code>GetDiskFreeSpaceExW</code> on Windows) and computes the share in use the way <code>df</code> does:
+        used divided by used plus available. <code>GET /api/v1/storage</code>, the MCP tool
+        <code>atlas_storage</code> and <code>/metrics</code> report the same values.</p>
+      <p data-l="de"><b>Die Reserve.</b> Sinkt der freie Platz unter die Reserve (<code>--storage-reserve-mb</code>,
+        Standard 1024), nimmt der Server keine neuen Schreibvorgänge mehr an. Neue Instanzen, Deployments und
+        Änderungen beantwortet er mit <i>507</i> und <code>Retry-After</code>, bevor sie die Engine erreichen: Es wird
+        nichts verändert, und der Aufrufer behält seine Daten. Weiter funktionieren Lesen, An- und Abmelden,
+        <code>POST /api/v1/checkpoints</code> und die Rückmeldungen bereits geleaster Jobs, denn deren Arbeit ist
+        schon geschehen. Der Server beginnt auch selbst nichts Neues: Fällige Timer warten, Aufbewahrung und
+        Inbound-Bridge pausieren, Worker im Serverprozess leasen keine neuen Jobs. Sobald die Reserve und ein Viertel
+        davon wieder frei sind, nimmt er von selbst wieder an; ein Neustart ist nicht nötig. Die Reserve deckt, was
+        der Zustandsspeicher, ein Checkpoint und das WAL nach dem Anhalten noch schreiben müssen. Mit <code>0</code>
+        schaltest du das Einfrieren aus; Anzeige und Warnungen bleiben.</p>
+      <p data-l="en"><b>The reserve.</b> Once the free space falls below the reserve
+        (<code>--storage-reserve-mb</code>, default 1024), the server takes no new writes. New instances,
+        deployments and changes are answered with <i>507</i> and <code>Retry-After</code> before they reach the
+        engine: nothing is changed, and the caller keeps its data. Reading, signing in and out,
+        <code>POST /api/v1/checkpoints</code> and the reports of jobs already leased go on — the work behind a report
+        has already happened. The server also starts nothing of its own: due timers wait, retention and the inbound
+        bridge pause, and workers inside the server lease no new jobs. Once the reserve and a quarter of it are free
+        again, it takes writes again by itself; no restart is needed. The reserve covers what the state store, a
+        checkpoint and the WAL still have to write after the server stops. <code>0</code> turns the freeze off; the
+        display and the warnings stay.</p>
+      <p data-l="de"><b>Wenn ein Schreibvorgang trotzdem scheitert.</b> Füllt ein anderes Programm die Platte
+        schneller, als Atlas misst, kann ein Schreibvorgang dennoch fehlschlagen. Dann hält die Engine an: Sie
+        verarbeitet nichts mehr, beantwortet Schreibvorgänge mit <i>503</i>, und das Log meldet einmal
+        <code>event=engine.halted</code>. Lesen funktioniert weiter. Gib Platz frei und starte den Server neu; der
+        Neustart stellt genau den bestätigten Stand wieder her. Ohne Neustart weiterzumachen wäre falsch: Befehle,
+        deren Aufrufer bereits einen Fehler erhalten haben, würden später doch noch ausgeführt.</p>
+      <p data-l="en"><b>When a write fails anyway.</b> If another program fills the disk faster than Atlas measures,
+        a write can still fail. The engine then halts: it processes nothing more, answers writes with <i>503</i>, and
+        the log says <code>event=engine.halted</code> once. Reading goes on. Free space and restart the server; the
+        restart recovers exactly what was acknowledged. Carrying on without a restart would be wrong: commands whose
+        callers had already been given an error would run later after all.</p>
+      <p data-l="de"><b>Platz freigeben.</b> Lösche Dateien ausserhalb des Datenverzeichnisses oder vergrössere das
+        Volume. Im Datenverzeichnis selbst löschst du nichts von Hand. Das WAL wächst, solange
+        <code>--compact-wal</code> ausgeschaltet ist, und das ist der Standard. Mit Checkpoints und
+        <code>--compact-wal</code> gibt jeder Checkpoint die Segmente frei, die er abdeckt;
+        <code>POST /api/v1/checkpoints</code> löst das sofort aus, auch im eingefrorenen Zustand.</p>
+      <p data-l="en"><b>Freeing space.</b> Delete files outside the data directory, or grow the volume. Inside the
+        data directory, delete nothing by hand. The WAL grows for as long as <code>--compact-wal</code> is off, which
+        is the default. With checkpoints and <code>--compact-wal</code>, each checkpoint frees the segments it
+        covers; <code>POST /api/v1/checkpoints</code> takes one at once, also while the server is frozen.</p>
+      <p data-l="de"><b>Prognose.</b> Atlas glättet den Verbrauch je Dateisystem über etwa sechs Stunden und hält dafür
+        nur zwei Zahlen im Speicher. Eine Prognose erscheint nach einer Stunde Beobachtung und beginnt bei jedem
+        Neustart von vorn. Erreicht sie die Reserve innerhalb einer Woche, zeigt das Dashboard eine Warnung. Für einen
+        längeren Zeitraum nimmst du Prometheus, das die Verlaufsdaten ohnehin hält:</p>
+      <p data-l="en"><b>Forecast.</b> Atlas smooths each file system's consumption over about six hours and keeps
+        only two numbers in memory for it. A forecast appears after an hour of observation and starts over with every
+        restart. If it reaches the reserve within a week, the dashboard shows a warning. For a longer view, use
+        Prometheus, which keeps the history anyway:</p>
+      <pre><code>groups:
+  - name: atlas-storage
+    rules:
+      # Reserve in einer Woche erreicht  ·  reserve reached within a week
+      - alert: AtlasStorageReserveWithinAWeek
+        expr: predict_linear(atlas_storage_available_bytes[1d], 7 * 86400) &lt; atlas_storage_reserve_bytes
+        for: 1h
+        labels: { severity: warning }
+      - alert: AtlasStorageFrozen
+        expr: atlas_storage_frozen == 1
+        labels: { severity: critical }
+      - alert: AtlasEngineHalted
+        expr: atlas_engine_halted == 1
+        labels: { severity: critical }</code></pre>
+      <p data-l="de"><b>Wo die Zahl nicht stimmt.</b> Atlas zeigt, was das Dateisystem meldet. Auf einem Volume, das
+        ein Blockgerät ist (etwa Ceph RBD, EBS, Azure Disk oder Longhorn), und unter Windows ist das die tatsächliche
+        Grösse. Abweichen kann sie bei Netzlaufwerken (NFS, CephFS, EFS und Azure Files melden oft den ganzen Pool),
+        bei <code>hostPath</code>- und <code>local-path</code>-Volumes (bei k3s der Standard: gemeldet wird die Platte
+        des Knotens, die Grösse des PVC wird nicht durchgesetzt), bei Docker ohne gemountetes Volume unter
+        <code>/data</code> (gemeldet wird die Platte des Hosts) und bei Thin Provisioning, das mehr melden kann, als
+        physisch vorhanden ist. Benutzer-Quotas unter Linux sind nicht berücksichtigt, Projekt-Quotas unter XFS und
+        ext4 schon.</p>
+      <p data-l="en"><b>Where the number is wrong.</b> Atlas shows what the file system reports. On a volume that is
+        a block device (Ceph RBD, EBS, Azure Disk or Longhorn, say) and on Windows, that is the real size. It can
+        differ on network shares (NFS, CephFS, EFS and Azure Files often report the whole pool), on
+        <code>hostPath</code> and <code>local-path</code> volumes (the k3s default: they report the node's disk, and
+        the PVC's size is not enforced), on Docker without a volume mounted at <code>/data</code> (it reports the
+        host's disk), and with thin provisioning, which can report more than physically exists. Linux user quotas
+        are not counted; XFS and ext4 project quotas are.</p>
+
       <h4 data-l="de">Ereignisse exportieren</h4><h4 data-l="en">Exporting events</h4>
       <p data-l="de">Für Auswertung und Aufbewahrung über die Instanz hinaus spiegelt ein Exporter das
         Ereignisprotokoll in einen <b>OpenSearch</b>-Index (ADR-0114): <code>--opensearch-url</code> schaltet ihn

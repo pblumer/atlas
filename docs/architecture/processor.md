@@ -104,6 +104,7 @@ Why it is shaped this way:
 - **Phase 1 does zero I/O.** Pure in-memory processing against the transaction. Fast, and it lets us accumulate many commands before the expensive disk operation.
 - **The `select`/`default` pattern is the group-commit heart.** Collect while commands are available; flush the instant the queue is empty. Self-tuning: low load → small batches, low latency; high load → large batches, max throughput. No timers, no tuning knobs.
 - **Followups before side effects.** Internal followup commands (`SequenceFlowTaken → ActivateElement`) go back into the queue and are made durable in the *next* batch. Side effects (worker notification) run only after this batch is safely on disk.
+- **`p.fatal` means the engine halts.** Once the sync fails, or state cannot be committed after the batch is in the log, the processor processes nothing more until it is restarted (`engine.ErrHalted`, `Processor.Halted`). The failed batch's commands are still queued and their callers have been told they failed; running them later would contradict that, and only recovery knows exactly what reached the disk. The WAL, for its part, cuts a write that failed part-way off again and never writes behind a torn batch ([ADR-0481](../adr/0481-storage-guard.md)).
 
 ## Processing one command
 

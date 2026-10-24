@@ -1604,6 +1604,7 @@ function paintReleaseNotes(slot, lang) {
 // ---------- Views ----------
 async function viewConsoleDashboard() {
   view.innerHTML = `
+    <div id="storage-alert-slot"></div>
     <div id="catalogue-stranded-slot"></div>
     <div id="api-tokens-expiring-slot"></div>
     <div id="approvals-waiting-slot"></div>
@@ -1645,6 +1646,7 @@ async function viewConsoleDashboard() {
         </div>
       </div>
     </div>
+    <div id="storage-card-slot"></div>
     <div id="key-features-slot"></div>`;
   view.querySelector("[data-system-overview]").addEventListener("click", () => openSystemOverview());
   // What switching the catalogue off strands (ADR-0434): asked only where it can have
@@ -1656,6 +1658,17 @@ async function viewConsoleDashboard() {
   if (mayUse("admin")) {
     import("./apitokens.js").then((m) => m.renderExpiringTokens(document.getElementById("api-tokens-expiring-slot"), { api }))
       .catch(() => {});
+  }
+  // The disk under the data directory (ADR-0481): asked only by an
+  // administrator, the one person the route answers and the one who can free space.
+  // The card is always shown to them; the alert above the dashboard only when the room
+  // runs low, the server is frozen below its reserve, or the engine has halted.
+  if (mayUse("admin")) {
+    import("./storage.js").then((m) => m.renderStorage({
+      alertSlot: document.getElementById("storage-alert-slot"),
+      cardSlot: document.getElementById("storage-card-slot"),
+      api,
+    })).catch(() => {});
   }
   // Action approvals waiting for this person's answer (ADR-0475 §9): asked only when
   // somebody is signed in, because only a person answers one. Silent otherwise.

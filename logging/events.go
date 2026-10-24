@@ -325,6 +325,26 @@ var (
 	WALCompactionSegmentsDeleted = newEvent("wal_compaction.segments_deleted")
 )
 
+// The storage monitor and the engine halt (ADR-0481).
+var (
+	// StorageLow is the disk crossing into the warning band: less room above the
+	// reserve than the warning margin, or a forecast that reaches the reserve within a
+	// week. Logged once per crossing, not on every reading.
+	StorageLow = newEvent("storage.low")
+	// StorageFrozen is the disk falling below the reserve: from here the server refuses
+	// new writes until there is room again. An error, because work is being turned away.
+	StorageFrozen = newEvent("storage.frozen")
+	// StorageResumed is the disk regaining the reserve and its margin, and the server
+	// taking writes again.
+	StorageResumed = newEvent("storage.resumed")
+	// StorageUnreadable is a reading of the file system failing. Nothing changes on it —
+	// a frozen server stays frozen, an open one stays open — so it is a warning.
+	StorageUnreadable = newEvent("storage.unreadable")
+	// EngineHalted is the engine stopping after a batch could not be made durable. It
+	// processes nothing more until the server is restarted.
+	EngineHalted = newEvent("engine.halted")
+)
+
 // Backup, restore, and streaming exports (ADR-0107/0108/0109).
 var (
 	RestoreApplied                = newEvent("restore.applied")

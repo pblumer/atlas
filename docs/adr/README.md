@@ -566,6 +566,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0478](0478-mail-documents-leave-the-mailbox.md) | A mail's documents leave the mailbox — forward, get-attachment, export-attachment, and what inspects them first | Accepted | Landed |
 | [0479](0479-paperless-ngx-worker.md) | Paperless-ngx Worker with reference-only document handling | Proposed | Not started |
 | [0480](0480-technical-capability-contract.md) | Technical capability claims on Worker Type operations | Proposed | Partial |
+| [0481](0481-storage-guard.md) | A storage reserve, and an engine that halts on a failed write | Accepted | Landed |
 
 ## The two states of a record
 
