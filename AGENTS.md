@@ -118,7 +118,7 @@ api/        HTTP API, web UI, command submission and queries
               broker Worker Instances lease from, never the log
   storage/    The disk under the data directory: the monitor that reads it off the run
               loop, the reserve below which writes are refused, and the forecast
-              (ADR-draft-storage-guard)
+              (ADR-0481)
   formgen/    Writing a form from a description and from the process it belongs to
               (ADR-0260) — design-time authoring against the agent
               Worker an operator configured; it owns no state, so it holds no run loop

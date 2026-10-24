@@ -1,6 +1,6 @@
 // Package diskspace reads how large the file system holding a directory is and how
 // much of it this process may still write — the numbers the storage monitor decides
-// on (ADR-draft-storage-guard).
+// on (ADR-0481).
 //
 // Each platform asks its own kernel: statfs on Linux, macOS and FreeBSD,
 // GetDiskFreeSpaceExW on Windows. One reading is a single system call whose cost

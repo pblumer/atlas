@@ -1,4 +1,4 @@
-# ADR-DRAFT: A storage reserve, and an engine that halts on a failed write
+# ADR-0481: A storage reserve, and an engine that halts on a failed write
 
 - **Status:** Accepted
 - **Implementation:** Landed

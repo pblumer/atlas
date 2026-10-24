@@ -1,5 +1,5 @@
 // Package storage watches the disk under the data directory and keeps the server from
-// running it full (ADR-draft-storage-guard).
+// running it full (ADR-0481).
 //
 // A full disk is where an event-sourced engine is most fragile. The WAL can be
 // repaired — a write it could not finish is cut off again — but the state store

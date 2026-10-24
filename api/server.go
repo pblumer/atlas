@@ -800,7 +800,7 @@ type Server struct {
 	lastPass   *checkpointPass
 
 	// storage watches the disk under the data directory and, below the reserve,
-	// freezes new writes until there is room again (ADR-draft-storage-guard).
+	// freezes new writes until there is room again (ADR-0481).
 	// storageReserve is that reserve: 0 unless WithStorageReserve set one, so a server
 	// built without it watches and warns but never refuses — the binary's flag is what
 	// turns the freeze on by default. storageRead, when non-nil, replaces the real
@@ -1324,7 +1324,7 @@ func WithCheckpointRetention(keep int) Option {
 }
 
 // WithStorageReserve sets the disk space the server keeps free for itself
-// (ADR-draft-storage-guard). While less than this is available under the data
+// (ADR-0481). While less than this is available under the data
 // directory, the server refuses new writes — the HTTP layer answers 507 — and starts
 // no work of its own, so the state store and the checkpoints that give WAL space back
 // still have room to write; it resumes by itself once the reserve and a quarter of it
@@ -2410,7 +2410,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	go s.timerScheduler(time.Second)
 	// The storage monitor reads the disk on its own goroutine — a statfs, off the run
 	// loop — and its first reading is taken at once, so the admission check below the
-	// routes has an answer before the first write arrives (ADR-draft-storage-guard).
+	// routes has an answer before the first write arrives (ADR-0481).
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -3095,7 +3095,7 @@ func (s *Server) drive() error {
 			}
 			// Below the storage reserve the in-process workers lease nothing new: a
 			// leased job is new work, and its result would have to be written. What is
-			// already leased finishes (ADR-draft-storage-guard).
+			// already leased finishes (ADR-0481).
 			if s.storage.Frozen() {
 				return
 			}
@@ -3355,7 +3355,7 @@ func (s *Server) timerScheduler(every time.Duration) {
 			// single writer for a worker call nobody had asked for.
 			// Below the storage reserve, or once the engine has halted, a due timer
 			// stays due: firing it is new work, and it fires on the first tick after
-			// writes resume (ADR-draft-storage-guard).
+			// writes resume (ADR-0481).
 			if s.writesPaused() {
 				continue
 			}

@@ -1117,7 +1117,7 @@ What it takes to run this for real.
   checkpoints and whether they still verify, the last pass, the WAL's footprint — and a
   checkpoint-now control for a planned restart. **ADR-0131 is complete.**
 - ✅ A full disk neither loses data nor stops the server from restarting
-  ([ADR-draft-storage-guard](docs/adr/draft-storage-guard.md)). The dashboard shows an
+  ([ADR-0481](docs/adr/0481-storage-guard.md)). The dashboard shows an
   administrator each file system the server writes to, the reserve, what the WAL and the
   state store hold, and a forecast smoothed over about six hours; `GET /api/v1/storage`,
   the `atlas_storage` MCP tool and `atlas_storage_*` on `/metrics` report the same reading.

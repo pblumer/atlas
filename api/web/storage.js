@@ -1,5 +1,5 @@
 // The disk under the data directory, as the Console's dashboard shows it to an
-// administrator (ADR-draft-storage-guard).
+// administrator (ADR-0481).
 //
 // Two pieces from one request. The card is always there for an administrator: each file
 // system the server writes to, how full it is, where the reserve begins, and how soon the

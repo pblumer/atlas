@@ -325,7 +325,7 @@ var (
 	WALCompactionSegmentsDeleted = newEvent("wal_compaction.segments_deleted")
 )
 
-// The storage monitor and the engine halt (ADR-draft-storage-guard).
+// The storage monitor and the engine halt (ADR-0481).
 var (
 	// StorageLow is the disk crossing into the warning band: less room above the
 	// reserve than the warning margin, or a forecast that reaches the reserve within a

@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/api/storage"
 )
 
-// The server's half of the storage guard (ADR-draft-storage-guard): which directories
+// The server's half of the storage guard (ADR-0481): which directories
 // the monitor reads, which requests a frozen or halted server still answers, and the
 // background work it stops starting.
 //

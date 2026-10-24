@@ -1659,7 +1659,7 @@ async function viewConsoleDashboard() {
     import("./apitokens.js").then((m) => m.renderExpiringTokens(document.getElementById("api-tokens-expiring-slot"), { api }))
       .catch(() => {});
   }
-  // The disk under the data directory (ADR-draft-storage-guard): asked only by an
+  // The disk under the data directory (ADR-0481): asked only by an
   // administrator, the one person the route answers and the one who can free space.
   // The card is always shown to them; the alert above the dashboard only when the room
   // runs low, the server is frozen below its reserve, or the engine has halted.

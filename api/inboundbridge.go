@@ -40,7 +40,7 @@ func (s *Server) inboundBridge(every time.Duration) {
 			// While writes are paused the source keeps what it has not delivered —
 			// the cursor only advances past events that were published — so the next
 			// poll after writes resume picks up where this one would have
-			// (ADR-draft-storage-guard).
+			// (ADR-0481).
 			if s.writesPaused() {
 				continue
 			}

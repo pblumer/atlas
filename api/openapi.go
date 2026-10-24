@@ -238,7 +238,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		{"GET", "/api/v1/storage", s.storage.HandleGet, apiOp{
-			summary: "The disk under the data directory: each file system the server writes to with its size, use and free space, the reserve below which the server refuses new writes (507) until space is back, the state that follows (ok, warn, frozen, halted after a failed write, unknown), what the WAL and the state store hold, and a forecast of when the reserve is reached, from a consumption rate smoothed over about six hours (admin-only when auth is on) (ADR-draft-storage-guard)", tag: "System", role: RoleAdmin,
+			summary: "The disk under the data directory: each file system the server writes to with its size, use and free space, the reserve below which the server refuses new writes (507) until space is back, the state that follows (ok, warn, frozen, halted after a failed write, unknown), what the WAL and the state store hold, and a forecast of when the reserve is reached, from a consumption rate smoothed over about six hours (admin-only when auth is on) (ADR-0481)", tag: "System", role: RoleAdmin,
 			resp: jsonBody("Storage status", schemaObj(map[string]any{
 				"state": tString(), "reason": tString(), "sampledAt": tString(),
 				"reserveBytes": tInteger(), "resumeBytes": tInteger(),

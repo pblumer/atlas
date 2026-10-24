@@ -61,7 +61,7 @@ governs a Worker:
   `GET /api/v1/storage`, the `atlas_storage` MCP tool and `/metrics`
   (`atlas_storage_*`, `atlas_engine_halted`), where `predict_linear` forecasts over as long
   a window as Prometheus keeps
-  ([ADR-draft-storage-guard](docs/adr/draft-storage-guard.md)).
+  ([ADR-0481](docs/adr/0481-storage-guard.md)).
 - **The PowerShell editor completes a cmdlet's parameters.** After a cmdlet, `-` offers
   its own parameters, then the common ones (`-ErrorAction`, `-Verbose` and the rest), less
   those it already has: `Get-ChildItem -Re` offers `-Recurse`, and `Where-Object Name -`
@@ -305,7 +305,7 @@ governs a Worker:
   `event=engine.halted` once. It had carried on, and ran the failed batch's commands again
   with the next request — after their callers had been told they failed. The restart
   recovers exactly what was acknowledged
-  ([ADR-draft-storage-guard](docs/adr/draft-storage-guard.md)).
+  ([ADR-0481](docs/adr/0481-storage-guard.md)).
 - **The server stops taking writes below a 1 GiB storage reserve by default.** A disk
   with less than that available under the data directory now answers writes with 507
   where it used to take them until it failed. Set `--storage-reserve-mb` to size the
@@ -385,7 +385,7 @@ governs a Worker:
   repaired by hand. A failed write is now cut off again and its batch dropped, a failed
   fsync stops the log, and nothing is written behind a torn batch. A batch that failed is
   also no longer written a second time with the next one
-  ([ADR-draft-storage-guard](docs/adr/draft-storage-guard.md)).
+  ([ADR-0481](docs/adr/0481-storage-guard.md)).
 - **A PowerShell command name completes past its dash.** The script editor read every
   `-` as the start of an operator, so `Get-` offered `-and`, `-eq` and the rest, and
   choosing `Get-ChildItem` after `Get-Ch` wrote `GetGet-ChildItem`. A dash glued to a

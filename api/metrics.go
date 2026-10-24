@@ -111,7 +111,7 @@ func newDurabilityCollector(s *Server) *durabilityCollector {
 			"Jobs admitted as a probe to test whether a held target has recovered."),
 		breakerRefused: d("worker_breaker_refused_total",
 			"Dispatch attempts turned away because their target was being held back."),
-		// The storage guard (ADR-draft-storage-guard), for the file system with the least
+		// The storage guard (ADR-0481), for the file system with the least
 		// room. The forecast is deliberately left to Prometheus as well:
 		// predict_linear(atlas_storage_available_bytes[1d], 7*86400) < atlas_storage_reserve_bytes
 		// alerts a week ahead over as long a window as retention holds, while the rate

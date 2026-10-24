@@ -552,7 +552,7 @@ type retentionConfig struct {
 type storeConfig struct {
 	cacheMB    int
 	memtableMB int
-	// reserveMB is the disk the storage guard keeps free (ADR-draft-storage-guard). It
+	// reserveMB is the disk the storage guard keeps free (ADR-0481). It
 	// rides here because it is a decision about the same disk; it is not a Pebble
 	// option, so options() leaves it out.
 	reserveMB int
@@ -769,7 +769,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 			slog.Duration("maxAge", retention.maxAge), slog.String("gate", gate),
 			slog.Int("batch", retention.batch), slog.Duration("interval", retention.interval))
 	}
-	// The storage guard (ADR-draft-storage-guard): on by default, because the failure it
+	// The storage guard (ADR-0481): on by default, because the failure it
 	// prevents is a state store that ends the process mid-write. A disk smaller than a
 	// few reserves is said once at start, since the server would pause early on it.
 	apiOpts = append(apiOpts, api.WithStorageReserve(storeCfg.reserve()))

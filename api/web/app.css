@@ -766,7 +766,7 @@ textarea::placeholder {
 .catalogue-stranded, .tokens-expiring { border: 1px solid var(--warn); background: var(--warn-soft); margin-bottom: 18px; }
 .catalogue-stranded h2, .tokens-expiring h2 { color: var(--warn); }
 .catalogue-stranded ul, .tokens-expiring ul { margin: 6px 0 10px; padding-left: 18px; }
-/* The storage guard (ADR-draft-storage-guard): an alert above the dashboard when there is
+/* The storage guard (ADR-0481): an alert above the dashboard when there is
    something to do — amber while the room runs low, red once writes are refused — and the
    administrator's card with one bar per file system. The bar's track is what this server
    can ever have (used + available, as df counts it); the dark mark is where the reserve

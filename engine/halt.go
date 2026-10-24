@@ -3,7 +3,7 @@ package engine
 import "errors"
 
 // ErrHalted is what every run reports once a batch could not be made durable: the
-// engine processes nothing more until the process is restarted (ADR-draft-storage-guard).
+// engine processes nothing more until the process is restarted (ADR-0481).
 //
 // The reason is the queue, not the disk. A failed batch leaves its commands queued in
 // memory, and their callers have already been told they failed. Running them later —
