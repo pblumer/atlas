@@ -46,6 +46,7 @@ governs a Worker:
 
 ### Added
 
+- **Worker Type operations can declare versioned technical capabilities.** A Worker Type manifest can now attach optional `capabilities` metadata (namespaced ID, semantic contract version and provider profile) to an operation. Invalid and duplicate claims are rejected at admission; existing manifests and runtime routing remain unchanged. These are descriptive claims, not a statement of cross-provider equivalence or an authorization grant ([ADR-draft-technical-capability-contract](docs/adr/draft-technical-capability-contract.md)).
 - **A mail task forwards a message, reads an attachment, or exports one into an S3 Worker.**
   Three new mail operations hand a mail's document on. **Forward message** sends the mail
   with its attachments to new recipients, with a note above it — server-side through
