@@ -1,7 +1,7 @@
 # Zugriffsschutz-Konzept — jede Schnittstelle hinter einem Prinzipal
 
-- **Status:** Entwurf zur Diskussion
-- **Datum:** 2026-08-26
+- **Status:** fortgeschriebenes Konzept; historische Befunde und aktueller Stand getrennt
+- **Datum:** 2026-10-24
 - **Zielbild:** Atlas ist für einen produktiven PoC vertretbar, **ohne** dass die
   Absicherung allein an der Konfiguration eines vorgelagerten Proxys hängt.
 
@@ -9,22 +9,16 @@
 
 ## 0 Auftrag und Abgrenzung
 
-Der Prüfbefund lautet: nicht alle Schnittstellen sind durch einen Benutzer-Login
-geschützt, und der MCP-Zugang ist so nicht akzeptabel. **Der Befund stimmt.**
-Kapitel 1 belegt ihn aus dem Code und zeigt, dass er für `/mcp` sogar noch
-schärfer ist als formuliert.
+Der **historische** Befund (August 2026) lautete, nicht alle Schnittstellen seien angemessen geschützt, insbesondere `/mcp`. **Damals traf er zu; heute ist er als Ist-Befund überholt.** Kapitel 1 bleibt als Nachweis des Ausgangszustands stehen. M1–M8 wurden implementiert; für neue Berechtigungsachsen siehe M9–M13 und Kapitel 8. Diese Dokumentation ersetzt keine unabhängige Sicherheitsabnahme.
 
-Dieses Dokument beschreibt den **kleinsten Umbau am Produkt**, nach dem die
-Aussage «keine Schnittstelle ohne authentisierten Prinzipal» wahr *und* durch
-einen Test belegbar ist. Es ist bewusst auf ein PoC-Zielbild zugeschnitten: keine
-Föderation, kein vollständiges Rollenmodell, keine Mandantenfähigkeit.
+Dieses Dokument dokumentiert den Mindestumbau und die Weiterentwicklung zu OIDC, Endpoint-Rollen, Worker-Berechtigungen und teilweise aktionsgebundener Autorisierung. Bewusst öffentliche Sonden, statische Ressourcen und tokengebundene Links sind keine Verletzung dieses Zielbilds. Eine vollständige Mandantentrennung und flächendeckende Aktionsautorisierung gibt es weiterhin nicht.
 
 Verhältnis zu den bestehenden Unterlagen:
 
 | Dokument | Bezug |
 |----------|-------|
-| [`isds-konzept.md`](isds-konzept.md) | Restrisiko **R-08** (unauthentisierte Endpunkte) ist heute **rot**, solange `/mcp` erreichbar ist. Dieses Konzept bringt R-08 auf grün und verbessert R-03, R-04, R-12 und R-13, ohne sie zu schliessen. |
-| [`isds-offene-punkte.md`](isds-offene-punkte.md) | Schliesst **O-07** vollständig, **O-03** und **O-04** weitgehend. Legt die Grundlage, auf der **O-01** (Föderation) und **O-02** (feingranulare Autorisierung) später aufsetzen — beide bleiben ausdrücklich draussen. |
+| [`isds-konzept.md`](isds-konzept.md) | **R-08** ist produktseitig durch Transportauthentisierung und Route-Inventar entschärft. Offene Risiken betreffen unter anderem OIDC-Konfiguration, Objekt-/Aktionsrechte, Credentials und Betrieb (R-03/R-04/R-09/R-13). |
+| [`isds-offene-punkte.md`](isds-offene-punkte.md) | **O-07 erledigt**; OIDC (O-01) und Rollen (O-02) sind implementiert, aber noch nicht in jeder Installation eingerichtet oder für alle Worker-Aktionen durchgesetzt. |
 
 ### Umsetzungsstand
 
@@ -40,10 +34,12 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M6** — `/metrics` hinter die Schranke | ✅ umgesetzt — [`ADR-0198`](../adr/0198-metrics-behind-the-boundary.md) |
 | **M10** — OAuth für gehostete MCP-Clients | ✅ umgesetzt — [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md): Ressourcenserver (`api/oauthmeta.go`), Autorisierungsserver (`api/oauthserver.go`) und dynamische Client-Registrierung (`api/oauthregister.go`, standardmässig aus) |
 | **M11** — Berechtigungen auf Worker-Ebene | ✅ umgesetzt — [`ADR-0205`](../adr/0205-connector-ownership-and-event-delivery.md): Eigentümer und Freigabe am Worker (`api/connectorscope.go`) und der Anspruch auf den Nachrichtennamen an beiden Türen (`api/messageclaim.go`) |
+| **M12** — OIDC und Claim-Mapping | ✅ implementiert — [ADR-0210](../adr/0210-federated-authentication.md); konkreter eIAM-Betrieb nicht nachgewiesen |
+| **M13** — policygesteuerte Worker-Ausführung | **Teilweise** — [ADR-0475](../adr/0475-identity-aware-worker-execution.md), nur SharePoint; durchsetzungsabhängig vom Modus |
 
 **Die acht Massnahmen der Stufe 1 sind umgesetzt. R-08 ist grün.**
 
-M10 und M11 kamen später dazu, und **keines ist eine Lücke in R-08**: Jede
+M10–M12 und die teilimplementierte M13 kamen später dazu; **sie behandeln andere Risiken als R-08**: Jede
 Schnittstelle verlangt einen Prinzipal. M10 ist die Antwort auf einen Fall, den M2
 und M4 nicht bedacht haben — einen Client, den niemand konfigurieren kann, weil er
 bei einem Dritten läuft. M11 ist die Antwort auf eine Frage *hinter* der Haustür:
@@ -847,8 +843,7 @@ befragt.
 
 ### M12 — Föderierte Authentisierung ✅
 
-**Problem, gemessen.** Atlas kennt genau **einen** Weg, wie aus einem Menschen ein
-Prinzipal wird: Benutzername und lokales Passwort.
+**Historische Messung vor M12 (inzwischen überholt):** Damals gab es nur das lokale Passwort. Die folgenden Zahlen sind kein aktueller Inventarstand; OIDC mit PKCE, JWKS-Prüfung und Claim-Mapping ist mittlerweile implementiert (ADR-0210).
 
 | | |
 |---|---|
@@ -861,15 +856,9 @@ Prinzipal wird: Benutzername und lokales Passwort.
 [ADR-0044](../adr/0044-user-management-and-authentication-boundary.md) hat die
 Haken bewusst gesetzt und schreibt sie auch hin: «morgen kann der Prinzipal aus
 einem OIDC/JWT-Bearer kommen, indem nur die Middleware getauscht wird». Benutzt hat
-sie bis heute nichts. Das ist zugleich die gute Nachricht — die Naht ist **eine**
-Funktion — und das ganze Risiko: Alles, was eine fremde Identität echt macht, gibt
-es noch nicht.
+sie damals noch nicht. Seit M12 nutzt die Föderation dieselbe Prinzipal-/Session-Grenze; IdP-Einrichtung und Claims sind installationsbezogen zu prüfen.
 
-Was das kostet, steht schon in den Akten. **R-03** (gelb): lokale Passwörter statt
-eIAM, kein MFA, keine zentrale Passwortrichtlinie und — der Punkt, nach dem eine
-Prüfstelle zuerst fragt — **kein automatischer Entzug beim Austritt**. Ein Konto
-hier überlebt die Anstellung seiner Inhaberin, bis eine Administratorin es von Hand
-entfernt.
+Der historische R-03-Befund bleibt für Installationen ohne föderierten Anbieter relevant. Mit OIDC und aktiver Claim-Abbildung können Rollen und Gruppen den Provider-Claims folgen; Austritt, noch aktive Sessions und Rollenentzug sind im konkreten Vorhaben zu testen.
 
 **Vorschlag** (Entwurf:
 [`ADR-0210`](../adr/0210-federated-authentication.md)):
@@ -1110,9 +1099,9 @@ Aussteller bleibt.
 
 | Punkt | Warum nicht |
 |-------|-------------|
-| OIDC/SAML/eIAM (O-01) | Braucht zuerst die Rollen, denen Claims zugewiesen werden — sonst entsteht ein Mapping ins Leere. Stufe 2. |
+| SAML / konkrete eIAM-Abnahme (O-01) | OIDC und Claim-Mapping sind umgesetzt; SAML, providerinitiierter Logout und die Abnahme eines konkreten eIAM-Anbieters sind weiterhin offen. |
 | MFA | Folgt sinnvollerweise der Föderation, nicht dem lokalen Passwort. |
-| Vollständiges RBAC (O-02) | Stufe 2. M1 und M2 sind so gebaut, dass es später an genau einer Stelle andockt. M9 und M11 sind zwei Scheiben davon, kein Ersatz dafür. |
+| Durchgängige Objekt-/Aktionsautorisierung (O-02) | M9 und M11 sind umgesetzt, M13 jedoch nur für SharePoint teilweise. Andere Instanz-Lesewege und Worker-Typen bleiben zu prüfen. |
 | Isolation der Zustellung in der Engine | Der echte Nachfolger von M11: Die veröffentlichte Nachricht trüge ihren Geltungsbereich mit, und die Korrelation verglicht ihn. Das ändert den Nachrichtenwert und berührt `applyToState` — ein eigener Entscheid mit eigener Wiederanlauf-Geschichte, nicht ein Detail von M11. Bis dahin ist M11 ausdrücklich ein Tor und keine Isolation. |
 | Mandantenfähigkeit (O-09) | Betriebsmuster «eine Installation je Schutzbedarfsklasse» bleibt die Aussage. |
 | TLS im Produkt (R-02) | Bleibt Aufgabe des vorgelagerten Proxys. |
