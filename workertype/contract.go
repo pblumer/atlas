@@ -3,7 +3,9 @@ package workertype
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 )
@@ -84,13 +86,25 @@ func ParseTechnicalContractJSON(raw []byte) (TechnicalContract, error) {
 	if err := dec.Decode(&c); err != nil {
 		return TechnicalContract{}, fmt.Errorf("decode technical capability contract: %w", err)
 	}
-	if err := ensureEOF(dec); err != nil {
+	if err := ensureTechnicalContractEOF(dec); err != nil {
 		return TechnicalContract{}, err
 	}
 	if err := c.Validate(); err != nil {
 		return TechnicalContract{}, err
 	}
 	return c, nil
+}
+
+func ensureTechnicalContractEOF(dec *json.Decoder) error {
+	var extra any
+	err := dec.Decode(&extra)
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	if err == nil {
+		return fmt.Errorf("decode technical capability contract: multiple JSON values")
+	}
+	return fmt.Errorf("decode technical capability contract: %w", err)
 }
 
 // Validate checks an independently versioned technical capability contract.
