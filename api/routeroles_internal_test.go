@@ -53,6 +53,9 @@ var wantAdminRoutes = []string{
 	"POST /api/v1/restore/full",
 	"GET /api/v1/checkpoints",
 	"POST /api/v1/checkpoints",
+	// The disk under the data directory and its reserve (ADR-draft-storage-guard):
+	// the same paths and sizes the checkpoint status names.
+	"GET /api/v1/storage",
 
 	// Code execution outside a deployment, and the overrides that decide which
 	// process a call activity reaches on this server.

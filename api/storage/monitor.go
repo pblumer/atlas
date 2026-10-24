@@ -113,7 +113,8 @@ type FileSystem struct {
 	AvailableBytes uint64   `json:"availableBytes"`
 	// UsedPercent is df's Use%: used / (used + available), to one decimal.
 	UsedPercent float64 `json:"usedPercent"`
-	// WarnBelowBytes is the available space under which this file system warns.
+	// WarnBelowBytes is the available space under which this file system warns: the
+	// reserve plus the larger of the reserve and a tenth of used + available.
 	WarnBelowBytes uint64 `json:"warnBelowBytes"`
 	// Decides marks the file system with the least room — the one that freezes the
 	// server first.
@@ -306,7 +307,10 @@ func (m *Monitor) Sample() {
 		}
 		tr.observe(now, fs.AvailableBytes)
 		fs.Forecast = tr.forecast(fs.AvailableBytes, m.cfg.Reserve)
-		fs.WarnBelowBytes = m.cfg.Reserve + max(m.cfg.Reserve, fs.TotalBytes/10)
+		// A tenth of what this server can ever have — used plus available, as the
+		// share in use is counted — not of Total: on a disk with a large reservation
+		// for root, a tenth of Total can exceed everything this process may write.
+		fs.WarnBelowBytes = m.cfg.Reserve + max(m.cfg.Reserve, (fs.UsedBytes+fs.AvailableBytes)/10)
 		if tightest < 0 || fs.AvailableBytes < fss[tightest].AvailableBytes {
 			tightest = i
 		}

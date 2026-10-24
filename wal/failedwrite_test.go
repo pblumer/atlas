@@ -261,3 +261,37 @@ func fileSize(t *testing.T, l *Log) int64 {
 	}
 	return total
 }
+
+// TestAFailedRollStopsTheLog: when the next segment cannot be created, the old one is
+// already closed and the new one may hold a torn header. Nothing may be written from
+// there, and closing the log afterwards has nothing left to close twice.
+func TestAFailedRollStopsTheLog(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "wal")
+	l, err := Open(Options{Dir: dir, MaxSegmentSize: 1})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	appendSync(t, l, "first")
+	// The directory goes away, so the segment the next batch rolls to cannot be made.
+	if err := os.RemoveAll(dir); err != nil {
+		t.Skipf("cannot remove a directory holding an open file here: %v", err)
+	}
+	if err := l.Append([]byte("second")); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if err := l.Sync(); err == nil {
+		t.Fatal("Sync rolled into a segment that could not be created")
+	}
+	if l.Err() == nil {
+		t.Fatal("Err() = nil after a failed roll; the log must stop")
+	}
+	if err := l.Append([]byte("third")); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if err := l.Sync(); err == nil {
+		t.Fatal("Sync after a failed roll succeeded")
+	}
+	if err := l.Close(); err != nil {
+		t.Fatalf("Close after a failed roll: %v", err)
+	}
+}

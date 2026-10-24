@@ -470,6 +470,8 @@ func (l *Log) roll() error {
 	if err := l.openNewSegment(l.segSeq + 1); err != nil {
 		// The old segment is closed and the new one may exist with a torn header —
 		// which recovery repairs, but which nothing may be written into from here.
+		// The closed file is let go, so Close has nothing left to close twice.
+		l.active = nil
 		l.pending = l.pending[:0]
 		l.stopped = fmt.Errorf("wal: rolling to a new segment failed; the log accepts no more batches until it is reopened: %w", err)
 		return l.stopped
