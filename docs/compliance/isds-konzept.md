@@ -440,10 +440,12 @@ Update `modeler`, `operator` und `user`, bis eine Betreiberin sie enger stellt
 
 | Sicherheits-Audit | An-/Abmeldung, Fehlanmeldung mit Grund, Drosselung, Autorisierungsverweigerung, Konto- und Deploy-Token-Lebenszyklus — je Zeile mit handelndem Prinzipal und Absenderadresse, ohne Passwort, Hash oder Token (ADR-0197) | Anwendungslog, stabile `event=`-Namen `auth.*`, mit `--log-format=json` maschinenlesbar |
 
-**Verbleibende Lücke:** einen **HTTP-Access-Log** schreibt Atlas weiterhin nicht;
-den muss der Reverse Proxy liefern (M-06). Die sicherheitsrelevanten Ereignisse
-selbst kommen jetzt aus dem Produkt und benennen das betroffene *Konto*, was ein
-Proxy-Log nicht kann.
+**Verbleibende Lücke:** Atlas schreibt weiterhin **kein vollständiges
+HTTP-Access-Log**. Bei Betrieb mit Reverse Proxy kann dieser es liefern;
+ohne Proxy ist eine gleichwertige Ingress-/Zugriffsprotokollierung auf
+Infrastrukturebene vorzusehen und ihr Umfang nachzuweisen (M-06).
+Die sicherheitsrelevanten `auth.*`-Ereignisse kommen aus dem Produkt und
+benennen das betroffene Konto; sie ersetzen kein vollständiges Access-Log.
 
 ### 5.2.5 Datensicherung und Wartung
 
@@ -521,7 +523,7 @@ deshalb hier explizit:
   abstimmen (M-08).
 - **Weitere Kopien** sind mitzudenken: OpenSearch-Indizes (eigene Retention
   konfigurieren), Backups (Aufbewahrungsfrist der Sicherungen), Instanz-Snapshots
-  und Applikations-Bundles, sowie ⟨Log-Aufbewahrung des Reverse Proxy⟩.
+  und Applikations-Bundles, sowie ⟨Aufbewahrung der Proxy-/Ingress-Logs, falls geführt⟩.
 - **Kryptografische Löschung deklarierter Personendaten** (ADR-0314): Mit
   `atlas:personal` und `atlas:dataSubject` werden deklarierte Felder je
   betroffener Person verschlüsselt; Schlüsselvernichtung macht die betroffenen
@@ -625,7 +627,7 @@ das Vorhaben ergänzen⟩. Initiator ist immer die Quelle.
 | K-18 | Browser + Atlas-Server | Microsoft-Identitätsplattform ⟨Zone⟩ | HTTPS / 443 | OIDC-Anmeldung / Konto verknüpfen (PKCE, Token-/JWKS-Austausch; ADR-0210/0475) | TLS | IdP-Protokoll, Clientregistrierung und Berechtigungen installationsabhängig |
 | K-19 | Beaufsichtigter SharePoint-Worker | Microsoft Graph / SharePoint Online ⟨Zone⟩ | HTTPS / 443 | Listen/Bibliotheken, ggf. stellvertretende Ausführung nach Policy-Permit (ADR-0141/0475) | TLS | Service-Credential oder kurzlebiger delegierter Token; Delegation nur im beaufsichtigten Modus |
 | K-20 | Beaufsichtigter Google-Contacts-Worker | Google People API / Workspace Directory ⟨Zone⟩ | HTTPS / 443 | Kontaktverwaltung und Suche (ADR-0476) | TLS | Refresh-Token oder Service-Account mit Domain-wide Delegation und ausdrücklich benanntem Subject |
-| K-21 | Aufgaben-UI / Atlas-Server / Worker | Entra-Abfragekanal / Microsoft Graph ⟨Zone⟩ | HTTPS (Browser zum Atlas), Worker-Leasing gemäss K-04, Worker zu Graph HTTPS/443 | Nicht-durable Remote-Auswahl in Formularen (ADR-0473) | ⟨TLS via Proxy/Worker-Egress⟩ | angemeldete, taskberechtigte Person + freigeschalteter Directory-Worker |
+| K-21 | Aufgaben-UI / Atlas-Server / Worker | Entra-Abfragekanal / Microsoft Graph ⟨Zone⟩ | HTTPS (Browser zum Atlas), Worker-Leasing gemäss K-04, Worker zu Graph HTTPS/443 | Nicht-durable Remote-Auswahl in Formularen (ADR-0473) | Browser-Zugang direkt TLS 1.3 oder via Proxy; HTTPS zum Microsoft Graph | angemeldete, taskberechtigte Person + freigeschalteter Directory-Worker |
 | K-22 | Mail-Worker | S3-Worker / S3-Ziel ⟨Zone⟩, ggf. ClamAV | Worker-interne Übergabe, HTTPS/443 oder ClamAV TCP/3310/Unix-Socket | geprüfter Anhang-Export ohne Engine als Binärtransport (ADR-0478) | TLS ⟨Zielverbindung⟩ | Zugriffsrechte für Quellpostfach und Ziel-Worker; Scanner nach Bedarf |
 
 **Nicht vorhanden:** ausgehende Verbindungen zum Hersteller, Update-Prüfungen,
@@ -751,18 +753,18 @@ formal in P042-Hi02 bewertet; diese Prüfung darf nicht als erledigt gelten):
 ## 6.3 Potenzielle sicherheitsrelevante Vorfälle
 
 Die Anwendung führt ein Log wichtiger Ereignisse mit stabilen `event=`-Namen;
-zusammen mit den Proxy-Logs und den fachlichen Audit-Spuren lassen sich folgende
+zusammen mit den vorhandenen Proxy- **oder Ingress-Logs** und den fachlichen Audit-Spuren lassen sich folgende
 Vorfälle erkennen. ⟨Auswertung durch CSIRT/CSO/ISBO BIT abstimmen; Nutzung der
 BIT-Dienstleistung «Analyse/Monitoring» prüfen.⟩
 
 | Nr. | Vorfall | Beschreibung / Kriterium | Quelle |
 |-----|---------|--------------------------|--------|
 | 01 | Unverhältnismässige Erweiterung der Zugriffsrechte | Konto erhält `admin` oder wird auffällig vielen Gruppen/Projekten zugeordnet | Benutzer-/Gruppen-Ablage, ⟨Rezertifizierung⟩ |
-| 02 | Massen-Export | Aufruf des Backup-Endpunkts, viele Instanz-Snapshots oder auffällig viele Laufzeitabfragen in kurzer Zeit | Proxy-Access-Log |
-| 03 | Unautorisiertes Deployment | Prozessmodell ausserhalb des Change-Verfahrens eingespielt, insbesondere mit Skript-Task oder neuem Worker-Ziel | Deployment-Historie, Proxy-Log |
+| 02 | Massen-Export | Aufruf des Backup-Endpunkts, viele Instanz-Snapshots oder auffällig viele Laufzeitabfragen in kurzer Zeit | Proxy-/Ingress-Access-Log (M-06) |
+| 03 | Unautorisiertes Deployment | Prozessmodell ausserhalb des Change-Verfahrens eingespielt, insbesondere mit Skript-Task oder neuem Worker-Ziel | Deployment-Historie, Proxy-/Ingress-Log |
 | 04 | Wiederholte Fehlanmeldungen / Passwort-Raten | Häufung von `auth.login_failed`, und `auth.login_throttled` überhaupt — letzteres heisst, dass ein Budget aufgebraucht wurde | Anwendungslog (`--log-format=json`), Alarm auf beide Ereignisse |
 | 04b | Rechteanmassung | `auth.denied`: ein angemeldeter Benutzer greift auf eine admin-geschützte Operation zu | Anwendungslog, mit `actor` und `path` |
-| 05 | Zugriff auf `/mcp` von aussen | gehäufte `401` auf `/mcp` (Versuche ohne Credential) oder MCP-Nutzung durch ein Konto, für das sie nicht vorgesehen ist | Proxy-Log / Firewall; die Werkzeugaufrufe selbst sind seit ADR-0196 dem handelnden Benutzer zugeordnet |
+| 05 | Zugriff auf `/mcp` von aussen | gehäufte `401` auf `/mcp` (Versuche ohne Credential) oder MCP-Nutzung durch ein Konto, für das sie nicht vorgesehen ist | Proxy-/Ingress-Log / Firewall; die Werkzeugaufrufe selbst sind seit ADR-0196 dem handelnden Benutzer zugeordnet |
 | 06 | Auffällige Worker-Aktivität | Häufung von Incidents oder Job-Fehlern auf einem Worker; ungewöhnliche Zielhosts | Incident-Liste (ADR-0061), Firewall-Logs |
 | 07 | Externe Änderung von Prozessvariablen | Variablen einer laufenden Instanz von aussen gesetzt — mit handelndem Benutzer attribuiert | Variablen-Audit (ADR-0098) |
 | 08 | Vault-Schlüssel-Abweichung | Secrets lassen sich nicht mehr öffnen (`keyId`-Mismatch) → Schlüsseltausch oder Manipulation | Startup-/Fehlerlog |
@@ -787,7 +789,7 @@ mit dem ISBO BIT.
 | M-05 | Getrennte Umgebungen (DEV/TEST/PROD); Deploy-Berechtigung auf einen definierten Kreis; Change-Verfahren für Modelländerungen | ⟨AV + Betrieb⟩ | Berechtigungskonzept, Change-Records |
 | M-06 | Anwendungslog mit `--log-format=json` an ⟨Log-Plattform/SIEM⟩ liefern (enthält `auth.*`); bei Reverse Proxy HTTP-Access-Log dort führen, **ohne Proxy eine gleichwertige Ingress-/Zugriffsprotokollierung sicherstellen und deren Grenzen dokumentieren** (atlas selbst liefert kein vollständiges HTTP-Access-Log). Alarme auf `auth.login_throttled`, `auth.denied`, `auth.disabled`, `checkpoint.failed`, `wal_compaction.failed`, `exporter.tick_failed`, `command.failed`, `auth.admin_seeded` | ⟨Betrieb LE⟩ | SIEM-Anbindung und Nachweis der Ingress-Protokollierung |
 | M-07 | Benutzer-/Berechtigungslebenszyklus: Eintritt, Mutation, Austritt (`Disabled`), jährliche Rezertifizierung | ⟨AV⟩ | Rezertifizierungsprotokoll (Kap. 8.3) |
-| M-08 | Aufbewahrung/Löschung konfigurieren: `--retention-max-age` bzw. `atlas:historyTtl`, Checkpointing **und** `--compact-wal`, OpenSearch-Retention, Backup-Fristen, ⟨Proxy-Logfristen⟩ | ⟨AV + Betrieb⟩ | Konfiguration, Löschnachweis |
+| M-08 | Aufbewahrung/Löschung konfigurieren: `--retention-max-age` bzw. `atlas:historyTtl`, Checkpointing **und** `--compact-wal`, OpenSearch-Retention, Backup-Fristen, ⟨Proxy-/Ingress-Logfristen⟩ | ⟨AV + Betrieb⟩ | Konfiguration, Löschnachweis |
 | M-18 | Personendaten deklarieren und löschbar halten (ADR-0314): in jedem Prozess, der Personendaten führt, `atlas:personal` und `atlas:dataSubject` setzen; die Kennung der betroffenen Person als `atlas:searchable` deklarieren, damit deren laufende Instanzen vor einer Löschung gefunden werden; Vault-Schlüssel sichern (siehe M-03 — der Verlust des Master-Schlüssels ist damit Verlust von Geschäftsdaten, nicht nur von Zugangsdaten); Löschbegehren über `DELETE /api/v1/personal-data/{subject}` ausführen — die Route schreibt den Nachweis selbst in den Audit-Trail (`event=personal_data.erased`, mit Betroffener und Handelnder), und dieser Eintrag ist der **einzige** verbleibende Nachweis, weil der Schlüssel danach fehlt und die Betroffene keine andere Spur hinterlässt; Audit-Log entsprechend aufbewahren | ⟨AV + Modellierung⟩ | Deklaration im Modell, Audit-Eintrag je Löschung |
 | M-09 | Nicht benötigte Skriptsprachen abschalten (`--powershell=false --python=false --javascript=false`); `--script-timeout` prüfen; für Skripte ohne Datei-/Netzwerkbedarf `--script-sandbox=strict` nach Kompatibilitätstest aktivieren (Linux Landlock ABI 3+) | ⟨Betrieb LE⟩ | Startparameter, negativer Zugriffstest auf `/data` und Netzwerk |
 | M-10 | Worker und Secrets ausschliesslich durch den Betrieb registrieren; Worker in der Zone des Zielsystems betreiben; Firewall-Whitelist je Ziel | ⟨Betrieb LE⟩ | Kommunikationsmatrix 5.4, CRQs |
@@ -864,7 +866,7 @@ den Sicherheitstest):
 | Architekturentscheide | jede sicherheitsrelevante Entscheidung als ADR mit Begründung und Konsequenzen |
 
 **Was das Vorhaben zusätzlich erbringen muss:** Webscan, Penetrationstest der
-Gesamtinstallation (inkl. Proxy und Konfiguration), Konfigurationsprüfung gegen
+Gesamtinstallation (inkl. Proxy, sofern eingesetzt, und TLS-/Ingress-Konfiguration), Konfigurationsprüfung gegen
 Kapitel 6.4, Restore-Test, Prüfung der Kommunikationsmatrix gegen die
 tatsächlichen Firewall-Regeln.
 
