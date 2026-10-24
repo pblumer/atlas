@@ -327,6 +327,9 @@ func (c *Client) addCorrespondent(ctx context.Context, r Request) (any, error) {
 		return nil, err
 	}
 	if existing != nil {
+		if err := checkCorrespondentOptions(*existing, r); err != nil {
+			return nil, err
+		}
 		return CorrespondentResult{ID: existing.ID, Name: existing.Name, Created: false}, nil
 	}
 	payload := map[string]any{"name": name, "match": r.Match, "matching_algorithm": r.MatchingAlgorithm}
@@ -350,8 +353,25 @@ func (c *Client) addCorrespondent(ctx context.Context, r Request) (any, error) {
 			return nil, err
 		}
 		if existing != nil {
+			if err := checkCorrespondentOptions(*existing, r); err != nil {
+				return nil, err
+			}
 			return CorrespondentResult{ID: existing.ID, Name: existing.Name, Created: false}, nil
 		}
 	}
 	return nil, statusError(status)
+}
+
+// An ensure must not silently rewrite existing correspondence classification rules.
+func checkCorrespondentOptions(existing correspondentWire, r Request) error {
+	if r.Match != "" && existing.Match != r.Match {
+		return errors.New("paperless: existing correspondent has a different match rule")
+	}
+	if r.MatchingAlgorithm != 0 && existing.MatchingAlgorithm != r.MatchingAlgorithm {
+		return errors.New("paperless: existing correspondent has a different matching algorithm")
+	}
+	if r.IsInsensitive != nil && existing.IsInsensitive != *r.IsInsensitive {
+		return errors.New("paperless: existing correspondent has different case-sensitivity")
+	}
+	return nil
 }
