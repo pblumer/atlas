@@ -1,0 +1,38 @@
+{
+  "apiVersion": "atlas.io/technical-capability/v1alpha1",
+  "kind": "TechnicalCapabilityContract",
+  "metadata": {
+    "id": "io.atlas.identity.account.create",
+    "version": "1.0.0",
+    "profile": "identity-directory",
+    "name": "Create authentication account"
+  },
+  "spec": {
+    "resourceKind": "account",
+    "identityScope": "tenant",
+    "verb": "create",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "userName": { "type": "string" },
+        "enabled": { "type": "boolean" }
+      },
+      "required": ["userName"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": { "accountId": { "type": "string" } },
+      "required": ["accountId"],
+      "additionalProperties": false
+    },
+    "errors": [
+      {"code": "ACCOUNT_ALREADY_EXISTS", "description": "Account identifier is already in use", "retryable": false}
+    ],
+    "idempotency": "non-idempotent",
+    "consistency": "provider-defined",
+    "pagination": "none"
+  }
+}
