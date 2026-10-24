@@ -565,6 +565,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0477](0477-last-login-day.md) | The roster says on which day an account last signed in | Accepted | Landed |
 | [0478](0478-mail-documents-leave-the-mailbox.md) | A mail's documents leave the mailbox — forward, get-attachment, export-attachment, and what inspects them first | Accepted | Landed |
 | [0479](0479-paperless-ngx-worker.md) | Paperless-ngx Worker with reference-only document handling | Proposed | Not started |
+| [0480](0480-technical-capability-contract.md) | Technical capability claims on Worker Type operations | Proposed | Partial |
 
 ## The two states of a record
 
