@@ -6808,10 +6808,17 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p data-l="de"><b>Ohne Workspace</b> (ein gmail.com-Konto) gibt es keine Delegierung. Dann braucht es einen
           OAuth-Client vom Typ <i>Desktop-App</i>, eine einmalige Zustimmung mit dem Contacts-Scope und das
           Refresh-Token daraus: <code>{"method": "refreshToken", "clientId": …, "clientSecret": …, "refreshToken":
-          …}</code>.</p>
+          …}</code>. Den Veröffentlichungsstatus des OAuth-Zustimmungsbildschirms vorher von <i>Testing</i> auf <i>In
+          production</i> stellen (in der deutschen Oberfläche sinngemäss übersetzt): Solange er auf <i>Testing</i>
+          steht, läuft das Refresh-Token nach sieben Tagen ab, und der Worker fällt jede Woche aus.
+          Google zeigt bei der Zustimmung dann den Hinweis auf eine nicht überprüfte App; für das eigene Konto lässt
+          er sich bestätigen.</p>
         <p data-l="en"><b>Without a Workspace</b> (a gmail.com account) there is no delegation. You then need an OAuth
           client of type <i>Desktop app</i>, one consent with the contacts scope and the refresh token it yields:
-          <code>{"method": "refreshToken", "clientId": …, "clientSecret": …, "refreshToken": …}</code>.</p>
+          <code>{"method": "refreshToken", "clientId": …, "clientSecret": …, "refreshToken": …}</code>. Set the project's
+          OAuth consent screen to <i>In production</i> first: while it stays in <i>Testing</i>, the refresh token expires
+          after seven days and the worker fails every week. Google then shows a warning about an unverified app at
+          consent; for your own account you can confirm it.</p>
         <div class="note warn">
           <span class="lbl" data-l="de">Ob ein Kunde bekannt ist: <i>Kontakte finden</i>, nicht <i>Kontakte suchen</i></span><span class="lbl" data-l="en">Whether a customer is known: <i>Find contacts</i>, not <i>Search contacts</i></span>
           <p data-l="de" style="margin:.3em 0 0">Die Suche von Google beantwortet eine Anfrage aus einem
