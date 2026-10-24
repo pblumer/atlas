@@ -324,6 +324,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   only by the server's availability check is not chosen — for the new diagram nor for a
   pool added to it.
 
+- **`element-name-ids.spec.mjs`** ([ADR-0474](../docs/adr/0474-readable-element-ids.md), amended):
+  **an element's id follows its name**, on the same harness. The name segment spells
+  umlauts out, drops accents and symbols and stays within 60 characters; naming a task,
+  gateway, event or flow in the panel or on the canvas renames its id; a second and a
+  third element of a type with the same name get `_01` and `_02`; a renamed element's id
+  follows and frees the old one; an empty or letterless name, an id the author typed, an
+  id a deployed version carries and the process's own id are kept; and one undo takes
+  back name and id together.
+
 - **`form-doors.spec.mjs`** ([ADR-0465](../docs/adr/0465-form-doors.md)):
   the **way from a step to its form and back**, through the real app (`index.html` →
   `app.js`) against a mocked `/api/v1`, because the routing is half of it. The start

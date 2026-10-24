@@ -22,7 +22,7 @@
       import * as ids from "/elementids.js";
 
       const view = document.getElementById("view");
-      let world = { drafts: [], processes: [], unavailable: [], draftXml: "" };
+      let world = { drafts: [], processes: [], unavailable: [], draftXml: "", deployedXml: {} };
       window.__calls = [];
 
       const api = async (method, url) => {
@@ -33,6 +33,8 @@
           return { id, available: !world.unavailable.includes(id) };
         }
         if (method === "GET" && /\/drafts\/[^/]+\/xml$/.test(url)) return world.draftXml;
+        const deployed = url.match(/\/processes\/(\d+)\/xml$/);
+        if (method === "GET" && deployed) return world.deployedXml[deployed[1]] || "";
         if (method === "GET" && /\/drafts$/.test(url)) return world.drafts;
         if (method === "GET" && /\/processes$/.test(url)) return world.processes;
         if (method === "GET" && /\/instances/.test(url)) return { items: [], total: 0, totalExact: true, truncated: false };
@@ -45,11 +47,14 @@
       // __mount opens the editor on a new diagram, or on a draft when the world carries
       // its XML — the two ways an author starts drawing.
       window.__mount = async (setup) => {
-        world = { drafts: [], processes: [], unavailable: [], draftXml: "", ...(setup || {}) };
+        world = { drafts: [], processes: [], unavailable: [], draftXml: "", deployedXml: {}, ...(setup || {}) };
         window.__calls = [];
         const opts = { api, toast: () => {} };
         if (world.draftXml) opts.draftId = "existing";
         await mountEditor(view, opts);
+        // The deployed ids are loaded beside the editor; naming waits on nothing, but a
+        // test that names an element must know they have arrived.
+        await window.__atlasModeler.atlasNameIdsReady;
       };
 
       const modeler = () => window.__atlasModeler;
@@ -85,6 +90,28 @@
       // code adds a message, signal, error or escalation to the definitions.
       window.__create = (type) => modeler().get("bpmnFactory").create(type).id;
       window.__nextPrefixed = (prefix) => modeler().get("moddle").ids.nextPrefixed(prefix);
+
+      // __name names an element as the properties panel does (updateProperties), or —
+      // with onCanvas — as typing into its label on the canvas does (updateLabel). It
+      // answers the element's id afterwards, found through the business object, since
+      // the id is what may change.
+      window.__name = (id, name, onCanvas) => {
+        const m = modeler();
+        const el = m.get("elementRegistry").get(id);
+        const bo = el.businessObject;
+        if (onCanvas) m.get("modeling").updateLabel(el, name);
+        else m.get("modeling").updateProperties(el, { name });
+        return bo.id;
+      };
+      window.__setId = (id, next) => {
+        const m = modeler();
+        const el = m.get("elementRegistry").get(id);
+        m.get("modeling").updateProperties(el, { id: next });
+        return el.businessObject.id;
+      };
+      window.__undo = () => modeler().get("commandStack").undo();
+      window.__redo = () => modeler().get("commandStack").redo();
+      window.__has = (id) => !!modeler().get("elementRegistry").get(id);
 
       window.__lib = ids;
       window.__ready = true;
