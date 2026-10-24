@@ -123,3 +123,50 @@ func TestResolveWithoutADetailIsRefused(t *testing.T) {
 		t.Fatalf("Resolve(nil detail) = %v, want the refusal", err)
 	}
 }
+
+// TestAForwardResolvesItsRecipientsLikeASend: a forward addresses people the way a
+// send does, so a reference becomes its addresses at the moment the forward goes out
+// (ADR-0478).
+func TestAForwardResolvesItsRecipientsLikeASend(t *testing.T) {
+	dir := mapDirectory{known: map[string][]string{"grp_ablage": {"ablage@example.ch", "archiv@example.ch"}}}
+	j, err := resolveMail(t, dir, compiler.MailConfig{
+		Connector: "office365", Operation: mail.OpForward,
+		Message: compiler.RestExpr{Literal: " m-1 "},
+		To:      compiler.RestExpr{Literal: "grp_ablage"}, Bcc: compiler.RestExpr{Literal: "audit@example.ch"},
+		Body: compiler.RestExpr{Literal: "Zur Ablage"}, Retries: 3,
+	})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if want := []string{"ablage@example.ch", "archiv@example.ch"}; !reflect.DeepEqual(j.To, want) || j.Bcc[0] != "audit@example.ch" {
+		t.Errorf("To = %v, Bcc = %v", j.To, j.Bcc)
+	}
+	if j.Target != "m-1" || j.Operation != mail.OpForward || j.Body != "Zur Ablage" || j.ErrorCodes != nil {
+		t.Errorf("job = %+v", j)
+	}
+	if _, err := resolveMail(t, dir, compiler.MailConfig{
+		Connector: "office365", Operation: mail.OpForward, Message: compiler.RestExpr{Literal: "m"},
+		To: compiler.RestExpr{Literal: "usr_ghost"}, Retries: 3,
+	}); err == nil || !strings.Contains(err.Error(), "usr_ghost") {
+		t.Errorf("a forward to nobody = %v", err)
+	}
+}
+
+// TestAnExportResolvesWhereItsDocumentGoes: the store is a name the model wrote, the
+// bucket and key are evaluated, the accepted types travel as the compiler normalized
+// them, and nothing about the store's credential is in the job.
+func TestAnExportResolvesWhereItsDocumentGoes(t *testing.T) {
+	j, err := resolveMail(t, nil, compiler.MailConfig{
+		Connector: "office365", Operation: mail.OpExportAttachment,
+		Message: compiler.RestExpr{Literal: "m-1"}, Attachment: compiler.RestExpr{Literal: " 2 "},
+		AllowedTypes: []string{"application/pdf"}, Store: "belege",
+		Bucket: compiler.RestExpr{Literal: " eingang "}, Key: compiler.RestExpr{Literal: "a/b.pdf"}, Retries: 3,
+	})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if j.Attachment != "2" || j.Store != "belege" || j.Bucket != "eingang" || j.Key != "a/b.pdf" ||
+		!reflect.DeepEqual(j.AllowedTypes, []string{"application/pdf"}) {
+		t.Errorf("job = %+v", j)
+	}
+}

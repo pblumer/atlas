@@ -7412,15 +7412,17 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           dir geteilt ist – lesen braucht <i>darf sehen</i>, ändern <i>darf ändern</i>. Der Watch beansprucht seinen
           Message-Namen: Ein fremder Prozess, der auf denselben Namen wartet, wird beim Deploy abgewiesen. Zwei Grenzen
           bleiben: Was ein Prozess erhält, sehen auf einem geteilten Server alle mit der Rolle <i>Operator</i> (Timeline,
-          Suche) – deshalb liefert ein Watch standardmässig nur den Umschlag, den Text nur auf Wunsch und Anhänge nie
-          mit Inhalt. Und Administratoren sehen alles; davor schützt nur eine eigene Instanz.</p>
+          Suche) – deshalb liefert ein Watch standardmässig nur den Umschlag, den Text nur auf Wunsch und den Inhalt
+          eines Anhangs nur, wenn ein Task ihn mit <i>Read attachment</i> ausdrücklich holt. Und Administratoren sehen
+          alles; davor schützt nur eine eigene Instanz.</p>
         <p data-l="en"><b>Who may read along?</b> A mail worker belongs to whoever created it and is private until
           shared. A process that reads or changes a mailbox deploys only when the worker is shared with you – reading
           needs <i>may see it</i>, changing <i>may change it</i>. The watch claims its message name: somebody else's
           process waiting for the same name is refused at deploy. Two limits remain: what a process receives, everyone
           with the <i>operator</i> role on a shared server can see (timeline, search) – which is why a watch delivers
-          only the envelope by default, the text only on request and attachments never with their content. And
-          administrators see everything; only an installation of your own protects against that.</p>
+          only the envelope by default, the text only on request and an attachment's content only when a task fetches
+          it explicitly with <i>Read attachment</i>. And administrators see everything; only an installation of your
+          own protects against that.</p>
         <p data-l="de"><b>Wer darf einen Prozess auslösen?</b> Jede Person, die an die Adresse schreiben kann. Eine
           Absenderadresse ist eine Behauptung, die jede und jeder aufstellen kann – beschränke den Watch auf
           <b>erlaubte Absender</b> <i>und</i> verlange ein <b>DMARC pass</b>. Das Urteil stammt aus dem obersten
@@ -7429,6 +7431,62 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           claim anybody can make – restrict the watch to <b>allowed senders</b> <i>and</i> require a <b>DMARC
           pass</b>. The verdict is read from the topmost <code>Authentication-Results</code> header, the one your
           receiving server wrote.</p>
+        <p data-l="de"><b>Anhänge weitergeben.</b> Drei Operationen geben das Dokument einer Mail weiter, und jede steht
+          sichtbar im Modell. <i>Forward message</i> leitet die Mail samt Anhängen an neue Empfänger weiter, mit einer
+          Notiz darüber. <i>Read attachment</i> holt einen Anhang Base64-codiert in eine Variable – höchstens so gross,
+          wie eine Prozessvariable sein darf (1&nbsp;MiB), und damit im Ereignisprotokoll, solange der Server seine
+          Geschichte aufbewahrt. <i>Export attachment</i> legt einen Anhang direkt in einem S3-Worker ab, ohne dass er
+          je im Prozess landet; einer Person zeigst du ihn danach mit einem S3-Task <code>presign-get</code> als Link
+          im User-Task. Welcher Anhang gemeint ist, sagt seine <code>id</code> aus <code>mail.attachments</code>.
+          Weiterleiten und Exportieren schreiben aus dem Postfach hinaus und brauchen deshalb beim Deploy
+          <i>darf ändern</i> auf dem Mail-Worker, ein Export zusätzlich <i>darf ändern</i> auf dem S3-Worker. Ein
+          Dokument ist auf 35&nbsp;MiB begrenzt (<code>ATLAS_LIMIT_DOCUMENT</code>).</p>
+        <p data-l="en"><b>Handing attachments on.</b> Three operations hand a mail's document on, and each is visible
+          in the model. <i>Forward message</i> forwards the mail with its attachments to new recipients, with a note
+          above it. <i>Read attachment</i> fetches one attachment base64-encoded into a variable – at most as large as
+          a process variable may be (1&nbsp;MiB), and therefore in the event log for as long as the server keeps its
+          history. <i>Export attachment</i> puts one attachment straight into an S3 Worker without it ever reaching
+          the process; to show it to a person, mint a link with an S3 <code>presign-get</code> task and put it in the
+          user task. Which attachment is meant is its <code>id</code> from <code>mail.attachments</code>. Forwarding
+          and exporting write out of the mailbox, so a deploy needs <i>may change it</i> on the mail Worker, and an
+          export also <i>may change it</i> on the S3 Worker. A document is limited to 35&nbsp;MiB
+          (<code>ATLAS_LIMIT_DOCUMENT</code>).</p>
+        <p data-l="de"><b>Schutz vor Schadcode.</b> Ein Anhang stammt von jemandem, der an die Adresse schreiben kann,
+          also potenziell von irgendwem. Deshalb wird jedes Dokument geprüft, bevor eine der drei Operationen es
+          weitergibt. Die eingebaute Prüfung entscheidet nach dem Inhalt, nie nach Name oder angegebenem Typ, und
+          weist ab: Programme und Skripte unter jedem Namen, Verknüpfungen und Datenträgerabbilder, Office-Dokumente mit
+          Makros, verschlüsselte Archive und Archive mit Programmen darin, PDFs mit JavaScript oder einer
+          Launch-Aktion, ein Dokument, dessen Name etwas anderes behauptet als sein Inhalt (eine
+          <code>rechnung.pdf</code>, die kein PDF ist), und Namen mit Steuerzeichen, die <code>exe.pdf</code> als
+          <code>fdp.exe</code> erscheinen lassen. Mit <i>Accepted types</i> schränkst du einen Task zusätzlich auf
+          bestimmte Typen ein, etwa <code>application/pdf, image/*</code>. Schadsoftware findet diese Prüfung nicht;
+          dafür trägst du beim Worker einen Virenscanner ein (Feld <b>Malware scanner</b>): einen ClamAV-Daemon,
+          <code>clamd://clamav.intern:3310</code> oder <code>clamd:///run/clamav/clamd.ctl</code>. Dann wird jedes
+          Dokument zusätzlich gescannt, und antwortet der Scanner nicht, bleibt der Task stehen, statt das Dokument
+          durchzulassen. Der Knopf <i>Test connection</i> prüft den Scanner mit. Ein abgewiesenes Dokument beendet den
+          Task mit dem Fehlercode <code>MAIL_ATTACHMENT_REJECTED</code>, wenn der Prozess ihn mit einem
+          Fehler-Grenzereignis abfängt, sonst mit einem Incident, der den Grund nennt. Was die Prüfung gefunden hat,
+          steht im Ergebnis unter <code>inspection</code> und beim Export in den Metadaten des Objekts. Ein Dokument,
+          das ein Browser als Seite ausführen würde (HTML, SVG), wird so abgelegt, dass ein Link es herunterlädt statt
+          es zu öffnen. Einen eigenen Scanner ersetzt der Schutz des Anbieters nicht: Microsoft Defender und Gmail
+          prüfen beim Empfang, und beides zusammen ist besser als eines allein.</p>
+        <p data-l="en"><b>Protection against malware.</b> An attachment comes from whoever can write to the address,
+          which may be anybody. So every document is inspected before one of the three operations hands it on. The
+          built-in inspection decides by content, never by name or declared type, and refuses: programs and scripts
+          under any name, shortcuts and disk images, Office documents with macros, encrypted archives and archives
+          carrying programs, PDFs with JavaScript or a launch action, a document whose name claims something its
+          content is not (a <code>rechnung.pdf</code> that is no PDF), and names with control characters that make
+          <code>exe.pdf</code> show as <code>fdp.exe</code>. With <i>Accepted types</i> you narrow a task further to
+          given types, such as <code>application/pdf, image/*</code>. This inspection does not find malware; for that
+          you name a <b>malware scanner</b> on the Worker: a ClamAV daemon, <code>clamd://clamav.internal:3310</code> or
+          <code>clamd:///run/clamav/clamd.ctl</code>. Every document is then scanned as well, and a scanner that does
+          not answer stops the task rather than letting the document through. <i>Test connection</i> checks the
+          scanner too. A refused document ends the task with the error code <code>MAIL_ATTACHMENT_REJECTED</code> when
+          the process catches it with an error boundary event, and with an incident naming the reason otherwise. What
+          the inspection found is in the result under <code>inspection</code>, and for an export in the object's
+          metadata. A document a browser would run as a page (HTML, SVG) is stored so that a link downloads it rather
+          than opening it. The provider's own protection does not replace a scanner of your own: Microsoft Defender
+          and Gmail check on receipt, and both together are better than either alone.</p>
         <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked September 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
       </div>
 

@@ -66,8 +66,9 @@ const (
 // (their owner), like buildMailClients does.
 func (s *Server) mailWorkerEnv() []string {
 	var (
-		names []string
-		env   []string
+		names    []string
+		env      []string
+		storeEnv []string
 	)
 	s.do(func() {
 		recs, err := s.connectors.LoadAll()
@@ -110,10 +111,12 @@ func (s *Server) mailWorkerEnv() []string {
 			names = append(names, c.Name)
 			env = append(env, mailConnectorEnv(key, c, secret)...)
 		}
+		storeEnv = s.mailStoreEnvLocked(recs)
 	})
 	if len(names) == 0 {
 		return nil
 	}
+	env = append(env, storeEnv...)
 	env = append(env, mailConnectorsEnv+"="+strings.Join(names, ","))
 	if s.superviseURL != "" {
 		env = append(env, mailOutboxURLEnv+"="+strings.TrimRight(s.superviseURL, "/")+"/api/v1/mail/outbox")
@@ -140,6 +143,12 @@ func mailConnectorEnv(key string, c connector, secret string) []string {
 	// engine's watch reads.
 	if m := strings.TrimSpace(c.MailboxEndpoint); m != "" {
 		env = append(env, p+"MAILBOX="+m)
+	}
+	// The malware scanner, when the Worker names one: a Worker Instance handing an
+	// attachment on must scan it exactly as the engine would have
+	// (ADR-0478).
+	if sc := strings.TrimSpace(c.Scanner); sc != "" {
+		env = append(env, p+"SCANNER="+sc)
 	}
 	if secret != "" {
 		env = append(env, p+"SECRET="+secret)
@@ -1270,14 +1279,7 @@ func (s *Server) s3WorkerEnv() []string {
 				continue
 			}
 			taken[envKey] = c.Name
-			key := s3EnvPrefix + envKey + "_"
-			// The endpoint is optional: blank means AWS at the bundle's region, which is
-			// what buildS3Clients passes too, so a record without one builds the same
-			// client on both sides.
-			if endpoint := strings.TrimSpace(c.Endpoint); endpoint != "" {
-				env = append(env, key+"URL="+endpoint)
-			}
-			env = append(env, key+"CREDENTIALS="+bundle)
+			env = append(env, s3IdentityEnv(envKey, c, bundle)...)
 			addName(c.Name)
 			fromStore = true
 		}
@@ -1289,6 +1291,21 @@ func (s *Server) s3WorkerEnv() []string {
 		return nil
 	}
 	return append(env, s3ConnectorsEnv+"="+strings.Join(names, ","))
+}
+
+// s3IdentityEnv is one S3 Worker's identity as the variables a worker reads it from:
+// the same for the s3 kind's own worker and for a mail worker exporting into it, so
+// both build the identical client.
+func s3IdentityEnv(envKey string, c connector, bundle string) []string {
+	key := s3EnvPrefix + envKey + "_"
+	var env []string
+	// The endpoint is optional: blank means AWS at the bundle's region, which is what
+	// buildS3Clients passes too, so a record without one builds the same client on
+	// both sides.
+	if endpoint := strings.TrimSpace(c.Endpoint); endpoint != "" {
+		env = append(env, key+"URL="+endpoint)
+	}
+	return append(env, key+"CREDENTIALS="+bundle)
 }
 
 // s3BundleUsable reports whether an S3 Worker's vault bundle builds an identity at all.

@@ -141,6 +141,13 @@ type configuredWorker struct {
 	// uses the sender and the credential above as login. Empty for a Worker that only
 	// sends, and for Gmail and Microsoft, which read through the API they send with.
 	MailboxEndpoint string `json:"mailboxEndpoint,omitempty"`
+	// Scanner is a mail Worker's malware scanner ("clamd://host:3310"): every
+	// attachment the Worker hands on — forwarded, read into a variable, exported into a
+	// store — is scanned by it first, and a scanner that does not answer stops the task
+	// rather than letting the document through
+	// (ADR-0478). Empty scans nothing beyond the
+	// built-in inspection.
+	Scanner string `json:"scanner,omitempty"`
 
 	// Model is which model an agent Worker asks (Kind == connectorKindAgent,
 	// ADR-0255). It is the first piece of a Worker's

@@ -150,3 +150,18 @@ test("a Gmail create carries no IMAP endpoint, even with one left in the hidden 
   expect(body.provider).toBe("gmail");
   expect(body).not.toHaveProperty("mailboxEndpoint");
 });
+
+// A mail Worker's malware scanner travels with its create; a preview Worker hands no
+// attachment on, so a value left in the field stays behind
+// (ADR-0478).
+test("a mail create carries its scanner, and a preview create does not", async ({ page }) => {
+  const body = await build(page, {
+    kind: "mail", name: "desk", endpoint: "smtp.example.com:587", sender: "desk@example.com",
+    provider: "smtp", scanner: " clamd://clamav.internal:3310 ",
+  });
+  expect(body.scanner).toBe("clamd://clamav.internal:3310");
+  const preview = await build(page, { kind: "mail", name: "probe", sender: "a@b.ch", provider: "preview", scanner: "clamd://x" });
+  expect(preview).not.toHaveProperty("scanner");
+  const jira = await build(page, { kind: "jira", name: "j", endpoint: "https://x", credentialsRef: "r", scanner: "clamd://x" });
+  expect(jira).not.toHaveProperty("scanner");
+});

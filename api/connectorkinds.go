@@ -84,7 +84,10 @@ type createConnectorParams struct {
 	// MailboxEndpoint is an SMTP mail Worker's IMAP endpoint
 	// (ADR-0438); cleared for every other kind.
 	MailboxEndpoint string `json:"mailboxEndpoint"`
-	Enabled         *bool  `json:"enabled"`
+	// Scanner is a mail Worker's malware scanner
+	// (ADR-0478); cleared for every other kind.
+	Scanner string `json:"scanner"`
+	Enabled *bool  `json:"enabled"`
 	// ConnectionString is a SQL worker's whole configuration, sealed into the vault
 	// by the create handler which then stores only the reference — so the record still
 	// holds no secret (I6). It exists because for these kinds the credential *is* the
@@ -183,7 +186,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		},
 		registerHandlers: func(s *Server, store *state.Store) {
 			s.jobRunner.HandleWithOutput(compiler.MailJobTypeIndex, func(rd state.Reader) job.OutputHandler {
-				return mail.Handler(rd, s.processLookup, s.mailRegistry, mailDirectory{s})
+				return mail.HandlerWith(rd, s.processLookup, s.mailRegistry, mailDirectory{s}, serverDocuments{s})
 			})
 		},
 		rebuild: func(s *Server) error {
@@ -1063,6 +1066,7 @@ func normalizeConnectorUpdate(rec *connector) string {
 		Sender:          strings.TrimSpace(rec.Sender),
 		Model:           strings.TrimSpace(rec.Model),
 		MailboxEndpoint: strings.TrimSpace(rec.MailboxEndpoint),
+		Scanner:         strings.TrimSpace(rec.Scanner),
 	}
 	if msg := validate(&p); msg != "" {
 		return msg
@@ -1070,6 +1074,7 @@ func normalizeConnectorUpdate(rec *connector) string {
 	rec.Endpoint, rec.CredentialsRef = p.Endpoint, p.CredentialsRef
 	rec.Provider, rec.Sender, rec.Model = p.Provider, p.Sender, p.Model
 	rec.MailboxEndpoint = p.MailboxEndpoint
+	rec.Scanner = p.Scanner
 	return ""
 }
 
@@ -1091,6 +1096,18 @@ func validateMailConnector(p *createConnectorParams) string {
 	}
 	if p.Sender == "" {
 		return "mail worker sender (default From address) is required"
+	}
+	// The scanner is the Worker's, whatever its provider — except preview, which has
+	// no mailbox and so hands nothing on. Normalized here so a typo is found while
+	// typing rather than at the first attachment.
+	if p.Provider == mail.ProviderPreview {
+		p.Scanner = ""
+	} else if p.Scanner != "" {
+		scanner, err := mail.NormalizeScannerEndpoint(p.Scanner)
+		if err != nil {
+			return err.Error()
+		}
+		p.Scanner = scanner
 	}
 	switch p.Provider {
 	case mail.ProviderSMTP:

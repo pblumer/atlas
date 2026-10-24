@@ -23,6 +23,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/soap"
@@ -232,8 +233,21 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 				continue
 			}
 			built.Names = append(built.Names, names...)
+			// The S3 Workers this host holds, when it holds any, are where an
+			// export-attachment puts its document (ADR-0478).
+			// They are read from the same variables the s3 kind reads, and are not
+			// reported as names this worker serves: holding an identity to export into
+			// is not leasing S3 tasks.
+			s3reg, _, err := s3RegistryFor(env, mailStoreNames(env))
+			if err != nil {
+				return Connectors{}, err
+			}
+			var docs mail.DocumentStore
+			if s3reg != nil {
+				docs = s3.Documents(s3reg)
+			}
 			built.Handlers[compiler.MailJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
-				return RunMailJob(ctx, j, reg)
+				return RunMailJobWith(ctx, j, reg, docs)
 			})
 		case "ad":
 			// Two shapes at once, because a model may carry either
@@ -672,6 +686,25 @@ func mailRegistryFromEnv(env func(string) string) (*mail.Registry, []string, err
 	return reg, names, nil
 }
 
+// mailStoresEnv names the S3 Workers a mail worker holds to export attachments into
+// (ADR-0478). A supervising engine renders it with
+// exactly the stores its deployed models export into.
+const mailStoresEnv = mailEnvPrefix + "STORES"
+
+// mailStoreNames is every S3 identity this host configures: the s3 kind's own and the
+// ones named for mail's exports, once each.
+func mailStoreNames(env func(string) string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, n := range append(splitAndTrim(env(s3EnvPrefix+"CONNECTORS")), splitAndTrim(env(mailStoresEnv))...) {
+		if !seen[n] {
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
 // mailClientFromEnv builds one worker's client from its environment.
 func mailClientFromEnv(env func(string) string, name string) (mail.Client, error) {
 	key := mailEnvPrefix + envFold(name) + "_"
@@ -684,6 +717,7 @@ func mailClientFromEnv(env func(string) string, name string) (mail.Client, error
 			Name:     name,
 			Outbox:   previewSink(env),
 			Mailbox:  env(key + "MAILBOX"),
+			Scanner:  env(key + "SCANNER"),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("worker: mail worker %q: %w", name, err)
@@ -694,12 +728,16 @@ func mailClientFromEnv(env func(string) string, name string) (mail.Client, error
 	if endpoint == "" {
 		return nil, fmt.Errorf("worker: mail worker %q has no endpoint: set %sENDPOINT", name, key)
 	}
-	return mail.NewSMTPClient(mail.Connector{
+	scanner, err := mail.NewScanner(env(key + "SCANNER"))
+	if err != nil {
+		return nil, fmt.Errorf("worker: mail worker %q: %w", name, err)
+	}
+	return mail.WithScanner(mail.NewSMTPClient(mail.Connector{
 		Endpoint: endpoint,
 		Username: env(key + "USERNAME"),
 		Password: env(key + "PASSWORD"),
 		From:     env(key + "FROM"),
-	}), nil
+	}), scanner), nil
 }
 
 // previewSink is where this worker's preview workers deliver, or nil when it was
@@ -781,6 +819,12 @@ func splitAndTrim(s string) []string {
 // [mail.Run] with the in-process path, so no two of those can disagree about what a
 // resolved mail task means — only about which credentials are in reach.
 func RunMailJob(ctx context.Context, j Job, reg *mail.Registry) (map[string]any, error) {
+	return RunMailJobWith(ctx, j, reg, nil)
+}
+
+// RunMailJobWith is [RunMailJob] with the object stores an export-attachment may put a
+// document into; nil holds none.
+func RunMailJobWith(ctx context.Context, j Job, reg *mail.Registry, docs mail.DocumentStore) (map[string]any, error) {
 	if j.Connector == nil {
 		return nil, fmt.Errorf("mail: the job carried no resolved worker detail; is this server offloading the mail kind?")
 	}
@@ -796,7 +840,7 @@ func RunMailJob(ctx context.Context, j Job, reg *mail.Registry) (map[string]any,
 	// operation answers what the task's result variable receives — the same
 	// distinction the in-process handler makes, so a mark-read offloaded does not
 	// write a null where a get would write a value (ADR-0438).
-	res, err := mail.Run(ctx, task, reg)
+	res, err := mail.RunWith(ctx, task, reg, docs)
 	if err != nil || task.ResultVariable == "" || res == nil {
 		return nil, err
 	}

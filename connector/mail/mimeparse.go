@@ -381,7 +381,7 @@ func (p *mimePart) attachments() []Attachment {
 		default:
 			name = "attachment"
 		}
-		out = append(out, Attachment{Name: name, ContentType: n.contentType(), Size: n.Size})
+		out = append(out, Attachment{ID: n.Section, Name: name, ContentType: n.contentType(), Size: n.Size})
 	}
 	walk(p)
 	return out

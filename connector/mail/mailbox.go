@@ -23,6 +23,12 @@ import (
 // for it, and attachments as names and sizes, never content. Whatever a process
 // receives is in the log, the checkpoints, the exporter and every backup, and on a
 // shared installation every operator can read it. What it does not receive cannot leak.
+//
+// Three operations hand an attachment's content on, and each says so in the model
+// (ADR-0478): get-attachment reads one into a
+// variable under the variable's own budget, export-attachment carries one into an
+// object store without the engine ever holding it, and forward sends the whole message
+// on. Every document that leaves through one of them is inspected first (inspect.go).
 
 // Operations a mail task can perform. An absent operation is [OpSend], which is every
 // mail task authored before mailboxes existed.
@@ -35,26 +41,42 @@ const (
 	OpMarkUnread = "mark-unread"
 	OpDelete     = "delete"
 	OpReply      = "reply"
+	// The three that hand a document on (ADR-0478).
+	OpForward          = "forward"
+	OpGetAttachment    = "get-attachment"
+	OpExportAttachment = "export-attachment"
 )
 
 // Operations lists every operation a mail task may name, send first.
 func Operations() []string {
-	return []string{OpSend, OpList, OpGet, OpMove, OpMarkRead, OpMarkUnread, OpDelete, OpReply}
+	return []string{OpSend, OpList, OpGet, OpMove, OpMarkRead, OpMarkUnread, OpDelete, OpReply,
+		OpForward, OpGetAttachment, OpExportAttachment}
 }
 
 // ReadsMailbox reports whether an operation reads the mailbox without changing it.
 // ChangesMailbox reports whether it changes the mailbox or writes from it. Send is
 // neither: it is the one operation a mail Worker always had, and who may use a sender
 // is not what the deploy check governs (ADR-0438).
-func ReadsMailbox(op string) bool { return op == OpList || op == OpGet }
+//
+// get-attachment reads, like a get with its body: the document lands in the process
+// that asked for it. forward and export-attachment write *from* the mailbox — one to
+// whoever the model names, the other into somebody else's store — which is what the
+// editor role is asked for, as it is for a reply.
+func ReadsMailbox(op string) bool { return op == OpList || op == OpGet || op == OpGetAttachment }
 
 // ChangesMailbox — see [ReadsMailbox].
 func ChangesMailbox(op string) bool {
 	switch op {
-	case OpMove, OpMarkRead, OpMarkUnread, OpDelete, OpReply:
+	case OpMove, OpMarkRead, OpMarkUnread, OpDelete, OpReply, OpForward, OpExportAttachment:
 		return true
 	}
 	return false
+}
+
+// HandsOnDocuments reports whether an operation carries attachment content out of the
+// mailbox, and so inspects it first.
+func HandsOnDocuments(op string) bool {
+	return op == OpForward || op == OpGetAttachment || op == OpExportAttachment
 }
 
 // DefaultFolder is the folder a watch or a list reads when it names none. Every
@@ -77,10 +99,26 @@ const MaxBodyBytes = 64 << 10
 
 // Attachment is what a process learns about an attachment: that it exists, and what it
 // is called, its type and its size. Never its content (ADR-0438).
+//
+// ID addresses the attachment within its message, for get-attachment and
+// export-attachment: Graph's attachment id, Gmail's part id, an IMAP body section.
+// Each is stable for as long as the message is — Gmail's own attachmentId is not, it
+// changes between two reads of one message, which is why the part id is used instead.
 type Attachment struct {
+	ID          string
 	Name        string
 	ContentType string
 	Size        int64
+}
+
+// Document is one attachment's content, read to be handed on. ContentType is what the
+// sender declared, which is a claim like any other header; what the bytes actually are
+// is decided by inspecting them (inspect.go), never by this field.
+type Document struct {
+	ID          string
+	Name        string
+	ContentType string
+	Data        []byte
 }
 
 // AuthResults is the receiving server's verdict on a message, read from the topmost
@@ -126,7 +164,7 @@ func (e Envelope) Fields(includeBody bool) map[string]any {
 	for _, a := range e.Attachments {
 		// The size as a json.Number: these fields become FEEL values and travel as JSON
 		// from a Worker Instance, and both read a number in that shape and no other.
-		atts = append(atts, map[string]any{"name": a.Name, "contentType": a.ContentType,
+		atts = append(atts, map[string]any{"id": a.ID, "name": a.Name, "contentType": a.ContentType,
 			"size": json.Number(strconv.FormatInt(a.Size, 10))})
 	}
 	out := map[string]any{
@@ -232,6 +270,23 @@ type Reply struct {
 	MessageID string
 }
 
+// Forward is a forward operation's content: who receives the message, and the text
+// written above it. MessageID is the job key, as a reply's is.
+//
+// Inspect is called with every document the message carries before anything is sent,
+// and an error from it stops the forward: a message is handed on whole or not at all.
+// A provider that forwards server-side (Graph) still reads each attachment for it,
+// which is the price of not forwarding what nobody looked at.
+type Forward struct {
+	To        []string
+	Cc        []string
+	Bcc       []string
+	Body      string
+	HTML      string
+	MessageID string
+	Inspect   func(Document) error
+}
+
 // Mailbox is a mail Worker's mailbox. Every provider implements the same operations;
 // what differs is how a folder and a message are addressed and how a watch's sequence
 // is made.
@@ -254,6 +309,11 @@ type Mailbox interface {
 	Delete(ctx context.Context, id string) error
 	// Reply answers a message to its Reply-To or From, threaded under it.
 	Reply(ctx context.Context, id string, r Reply) error
+	// Attachment reads one attachment's content, addressed by the id the envelope
+	// listed it under, refusing one larger than limits.Document rather than holding it.
+	Attachment(ctx context.Context, id, attachmentID string) (Document, error)
+	// Forward sends the message, attachments included, to new recipients.
+	Forward(ctx context.Context, id string, f Forward) error
 }
 
 // MailboxOf answers the mailbox behind a Worker's client, or why it has none. A client

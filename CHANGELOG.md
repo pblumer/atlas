@@ -46,6 +46,33 @@ governs a Worker:
 
 ### Added
 
+- **A mail task forwards a message, reads an attachment, or exports one into an S3 Worker.**
+  Three new mail operations hand a mail's document on. **Forward message** sends the mail
+  with its attachments to new recipients, with a note above it — server-side through
+  Microsoft Graph, framed by the Worker for IMAP and Gmail. **Read attachment** puts one
+  attachment base64-encoded into a variable, bounded by the variable budget and refused
+  with a pointer to the export beyond it. **Export attachment** carries one attachment from
+  the mailbox straight into a named S3 Worker without it ever entering the process, stored
+  under its detected content type, so an S3 `presign-get` can show it to a person in a user
+  task. The envelope's `attachments` list now carries an `id` per entry, which is how the
+  two attachment operations address one. Forwarding and exporting deploy only for editors
+  of the mail Worker, and an export also only for editors of the S3 Worker it names; a
+  supervised mail worker is handed exactly the S3 Workers its deployed models export into.
+  A document is bounded by a new budget, `ATLAS_LIMIT_DOCUMENT` (35 MiB)
+  ([ADR-0478](docs/adr/0478-mail-documents-leave-the-mailbox.md)).
+- **Attachments are inspected before they leave the mailbox, and a mail Worker can name a
+  malware scanner.** Every document the three operations hand on is judged from its
+  content, never its name: programs and scripts under any name, shortcuts and disk images,
+  Office documents with macros, encrypted archives and archives carrying programs, PDFs
+  with JavaScript or a launch action, a document whose name claims a format its content is
+  not, and names with bidirectional control characters are refused. A task can narrow the
+  accepted types further (`allowedTypes="application/pdf, image/*"`). A mail Worker's new
+  **Malware scanner** field names a ClamAV daemon (`clamd://host:3310` or a Unix socket);
+  every document is then scanned as well, a scanner that does not answer stops the task
+  rather than letting the document through, and **Test connection** checks it. A refused
+  document ends the task with `MAIL_ATTACHMENT_REJECTED` where the process catches that
+  code, and with an incident naming the reason otherwise; what inspection found travels in
+  the result as `inspection` and in an exported object's metadata.
 - **The user list shows when each account last signed in.** **Organization → Users** has
   a **Last login** column beside Status and Presence: "today", "yesterday" or "N days
   ago", with the day itself, and sorting by it puts the accounts nobody uses first — the
@@ -321,6 +348,11 @@ governs a Worker:
   choosing `Get-ChildItem` after `Get-Ch` wrote `GetGet-ChildItem`. A dash glued to a
   word now continues the command name; after a space, a bracket or a value such as
   `$a-` it still offers the operators.
+- **A pill keeps to one line.** A status pill in a column narrower than its label folded
+  inside itself, and its round ends turned the two lines into a tall blob: the expiry and
+  vault pills on *API tokens*, the findings on *Events* and the marks on the *Event log*.
+  A pill now stays on one line, as a chip already did, and moves under the cell's text
+  when the column is narrow; the *Event log*'s marks also stand a size smaller.
 - **Authorization evidence has its own key space.** It had been given the event log's
   column family byte, so a range read or prefix delete of one could reach the other's
   records. It moved; evidence recorded by a development build before the move is no longer
