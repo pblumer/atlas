@@ -46,6 +46,13 @@ governs a Worker:
 
 ### Added
 
+- **The PowerShell editor completes a cmdlet's parameters.** After a cmdlet, `-` offers
+  its own parameters, then the common ones (`-ErrorAction`, `-Verbose` and the rest), less
+  those it already has: `Get-ChildItem -Re` offers `-Recurse`, and `Where-Object Name -`
+  offers `-Like` and `-EQ`. In an expression — `$a -`, `if ($x -`, `{ $_.Name -` — it still
+  offers the operators. The catalogue's cmdlets carry the parameters a script reaches for,
+  as PowerShell 7.4 names them, not each one's full set; a command outside it, such as a
+  function of the script, is offered the common parameters.
 - **A mail task forwards a message, reads an attachment, or exports one into an S3 Worker.**
   Three new mail operations hand a mail's document on. **Forward message** sends the mail
   with its attachments to new recipients, with a note above it — server-side through
