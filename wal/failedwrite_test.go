@@ -161,6 +161,8 @@ func TestAFailedFsyncStopsTheLog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
+	// Closed before the temp dir is removed: Windows will not delete an open file.
+	t.Cleanup(func() { _ = l.Close() })
 	appendSync(t, l, "before")
 	fault := &faultyFile{writeBudget: -1, failSync: true}
 	injectFault(t, l, fault)
@@ -272,9 +274,11 @@ func TestAFailedRollStopsTheLog(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	appendSync(t, l, "first")
-	// The directory goes away, so the segment the next batch rolls to cannot be made.
-	if err := os.RemoveAll(dir); err != nil {
-		t.Skipf("cannot remove a directory holding an open file here: %v", err)
+	// A directory where the next segment belongs, so creating that segment fails on
+	// every platform without deleting anything under an open file, which Windows
+	// refuses.
+	if err := os.Mkdir(filepath.Join(dir, segmentName(1)), 0o755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
 	}
 	if err := l.Append([]byte("second")); err != nil {
 		t.Fatalf("Append: %v", err)

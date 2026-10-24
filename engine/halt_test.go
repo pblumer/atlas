@@ -96,6 +96,12 @@ func TestADurabilityFailureHaltsTheEngine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("restart wal.Open: %v", err)
 	}
+	// Closed before the temp dir is removed: Windows will not delete an open file.
+	defer func() {
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
 	store2, err := state.Open(stateDir)
 	if err != nil {
 		t.Fatalf("restart state.Open: %v", err)
