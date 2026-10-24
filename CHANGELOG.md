@@ -46,6 +46,13 @@ governs a Worker:
 
 ### Added
 
+- **The PowerShell editor completes a cmdlet's parameters.** After a cmdlet, `-` offers
+  its own parameters, then the common ones (`-ErrorAction`, `-Verbose` and the rest), less
+  those it already has: `Get-ChildItem -Re` offers `-Recurse`, and `Where-Object Name -`
+  offers `-Like` and `-EQ`. In an expression — `$a -`, `if ($x -`, `{ $_.Name -` — it still
+  offers the operators. The catalogue's cmdlets carry the parameters a script reaches for,
+  as PowerShell 7.4 names them, not each one's full set; a command outside it, such as a
+  function of the script, is offered the common parameters.
 - **Worker Type operations can declare versioned technical capabilities.** A Worker Type manifest can now attach optional `capabilities` metadata (namespaced ID, semantic contract version and provider profile) to an operation. Invalid and duplicate claims are rejected at admission; existing manifests and runtime routing remain unchanged. These are descriptive claims, not a statement of cross-provider equivalence or an authorization grant ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
 - **A mail task forwards a message, reads an attachment, or exports one into an S3 Worker.**
   Three new mail operations hand a mail's document on. **Forward message** sends the mail
@@ -344,6 +351,11 @@ governs a Worker:
 
 ### Fixed
 
+- **A PowerShell command name completes past its dash.** The script editor read every
+  `-` as the start of an operator, so `Get-` offered `-and`, `-eq` and the rest, and
+  choosing `Get-ChildItem` after `Get-Ch` wrote `GetGet-ChildItem`. A dash glued to a
+  word now continues the command name; after a space, a bracket or a value such as
+  `$a-` it still offers the operators.
 - **A pill keeps to one line.** A status pill in a column narrower than its label folded
   inside itself, and its round ends turned the two lines into a tall blob: the expiry and
   vault pills on *API tokens*, the findings on *Events* and the marks on the *Event log*.

@@ -13,8 +13,9 @@
 
 // rankByPrefix scores items the way the FEEL editor does: exact match beats a
 // prefix match beats a word-start beats a substring; an empty prefix keeps all.
-// `text(it)` yields the string to match against.
-function rankByPrefix(items, prefix, text) {
+// `text(it)` yields the string to match against; `tier(it)`, when given, orders
+// equal scores before the alphabet does (a cmdlet's own parameters before the common).
+function rankByPrefix(items, prefix, text, tier = () => 0) {
   const p = (prefix || "").toLowerCase();
   const scored = [];
   for (const it of items) {
@@ -28,7 +29,7 @@ function rankByPrefix(items, prefix, text) {
     else continue;
     scored.push({ it, score });
   }
-  scored.sort((a, b) => b.score - a.score || text(a.it).localeCompare(text(b.it)));
+  scored.sort((a, b) => b.score - a.score || tier(a.it) - tier(b.it) || text(a.it).localeCompare(text(b.it)));
   return scored.map((s) => s.it);
 }
 
@@ -86,54 +87,108 @@ export const PS_OPERATORS = [
 // one-line doc shown in completion and on hover. It is intentionally a starter set
 // (the catalogue is huge); it covers the verbs a script author reaches for first,
 // plus the JSON/REST and Microsoft.Graph cmdlets an Atlas job script typically uses.
+//
+// params are what `-` completes to in the cmdlet's arguments: "Name" for a switch,
+// "Name type" for one that takes a value. They are the parameters a script reaches
+// for, not each cmdlet's full set, and all exist in the PowerShell the image bundles
+// (7.4). The common parameters every cmdlet takes are in PS_COMMON_PARAMS.
 export const PS_CMDLETS = [
   // Output / streams
-  { name: "Write-Output", sig: "Write-Output <obj>", doc: "Emit to the output stream — this becomes the task result." },
-  { name: "Write-Host", sig: "Write-Host <msg>", doc: "Write to the host (not the output/result stream)." },
-  { name: "Write-Error", sig: "Write-Error <msg>", doc: "Write to the error stream (stops when ErrorAction=Stop)." },
-  { name: "Write-Warning", sig: "Write-Warning <msg>", doc: "Write to the warning stream." },
-  { name: "Write-Verbose", sig: "Write-Verbose <msg>", doc: "Write to the verbose stream." },
-  { name: "Out-Null", sig: "... | Out-Null", doc: "Discard pipeline output." },
+  { name: "Write-Output", sig: "Write-Output <obj>", doc: "Emit to the output stream — this becomes the task result.",
+    params: ["InputObject psobject[]", "NoEnumerate"] },
+  { name: "Write-Host", sig: "Write-Host <msg>", doc: "Write to the host (not the output/result stream).",
+    params: ["Object object", "NoNewline", "Separator object", "ForegroundColor ConsoleColor", "BackgroundColor ConsoleColor"] },
+  { name: "Write-Error", sig: "Write-Error <msg>", doc: "Write to the error stream (stops when ErrorAction=Stop).",
+    params: ["Message string", "Exception Exception", "ErrorRecord ErrorRecord", "Category ErrorCategory", "ErrorId string", "TargetObject object", "RecommendedAction string"] },
+  { name: "Write-Warning", sig: "Write-Warning <msg>", doc: "Write to the warning stream.",
+    params: ["Message string"] },
+  { name: "Write-Verbose", sig: "Write-Verbose <msg>", doc: "Write to the verbose stream.",
+    params: ["Message string"] },
+  { name: "Out-Null", sig: "... | Out-Null", doc: "Discard pipeline output.",
+    params: ["InputObject psobject"] },
   // JSON / REST
-  { name: "ConvertTo-Json", sig: "ConvertTo-Json <obj> [-Depth n] [-Compress]", doc: "Serialize an object to JSON." },
-  { name: "ConvertFrom-Json", sig: "ConvertFrom-Json <string> [-AsHashtable]", doc: "Parse JSON into objects." },
-  { name: "Invoke-RestMethod", sig: "Invoke-RestMethod -Uri <url> [-Method] [-Body]", doc: "Call a REST endpoint, parsed result." },
-  { name: "Invoke-WebRequest", sig: "Invoke-WebRequest -Uri <url>", doc: "HTTP request, full response object." },
-  { name: "ConvertTo-SecureString", sig: "ConvertTo-SecureString <s> -AsPlainText -Force", doc: "Wrap a string as a SecureString." },
+  { name: "ConvertTo-Json", sig: "ConvertTo-Json <obj> [-Depth n] [-Compress]", doc: "Serialize an object to JSON.",
+    params: ["InputObject object", "Depth int", "Compress", "AsArray", "EnumsAsStrings", "EscapeHandling StringEscapeHandling"] },
+  { name: "ConvertFrom-Json", sig: "ConvertFrom-Json <string> [-AsHashtable]", doc: "Parse JSON into objects.",
+    params: ["InputObject string", "AsHashtable", "Depth int", "NoEnumerate"] },
+  { name: "Invoke-RestMethod", sig: "Invoke-RestMethod -Uri <url> [-Method] [-Body]", doc: "Call a REST endpoint, parsed result.",
+    params: ["Uri uri", "Method WebRequestMethod", "Body object", "Headers IDictionary", "ContentType string", "Authentication WebAuthenticationType", "Token securestring", "Credential pscredential", "Form IDictionary", "OutFile string", "TimeoutSec int", "MaximumRetryCount int", "RetryIntervalSec int", "StatusCodeVariable string", "ResponseHeadersVariable string", "SkipCertificateCheck", "SkipHttpErrorCheck"] },
+  { name: "Invoke-WebRequest", sig: "Invoke-WebRequest -Uri <url>", doc: "HTTP request, full response object.",
+    params: ["Uri uri", "Method WebRequestMethod", "Body object", "Headers IDictionary", "ContentType string", "Authentication WebAuthenticationType", "Token securestring", "Credential pscredential", "Form IDictionary", "OutFile string", "TimeoutSec int", "MaximumRedirection int", "MaximumRetryCount int", "RetryIntervalSec int", "SkipCertificateCheck", "SkipHttpErrorCheck"] },
+  { name: "ConvertTo-SecureString", sig: "ConvertTo-SecureString <s> -AsPlainText -Force", doc: "Wrap a string as a SecureString.",
+    params: ["String string", "AsPlainText", "Force", "Key byte[]", "SecureKey securestring"] },
   // Pipeline shaping
-  { name: "Where-Object", sig: "Where-Object { $_ ... }", doc: "Filter pipeline objects by a predicate." },
-  { name: "ForEach-Object", sig: "ForEach-Object { $_ ... }", doc: "Run a block for each pipeline object." },
-  { name: "Select-Object", sig: "Select-Object <props> [-First n]", doc: "Pick properties / first N objects." },
-  { name: "Sort-Object", sig: "Sort-Object <prop> [-Descending]", doc: "Sort pipeline objects." },
-  { name: "Group-Object", sig: "Group-Object <prop>", doc: "Group objects by a property." },
-  { name: "Measure-Object", sig: "Measure-Object <prop> -Sum -Average", doc: "Aggregate numbers/strings." },
-  { name: "Select-String", sig: "Select-String -Pattern <re>", doc: "Grep-style regex search." },
-  { name: "Compare-Object", sig: "Compare-Object <ref> <diff>", doc: "Diff two collections." },
+  { name: "Where-Object", sig: "Where-Object { $_ ... }", doc: "Filter pipeline objects by a predicate.",
+    params: ["FilterScript scriptblock", "Property string", "Value object", "EQ", "NE", "GT", "GE", "LT", "LE", "Like", "NotLike", "Match", "NotMatch", "Contains", "NotContains", "In", "NotIn", "Is", "IsNot", "Not", "InputObject psobject"] },
+  { name: "ForEach-Object", sig: "ForEach-Object { $_ ... }", doc: "Run a block for each pipeline object.",
+    params: ["Process scriptblock[]", "Begin scriptblock", "End scriptblock", "MemberName string", "ArgumentList object[]", "Parallel scriptblock", "ThrottleLimit int", "TimeoutSeconds int", "InputObject psobject"] },
+  { name: "Select-Object", sig: "Select-Object <props> [-First n]", doc: "Pick properties / first N objects.",
+    params: ["Property object[]", "ExcludeProperty string[]", "ExpandProperty string", "First int", "Last int", "Skip int", "SkipLast int", "Unique", "Index int[]", "InputObject psobject"] },
+  { name: "Sort-Object", sig: "Sort-Object <prop> [-Descending]", doc: "Sort pipeline objects.",
+    params: ["Property object[]", "Descending", "Unique", "Top int", "Bottom int", "Stable", "CaseSensitive", "Culture string", "InputObject psobject"] },
+  { name: "Group-Object", sig: "Group-Object <prop>", doc: "Group objects by a property.",
+    params: ["Property object[]", "NoElement", "AsHashTable", "AsString", "CaseSensitive", "Culture string", "InputObject psobject"] },
+  { name: "Measure-Object", sig: "Measure-Object <prop> -Sum -Average", doc: "Aggregate numbers/strings.",
+    params: ["Property object[]", "Sum", "Average", "Maximum", "Minimum", "StandardDeviation", "AllStats", "Line", "Word", "Character", "IgnoreWhiteSpace", "InputObject psobject"] },
+  { name: "Select-String", sig: "Select-String -Pattern <re>", doc: "Grep-style regex search.",
+    params: ["Pattern string[]", "Path string[]", "LiteralPath string[]", "InputObject psobject", "SimpleMatch", "CaseSensitive", "NotMatch", "AllMatches", "Context int[]", "List", "Quiet", "Raw", "Encoding Encoding", "Include string[]", "Exclude string[]"] },
+  { name: "Compare-Object", sig: "Compare-Object <ref> <diff>", doc: "Diff two collections.",
+    params: ["ReferenceObject psobject[]", "DifferenceObject psobject[]", "Property object[]", "IncludeEqual", "ExcludeDifferent", "PassThru", "SyncWindow int", "CaseSensitive", "Culture string"] },
   // Objects / members
-  { name: "New-Object", sig: "New-Object <type> <args>", doc: "Construct a .NET object." },
-  { name: "Get-Member", sig: "<obj> | Get-Member", doc: "Inspect an object's members." },
-  { name: "Add-Member", sig: "Add-Member -NotePropertyName <n> -NotePropertyValue <v>", doc: "Attach a property to an object." },
-  { name: "Set-Variable", sig: "Set-Variable -Name <n> -Value <v>", doc: "Set a variable by name." },
-  { name: "Get-Variable", sig: "Get-Variable <n>", doc: "Read a variable by name." },
+  { name: "New-Object", sig: "New-Object <type> <args>", doc: "Construct a .NET object.",
+    params: ["TypeName string", "ArgumentList object[]", "Property IDictionary", "ComObject string", "Strict"] },
+  { name: "Get-Member", sig: "<obj> | Get-Member", doc: "Inspect an object's members.",
+    params: ["Name string[]", "MemberType PSMemberTypes", "View PSMemberViewTypes", "Static", "Force", "InputObject psobject"] },
+  { name: "Add-Member", sig: "Add-Member -NotePropertyName <n> -NotePropertyValue <v>", doc: "Attach a property to an object.",
+    params: ["NotePropertyName string", "NotePropertyValue object", "NotePropertyMembers IDictionary", "MemberType PSMemberTypes", "Name string", "Value object", "SecondValue object", "TypeName string", "Force", "PassThru", "InputObject psobject"] },
+  { name: "Set-Variable", sig: "Set-Variable -Name <n> -Value <v>", doc: "Set a variable by name.",
+    params: ["Name string[]", "Value object", "Scope string", "Option ScopedItemOptions", "Description string", "Include string[]", "Exclude string[]", "Force", "PassThru", "WhatIf", "Confirm"] },
+  { name: "Get-Variable", sig: "Get-Variable <n>", doc: "Read a variable by name.",
+    params: ["Name string[]", "ValueOnly", "Scope string", "Include string[]", "Exclude string[]"] },
   // Files / paths
-  { name: "Get-ChildItem", sig: "Get-ChildItem <path>", doc: "List items in a location (alias: ls, dir)." },
-  { name: "Get-Content", sig: "Get-Content <path>", doc: "Read a file's contents." },
-  { name: "Set-Content", sig: "Set-Content <path> <value>", doc: "Write a file's contents." },
-  { name: "Test-Path", sig: "Test-Path <path>", doc: "True if a path exists." },
-  { name: "Join-Path", sig: "Join-Path <a> <b>", doc: "Combine path segments." },
-  { name: "Split-Path", sig: "Split-Path <path> [-Leaf|-Parent]", doc: "Split a path." },
+  { name: "Get-ChildItem", sig: "Get-ChildItem <path>", doc: "List items in a location (alias: ls, dir).",
+    params: ["Path string[]", "LiteralPath string[]", "Filter string", "Include string[]", "Exclude string[]", "Recurse", "Depth uint", "Name", "File", "Directory", "Hidden", "ReadOnly", "System", "Attributes FlagsExpression", "FollowSymlink", "Force"] },
+  { name: "Get-Content", sig: "Get-Content <path>", doc: "Read a file's contents.",
+    params: ["Path string[]", "LiteralPath string[]", "Raw", "Encoding Encoding", "TotalCount long", "Tail int", "ReadCount long", "Delimiter string", "AsByteStream", "Wait", "Filter string", "Include string[]", "Exclude string[]", "Force"] },
+  { name: "Set-Content", sig: "Set-Content <path> <value>", doc: "Write a file's contents.",
+    params: ["Path string[]", "LiteralPath string[]", "Value object[]", "Encoding Encoding", "NoNewline", "AsByteStream", "Filter string", "Include string[]", "Exclude string[]", "Force", "PassThru", "WhatIf", "Confirm"] },
+  { name: "Test-Path", sig: "Test-Path <path>", doc: "True if a path exists.",
+    params: ["Path string[]", "LiteralPath string[]", "PathType TestPathType", "IsValid", "Filter string", "Include string[]", "Exclude string[]"] },
+  { name: "Join-Path", sig: "Join-Path <a> <b>", doc: "Combine path segments.",
+    params: ["Path string[]", "ChildPath string", "AdditionalChildPath string[]", "Resolve"] },
+  { name: "Split-Path", sig: "Split-Path <path> [-Leaf|-Parent]", doc: "Split a path.",
+    params: ["Path string[]", "LiteralPath string[]", "Parent", "Leaf", "LeafBase", "Extension", "Qualifier", "NoQualifier", "IsAbsolute", "Resolve"] },
   // Misc
-  { name: "Get-Date", sig: "Get-Date [-Format <f>]", doc: "The current date/time." },
-  { name: "Start-Sleep", sig: "Start-Sleep -Seconds <n>", doc: "Pause execution." },
-  { name: "Get-Random", sig: "Get-Random [-Minimum m -Maximum n]", doc: "A random number/element." },
-  { name: "Import-Module", sig: "Import-Module <name>", doc: "Load a module." },
-  { name: "Get-Command", sig: "Get-Command <name>", doc: "Discover commands." },
-  { name: "Get-Help", sig: "Get-Help <name>", doc: "Show help for a command." },
-  { name: "Read-Host", sig: "Read-Host <prompt>", doc: "Read a line of input." },
+  { name: "Get-Date", sig: "Get-Date [-Format <f>]", doc: "The current date/time.",
+    params: ["Date datetime", "Format string", "UFormat string", "AsUTC", "UnixTimeSeconds long", "Year int", "Month int", "Day int", "Hour int", "Minute int", "Second int", "Millisecond int", "DisplayHint DisplayHintType"] },
+  { name: "Start-Sleep", sig: "Start-Sleep -Seconds <n>", doc: "Pause execution.",
+    params: ["Seconds double", "Milliseconds int", "Duration timespan"] },
+  { name: "Get-Random", sig: "Get-Random [-Minimum m -Maximum n]", doc: "A random number/element.",
+    params: ["Minimum object", "Maximum object", "Count int", "InputObject object[]", "SetSeed int"] },
+  { name: "Import-Module", sig: "Import-Module <name>", doc: "Load a module.",
+    params: ["Name string[]", "MinimumVersion version", "RequiredVersion version", "MaximumVersion string", "Prefix string", "Function string[]", "Cmdlet string[]", "ArgumentList object[]", "Scope string", "Global", "Force", "PassThru", "DisableNameChecking"] },
+  { name: "Get-Command", sig: "Get-Command <name>", doc: "Discover commands.",
+    params: ["Name string[]", "Verb string[]", "Noun string[]", "Module string[]", "CommandType CommandTypes", "ParameterName string[]", "TotalCount int", "ListImported", "Syntax", "All"] },
+  { name: "Get-Help", sig: "Get-Help <name>", doc: "Show help for a command.",
+    params: ["Name string", "Full", "Detailed", "Examples", "Parameter string[]", "Online", "Category string[]"] },
+  { name: "Read-Host", sig: "Read-Host <prompt>", doc: "Read a line of input.",
+    params: ["Prompt object", "AsSecureString", "MaskInput"] },
   // Microsoft.Graph (common in Atlas identity jobs)
-  { name: "Connect-MgGraph", sig: "Connect-MgGraph -TenantId <id> -ClientSecretCredential <cred>", doc: "Authenticate to Microsoft Graph." },
-  { name: "Get-MgUser", sig: "Get-MgUser -Filter <feel> -ConsistencyLevel eventual", doc: "Query users in Microsoft Graph." },
-  { name: "New-MgUser", sig: "New-MgUser -BodyParameter <hash>", doc: "Create a user in Microsoft Graph." },
+  { name: "Connect-MgGraph", sig: "Connect-MgGraph -TenantId <id> -ClientSecretCredential <cred>", doc: "Authenticate to Microsoft Graph.",
+    params: ["TenantId string", "ClientId string", "ClientSecretCredential pscredential", "CertificateThumbprint string", "CertificateName string", "Certificate X509Certificate2", "AccessToken securestring", "Scopes string[]", "Identity", "Environment string", "ContextScope ContextScope", "NoWelcome"] },
+  { name: "Get-MgUser", sig: "Get-MgUser -Filter <feel> -ConsistencyLevel eventual", doc: "Query users in Microsoft Graph.",
+    params: ["UserId string", "Filter string", "Search string", "Property string[]", "ExpandProperty string[]", "Sort string[]", "Top int", "All", "PageSize int", "ConsistencyLevel string", "CountVariable string"] },
+  { name: "New-MgUser", sig: "New-MgUser -BodyParameter <hash>", doc: "Create a user in Microsoft Graph.",
+    params: ["BodyParameter IMicrosoftGraphUser", "DisplayName string", "UserPrincipalName string", "MailNickname string", "AccountEnabled", "PasswordProfile IMicrosoftGraphPasswordProfile", "GivenName string", "Surname string", "Department string", "JobTitle string", "UsageLocation string"] },
+];
+
+// PS_COMMON_PARAMS are the common parameters every cmdlet (and advanced function)
+// accepts, offered after a cmdlet's own.
+export const PS_COMMON_PARAMS = [
+  "ErrorAction ActionPreference", "ErrorVariable string", "WarningAction ActionPreference",
+  "WarningVariable string", "InformationAction ActionPreference", "InformationVariable string",
+  "ProgressAction ActionPreference", "OutVariable string", "OutBuffer int",
+  "PipelineVariable string", "Verbose", "Debug",
 ];
 
 const PS_KEYWORD_SET = new Set(PS_KEYWORDS);
@@ -270,11 +325,81 @@ function psPrefix(before) {
   // (ADR-0456).
   m = /\$(?:(?:application|server)\.[A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*|)$/.exec(before);
   if (m) return { text: m[0], start: before.length - m[0].length, mode: "var" };
+  // A dash glued to a bare word is part of a Verb-Noun command name, as the tokenizer
+  // reads it: `Get-` and `Get-Ch` complete Get-ChildItem, not -eq. A dash starts an
+  // operator or parameter only after whitespace, a bracket or a value — `$a-eq`,
+  // `$_.Name-`, `)-and` — so a word led by `$`, `:`, `.` or `-` is not a command.
+  m = /(?:^|[^$\w:.-])([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*-[A-Za-z0-9]*)$/.exec(before);
+  if (m) return { text: m[1], start: before.length - m[1].length, mode: "cmd" };
   m = /-[A-Za-z]*$/.exec(before);
   if (m) return { text: m[0], start: before.length - m[0].length, mode: "op" };
   m = /[A-Za-z][A-Za-z0-9]*(-[A-Za-z0-9]*)?$/.exec(before);
   if (m) return { text: m[0], start: before.length - m[0].length, mode: "cmd" };
   return { text: "", start: before.length, mode: "cmd" };
+}
+
+// commandAt names the command whose arguments the end of src sits in, or null when
+// the end is in an expression. A `-` there is a parameter (`Get-ChildItem -Path`); in
+// an expression it is an operator (`$a -eq`, `if ($x -lt`, `{ $_.Name -like`). Each
+// bracket opens a frame of its own, so `Get-ChildItem -Path (Join-Path $a $b) -`
+// is back in Get-ChildItem's arguments. used holds the parameters the command
+// already has, lower-cased and without the dash, so they are not offered twice.
+function commandAt(src) {
+  // key: the start is a hashtable key, not a command; the value after = may be one.
+  const fresh = (hash) => ({ cmd: null, start: true, hash, key: hash, used: new Set() });
+  const stack = [fresh(false)];
+  const top = () => stack[stack.length - 1];
+  const reset = () => { const f = top(); Object.assign(f, fresh(f.hash)); };
+  let prev = null; // the last token that is not whitespace
+  for (const t of tokenizePowerShell(src)) {
+    const f = top();
+    if (t.type === "ws") {
+      // A line ends a statement unless a backtick continues it.
+      if (t.value.includes("\n") && !(prev && prev.value === "`")) reset();
+      continue;
+    }
+    const v = t.value;
+    if (t.type === "punct" && "({[".includes(v)) {
+      // @{ ... } is a hashtable: its keys are not commands.
+      stack.push(fresh(v === "{" && prev !== null && prev.value === "@"));
+    } else if (t.type === "punct" && ")}]".includes(v)) {
+      if (stack.length > 1) stack.pop();
+    } else if (t.type === "punct" && (v === "|" || v === ";")) {
+      reset();
+    } else if (t.type === "punct" && v === "=" && !f.cmd) {
+      f.start = true; f.key = false; // the value of an assignment or a key may be a command
+    } else if (f.start) {
+      // A keyword (return, else) and the call operators & and . keep the statement's
+      // start open; a bare word there is its command, anything else an expression.
+      const keepsStart = t.type === "keyword" || (t.type === "punct" && (v === "&" || v === "."));
+      if (!keepsStart) {
+        f.start = false;
+        f.cmd = !f.key && (t.type === "cmdlet" || t.type === "name") ? v : null;
+      }
+    } else if (f.cmd && (t.type === "parameter" || t.type === "operator")) {
+      f.used.add(v.slice(1).toLowerCase());
+    }
+    prev = t;
+  }
+  const f = top();
+  return f.cmd ? { cmd: f.cmd, used: f.used } : null;
+}
+
+// parameterItems lists what `-` completes to in a command's arguments: the cmdlet's
+// own parameters, then the common ones, less those the command already has. A command
+// outside the catalogue (a function, an alias) still takes the common parameters.
+function parameterItems(at, rest) {
+  const c = PS_CMDLET_BY_NAME.get(at.cmd.toLowerCase());
+  const items = [];
+  const add = (spec, tier) => {
+    const [name, type] = spec.split(" ");
+    if (at.used.has(name.toLowerCase())) return;
+    const detail = (type || "switch") + (tier ? " · common" : "");
+    items.push({ label: "-" + name, kind: "parameter", insert: "-" + name, detail, tier });
+  };
+  for (const spec of (c && c.params) || []) add(spec, 0);
+  for (const spec of PS_COMMON_PARAMS) add(spec, 1);
+  return rankByPrefix(items, rest, (it) => it.label.slice(1), (it) => it.tier);
 }
 
 // envNamesIn harvests the $env:NAME keys the script already references, so the
@@ -317,6 +442,8 @@ export const powershell = {
     }
     if (p.mode === "op") {
       const rest = p.text.slice(1);
+      const at = commandAt((ctx.before || "").slice(0, p.start));
+      if (at) return parameterItems(at, rest);
       const items = PS_OPERATORS.map((o) => ({
         label: o.name, kind: "operator", insert: o.name, detail: o.doc,
       }));
