@@ -16,15 +16,15 @@ func validTechnicalContract() TechnicalContract {
 			Profile: "address-book", Name: "Create address-book contact",
 		},
 		Spec: ContractSpec{
-			ResourceKind: "contact-record",
+			ResourceKind:  "contact-record",
 			IdentityScope: "address-book",
-			Verb: "create",
-			InputSchema: json.RawMessage(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"email":{"type":"string"}}}`),
-			OutputSchema: json.RawMessage(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["id"]}`),
-			Errors: []ContractError{{Code: "CONTACT_ALREADY_EXISTS", Description: "Contact exists", Retryable: false}},
-			Idempotency: "non-idempotent",
-			Consistency: "provider-defined",
-			Pagination: "none",
+			Verb:          "create",
+			InputSchema:   json.RawMessage(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"email":{"type":"string"}}}`),
+			OutputSchema:  json.RawMessage(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["id"]}`),
+			Errors:        []ContractError{{Code: "CONTACT_ALREADY_EXISTS", Description: "Contact exists", Retryable: false}},
+			Idempotency:   "non-idempotent",
+			Consistency:   "provider-defined",
+			Pagination:    "none",
 		},
 	}
 }
