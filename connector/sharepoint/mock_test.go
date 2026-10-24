@@ -460,3 +460,31 @@ func TestExamplesRunOnTheMockup(t *testing.T) {
 		t.Error("the settled request's folder is still there")
 	}
 }
+
+// A route that answers something other than the mockup's two answers fails the job with
+// what it said, quoted, rather than passing on a value nobody can read.
+func TestRemoteMockOddAnswers(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch strings.TrimPrefix(r.URL.Path, "/m/") {
+		case "kaputt":
+			_, _ = w.Write([]byte("kein JSON"))
+		case "leer":
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			http.Error(w, strings.Repeat("x", 10000), http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
+	for worker, want := range map[string]string{
+		"kaputt": "answered 200 OK: kein JSON",
+		"leer":   "answered 422",
+		"fehler": "answered 500",
+	} {
+		msg := refused(t, sharepoint.NewRemoteMock(srv.URL+"/m", worker, ""), sharepoint.Request{List: "A"})
+		wantContains(t, msg, want)
+		if len(msg) > 5000 {
+			t.Errorf("%s: the error quotes %d bytes of the answer, want it cut", worker, len(msg))
+		}
+	}
+}

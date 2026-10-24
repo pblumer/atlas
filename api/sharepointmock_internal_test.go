@@ -179,3 +179,29 @@ func TestSharePointMockIsNeverDelegated(t *testing.T) {
 		t.Errorf("governing a mockup with the service identity = %q, want it allowed", msg)
 	}
 }
+
+// The remaining edges of the server half: a body that is not an operation, a summary
+// counted in the plural, and a delegated Graph Worker that is switched to the mockup.
+func TestSharePointMockServerEdges(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	h := srv.Handler()
+	spRequest(t, h, http.MethodPost, "/api/v1/connectors", `{"name":"intranet","kind":"sharepoint","provider":"mock"}`)
+	if rec := spRequest(t, h, http.MethodPost, "/api/v1/sharepoint/mock-sites/intranet", `not json`); rec.Code != http.StatusBadRequest {
+		t.Errorf("a body that is not an operation = %d, want 400", rec.Code)
+	}
+
+	snap := sharepoint.MockSiteSnapshot{Sites: []sharepoint.MockWebSnapshot{{}, {Lists: []sharepoint.MockListSnapshot{{}, {}}}}}
+	if got := sharePointMockSummary(snap); got != "2 sites, 2 lists and libraries, 0 refused operations" {
+		t.Errorf("summary = %q", got)
+	}
+
+	if err := srv.connectors.Save(connector{
+		ID: "9", Name: "delegiert", Kind: connectorKindSharePoint, CredentialsRef: "sp_bundle", Enabled: true, CreatedAt: 1,
+		Identity: &workerIdentity{Mode: "delegated-per-job", ActAs: actAsInitiator, Enforcement: enforcementEnforce},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if rec := spRequest(t, h, http.MethodPatch, "/api/v1/connectors/9", `{"provider":"mock"}`); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "cannot be delegated") {
+		t.Errorf("switching a delegated Worker to the mockup = %d %s, want 400 with the reason", rec.Code, rec.Body)
+	}
+}
