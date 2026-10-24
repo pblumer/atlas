@@ -86,8 +86,8 @@ persistente Zustand liegt in einem Datenverzeichnis auf lokalem Datenträger
 (`--data-dir`).
 
 Schutzobjekt im Sinne dieses Konzepts ist die Installation als Ganzes:
-Server-Prozess, Datenverzeichnis, optionale Worker-Prozesse, vorgelagerter
-Reverse Proxy und die darauf betriebenen Fachprozesse.
+Server-Prozess, Datenverzeichnis, optionale Worker-Prozesse, gegebenenfalls
+vorgelagerter Reverse Proxy und die darauf betriebenen Fachprozesse.
 
 ⟨Fachlicher Einsatzzweck in der Verwaltungseinheit: welche Geschäftsprozesse,
 welcher Benutzerkreis, welche Fachanwendungen werden angebunden.⟩
@@ -175,11 +175,17 @@ Empfehlung des Projektteams für eine Einführung im Bund:
    **intern**. Prozesse mit besonders schützenswerten Personendaten,
    Klassifizierung «vertraulich» oder RINA-Relevanz erst nach Schliessen der
    Punkte R-03/R-04/R-05 und nach einem Penetrationstest.
-2. **Reverse Proxy mit TLS und Authentisierung davor ist obligatorisch** — Atlas
-   spricht ausschliesslich Klartext-HTTP (`docs/install.md`). `/metrics` ist am
-   Proxy zu sperren; `/mcp` ist seit ADR-0196 durch
-   `--auth` geschützt, eine Proxy-Regel dafür ist zusätzliche Absicherung und
-   nicht mehr der Schutz selbst.
+2. **Verschlüsselten Zugriff nachweisen:** Atlas kann den öffentlichen Listener
+   selbst mit **TLS 1.3** bedienen (`--tls-cert` und `--tls-key`, ADR-0191), oder
+   TLS wird an einem Reverse Proxy terminiert. **Ein Reverse Proxy ist für TLS
+   nicht zwingend.** Wird die Strecke vom Proxy zu Atlas unverschlüsselt
+   betrieben, muss sie auf einen ausreichend geschützten lokalen bzw.
+   isolierten Kommunikationsweg beschränkt und ausdrücklich beurteilt werden.
+   `/metrics` erfordert ein API-Token mit Scope `metrics` (ADR-0198),
+   `/mcp` unterliegt der Authentisierung (ADR-0196); eine zusätzliche
+   Einschränkung am Proxy oder an der Firewall kann sinnvoll sein. Für
+   Access-Logging, Rate-Limiting und zentrale Zugriffsrichtlinien bleibt ein
+   Reverse Proxy eine mögliche betriebliche Schutzmassnahme (`docs/install.md` § 8).
 3. **Eine Installation pro Schutzbedarfsklasse**, nicht Mischbetrieb — solange es
    keine Mandantentrennung gibt, ist die Installationsgrenze die einzige
    verlässliche Trennlinie.
@@ -197,8 +203,8 @@ angebundenen Fachsystemen ab (siehe Kommunikationsmatrix 5.4).
 
 | Nr. | Art | Gegenstand | Begründung | Referenz |
 |-----|-----|------------|------------|----------|
-| A-01 | CRQ FW-Portöffnung | Reverse Proxy (PEZ/SZ) → Atlas-Server TCP 8080 | Zugriff der Benutzer auf UI und API | ⟨CRQ-Nr.⟩ |
-| A-02 | CRQ FW-Portöffnung | Worker → Atlas-Server TCP 8080 | Job-Leasing der Worker-Arbeit (ADR-0007/0168) | ⟨CRQ-Nr.⟩ |
+| A-01 | CRQ FW-Portöffnung | Client → Atlas-TLS-Listener oder Reverse Proxy → Atlas; Port ⟨z. B. 8080/8443 gemäss Betrieb⟩ | Zugriff auf UI/API; direkt TLS 1.3 oder begründeter Proxy-Hop | ⟨CRQ-Nr. / Topologie⟩ |
+| A-02 | CRQ FW-Portöffnung | Externer Worker → Atlas über HTTPS/TLS 1.3 (direkt oder Proxy), Port ⟨…⟩ | Job-Leasing (ADR-0007/0168); beaufsichtigte Worker benutzen lokal den Loopback-Listener | ⟨CRQ-Nr., falls remote⟩ |
 | A-03 | CRQ FW-Portöffnung | Worker → Fachsystem (SMTP 25/587, LDAP 389/636, SQL 1433/5432/3306, HTTPS 443) | ausgehende Worker-Aufrufe | ⟨CRQ-Nr., pro Ziel⟩ |
 | A-04 | CRQ FW-Portöffnung | Atlas → OpenSearch (9200/443), OTLP-Collector (4318), Prometheus-Scrape | Export, Tracing, Monitoring | ⟨CRQ-Nr.⟩ |
 | A-05 | Proxy-/SSL-Whitelist | ausgehend zu ⟨Fachsystem-Hosts⟩ | REST-, SOAP- und Graph-Worker-Typen | ⟨CRQ-Nr.⟩ |
@@ -339,7 +345,8 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
 | **Worker-Prozess** (`atlas worker`) | führt Service-Task-Arbeit aus, least Jobs über die HTTP-API | hält die Credentials der Fachsysteme; läuft idealerweise in der Zone des Zielsystems (ADR-0164/0168) |
 | **MCP-Adapter** (`atlas mcp`) | stellt die API als Model-Context-Protocol-Werkzeuge bereit (für KI-Agenten) | `/mcp` liegt innerhalb der Zugriffsgrenze des Servers und wird von `--auth` erzwungen; ein Werkzeugaufruf handelt mit dem Credential des Aufrufers (ADR-0196). Der stdio-Adapter hält als Prozess *ein* Credential für seine ganze Laufzeit — `--token` bzw. `ATLAS_TOKEN`, üblicherweise ein API-Token mit Geltungsbereich `full` (ADR-0194) |
 | **Vault** | AES-256-GCM-verschlüsselte Ablage der Worker-Secrets | Schlüssel `vault.key` (Mode 0600) oder extern via `ATLAS_VAULT_KEY(_FILE)` (ADR-0069/0070) |
-| **Reverse Proxy** ⟨nginx/Apache BIT-Standard⟩ | TLS-Terminierung, Zugriffssteuerung, Access-Log, Rate-Limiting | **zwingend** — Atlas selbst kann kein TLS |
+| **TLS-Listener** (`atlas serve`) | Optionale TLS-1.3-Terminierung am `--addr`-Listener mittels PEM-Zertifikat und -Schlüssel; automatische Neuladung bei Dateiänderung (ADR-0191) | Direkter verschlüsselter Zugriff ohne vorgeschalteten TLS-Proxy möglich; ohne Zertifikats-/Schlüsselpaar bleibt `--addr` HTTP |
+| **Reverse Proxy** ⟨nginx/Apache BIT-Standard⟩ | Optional: TLS-Terminierung, zentrale Zugriffsregeln, HTTP-Access-Log, Rate-Limiting | **Nicht für TLS zwingend.** Bei Einsatz eines Proxys müssen Protokoll und Schutz des Hops zu Atlas geprüft werden |
 | **Identität & Policies** (`api/identity`, `api/policy`, `authz`) | verknüpfte externe Konten, Policy-Entwürfe und -Versionen, PDP/PEP, aktionsgebundene Freigaben (ADR-0475) | neues Identitäts-/Credential-Inventar; Entscheidungen und Approvals dauerhaft, für beaufsichtigte SharePoint-Worker implementiert |
 | **Architektur-Snapshots** (`api/archsketch`) | logischer und physischer Nachweis je Applikations-Release (ADR-0471) | Release-Sidecar, Endpunkte auf Scheme/Host/Port reduziert; Leserechte filtern Worker-/Instanzdetails |
 | **Worker-Formularabfragen** | begrenzte Abfragen nach Entra-Personen via beaufsichtigten Worker (ADR-0473) | nicht-durabler Abfragekanal ohne Prozessvariablen-/WAL-Eintrag bis zur Auswahl |
@@ -532,41 +539,59 @@ deshalb hier explizit:
 
 ## 5.4 Architekturskizze / Kommunikationsmatrix
 
-### 5.4.1 Architekturskizze (Sollzustand für einen Bundesbetrieb)
+### 5.4.1 Architekturskizze (alternative zulässige TLS-Topologien)
 
 ```mermaid
 flowchart LR
   subgraph CZ["Client-Zone (CZ)"]
-    B["Browser<br/>Modeler · Operations · Tasks"]
-    P["Prometheus / Log-Shipper"]
+    B["Browser: Modeler · Operations · Tasks"]
+    P["Monitoring / Log-Shipper"]
   end
-  subgraph PEZ["Zugriffszone (PEZ)"]
-    RP["Reverse Proxy<br/>TLS-Terminierung · Access-Log<br/>Zugang zum /metrics-Endpunkt absichern"]
+  subgraph PEZ["Optionale Zugriffszone (PEZ)"]
+    RP["Reverse Proxy: TLS, Access-Log, Rate-Limiting"]
   end
   subgraph SZ["Server-Zone (SZ)"]
-    A["atlas serve<br/>Engine · API · UI<br/>HTTP 8080, kein TLS"]
-    D[("Datenverzeichnis<br/>wal/ · state/ · checkpoints/<br/>vault/ · vault.key · Sidecar-Stores")]
-    W["atlas worker<br/>Worker-Instanz · least Jobs<br/>hält die Fachsystem-Credentials"]
+    A["atlas serve: Engine · API · UI · optional TLS 1.3"]
+    D[("Datenverzeichnis: WAL · State · Vault · Sidecars")]
+    W["Externer Worker (Job-Leasing)"]
+    SW["Beaufsichtigter Worker (lokal)"]
   end
   subgraph EXT["Fachsysteme / Dienste"]
-    M["Mail-Relay (SMTP)"]
-    L["Verzeichnis (LDAP/AD/Entra)"]
-    S["Fachanwendungen (REST/SOAP/SQL/SharePoint/Remedy)"]
+    M["Mail-Relay"]
+    L["LDAP / AD / Entra"]
+    S["REST / SOAP / SQL / SharePoint"]
     O["OpenSearch (optional)"]
     T["OTLP-Collector (optional)"]
   end
 
-  B -->|HTTPS 443| RP
-  RP -->|HTTP 8080| A
+  B -->|"Variante A: HTTPS TLS 1.3 direkt"| A
+  B -->|"Variante B: HTTPS zum Proxy"| RP
+  RP -->|"HTTPS TLS 1.3 oder geschützter HTTP-Hop"| A
   A --- D
-  W -->|HTTP 8080, Job-Leasing| A
+  W -->|"HTTPS: Job-Leasing"| A
+  SW -->|"HTTP nur 127.0.0.1 (ephemer)"| A
   W --> M
   W --> L
   W --> S
-  A -->|Export| O
-  A -->|Traces| T
-  P -->|/metrics| A
+  A -->|"Export"| O
+  A -->|"Traces"| T
+  P -->|"HTTPS: /metrics, Token erforderlich"| A
 ```
+
+**Die beiden Browser-Wege im Diagramm sind Alternativen, keine gleichzeitige
+Voraussetzung.** Direkter Zugriff auf Atlas setzt ein Zertifikat-/Schlüsselpaar
+voraus (`--tls-cert`, `--tls-key`, TLS 1.3). Bei TLS-Terminierung am Proxy
+kann dessen Hop zu Atlas HTTP sein, sofern er vollständig auf einem ausreichend
+geschützten lokalen bzw. isolierten Weg geführt wird; sonst ist auch dort HTTPS
+zu verwenden. Ein HTTP-Listener ohne zusätzliche Schutzmassnahmen darf nicht
+aus anderen Netzen zugänglich sein. Bei direktem TLS ist eine gleichwertige
+Lösung für Access-Logging und Ingress-Schutz betrieblich zu belegen.
+
+Mit integriertem TLS öffnet Atlas für eigene beaufsichtigte Worker und interne
+MCP-Aufrufe zusätzlich einen **unverschlüsselten, nur an `127.0.0.1` gebundenen
+Listener auf ephemerem Port** (ADR-0191). Dieser ist kein Remote-Zugang und
+gehört nicht in die Firewallfreigabe. Externe Worker nutzen HTTPS auf dem
+öffentlichen Listener bzw. über den Proxy.
 
 Ohne Worker-Instanz laufen die verbliebenen In-Process-Worker-Typen im Server-Prozess;
 das ist der abgekündigte Weg (ADR-0164) und für den Bund nicht empfohlen, weil
@@ -580,10 +605,10 @@ das Vorhaben ergänzen⟩. Initiator ist immer die Quelle.
 
 | Nr. | Quelle (Zone) | Ziel (Zone) | Protokoll / Port | Zweck | Verschlüsselung | Authentisierung |
 |-----|---------------|-------------|------------------|-------|-----------------|-----------------|
-| K-01 | Benutzer-Client ⟨CZ⟩ | Reverse Proxy ⟨PEZ⟩ | HTTPS / 443 | UI und API | TLS ⟨1.2+/1.3⟩ | Session-Cookie ⟨+ vorgelagerte AuthN⟩ |
-| K-02 | Reverse Proxy ⟨PEZ⟩ | Atlas-Server ⟨SZ⟩ | HTTP / 8080 | Weiterleitung | **keine** — Produkt kann kein TLS | keine auf Transportebene |
+| K-01 | Benutzer-Client ⟨CZ⟩ | Atlas-Server ⟨SZ⟩ direkt **oder** Reverse Proxy ⟨PEZ⟩ | HTTPS / ⟨443, 8080, 8443 oder Betriebsport⟩ | UI und API | direkt: **TLS 1.3** (ADR-0191); über Proxy: dessen freigegebene TLS-Konfiguration | Atlas-Session oder Bearer; zusätzliche Proxy-Authentisierung optional |
+| K-02 | Reverse Proxy ⟨PEZ⟩ **falls eingesetzt** | Atlas-Server ⟨SZ⟩ | HTTPS/TLS 1.3 **oder** geschütztes HTTP, Port ⟨…⟩ | Proxy-Hop; entfällt bei direktem TLS | HTTPS mit Atlas-Zertifikat oder HTTP ausschliesslich über ⟨isolierte/vertrauenswürdige Strecke⟩ | Atlas authentisiert den Client auf Anwendungsebene; Netzsegment-/Proxy-Schutz separat |
 | K-03 | Atlas-Server ⟨SZ⟩ | lokales Dateisystem | — | WAL, State, Vault, Sidecar-Stores | keine (Datenträgerverschlüsselung ⟨LUKS/BitLocker⟩) | Dateirechte 0750 / 0600, eigener Dienstbenutzer |
-| K-04 | Worker ⟨Zone des Fachsystems⟩ | Atlas-Server ⟨SZ⟩ | HTTP / 8080 | Job-Leasing, Ergebnisrückgabe (ADR-0007) | ⟨über Proxy/TLS führen⟩ | ⟨Bearer/Proxy⟩ |
+| K-04 | Externer Worker ⟨Zone des Fachsystems⟩ | Atlas-Server ⟨SZ⟩ direkt oder via Proxy | HTTPS / ⟨Betriebsport⟩ | Job-Leasing, Ergebnisrückgabe (ADR-0007) | **TLS 1.3** direkt oder TLS über Proxy; `--tls-ca` für interne CA | Worker-Bearer-Token; beaufsichtigte lokale Worker sprechen nur über Loopback HTTP |
 | K-05 | Worker | Mail-Relay | SMTP / 25 · 587 (bzw. Graph HTTPS 443) | ausgehende Benachrichtigungen (ADR-0079/0093) | ⟨STARTTLS/TLS⟩ | ⟨Relay-Regel / OAuth2⟩ |
 | K-06 | Worker | LDAP / AD / Entra ID | LDAP 389 · LDAPS 636 · HTTPS 443 | Verzeichnis-Worker-Typen (ADR-0153/0154/0166/0172) | LDAPS/TLS empfohlen | Dienstkonto aus Vault/Worker |
 | K-07 | Worker | Fachanwendung REST/SOAP | HTTPS / 443 | Service-Tasks (ADR-0067/0165), OAuth2 möglich (ADR-0152) | TLS (Systemtruststore) | Token/Basic/OAuth2 aus Vault |
@@ -591,10 +616,10 @@ das Vorhaben ergänzen⟩. Initiator ist immer die Quelle.
 | K-09 | Worker | SharePoint / Remedy | HTTPS / 443 | Fach-Worker-Typen (ADR-0141/0106) | TLS | Dienstkonto aus Vault |
 | K-10 | Atlas-Server | OpenSearch | HTTPS / 9200 · 443 | Ereignis-Export (ADR-0114), optional | TLS ⟨Cluster-Konfiguration⟩ | Basic Auth via Umgebungsvariablen |
 | K-11 | Atlas-Server | OTLP-Collector | HTTP / 4318 | Traces, optional, standardmässig aus | ⟨TLS⟩ | ⟨Collector-Regel⟩ |
-| K-12 | Monitoring | Atlas-Server | HTTP / 8080 `/metrics` | Prometheus-Scrape (ADR-0198; inklusive API-Token-Ablaufmetriken) | ⟨TLS über Proxy vorsehen⟩ | **API-Token mit Scope `metrics` erforderlich**, Proxy/FW zusätzlich einschränken |
+| K-12 | Monitoring | Atlas-Server `/metrics` direkt oder via Proxy | HTTPS / ⟨Betriebsport⟩ | Prometheus-Scrape (ADR-0198; inklusive API-Token-Ablaufmetriken) | direkt TLS 1.3 oder am Proxy; keinen ungeschützten Remote-HTTP-Hop | **API-Token mit Scope `metrics` erforderlich**, zusätzliche Netzbegrenzung empfohlen |
 | K-13 | Atlas-Server ↔ Peer-Atlas ⟨andere Umgebung⟩ | je nach Richtung | HTTPS / 443 | Applikations-Promotion zwischen Umgebungen (ADR-0129); nur falls genutzt | TLS, **Verifikation nicht abschaltbar** (kein «skip verify») | Deploy-Token (Bearer, als SHA-256-Hash abgelegt, fail-closed-Allowlist auf 2 Operationen); Zieladresse und Credential-Referenz sind admin-verwaltet |
-| K-14 | KI-Agent / Werkzeug | Atlas-Server `/mcp` | HTTP / 8080 | MCP-Steuerung (ADR-0016) | keine | Session-Cookie oder Bearer des Aufrufers; unter `--auth` erzwungen (ADR-0196) |
-| K-15 | Internet ⟨optional⟩ | Reverse Proxy → `/public/forms/…` | HTTPS / 443 | öffentliche Start-Links (ADR-0029), Selbstregistrierung (ADR-0126) | TLS | anonym, Token-gebunden, ratenbegrenzt |
+| K-14 | KI-Agent / Werkzeug | Atlas-Server `/mcp` direkt oder via Proxy | HTTPS / ⟨Betriebsport⟩ | MCP-Steuerung (ADR-0016) | direkt TLS 1.3 oder über Proxy | Session-Cookie oder Bearer des Aufrufers; unter `--auth` erzwungen (ADR-0196) |
+| K-15 | Internet ⟨optional⟩ | Atlas-Server direkt oder Reverse Proxy → `/public/forms/…` | HTTPS / ⟨öffentlicher Port⟩ | öffentliche Start-Links (ADR-0029), Selbstregistrierung (ADR-0126) | direkt TLS 1.3 oder TLS am Proxy | anonym, Token-gebunden, ratenbegrenzt; Netzfreigabe bewusst festlegen |
 | K-16 | Atlas-Server | Skript-Interpreter (lokal) | Prozessaufruf | Skript-Tasks `pwsh`/`python3`/`node` (ADR-0047) | — | läuft als Dienstbenutzer — siehe R-09 |
 | K-17 | Atlas-Server | Umsystem (Verrechnung, CMDB) ⟨Zone⟩ | HTTPS / 443 | Push-Zustellung des Ereignis-Feeds an einen CloudEvents-Endpunkt (ADR-0429 §5), nur falls ein Administrator ein Abonnement anlegt; Inhalt: wer welches Recht hält, Personen nur als ID | TLS, Klartext nur für Loopback, Weiterleitungen werden nicht verfolgt | Bearer-Token aus dem Vault (Referenz am Worker); Abonnement admin-verwaltet, auf Kataloge einschränkbar |
 | K-18 | Browser + Atlas-Server | Microsoft-Identitätsplattform ⟨Zone⟩ | HTTPS / 443 | OIDC-Anmeldung / Konto verknüpfen (PKCE, Token-/JWKS-Austausch; ADR-0210/0475) | TLS | IdP-Protokoll, Clientregistrierung und Berechtigungen installationsabhängig |
@@ -616,7 +641,7 @@ Internetzugang**.
 | Betriebssystem-Anforderungen | ein Dienstbenutzer ohne Privilegien, ein Datenverzeichnis auf **lokalem** Datenträger (kein NFS — die Durability hängt an `fsync`) |
 | Speicher / Persistenz | eigenes segmentiertes WAL (Group-Commit, ein `fsync` pro Batch) + eingebetteter LSM-Store (Pebble) für den materialisierten Zustand; Sidecar-Stores als atomar geschriebene JSON-Dateien |
 | Ressourcen | ab 1 CPU-Kern und einige hundert MB RAM; Engine ist Single-Writer — schnelle lokale Disk zählt mehr als viele Kerne |
-| Netzwerk | genau ein HTTP-Listener (`--addr`, Standard `:8080`); **keine TLS-Unterstützung im Produkt** |
+| Netzwerk | öffentlicher Listener `--addr` (Standard `:8080`): **HTTP ohne TLS-Flags, HTTPS mit TLS 1.3** bei `--tls-cert` und `--tls-key` (ADR-0191); bei aktiviertem TLS zusätzlicher HTTP-Loopback-Listener auf `127.0.0.1` und ephemerem Port nur für interne Kindprozesse |
 | Kryptografie | Passwörter: bcrypt · Vault: AES-256-GCM (`crypto/aes`, `crypto/cipher`), 96-Bit-Zufallsnonce je Wert, Schlüssel-Fingerprint `keyId` aus SHA-256 · Session-/Interntokens: 32 Byte aus `crypto/rand` · Deploy-Tokens: SHA-256-Hash gespeichert · ausgehendes TLS: Go-Standardbibliothek mit System-Truststore, **kein** `InsecureSkipVerify` im Code |
 | Eingabehärtung | BPMN-Upload auf 4 MiB begrenzt, Restore-/Import-Uploads begrenzt; Go-XML-Parser verarbeitet keine externen Entitäten/DTDs (kein XXE) |
 | Web-Härtung | UI eingebettet (keine CDN-Abhängigkeit); `X-Content-Type-Options: nosniff` und restriktive CSP auf hochgeladenen Inhalten (Logo, Prozessdokumentation); CSRF-Schutz über `SameSite=Lax` |
@@ -642,7 +667,7 @@ zu bestätigen.
 | Nr. | Risiko / Gefährdung | Grundwert | Massnahmen (Kap. 6.4) | Restrisiko |
 |-----|---------------------|-----------|------------------------|------------|
 | R-01 | **Produktreife.** `0.x` Developer Preview: On-Disk-Format instabil, kein Downgrade, keine LTS-Linie, Sicherheitsfixes nur im nächsten Release, kein kommerzieller Support | alle | M-05, M-11, M-14, befristete Freigabe | **rot** bis 1.0; gelb bei unkritischem Einsatz mit Ausnahmebewilligung |
-| R-02 | **Kein TLS im Produkt.** Server spricht ausschliesslich HTTP; bei fehlendem/fehlkonfiguriertem Proxy Klartext im Netz (Session-Cookie, Prozessvariablen) | Vertraulichkeit, Integrität | M-01, Konfigurationsprüfung in der Abnahme | gelb → **grün** bei korrektem Proxy |
+| R-02 | **Ungeschützter Transport durch Fehlkonfiguration.** Der Server unterstützt direktes TLS 1.3 (ADR-0191); ohne `--tls-cert`/`--tls-key` spricht der öffentliche Listener weiterhin HTTP. Eine falsche TLS-/Proxy-Konfiguration oder ein ungeschützter Proxy-Hop könnte Cookies, Tokens und Prozessdaten offenlegen. Der interne HTTP-Loopback ist ausschliesslich lokal und kein Ersatz für einen gesicherten Remote-Zugang | Vertraulichkeit, Integrität | M-01 (TLS-Topologie, Portfreigaben, Zertifikatsprüfung, geschützte Proxy-Strecken, Zugangsdaten), M-06 (Ingress-Protokollierung), TLS-Negativtests | **gelb bis zur konkreten Abnahme**, danach grün bei nachweislich durchgängig geschützter Transportstrecke |
 | R-03 | **Föderierte Authentisierung gebaut, aber optional.** Mit M12 kann eine Installation die Anmeldung an einen OpenID-Connect-Anbieter übergeben; MFA und Passwortrichtlinie werden damit dessen Sache, und ein dort geschlossenes Konto kommt hier nicht mehr hinein. Schaltet eine Betreiberin zusätzlich die Claim-Abbildung ein, entzieht ein Austritt beim Anbieter auch die *Rollen* und die Gruppenmitgliedschaft — der automatische Entzug, nach dem eine Prüfstelle zuerst fragt. Ohne konfigurierten Anbieter bleibt es beim lokalen Passwort, und das lokale Login bleibt in jedem Fall als Notfallzugang bestehen. Offen: die vom Anbieter ausgelöste Abmeldung sowie SAML für eIAM | Vertraulichkeit | M-01 (AuthN am Proxy), M-06, M-07, ADR-0197, M12 | **gelb**, grün für Installationen mit konfiguriertem Anbieter und eingeschalteter Abbildung |
 | R-04 | **Verbleibende Lücken der Objekt- und Aktionsautorisierung.** Endpoint-Rollen und Worker-Freigaben bestehen (ADR-0209/0205), die Task-/Variablensichtbarkeit ist eingeschränkt (ADR-0275). ADR-0475 fügt Policy-Entscheide und Delegation hinzu, jedoch nur beim SharePoint-Worker. `service/shadow` erzwingt nichts und `service/enforce` ist auf Providerseite kooperativ. Übrige Instanz-Lesezugriffe, Provider-Credentials und Altrollen bleiben zu prüfen | Vertraulichkeit, Integrität | M-05, M-07, M-21, engste Providerrechte, Trennung der Umgebungen, Negativtests | **gelb**, bis der konkret eingesetzte Objekt-/Aktionsumfang und seine Providergrenzen abgenommen sind |
 | R-05 | **Keine umfassende Verschlüsselung ruhender Daten.** Vault-Secrets (ADR-0069/0070) und als persönlich deklarierte Prozessvariablen (ADR-0314) werden verschlüsselt. Nicht deklarierte Variablen, die sonstigen WAL-/State-Daten und Sidecars können im Klartext liegen; ein Dateisystemzugriff bleibt kritisch | Vertraulichkeit | M-04 (Datenträgerverschlüsselung, Dateirechte, Schlüsselverwaltung), M-18 (korrekte Personendatendeklaration) | **gelb**; grün nur nach installations-/schutzbedarfsbezogenem Nachweis |
@@ -755,12 +780,12 @@ mit dem ISBO BIT.
 
 | Nr. | Massnahme | Verantwortlichkeit | Umsetzung / Nachweis |
 |-----|-----------|--------------------|----------------------|
-| M-01 | Reverse Proxy mit TLS vorschalten (Atlas spricht Klartext-HTTP — das bleibt der Zweck des Proxys); Rate-Limiting und ⟨vorgelagerte Authentisierung⟩ nach Bedarf. Endpunktsperren sind seit ADR-0198 nur noch zusätzliche Absicherung, nicht mehr der Schutz selbst | ⟨Betrieb LE⟩ | Proxy-Konfiguration, Abnahmeprotokoll |
+| M-01 | **TLS-Topologie festlegen und prüfen:** `atlas serve --tls-cert/--tls-key` (TLS 1.3) **oder** TLS-Terminierung am Reverse Proxy (ADR-0191). Remote-HTTP ausschliessen; einen etwaigen HTTP-Hop Proxy→Atlas nur in geschützter Zone zulassen. Zertifikat, Schlüsselrechte (0600), Erneuerung, TLS-1.3-Clientkompatibilität, Health-Probes, externe URL und Portfreigaben prüfen. Reverse Proxy für Access-Log, Rate-Limiting und zusätzliche Kontrolle optional | ⟨Betrieb LE⟩ | Betriebsdiagramm, Startparameter, TLS-Handshake-/Negativtest, Erneuerungstest, Firewall-/Probe-Konfiguration |
 | M-02 | `--auth=false` **nicht** gesetzt (Standard ist an); Bootstrap-Passwort geändert und aus Konfiguration/Log entfernt | ⟨Betrieb LE⟩ | Konfigurationsprüfung, Startlog ohne `auth.disabled` |
 | M-03 | Vault-Schlüssel über `ATLAS_VAULT_KEY_FILE` bereitstellen; getrennte Aufbewahrung; Wiederherstellungsverfahren dokumentiert | ⟨Betrieb LE⟩ | Betriebshandbuch |
 | M-04 | Datenträgerverschlüsselung, Dateirechte (0750/0600), eigener Dienstbenutzer, systemd-Härtung bzw. Container-SecurityContext | ⟨Betrieb LE⟩ | Systemdokumentation |
 | M-05 | Getrennte Umgebungen (DEV/TEST/PROD); Deploy-Berechtigung auf einen definierten Kreis; Change-Verfahren für Modelländerungen | ⟨AV + Betrieb⟩ | Berechtigungskonzept, Change-Records |
-| M-06 | Anwendungslog mit `--log-format=json` an ⟨Log-Plattform/SIEM⟩ liefern (es trägt die `auth.*`-Sicherheitsspur); Access-Log am Proxy ergänzen; Alarme auf `auth.login_throttled`, `auth.denied`, `auth.disabled`, `checkpoint.failed`, `wal_compaction.failed`, `exporter.tick_failed`, `command.failed`, `auth.admin_seeded` | ⟨Betrieb LE⟩ | Monitoring-Konfiguration |
+| M-06 | Anwendungslog mit `--log-format=json` an ⟨Log-Plattform/SIEM⟩ liefern (enthält `auth.*`); bei Reverse Proxy HTTP-Access-Log dort führen, **ohne Proxy eine gleichwertige Ingress-/Zugriffsprotokollierung sicherstellen und deren Grenzen dokumentieren** (atlas selbst liefert kein vollständiges HTTP-Access-Log). Alarme auf `auth.login_throttled`, `auth.denied`, `auth.disabled`, `checkpoint.failed`, `wal_compaction.failed`, `exporter.tick_failed`, `command.failed`, `auth.admin_seeded` | ⟨Betrieb LE⟩ | SIEM-Anbindung und Nachweis der Ingress-Protokollierung |
 | M-07 | Benutzer-/Berechtigungslebenszyklus: Eintritt, Mutation, Austritt (`Disabled`), jährliche Rezertifizierung | ⟨AV⟩ | Rezertifizierungsprotokoll (Kap. 8.3) |
 | M-08 | Aufbewahrung/Löschung konfigurieren: `--retention-max-age` bzw. `atlas:historyTtl`, Checkpointing **und** `--compact-wal`, OpenSearch-Retention, Backup-Fristen, ⟨Proxy-Logfristen⟩ | ⟨AV + Betrieb⟩ | Konfiguration, Löschnachweis |
 | M-18 | Personendaten deklarieren und löschbar halten (ADR-0314): in jedem Prozess, der Personendaten führt, `atlas:personal` und `atlas:dataSubject` setzen; die Kennung der betroffenen Person als `atlas:searchable` deklarieren, damit deren laufende Instanzen vor einer Löschung gefunden werden; Vault-Schlüssel sichern (siehe M-03 — der Verlust des Master-Schlüssels ist damit Verlust von Geschäftsdaten, nicht nur von Zugangsdaten); Löschbegehren über `DELETE /api/v1/personal-data/{subject}` ausführen — die Route schreibt den Nachweis selbst in den Audit-Trail (`event=personal_data.erased`, mit Betroffener und Handelnder), und dieser Eintrag ist der **einzige** verbleibende Nachweis, weil der Schlüssel danach fehlt und die Betroffene keine andere Spur hinterlässt; Audit-Log entsprechend aufbewahren | ⟨AV + Modellierung⟩ | Deklaration im Modell, Audit-Eintrag je Löschung |
