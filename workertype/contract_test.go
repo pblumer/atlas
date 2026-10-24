@@ -66,8 +66,12 @@ func TestTechnicalContractValidationRejectsInvalidSemantics(t *testing.T) {
 		{"input missing", func(c *TechnicalContract) { c.Spec.InputSchema = nil }, "inputSchema"},
 		{"input malformed", func(c *TechnicalContract) { c.Spec.InputSchema = json.RawMessage(`{"$schema":`) }, "inputSchema"},
 		{"input dialect", func(c *TechnicalContract) { c.Spec.InputSchema = json.RawMessage(`{"type":"object"}`) }, "inputSchema"},
-		{"output root", func(c *TechnicalContract) { c.Spec.OutputSchema = json.RawMessage(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"integer"}`) }, "outputSchema"},
-		{"external reference", func(c *TechnicalContract) { c.Spec.InputSchema = json.RawMessage(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"id":{"$ref":"https://evil.example/schema.json"}}}`) }, "$ref"},
+		{"output root", func(c *TechnicalContract) {
+			c.Spec.OutputSchema = json.RawMessage(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"integer"}`)
+		}, "outputSchema"},
+		{"external reference", func(c *TechnicalContract) {
+			c.Spec.InputSchema = json.RawMessage(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"id":{"$ref":"https://evil.example/schema.json"}}}`)
+		}, "$ref"},
 		{"idempotency", func(c *TechnicalContract) { c.Spec.Idempotency = "exactly-once" }, "idempotency"},
 		{"consistency", func(c *TechnicalContract) { c.Spec.Consistency = "magic" }, "consistency"},
 		{"pagination", func(c *TechnicalContract) { c.Spec.Pagination = "all-at-once" }, "pagination"},
