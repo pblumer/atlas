@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/pblumer/atlas/compiler"
@@ -141,6 +142,11 @@ type Processor struct {
 	arrivalBuf []Arrival
 	joinSetBuf []Arrival
 	fatalErr   error
+
+	// halted is set, once and for good, when a batch could not be made durable; see
+	// ErrHalted. Atomic because it is the one piece of processor state read from
+	// outside the writer's goroutine.
+	halted atomic.Pointer[haltedError]
 
 	// tokenSteps counts, per token, how many element activations it has driven in the
 	// current run — the execution budget (ADR-0272). It is
@@ -1068,6 +1074,9 @@ func (p *Processor) scheduleConditionRechecks() {
 }
 
 func (p *Processor) processBatch() error {
+	if h := p.halted.Load(); h != nil {
+		return h
+	}
 	p.batchRecords = p.batchRecords[:0]
 	p.followups = p.followups[:0]
 	p.sideEffects = p.sideEffects[:0]
@@ -1119,6 +1128,10 @@ func (p *Processor) processBatch() error {
 		rec := model.Record{Header: er.header, Value: er.value.asValue(er.header.ValueType)}
 		p.encBuf = model.AppendRecord(p.encBuf[:0], &rec)
 		if err := p.log.Append(p.encBuf); err != nil {
+			// A record the log refuses to stage (an oversized one) is not a disk
+			// failure, so it does not halt the engine — but the records staged before
+			// it must not ride along with the next batch.
+			p.log.Discard()
 			tx.Close()
 			return err
 		}
@@ -1132,6 +1145,7 @@ func (p *Processor) processBatch() error {
 	p.buildNextQueue(n)
 	p.contBuf = encodeContinuation(p.contBuf[:0], p.queueScratch)
 	if err := p.log.AppendContinuation(p.contBuf); err != nil {
+		p.log.Discard()
 		tx.Close()
 		return err
 	}
@@ -1146,7 +1160,7 @@ func (p *Processor) processBatch() error {
 			p.metrics.SyncFailed()
 		}
 		tx.Close()
-		return err
+		return p.halt(err)
 	}
 	if p.metrics != nil {
 		syncSeconds = time.Since(started).Seconds()
@@ -1155,16 +1169,19 @@ func (p *Processor) processBatch() error {
 
 	// Phase 3: make state visible, recording the applied position atomically.
 	lastPos := p.batchRecords[len(p.batchRecords)-1].header.Position
+	// From here on the batch is in the log, so a failure leaves the state store behind
+	// it. Recovery replays the store forward from its applied position; carrying on
+	// instead would process the same commands again and log their events twice.
 	if err := tx.SetLastAppliedPosition(lastPos); err != nil {
 		tx.Close()
-		return err
+		return p.halt(err)
 	}
 	if err := tx.Commit(); err != nil {
 		if p.metrics != nil {
 			p.metrics.CommitFailed()
 		}
 		tx.Close()
-		return err
+		return p.halt(err)
 	}
 	tx.Close()
 	if p.metrics != nil {

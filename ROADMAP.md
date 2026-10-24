@@ -1116,6 +1116,16 @@ What it takes to run this for real.
   compacted log. `GET`/`POST /api/v1/checkpoints` expose the status — published
   checkpoints and whether they still verify, the last pass, the WAL's footprint — and a
   checkpoint-now control for a planned restart. **ADR-0131 is complete.**
+- ✅ A full disk neither loses data nor stops the server from restarting
+  ([ADR-draft-storage-guard](docs/adr/draft-storage-guard.md)). The dashboard shows an
+  administrator each file system the server writes to, the reserve, what the WAL and the
+  state store hold, and a forecast smoothed over about six hours; `GET /api/v1/storage`,
+  the `atlas_storage` MCP tool and `atlas_storage_*` on `/metrics` report the same reading.
+  Below the reserve (`--storage-reserve-mb`, default 1 GiB) writes are refused with 507
+  before they reach the engine and background work pauses, resuming by itself once space is
+  back. Underneath, a WAL write cut short is cut off again, and the engine halts after a
+  batch it could not make durable instead of running refused commands later. Open: whether
+  1 GiB covers a large store's compaction output (the record's open question)
 - ✅ Exported-log stream for downstream analytics: the OpenSearch exporter ([ADR-0114](docs/adr/0114-opensearch-event-exporter.md)) and the CloudEvents feed, pushed to a receiver ([ADR-0433](docs/adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md))
 - ✅ **Instance migration**
   ([ADR-0162](docs/adr/0162-process-instance-migration.md)): move running
