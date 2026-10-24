@@ -1,4 +1,4 @@
-# ADR-DRAFT: Paperless-ngx Worker with reference-only document handling
+# ADR-0479: Paperless-ngx Worker with reference-only document handling
 
 - **Status:** Proposed
 - **Implementation:** Not started

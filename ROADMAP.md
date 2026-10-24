@@ -636,7 +636,7 @@ The control-flow basics most real models use.
   Sheets bundle with the Workspace user it acts as. Still open: a run against a real
   account (the record's open question), and a form-lookup provider so a person picks a
   customer in a task form ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
-  **Proposed: Paperless-ngx Worker** ([ADR draft](docs/adr/draft-paperless-ngx-worker.md)):
+  **Proposed: Paperless-ngx Worker** ([ADR draft](docs/adr/0479-paperless-ngx-worker.md)):
   reference-only document search, authenticated presentation, safe metadata operations
   and retry-safe `add-correspondent` (lookup/create with conflict recovery) before a
   separately designed streamed upload path. OCR text and document bytes must
