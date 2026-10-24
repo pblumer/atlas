@@ -25,7 +25,7 @@ import (
 // shared installation every operator can read it. What it does not receive cannot leak.
 //
 // Three operations hand an attachment's content on, and each says so in the model
-// (ADR-draft-mail-documents-leave-the-mailbox): get-attachment reads one into a
+// (ADR-0478): get-attachment reads one into a
 // variable under the variable's own budget, export-attachment carries one into an
 // object store without the engine ever holding it, and forward sends the whole message
 // on. Every document that leaves through one of them is inspected first (inspect.go).
@@ -41,7 +41,7 @@ const (
 	OpMarkUnread = "mark-unread"
 	OpDelete     = "delete"
 	OpReply      = "reply"
-	// The three that hand a document on (ADR-draft-mail-documents-leave-the-mailbox).
+	// The three that hand a document on (ADR-0478).
 	OpForward          = "forward"
 	OpGetAttachment    = "get-attachment"
 	OpExportAttachment = "export-attachment"

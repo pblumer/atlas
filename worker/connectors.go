@@ -234,7 +234,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			}
 			built.Names = append(built.Names, names...)
 			// The S3 Workers this host holds, when it holds any, are where an
-			// export-attachment puts its document (ADR-draft-mail-documents-leave-the-mailbox).
+			// export-attachment puts its document (ADR-0478).
 			// They are read from the same variables the s3 kind reads, and are not
 			// reported as names this worker serves: holding an identity to export into
 			// is not leasing S3 tasks.
@@ -687,7 +687,7 @@ func mailRegistryFromEnv(env func(string) string) (*mail.Registry, []string, err
 }
 
 // mailStoresEnv names the S3 Workers a mail worker holds to export attachments into
-// (ADR-draft-mail-documents-leave-the-mailbox). A supervising engine renders it with
+// (ADR-0478). A supervising engine renders it with
 // exactly the stores its deployed models export into.
 const mailStoresEnv = mailEnvPrefix + "STORES"
 

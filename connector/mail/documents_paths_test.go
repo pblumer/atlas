@@ -10,7 +10,7 @@ import (
 )
 
 // The edges of reading documents out of a raw message, framing a forward from one, and
-// judging what the bytes are (ADR-draft-mail-documents-leave-the-mailbox).
+// judging what the bytes are (ADR-0478).
 
 func TestRawDocumentsReadsEachEncodingAndRefusesWhatDoesNotDecode(t *testing.T) {
 	raw := "From: a@example.com\r\n" +

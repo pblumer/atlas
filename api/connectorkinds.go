@@ -85,7 +85,7 @@ type createConnectorParams struct {
 	// (ADR-0438); cleared for every other kind.
 	MailboxEndpoint string `json:"mailboxEndpoint"`
 	// Scanner is a mail Worker's malware scanner
-	// (ADR-draft-mail-documents-leave-the-mailbox); cleared for every other kind.
+	// (ADR-0478); cleared for every other kind.
 	Scanner string `json:"scanner"`
 	Enabled *bool  `json:"enabled"`
 	// ConnectionString is a SQL worker's whole configuration, sealed into the vault

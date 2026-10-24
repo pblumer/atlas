@@ -912,7 +912,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		// makes the Worker a sender only again (ADR-0438).
 		MailboxEndpoint *string `json:"mailboxEndpoint"`
 		// Scanner is a mail Worker's malware scanner; "" removes it, which leaves only
-		// the built-in inspection (ADR-draft-mail-documents-leave-the-mailbox).
+		// the built-in inspection (ADR-0478).
 		Scanner *string `json:"scanner"`
 		Enabled *bool   `json:"enabled"`
 		// FormLookups opens the Worker to task forms' directory searches, or closes it

@@ -20,7 +20,7 @@ import (
 )
 
 // Inspecting a document before it leaves the mailbox
-// (ADR-draft-mail-documents-leave-the-mailbox).
+// (ADR-0478).
 //
 // Anybody on the internet can write to an address, so every attachment is untrusted
 // input written by a stranger — and the three operations that hand one on put it in

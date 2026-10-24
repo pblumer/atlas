@@ -593,7 +593,7 @@ func documentJSONLimit() int64 {
 }
 
 // apiJSONLimit is apiJSON with the answer bounded by limit instead of the payload
-// budget — for the answers that carry a document (ADR-draft-mail-documents-leave-the-mailbox).
+// budget — for the answers that carry a document (ADR-0478).
 func apiJSONLimit(ctx context.Context, httpc *http.Client, tokens TokenSource, method, endpoint, prefer string, in, out any, limit int64, what string) error {
 	tok, err := tokens.Token(ctx)
 	if err != nil {

@@ -50,7 +50,7 @@ type ProviderConfig struct {
 	Mailbox string
 	// Scanner is the malware scanner every document this Worker hands on is scanned by
 	// ("clamd://host:3310"); "" scans nothing beyond the built-in inspection
-	// (ADR-draft-mail-documents-leave-the-mailbox). It belongs to the Worker rather than
+	// (ADR-0478). It belongs to the Worker rather than
 	// to a provider, so every provider takes it.
 	Scanner string
 }

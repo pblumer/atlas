@@ -338,7 +338,7 @@ stood. An administrator passes, because an administrator reaches every Worker.
 
 ## Amendment (2026-10-23): three operations hand a document on
 
-[ADR-draft-mail-documents-leave-the-mailbox](draft-mail-documents-leave-the-mailbox.md) adds
+[ADR-0478](0478-mail-documents-leave-the-mailbox.md) adds
 `forward`, `get-attachment` and `export-attachment`. The rule above — attachment content is
 never included — still holds for the watch and for every operation this record decided; it
 no longer holds for `get-attachment`, which puts one document into one variable, bounded by

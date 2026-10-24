@@ -563,6 +563,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0475](0475-identity-aware-worker-execution.md) | Identity-aware Worker execution and policy-based authorization | Proposed | Partial |
 | [0476](0476-google-contacts-worker.md) | A Google Contacts Worker Type — a process finds, keeps and labels the people it works with | Accepted | Landed |
 | [0477](0477-last-login-day.md) | The roster says on which day an account last signed in | Accepted | Landed |
+| [0478](0478-mail-documents-leave-the-mailbox.md) | A mail's documents leave the mailbox — forward, get-attachment, export-attachment, and what inspects them first | Accepted | Landed |
 
 ## The two states of a record
 

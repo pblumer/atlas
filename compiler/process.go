@@ -602,7 +602,7 @@ type ConnectorTaskDetail struct {
 	MailMaxResults  int32
 	MailIncludeBody bool
 	MailUnreadOnly  bool
-	// The documents half (ADR-draft-mail-documents-leave-the-mailbox). MailAttachment is
+	// The documents half (ADR-0478). MailAttachment is
 	// the attachment get-attachment and export-attachment address, literal-or-FEEL;
 	// MailAllowedTypes the media types the task accepts, normalized here (I5); MailStore
 	// the S3 Worker an export puts the document into — a literal name, so the deploy
@@ -2359,7 +2359,7 @@ type MailboxUse struct {
 	Operation string
 	// Store is the S3 Worker an export-attachment writes into, "" for every other
 	// operation: a second Worker the task uses, and so a second one the deployer must
-	// be able to reach (ADR-draft-mail-documents-leave-the-mailbox).
+	// be able to reach (ADR-0478).
 	Store string
 }
 

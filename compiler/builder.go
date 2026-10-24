@@ -1852,7 +1852,7 @@ type MailConfig struct {
 	IncludeBody bool
 	UnreadOnly  bool
 	ResultVar   string
-	// The documents half (ADR-draft-mail-documents-leave-the-mailbox): the attachment an
+	// The documents half (ADR-0478): the attachment an
 	// operation addresses, the media types it accepts, and for an export the S3 Worker,
 	// bucket and key the document goes to.
 	Attachment   RestExpr

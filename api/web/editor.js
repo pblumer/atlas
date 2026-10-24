@@ -4402,7 +4402,7 @@ const SERVICE_TASK_KINDS = [
           { v: "mark-unread", l: "Mark as unread" },
           { v: "delete", l: "Delete message (to the trash)" },
           { v: "reply", l: "Reply to message" },
-          // The three that hand a document on (ADR-draft-mail-documents-leave-the-mailbox).
+          // The three that hand a document on (ADR-0478).
           { v: "forward", l: "Forward message (with its attachments)" },
           { v: "get-attachment", l: "Read attachment into a variable" },
           { v: "export-attachment", l: "Export attachment to an S3 Worker" },

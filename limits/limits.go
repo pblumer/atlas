@@ -107,7 +107,7 @@ type Limits struct {
 
 	// Document is one document a Worker carries between two outside systems without it
 	// ever becoming a variable: a mail attachment exported into an object store, a
-	// whole message read to be forwarded (ADR-draft-mail-documents-leave-the-mailbox).
+	// whole message read to be forwarded (ADR-0478).
 	// It is held in a Worker Instance's memory, never in the engine's, and it is
 	// larger than Payload because what it bounds is a person's document rather than
 	// an API's answer — 35 MiB is the largest message Exchange Online accepts by

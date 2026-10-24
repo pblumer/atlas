@@ -192,7 +192,7 @@ func TestAnOpenServerChecksNoMailbox(t *testing.T) {
 }
 
 // An export-attachment writes into a second Worker
-// (ADR-draft-mail-documents-leave-the-mailbox): the deployer must be able to read
+// (ADR-0478): the deployer must be able to read
 // the mailbox *and* write into the S3 Worker, or a bucket private in the Console
 // would be writable by anybody who can draw an export.
 func TestAnExportNeedsTheStoreAsWellAsTheMailbox(t *testing.T) {

@@ -123,7 +123,7 @@ func TestMailOperationsListIsSorted(t *testing.T) {
 }
 
 // The three operations that hand a document on
-// (ADR-draft-mail-documents-leave-the-mailbox).
+// (ADR-0478).
 func TestMailDocumentOperationsCompile(t *testing.T) {
 	cp, d := mailDetail(t, `connector="m" operation="forward" messageId="=mail.messageId" to="=approver" cc="c@x.ch" body="Zur Ablage"`)
 	if d.MailOp != "forward" || d.To.Expr == nil || d.Cc.Literal != "c@x.ch" || d.Body.Literal != "Zur Ablage" || d.ResultVar != -1 {

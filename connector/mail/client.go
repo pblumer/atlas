@@ -61,7 +61,7 @@ type Message struct {
 	InReplyTo  string
 	References string
 	// Raw, when set, is the whole message already framed — a forward an IMAP mailbox
-	// built from the original (ADR-draft-mail-documents-leave-the-mailbox) — and is
+	// built from the original (ADR-0478) — and is
 	// submitted as it is, to the envelope To, Cc and Bcc make. Only the SMTP transport
 	// is ever handed one: it is the one an IMAP mailbox sends through.
 	Raw []byte

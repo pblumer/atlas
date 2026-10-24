@@ -34,7 +34,7 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, dir Direct
 }
 
 // HandlerWith is [Handler] with the object stores an export-attachment may put a
-// document into (ADR-draft-mail-documents-leave-the-mailbox); nil holds none.
+// document into (ADR-0478); nil holds none.
 func HandlerWith(store state.Reader, lookup ProcessLookup, reg *Registry, dir Directory, docs DocumentStore) job.OutputHandler {
 	return func(j job.Job) ([]model.VariableValue, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)

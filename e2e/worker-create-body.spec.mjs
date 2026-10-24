@@ -153,7 +153,7 @@ test("a Gmail create carries no IMAP endpoint, even with one left in the hidden 
 
 // A mail Worker's malware scanner travels with its create; a preview Worker hands no
 // attachment on, so a value left in the field stays behind
-// (ADR-draft-mail-documents-leave-the-mailbox).
+// (ADR-0478).
 test("a mail create carries its scanner, and a preview create does not", async ({ page }) => {
   const body = await build(page, {
     kind: "mail", name: "desk", endpoint: "smtp.example.com:587", sender: "desk@example.com",

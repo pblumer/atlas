@@ -57,7 +57,7 @@ export function workerCreateBody(form) {
     if (mailbox) body.mailboxEndpoint = mailbox;
   }
   // The malware scanner every attachment the Worker hands on is scanned by
-  // (ADR-draft-mail-documents-leave-the-mailbox).
+  // (ADR-0478).
   if (workerShape(body.kind, body.provider).scanner) {
     const scanner = get("scanner");
     if (scanner) body.scanner = scanner;
@@ -172,7 +172,7 @@ export function workerShape(kind, provider) {
     // API they send with; preview has no mailbox at all.
     mailbox: mail && !native && !preview,
     // Every mail Worker that has a mailbox can name a malware scanner; the attachments
-    // it hands on are scanned by it first (ADR-draft-mail-documents-leave-the-mailbox).
+    // it hands on are scanned by it first (ADR-0478).
     // Preview has no mailbox and hands nothing on.
     scanner: mail && !preview,
     // The example for this product's connection string, empty for a kind that has

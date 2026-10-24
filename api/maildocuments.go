@@ -12,7 +12,7 @@ import (
 )
 
 // serverDocuments is where an export-attachment run inside this server puts its
-// document: the S3 Workers this server holds (ADR-draft-mail-documents-leave-the-mailbox).
+// document: the S3 Workers this server holds (ADR-0478).
 //
 // It reads s.s3Registry at call time rather than capturing it when the mail handler is
 // registered, because the two kinds are set up one after the other and a rebuild

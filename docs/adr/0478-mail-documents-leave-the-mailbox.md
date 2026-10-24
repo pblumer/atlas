@@ -1,4 +1,4 @@
-# ADR-DRAFT: A mail's documents leave the mailbox — forward, get-attachment, export-attachment, and what inspects them first
+# ADR-0478: A mail's documents leave the mailbox — forward, get-attachment, export-attachment, and what inspects them first
 
 - **Status:** Accepted
 - **Implementation:** Landed

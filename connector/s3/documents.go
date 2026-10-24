@@ -12,7 +12,7 @@ import (
 )
 
 // A document another Worker hands to an S3 Worker
-// (ADR-draft-mail-documents-leave-the-mailbox).
+// (ADR-0478).
 //
 // put-object writes what a process composed, through a variable, under the variable's
 // budget. A mail attachment exported by the mail Worker never was a variable: it goes

@@ -1420,7 +1420,7 @@ type mailOp struct {
 	message, destination     bool
 	needsResult, takesResult bool
 	// forward, attachment and export are the operations that hand a document on
-	// (ADR-draft-mail-documents-leave-the-mailbox).
+	// (ADR-0478).
 	forward, attachment, export bool
 }
 

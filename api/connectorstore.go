@@ -145,7 +145,7 @@ type configuredWorker struct {
 	// attachment the Worker hands on — forwarded, read into a variable, exported into a
 	// store — is scanned by it first, and a scanner that does not answer stops the task
 	// rather than letting the document through
-	// (ADR-draft-mail-documents-leave-the-mailbox). Empty scans nothing beyond the
+	// (ADR-0478). Empty scans nothing beyond the
 	// built-in inspection.
 	Scanner string `json:"scanner,omitempty"`
 

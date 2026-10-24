@@ -59,7 +59,7 @@ governs a Worker:
   of the mail Worker, and an export also only for editors of the S3 Worker it names; a
   supervised mail worker is handed exactly the S3 Workers its deployed models export into.
   A document is bounded by a new budget, `ATLAS_LIMIT_DOCUMENT` (35 MiB)
-  ([ADR-draft-mail-documents-leave-the-mailbox](docs/adr/draft-mail-documents-leave-the-mailbox.md)).
+  ([ADR-0478](docs/adr/0478-mail-documents-leave-the-mailbox.md)).
 - **Attachments are inspected before they leave the mailbox, and a mail Worker can name a
   malware scanner.** Every document the three operations hand on is judged from its
   content, never its name: programs and scripts under any name, shortcuts and disk images,

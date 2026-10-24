@@ -90,7 +90,7 @@ func (s *Server) mailboxUseBlockingModel(r *http.Request, body []byte) (*mailbox
 		}
 		// An export writes into a second Worker, so the deployer must be able to write
 		// through that one too — as an editor, the role that changes what a Worker
-		// holds (ADR-draft-mail-documents-leave-the-mailbox). Without this a bucket
+		// holds (ADR-0478). Without this a bucket
 		// private in the Console would be writable by anybody who can draw an export.
 		if u.Store == "" {
 			continue

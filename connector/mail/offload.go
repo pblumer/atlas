@@ -72,7 +72,7 @@ type Job struct {
 	IncludeBody    bool   `json:"includeBody,omitempty"`
 	UnreadOnly     bool   `json:"unreadOnly,omitempty"`
 	ResultVariable string `json:"resultVariable,omitempty"`
-	// The documents half (ADR-draft-mail-documents-leave-the-mailbox). Attachment is the
+	// The documents half (ADR-0478). Attachment is the
 	// attachment get-attachment and export-attachment address, by the id the envelope
 	// listed it under; AllowedTypes the media types the task accepts, empty for any the
 	// inspection admits. Store, Bucket and Key are where export-attachment puts the

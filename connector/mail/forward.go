@@ -15,7 +15,7 @@ import (
 )
 
 // Forwarding a message a provider hands over raw (IMAP, Gmail), and finding the
-// documents inside one (ADR-draft-mail-documents-leave-the-mailbox).
+// documents inside one (ADR-0478).
 //
 // Graph forwards server-side; IMAP and Gmail cannot, so the forward is framed here. It
 // is the original message's own body entity — every part and attachment exactly as

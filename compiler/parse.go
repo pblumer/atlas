@@ -2826,7 +2826,7 @@ type xmlMailConnector struct {
 	IncludeBody    string `xml:"includeBody,attr"`
 	UnreadOnly     string `xml:"unreadOnly,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
-	// The operations that hand a document on (ADR-draft-mail-documents-leave-the-mailbox):
+	// The operations that hand a document on (ADR-0478):
 	// attachmentId addresses an attachment by the id the envelope listed it under, and
 	// allowedTypes narrows the media types the task accepts; store names the S3 Worker
 	// export-attachment puts the document into, and bucket and key where in it.

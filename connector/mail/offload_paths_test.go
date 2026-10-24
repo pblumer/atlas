@@ -126,7 +126,7 @@ func TestResolveWithoutADetailIsRefused(t *testing.T) {
 
 // TestAForwardResolvesItsRecipientsLikeASend: a forward addresses people the way a
 // send does, so a reference becomes its addresses at the moment the forward goes out
-// (ADR-draft-mail-documents-leave-the-mailbox).
+// (ADR-0478).
 func TestAForwardResolvesItsRecipientsLikeASend(t *testing.T) {
 	dir := mapDirectory{known: map[string][]string{"grp_ablage": {"ablage@example.ch", "archiv@example.ch"}}}
 	j, err := resolveMail(t, dir, compiler.MailConfig{

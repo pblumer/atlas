@@ -146,7 +146,7 @@ func mailConnectorEnv(key string, c connector, secret string) []string {
 	}
 	// The malware scanner, when the Worker names one: a Worker Instance handing an
 	// attachment on must scan it exactly as the engine would have
-	// (ADR-draft-mail-documents-leave-the-mailbox).
+	// (ADR-0478).
 	if sc := strings.TrimSpace(c.Scanner); sc != "" {
 		env = append(env, p+"SCANNER="+sc)
 	}

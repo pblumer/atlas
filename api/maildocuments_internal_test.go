@@ -26,7 +26,7 @@ const exportBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 
 // A supervised mail worker is handed its scanner, and the S3 identities the deployed
 // models export attachments into — those and no others, because an access key is the
-// whole of a Worker's authority over a bucket (ADR-draft-mail-documents-leave-the-mailbox).
+// whole of a Worker's authority over a bucket (ADR-0478).
 func TestASupervisedMailWorkerHoldsTheStoresItsModelsExportInto(t *testing.T) {
 	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
 	if err := srv.connectors.Save(connector{

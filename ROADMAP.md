@@ -661,7 +661,7 @@ The control-flow basics most real models use.
   installation's other operators; IMAP `XOAUTH2`; push instead of polling (IMAP `IDLE`,
   Graph change notifications).
   **A mail's documents leave the mailbox, inspected**
-  ([ADR-draft-mail-documents-leave-the-mailbox](docs/adr/draft-mail-documents-leave-the-mailbox.md)):
+  ([ADR-0478](docs/adr/0478-mail-documents-leave-the-mailbox.md)):
   `forward` sends a mail with its attachments to new recipients, `get-attachment` reads one
   attachment into a variable under the variable budget, and `export-attachment` carries one
   from the mailbox straight into a named S3 Worker, so a user task can open it through a

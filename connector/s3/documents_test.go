@@ -16,7 +16,7 @@ import (
 
 // A document another Worker hands over is bounded by the document budget, not by a
 // variable's: an exported attachment never was a variable
-// (ADR-draft-mail-documents-leave-the-mailbox).
+// (ADR-0478).
 func TestPutDocumentStoresMoreThanAVariableHolds(t *testing.T) {
 	var got []byte
 	var hdr http.Header

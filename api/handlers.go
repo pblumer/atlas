@@ -6811,7 +6811,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"destination": j.Destination, "maxResults": j.MaxResults,
 			"includeBody": j.IncludeBody, "unreadOnly": j.UnreadOnly,
 			"resultVariable": j.ResultVariable,
-			// The documents half (ADR-draft-mail-documents-leave-the-mailbox): which
+			// The documents half (ADR-0478): which
 			// attachment, which types the task accepts, and for an export the S3
 			// Worker's *name* and where in it — never its access key.
 			"attachment": j.Attachment, "allowedTypes": j.AllowedTypes,
