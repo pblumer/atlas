@@ -46,6 +46,7 @@ governs a Worker:
 
 ### Added
 
+- **Technical capabilities can be described with an independently versioned semantic contract.** A design-time JSON descriptor now records resource kind, identity scope, typed input/output schema roots, semantic errors, idempotency, consistency and pagination. Strict parsing rejects malformed contracts, duplicate identities and remote JSON Schema references. Sample account and contact contracts are tests, not proof of provider conformance; no Worker routing or policy enforcement changes ([ADR-draft-technical-capability-semantics](docs/adr/draft-technical-capability-semantics.md)).
 - **Worker Type operations can declare versioned technical capabilities.** A Worker Type manifest can now attach optional `capabilities` metadata (namespaced ID, semantic contract version and provider profile) to an operation. Invalid and duplicate claims are rejected at admission; existing manifests and runtime routing remain unchanged. These are descriptive claims, not a statement of cross-provider equivalence or an authorization grant ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
 - **A mail task forwards a message, reads an attachment, or exports one into an S3 Worker.**
   Three new mail operations hand a mail's document on. **Forward message** sends the mail
