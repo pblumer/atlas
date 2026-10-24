@@ -56,6 +56,12 @@ export function workerCreateBody(form) {
     const mailbox = get("mailboxEndpoint");
     if (mailbox) body.mailboxEndpoint = mailbox;
   }
+  // The malware scanner every attachment the Worker hands on is scanned by
+  // (ADR-draft-mail-documents-leave-the-mailbox).
+  if (workerShape(body.kind, body.provider).scanner) {
+    const scanner = get("scanner");
+    if (scanner) body.scanner = scanner;
+  }
   // An agent's provider is its wire format, and its model is the one piece of a
   // Worker's configuration that is neither endpoint nor credential
   // (ADR-0255).
@@ -165,6 +171,10 @@ export function workerShape(kind, provider) {
     // mailbox it sends from (ADR-0438). Gmail and Graph read through the
     // API they send with; preview has no mailbox at all.
     mailbox: mail && !native && !preview,
+    // Every mail Worker that has a mailbox can name a malware scanner; the attachments
+    // it hands on are scanned by it first (ADR-draft-mail-documents-leave-the-mailbox).
+    // Preview has no mailbox and hands nothing on.
+    scanner: mail && !preview,
     // The example for this product's connection string, empty for a kind that has
     // none. Both the create form and the edit dialog read it from here, so the two
     // cannot disagree about what a SQL Server DSN looks like.
@@ -379,6 +389,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
             <label class="field conn-f-endpoint" style="flex:1 1 220px"><span class="conn-endpoint-label">Endpoint</span><input id="conn-endpoint" value="${esc(c.endpoint || "")}"/></label>
             <label class="field conn-f-sender" style="flex:1 1 200px"><span>Sender</span><input id="conn-sender" value="${esc(c.sender || "")}" placeholder="bot@example.com"/></label>
             <label class="field conn-f-mailbox" style="flex:1 1 220px"><span>IMAP endpoint (optional)</span><input id="conn-mailbox" value="${esc(c.mailboxEndpoint || "")}" placeholder="imaps://imap.example.com:993"/></label>
+            <label class="field conn-f-scanner" style="flex:1 1 220px" title="Every attachment this Worker forwards, reads into a variable or exports into a store is scanned by this ClamAV daemon first. A scanner that does not answer stops the task rather than letting the attachment through."><span>Malware scanner (optional)</span><input id="conn-scanner" value="${esc(c.scanner || "")}" placeholder="clamd://clamav.internal:3310"/></label>
             <label class="field conn-f-model" style="flex:1 1 200px"><span>Default model</span><input id="conn-model" value="${esc(c.model || "")}" title="What a task that names no model of its own asks. A task or an agent container may name one, and then that one runs."/></label>
             <label class="field conn-f-credref" style="flex:1 1 200px"><span class="conn-credref-label">Token reference</span><input id="conn-credref" value="${esc(c.credentialsRef || "")}"/></label>
             <label class="field conn-f-connstr" style="flex:1 1 100%"><span>Connection string</span><input id="conn-connstr" type="password" autocomplete="new-password"/></label>
@@ -402,6 +413,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
     const endpointIn = ov.querySelector("#conn-endpoint");
     const senderIn = ov.querySelector("#conn-sender");
     const mailboxIn = ov.querySelector("#conn-mailbox");
+    const scannerIn = ov.querySelector("#conn-scanner");
     const modelIn = ov.querySelector("#conn-model");
     const credRefIn = ov.querySelector("#conn-credref");
     const connStrIn = ov.querySelector("#conn-connstr");
@@ -430,6 +442,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
       show(".conn-f-endpoint", sh.endpoint);
       show(".conn-f-sender", sh.sender);
       show(".conn-f-mailbox", sh.mailbox);
+      show(".conn-f-scanner", sh.scanner);
       show(".conn-f-credref", sh.credRef !== "none");
       // Two fields the edit dialog has no business showing. The name is the heading
       // when it is fixed and already stored; on a create it is what the operator is
@@ -494,6 +507,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
       if (sh.endpoint) f.set("endpoint", endpointIn.value.trim());
       if (sh.sender) f.set("sender", senderIn.value.trim());
       if (sh.mailbox) f.set("mailboxEndpoint", mailboxIn.value.trim());
+      if (sh.scanner) f.set("scanner", scannerIn.value.trim());
       if (sh.model) f.set("model", modelIn.value.trim());
       if (sh.credRef !== "none") f.set("credentialsRef", credRefIn.value.trim());
       if (sh.sql) f.set("connectionString", connStrIn.value.trim());
@@ -524,6 +538,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
         // The IMAP endpoint is SMTP's alone. Hidden for any other provider, it is left
         // out like every hidden field; the server clears it when the provider changes.
         if (sh.mailbox) patch.mailboxEndpoint = mailboxIn.value.trim();
+        if (sh.scanner) patch.scanner = scannerIn.value.trim();
       }
       if (sh.model) {
         patch.provider = providerSel.value;

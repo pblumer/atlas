@@ -919,6 +919,7 @@ away.
 | `ATLAS_LIMIT_GENERATED` | 2 MiB | A document this server produced or renders back |
 | `ATLAS_LIMIT_MODEL_UPLOAD` | 4 MiB | A BPMN, DMN or XOML document |
 | `ATLAS_LIMIT_PAYLOAD` | 8 MiB | The largest thing that travels in one piece: a model provider's answer, a script's output |
+| `ATLAS_LIMIT_DOCUMENT` | 35 MiB | One document a Worker carries between two outside systems without it becoming a variable — a mail attachment exported to an object store, a message read to be forwarded. Held in the Worker Instance's memory, never the engine's |
 | `ATLAS_LIMIT_DATA_UPLOAD` | 16 MiB | A CSV or a playground scenario |
 | `ATLAS_LIMIT_IMPORT` | 24 MiB | A document imported from another tool |
 | `ATLAS_LIMIT_APP_BUNDLE` | 32 MiB | An application's whole source or export |

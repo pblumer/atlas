@@ -4936,6 +4936,7 @@ function wireWorkerManagement(workers) {
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
         <label class="field mailbox-field" style="margin:0;flex:1 1 200px" title="Lets this Worker read the mailbox it sends from: a watch, or a task that lists, files or answers mail. Logs in as the sender, always over TLS."><span>IMAP endpoint (optional)</span><input name="mailboxEndpoint" placeholder="imaps://imap.example.com:993"/></label>
+        <label class="field scanner-field" style="margin:0;flex:1 1 200px" title="Every attachment this Worker forwards, reads into a variable or exports into a store is scanned by this ClamAV daemon first. A scanner that does not answer stops the task rather than letting the attachment through."><span>Malware scanner (optional)</span><input name="scanner" placeholder="clamd://clamav.internal:3310"/></label>
         <label class="field model-field" style="margin:0;flex:1 1 180px"><span>Default model</span><input name="model" title="What a step that names no model of its own asks. A task or an agent container may name one, and then that one runs (ADR-0256)."/></label>
         <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
@@ -4978,6 +4979,7 @@ function wireWorkerManagement(workers) {
         const sh = workerShape(kindSel.value, providerSel.value);
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = sh.mail ? "" : "none"; });
         form.querySelector(".mailbox-field").style.display = sh.mailbox ? "" : "none";
+        form.querySelector(".scanner-field").style.display = sh.scanner ? "" : "none";
         form.querySelector(".provider-field").style.display = sh.provider ? "" : "none";
         form.querySelector(".provider-label").textContent = sh.model ? "Wire format" : "Provider";
         const modelField = form.querySelector(".model-field");

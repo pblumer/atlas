@@ -30,6 +30,12 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // the job pending (retry, then an incident, ADR-0061); the runner completes it only
 // on success.
 func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, dir Directory) job.OutputHandler {
+	return HandlerWith(store, lookup, reg, dir, nil)
+}
+
+// HandlerWith is [Handler] with the object stores an export-attachment may put a
+// document into (ADR-draft-mail-documents-leave-the-mailbox); nil holds none.
+func HandlerWith(store state.Reader, lookup ProcessLookup, reg *Registry, dir Directory, docs DocumentStore) job.OutputHandler {
 	return func(j job.Job) ([]model.VariableValue, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
@@ -53,7 +59,7 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, dir Direct
 		if err != nil {
 			return nil, err
 		}
-		result, err := Run(context.Background(), resolved, reg)
+		result, err := RunWith(context.Background(), resolved, reg, docs)
 		if err != nil {
 			return nil, err
 		}

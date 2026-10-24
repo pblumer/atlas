@@ -282,6 +282,7 @@ func (s *Server) buildMailClients() (map[string]mail.Client, map[string]string, 
 			Name:     c.Name,
 			Outbox:   s.mailOutbox,
 			Mailbox:  strings.TrimSpace(c.MailboxEndpoint),
+			Scanner:  strings.TrimSpace(c.Scanner),
 		})
 		if err != nil {
 			// Misconfigured provider: its tasks park until it is fixed (ADR-0093) — and
@@ -754,6 +755,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	p.Sender = strings.TrimSpace(p.Sender)
 	p.Model = strings.TrimSpace(p.Model)
 	p.MailboxEndpoint = strings.TrimSpace(p.MailboxEndpoint)
+	p.Scanner = strings.TrimSpace(p.Scanner)
 	p.CredentialsRef = strings.TrimSpace(p.CredentialsRef)
 	if p.Name == "" {
 		httpapi.Error(w, http.StatusBadRequest, "worker name is required")
@@ -803,6 +805,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	}
 	if p.Kind != connectorKindMail {
 		p.MailboxEndpoint = "" // a mail-only field, cleared like Provider and Sender are
+		p.Scanner = ""
 	}
 	if p.FormLookups && !formLookupKind(p.Kind) {
 		httpapi.Error(w, http.StatusBadRequest, refuseFormLookups(p.Kind))
@@ -828,6 +831,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		CredentialsRef: p.CredentialsRef, Enabled: enabled,
 		Provider: p.Provider, Sender: p.Sender, Model: p.Model,
 		MailboxEndpoint: p.MailboxEndpoint,
+		Scanner:         p.Scanner,
 		FormLookups:     p.FormLookups,
 		CreatedAt:       time.Now().Unix(),
 		// Whoever made it owns it, and it starts private (ADR-0205). Private is the
@@ -907,7 +911,10 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		// MailboxEndpoint is an SMTP mail Worker's IMAP endpoint; "" removes it, which
 		// makes the Worker a sender only again (ADR-0438).
 		MailboxEndpoint *string `json:"mailboxEndpoint"`
-		Enabled         *bool   `json:"enabled"`
+		// Scanner is a mail Worker's malware scanner; "" removes it, which leaves only
+		// the built-in inspection (ADR-draft-mail-documents-leave-the-mailbox).
+		Scanner *string `json:"scanner"`
+		Enabled *bool   `json:"enabled"`
 		// FormLookups opens the Worker to task forms' directory searches, or closes it
 		// (ADR-0473). An editor's act, like the credential.
 		FormLookups *bool `json:"formLookups"`
@@ -965,6 +972,9 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		}
 		if p.MailboxEndpoint != nil {
 			rec.MailboxEndpoint = strings.TrimSpace(*p.MailboxEndpoint)
+		}
+		if p.Scanner != nil {
+			rec.Scanner = strings.TrimSpace(*p.Scanner)
 		}
 		if p.Enabled != nil {
 			rec.Enabled = *p.Enabled

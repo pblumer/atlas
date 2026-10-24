@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/limits"
 )
 
 // Gmail scopes the mailbox half asks for. Reading and changing are separate tokens on
@@ -402,6 +404,138 @@ func (m gmailMailbox) SetRead(ctx context.Context, id string, read bool) error {
 func (m gmailMailbox) Delete(ctx context.Context, id string) error {
 	u := m.base() + "/messages/" + url.PathEscape(strings.TrimSpace(id)) + "/trash"
 	return apiJSON(ctx, m.c.http, m.modify(), http.MethodPost, u, "", map[string]string{}, nil, "gmail trash")
+}
+
+// findPart is the part of a payload tree a part id names.
+func (p gmailPart) findPart(id string) (gmailPart, bool) {
+	if p.PartID == id {
+		return p, true
+	}
+	for _, c := range p.Parts {
+		if found, ok := c.findPart(id); ok {
+			return found, true
+		}
+	}
+	return gmailPart{}, false
+}
+
+// Attachment reads one attachment, addressed by its part id. The part's attachmentId is
+// read fresh from the message, because Gmail mints a new one on every read — the part
+// id is the address that lasts.
+func (m gmailMailbox) Attachment(ctx context.Context, id, attachmentID string) (Document, error) {
+	var g gmailMessage
+	u := m.base() + "/messages/" + url.PathEscape(strings.TrimSpace(id)) + "?format=full"
+	if err := apiJSON(ctx, m.c.http, m.read(), http.MethodGet, u, "", nil, &g, "gmail get message"); err != nil {
+		return Document{}, err
+	}
+	part, ok := g.Payload.findPart(strings.TrimSpace(attachmentID))
+	if !ok {
+		return Document{}, fmt.Errorf("mail: gmail: message %s has no part %q (use an attachment id the envelope listed)", id, attachmentID)
+	}
+	mp := part.toMIME()
+	name := mp.filename()
+	if name == "" {
+		name = "attachment"
+	}
+	limit := limits.Default().Document
+	if part.Body.Size > limit {
+		return Document{}, documentTooLarge(name, part.Body.Size, limit)
+	}
+	data := mp.Data
+	if data == nil && part.Body.AttachmentID != "" {
+		var a struct {
+			Data string `json:"data"`
+		}
+		au := m.base() + "/messages/" + url.PathEscape(g.ID) + "/attachments/" + url.PathEscape(part.Body.AttachmentID)
+		if err := apiJSONLimit(ctx, m.c.http, m.read(), http.MethodGet, au, "", nil, &a, documentJSONLimit(), "gmail get attachment"); err != nil {
+			return Document{}, err
+		}
+		var err error
+		if data, err = decodeBase64URL(a.Data); err != nil {
+			return Document{}, fmt.Errorf("mail: gmail: attachment %q does not decode: %w", name, err)
+		}
+	}
+	if int64(len(data)) > limit {
+		return Document{}, documentTooLarge(name, int64(len(data)), limit)
+	}
+	return Document{ID: part.PartID, Name: name, ContentType: mp.contentType(), Data: data}, nil
+}
+
+func decodeBase64URL(s string) ([]byte, error) {
+	if data, err := base64.URLEncoding.DecodeString(s); err == nil {
+		return data, nil
+	}
+	return base64.RawURLEncoding.DecodeString(s)
+}
+
+// raw reads a message as Gmail stores it, RFC 5322 whole.
+func (m gmailMailbox) raw(ctx context.Context, id string) ([]byte, string, error) {
+	var g struct {
+		Raw      string `json:"raw"`
+		ThreadID string `json:"threadId"`
+	}
+	u := m.base() + "/messages/" + url.PathEscape(strings.TrimSpace(id)) + "?format=raw"
+	if err := apiJSONLimit(ctx, m.c.http, m.read(), http.MethodGet, u, "", nil, &g, documentJSONLimit(), "gmail get raw message"); err != nil {
+		return nil, "", err
+	}
+	data, err := decodeBase64URL(g.Raw)
+	if err != nil {
+		return nil, "", fmt.Errorf("mail: gmail: message %s does not decode: %w", id, err)
+	}
+	if limit := limits.Default().Document; int64(len(data)) > limit {
+		return nil, "", fmt.Errorf("mail: gmail: message %s is %d bytes, more than the %d a Worker carries in one piece (ATLAS_LIMIT_DOCUMENT)", id, len(data), limit)
+	}
+	return data, g.ThreadID, nil
+}
+
+// Forward frames the forward from the raw message and sends it through Gmail's media
+// upload, which is the send Google documents for a message carrying attachments; the
+// metadata send the other operations use takes the message inside a JSON string.
+func (m gmailMailbox) Forward(ctx context.Context, id string, f Forward) error {
+	if len(f.To) == 0 {
+		return fmt.Errorf("mail: a forward needs a recipient")
+	}
+	from := firstNonEmpty(m.c.sender)
+	if from == "" {
+		return fmt.Errorf("mail: gmail: no sender configured to forward as")
+	}
+	raw, _, err := m.raw(ctx, id)
+	if err != nil {
+		return err
+	}
+	if f.Inspect != nil {
+		docs, err := rawDocuments(raw)
+		if err != nil {
+			return err
+		}
+		for _, d := range docs {
+			if err := f.Inspect(d); err != nil {
+				return err
+			}
+		}
+	}
+	msg, err := forwardMessage(raw, f, from)
+	if err != nil {
+		return err
+	}
+	// Bcc is the envelope, not a header: Gmail reads it from the message it is handed
+	// and strips it before delivery, which is the only way to give it one.
+	if len(f.Bcc) > 0 {
+		msg = append([]byte("Bcc: "+headerSafe(strings.Join(f.Bcc, ", "))+"\r\n"), msg...)
+	}
+	return apiUpload(ctx, m.c.http, m.c.tokens, m.uploadBase()+"/users/me/messages/send?uploadType=media", "message/rfc822", msg, "gmail forward")
+}
+
+// uploadBase is the API base with Google's /upload prefix, where media uploads go:
+// https://gmail.googleapis.com/upload/gmail/v1 for the default base.
+func (m gmailMailbox) uploadBase() string {
+	base := strings.TrimRight(m.c.baseURL, "/")
+	u, err := url.Parse(base)
+	if err != nil || u.Host == "" {
+		return base
+	}
+	u.Path = "/upload" + u.Path
+	return strings.TrimRight(u.String(), "/")
 }
 
 // Reply frames the reply like a send and posts it into the original's thread.

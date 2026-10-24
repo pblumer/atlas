@@ -139,6 +139,18 @@ type imapConn struct {
 	// preauth is a server that greeted the connection as already authenticated
 	// (RFC 3501 §7.1.4): a LOGIN there is a protocol error, not a login.
 	preauth bool
+	// maxLiteral, when set, replaces maxIMAPLiteral for this session: a fetch of a
+	// whole attachment or a whole message to forward asks for more than a header
+	// block ever needs, and only those sessions are allowed it.
+	maxLiteral int
+}
+
+// literalLimit is the largest literal this session accepts.
+func (ic *imapConn) literalLimit() int {
+	if ic.maxLiteral > 0 {
+		return ic.maxLiteral
+	}
+	return maxIMAPLiteral
 }
 
 // dialIMAP connects, secures the connection (implicit TLS or a mandatory STARTTLS)
@@ -583,8 +595,8 @@ func (ic *imapConn) readLiteral() (string, error) {
 	if err != nil {
 		return "", errors.New("malformed IMAP literal length")
 	}
-	if n > maxIMAPLiteral {
-		return "", fmt.Errorf("IMAP literal of %d bytes exceeds the %d-byte limit", n, maxIMAPLiteral)
+	if n > ic.literalLimit() {
+		return "", fmt.Errorf("IMAP literal of %d bytes exceeds the %d-byte limit", n, ic.literalLimit())
 	}
 	if c, err := ic.r.ReadByte(); err != nil || c != '\r' {
 		return "", errors.New("malformed IMAP literal")
