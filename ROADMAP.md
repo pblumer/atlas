@@ -2218,7 +2218,7 @@ the method and how to work it with Atlas as it stands are in
 
 - 🚧 **B11 — Technical capability contract, first slice.** Optional, versioned
   operation-level capability claims in the existing Worker Type manifest
-  ([ADR-draft-technical-capability-contract](docs/adr/draft-technical-capability-contract.md)).
+  ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
   This is metadata validated at admission, **not** a new integration-capability
   register or capability-based job routing. The first slice includes negative
   validation tests and legacy-manifest compatibility; built-in Worker Type

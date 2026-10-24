@@ -1,4 +1,4 @@
-# ADR-DRAFT: Technical capability claims on Worker Type operations
+# ADR-0480: Technical capability claims on Worker Type operations
 
 - **Status:** Proposed
 - **Implementation:** Partial

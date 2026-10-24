@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-24  
 **Scope:** Technical Capability Contract, technical-to-business traceability, and later authorized capability-aware routing.  
-**Governing draft:** [ADR-draft-technical-capability-contract](../adr/draft-technical-capability-contract.md)
+**Governing draft:** [ADR-0480](../adr/0480-technical-capability-contract.md)
 
 ## Goal
 
@@ -107,7 +107,7 @@ A modeled employee onboarding value stream names the `Identity management` busin
 
 ## Decisions still required
 
-1. **Accept or revise ADR-draft-technical-capability-contract.** Is the optional metadata shape sufficient for the first slice?
+1. **Accept or revise ADR-0480.** Is the optional metadata shape sufficient for the first slice?
 2. **Accept or revise ADR-0420.** Its graph identity and provenance contract must own technical capability nodes/edges.
 3. **Canonical contract ownership:** which repository/package maintains schemas and conformance evidence? Decide before T1.
 4. **Separate capability-based routing ADR:** required before T5; no implicit runtime decision from this plan.

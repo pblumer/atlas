@@ -8,7 +8,7 @@ import (
 // CapabilityClaim is a descriptive assertion that one Worker Type operation
 // offers a versioned technical capability. It is not evidence that another
 // operation is interchangeable, nor an authorization or routing permission.
-// See ADR-draft-technical-capability-contract.
+// See ADR-0480.
 type CapabilityClaim struct {
 	ID      string `json:"id"`
 	Version string `json:"version"`
