@@ -489,3 +489,30 @@ func TestARejectionReachesTheProcessThatCatchesIt(t *testing.T) {
 		t.Errorf("the handler ended with %v, want the BPMN error the boundary catches", thrown)
 	}
 }
+
+// TestADocumentOperationStopsAtTheFirstThingThatIsNotThere: an attachment id that
+// resolved to nothing, a mailbox that cannot read the attachment, a store that refuses
+// the put — each ends the task with its own reason and hands nothing on.
+func TestADocumentOperationStopsAtTheFirstThingThatIsNotThere(t *testing.T) {
+	ctx := context.Background()
+	_, err := mail.RunWith(ctx, mail.Job{Connector: "box", Operation: mail.OpGetAttachment, Target: "m1"}, registryWith(&mailboxClient{}), nil)
+	if err == nil || !strings.Contains(err.Error(), "attachmentId resolved to nothing") {
+		t.Errorf("no attachment id = %v", err)
+	}
+	gone := errors.New("message gone")
+	_, err = mail.RunWith(ctx, mail.Job{Connector: "box", Operation: mail.OpGetAttachment, Target: "m1", Attachment: "1"},
+		registryWith(&mailboxClient{fail: gone}), nil)
+	if !errors.Is(err, gone) {
+		t.Errorf("a mailbox that cannot read the attachment = %v", err)
+	}
+	refused := errors.New("bucket says no")
+	j := mail.Job{Connector: "box", Operation: mail.OpExportAttachment, Target: "m1", Attachment: "2", Store: "s", Bucket: "b", Key: "k"}
+	if _, err := mail.RunWith(ctx, j, registryWith(&mailboxClient{doc: pdfDoc}), &fakeDocuments{fail: refused}); !errors.Is(err, refused) {
+		t.Errorf("a store that refuses the put = %v", err)
+	}
+	docs := &fakeDocuments{}
+	reg := registryWith(mail.WithScanner(&mailboxClient{doc: pdfDoc}, &countingScanner{}))
+	if _, err := mail.RunWith(ctx, j, reg, docs); err != nil || docs.meta["atlas-scanned"] != "true" || docs.meta["atlas-scanner"] != "count" {
+		t.Errorf("a scanned export = %v, metadata %v; the object must say which scanner looked", err, docs.meta)
+	}
+}

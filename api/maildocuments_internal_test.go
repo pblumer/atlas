@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
@@ -83,5 +85,15 @@ func TestAMailWorkersScannerIsNormalizedWhereItIsTyped(t *testing.T) {
 	rec := connector{Kind: connectorKindMail, Provider: "microsoft", Sender: "a@b.ch", CredentialsRef: "graph", Scanner: " clamd://av "}
 	if msg := normalizeConnectorUpdate(&rec); msg != "" || rec.Scanner != "clamd://av:3310" {
 		t.Errorf("a patched scanner = %q, %q", msg, rec.Scanner)
+	}
+}
+
+// An export run inside this server reaches the S3 Workers this server holds, read when
+// the export runs rather than when the handler was registered.
+func TestAnExportInsideTheServerReachesItsOwnS3Workers(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	_, err := serverDocuments{srv}.PutDocument(context.Background(), "niemand", "b", "k", "application/pdf", "inline", []byte("%PDF"), nil)
+	if err == nil || !strings.Contains(err.Error(), `"niemand"`) {
+		t.Errorf("an export into an S3 Worker this server does not hold = %v, want it named", err)
 	}
 }

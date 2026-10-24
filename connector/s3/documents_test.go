@@ -81,3 +81,17 @@ func TestPutDocumentRefusals(t *testing.T) {
 		t.Errorf("an unknown store = %v, want it named", err)
 	}
 }
+
+// plainClient is an S3 Worker client that can only perform the eight operations.
+type plainClient struct{}
+
+func (plainClient) Do(context.Context, s3.Request) (any, error) { return nil, nil }
+
+func TestAStoreThatCannotTakeADocumentSaysSo(t *testing.T) {
+	reg := s3.NewRegistry()
+	reg.Register("alt", plainClient{})
+	if _, err := s3.Documents(reg).PutDocument(context.Background(), "alt", "b", "k", "", "", []byte("x"), nil); err == nil ||
+		!strings.Contains(err.Error(), "cannot store a document") {
+		t.Errorf("a client without the document path = %v", err)
+	}
+}
