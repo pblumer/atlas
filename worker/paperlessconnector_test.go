@@ -27,9 +27,9 @@ func TestPaperlessWorkerDoesNotWriteOCRToVariables(t *testing.T) {
 	}))
 	defer server.Close()
 	env := map[string]string{
-		"ATLAS_PAPERLESS_CONNECTORS":   "archive",
-		"ATLAS_PAPERLESS_ARCHIVE_URL":  server.URL,
-		"ATLAS_PAPERLESS_ARCHIVE_TOKEN": "example-secret",
+		"ATLAS_PAPERLESS_CONNECTORS":         "archive",
+		"ATLAS_PAPERLESS_ARCHIVE_URL":        server.URL,
+		"ATLAS_PAPERLESS_ARCHIVE_TOKEN":      "example-secret",
 		"ATLAS_PAPERLESS_ARCHIVE_ALLOW_HTTP": "true",
 	}
 	config, err := BuiltinConnectors(func(k string) string { return env[k] }, "paperless")
@@ -74,8 +74,12 @@ func TestPaperlessWorkerReusesCorrespondentAfterRetry(t *testing.T) {
 		fmt.Fprint(w, "{\"id\":18,\"name\":\"Muster AG\"}")
 	}))
 	defer server.Close()
-	env := map[string]string{"ATLAS_PAPERLESS_CONNECTORS": "archive", "ATLAS_PAPERLESS_ARCHIVE_URL": server.URL,
-		"ATLAS_PAPERLESS_ARCHIVE_TOKEN": "example-secret", "ATLAS_PAPERLESS_ARCHIVE_ALLOW_HTTP": "true"}
+	env := map[string]string{
+		"ATLAS_PAPERLESS_CONNECTORS":         "archive",
+		"ATLAS_PAPERLESS_ARCHIVE_URL":        server.URL,
+		"ATLAS_PAPERLESS_ARCHIVE_TOKEN":      "example-secret",
+		"ATLAS_PAPERLESS_ARCHIVE_ALLOW_HTTP": "true",
+	}
 	c, err := BuiltinConnectors(func(k string) string { return env[k] }, "paperless")
 	if err != nil {
 		t.Fatal(err)
