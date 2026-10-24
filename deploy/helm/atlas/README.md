@@ -204,8 +204,8 @@ common knobs:
 | `image.repository` | `ghcr.io/pblumer/atlas` | Image to run |
 | `image.tag` | `""` (chart `appVersion`) | Image tag; pin in production |
 | `persistence.enabled` | `true` | Use a PersistentVolume (never `false` for real use) |
-| `persistence.size` | `8Gi` | PVC size for WAL + state store |
-| `persistence.storageClass` | `""` (cluster default) | StorageClass for the PVC |
+| `persistence.size` | `8Gi` | PVC size for WAL + state store. The server keeps 1 GiB of it free and refuses new writes below that (`--storage-reserve-mb`); the Console's dashboard shows the rest and a forecast |
+| `persistence.storageClass` | `""` (cluster default) | StorageClass for the PVC. Prefer one backed by a block device: on `local-path`/`hostPath` and network filesystems the free space the server reads is the node's or the pool's, not the claim's |
 | `atlas.auth.enabled` | `false` | Require login for API/UI |
 | `atlas.vault.enabled` | `true` | Encrypted secret vault |
 | `atlas.docs.enabled` | `true` | Serve OpenAPI + API explorer |

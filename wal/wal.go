@@ -112,11 +112,28 @@ type Log struct {
 	maxSegmentSize int64
 	noFsync        bool
 
-	active     *os.File
+	active     segmentFile
 	activeSize int64
 	segSeq     uint64 // sequence number of the active segment
 
 	pending []byte // framed records staged by Append, not yet durable
+
+	// stopped is the failure after which the log writes nothing more, nil while it
+	// still may. It is set when a batch failed in a way that leaves the end of the
+	// segment unknown or unrepairable — a failed fsync, or a short write whose torn
+	// bytes could not be cut off again — because writing behind such an end is how a
+	// log gets damage with data after it, which recovery rightly refuses to open
+	// (ADR-0283). Reopening the log is the repair: recovery decides what reached the
+	// disk.
+	stopped error
+}
+
+// segmentFile is what the log needs of the segment it writes: an *os.File, and in a
+// test a file whose disk runs out part-way, which a real disk does only when full.
+type segmentFile interface {
+	activeFile
+	Sync() error
+	Close() error
 }
 
 // Open opens (or creates) the log in opts.Dir. If the last segment has a torn
@@ -349,6 +366,10 @@ func (l *Log) Sync() error {
 	if len(l.pending) <= batchHeaderSize {
 		return nil
 	}
+	if l.stopped != nil {
+		l.pending = l.pending[:0]
+		return l.stopped
+	}
 	// Roll before writing so a batch is never split across segments. A segment
 	// holding nothing but its header is never rolled: it is already the fresh
 	// segment a roll would produce, and rolling it would leave an empty file
@@ -368,21 +389,65 @@ func (l *Log) Sync() error {
 	binary.LittleEndian.PutUint32(l.pending[0:], uint32(len(payload)))
 	binary.LittleEndian.PutUint32(l.pending[4:], crc32.Checksum(payload, castagnoli))
 
+	start := l.activeSize
 	n, err := l.active.Write(l.pending)
 	l.activeSize += int64(n)
 	if err != nil {
-		return err
+		return l.abandon(start, err)
 	}
 	// A log opened with NoFsync is written but not forced: see Options.NoFsync for
 	// the one caller that may ask for it and what it gives up.
 	if !l.noFsync {
 		if err := l.active.Sync(); err != nil {
-			return err
+			// A failed fsync says nothing reliable about what is on disk: the kernel may
+			// already have dropped the dirty pages it could not write, so a later fsync
+			// that succeeds would prove nothing about this batch. The batch may or may
+			// not survive a restart — recovery reads what is there — but nothing more
+			// is written behind it.
+			l.pending = l.pending[:0]
+			l.stopped = fmt.Errorf("wal: fsync failed, the log accepts no more batches until it is reopened: %w", err)
+			return l.stopped
 		}
 	}
 	l.pending = l.pending[:0]
 	return nil
 }
+
+// abandon undoes a batch whose write failed — on a full disk, typically after the
+// file had already taken part of it. The staged batch is dropped, so the caller that
+// was told it failed is never contradicted by a later Sync writing it after all, and
+// the bytes it left are cut off, so the next batch starts at the last one that was
+// whole instead of behind a torn frame (ADR-0283). Should cutting them off fail, the
+// log stops: its end is torn, and a torn end is only harmless while nothing follows.
+//
+// The truncation is not forced to disk on its own. It does not need to be: the next
+// batch is written from the same offset and fsynced, which settles the length, and a
+// crash before that leaves the torn bytes as the log's tail — the case recovery
+// already repairs.
+func (l *Log) abandon(start int64, cause error) error {
+	l.pending = l.pending[:0]
+	if l.activeSize == start {
+		return cause
+	}
+	if err := l.active.Truncate(start); err != nil {
+		l.stopped = fmt.Errorf("wal: a failed write left a torn batch that could not be cut off (%v); the log accepts no more batches until it is reopened: %w", err, cause)
+		return l.stopped
+	}
+	if _, err := l.active.Seek(start, io.SeekStart); err != nil {
+		l.stopped = fmt.Errorf("wal: a failed write left the segment offset unknown (%v); the log accepts no more batches until it is reopened: %w", err, cause)
+		return l.stopped
+	}
+	l.activeSize = start
+	return cause
+}
+
+// Discard drops the records staged since the last Sync without writing them. A
+// caller that gives up on a batch before syncing it calls this, so the next batch
+// does not carry what it abandoned.
+func (l *Log) Discard() { l.pending = l.pending[:0] }
+
+// Err reports why the log stopped accepting batches, or nil while it accepts them.
+func (l *Log) Err() error { return l.stopped }
 
 // Close closes the active segment. Records staged but not yet Synced are
 // discarded — by contract they were never durable.
@@ -392,6 +457,9 @@ func (l *Log) Close() error {
 	}
 	err := l.active.Close()
 	l.active = nil
+	if l.stopped == nil {
+		l.stopped = fmt.Errorf("wal: the log is closed: %w", os.ErrClosed)
+	}
 	return err
 }
 
@@ -399,7 +467,16 @@ func (l *Log) roll() error {
 	if err := l.active.Close(); err != nil {
 		return err
 	}
-	return l.openNewSegment(l.segSeq + 1)
+	if err := l.openNewSegment(l.segSeq + 1); err != nil {
+		// The old segment is closed and the new one may exist with a torn header —
+		// which recovery repairs, but which nothing may be written into from here.
+		// The closed file is let go, so Close has nothing left to close twice.
+		l.active = nil
+		l.pending = l.pending[:0]
+		l.stopped = fmt.Errorf("wal: rolling to a new segment failed; the log accepts no more batches until it is reopened: %w", err)
+		return l.stopped
+	}
+	return nil
 }
 
 func (l *Log) openNewSegment(seq uint64) error {

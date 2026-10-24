@@ -237,6 +237,24 @@ func (s *Server) apiRoutes() []apiRoute {
 				"segmentsRemoved": tInteger(), "compactionError": tString(), "note": tString(),
 			}))}},
 
+		{"GET", "/api/v1/storage", s.storage.HandleGet, apiOp{
+			summary: "The disk under the data directory: each file system the server writes to with its size, use and free space, the reserve below which the server refuses new writes (507) until space is back, the state that follows (ok, warn, frozen, halted after a failed write, unknown), what the WAL and the state store hold, and a forecast of when the reserve is reached, from a consumption rate smoothed over about six hours (admin-only when auth is on) (ADR-draft-storage-guard)", tag: "System", role: RoleAdmin,
+			resp: jsonBody("Storage status", schemaObj(map[string]any{
+				"state": tString(), "reason": tString(), "sampledAt": tString(),
+				"reserveBytes": tInteger(), "resumeBytes": tInteger(),
+				"fileSystems": map[string]any{"type": "array", "items": schemaObj(map[string]any{
+					"paths": tArray(), "totalBytes": tInteger(), "usedBytes": tInteger(), "availableBytes": tInteger(),
+					"usedPercent": map[string]any{"type": "number"}, "warnBelowBytes": tInteger(), "decides": tBool(),
+					"forecast": tObject(),
+				})},
+				"forecast": schemaObj(map[string]any{
+					"bytesPerSecond": map[string]any{"type": "number"}, "bytesPerDay": map[string]any{"type": "number"},
+					"secondsUntilFreeze": map[string]any{"type": "number"}, "basisSeconds": map[string]any{"type": "number"},
+				}),
+				"atlas":        schemaObj(map[string]any{"walBytes": tInteger(), "walSegments": tInteger(), "stateBytes": tInteger()}),
+				"engineHalted": tString(), "error": tString(),
+			}, "state", "reason", "reserveBytes", "fileSystems"))}},
+
 		{"POST", "/api/v1/feel/validate", s.handleValidateFeel, apiOp{
 			summary: "Validate a FEEL expression: that it compiles, and that every call in it is one this build can make", tag: "FEEL", role: RoleModeler,
 			req: jsonBody("FEEL expression", schemaObj(map[string]any{"expression": tString()}, "expression")),
