@@ -9,9 +9,9 @@
 |---|---|
 | **Schutzobjekt** | Atlas — BPMN 2.x Workflow Engine (Fachanwendungsplattform) |
 | **Status** | in Arbeit (Entwurf des Herstellers/Projekts, noch nicht geprüft) |
-| **Version** | 0.1 |
-| **Datum** | 2026-08-25 |
-| **Basis** | Atlas `0.x` Developer Preview, Stand `main` (siehe `atlas version`) |
+| **Version** | 0.2 (redaktionelle Aktualisierung) |
+| **Datum** | 2026-10-24 |
+| **Basis** | Atlas `main`, geprüft am 2026-10-24; Release 0.19.0 und nachfolgende Änderungen (siehe `atlas version`) |
 | **Autor** | Atlas-Projektteam |
 
 ## Wie dieses Dokument zu lesen ist
@@ -41,6 +41,32 @@ müssen, sind separat als Arbeitsliste geführt:
 [`isds-offene-punkte.md`](isds-offene-punkte.md).
 
 ---
+
+## Aktualitätsnachtrag 24. Oktober 2026 — produktseitige Änderungen
+
+Diese Aktualisierung ersetzt die veralteten Ist-Aussagen in den betroffenen
+Abschnitten, nicht aber die ausstehende Abnahme eines konkreten Schutzobjekts.
+Insbesondere bedeuten «implementiert» und «im Repository getestet» **nicht**,
+dass eine Funktion in einem produktiven Bundesmandanten, mit eIAM, mit
+Klassifizierungsdaten oder durch einen unabhängigen Audit validiert ist.
+
+| Thema | Implementierter Stand | Verbleibende Grenze / Nachweis |
+|---|---|---|
+| Föderation und Rollen | OIDC mit PKCE, Claim-Mapping, Endpoint-Rollen, Projekt-/Worker-Sichtbarkeit (ADR-0210, ADR-0209, ADR-0205) | Kein pauschal bestätigter eIAM-Betrieb; SAML und providerinitiierter Logout offen; tatsächliches Rollen-/Gruppenmapping prüfen |
+| Identitätsbezogene Worker-Ausführung | Verbundene Microsoft-Konten, versionierte Policies, Entscheide und Genehmigungen als dauerhafte Engine-Fakten, Policy Enforcement Point und kurzlebige, aktionsgebundene Delegation (ADR-0475) | **Teilimplementierung ausschliesslich für SharePoint**; `service/shadow` erzwingt nichts, `service/enforce` ist ohne Kontrolle des Zielzugangs kooperativ; keine Token-Vermittlung an externe Worker |
+| Architektur-Nachweise | Logischer und physischer Architektur-Snapshot beim Publizieren/Importieren eines Releases, SVG und ArchiMate Open Exchange, gefilterte Endpunktanzeige (ADR-0471) | Snapshot ist eine Zeitpunktaufnahme, keine vollständige Ist-Netzwerk-/Berechtigungsprüfung; Confluence-Publikation noch offen |
+| Datenminimierung | Remote-Formularabfrage für Entra-Benutzerauswahl ohne WAL-Eintrag; Formular speichert nur die ausgewählte Objekt-ID (ADR-0473) | Abfrage, Anzeige, Proxy-Logs und Berechtigungen der Worker müssen im konkreten Betrieb geprüft werden |
+| Dokumentverarbeitung | Mail-Weiterleitung, begrenztes Auslesen und S3-Export von Anhängen mit Inhaltsprüfung; optional ClamAV (ADR-0478) | `get-attachment` bringt Base64 explizit in eine Prozessvariable und damit in die persistente Kette; Scanner-/Grössenlimits und Zielberechtigungen prüfen |
+| Weitere Integrationen | SharePoint-Listen und -Bibliotheken, Google Contacts, Exchange, Teams Phone, Mail und weitere Worker | Dienstkonten, Rechte, ausgehende Kommunikationswege und Wiederholungssemantik je Worker und Mandant prüfen; einige Provideroperationen sind nur gegen Mocks verifiziert |
+| Geplante Integrationen | Paperless-ngx (ADR-0479) und Swisscom NATEL go (experimentelles Fundament, PR #1333) | **Keine produktiv einsetzbaren Worker-Typen**; Paperless ist Entwurf, NATEL go ohne verifizierten Live-API-Vertrag und ohne registrierten Worker |
+
+Quellen: [ADR-0475](../adr/0475-identity-aware-worker-execution.md),
+[ADR-0471](../adr/0471-release-architecture-sketch.md),
+[ADR-0473](../adr/0473-form-remote-data-sources.md),
+[ADR-0478](../adr/0478-mail-documents-leave-the-mailbox.md),
+[ADR-0479](../adr/0479-paperless-ngx-worker.md) und
+[SECURITY.md](../../SECURITY.md). Die produktseitigen Restarbeiten stehen in
+[isds-offene-punkte.md](isds-offene-punkte.md).
 
 # 1 Generelle Anmerkungen
 
@@ -118,11 +144,11 @@ Zwei Eigenschaften der Architektur prägen das Sicherheitsbild positiv:
    Worker (ADR-0041, ADR-0069/0070, ADR-0168).
 
 Dem stehen Lücken gegenüber, die für den Bund relevant sind und in Kapitel 6.1
-als Restrisiken ausgewiesen sind: Produktreife (`0.x`), fehlende föderierte
-Authentisierung (kein eIAM/OIDC — nur lokale Passwörter), grobgranulare
-Autorisierung, keine Verschlüsselung ruhender Daten durch das Produkt selbst,
-keine Hochverfügbarkeit und ein Löschkonzept, das der Anfüge-only-Natur des Logs
-Rechnung tragen muss.
+als Restrisiken ausgewiesen sind: Produktreife (`0.x`), nicht verpflichtend konfigurierte Föderation (OIDC ist implementiert, eIAM
+ist installationsbezogen nachzuweisen), verbleibende objekt- und aktionsbezogene
+Autorisierungslücken, keine umfassende Verschlüsselung ruhender Daten durch das
+Produkt selbst, keine Hochverfügbarkeit und ein Löschkonzept, das der
+Anfüge-only-Natur des Logs Rechnung tragen muss.
 
 ## 2.2 Zusammenfassung Restrisiken
 
@@ -314,6 +340,9 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
 | **MCP-Adapter** (`atlas mcp`) | stellt die API als Model-Context-Protocol-Werkzeuge bereit (für KI-Agenten) | `/mcp` liegt innerhalb der Zugriffsgrenze des Servers und wird von `--auth` erzwungen; ein Werkzeugaufruf handelt mit dem Credential des Aufrufers (ADR-0196). Der stdio-Adapter hält als Prozess *ein* Credential für seine ganze Laufzeit — `--token` bzw. `ATLAS_TOKEN`, üblicherweise ein API-Token mit Geltungsbereich `full` (ADR-0194) |
 | **Vault** | AES-256-GCM-verschlüsselte Ablage der Worker-Secrets | Schlüssel `vault.key` (Mode 0600) oder extern via `ATLAS_VAULT_KEY(_FILE)` (ADR-0069/0070) |
 | **Reverse Proxy** ⟨nginx/Apache BIT-Standard⟩ | TLS-Terminierung, Zugriffssteuerung, Access-Log, Rate-Limiting | **zwingend** — Atlas selbst kann kein TLS |
+| **Identität & Policies** (`api/identity`, `api/policy`, `authz`) | verknüpfte externe Konten, Policy-Entwürfe und -Versionen, PDP/PEP, aktionsgebundene Freigaben (ADR-0475) | neues Identitäts-/Credential-Inventar; Entscheidungen und Approvals dauerhaft, für beaufsichtigte SharePoint-Worker implementiert |
+| **Architektur-Snapshots** (`api/archsketch`) | logischer und physischer Nachweis je Applikations-Release (ADR-0471) | Release-Sidecar, Endpunkte auf Scheme/Host/Port reduziert; Leserechte filtern Worker-/Instanzdetails |
+| **Worker-Formularabfragen** | begrenzte Abfragen nach Entra-Personen via beaufsichtigten Worker (ADR-0473) | nicht-durabler Abfragekanal ohne Prozessvariablen-/WAL-Eintrag bis zur Auswahl |
 
 ### 5.2.2 Authentisierung
 
@@ -346,10 +375,13 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
   Registrierungslink), die tokenbasierten öffentlichen Links und die statische
   Oberfläche. **`/mcp`, der API-Explorer und `/metrics` gehören nicht mehr dazu** —
   ein Prometheus-Scraper legt ein API-Token mit Geltungsbereich `metrics` vor.
-- **Nicht vorhanden:** SSO/Föderation (eIAM, OIDC, SAML, LDAP-Login), MFA,
-  Kontosperre nach Fehlversuchen, Passwortablauf, Wiederverwendungssperre. Die
-  Datenmodell-Haken für externe Identitäten (`Source`, `ExternalID`) existieren,
-  die Anbindung selbst nicht (R-03).
+- **Föderation:** OIDC-Relying-Party mit Authorization Code/PKCE, JWKS-Prüfung und
+  optionaler Claim-Abbildung auf Rollen und Gruppen (ADR-0210). Ohne
+  konfigurierten Anbieter bleibt das lokale Passwortverfahren; MFA und zentrale
+  Passwortregeln sind über den Identitätsanbieter sicherzustellen und abzunehmen.
+  **Nicht nachgewiesen bzw. offen:** konkrete eIAM-Integration, SAML, vom Provider
+  ausgelöste Abmeldung, lokale Passwortablauf- und Wiederverwendungssperre.
+  Drosselung der Anmeldeversuche ist hingegen implementiert (ADR-0197).
 - **Login-Fehler** liefern eine einheitliche Meldung ohne Benutzer-Enumeration;
   deaktivierte Konten (`Disabled`) werden abgewiesen.
 - **Anmeldeversuche sind begrenzt** (ADR-0197): je
@@ -442,7 +474,11 @@ Proxy-Log nicht kann.
 | Audit-Spuren | handelnder Benutzername je externer Variablenänderung / Task-Abschluss | State-Store | ja |
 | Design-Time-Artefakte | BPMN-/DMN-Modelle, Formulare, Projekte, Dokumentation | Sidecar-Stores | in der Regel nein (Modell ≠ Fall) |
 | Secrets | Zugangsdaten zu Fachsystemen | `vault/` (AES-256-GCM) bzw. Worker-Konfiguration | nein |
-| Betriebsdaten | Log-Zeilen, Metriken, Traces | stderr/journald, Prometheus, Collector | Randdaten i. S. v. SR 172.010.442 — Benutzername in Log-Ereignissen möglich; Client-IP wird nur zur Ratenbegrenzung verwendet, nicht protokolliert |
+| Betriebsdaten | Log-Zeilen, Metriken, Traces | stderr/journald, Prometheus, Collector | Randdaten i. S. v. SR 172.010.442 — Benutzername in Log-Ereignissen möglich; Client-IP wird zur Ratenbegrenzung genutzt; personenbezogene Felder in Betriebs-/Auditlogs sind bei der Einführung zu prüfen |
+| Externe Kontoverknüpfungen | Provider, Tenant, unveränderliche externe Subjekt-ID, freigegebene Worker, Verknüpfungsstatus | Identity-Sidecar; Refresh-Credentials nur im geschützten Vault (ADR-0475) | **ja**, Identitäts- und Berechtigungsbezug |
+| Autorisierungs-/Genehmigungsnachweise | Subjekt, Policy/Version, Aktion, Ressource, Entscheidung, Fingerprint, Freigaben | WAL und State-Familien für autorisierte Aktionen (ADR-0475) | **ja**, langfristig nachvollziehbare Personen- und Handlungsbezüge |
+| Release-Architektur-Snapshots | referenzierte Worker, Endpunkte (Scheme/Host/Port), Platzierungen und Verbindungen | Release-Sidecar (ADR-0471) | potenziell schutzwürdige Infrastruktur-/Konfigurationsdaten; nach Rollen gefilterte Ausgabe |
+| Mail-/Dokumentverweise und optionale Inhalte | Metadaten/Referenzen; bei `get-attachment` explizit Base64-Inhalt | Prozessvariablen → WAL/State; bei `export-attachment` externer S3-Speicher (ADR-0478) | **ja, möglicherweise besonders schützenswert**; Vermeidung persistenter Binärinhalte als Modellierungsregel |
 
 **Datenhaltung:** ausschliesslich lokal im Datenverzeichnis der Installation
 (Dateisystem, kein externes DBMS). Kein Cloud-Dienst, kein Herstellerzugriff.
@@ -479,6 +515,15 @@ deshalb hier explizit:
 - **Weitere Kopien** sind mitzudenken: OpenSearch-Indizes (eigene Retention
   konfigurieren), Backups (Aufbewahrungsfrist der Sicherungen), Instanz-Snapshots
   und Applikations-Bundles, sowie ⟨Log-Aufbewahrung des Reverse Proxy⟩.
+- **Kryptografische Löschung deklarierter Personendaten** (ADR-0314): Mit
+  `atlas:personal` und `atlas:dataSubject` werden deklarierte Felder je
+  betroffener Person verschlüsselt; Schlüsselvernichtung macht die betroffenen
+  Kopien unlesbar, auch in Backups. Dies gilt **nicht automatisch** für
+  undeclarierte Felder, Dokument-Base64 oder beliebige externe Systeme; die
+  datenschutzrechtliche Bewertung bleibt installations- und prozessbezogen.
+- **Remote Form Lookup** (ADR-0473) schreibt Suchresultate nicht in den WAL,
+  erst die ausgewählte ID wird zur Prozessvariable. Berechtigungen und allfällige
+  Log-Spuren des Verzeichnisanbieters bleiben gesondert zu prüfen.
 - **Empfehlung an die Modellierung:** Personendaten möglichst als Referenz
   (Geschäftsfallnummer, Personalnummer) statt als Inhalt in Prozessvariablen
   führen; das verkleinert alle oben genannten Kopien gleichzeitig.
@@ -496,7 +541,7 @@ flowchart LR
     P["Prometheus / Log-Shipper"]
   end
   subgraph PEZ["Zugriffszone (PEZ)"]
-    RP["Reverse Proxy<br/>TLS-Terminierung · AuthN · Access-Log<br/>blockiert /metrics"]
+    RP["Reverse Proxy<br/>TLS-Terminierung · Access-Log<br/>Zugang zum /metrics-Endpunkt absichern"]
   end
   subgraph SZ["Server-Zone (SZ)"]
     A["atlas serve<br/>Engine · API · UI<br/>HTTP 8080, kein TLS"]
@@ -546,12 +591,17 @@ das Vorhaben ergänzen⟩. Initiator ist immer die Quelle.
 | K-09 | Worker | SharePoint / Remedy | HTTPS / 443 | Fach-Worker-Typen (ADR-0141/0106) | TLS | Dienstkonto aus Vault |
 | K-10 | Atlas-Server | OpenSearch | HTTPS / 9200 · 443 | Ereignis-Export (ADR-0114), optional | TLS ⟨Cluster-Konfiguration⟩ | Basic Auth via Umgebungsvariablen |
 | K-11 | Atlas-Server | OTLP-Collector | HTTP / 4318 | Traces, optional, standardmässig aus | ⟨TLS⟩ | ⟨Collector-Regel⟩ |
-| K-12 | Monitoring | Atlas-Server | HTTP / 8080 `/metrics` | Prometheus-Scrape | keine | **keine** — am Proxy/FW einschränken |
+| K-12 | Monitoring | Atlas-Server | HTTP / 8080 `/metrics` | Prometheus-Scrape (ADR-0198; inklusive API-Token-Ablaufmetriken) | ⟨TLS über Proxy vorsehen⟩ | **API-Token mit Scope `metrics` erforderlich**, Proxy/FW zusätzlich einschränken |
 | K-13 | Atlas-Server ↔ Peer-Atlas ⟨andere Umgebung⟩ | je nach Richtung | HTTPS / 443 | Applikations-Promotion zwischen Umgebungen (ADR-0129); nur falls genutzt | TLS, **Verifikation nicht abschaltbar** (kein «skip verify») | Deploy-Token (Bearer, als SHA-256-Hash abgelegt, fail-closed-Allowlist auf 2 Operationen); Zieladresse und Credential-Referenz sind admin-verwaltet |
 | K-14 | KI-Agent / Werkzeug | Atlas-Server `/mcp` | HTTP / 8080 | MCP-Steuerung (ADR-0016) | keine | Session-Cookie oder Bearer des Aufrufers; unter `--auth` erzwungen (ADR-0196) |
 | K-15 | Internet ⟨optional⟩ | Reverse Proxy → `/public/forms/…` | HTTPS / 443 | öffentliche Start-Links (ADR-0029), Selbstregistrierung (ADR-0126) | TLS | anonym, Token-gebunden, ratenbegrenzt |
 | K-16 | Atlas-Server | Skript-Interpreter (lokal) | Prozessaufruf | Skript-Tasks `pwsh`/`python3`/`node` (ADR-0047) | — | läuft als Dienstbenutzer — siehe R-09 |
 | K-17 | Atlas-Server | Umsystem (Verrechnung, CMDB) ⟨Zone⟩ | HTTPS / 443 | Push-Zustellung des Ereignis-Feeds an einen CloudEvents-Endpunkt (ADR-0429 §5), nur falls ein Administrator ein Abonnement anlegt; Inhalt: wer welches Recht hält, Personen nur als ID | TLS, Klartext nur für Loopback, Weiterleitungen werden nicht verfolgt | Bearer-Token aus dem Vault (Referenz am Worker); Abonnement admin-verwaltet, auf Kataloge einschränkbar |
+| K-18 | Browser + Atlas-Server | Microsoft-Identitätsplattform ⟨Zone⟩ | HTTPS / 443 | OIDC-Anmeldung / Konto verknüpfen (PKCE, Token-/JWKS-Austausch; ADR-0210/0475) | TLS | IdP-Protokoll, Clientregistrierung und Berechtigungen installationsabhängig |
+| K-19 | Beaufsichtigter SharePoint-Worker | Microsoft Graph / SharePoint Online ⟨Zone⟩ | HTTPS / 443 | Listen/Bibliotheken, ggf. stellvertretende Ausführung nach Policy-Permit (ADR-0141/0475) | TLS | Service-Credential oder kurzlebiger delegierter Token; Delegation nur im beaufsichtigten Modus |
+| K-20 | Beaufsichtigter Google-Contacts-Worker | Google People API / Workspace Directory ⟨Zone⟩ | HTTPS / 443 | Kontaktverwaltung und Suche (ADR-0476) | TLS | Refresh-Token oder Service-Account mit Domain-wide Delegation und ausdrücklich benanntem Subject |
+| K-21 | Aufgaben-UI / Atlas-Server / Worker | Entra-Abfragekanal / Microsoft Graph ⟨Zone⟩ | HTTPS (Browser zum Atlas), Worker-Leasing gemäss K-04, Worker zu Graph HTTPS/443 | Nicht-durable Remote-Auswahl in Formularen (ADR-0473) | ⟨TLS via Proxy/Worker-Egress⟩ | angemeldete, taskberechtigte Person + freigeschalteter Directory-Worker |
+| K-22 | Mail-Worker | S3-Worker / S3-Ziel ⟨Zone⟩, ggf. ClamAV | Worker-interne Übergabe, HTTPS/443 oder ClamAV TCP/3310/Unix-Socket | geprüfter Anhang-Export ohne Engine als Binärtransport (ADR-0478) | TLS ⟨Zielverbindung⟩ | Zugriffsrechte für Quellpostfach und Ziel-Worker; Scanner nach Bedarf |
 
 **Nicht vorhanden:** ausgehende Verbindungen zum Hersteller, Update-Prüfungen,
 Telemetrie, Lizenz-Calls. Der Server benötigt für den Betrieb **keinen
@@ -609,6 +659,28 @@ zu bestätigen.
 | R-16 | **Datenverzeichnis doppelt geöffnet.** Zwei `atlas serve` auf demselben Verzeichnis korrumpieren es (z. B. durch versehentliche zweite Replika) | Integrität, Verfügbarkeit | Helm-Chart als StatefulSet mit 1 Replika, Betriebsanweisung, M-12 | **grün** bei eingehaltener Betriebsanweisung |
 
 ⟨Abbild der Restrisikomatrix aus P042-Hi02 hier einfügen.⟩
+
+**Zusätzliche Prüfpunkte aus den Änderungen vom Oktober 2026** (noch nicht
+formal in P042-Hi02 bewertet; diese Prüfung darf nicht als erledigt gelten):
+
+- **Delegation und Policy Enforcement (R-04/R-09):** Gewährleisten, dass nur
+  beaufsichtigte SharePoint-Worker delegierte Tokens erhalten, der Provider-
+  Scope minimiert ist, `shadow` niemals als Sperre gilt und Service-Credentials
+  keine Policy-Umgehung ermöglichen (ADR-0475). Provider-Tokens bleiben bis
+  zum Ablauf gültig, auch nach Widerruf in Atlas.
+- **Neue personenbezogene Nebendaten (R-06/R-13):** Kontoverknüpfungen,
+  Genehmigungs-/Autorisierungsfakten, Mail-Anhänge und Remote-Lookups in
+  Verzeichnis der Bearbeitungen, Rollenprüfung, Aufbewahrung, Auskunft und
+  Löschung einbeziehen. Die neue Event-Log-Diagnose (ADR-0472) enthält
+  Korrelationen und hat eine gesonderte TTL, ist aber **kein** Sicherheits-SIEM.
+- **Architekturbeweise (R-04/R-11):** Versionierte Architektur-Snapshots
+  helfen bei Prüfungen, sind aber nicht vollständig: externe Konfigurationen
+  werden nur reduziert angezeigt; Rechte-/Netzwerk- und Release-Abgleiche
+  müssen weiterhin mit der produktiven Umgebung abgeglichen werden.
+- **Betrieb externer Dienste:** Für Microsoft, Google, S3, Mail und ClamAV
+  sind Zielmandanten, Datenflüsse, Providerrollen, Speicherort, Wartung und
+  Incident-Verfahren pro Vorhaben zu dokumentieren. Mock-Tests sind kein
+  erfolgreicher Abnahmetest gegen einen realen Provider.
 
 ## 6.2 Besonders zu beachtende Punkte
 
@@ -701,8 +773,12 @@ mit dem ISBO BIT.
 | M-15 | Webscan und Penetrationstest vor Produktivsetzung; Befunde nach Kapitel 8.3 nachführen | ⟨Projekt⟩ | Prüfprotokoll |
 | M-16 | Archivierung: Anbieten der geschäftsrelevanten Daten ans BAR organisieren, Exportweg testen | ⟨AV⟩ | Archivierungskonzept |
 | M-17 | Notfallkonzept P042-Hi03 erstellen, Verweis auf BCM Stufe Amt | ⟨Projekt⟩ | Notfallkonzept |
-| M-18 | Keine externen KI-Agenten-Endpunkte registrieren; falls doch, nur bundesinterne mit eigener Beurteilung | ⟨AV⟩ | Worker-Liste |
+| M-20 | Keine externen KI-Agenten-Endpunkte registrieren; falls doch, nur bundesinterne mit eigener Beurteilung | ⟨AV⟩ | Worker-Liste |
 | M-19 | Klassifizierungsgrenze «intern» einhalten; keine Mischung von Schutzbedarfsklassen in einer Installation | ⟨AV + ISBO⟩ | Betriebsanweisung |
+| M-21 | Identitätspolitik (ADR-0475): Worker-Modus, Policy-Version und Default-Deny prüfen; `shadow` nicht als Durchsetzung werten; delegierte SharePoint-Verbindungen, Einwilligung, Reauth, Austritt und externe Token-Lebensdauer testen; Service-Egress separat begrenzen | ⟨AV + IAM/Betrieb⟩ | Policy-Freigabe, Negativtests, tatsächlicher Provider-Rechtecheck |
+| M-22 | Dokument- und Formular-Datenminimierung prüfen (ADR-0473/0478): Remote-Queries, Logs, `get-attachment`, Exportziele, Antivirus- und Grössenlimits, Replay und Retention | ⟨AV + Datenschutz + Betrieb⟩ | Test mit sensiblen Beispieldaten, WAL-/Backup-/Export-Kontrolle |
+| M-23 | Release-Architektur-Snapshots (ADR-0471) archivieren, auf Redaktionsrechte prüfen und mit realem Netzwerk-/Firewall-Inventar sowie CRQs abgleichen | ⟨Architektur + Betrieb⟩ | versionierter Export (SVG/ArchiMate), Review-Nachweis |
+| M-24 | Für neue Provider-Worker und Änderungen an Schnittstellen K-18 bis K-22 Mandanten-/API-Verifikation, Scope-Minimierung und dokumentierte Negativtests einfordern; geplante Worker dürfen nicht als verfügbar inventarisiert werden | ⟨Betrieb + Projekt⟩ | Provider-Testprotokolle, aktuelle Worker-Liste |
 
 ---
 
