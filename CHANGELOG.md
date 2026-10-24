@@ -46,6 +46,7 @@ governs a Worker:
 
 ### Added
 
+- **Technical capabilities can be described with an independently versioned semantic contract.** A design-time JSON descriptor now records resource kind, identity scope, typed input/output schema roots, semantic errors, idempotency, consistency and pagination. Strict parsing rejects malformed contracts, duplicate identities and remote JSON Schema references. Sample account and contact contracts are tests, not proof of provider conformance; no Worker routing or policy enforcement changes ([ADR-draft-technical-capability-semantics](docs/adr/draft-technical-capability-semantics.md)).
 - **The PowerShell editor completes a cmdlet's parameters.** After a cmdlet, `-` offers
   its own parameters, then the common ones (`-ErrorAction`, `-Verbose` and the rest), less
   those it already has: `Get-ChildItem -Re` offers `-Recurse`, and `Where-Object Name -`
