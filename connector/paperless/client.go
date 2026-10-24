@@ -364,10 +364,10 @@ func (c *Client) addCorrespondent(ctx context.Context, r Request) (any, error) {
 
 // An ensure must not silently rewrite existing correspondence classification rules.
 func checkCorrespondentOptions(existing correspondentWire, r Request) error {
-	if r.Match != "" && existing.Match != r.Match {
+	if existing.Match != r.Match {
 		return errors.New("paperless: existing correspondent has a different match rule")
 	}
-	if r.MatchingAlgorithm != 0 && existing.MatchingAlgorithm != r.MatchingAlgorithm {
+	if existing.MatchingAlgorithm != r.MatchingAlgorithm {
 		return errors.New("paperless: existing correspondent has a different matching algorithm")
 	}
 	if r.IsInsensitive != nil && existing.IsInsensitive != *r.IsInsensitive {
