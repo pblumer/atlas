@@ -2226,6 +2226,17 @@ the method and how to work it with Atlas as it stands are in
   the automation one), and on the coverage read — and it never withholds a stale
   record, which would make the map least useful exactly when it needs attention.
 
+- 🚧 **B11 — Technical capability contract, first slice.** Optional, versioned
+  operation-level capability claims in the existing Worker Type manifest
+  ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
+  This is metadata validated at admission, **not** a new integration-capability
+  register or capability-based job routing. The first slice includes negative
+  validation tests and legacy-manifest compatibility; built-in Worker Type
+  projections, canonical semantic contracts, conformance tests and graph
+  relationships are subsequent slices described in
+  [the implementation plan](docs/planning/technical-capability-contract.md).
+  **Do not mark this completed before full Go checks and CI are green.**
+
 Deliberately out of scope: business areas (Level 1) and integration capabilities
 (Level 5) as record kinds of their own — the first is a tag, and the second is what a
 Worker Type already is ([ADR-0203](docs/adr/0203-worker-execution-model.md)). Importing
