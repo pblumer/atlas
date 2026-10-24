@@ -622,6 +622,27 @@ The control-flow basics most real models use.
   explains every operation. Still open: a run against a live tenant, business hours and
   menus, an existing queue's language and an existing auto attendant's settings, and a
   warm `pwsh` session per tenant.
+  **Google Contacts is another Worker Type in the catalog**
+  ([ADR-0476](docs/adr/0476-google-contacts-worker.md)): a service
+  task marked `<atlas:googleContactsConnector connector operation …>` finds a contact by
+  e-mail address, phone number or a custom field such as a customer number, reads, lists,
+  searches, creates, updates and deletes contacts, puts a label on one or takes it off, and
+  searches the Workspace directory — ten operations in one table
+  (`connector/googlecontacts/catalog`) that the compiler and the worker both read. A contact
+  is one flat object; null leaves a value as it is, `""` clears it, and an update writes
+  under the etag it read. `find-contacts` reads the address book rather than Google's search
+  cache, so a process deciding whether a customer is known is not told "no" about one
+  created a minute ago. Worker-only and supervised by default; the credential is the Google
+  Sheets bundle with the Workspace user it acts as. Still open: a run against a real
+  account (the record's open question), and a form-lookup provider so a person picks a
+  customer in a task form ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
+  **Proposed: Paperless-ngx Worker** ([ADR draft](docs/adr/0479-paperless-ngx-worker.md)):
+  reference-only document search, authenticated presentation, safe metadata operations
+  and retry-safe `add-correspondent` (lookup/create with conflict recovery) before a
+  separately designed streamed upload path. OCR text and document bytes must
+  not enter process variables/WAL by default. Slice A is an executable search →
+  human-review workflow; Slice C depends on an explicitly authorized external
+  document source and retry/duplicate reconciliation. No implementation has landed.
   **On Windows, the Go Workers take the route PowerShell takes**
   ([ADR-0464](docs/adr/0464-windows-system-proxy.md)): outbound
   HTTP follows a proxy variable when one is set and otherwise the account's PAC, WPAD or
@@ -638,7 +659,7 @@ The control-flow basics most real models use.
   history and the Microsoft Graph messages API for those providers — and a mail task's
   `operation` lists, reads, moves, marks, deletes (to the trash) or answers mail by the
   `messageId` a watch or a list answered. A process receives the envelope by default and
-  the text only on request; attachment content never. A watch admits `allowedSenders` and,
+  the text only on request; attachment content only through the operations below. A watch admits `allowedSenders` and,
   optionally, only a DMARC pass, and never changes the mailbox. A task that reads a mail
   Worker's mailbox deploys only for a viewer of it and one that changes it for an editor,
   at every deploy door — the application import included, which also gained ADR-0205's
@@ -646,6 +667,19 @@ The control-flow basics most real models use.
   than by role (ADR-0275), so what a process receives is not yet hidden from the
   installation's other operators; IMAP `XOAUTH2`; push instead of polling (IMAP `IDLE`,
   Graph change notifications).
+  **A mail's documents leave the mailbox, inspected**
+  ([ADR-0478](docs/adr/0478-mail-documents-leave-the-mailbox.md)):
+  `forward` sends a mail with its attachments to new recipients, `get-attachment` reads one
+  attachment into a variable under the variable budget, and `export-attachment` carries one
+  from the mailbox straight into a named S3 Worker, so a user task can open it through a
+  presigned link — for IMAP, Gmail and Graph alike. Every document they hand on is judged
+  from its content first (programs, scripts, macros, encrypted archives, PDFs that run code,
+  disguised names are refused; `allowedTypes` narrows further), and a mail Worker that
+  names a ClamAV `scanner` has every document scanned, failing closed when the scanner does
+  not answer. A refusal is the BPMN error `MAIL_ATTACHMENT_REJECTED` where the process
+  catches it. Still open: an ICAP client for antivirus gateways that do not speak clamd;
+  the Graph and Gmail calls walked at a live tenant; re-checking a stored object's verdict
+  before presenting it long after its export.
   The same reader also runs the other way: `atlas openapi-template --spec x.yaml --out
   dir` writes one element-template package per operation, in the repository catalog's
   own shape ([ADR-0300](docs/adr/0300-openapi-element-templates.md)) —
@@ -1082,6 +1116,16 @@ What it takes to run this for real.
   compacted log. `GET`/`POST /api/v1/checkpoints` expose the status — published
   checkpoints and whether they still verify, the last pass, the WAL's footprint — and a
   checkpoint-now control for a planned restart. **ADR-0131 is complete.**
+- ✅ A full disk neither loses data nor stops the server from restarting
+  ([ADR-0481](docs/adr/0481-storage-guard.md)). The dashboard shows an
+  administrator each file system the server writes to, the reserve, what the WAL and the
+  state store hold, and a forecast smoothed over about six hours; `GET /api/v1/storage`,
+  the `atlas_storage` MCP tool and `atlas_storage_*` on `/metrics` report the same reading.
+  Below the reserve (`--storage-reserve-mb`, default 1 GiB) writes are refused with 507
+  before they reach the engine and background work pauses, resuming by itself once space is
+  back. Underneath, a WAL write cut short is cut off again, and the engine halts after a
+  batch it could not make durable instead of running refused commands later. Open: whether
+  1 GiB covers a large store's compaction output (the record's open question)
 - ✅ Exported-log stream for downstream analytics: the OpenSearch exporter ([ADR-0114](docs/adr/0114-opensearch-event-exporter.md)) and the CloudEvents feed, pushed to a receiver ([ADR-0433](docs/adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md))
 - ✅ **Instance migration**
   ([ADR-0162](docs/adr/0162-process-instance-migration.md)): move running
@@ -1415,7 +1459,10 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   supervised worker authenticates with. The roster now also says **who is signed in
   right now** — `online` / `idle` / `offline` per account, admin-only, read from the
   live sessions and stored nowhere, so it is presence and never an attendance history
-  ([ADR-0228](docs/adr/0228-user-presence.md)).
+  ([ADR-0228](docs/adr/0228-user-presence.md)) — and **the day each account last
+  signed in**, kept beside the account as a UTC calendar day and nothing finer, so an
+  account nobody uses any more stands out without the roster learning when anybody
+  starts work ([ADR-0477](docs/adr/0477-last-login-day.md)).
 - 🚧 **Identity-aware Worker execution & policy-based authorization**
   ([ADR-0475](docs/adr/0475-identity-aware-worker-execution.md),
   proposed): a person links their Microsoft account (authorization code with PKCE; no
@@ -1426,11 +1473,12 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   default deny, deny-overrides, Indeterminate refuses — with approval obligations bound to
   the action's digest and separation of duties by stable ids. Every decision and approval
   is an engine fact fenced on the job's lease, replayed without re-evaluation. The Console
-  has **Connected accounts** and **Administration → Security** (readiness, policies,
-  simulator, evidence). Built for the SharePoint Worker Type only, with brokering to
-  Atlas-supervised Worker Instances only. Next: Google, further Worker Types, a Console
-  screen for answering approvals, the evidence in the Operations instance view, and the
-  open question of brokering to external Worker Instances (an amendment of ADR-0168).
+  has **Connected accounts**, **Approvals** (a person's open action approvals across
+  instances) and **Administration → Security** (readiness, policies, simulator, evidence).
+  Built for the SharePoint Worker Type only, with brokering to Atlas-supervised Worker
+  Instances only. Next: Google, further Worker Types, the evidence in the Operations
+  instance view, and the open question of brokering to external Worker Instances (an
+  amendment of ADR-0168).
 - ✅ **Engine-internal encrypted secret vault**
   ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md),
   [ADR-0070](docs/adr/0070-vault-on-by-default-with-generated-key.md)): closes
@@ -1754,15 +1802,18 @@ the hand-written Details panel one vertical slice at a time:
   kept per person on the server; the process listing names each row's application where
   the caller may see it
   ([ADR-0466](docs/adr/0466-start-view-groups-and-favourites.md)).
-- ✅ **Remote data sources in task forms**: a textfield with an `atlasDataSource` block
+- ✅ **Remote data sources in task forms**: a select whose options source is a remote data
+  source (an `atlasDataSource` block)
   searches a directory through the Worker the stored form names — Microsoft Entra ID users
   first — and submits only the chosen object id. One bounded page per request, filters
   bound to another field or fixed, a sealed cursor for the next page, a per-person rate
   limit, and a check of the value before the task completes. The search is a **worker
   query**, the protocol's non-durable message kind beside the job, so nothing about it
   reaches the log; a Worker's editors open it with **Forms may search**. The form editor
-  configures it without JSON and previews it with made-up people
-  ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
+  configures it under the select's own Options source, without JSON, and previews it with
+  made-up people ([ADR-0473](docs/adr/0473-form-remote-data-sources.md), amended).
+- 🔲 A tag list whose options come from a remote data source: several entries, and a
+  submission check over a list of ids.
 - 🔲 Further remote data sources: Entra groups and administrative units, a `$search` mode
   for word matching, and departments discovered rather than configured — each needs a
   provider row and a query handler in its Worker Type.
@@ -2174,6 +2225,17 @@ the method and how to work it with Atlas as it stands are in
   ninth finding, as `?stale=true` beside `?realized=false` (the review backlog beside
   the automation one), and on the coverage read — and it never withholds a stale
   record, which would make the map least useful exactly when it needs attention.
+
+- 🚧 **B11 — Technical capability contract, first slice.** Optional, versioned
+  operation-level capability claims in the existing Worker Type manifest
+  ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
+  This is metadata validated at admission, **not** a new integration-capability
+  register or capability-based job routing. The first slice includes negative
+  validation tests and legacy-manifest compatibility; built-in Worker Type
+  projections, canonical semantic contracts, conformance tests and graph
+  relationships are subsequent slices described in
+  [the implementation plan](docs/planning/technical-capability-contract.md).
+  **Do not mark this completed before full Go checks and CI are green.**
 
 Deliberately out of scope: business areas (Level 1) and integration capabilities
 (Level 5) as record kinds of their own — the first is a tag, and the second is what a

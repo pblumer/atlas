@@ -85,7 +85,8 @@ var engineEvaluatedExpressions = map[string]bool{
 // engine/: the evaluation sites are connector/rest/worker.go:95, connector/mail/worker.go:89,
 // connector/ldap/worker.go:190, connector/ad/worker.go:296, connector/jira/worker.go:82,
 // connector/discord/offload.go:141, connector/s3/offload.go:155,
-// connector/exchange/offload.go:100, connector/teamsphone/offload.go (resolveValue) and
+// connector/exchange/offload.go:100, connector/teamsphone/offload.go (resolveValue),
+// connector/googlecontacts/offload.go (Resolve and resolveValue) and
 // connector/agent/aitask.go:133, each over the scope variables handed to that call.
 //
 // THE EXEMPTION IS CONDITIONAL, and the condition is the next step's to satisfy: it holds
@@ -141,8 +142,11 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.LdapNewPassword.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.LdapURL.Expr":             "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.List.Expr":                "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.MailAttachment.Expr":      "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.MailBucket.Expr":          "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.MailDestination.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.MailFolder.Expr":          "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.MailKey.Expr":             "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.MailMessage.Expr":         "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.MailSubject.Expr":         "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.Query.Val.Expr":           "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
@@ -197,6 +201,14 @@ var workerEvaluatedExpressions = map[string]string{
 	// Teams Phone's values are one list keyed by attribute name rather than a field per
 	// attribute, so one path covers every value its operations take.
 	"connectorTasks.TeamsPhoneArgs.Val.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+
+	// The Google Contacts Worker's (ADR-0476).
+	"connectorTasks.GoogleContactsConnector.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.GoogleContactsContactID.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.GoogleContactsQuery.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.GoogleContactsField.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.GoogleContactsGroup.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.GoogleContactsContact.Expr":   "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 }
 
 // expressionKindByPath names each engine-evaluated path in the modeller's vocabulary, so

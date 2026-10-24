@@ -271,6 +271,31 @@ stood. An administrator passes, because an administrator reaches every Worker.
 - **The deploy check** is `api/mailboxuse.go`, called at the deploy, the project deploy and
   the application import — which also gained ADR-0205's claim check, found missing while
   wiring this one in.
+- **A watch on a Worker with no mailbox is refused at create** (added 2026-10-23). It was
+  stored, switched on, and then skipped at every poll without a word — indistinguishable
+  from a quiet inbox. `mail.CanReadMailbox` answers from the Worker's configuration (SMTP
+  without an IMAP endpoint, preview, Graph without a sender) in the same words
+  `mail.MailboxOf` uses for a built client. Whether the credential works stays the first
+  read's to say. A watch stored before the check, or one whose Worker loses its IMAP
+  endpoint later, is not refused but reports the reason, as below.
+- **A watch says why it is not reading** (added 2026-10-23). The bridge used to drop a
+  watch it could not resolve and retry a failed prime or read in silence. Each such
+  failure is now kept per watch in memory (`api/inboundhealth.go`), as a feed
+  subscription's hold is (ADR-0433), and answered as `lastError` and `failingSince` by the
+  watch listing and, for a viewer of the Worker, by the message sources; the Console shows
+  it as *not reading*. It is logged once per streak as `inbound_watch.failing` and
+  `inbound_watch.recovered`. It covers every kind of watch, since the bridge is shared. It
+  is not written into the record: a failure is a fact about now, a restart learns it again
+  at the next read, and persisting it would put fsyncs on the single writer for a value
+  nothing replays.
+- **The process receives the mail as one object, `mail`** (changed 2026-10-23). The
+  envelope above was seeded as that many top-level variables, so a message catch event
+  waiting for a reply overwrote any process variable called `from`, `to` or `subject`, and
+  the mail could not be handed on whole to a form, a decision or a subprocess. The
+  instance now receives exactly one variable, `mail` (`mail.from`, `mail.auth.dmarc`,
+  `mail.messageId`), with the same fields as before. A watch's correlation key binds the
+  flat names as it did and `mail` beside them, so a key written as `internetMessageId`
+  keeps correlating. A model that read `from` directly reads `mail.from` now.
 - **What could not be verified here** is the open question above: the provider-side setup,
   and Graph answering `internetMessageHeaders` on a list. The handbook and the setup panel
   say in so many words that those steps come from the providers' documentation.
@@ -310,3 +335,12 @@ stood. An administrator passes, because an administrator reaches every Worker.
 - the read gap it does not close: [ADR-0275](0275-instance-visibility.md)
 - erasure of what a process did receive: [ADR-0314](0314-portal-personal-data.md)
 - the Worker vocabulary: [ADR-0203](0203-worker-execution-model.md)
+
+## Amendment (2026-10-23): three operations hand a document on
+
+[ADR-0478](0478-mail-documents-leave-the-mailbox.md) adds
+`forward`, `get-attachment` and `export-attachment`. The rule above — attachment content is
+never included — still holds for the watch and for every operation this record decided; it
+no longer holds for `get-attachment`, which puts one document into one variable, bounded by
+the variable budget, because the model asked for exactly that. The envelope's attachments now
+carry an `id` each, and every document one of the three hands on is inspected first.

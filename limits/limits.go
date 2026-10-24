@@ -105,6 +105,15 @@ type Limits struct {
 	// provider's answer, a playground model, a mock's journal, a script's output.
 	Payload int64
 
+	// Document is one document a Worker carries between two outside systems without it
+	// ever becoming a variable: a mail attachment exported into an object store, a
+	// whole message read to be forwarded (ADR-0478).
+	// It is held in a Worker Instance's memory, never in the engine's, and it is
+	// larger than Payload because what it bounds is a person's document rather than
+	// an API's answer — 35 MiB is the largest message Exchange Online accepts by
+	// default and the largest Gmail sends through its API.
+	Document int64
+
 	// DataUpload is tabular or scenario data: a CSV, a playground scenario.
 	DataUpload int64
 
@@ -349,6 +358,10 @@ func Default() Limits {
 		Iterations:    100_000,
 		Variable:      1 << 20,
 		Collection:    16 << 20,
+		// New rather than gathered: no Worker carried a document from one outside
+		// system to another before the mail Worker's attachment operations. See the
+		// field for where the number comes from.
+		Document: 35 << 20,
 		// Eight megabytes is a full enumeration of a few tens of thousands of objects
 		// under a narrow $select; two thousand objects is the batch a run-loop turn can
 		// write without the engine noticeably stalling, and five hundred lines is more

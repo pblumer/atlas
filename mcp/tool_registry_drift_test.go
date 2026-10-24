@@ -26,8 +26,11 @@ import (
 // operation it proxies to. Every entry must be a real API route and every
 // advertised tool must appear here (both asserted below).
 var mcpToolRoutes = map[string]string{
-	"atlas_info":           "GET /api/v1/info",
-	"atlas_stats":          "GET /api/v1/stats",
+	"atlas_info":  "GET /api/v1/info",
+	"atlas_stats": "GET /api/v1/stats",
+	// The storage guard (ADR-0481): a read, and the one that explains a
+	// 507 or 503 an agent has just been given.
+	"atlas_storage":        "GET /api/v1/storage",
 	"atlas_deploy":         "POST /api/v1/deployments",
 	"atlas_list_processes": "GET /api/v1/processes",
 	"atlas_product_usage":  "GET /api/v1/catalog-products/{id}/usage",
@@ -113,6 +116,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_deploy_application":           "POST /api/v1/applications/{id}/deploy",
 	"atlas_publish_application":          "POST /api/v1/applications/{id}/publish",
 	"atlas_application_releases":         "GET /api/v1/applications/{id}/releases",
+	"atlas_release_architecture":         "GET /api/v1/applications/{id}/releases/{version}/architecture",
 	"atlas_application_deployments":      "GET /api/v1/applications/{id}/deployments",
 	"atlas_application_deletion_preview": "GET /api/v1/applications/{id}/deletion-preview",
 	"atlas_application_constants":        "GET /api/v1/applications/{id}/constants",
@@ -209,6 +213,7 @@ var mcpOmittedRoutes = map[string]string{
 	// who may do what — none of it an agent's to do.
 	"POST /api/v1/jobs/{key}/authorize":                               "the worker protocol's credential-bearing step: an agent is not a Worker Instance and must never be handed a delegated credential",
 	"GET /api/v1/instances/{key}/action-approvals":                    "a person's approval worklist, filtered per caller; an agent reads what was decided through atlas_instance_authorizations",
+	"GET /api/v1/me/action-approvals":                                 "a person's own approval worklist across instances, for the Console; an approval is answered by a person in their own session (ADR-0428), so an agent has nothing to act on there",
 	"POST /api/v1/instances/{key}/action-approvals/{approval}/decide": "an approval is a person's own answer, given in their own session (ADR-0428): deciding for a person",
 	"PUT /api/v1/configured-workers/{id}/identity":                    "decides as whom a Worker acts: an administrator's act, not an agent's",
 	"DELETE /api/v1/configured-workers/{id}/identity":                 "decides as whom a Worker acts: an administrator's act, not an agent's",
@@ -868,14 +873,16 @@ var mcpOmittedRoutes = map[string]string{
 	// atlas_save_form, atlas_register_decision), where each change is one legible
 	// step; handing it an archive that silently rewrites every artifact of an
 	// application at once is neither reviewable nor something an agent needs.
-	"GET /api/v1/applications/{id}/source":    "bulk source-tree download; an agent reads artifacts individually via atlas_get_draft_xml / atlas_get_form",
-	"POST /api/v1/applications/source":        "bulk source-tree upload that rewrites a whole application; an agent authors via atlas_save_draft / atlas_save_form",
-	"GET /api/v1/applications/{id}/needs":     "the list the Console's source download names before it downloads; an agent reads the same facts through atlas_application_constants, atlas_server_constants and atlas_workers",
-	"GET /api/v1/applications/{id}/package":   "bulk package download, the source tree and its shop in one archive; an agent reads the application through the source tools and a catalogue through atlas_export_catalog",
-	"GET /api/v1/catalogs/import/mappings":    "the installation's table of names a person keeps for package imports; an agent imports a catalogue document with its own ids through atlas_import_catalog and needs no translation",
-	"POST /api/v1/catalogs/import/mappings":   "deciding which group or person here a package's name means is a person's decision, made in the Console's import or its table, not an agent action",
-	"DELETE /api/v1/catalogs/import/mappings": "editing the installation's table of names is a person's decision, made in the Console, not an agent action",
-	"POST /api/v1/catalogs/import/answers":    "the Console's half of installing a package: it answers the package's questions from the directory so a person can import the filled catalogue; an agent imports a catalogue document with its own ids through atlas_import_catalog",
+	"GET /api/v1/applications/{id}/source":                              "bulk source-tree download; an agent reads artifacts individually via atlas_get_draft_xml / atlas_get_form",
+	"GET /api/v1/applications/{id}/releases/{version}/architecture.svg": "a rendering for people to look at; atlas_release_architecture returns the same facts as data",
+	"GET /api/v1/applications/{id}/releases/{version}/architecture.xml": "a document for architecture tools; atlas_release_architecture returns the same facts as data",
+	"POST /api/v1/applications/source":                                  "bulk source-tree upload that rewrites a whole application; an agent authors via atlas_save_draft / atlas_save_form",
+	"GET /api/v1/applications/{id}/needs":                               "the list the Console's source download names before it downloads; an agent reads the same facts through atlas_application_constants, atlas_server_constants and atlas_workers",
+	"GET /api/v1/applications/{id}/package":                             "bulk package download, the source tree and its shop in one archive; an agent reads the application through the source tools and a catalogue through atlas_export_catalog",
+	"GET /api/v1/catalogs/import/mappings":                              "the installation's table of names a person keeps for package imports; an agent imports a catalogue document with its own ids through atlas_import_catalog and needs no translation",
+	"POST /api/v1/catalogs/import/mappings":                             "deciding which group or person here a package's name means is a person's decision, made in the Console's import or its table, not an agent action",
+	"DELETE /api/v1/catalogs/import/mappings":                           "editing the installation's table of names is a person's decision, made in the Console, not an agent action",
+	"POST /api/v1/catalogs/import/answers":                              "the Console's half of installing a package: it answers the package's questions from the directory so a person can import the filled catalogue; an agent imports a catalogue document with its own ids through atlas_import_catalog",
 
 	// Process documentation (ADR-0138): the document is *produced in the browser*,
 	// where bpmn-js holds the authoritative picture — an agent has no rendered

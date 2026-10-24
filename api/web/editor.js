@@ -10,6 +10,7 @@ import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
 import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } from "./entra-attrmask.js";
 import { exchangeOperationOptions, exchangeParametersPlaceholder, exchangeParametersHint, exchangeIsListing, exchangeResultType, exchangeResultShape } from "./exchange-ops.js";
+import { googleContactsOperationOptions, googleContactsUses, googleContactsResultType, googleContactsResultShape, googleContactsMaxPlaceholder, googleContactsMaxHint, googleContactsQueryHint, googleContactsContactPlaceholder } from "./googlecontacts-ops.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { lookupSamples, sampleFor } from "./instance-samples.js";
 import { devLang } from "./dev-lang.js";
@@ -4420,19 +4421,27 @@ const SERVICE_TASK_KINDS = [
           { v: "mark-unread", l: "Mark as unread" },
           { v: "delete", l: "Delete message (to the trash)" },
           { v: "reply", l: "Reply to message" },
+          // The three that hand a document on (ADR-0478).
+          { v: "forward", l: "Forward message (with its attachments)" },
+          { v: "get-attachment", l: "Read attachment into a variable" },
+          { v: "export-attachment", l: "Export attachment to an S3 Worker" },
         ],
       },
-      { group: "Message", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" },
-      { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, showIf: (v) => !v.operation || v.operation === "send", hint: "Comma-separated recipients. A value may be a FEEL expression (fx)." },
-      { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
-      { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send", hint: "Delivered but never shown in the message headers." },
+      { group: "Message", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward" },
+      { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "forward", hint: (v) => (v.operation === "forward"
+        ? "Who receives the forwarded message, attachments included. Comma-separated; a person or group this server knows may be named by reference. Forwarding writes from the mailbox, so a deploy needs editor access to the Worker."
+        : "Comma-separated recipients. A value may be a FEEL expression (fx).") },
+      { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "forward" },
+      { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "forward", hint: "Delivered but never shown in the message headers." },
       { key: "from", label: "From", placeholder: "leave empty for the Worker's default sender", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
       { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
-      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply", hint: (v) => (v.operation === "reply"
+      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: (v) => (v.operation === "reply"
         ? "The reply's text. It goes to the original's Reply-To, or its From, under \"Re: \" and its subject, threaded beneath it."
-        : "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion.") },
-      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
-      { group: "Mailbox", showIf: (v) => !!v.operation && v.operation !== "send" && v.operation !== "reply" },
+        : v.operation === "forward"
+          ? "Optional. The note written above the forwarded message, which follows under \"Fwd: \" and its subject. Every attachment is inspected before anything is sent; one that is refused stops the whole forward."
+          : "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion.") },
+      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
+      { group: "Mailbox", showIf: (v) => !!v.operation && v.operation !== "send" && v.operation !== "reply" && v.operation !== "forward" },
       {
         key: "folder", label: "Folder", placeholder: "INBOX", fx: true, showIf: (v) => v.operation === "list",
         hint: "The folder to list — an IMAP folder name, a Gmail label id (INBOX, Label_…) or a Microsoft folder id or well-known name (inbox, archive). Empty is the inbox.",
@@ -4457,17 +4466,42 @@ const SERVICE_TASK_KINDS = [
       {
         key: "includeBody", label: "Text", type: "select", showIf: (v) => v.operation === "list" || v.operation === "get",
         options: [{ v: "", l: "Envelope only" }, { v: "true", l: "Include the text" }],
-        hint: "The envelope is sender, recipients, subject, date, attachment names and sizes and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB; attachment content is never read. What a process receives, every operator of a shared server can read — include the text only where the process needs it.",
+        hint: "The envelope is sender, recipients, subject, date, each attachment's id, name and size and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB; attachment content is read only by the attachment operations. What a process receives, every operator of a shared server can read — include the text only where the process needs it.",
       },
-      { group: "Output", showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" },
+      { group: "Attachment", showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment" },
+      {
+        key: "attachmentId", label: "Attachment", placeholder: "=mail.attachments[1].id", fx: true,
+        showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment",
+        hint: "The attachment to read: the id an envelope's attachments list carries — usually a FEEL expression (fx), e.g. =mail.attachments[1].id, or an item of a multi-instance loop over them.",
+      },
+      {
+        key: "allowedTypes", label: "Accepted types", placeholder: "application/pdf, image/*",
+        showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment",
+        hint: "Optional. Comma-separated media types the task accepts, judged from the document's content rather than from what the sender called it. Anything else ends the task with the error code MAIL_ATTACHMENT_REJECTED. Programs, scripts, macro documents, encrypted archives and PDFs that run code are refused in any case, and a Worker with a malware scanner scans every attachment first.",
+      },
+      { group: "Object store", showIf: (v) => v.operation === "export-attachment" },
+      {
+        key: "store", label: "S3 Worker", datalist: "s3", placeholder: "belege", showIf: (v) => v.operation === "export-attachment",
+        hint: "The S3 Worker the attachment is put into, by its name under Workers. Written as a name, not an expression: a deploy needs editor access to it as well as to the mailbox. The document goes from the mailbox to the store without passing through the process.",
+      },
+      { key: "bucket", label: "Bucket", placeholder: "eingang", fx: true, showIf: (v) => v.operation === "export-attachment" },
+      {
+        key: "key", label: "Object key", placeholder: "=\"rechnungen/\" + mail.messageId + \".pdf\"", fx: true, showIf: (v) => v.operation === "export-attachment",
+        hint: "Where the attachment is stored. Build it from values that stay the same on a retry — a key computed from now() writes a second object when the task runs again.",
+      },
+      { group: "Output", showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" || v.operation === "get-attachment" || v.operation === "export-attachment" },
       {
         key: "resultVariable", label: "Result variable",
         resultType: (v) => (v.operation === "list" ? "array" : v.operation === "move" ? "string" : "object"),
         placeholder: "mail",
-        showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move",
+        showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" || v.operation === "get-attachment" || v.operation === "export-attachment",
         hint: (v) => (v.operation === "move"
           ? "Optional. Receives the message's id in its new folder — the same id for Gmail and Microsoft, a new one for IMAP."
-          : "Receives what the mailbox answered: " + (v.operation === "list" ? "a list of messages, newest first." : "the message.")),
+          : v.operation === "get-attachment"
+            ? "Receives the attachment: content (base64), name, contentType as detected from the content, declaredType as the sender wrote it, size, and inspection. Limited to what fits a process variable (1 MiB); a larger document needs Export attachment."
+            : v.operation === "export-attachment"
+              ? "Optional. Receives where the document went — bucket, key, etag — with its detected type and the inspection. Mint a link for a user task with an S3 presign-get on that key."
+              : "Receives what the mailbox answered: " + (v.operation === "list" ? "a list of messages, newest first." : "the message.")),
       },
     ],
   },
@@ -4898,6 +4932,76 @@ const SERVICE_TASK_KINDS = [
               return "What Google returned is written into this process variable (leave empty to discard it).";
           }
         },
+      },
+    ],
+  },
+  {
+    id: "googlecontacts", name: "Google Contacts", group: "Applications",
+    desc: "Find, read, list, create, update and delete contacts in a Google address book, put a label such as Kunden on one or take it off, and search the organization's Workspace directory",
+    icon: "C",
+    // A person on Google blue: the contact this Worker Type is about, beside Sheets'
+    // grid in the same group.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#1a73e8"/><circle cx="8" cy="6.2" r="2.3" fill="#fff"/><path d="M3.8 12.6c.5-2.2 2.2-3.4 4.2-3.4s3.7 1.2 4.2 3.4z" fill="#fff"/></svg>`,
+    ext: "atlas:GoogleContactsConnector",
+    fields: [
+      { group: "Address book" },
+      {
+        key: "connector", label: "Worker", datalist: "googlecontacts", placeholder: "verkauf",
+        hint: "The configured Google Contacts Worker whose address book this task uses, by its name under Workers in the Console. Its credential — a service account acting as a Workspace user, or a person's refresh token — reaches that worker and never the engine. A value starting with = is a FEEL expression, so one process can choose the address book at runtime, e.g. the account manager's.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: googleContactsOperationOptions(),
+      },
+      {
+        key: "contactId", label: "Contact", placeholder: "=kunde.id", fx: true,
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "contactId"),
+        hint: "The contact, by the id a read, a find or a create answered with (people/c…). Usually a FEEL expression (fx) naming that variable, e.g. =kunde.id.",
+      },
+      {
+        key: "query", label: "Query", placeholder: "=anfrage.absender", fx: true,
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "query"),
+        hint: (v) => googleContactsQueryHint(v.operation || "find-contacts"),
+      },
+      {
+        key: "field", label: "Custom field", placeholder: "Kundennummer",
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "field"),
+        hint: "Optional. The name of a custom field (as Google Contacts shows it under \"Custom field\"), e.g. Kundennummer: the query is then compared with that field's value instead of with the e-mail addresses and phone numbers.",
+      },
+      {
+        key: "group", label: "Label", placeholder: "Kunden", fx: true,
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "group"),
+        hint: (v) => (["add-to-group", "remove-from-group"].includes(v.operation)
+          ? "The label, by the name Google Contacts shows it under, e.g. Kunden. It must exist: a misspelt name is refused rather than created."
+          : "Optional. Only the contacts with this label, by the name Google Contacts shows it under, e.g. Kunden."),
+      },
+      {
+        key: "contact", label: "Contact values", type: "json", rows: 8,
+        // Inline JSON and a variable are mutually exclusive (the compiler refuses both).
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "contact") && !v.contactVariable,
+        placeholder: (v) => googleContactsContactPlaceholder(v.operation || "create-contact"),
+        hint: (v) => "Keys: givenName, familyName, email, emails, phone, phones, organization, jobTitle, department, address, addresses, birthday (1980-05-17, or --05-17 without a year), notes, fields (custom fields by name)" +
+          (v.operation === "create-contact" ? " and groups (labels by name)." : "; labels change through Add to label and Remove from label.") +
+          " A string starting with = is a FEEL expression. A value that is null changes nothing, \"\" clears; email, phone and address change the primary entry and keep the others, emails, phones and addresses replace the list.",
+      },
+      {
+        key: "contactVariable", label: "Contact variable", placeholder: "neukunde",
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "contact") && !v.contact,
+        hint: "Instead of the values above: a process variable holding the contact object, for a process that assembles it itself — a form's answers, say. Its keys are checked when the task runs rather than at deploy.",
+      },
+      {
+        key: "maxResults", label: "Maximum results",
+        placeholder: (v) => googleContactsMaxPlaceholder(v.operation || "find-contacts"),
+        showIf: (v) => !!googleContactsMaxPlaceholder(v.operation || "find-contacts"),
+        hint: (v) => googleContactsMaxHint(v.operation || "find-contacts"),
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "kunden",
+        resultType: (v) => googleContactsResultType(v.operation || "find-contacts"),
+        showIf: (v) => !!googleContactsResultType(v.operation || "find-contacts"),
+        hint: (v) => googleContactsResultShape(v.operation || "find-contacts"),
       },
     ],
   },

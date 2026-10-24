@@ -43,6 +43,10 @@ func TestDefaultsAreTheNumbersTheCodeAlreadyHad(t *testing.T) {
 		// is four times a measurement (ADR-0402), so a
 		// number that drifts away from it silently stops being four times anything.
 		{"PeerLandscape", l.PeerLandscape, 1 << 20},
+		// Document is new as well, and pinned to the providers' own ceilings rather
+		// than to a measurement: Exchange Online's default message size and the Gmail
+		// API's largest send.
+		{"Document", l.Document, 35 << 20},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("%s = %d, want %d", tc.name, tc.got, tc.want)

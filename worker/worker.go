@@ -205,6 +205,12 @@ type Options struct {
 	// configured nowhere (ADR-0168). Empty for a worker that serves only plain job
 	// types, which need no credential of their own.
 	Connectors []string
+	// Endpoints are where those workers connect, reduced to scheme, host and port and
+	// keyed by worker name — what lets an architecture sketch draw the system a worker
+	// reaches when the engine holds no configuration for it (ADR-0471). Reported beside
+	// Connectors on every poll; a name with no entry is drawn as holding its endpoint
+	// itself.
+	Endpoints map[string]string
 	// Queries are the form lookups this worker answers, keyed by the job type of the
 	// Worker Type answering them (ADR-0473). A query is not a
 	// job: nothing about it is durable, and it is polled on a path of its own beside the
@@ -454,6 +460,9 @@ func (w *Worker) activate(ctx context.Context, jobType string, maxJobs int) ([]J
 	// an operator is looking at when a queue is not moving (ADR-0168).
 	if len(w.opts.Connectors) > 0 {
 		body["connectors"] = w.opts.Connectors
+	}
+	if len(w.opts.Endpoints) > 0 {
+		body["endpoints"] = w.opts.Endpoints
 	}
 	var out struct {
 		Jobs []Job `json:"jobs"`

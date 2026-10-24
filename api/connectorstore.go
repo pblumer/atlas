@@ -83,6 +83,12 @@ const (
 	// certificate thumbprint. Worker-only like Entra: the engine never signs in, so the
 	// app never enters it.
 	connectorKindTeamsPhone = "teamsphone"
+	// connectorKindGoogleContacts is the Google Contacts Worker Type
+	// (ADR-0476). Worker-only like Exchange: a record holds an
+	// optional endpoint — a People API base for an operator behind a proxy — and a
+	// credentialsRef naming the vault bundle that says whose address book it is and as
+	// whom (connector/googlecontacts.Bundle). The engine builds no client from it.
+	connectorKindGoogleContacts = "googlecontacts"
 	// connectorKindAD is the Active Directory Worker Type
 	// (ADR-0206). A record holds the directory's LDAP URL
 	// and a credentialsRef naming a vault {bindDN, password} bundle; the model names
@@ -135,6 +141,13 @@ type configuredWorker struct {
 	// uses the sender and the credential above as login. Empty for a Worker that only
 	// sends, and for Gmail and Microsoft, which read through the API they send with.
 	MailboxEndpoint string `json:"mailboxEndpoint,omitempty"`
+	// Scanner is a mail Worker's malware scanner ("clamd://host:3310"): every
+	// attachment the Worker hands on — forwarded, read into a variable, exported into a
+	// store — is scanned by it first, and a scanner that does not answer stops the task
+	// rather than letting the document through
+	// (ADR-0478). Empty scans nothing beyond the
+	// built-in inspection.
+	Scanner string `json:"scanner,omitempty"`
 
 	// Model is which model an agent Worker asks (Kind == connectorKindAgent,
 	// ADR-0255). It is the first piece of a Worker's

@@ -196,6 +196,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   are both kept, and so are CSV's columns, one attribute the catalog describes twice (names,
   or name:width) with one description always hidden. Assertions are on the exported XML,
   because a hidden attribute is what the compiler refuses and the panel cannot show.
+- **`googlecontacts-modeler.spec.mjs`** (ADR-0476): the **Google
+  Contacts Worker Type in the Implement panel** — choosing it starts on Find contacts and
+  shows the query, custom field, label and bound a find takes; switching a find to an update
+  drops what only a find takes; a delete offers and writes no result variable; and a
+  contact given by a variable hides the inline values and keeps the variable across an
+  unrelated edit. Assertions are on the exported XML, which is what the compiler checks.
 - **`documentation-modeler.spec.mjs`** (ADR-0025): the **Documentation** property — every
   element (task, gateway, event, sequence flow, data object) shows the `<bpmn:documentation>`
   its model carries and writes an edit back onto that element, blanking it drops the child
@@ -374,8 +380,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   divider restores the column's default width.
 
 - **`remote-select.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
-  the **directory field** (`api/web/remote-select.js`) on the real vendored form-js viewer,
-  with a transport the test answers itself — nothing is asked before somebody types; a search
+  the **directory field** (`api/web/remote-select.js`, `vendor/form-js/src/atlas/viewer.jsx`)
+  on the real vendored form-js viewer, with a transport the test answers itself, each property
+  shown for the select the editor writes and for a directory field saved as a textfield —
+  nothing is asked before somebody types; a search
   waits for the department it is bound to and for the field's minimum length; loading, results,
   an empty answer and a failure each say so; keystrokes are debounced into one request; a newer
   term aborts the older request and a late answer is ignored; the keyboard moves through the
@@ -384,15 +392,19 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   Load more continues through the server's cursor; a reopened task shows who its value stands
   for, or that the directory no longer holds it; and the preview searches made-up people.
 - **`tasks-remote-select.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
-  the same field in the **real Tasks app** against a stubbed API — the search goes to the
+  the same field, as a select and as a textfield, in the **real Tasks app** against a stubbed
+  API — the search goes to the
   task's own lookup route, Complete sends `{abteilung, user}` with the object id, Complete
   without a choice sends nothing, and "Back to the list" completes nothing.
 - **`form-directory-field.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
-  the **form editor's** directory field panel — **＋ Directory field** writes a data source
-  through the Worker open to forms, a plain text field becomes one bound to the department it
-  is filtered by, a Worker that does not let forms search it is named as such, an unfinished
-  filter is pointed out before Save, the field turns back into a plain one, and both the
-  Validate tab and the Design preview search made-up people and ask no directory.
+  the **form editor's** directory field (`vendor/form-js/src/atlas/editor.jsx`) — the palette's
+  **Directory picker** adds a select searching through the Worker open to forms; a static
+  select gets its options from the remote source under Options source ▸ Type, bound to the
+  department it is filtered by; the source is offered on a select only; a Worker that does not
+  let forms search it is named as such; an unfinished filter is pointed out and a fixed value
+  completes it; back to static options drops the block; both the Validate tab and the Design
+  preview search made-up people and ask no directory, while the canvas shows the field without
+  searching; and a directory field saved as a textfield is converted into a select on request.
   `worker-test.spec.mjs` covers the Worker dialog's **Forms may search** switch.
 
 - **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):
@@ -404,6 +416,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   enforcement off there is no session to be present in, so nothing is reported and the
   column is absent. Drives the real app shell against a routed mock, with Playwright's
   clock driving both intervals — the timing is part of what is being tested.
+
+- **`user-last-login.spec.mjs`** ([ADR-0477](../docs/adr/0477-last-login-day.md)):
+  **when each account last signed in**, in the same Users card. The column turns the
+  stored UTC day into "today" / "yesterday" / "N days ago" with the date beneath, says
+  "no login recorded" rather than inventing a date, sorts the accounts nobody uses to the
+  top, and is absent with enforcement off. The browser sits in Zurich with the clock
+  fixed half an hour after local midnight, when the local and the UTC calendar disagree:
+  the age must be counted in UTC, as the day was.
 
 - **`catalog-actions.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
   the **product's actions** in the catalogue editor. A product that still carries the
@@ -566,7 +586,17 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   sends and receives it, an older version named by its number, and its findings; a channel
   filter and a filter for names with a finding; a detail with the interrupting receivers, a
   link to each deployed version and the watches that send a message. A link naming a name and a
-  channel opens it, and a server without the routes leaves the catalogue standing.
+  channel opens it, unfolding its section, and a server without the routes leaves the catalogue
+  standing.
+
+  A row's detail opens in a dialog in view, by click, Enter or the space bar; Escape, the close
+  button and a click beside it close it back onto the row, and a navigation closes it. Each
+  section folds away, is still folded on the next visit, and says while folded how many entries
+  it holds and what it warns about. A hyphenated name stays on one line beside a long column.
+  The page reads in the Console's language: German for a viewer who chose none, with German words
+  for the server's ids and no raw message key left on screen, and English when chosen; an event's
+  meaning and a payload field's follow it, and the server's own English sentences are marked
+  `lang="en"`. The other cases check the wiring in English.
 - **`operations-eventlog.spec.mjs`** ([ADR-0472](../docs/adr/0472-event-log.md)):
   the Operations page **Event log**. A send heads its group with the receptions and starts it
   caused under it; a send nobody received is marked unless the buffer kept it, and an expiry is
@@ -677,6 +707,12 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   with enforcement off it is offered. Operations keeps its working pages and the incident
   count on the bar and puts the rest behind **Diagnostics**, whose mock tools only an
   administrator sees.
+- **`workers-endpoints.spec.mjs`**
+  ([ADR-0471](../docs/adr/0471-release-architecture-sketch.md)): **Operations → Workers**
+  against a stubbed API. A worker name a Worker Instance holds shows the endpoint the
+  instance reported for it beside the name. A name without a report shows the name alone,
+  including one that is also an inherited object property. A reported value is drawn as
+  text, never as markup.
 
 ## Rendering a conformance gallery diagram
 

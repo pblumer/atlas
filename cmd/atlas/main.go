@@ -35,12 +35,14 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api"
+	"github.com/pblumer/atlas/api/storage"
 	"github.com/pblumer/atlas/checkpoint"
 	remedymock "github.com/pblumer/atlas/connector/remedy/mock"
 	"github.com/pblumer/atlas/connector/rest/openapimock"
 	"github.com/pblumer/atlas/connector/rest/openapitemplate"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/internal/diskspace"
 	"github.com/pblumer/atlas/internal/trustedproxy"
 	"github.com/pblumer/atlas/jobtype"
 	"github.com/pblumer/atlas/limits"
@@ -297,6 +299,11 @@ func runServe(args []string) error {
 			"stall — which stalls the run loop, and with it every request. A larger buffer means "+
 			"recovery replays a longer log suffix after a crash; it costs recovery time, never "+
 			"durability (ADR-0005). 0 leaves Pebble's default")
+	storageReserveMB := fs.Int("storage-reserve-mb", envIntOr("ATLAS_STORAGE_RESERVE_MB", int(storage.DefaultReserve>>20)),
+		"disk space to keep free under the data directory, in MiB. Below it the server refuses new "+
+			"writes (HTTP 507) and starts no work of its own, so the state store and the checkpoints "+
+			"that give WAL space back still have room; it resumes by itself once the reserve and a "+
+			"quarter of it are free. 0 keeps the monitoring and turns the freeze off")
 	checkpointKeep := fs.Int("checkpoint-keep", 3, "how many recovery checkpoints to keep; each pins the state files it captured, so this bounds their disk (ADR-0131)")
 	// WAL compaction (ADR-0131): opt-in, off by default. Unlike checkpointing it deletes
 	// data, so — like history retention (ADR-0115) — an operator turns it on deliberately.
@@ -395,7 +402,7 @@ func runServe(args []string) error {
 		Instance: strings.TrimSpace(*metricsInstance),
 	}
 	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch, receiptTTL: *triggerReceiptTTL, feedTTL: *eventFeedTTL, logTTL: *eventLogTTL, messageTTLMax: *messageTTLMax}
-	storeCfg := storeConfig{cacheMB: *stateCacheMB, memtableMB: *stateMemtableMB}
+	storeCfg := storeConfig{cacheMB: *stateCacheMB, memtableMB: *stateMemtableMB, reserveMB: *storageReserveMB}
 	trace := tracing.Config{
 		Endpoint:    *traceEndpoint,
 		ServiceName: envOr("OTEL_SERVICE_NAME", "atlas"),
@@ -545,6 +552,18 @@ type retentionConfig struct {
 type storeConfig struct {
 	cacheMB    int
 	memtableMB int
+	// reserveMB is the disk the storage guard keeps free (ADR-0481). It
+	// rides here because it is a decision about the same disk; it is not a Pebble
+	// option, so options() leaves it out.
+	reserveMB int
+}
+
+// reserve is the storage reserve in bytes; a negative flag means none.
+func (c storeConfig) reserve() uint64 {
+	if c.reserveMB <= 0 {
+		return 0
+	}
+	return uint64(c.reserveMB) << 20
 }
 
 // options renders the config as the state package's open options. A zero or negative
@@ -749,6 +768,18 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		logging.Info(logging.RetentionEnabled, "history retention enabled",
 			slog.Duration("maxAge", retention.maxAge), slog.String("gate", gate),
 			slog.Int("batch", retention.batch), slog.Duration("interval", retention.interval))
+	}
+	// The storage guard (ADR-0481): on by default, because the failure it
+	// prevents is a state store that ends the process mid-write. A disk smaller than a
+	// few reserves is said once at start, since the server would pause early on it.
+	apiOpts = append(apiOpts, api.WithStorageReserve(storeCfg.reserve()))
+	if reserve := storeCfg.reserve(); reserve > 0 {
+		if u, err := diskspace.Of(dataDir); err == nil && u.Total < 4*reserve {
+			logging.Warn(logging.StorageLow,
+				"the data directory's file system is small for its storage reserve; the server will stop taking "+
+					"writes early — lower --storage-reserve-mb only if you know the state store needs less",
+				slog.Uint64("totalBytes", u.Total), slog.Uint64("reserveBytes", reserve))
+		}
 	}
 	// Periodic recovery checkpoints keep restart time a function of the cadence rather
 	// than of the whole log's length (ADR-0131). Nothing is deleted by them.
@@ -1325,7 +1356,7 @@ func runWorker(args []string) error {
 	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
-	connectors := fs.String("connector", "", "comma-separated built-in Worker Types this worker serves (currently: ad, csv, entra, exchange, jira, ldif, mail, mariadb, mssql, postgres, remedy, rest, script, teamsphone, webscrape). The server must be offloading them (it offloads ad, csv, jira, mail, remedy, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN — or, with ATLAS_<KIND>_MOCK=1, no DSN at all: the worker then answers that product's statements from seeded answers in its own memory, so a model that reads or writes a database runs end to end without one, and ATLAS_<KIND>_MOCK_SEED names the JSON file of answers it starts with (a statement nobody seeded fails naming itself rather than answering no rows). entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and exactly one of _CLIENT_SECRET, _CLIENT_CERTIFICATE (the app's certificate with its private key as PEM) or, on Windows, _CLIENT_CERTIFICATE_THUMBPRINT (a certificate in this host's store, whose key signs there), teamsphone takes ATLAS_TEAMSPHONE_CONNECTORS plus ATLAS_TEAMSPHONE_<NAME>_TENANT_ID, _CLIENT_ID and exactly one of _CERTIFICATE (PEM) or _CERTIFICATE_THUMBPRINT (a certificate in this host's store), runs pwsh — or ATLAS_TEAMSPHONE_PWSH — with the MicrosoftTeams module for each job within ATLAS_TEAMSPHONE_TIMEOUT (default 4m), and with ATLAS_TEAMSPHONE_MOCK=1 serves its tenants from memory instead, exchange takes ATLAS_EXCHANGE_CONNECTORS plus ATLAS_EXCHANGE_<NAME>_CREDENTIALS (the JSON bundle naming an Exchange Online organization or, with \"target\": \"onprem\", an Exchange Server) and optionally _URL (an Exchange Server's Remote PowerShell URI), and ATLAS_EXCHANGE_POWERSHELL for the interpreter an on-premises call starts, remedy takes ATLAS_REMEDY_CONNECTORS plus ATLAS_REMEDY_<NAME>_ENDPOINT, _USERNAME and _PASSWORD, and jira takes ATLAS_JIRA_CONNECTORS plus ATLAS_JIRA_<NAME>_URL and exactly one credential shape — _EMAIL with _API_TOKEN for Jira Cloud, or _TOKEN alone for a Data Center personal access token, because that shape also decides how an assignee is addressed and which search endpoint is used; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. Point ATLAS_AD_MOCK_VIEW_URL at an atlas's /api/v1/ad/mock-directory and the worker reports the forest it holds, so it shows up under Operations > Mock directory instead of only in this worker's log. A worker this server supervises is switched from Console > Workers instead, which needs no restart; these variables are for a worker you run yourself, and for what a server does before anyone has used that switch. A worker atlas supervises is handed all of that at spawn from the worker store, so it needs none of it set by hand")
+	connectors := fs.String("connector", "", "comma-separated built-in Worker Types this worker serves (currently: ad, csv, entra, exchange, googlecontacts, jira, ldif, mail, mariadb, mssql, postgres, remedy, rest, script, teamsphone, webscrape). The server must be offloading them (it offloads ad, csv, jira, mail, remedy, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN — or, with ATLAS_<KIND>_MOCK=1, no DSN at all: the worker then answers that product's statements from seeded answers in its own memory, so a model that reads or writes a database runs end to end without one, and ATLAS_<KIND>_MOCK_SEED names the JSON file of answers it starts with (a statement nobody seeded fails naming itself rather than answering no rows). entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and exactly one of _CLIENT_SECRET, _CLIENT_CERTIFICATE (the app's certificate with its private key as PEM) or, on Windows, _CLIENT_CERTIFICATE_THUMBPRINT (a certificate in this host's store, whose key signs there), teamsphone takes ATLAS_TEAMSPHONE_CONNECTORS plus ATLAS_TEAMSPHONE_<NAME>_TENANT_ID, _CLIENT_ID and exactly one of _CERTIFICATE (PEM) or _CERTIFICATE_THUMBPRINT (a certificate in this host's store), runs pwsh — or ATLAS_TEAMSPHONE_PWSH — with the MicrosoftTeams module for each job within ATLAS_TEAMSPHONE_TIMEOUT (default 4m), and with ATLAS_TEAMSPHONE_MOCK=1 serves its tenants from memory instead, exchange takes ATLAS_EXCHANGE_CONNECTORS plus ATLAS_EXCHANGE_<NAME>_CREDENTIALS (the JSON bundle naming an Exchange Online organization or, with \"target\": \"onprem\", an Exchange Server) and optionally _URL (an Exchange Server's Remote PowerShell URI), and ATLAS_EXCHANGE_POWERSHELL for the interpreter an on-premises call starts, googlecontacts takes ATLAS_GOOGLECONTACTS_CONNECTORS plus ATLAS_GOOGLECONTACTS_<NAME>_CREDENTIALS (the JSON bundle of a service account acting as a Workspace user, or of a refresh token) and optionally _URL (a People API base behind a proxy), remedy takes ATLAS_REMEDY_CONNECTORS plus ATLAS_REMEDY_<NAME>_ENDPOINT, _USERNAME and _PASSWORD, and jira takes ATLAS_JIRA_CONNECTORS plus ATLAS_JIRA_<NAME>_URL and exactly one credential shape — _EMAIL with _API_TOKEN for Jira Cloud, or _TOKEN alone for a Data Center personal access token, because that shape also decides how an assignee is addressed and which search endpoint is used; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. Point ATLAS_AD_MOCK_VIEW_URL at an atlas's /api/v1/ad/mock-directory and the worker reports the forest it holds, so it shows up under Operations > Mock directory instead of only in this worker's log. A worker this server supervises is switched from Console > Workers instead, which needs no restart; these variables are for a worker you run yourself, and for what a server does before anyone has used that switch. A worker atlas supervises is handed all of that at spawn from the worker store, so it needs none of it set by hand")
 	scriptLanguages := fs.String("script-languages", "", "comma-separated script languages this worker serves (powershell, python, javascript); empty serves all for compatibility. atlas serve sets this automatically from its per-language flags")
 	scriptSandboxRaw := fs.String("script-sandbox", envOr(script.SandboxEnv, string(script.SandboxOff)), "operating-system isolation for script interpreters: off or strict (Linux Landlock/seccomp; or ATLAS_SCRIPT_SANDBOX)")
 	if err := fs.Parse(args); err != nil {
@@ -1408,6 +1439,7 @@ func runWorker(args []string) error {
 		BrokerKey: os.Getenv("ATLAS_BROKER_KEY"),
 		Handlers:  execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
 		Connectors: builtin.Names,
+		Endpoints:  builtin.Endpoints,
 		// The form lookups the configured kinds answer, for the same Workers
 		// (ADR-0473).
 		Queries: builtin.Queries,

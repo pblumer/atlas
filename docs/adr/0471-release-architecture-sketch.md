@@ -1,7 +1,9 @@
 # ADR-0471: A release carries its architecture sketch, and a worker publishes it to Confluence
 
-- **Status:** Accepted (2026-10-23)
-- **Implementation:** Not started
+- **Status:** Accepted (2026-10-23; amended 2026-10-23 — public start links belong to the
+  physical part, the Atlas node is composed of its System Software, and job types belong to
+  the logical part; see the notes below)
+- **Implementation:** Partial
 - **Date:** 2026-10-23
 - **Deciders:** Atlas maintainers
 - **Open question:** The Confluence contract this record builds on is not established from
@@ -10,6 +12,58 @@
   each takes, and whether both render an SVG attachment embedded in a page. §4's file
   naming and §3's choice of SVG over PNG rest on that gap.
 - **Question checked:** 2026-10
+
+> **Implementation status and amendment (2026-10-23): S1 has landed.** A release records
+> its snapshot on publish and on import (`api/releasearchitecture.go`), the three routes
+> serve it, and the Console's release history shows it. The snapshot model and both
+> renderings are `api/archsketch`; the per-element message enumeration is
+> `compiler.CompiledProcess.MessageReceipts`. S2 to S4 are not started.
+>
+> Two details of the text below changed while building it, both for the reason the
+> record itself gives for the split between the two parts:
+>
+> - **Public start links are physical, not logical.** §1 listed them among the entry
+>   points of the logical part. A link is created on an installation, independently of
+>   any release, and one that exists on DEV need not exist in PROD — exactly the kind of
+>   fact §1 assigns to the physical part. They are recorded with it, in S2. The logical
+>   part's entry points are the messages the release's processes receive.
+> - **The Atlas node is composed of its System Software.** §3's table said the System
+>   Software is assigned to the node. ArchiMate assigns active structure to behaviour or,
+>   in the technology layer, to what is deployed on it; a node and its system software
+>   are both active structure, so the relationship is composition, which is also what
+>   Panorama's own authoring rules accept (`panorama.MayConnect`). The release's Artifact
+>   is still assigned to the node.
+
+> **Implementation status and amendment (2026-10-23, second): S2 has landed, without the
+> worker protocol extension.** A snapshot now carries the physical part §1 describes —
+> the installation's name and environment, its external URL, the public start links, and
+> per worker name its placement, the configured endpoint reduced to scheme, host and port
+> (`archsketch.ParseEndpoint`), and the worker instances the registry saw holding the
+> name. The renderings draw each connection from the side that opens it (§2), and a read
+> withholds an endpoint from a caller who may not see that worker's configuration and the
+> instances from a caller without the operator role (§3, §5). The snapshot's format and
+> mapping versions are 2; a version-1 snapshot is drawn as before. What remains of S2 is
+> the additive `endpoints` field on job activation, so a worker that keeps its own
+> configuration can report where it connects; until then such a worker is drawn as
+> holding its endpoint itself.
+>
+> **Update (2026-10-23): the worker protocol extension has landed, and S2 with it.**
+> `atlas worker` reduces the endpoint each held name's configuration names
+> (`internal/endpoint`, shared with the server so both mean the same by "scheme, host
+> and port") and sends it in the additive `endpoints` field of job activation. The
+> server reduces it again, keeps it only for names the same poll reported, and bounds
+> it. A snapshot draws a reported endpoint for a worker the installation holds no
+> configuration for, marked as reported; instances that disagree are recorded as
+> disagreeing; and a reported endpoint, being information about instances, is read by
+> operators only. Format and mapping version 3; a version-2 snapshot is drawn as before.
+>
+> One addition to §1's logical part, found while building it: **job types.** A service or
+> send task with a job type hands its work to whichever worker subscribes to that type
+> (ADR-0007) — the plain external job worker, which §1 did not name because it is reached
+> by a type rather than a worker name. It is a way out of the application all the same,
+> so the logical part records each job type with the elements that state it, and the
+> physical part records the instances seen leasing it. Its connection is always opened
+> by the worker, so it is drawn as one in both views.
 
 ## Context and problem statement
 

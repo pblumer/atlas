@@ -656,3 +656,14 @@ func TestSnapshotRefusesADestinationThatExists(t *testing.T) {
 		t.Error("a second snapshot into the same directory was accepted")
 	}
 }
+
+// TestDiskSpaceUsageCountsWhatTheStoreHolds: the store's own account of its bytes on
+// disk, which the storage monitor shows beside the WAL's. An open store already holds
+// its manifest, options file and log, so the account is never empty.
+func TestDiskSpaceUsageCountsWhatTheStoreHolds(t *testing.T) {
+	s := openStore(t)
+	commit(t, s, func(tx *state.Tx) error { return tx.SetLastAppliedPosition(1) })
+	if got := s.DiskSpaceUsage(); got == 0 {
+		t.Fatal("an open store reports no bytes on disk")
+	}
+}

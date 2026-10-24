@@ -54,6 +54,7 @@ import (
 	"github.com/pblumer/atlas/api/policy"
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/api/startfavourites"
+	"github.com/pblumer/atlas/api/storage"
 	"github.com/pblumer/atlas/api/taskfolder"
 	"github.com/pblumer/atlas/api/userprefs"
 	"github.com/pblumer/atlas/authz"
@@ -81,6 +82,7 @@ import (
 	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/internal/diskspace"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/jobtype"
 	"github.com/pblumer/atlas/limits"
@@ -478,6 +480,11 @@ type Server struct {
 	// mutex; it is not engine state and does not persist (ADR-0044).
 	sessions *sessionStore
 
+	// lastLogins is the day each account last signed in, beside the account rather
+	// than on it. Written by the sign-in path off the run loop and serialised by its
+	// own mutex, like sessions (ADR-0477, lastlogin.go).
+	lastLogins *lastLoginStore
+
 	// collab holds live collaborative-editing sessions on drafts in memory
 	// (ADR-0140). Like sessions it is reached from concurrent handler goroutines
 	// (SSE streams and POSTs), guards itself with a mutex, and never persists or
@@ -630,8 +637,11 @@ type Server struct {
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
 	// is that bridge's poll cadence (WithInboundPollInterval; 0 disables the bridge).
-	inboundSubs *inboundSubStore
-	inboundPoll time.Duration
+	// inboundHealth is why each watch that cannot read its source is not reading —
+	// runtime only, like feedPushes below.
+	inboundSubs   *inboundSubStore
+	inboundPoll   time.Duration
+	inboundHealth *inboundHealth
 	// feedSubs holds the event feed's push subscriptions and feedPush the cadence they
 	// are delivered at (WithFeedPushInterval; 0 disables delivery). feedPushes is each
 	// subscription's runtime hold after a failed delivery, feedPushClient and
@@ -788,6 +798,16 @@ type Server struct {
 	// checkpoint goroutine, read by handler goroutines, hence the mutex.
 	lastPassMu sync.Mutex
 	lastPass   *checkpointPass
+
+	// storage watches the disk under the data directory and, below the reserve,
+	// freezes new writes until there is room again (ADR-0481).
+	// storageReserve is that reserve: 0 unless WithStorageReserve set one, so a server
+	// built without it watches and warns but never refuses — the binary's flag is what
+	// turns the freeze on by default. storageRead, when non-nil, replaces the real
+	// file-system reading so a test can script a disk filling up.
+	storage        *storage.Monitor
+	storageReserve uint64
+	storageRead    func(dir string) (diskspace.Usage, error)
 
 	// backupsInFlight counts whole-instance snapshots currently streaming (ADR-0109).
 	// A snapshot reads the WAL files off the run loop, so a compaction underneath one
@@ -1303,6 +1323,22 @@ func WithCheckpointRetention(keep int) Option {
 	}
 }
 
+// WithStorageReserve sets the disk space the server keeps free for itself
+// (ADR-0481). While less than this is available under the data
+// directory, the server refuses new writes — the HTTP layer answers 507 — and starts
+// no work of its own, so the state store and the checkpoints that give WAL space back
+// still have room to write; it resumes by itself once the reserve and a quarter of it
+// are free. 0 keeps the monitoring and the warnings and turns the freeze off.
+func WithStorageReserve(bytes uint64) Option {
+	return func(s *Server) { s.storageReserve = bytes }
+}
+
+// withStorageReader replaces the file-system reading the storage monitor takes, so a
+// test can script a disk filling and draining without filling one.
+func withStorageReader(read func(dir string) (diskspace.Usage, error)) Option {
+	return func(s *Server) { s.storageRead = read }
+}
+
 // WithoutMetrics turns off the Prometheus exposition at /metrics (ADR-0142). It is
 // served by default — a system meant to be operated should be observable without extra
 // configuration, and the exposition carries only bounded-cardinality aggregates — so
@@ -1523,6 +1559,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	lastLogins, err := newLastLoginStore(filepath.Join(dataDir, "last-logins"), users)
+	if err != nil {
+		return nil, err
+	}
 	groups, err := newGroupStore(filepath.Join(dataDir, "groups"))
 	if err != nil {
 		return nil, err
@@ -1685,6 +1725,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		repository:        repositoryCatalog,
 		repositoryStore:   repositoryStore,
 		inboundSubs:       inboundSubs,
+		inboundHealth:     newInboundHealth(),
 		feedSubs:          feedSubs,
 		feedPushes:        newFeedPushState(),
 		settings:          settings,
@@ -1699,6 +1740,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		checkpointKeep:    checkpointKeepDefault,    // published checkpoints kept; WithCheckpointRetention overrides (ADR-0131)
 		vaultEnabled:      true,                     // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:             users,
+		lastLogins:        lastLogins,
 		groups:            groups,
 		directorySync:     directorySync,
 		inventoryLoads:    inventoryLoads,
@@ -1974,6 +2016,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	for _, opt := range opts {
 		opt(s)
 	}
+	s.storage = s.newStorageMonitor()
 	s.newFormLookups()
 	// The Playground's sandboxes are engines of their own, so the registry is not
 	// behind this server's run loop — but *finding* the model a session runs is
@@ -2077,6 +2120,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// carries the marker that says it has been through this.
 		if err := s.upgradeLegacyRoles(time.Now().Unix()); err != nil {
 			return nil, err
+		}
+		// A login day left behind by an account that is gone is removed before anybody
+		// can sign in (lastlogin.go). Reported and not fatal: it is a convenience
+		// column, and it must not be what keeps a server from starting.
+		if err := s.lastLogins.prune(); err != nil {
+			logging.Warn(logging.AuthLoginDateUnrecorded, "login days of deleted accounts could not be pruned",
+				slog.String("error", err.Error()))
 		}
 		token, err := randomHex(32)
 		if err != nil {
@@ -2358,6 +2408,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.supervisor.start()
 	}
 	go s.timerScheduler(time.Second)
+	// The storage monitor reads the disk on its own goroutine — a statfs, off the run
+	// loop — and its first reading is taken at once, so the admission check below the
+	// routes has an answer before the first write arrives (ADR-0481).
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.storage.Run(quit, storage.DefaultInterval)
+	}()
 	// The collaboration reaper evicts idle detached session participants (MCP
 	// agents that stopped polling) and releases their locks (ADR-0140). It runs off
 	// the run loop — the collab registry is its own mutex-guarded, engine-independent
@@ -2487,8 +2545,12 @@ func (s *Server) retentionSweeper(every time.Duration) {
 		case <-s.quit:
 			return
 		case <-ticks:
-			now := s.now()
-			s.do(func() { s.sweepRetention(now) })
+			// A purge writes its events before it frees anything, so it waits while the
+			// disk is below the reserve; finished instances stay eligible meanwhile.
+			if !s.writesPaused() {
+				now := s.now()
+				s.do(func() { s.sweepRetention(now) })
+			}
 			if s.retentionSwept != nil {
 				select {
 				case s.retentionSwept <- struct{}{}:
@@ -3031,6 +3093,12 @@ func (s *Server) drive() error {
 			if err = s.proc.RunUntilIdle(); err != nil {
 				return
 			}
+			// Below the storage reserve the in-process workers lease nothing new: a
+			// leased job is new work, and its result would have to be written. What is
+			// already leased finishes (ADR-0481).
+			if s.storage.Frozen() {
+				return
+			}
 			if jobs, err = s.jobRunner.Claim(); err != nil || len(jobs) == 0 {
 				return
 			}
@@ -3285,6 +3353,12 @@ func (s *Server) timerScheduler(every time.Duration) {
 			// timer leading into a business rule task) OFF it: this tick runs every
 			// second, and before ADR-0157 step 6 it was the path that could hold the
 			// single writer for a worker call nobody had asked for.
+			// Below the storage reserve, or once the engine has halted, a due timer
+			// stays due: firing it is new work, and it fires on the first tick after
+			// writes resume (ADR-0481).
+			if s.writesPaused() {
+				continue
+			}
 			ticked := false
 			s.do(func() { ticked = s.proc.TickTimers() == nil })
 			if ticked {
@@ -3434,7 +3508,7 @@ func (s *Server) Close() {
 // /api/v1/openapi.json and the Scalar API explorer at /api/docs.
 func (s *Server) Handler() http.Handler {
 	mux, policy := s.mountRoutes()
-	return s.withAuth(policy, mux)
+	return s.withAuth(policy, s.withStorageAdmission(mux))
 }
 
 // mountRoutes registers every route this server serves and, in the same pass,

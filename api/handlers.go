@@ -25,6 +25,7 @@ import (
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/exchange"
+	"github.com/pblumer/atlas/connector/googlecontacts"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
@@ -1135,7 +1136,7 @@ func (s *Server) deployBody(r *http.Request, body []byte) (deployResp, *deployRe
 func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, projectID, deployedBy string) (deployed []deployedProcess, compErr, persistErr error) {
 	// Set while registering: whether any process in this model binds to a directory,
 	// which is what a supervised AD worker may need a fresh credential for.
-	var namesADBindSecret bool
+	var refreshWorkers bool
 	deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
 	if err != nil {
 		return nil, err, nil
@@ -1262,7 +1263,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 		// A model that binds to a directory names a bind-password reference, and this
 		// server's supervised AD worker may not be holding that one yet — it is handed
 		// exactly the references the deployed models make (adWorkerEnv).
-		namesADBindSecret = namesADBindSecret || len(adBindSecretRefs(cp)) > 0
+		refreshWorkers = refreshWorkers || len(adBindSecretRefs(cp)) > 0 || len(mailExportStores(cp)) > 0
 		deployed = append(deployed, deployedProcess{Key: key, ProcessID: pid, Name: name, Version: version})
 	}
 	// Run the arm commands queued above (ADR-0051) so a timer start event's durable
@@ -1273,13 +1274,14 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 	if err := s.proc.RunUntilIdle(); err != nil {
 		return deployed, nil, err
 	}
-	// Let a supervised AD worker pick up a bind password it is not holding yet. Off
+	// Let a supervised AD worker pick up a bind password it is not holding yet — and a
+	// supervised mail worker an S3 Worker a new export-attachment writes into. Off
 	// the loop, because rendering a child's environment needs the loop this deploy is
 	// running on; and only when a new model actually binds to a directory, so the
 	// common deploy queues nothing. The refresh restarts a child only when its
 	// environment really changed, so a redeploy that names the same reference — or
 	// one whose reference resolves to nothing — costs no restart.
-	if namesADBindSecret && s.supervisor != nil {
+	if refreshWorkers && s.supervisor != nil {
 		go s.refreshSupervisedWorkers()
 	}
 	return deployed, nil, nil
@@ -6489,11 +6491,18 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		// process's environment. Reporting it here is what lets the Workers view say
 		// which names deployed models reference and *nothing* can serve (ADR-0168).
 		Connectors []string `json:"connectors,omitempty"`
+		// Endpoints are where those workers connect, keyed by worker name, as the
+		// worker reduced them to scheme, host and port (ADR-0471). The server reduces
+		// them again before keeping them — a report is input, not a promise — and an
+		// architecture sketch draws them for workers the server holds no
+		// configuration for.
+		Endpoints map[string]string `json:"endpoints,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
+	reported := reportedEndpoints(body.Connectors, body.Endpoints)
 	body.Type = strings.TrimSpace(body.Type)
 	if body.Type == "" {
 		httpapi.Error(w, http.StatusBadRequest, "type is required: a worker leases by job type")
@@ -6605,7 +6614,7 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			// Recorded on every poll, not just a productive one: an idle worker still
 			// holds its workers, and it is exactly the idle case an operator is
 			// looking at when work is not moving.
-			s.workers.holdsConnectors(body.Worker, body.Connectors)
+			s.workers.holdsConnectors(body.Worker, body.Connectors, reported)
 		})
 	}
 
@@ -6802,6 +6811,12 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"destination": j.Destination, "maxResults": j.MaxResults,
 			"includeBody": j.IncludeBody, "unreadOnly": j.UnreadOnly,
 			"resultVariable": j.ResultVariable,
+			// The documents half (ADR-0478): which
+			// attachment, which types the task accepts, and for an export the S3
+			// Worker's *name* and where in it — never its access key.
+			"attachment": j.Attachment, "allowedTypes": j.AllowedTypes,
+			"store": j.Store, "bucket": j.Bucket, "key": j.Key,
+			"errorCodes": j.ErrorCodes,
 		}}
 	case compiler.RemedyJobTypeIndex:
 		// The form and its field values travel; the AR System base URL and the service
@@ -7046,6 +7061,21 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		return &connectorPayload{Kind: "teamsphone", Fields: map[string]any{
 			"connector": j.Connector, "operation": j.Operation, "args": j.Args,
 			"resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
+		}}
+	case compiler.GoogleContactsJobTypeIndex:
+		// Exchange's arm with an address book's operation: the evaluated values travel,
+		// and nothing that says whose address book or as whom — that and the credential
+		// exist only on the worker (ADR-0476). The codes the
+		// process catches travel too, so a missing contact can take the process's path
+		// for it (ADR-0461).
+		j, err := googlecontacts.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "googlecontacts", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "contactId": j.ContactID,
+			"query": j.Query, "field": j.Field, "group": j.Group, "contact": j.Contact,
+			"maxResults": j.MaxResults, "resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
 		}}
 	case compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex:
 		// One arm for the three clio operations: the resolved job says which it is, so

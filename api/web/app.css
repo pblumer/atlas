@@ -670,7 +670,10 @@ textarea::placeholder {
 .stats { display: flex; gap: 34px; flex-wrap: wrap; }
 .stat b { display: block; font-size: 30px; font-weight: 700; line-height: 1.1; }
 .stat span { font-size: 12px; color: var(--muted); }
-.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+/* A pill is a label, and like a chip it keeps to one line: its round ends are made for
+   one, and a pill folded by a narrow table column reads as a tall blob. A column too
+   narrow for it moves it under the cell's text instead. */
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
 .chip { display: inline-block; font: 12px/1.6 ui-monospace, monospace; padding: 1px 7px; border-radius: 5px; background: var(--bg); border: 1px solid var(--border); white-space: nowrap; }
 
 /* Artifact id availability (ADR-0222). A draft is stored under its
@@ -763,6 +766,27 @@ textarea::placeholder {
 .catalogue-stranded, .tokens-expiring { border: 1px solid var(--warn); background: var(--warn-soft); margin-bottom: 18px; }
 .catalogue-stranded h2, .tokens-expiring h2 { color: var(--warn); }
 .catalogue-stranded ul, .tokens-expiring ul { margin: 6px 0 10px; padding-left: 18px; }
+/* The storage guard (ADR-0481): an alert above the dashboard when there is
+   something to do — amber while the room runs low, red once writes are refused — and the
+   administrator's card with one bar per file system. The bar's track is what this server
+   can ever have (used + available, as df counts it); the dark mark is where the reserve
+   begins, so the distance between the fill and the mark is the room left before a freeze. */
+.storage-alert { border: 1px solid var(--warn); background: var(--warn-soft); margin-bottom: 18px; }
+.storage-alert h2 { color: var(--warn); }
+.storage-alert.storage-frozen, .storage-alert.storage-halted { border-color: var(--danger); background: var(--danger-soft); }
+.storage-alert.storage-frozen h2, .storage-alert.storage-halted h2 { color: var(--danger); }
+.storage-card { margin-top: 18px; }
+.storage-fs { margin: 10px 0 14px; }
+.storage-paths code { font-size: 12px; }
+.storage-bar { position: relative; height: 10px; border-radius: 5px; background: var(--border); margin: 6px 0 4px; }
+.storage-used { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: var(--ok); }
+.storage-used.storage-warn { background: var(--warn); }
+.storage-used.storage-frozen, .storage-used.storage-halted { background: var(--danger); }
+.storage-used.storage-unknown { background: var(--muted); }
+.storage-reserve { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); }
+.storage-nums { font-size: 12px; }
+.storage-forecast { margin: 4px 0 8px; }
+.storage-error { color: var(--danger); }
 #api-tokens #tok-soon ul { margin: 6px 0; padding-left: 18px; }
 /* The variable editor inside the incident's fix dialog (ADR-0158). */
 .inc-vars-modal { max-width: 620px; width: 92vw; }
@@ -3662,6 +3686,28 @@ tr[hidden] { display: none; }
 .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--border); }
 .modal-actions { display: flex; align-items: center; gap: 8px; }
 
+/* The Events page (events.js): each of its two sections is a <details> that folds away,
+   its summary the section's heading with a caret that turns, and beside it a line saying
+   what the section holds and warns about — readable while the section is folded. A row's
+   detail is a dialog wide enough for the tables in it. */
+.ev-section { margin-top: 18px; }
+.ev-section > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 10px;
+}
+.ev-section > summary::-webkit-details-marker { display: none; }
+.ev-section > summary::before {
+  content: "\25B8"; display: inline-block; font-size: 12px; color: var(--muted); transition: transform .12s ease;
+}
+.ev-section[open] > summary::before { transform: rotate(90deg); }
+.ev-section > summary h2 { margin: 0; }
+.ev-section > summary:hover h2 { color: var(--accent); }
+.ev-sum-warn { color: var(--warn); font-weight: 600; }
+.modal.ev-modal { width: min(960px, 100%); }
+.modal.ev-modal:focus { outline: none; }
+.ev-modal .modal-head h2 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ev-modal .modal-foot { justify-content: flex-end; }
+
 /* Deleting an application (deletedialog.js): two modes, and for the irreversible one
    the server's preview of what goes and what stops working outside it. */
 .modal.purge-modal { width: min(640px, 100%); }
@@ -6366,7 +6412,6 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 /* The three parts of "used by" stack rather than wrap: they are three different
    statements, and a wrapped one reads as a broken line. */
 .bo-used { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; font-size: 12px; }
-.bo-used .pill { white-space: nowrap; }
 .bo-kind.businessObject { border-color: var(--accent); color: var(--accent); }
 .bo-kind.enumeration { border-style: dashed; }
 .bo-scope { margin: 10px 2px 0; font-size: 12px; color: var(--muted); max-width: 90ch; line-height: 1.5; }
@@ -7255,28 +7300,23 @@ button.im-problem:hover { background: var(--accent-soft); }
 .package-answers .package-question label { display: grid; gap: 4px; }
 .package-answers .package-answer { max-width: 100%; }
 
-/* The form editor's remote data source panel (remote-select-editor.js,
-   ADR-0473): above form-js's own properties, for a selected
-   textfield. */
-.atlas-ds-panel { padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--surface); font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
-.atlas-ds-panel[hidden] { display: none; }
-/* form-js lays its properties column out as a row; with the panel shown, stack it above
-   the properties panel instead of squeezing that panel aside, and let each scroll. */
-.fjs-pgl-properties-container:has(> .atlas-ds-panel:not([hidden])) { flex-direction: column; }
-.fjs-pgl-properties-container > .atlas-ds-panel { flex: 0 0 auto; max-height: 55%; overflow-y: auto; box-sizing: border-box; }
-.fjs-pgl-properties-container:has(> .atlas-ds-panel:not([hidden])) > .fjs-properties-container { flex: 1 1 0; min-height: 0; }
-.atlas-ds-head { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.atlas-ds-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.atlas-ds-row > span:first-child { min-width: 96px; color: var(--muted); }
-.atlas-ds-row select, .atlas-ds-row input[type=number], .atlas-ds-filter select, .atlas-ds-filter input[type=text] { font: inherit; padding: 3px 6px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface); color: var(--text); max-width: 100%; }
-.atlas-ds-row input[type=number] { width: 64px; }
-.atlas-ds-group { border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; margin: 0; display: flex; flex-direction: column; gap: 4px; }
-.atlas-ds-group legend { color: var(--muted); padding: 0 4px; }
-.atlas-ds-check { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; }
-.atlas-ds-filter { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.atlas-ds-hint { color: var(--muted); margin: 0; font-size: 12px; }
-.atlas-ds-warn { color: var(--warn); background: var(--warn-soft); border-radius: 4px; padding: 6px 8px; margin: 0; font-size: 12px; }
-.atlas-ds-problems { color: var(--danger); margin: 0; padding-left: 18px; font-size: 12px; }
+/* A select's remote options source in the form editor's properties panel
+   (vendor/form-js/src/atlas/editor.jsx, ADR-0473). The entries are the panel's own
+   markup; only what the panel has no rule for — a list of checkboxes under one label,
+   a filter's block of entries, a plain button — is laid out here, in the panel's own
+   variables. */
+.atlas-remote-checks > .bio-properties-panel-label { display: block; margin-bottom: 4px; }
+/* A long checkbox label wraps beside its box, not below it. */
+.atlas-remote-checkbox > .bio-properties-panel-checkbox { display: flex; align-items: flex-start; }
+.atlas-remote-checkbox > .bio-properties-panel-checkbox > .bio-properties-panel-input { margin-top: 3px; flex: 0 0 auto; }
+.atlas-remote-checkbox > .bio-properties-panel-checkbox > .bio-properties-panel-label { margin-top: 0; }
+.atlas-remote-checks > .bio-properties-panel-checkbox { margin: 2px 0; }
+.atlas-remote-filter { border: 1px solid var(--color-borders-group, var(--border)); border-radius: 2px; padding: 4px 0; margin: 0 0 8px; }
+.atlas-remote-filter .bio-properties-panel-entry { margin-right: 12px; }
+.atlas-remote-button { font: inherit; font-size: var(--text-size-small, 13px); padding: 4px 10px; margin: 4px 0; border: 1px solid var(--input-border-color, var(--border-strong)); border-radius: 2px; background: var(--input-background-color, var(--surface)); color: var(--color-text, var(--text)); cursor: pointer; }
+.atlas-remote-button:hover:not(:disabled) { border-color: var(--input-focus-border-color, var(--accent)); }
+.atlas-remote-button:disabled { opacity: 0.6; cursor: default; }
+.atlas-remote-filter .atlas-remote-remove { margin-left: 12px; }
 /* The directory field's own warn states (form-theme.css lays the field out): the
    preview's "example data" note and a chosen id the directory no longer resolves. */
 .fjs-container .atlas-rs-preview { background: var(--warn-soft); color: var(--warn); }
@@ -7285,3 +7325,6 @@ button.im-problem:hover { background: var(--accent-soft); }
    shares a cause with, so the send reads as the head of its group. */
 .el-row.el-child td { border-top-color: transparent; }
 .el-row.el-child td:nth-child(4) { padding-left: 22px; }
+/* A send's mark (nobody received it, kept, expired unreceived) stands a size below the
+   row's text, so it reads as a note on the verb rather than as a second headline. */
+.el-row .pill { font-size: 11px; line-height: 16px; padding: 1px 7px; }

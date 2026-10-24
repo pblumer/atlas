@@ -403,7 +403,8 @@ batch as the decision, appends an `ApprovalRequested` fact and throws the BPMN e
 `ATLAS_APPROVAL_REQUIRED` on the job. A model that wants approval catches it with a boundary
 error event, routes to a user task, and loops back to the service task; an uncaught error is
 an incident, which is the correct answer for a model that never planned for approval. The
-approver decides through `POST /api/v1/action-approvals/{key}/decide`, which checks group
+approver decides through `POST /api/v1/instances/{key}/action-approvals/{approval}/decide`
+(the Console's *Approvals* page posts there), which checks group
 membership and separation of duties on the server and appends `ApprovalDecided`; completing
 the user task only moves the process. When the loop reaches the service task again, a new
 job, a new lease and a new decision find the approval for the same digest. The policy never
@@ -716,7 +717,16 @@ amendment of §19, are not decided by having built the supervised half.
 - **Console.** *Connected accounts* (account menu) and *Administration → Security*: readiness,
   identity policy per Worker, policy drafts and publication, the simulator, and an instance's
   decisions and approvals by key. The MCP tool `atlas_instance_authorizations` reads the same
-  evidence.
+  evidence. *Approvals* (account menu, and a dashboard tile when some wait) is where a person
+  answers: `GET /api/v1/me/action-approvals` lists the open requests they may answer and those
+  asked on their behalf, across instances, read through an index of open requests by expiry
+  (column family `0x35`, written with the request fact and purged with the instance). It is a
+  page of at most 200, soonest-expiring first, marked truncated when more are open.
+- **Storage.** Evidence is under column family `0x34` and approval facts under `0x33`. Evidence
+  was first given `0x32`, which the event log already used. The two did not meet only because,
+  in partition 1, an instance key's leading bytes differ from the event log's sub-prefixes;
+  in partition 0, or one of 256 and above, a range read of one would have reached the other.
+  `state/columnfamily_test.go` now holds every family to a value of its own.
 - **Backup.** The `identity` store is classified as a credential and `policies` as identity
   (`api/storeregistry.go`).
 
@@ -741,7 +751,6 @@ a revocation during a refresh wins, so it is accepted and stated in §13.
 - Shadow is refused for the delegated modes. A delegated credential is released only on a
   Permit, so shadow would either release a person's credential on a refusal or not be
   shadow.
-- There is no Console screen for answering an approval; the approver uses the route.
 
 **Not built**
 
@@ -765,7 +774,8 @@ a revocation during a refresh wins, so it is accepted and stated in §13.
   refusal of §4.
 - Worked example: `api/identitysample_internal_test.go` holds the documentation's model and
   policies.
-- Console: `e2e/console-identity.spec.mjs`.
+- Console: `e2e/console-identity.spec.mjs`, `e2e/console-approvals.spec.mjs`;
+  `api/myapprovals_internal_test.go` for the worklist route.
 
 **Measured** with `go test -bench . -benchmem ./authz` on a 4-core development container, one
 decision per operation. These are single runs, taken while other tests were running, so

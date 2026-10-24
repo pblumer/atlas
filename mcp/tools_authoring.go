@@ -892,6 +892,40 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_release_architecture",
+			Description: "Read one release's architecture snapshot, taken when the release was recorded " +
+				"(ADR-0471): the messages its processes receive and whether each starts an instance, the " +
+				"workers they name with their Worker Type (a name authored as FEEL is reported as decided at " +
+				"run time), the local decisions they evaluate, and the calls they make into processes of other " +
+				"applications — each with the process and element that states it — and the job types its service " +
+				"tasks hand to subscribed workers. A release recorded since the physical view exists also carries " +
+				"what this installation had in place for it: its name and environment, its external address, the " +
+				"public start links, and per worker whether Atlas runs it or a worker process leases it, its " +
+				"endpoint as scheme, host and port, and the worker instances seen serving it. An endpoint the " +
+				"caller may not see, and the instances for a caller who is not an operator, are withheld. A " +
+				"release recorded before snapshots existed has none, and the error says so.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      stringProp("The application id."),
+					"version": integerProp("The release version, as atlas_application_releases lists it."),
+				},
+				"required": []any{"id", "version"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				version, err := argUint(args, "version")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/applications/" + url.PathEscape(id) + "/releases/" +
+					strconv.FormatUint(version, 10) + "/architecture"))
+			},
+		},
+		{
 			Name: "atlas_application_deployments",
 			Description: "Report what a process application currently has deployed on this server: its " +
 				"published version and each definition's version, active flag, and running/finished " +

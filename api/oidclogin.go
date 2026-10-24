@@ -357,6 +357,7 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	audit(r, logging.AuthLogin, "login",
 		slog.String("username", u.Username), slog.String("user_id", u.ID),
 		slog.String("source", SourceOIDC))
+	s.recordLogin(u)
 	http.Redirect(w, r, oidcReturnFrom(r), http.StatusFound)
 }
 

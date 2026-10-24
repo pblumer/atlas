@@ -84,7 +84,10 @@ type createConnectorParams struct {
 	// MailboxEndpoint is an SMTP mail Worker's IMAP endpoint
 	// (ADR-0438); cleared for every other kind.
 	MailboxEndpoint string `json:"mailboxEndpoint"`
-	Enabled         *bool  `json:"enabled"`
+	// Scanner is a mail Worker's malware scanner
+	// (ADR-0478); cleared for every other kind.
+	Scanner string `json:"scanner"`
+	Enabled *bool  `json:"enabled"`
 	// ConnectionString is a SQL worker's whole configuration, sealed into the vault
 	// by the create handler which then stores only the reference — so the record still
 	// holds no secret (I6). It exists because for these kinds the credential *is* the
@@ -183,7 +186,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		},
 		registerHandlers: func(s *Server, store *state.Store) {
 			s.jobRunner.HandleWithOutput(compiler.MailJobTypeIndex, func(rd state.Reader) job.OutputHandler {
-				return mail.Handler(rd, s.processLookup, s.mailRegistry, mailDirectory{s})
+				return mail.HandlerWith(rd, s.processLookup, s.mailRegistry, mailDirectory{s}, serverDocuments{s})
 			})
 		},
 		rebuild: func(s *Server) error {
@@ -430,6 +433,20 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		workerOnly:     true,
 		validateCreate: validateTeamsPhoneConnector,
 		jobTypes:       []int32{compiler.TeamsPhoneJobTypeIndex},
+	},
+	{
+		// A Google Contacts task finds, reads, lists, creates, updates or deletes a
+		// contact in an address book, labels one, or searches the organization's
+		// directory (ADR-0476). Worker-only for Exchange's
+		// reason: the credential reads a person's whole address book — a service account
+		// with domain-wide delegation, or that person's own refresh token — and has no
+		// business on the engine's run loop. The record exists so an operator can add an
+		// address book in the Console and the supervised worker be provisioned from it
+		// (googleContactsWorkerEnv).
+		name:           connectorKindGoogleContacts,
+		workerOnly:     true,
+		validateCreate: validateGoogleContactsConnector,
+		jobTypes:       []int32{compiler.GoogleContactsJobTypeIndex},
 	},
 	{
 		// An Active Directory task performs one directory operation against a
@@ -693,7 +710,7 @@ func DefaultOffloadedKinds() []string {
 // flag, no restart of Atlas. That is what makes the tenant a Console entry rather than a
 // deployment change.
 func DefaultSupervisedWorkerOnlyKinds() []string {
-	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
+	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindGoogleContacts, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
 }
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
@@ -982,6 +999,19 @@ func validateTeamsPhoneConnector(p *createConnectorParams) string {
 	return ""
 }
 
+// validateGoogleContactsConnector checks an address book a Console operator is adding.
+// Whose address book it is and as whom lives in the vault bundle the credentialsRef
+// names — a service account with the Workspace user it acts as, or a refresh token — so
+// a record without one has nothing to read with. The endpoint is optional: empty is the
+// People API itself.
+func validateGoogleContactsConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if p.CredentialsRef == "" {
+		return "a googlecontacts worker requires a credentialsRef naming a vault bundle: {method: serviceAccount, clientEmail, privateKey, subject} or {method: refreshToken, clientId, clientSecret, refreshToken}"
+	}
+	return ""
+}
+
 // validateExchangeConnector checks an Exchange organization a Console operator is
 // adding. Everything that says which organization and as whom lives in the vault bundle
 // the credentialsRef names — Online's {organization, clientId, certificate or
@@ -1036,6 +1066,7 @@ func normalizeConnectorUpdate(rec *connector) string {
 		Sender:          strings.TrimSpace(rec.Sender),
 		Model:           strings.TrimSpace(rec.Model),
 		MailboxEndpoint: strings.TrimSpace(rec.MailboxEndpoint),
+		Scanner:         strings.TrimSpace(rec.Scanner),
 	}
 	if msg := validate(&p); msg != "" {
 		return msg
@@ -1043,6 +1074,7 @@ func normalizeConnectorUpdate(rec *connector) string {
 	rec.Endpoint, rec.CredentialsRef = p.Endpoint, p.CredentialsRef
 	rec.Provider, rec.Sender, rec.Model = p.Provider, p.Sender, p.Model
 	rec.MailboxEndpoint = p.MailboxEndpoint
+	rec.Scanner = p.Scanner
 	return ""
 }
 
@@ -1064,6 +1096,18 @@ func validateMailConnector(p *createConnectorParams) string {
 	}
 	if p.Sender == "" {
 		return "mail worker sender (default From address) is required"
+	}
+	// The scanner is the Worker's, whatever its provider — except preview, which has
+	// no mailbox and so hands nothing on. Normalized here so a typo is found while
+	// typing rather than at the first attachment.
+	if p.Provider == mail.ProviderPreview {
+		p.Scanner = ""
+	} else if p.Scanner != "" {
+		scanner, err := mail.NormalizeScannerEndpoint(p.Scanner)
+		if err != nil {
+			return err.Error()
+		}
+		p.Scanner = scanner
 	}
 	switch p.Provider {
 	case mail.ProviderSMTP:

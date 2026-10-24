@@ -1,6 +1,10 @@
 # ADR-0473: A form looks remote data up through an ephemeral worker query
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-23: a directory field is a form-js select whose
+  options source is the remote data source, a fourth beside Static, Input data and
+  Expression, edited under the select's own Options source; the vendored form-js bundles
+  are rebuilt from a lockfile with Atlas's modules for it; a directory field saved as a
+  textfield is still read, and the editor converts one on request)
 - **Implementation:** Landed
 - **Date:** 2026-10-23
 - **Deciders:** Atlas maintainers
@@ -352,9 +356,11 @@ Every refusal is the API's error envelope with a machine-readable `code` beside
 - Completion (`handleCompleteTask`) checks directory fields after the task question and
   before the command; the public start link and the public wizard step refuse a form with
   one; the form save refuses an `atlasDataSource` the server cannot honour.
-- `api/web/remote-select.js` — the Tasks app's search on a directory field;
-  `api/web/remote-select-editor.js` — the form editor's panel and **＋ Directory field**,
-  with the Validate tab and the Design preview on made-up people.
+- `api/web/remote-select.js` — the search on a directory field, for the Tasks app and the
+  form editor's previews on made-up people; `api/web/vendor/form-js/src/atlas/` — the
+  select that mounts it and the properties that edit it (amended 2026-10-23, below; the
+  panel of the first build, `remote-select-editor.js`, and its **＋ Directory field** are
+  gone).
 - `examples/entra-benutzerauswahl` — `Process_mvjoqvisfajk` without `list-users`.
 
 Tested by `connector/entra/lookup_test.go` (filter construction, escaping, allowlist,
@@ -365,6 +371,78 @@ example end to end against a recorded Graph with a real Worker Instance, the sec
 doors, a restart before and after the choice with the log position unchanged by
 searches), and the Playwright specs `remote-select`, `tasks-remote-select`,
 `form-directory-field` and `worker-test`.
+
+### Amendment (2026-10-23): a directory field is a select
+
+The record chose a textfield carrying the block because the vendored bundles inline a
+Preact of their own and export none of it, so a component of Atlas's would have meant
+rebuilding both. In the form editor that choice showed. The data source was edited in a
+panel of Atlas's own laid above form-js's properties and reached by a button beside Save,
+and the field read as a text field on the canvas and in the palette. An author asking
+where a field's options come from looks under **Options source**, which is where form-js
+asks it of every select; the panel was somewhere else.
+
+So a directory field is now a form-js **select**, and the remote data source is a fourth
+options source beside Static, Input data and Expression:
+
+```json
+{
+  "type": "select",
+  "key": "user",
+  "label": "Person",
+  "validate": { "required": true },
+  "atlasDataSource": { "version": 1, "workerType": "entra", "worker": "ucc_entra", "resource": "users" }
+}
+```
+
+The block is unchanged. It stands where a select's `values`, `valuesKey` or
+`valuesExpression` would, and a select that names one of those as well is refused at
+save: a select takes its options from one source. Every check above applies as written.
+
+form-js describes its options sources in four exported tables — the sources, their
+labels, the property each lives in, and the value a newly chosen one starts with — and
+everything that deals with them reads those tables: the editor's Type select, the
+behaviour that clears the other sources when one is chosen, and the viewer's
+`getOptionsSource`. Adding a row to them is what makes the editor treat the remote
+source as one of its own. No file of form-js is patched or copied.
+
+The bundles are rebuilt for it, which is the cost the record had avoided, and paid this
+way:
+
+- `form-viewer.js` and `form-playground.js` are built from
+  `api/web/vendor/form-js/src/` — the two entries, Atlas's modules and a
+  `package-lock.json` — by the recipe in its `ATLAS-VENDORED.txt`, and a test holds each
+  bundle to the checksum recorded there, as it holds the DMN bundle. The bundles of the
+  first build were made from a recipe that named only the entry packages; they cannot be
+  rebuilt byte for byte.
+- The modules register into the bundle's own Preact when its Form or Playground is
+  constructed. Nothing is exported for a page to register, and nothing is registered
+  twice.
+- What a search is — the request, the paging, the announcements, the keyboard — stays in
+  `api/web/remote-select.js`. The page hands the bundle an adapter as the Form's
+  `atlasRemote` option; the select mounts it into its own element and tells it every
+  value form-js renders. A form rendered by the bundle without an adapter — a start form,
+  a repair form — shows a box for the id, as the textfield did.
+- The properties of the remote source are entries in the properties panel's own markup.
+  The bundle does not import `@bpmn-io/properties-panel`: form-js-editor carries that
+  library inside its dist and exports none of it, and a second copy would bring a second
+  Preact, whose hooks do not run under the first.
+- The palette's **Directory picker** adds a select with the first source this server
+  offers and a Worker already open to forms. It is a preset, not a type: what it
+  creates and what is saved is a select.
+
+Forms saved before keep working. The server reads a textfield carrying the block as it
+did, at save, at query time and at completion; the Tasks app attaches the same search to
+it; and the editor shows it with **Convert to select**, which converts it only when its
+author asks — nothing converts a stored form behind its author's back.
+
+One thing is lost: form-js rendered without these modules does not know the fourth
+source, and shows a remote select as a select with form-js's own placeholder option,
+where it showed the textfield as a text field. Every surface Atlas renders a form on
+uses the vendored bundle.
+
+A tag list — several entries chosen from the same source — is not part of this
+amendment. The submission check takes one id per field; a list of ids is its own change.
 
 ## Pros and cons of the options
 

@@ -101,3 +101,88 @@ func TestReceivableMessageNamesOfAProcessWithNone(t *testing.T) {
 		t.Errorf("= %v, want none", got)
 	}
 }
+
+// TestMessageReceiptsNameTheElement: the same five places as the set above, one entry
+// per element, so an architecture sketch can say which element a message reaches
+// (ADR-0471). A start is marked only where it creates an instance — at the process
+// root — and an event subprocess is listed once, as itself.
+func TestMessageReceiptsNameTheElement(t *testing.T) {
+	b := NewBuilder(1, "empfaenger", 1)
+
+	start := b.AddMessageStartEvent("post-eingegangen", nil, false)
+	b.SetElementBpmnId(start, "Start_Post")
+	catch := b.AddMessageCatchEvent("antwort-da", nil)
+	b.SetElementBpmnId(catch, "Catch_Antwort")
+	receive := b.AddReceiveTask("freigabe-erteilt", nil)
+	b.SetElementBpmnId(receive, "Receive_Freigabe")
+	task := b.AddServiceTask("arbeit", 1)
+	boundary := b.AddBoundaryMessageEvent(task, true, "abbruch-gewuenscht", nil)
+	b.SetElementBpmnId(boundary, "Boundary_Abbruch")
+	throw := b.AddMessageThrowEvent("wir-melden-uns", nil)
+	end := b.AddEndEvent()
+
+	sub := b.AddSubProcess()
+	b.SetElementBpmnId(sub, "EventSub_Eskalation")
+	b.SetEventSubProcess(sub, EventSubProcessDetail{
+		Kind: BoundaryMessage, MessageName: "eskalation-gemeldet",
+	})
+	timerSub := b.AddSubProcess()
+	b.SetEventSubProcess(timerSub, EventSubProcessDetail{Kind: BoundarySignal, SignalName: "kein-nachrichtenname"})
+
+	b.Connect(start, catch)
+	b.Connect(catch, receive)
+	b.Connect(receive, task)
+	b.Connect(task, throw)
+	b.Connect(throw, end)
+
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	got := cp.MessageReceipts()
+	want := []MessageReceipt{
+		{ElementId: "Start_Post", MessageName: "post-eingegangen", Starts: true},
+		{ElementId: "Catch_Antwort", MessageName: "antwort-da"},
+		{ElementId: "Receive_Freigabe", MessageName: "freigabe-erteilt"},
+		{ElementId: "Boundary_Abbruch", MessageName: "abbruch-gewuenscht"},
+		{ElementId: "EventSub_Eskalation", MessageName: "eskalation-gemeldet"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("= %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+// TestJobTypeRefsListServiceAndSendTasks: the work a process hands to whatever worker
+// subscribes to a type — an architecture sketch draws it as a way out of the
+// application (ADR-0471). A connector task names its worker and is not listed here.
+func TestJobTypeRefsListServiceAndSendTasks(t *testing.T) {
+	b := NewBuilder(1, "versand", 1)
+	start := b.AddStartEvent()
+	service := b.AddServiceTask("adresse-pruefen", 3)
+	b.SetElementBpmnId(service, "Task_Adresse")
+	send := b.AddSendTask("paket-melden", 3)
+	b.SetElementBpmnId(send, "Send_Paket")
+	end := b.AddEndEvent()
+	b.Connect(start, service)
+	b.Connect(service, send)
+	b.Connect(send, end)
+
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	got := cp.JobTypeRefs()
+	want := []JobTypeRef{
+		{ElementId: "Task_Adresse", JobType: "adresse-pruefen"},
+		{ElementId: "Send_Paket", JobType: "paket-melden"},
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("= %+v, want %+v", got, want)
+	}
+}
