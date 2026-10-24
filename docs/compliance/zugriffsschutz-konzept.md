@@ -598,8 +598,11 @@ Ressourcenserver-Hälfte zuerst gebaut.
 **Stand: die Ressourcenserver-Hälfte ist umgesetzt** (`api/oauthmeta.go`). Zwei
 öffentliche Dokumente unter `/.well-known/oauth-protected-resource` — eines für
 den Server, eines für `/mcp` —, der `resource_metadata`-Verweis auf jedem `401`,
-und `--external-url` für die absolute Origin, weil Atlas kein TLS terminiert und
-die aus einer Anfrage abgeleitete Origin hinter einem Proxy `http://…` lautet.
+und `--external-url` für die öffentliche Origin, **wenn TLS vor Atlas an einem
+Reverse Proxy terminiert wird**: Die beim Server ankommende HTTP-Anfrage
+enthält andernfalls nicht zuverlässig das öffentliche `https://`-Schema.
+Bei direktem TLS 1.3 im Server (ADR-0191) kann Atlas die HTTPS-Origin
+aus der Anfrage ableiten; `--external-url` bleibt für abweichende Adressen verfügbar.
 
 Was das ändert und was nicht: Eine Abweisung ist jetzt lesbar statt stumm — der
 Client findet ein Dokument, das die Ressource benennt, die ihn abgewiesen hat,
@@ -1134,7 +1137,7 @@ Aussteller bleibt.
 | Durchgängige Objekt-/Aktionsautorisierung (O-02) | M9 und M11 sind umgesetzt, M13 jedoch nur für SharePoint teilweise. Andere Instanz-Lesewege und Worker-Typen bleiben zu prüfen. |
 | Isolation der Zustellung in der Engine | Der echte Nachfolger von M11: Die veröffentlichte Nachricht trüge ihren Geltungsbereich mit, und die Korrelation verglicht ihn. Das ändert den Nachrichtenwert und berührt `applyToState` — ein eigener Entscheid mit eigener Wiederanlauf-Geschichte, nicht ein Detail von M11. Bis dahin ist M11 ausdrücklich ein Tor und keine Isolation. |
 | Mandantenfähigkeit (O-09) | Betriebsmuster «eine Installation je Schutzbedarfsklasse» bleibt die Aussage. |
-| TLS im Produkt (R-02) | Bleibt Aufgabe des vorgelagerten Proxys. |
+| TLS-Betriebsart (R-02) | **Implementiert** (ADR-0191): atlas terminiert optional TLS 1.3 am eigenen Listener. Nicht Teil dieses Zugriffsschutz-Umbaus ist die Auswahl/Abnahme der Topologie, der Zertifikate und einer gleichwertigen Ingress-Protokollierung ohne Proxy; siehe ISDS M-01/M-06. |
 | Verschlüsselung ruhender Daten (O-06) | Unabhängige Achse; ändert nichts an der Zugriffsfrage. |
 | CIMD (Client ID Metadata Documents) | Die andere Hälfte der Vollausbau-Variante der MCP-Spezifikation. Sie löst dasselbe Problem wie RFC 7591 eine Stufe weiter draussen, und nichts, worauf Atlas getroffen ist, verlangt danach. Dynamische Client-Registrierung selbst ist inzwischen umgesetzt (M10, Schritt zwei) — standardmässig aus. |
 

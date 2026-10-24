@@ -14,6 +14,10 @@ die **schweizerische Bundesverwaltung** (ISG/ISV, DSG, HERMES, BIT-Vorgaben).
 
 ## Stand und Geltungsgrenzen
 
+- **Transportverschlüsselung:** atlas kann direkt TLS 1.3 terminieren
+  (`--tls-cert`/`--tls-key`, ADR-0191) oder hinter einem TLS-Reverse-Proxy
+  betrieben werden. Der öffentliche Listener ist ohne TLS-Konfiguration HTTP;
+  die konkrete Ingress-Topologie und Access-Protokollierung sind abzunehmen.
 - **Implementiert** bedeutet im Repository vorhanden, nicht durch eIAM, BIT,
   Provider oder eine unabhängige Prüfstelle abgenommen.
 - OIDC-Föderation, Rollen und Worker-Freigaben sind implementiert. Die neue
@@ -47,6 +51,7 @@ Diese Dokumente veralten still, deshalb: **wer eine sicherheitsrelevante
 Eigenschaft ändert, ändert sie hier mit.** Das betrifft insbesondere
 
 - Authentisierung und Autorisierung (`api/auth.go`, ADR-0044/0049/0071/0129),
+- TLS-Listener, Zertifikatswechsel, Proxy-/Ingress-Topologie (ADR-0191/0448),
 - den Vault und die Secret-Auflösung (ADR-0041/0069/0070),
 - Aufbewahrung und Löschung (ADR-0115/0144),
 - Backup, Checkpoints und WAL-Kompaktierung (ADR-0107/0109/0131),
