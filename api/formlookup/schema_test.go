@@ -6,14 +6,15 @@ import (
 )
 
 // exampleForm is the form the example process ships: a department chosen from fixed
-// options, and a person searched within it.
+// options, and a person searched within it — a select whose options come from the
+// remote data source.
 const exampleForm = `{
   "type": "default",
   "id": "entra-benutzerauswahl",
   "components": [
     {"type": "select", "key": "abteilung", "label": "Abteilung",
      "values": [{"label": "IT", "value": "IT"}, {"label": "Finanzen", "value": "Finance"}]},
-    {"type": "textfield", "key": "user", "label": "Person", "validate": {"required": true},
+    {"type": "select", "key": "user", "label": "Person", "validate": {"required": true},
      "atlasDataSource": {
        "version": 1, "workerType": "entra", "worker": "ucc_entra", "resource": "users",
        "searchFields": ["displayName", "mail", "userPrincipalName"],
@@ -103,7 +104,10 @@ func TestAFormIsRefusedForADataSourceTheServerCannotHonour(t *testing.T) {
 		"too many details":   {`"details": ["department"]`, `"details": ["department","jobTitle","mail","surname","givenName"]`, "details"},
 		"verify":             {`"pageSize": 25`, `"pageSize": 25, "verify": "trust"`, "verify"},
 		"min search":         {`"pageSize": 25`, `"pageSize": 25, "minSearchLength": 11`, "minSearchLength"},
-		"not a textfield":    {`{"type": "textfield", "key": "user"`, `{"type": "select", "key": "user"`, "textfield"},
+		"not a select":       {`{"type": "select", "key": "user"`, `{"type": "radio", "key": "user"`, "select"},
+		"static options too": {`"key": "user", "label": "Person"`, `"key": "user", "label": "Person", "values": [{"label": "A", "value": "a"}]`, "values"},
+		"input options too":  {`"key": "user", "label": "Person"`, `"key": "user", "label": "Person", "valuesKey": "people"`, "valuesKey"},
+		"FEEL options too":   {`"key": "user", "label": "Person"`, `"key": "user", "label": "Person", "valuesExpression": "=people"`, "valuesExpression"},
 		"no key":             {`"key": "user", "label": "Person"`, `"label": "Person"`, "key"},
 		"not an object":      {`"atlasDataSource": {`, `"atlasDataSource": "x", "ignored": {`, "atlasDataSource"},
 	} {
@@ -115,6 +119,23 @@ func TestAFormIsRefusedForADataSourceTheServerCannotHonour(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: err = %v, want it to mention %q", name, err, tc.want)
 		}
+	}
+}
+
+// A directory field saved as a textfield — the shape such fields were saved in first — is
+// read as it was, so a form stored before the select still saves and completes.
+func TestADirectoryFieldSavedAsATextfieldIsStillRead(t *testing.T) {
+	schema := strings.Replace(exampleForm, `{"type": "select", "key": "user"`, `{"type": "textfield", "key": "user"`, 1)
+	if schema == exampleForm {
+		t.Fatal("the mutation did not apply")
+	}
+	form, err := Parse([]byte(schema))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, ok := form.Field("user")
+	if !ok || f.Source.Worker != "ucc_entra" || !f.Required {
+		t.Fatalf("field = %+v (%v)", f, ok)
 	}
 }
 

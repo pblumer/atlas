@@ -56,7 +56,10 @@
       // offers the Entra users source and two Workers — one open to forms, one not
       // (ADR-0473). Saves and every call are captured.
       window.__calls = [];
-      window.__mountDirectory = () => {
+      // __mountDirectory opens a form with a static select (the department), a second
+      // static select to turn into a remote one, a radio group and — with legacy — a
+      // directory field saved as a textfield, the shape such fields were saved in first.
+      window.__mountDirectory = ({ legacy } = {}) => {
         const sources = {
           providers: [{ workerType: "entra", resource: "users", label: "Microsoft Entra ID — users",
             valueProperty: "id",
@@ -77,7 +80,14 @@
             return { id: "form-dir", name: "Person", projectId: "", schema: { type: "default", id: "form-dir", components: [
               { type: "select", id: "Field_abteilung", key: "abteilung", label: "Abteilung",
                 values: [{ label: "IT", value: "IT" }, { label: "Finanzen", value: "Finance" }] },
-              { type: "textfield", id: "Field_wer", key: "wer", label: "Wer" },
+              { type: "select", id: "Field_wer", key: "wer", label: "Wer",
+                values: [{ label: "Value", value: "value" }] },
+              { type: "radio", id: "Field_dringlichkeit", key: "dringlichkeit", label: "Dringlichkeit",
+                values: [{ label: "Hoch", value: "high" }, { label: "Normal", value: "normal" }] },
+              ...(legacy ? [{ type: "textfield", id: "Field_alt", key: "alt", label: "Alt",
+                validate: { required: true, validationType: "email", minLength: 2 },
+                appearance: { prefixAdorner: "@" },
+                atlasDataSource: { version: 1, workerType: "entra", worker: "ucc_entra", resource: "users" } }] : []),
             ] } };
           }
           if (method === "POST" && url.endsWith("/forms")) {

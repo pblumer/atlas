@@ -178,9 +178,9 @@ governs a Worker:
   policies, a simulator whose answer is labelled a simulation, and an instance's recorded
   decisions and approvals. The MCP tool `atlas_instance_authorizations` reads the same
   evidence.
-- **A task form can search a directory instead of listing it.** A textfield with an
-  `atlasDataSource` block is a directory field: in the Tasks app the person types a name or
-  an e-mail address, sees at most one page of matches (25 by default) from Microsoft Entra
+- **A task form can search a directory instead of listing it.** A select whose options
+  source is a remote data source is a directory field: in the Tasks app the person types a
+  name or an e-mail address, sees at most one page of matches (25 by default) from Microsoft Entra
   ID, narrowed by another field of the form such as the department, and the task completes
   with the chosen entry's object id — never its label, and never a listing in a process
   variable. `POST /api/v1/tasks/{key}/form-data/{field}/query` answers only somebody who may
@@ -198,11 +198,16 @@ governs a Worker:
 - **Forms may search, per Worker.** An Entra Worker's dialog in the Console has a
   **Forms may search** switch (`formLookups`), off until its editors turn it on: a form
   can name any Worker, but only one opened this way answers its searches.
-- **The form editor configures a directory field without JSON.** **＋ Directory field**
-  adds one, and a panel above the properties of a selected text field chooses the source,
-  the Worker, the properties searched and shown, filters bound to another field or fixed,
-  the page size and how the choice is checked. The Validate tab and the Design preview
-  search made-up people and say so; no directory is asked while a form is designed.
+- **A select's options can come from a remote data source.** In the form editor, a
+  select's **Options source ▸ Type** offers **Remote data source** beside Static, Input data
+  and Expression, and the same group chooses the source, the Worker, the properties
+  searched, after how many characters and how many results per page; **Remote filters**
+  binds the search to another field or a fixed value, **Option display** says what each
+  result shows, and **Validation** how the choice is checked when the task is completed.
+  The palette's **Directory picker** adds such a select, already searching through a
+  Worker open to forms. The Validate tab and the Design preview search made-up people and
+  say so; no directory is asked while a form is designed. A directory field saved as a
+  text field keeps working everywhere, and the editor offers **Convert to select** for it.
 - **Example: pick a person and read their manager.** `examples/entra-benutzerauswahl` is the
   process `Process_mvjoqvisfajk` without its `list-users` step: a department, a directory
   search, the object id into `user`, and `get-user-manager` with `userId="= user"`.
@@ -270,6 +275,12 @@ governs a Worker:
 
 ### Changed
 
+- **The vendored form-js bundles are built from a lockfile, and checked.**
+  `form-viewer.js` and `form-playground.js` are now built from
+  `api/web/vendor/form-js/src/` — the entries, Atlas's form-js modules and a
+  `package-lock.json` — by the recipe in `ATLAS-VENDORED.txt`, and a test holds both to
+  the checksums recorded there. Two builds give the same bytes. The bundles they replace
+  were built without a lockfile and cannot be rebuilt byte for byte.
 - **A mail watch hands the mail to the process as one object, `mail`.** The instance
   receives `mail.from`, `mail.subject`, `mail.to`, `mail.auth.dmarc`, `mail.messageId`
   and the other envelope fields under one variable, instead of each as a variable of its
@@ -332,6 +343,11 @@ governs a Worker:
 
 ### Fixed
 
+- **A pill keeps to one line.** A status pill in a column narrower than its label folded
+  inside itself, and its round ends turned the two lines into a tall blob: the expiry and
+  vault pills on *API tokens*, the findings on *Events* and the marks on the *Event log*.
+  A pill now stays on one line, as a chip already did, and moves under the cell's text
+  when the column is narrow; the *Event log*'s marks also stand a size smaller.
 - **Authorization evidence has its own key space.** It had been given the event log's
   column family byte, so a range read or prefix delete of one could reach the other's
   records. It moved; evidence recorded by a development build before the move is no longer
