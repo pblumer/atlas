@@ -2,6 +2,7 @@ package workertype
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 )
@@ -137,4 +138,26 @@ func TestTechnicalContractDoesNotInferAccountFromContact(t *testing.T) {
 	}
 	// A contract description is not a Worker Type claim, an authorization
 	// decision or a provider conformance certificate.
+}
+
+func TestTechnicalContractFixturesAreDistinctResourceKinds(t *testing.T) {
+	paths := []string{"testdata/technical-contact-create.json", "testdata/technical-account-create.json"}
+	var contracts []TechnicalContract
+	for _, path := range paths {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		contract, err := ParseTechnicalContractJSON(raw)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		contracts = append(contracts, contract)
+	}
+	if err := ValidateTechnicalContracts(contracts); err != nil {
+		t.Fatalf("sample contracts are not a valid distinct set: %v", err)
+	}
+	if contracts[0].Spec.ResourceKind != "contact-record" || contracts[1].Spec.ResourceKind != "account" {
+		t.Fatalf("creation verbs must not erase distinct resource semantics: %+v, %+v", contracts[0].Spec, contracts[1].Spec)
+	}
 }
