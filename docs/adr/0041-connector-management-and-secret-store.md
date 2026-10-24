@@ -1,6 +1,6 @@
 # ADR-0041: Connector management and the secret store
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-24: vault names under `atlas:connection-credential:` are reserved for delegated connections, ADR-0475)
 - **Implementation:** Partial
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
@@ -207,6 +207,15 @@ reachability probe.
   token, but who refreshes it?); connector-kind versioning alongside template
   versioning; per-connector retry/incident policy for a persistently unreachable
   endpoint (extends ADR-0036).
+
+## Amendment (2026-10-24): a reserved prefix for connection credentials
+
+[ADR-0475](0475-identity-aware-worker-execution.md) keeps a person's delegated refresh token
+in the secret store, under `atlas:connection-credential:<connection>`. Those entries belong to the
+person who linked the account and to Atlas's broker, nobody else: the secret routes refuse to
+read, write or list a name under the prefix, vault listings hide it, API-token sealing and a
+Worker's credential reference may not name one, and revoking the connection deletes it. The
+prefix sits beside `atlas:personal-data-key:`, reserved the same way.
 
 ## Pros and cons of the options
 

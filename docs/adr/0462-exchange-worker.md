@@ -1,6 +1,6 @@
 # ADR-0462: A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-24: an identity policy, ADR-0475, is refused for an Exchange Worker while a model can compute its name)
 - **Implementation:** Landed
 - **Date:** 2026-10-17
 - **Deciders:** Atlas maintainers
@@ -182,6 +182,14 @@ way in, so that backend starts PowerShell for each call (`connector/exchange/onp
 - The bootstrap is exercised in a real pwsh (`TestBootstrapInRealPowerShell`) with
   `New-PSSession` and `Import-PSSession` replaced by functions; WinRM, Kerberos and
   Exchange's own parameter binding are not reached by any test.
+
+## Amendment (2026-10-24): no identity policy while a model can compute the name
+
+An Exchange task may compute its Worker's name (`connector="=…"`), as an Entra task may.
+[ADR-0475](0475-identity-aware-worker-execution.md) therefore refuses an identity policy for
+an Exchange Worker until the name the engine resolved into the job is part of the decision,
+for the reason ADR-0172's amendment of the same day gives. As built, the server governs
+SharePoint Workers only.
 
 ## Links
 

@@ -1,6 +1,6 @@
 # ADR-0210: Federated authentication
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-24: a linked account of ADR-0475 is a separate identity, bound by issuer and subject, and changes nothing about login)
 - **Implementation:** Landed
 - **Date:** 2026-08-29
 - **Deciders:** Atlas maintainers
@@ -298,6 +298,16 @@ Four things came out of building it that the proposal did not have:
   end the provider session too; SAML if eIAM requires it; and the ADR-0200
   authorization-server question, which this record deliberately leaves open rather
   than answering early.
+
+## Amendment (2026-10-24): linked accounts are not logins
+
+[ADR-0475](0475-identity-aware-worker-execution.md) lets a person link an external account —
+a Microsoft account today — so a Worker can act as them. It reuses this record's ID-token
+verifier, and linking does not touch `User.Source` or `User.ExternalID`, and a
+linked account never signs anybody in. One difference is deliberate. Login federation binds
+an account by the provider's `sub`; a linked identity is bound by issuer, tenant and subject
+together (Microsoft's `oid` within `tid`), because one Atlas user may link several accounts of
+several providers, and a subject is unique only within its issuer.
 
 ## Pros and cons of the options
 

@@ -18,7 +18,7 @@ them; an administrator publishes versioned authorization policies; and a governe
 asks Atlas before every action, which decides, records the decision on the log, and — for
 a delegated Worker — releases a short-lived token for that one action
 ([ADR-0475](docs/adr/0475-identity-aware-worker-execution.md),
-proposed). This build governs the SharePoint Worker Type only, and releases a person's
+accepted). This build governs the SharePoint Worker Type only, and releases a person's
 token only to a Worker Instance Atlas supervises.
 
 **Read this before upgrading from 0.19.0.** Nothing changes until an administrator

@@ -1,6 +1,8 @@
 # ADR-0475: Identity-aware Worker execution and policy-based authorization
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-10-24, by the maintainers: brokering to Atlas-supervised Worker
+  Instances, as built, with §19's changes made in the records it names; whether an external
+  Worker Instance may receive a brokered credential stays the open question below)
 - **Implementation:** Partial
 - **Date:** 2026-10-23
 - **Deciders:** Atlas maintainers
@@ -670,8 +672,11 @@ action.
 ### As built, first slice
 
 Phases 1 to 6 of §20 landed together for the SharePoint Worker Type, with the departures and
-gaps listed below. The status stays *Proposed*: the open question above, and the ADR-0168
-amendment of §19, are not decided by having built the supervised half.
+gaps listed below. The status stayed *Proposed* while the open question above and the
+ADR-0168 amendment of §19 were undecided: building the supervised half decided neither. On
+2026-10-24 the maintainers accepted the record for Atlas-supervised Worker Instances. §19's
+changes are made in ADR-0168, ADR-0172, ADR-0462, ADR-0297, ADR-0210, ADR-0041 and ADR-0069;
+brokering to external Worker Instances remains the open question.
 
 **What exists**
 

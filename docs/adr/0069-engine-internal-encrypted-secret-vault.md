@@ -1,6 +1,6 @@
 # ADR-0069: An engine-internal encrypted secret vault (ADR-0041 option A3)
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-24: vault names under `atlas:connection-credential:` are reserved for delegated connections, ADR-0475)
 - **Implementation:** Landed
 - **Date:** 2026-07-27
 - **Deciders:** Atlas engine team
@@ -148,6 +148,15 @@ side-effect-phase, sidecar-store concern, exactly like the connector registry.
   DMN-resolver token and other `ATLAS_*_TOKEN` references; a Console
   Organization → Secrets panel over the CRUD endpoints; audit logging of
   set/delete (not the value); optional memory hygiene (zeroing plaintext buffers).
+
+## Amendment (2026-10-24): a reserved prefix for connection credentials
+
+[ADR-0475](0475-identity-aware-worker-execution.md) keeps a person's delegated refresh token
+in the vault, under `atlas:connection-credential:<connection>`. Those entries belong to the
+person who linked the account and to Atlas's broker, nobody else: the secret routes refuse to
+read, write or list a name under the prefix, vault listings hide it, API-token sealing and a
+Worker's credential reference may not name one, and revoking the connection deletes it. The
+prefix sits beside `atlas:personal-data-key:`, reserved the same way.
 
 ## Pros and cons of the options
 

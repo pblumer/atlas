@@ -126,7 +126,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0038](0038-collaboration-message-flow-replay.md) | Collaboration message-flow replay | Accepted | Landed |
 | [0039](0039-dmn-io-variable-mappings.md) | Input/output variable mappings for business rule tasks | Accepted | Landed |
 | [0040](0040-boundary-events.md) | Boundary events — timer and message, interrupting and non-interrupting | Accepted | Landed |
-| [0041](0041-connector-management-and-secret-store.md) | Connector management and the secret store | Accepted | Partial |
+| [0041](0041-connector-management-and-secret-store.md) | Connector management and the secret store | Accepted (amended) | Partial |
 | [0042](0042-user-task-assignment-and-claim.md) | User-task runtime assignment and claim/unclaim | Accepted | Landed |
 | [0043](0043-openapi-spec-and-embedded-api-explorer.md) | An OpenAPI spec and an embedded API explorer for the HTTP API | Accepted | Landed |
 | [0044](0044-user-management-and-authentication-boundary.md) | User management and the authentication boundary | Accepted | Landed |
@@ -154,7 +154,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0066](0066-decision-evaluation-records.md) | Durable decision-evaluation records for debugging | Accepted | Landed |
 | [0067](0067-service-task-connector-catalog.md) | A service-task connector catalog, and REST with a model-authored endpoint | Accepted | Landed |
 | [0068](0068-task-io-variable-mappings.md) | Task input/output variable mappings with activity-local scopes | Accepted | Landed |
-| [0069](0069-engine-internal-encrypted-secret-vault.md) | An engine-internal encrypted secret vault (ADR-0041 option A3) | Accepted | Landed |
+| [0069](0069-engine-internal-encrypted-secret-vault.md) | An engine-internal encrypted secret vault (ADR-0041 option A3) | Accepted (amended) | Landed |
 | [0070](0070-vault-on-by-default-with-generated-key.md) | The secret vault is on by default, with a generated key | Accepted | Landed |
 | [0071](0071-sharing-scopes.md) | Sharing scopes — private and shared access boundaries for design-time work | Accepted | Landed |
 | [0072](0072-multiple-dmn-models-per-process.md) | Multiple DMN models per process deployment | Accepted | Landed |
@@ -253,7 +253,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0165](0165-soap-connector.md) | SOAP / Web Services (WSDL) connector | Accepted | Landed |
 | [0166](0166-active-directory-connector.md) | Active Directory connector | Accepted (amended) | Landed |
 | [0167](0167-released-connectors-ship-in-the-marketplace.md) | A released connector ships in the marketplace | Accepted | Partial |
-| [0168](0168-connector-work-on-a-worker.md) | Moving a connector onto a worker — where the task detail travels, and where the credential lives | Accepted | Landed |
+| [0168](0168-connector-work-on-a-worker.md) | Moving a connector onto a worker — where the task detail travels, and where the credential lives | Accepted (amended) | Landed |
 | [0169](0169-incident-repair-forms.md) | A form on the incident — repairing an instance with named fields instead of raw JSON | Accepted | Landed |
 | [0170](0170-adr-numbers-assigned-at-merge.md) | ADR numbers are assigned at merge, not on a branch | Accepted (amended) | Landed |
 | [0171](0171-directory-file-connector.md) | A directory-file connector — LDIF and DSML | Accepted | Landed |
@@ -295,7 +295,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0207](0207-worker-type-packaging.md) | Package Worker Types as signed external runtime artifacts | Accepted | Partial |
 | [0208](0208-worker-type-packages.md) | Worker Type package contract, trust, and distribution | Accepted | Partial |
 | [0209](0209-roles-per-endpoint-group.md) | Roles per endpoint group | Accepted | Landed |
-| [0210](0210-federated-authentication.md) | Federated authentication | Accepted | Landed |
+| [0210](0210-federated-authentication.md) | Federated authentication | Accepted (amended) | Landed |
 | [0211](0211-panorama-derived-landscape-mesh.md) | Panorama's derived landscape mesh and notation projections | Accepted (amended) | Landed |
 | [0212](0212-element-template-applier.md) | The element-template applier, and what a template binding means in Atlas | Proposed | Not started |
 | [0213](0213-ad-mock-directory-in-the-console.md) | The mock Active Directory is visible in the Console | Accepted | Landed |
@@ -382,7 +382,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0294](0294-a-variable-is-a-record.md) | A variable is a record, a collection is a loop's harvest — two budgets | Accepted | Landed |
 | [0295](0295-migration-reindexes-searchable-variables.md) | A migration re-indexes what its target declares | Accepted | Landed |
 | [0296](0296-a-loop-records-its-element.md) | A loop records the element it produced, not the collection so far | Accepted (amended) | Landed |
-| [0297](0297-confine-internal-worker-token.md) | Confine the internal worker token to the worker protocol | Accepted | Landed |
+| [0297](0297-confine-internal-worker-token.md) | Confine the internal worker token to the worker protocol | Accepted (amended) | Landed |
 | [0298](0298-two-states-for-a-record.md) | A record has two states — whether the decision holds, and whether it is built | Accepted | Landed |
 | [0299](0299-worker-type-admission-criteria.md) | What earns a Worker Type — admission criteria for a new kind | Proposed | Not started |
 | [0300](0300-openapi-element-templates.md) | An OpenAPI document as element templates | Accepted | Landed |
@@ -547,7 +547,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0459](0459-display-preferences-per-user.md) | How a person reads — number format, time zone and language, per user | Proposed | Not started |
 | [0460](0460-diagram-shortcuts.md) | Favourite and recent diagrams are one record per account, resolved at read time | Accepted | Landed |
 | [0461](0461-script-bpmn-errors.md) | A script throws a BPMN error by giving its error a code the process catches | Accepted | Landed |
-| [0462](0462-exchange-worker.md) | A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises | Accepted | Landed |
+| [0462](0462-exchange-worker.md) | A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises | Accepted (amended) | Landed |
 | [0463](0463-teams-phone-worker.md) | A Microsoft Teams Phone Worker Type for voice apps and their resource accounts | Accepted (amended) | Landed |
 | [0464](0464-windows-system-proxy.md) | Outbound HTTP follows the Windows proxy settings, the way .NET does | Accepted | Landed |
 | [0465](0465-form-doors.md) | A step's form is opened from the step, and the way back links it | Accepted (amended) | Landed |
@@ -560,7 +560,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0472](0472-event-log.md) | Atlas keeps a log of the signals and messages that were sent | Accepted (2026-10-22) | Landed |
 | [0473](0473-form-remote-data-sources.md) | A form looks remote data up through an ephemeral worker query | Accepted (amended) | Landed |
 | [0474](0474-readable-element-ids.md) | Readable ids for new BPMN elements | Accepted | Landed |
-| [0475](0475-identity-aware-worker-execution.md) | Identity-aware Worker execution and policy-based authorization | Proposed | Partial |
+| [0475](0475-identity-aware-worker-execution.md) | Identity-aware Worker execution and policy-based authorization | Accepted | Partial |
 | [0476](0476-google-contacts-worker.md) | A Google Contacts Worker Type — a process finds, keeps and labels the people it works with | Accepted (amended) | Landed |
 | [0477](0477-last-login-day.md) | The roster says on which day an account last signed in | Accepted | Landed |
 

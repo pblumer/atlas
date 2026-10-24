@@ -1,6 +1,6 @@
 # ADR-0297: Confine the internal worker token to the worker protocol
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-24: the internal token stays the principal a supervised Worker brokers through, beside a per-start broker key, until per-Worker-Instance credentials exist, ADR-0475)
 - **Implementation:** Landed
 - **Date:** 2026-09-09
 - **Deciders:** Atlas maintainers
@@ -68,6 +68,18 @@ able to make it too.
   per-worker ephemeral credentials when their lifecycle can remain automatic;
   provide a first-class sandbox profile for script Worker Instances, including a
   dedicated OS identity, filesystem and network policy, CPU and memory limits.
+
+## Amendment (2026-10-24): the internal token as the brokering principal
+
+[ADR-0475](0475-identity-aware-worker-execution.md) releases a person's short-lived access
+token to a supervised Worker Instance that asks for it. The Instance asks with the internal
+worker token this record confined to the worker protocol, and that token alone would let any
+supervised child ask. So a delegated token is released only to a request that also carries a
+**broker key**, generated per start and handed only to the process serving the delegated
+Worker Type (`ATLAS_BROKER_KEY`, sent as `X-Atlas-Broker-Key`). The internal token remains
+the brokering principal until per-Worker-Instance credentials exist, the follow-up this record
+named. ADR-0475 adds a second one: narrow the worker scope to fenced reports, so the operator
+doors of `complete` and `fail` stop accepting a report from somebody who holds no lease.
 
 ## Pros and cons of the options
 

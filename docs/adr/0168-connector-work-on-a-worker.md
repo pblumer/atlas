@@ -1,6 +1,6 @@
 # ADR-0168: Moving a connector onto a worker — where the task detail travels, and where the credential lives
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-24: Atlas brokers a short-lived access token for a person's delegated connection to an Atlas-supervised Worker Instance, after a recorded Permit, ADR-0475)
 - **Implementation:** Landed
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
@@ -160,6 +160,22 @@ per-kind switch, listed there as a follow-up and never built. It comes first.
   else waits on; a worker reporting its configured connector names so the Workers
   view can show which are served and which are configured nowhere; and the order the
   kinds move in, cheapest and least secret first.
+
+## Amendment (2026-10-24): a brokered credential for a supervised Worker Instance
+
+[ADR-0475](0475-identity-aware-worker-execution.md) adds a credential this record did not
+know: a person's delegated connection, whose refresh token only Atlas may hold, because only
+Atlas can refresh it once, decide before every action and drop it the moment the person
+revokes it. For those connections, and only for them, Atlas holds the refresh token and
+releases a short-lived access token to an **Atlas-supervised** Worker Instance through
+`POST /api/v1/jobs/{key}/authorize`, after a Permit for that job and lease is in the log.
+
+This is narrower than option 1, which this record rejected: no long-lived secret crosses,
+the token is good for about an hour and for what the person consented to, and it goes only
+down the spawn path Atlas controls, with a broker key handed to that one child at start.
+Every other credential stays where the decision above put it, on the worker. Whether an
+external Worker Instance may receive a brokered token is ADR-0475's open question and is
+not decided here.
 
 ## Pros and cons of the options
 
