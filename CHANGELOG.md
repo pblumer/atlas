@@ -46,6 +46,23 @@ governs a Worker:
 
 ### Added
 
+- **The dashboard shows the disk, and the server keeps a reserve free on it.** An
+  administrator sees each file system the server writes to on the Console's dashboard: how
+  much is used and free, where the reserve begins, what the WAL and the state store hold,
+  and when the reserve will be reached at the current consumption. An alert above the
+  dashboard appears when the room runs low, when the server is frozen, or when the engine
+  has halted. Below the reserve (`--storage-reserve-mb`, default 1024, `0` turns the
+  freeze off) the server refuses new writes with 507 and `Retry-After` before they reach
+  the engine, starts no work of its own — timers wait, retention and the inbound bridge
+  pause, in-process workers lease nothing — and keeps answering reads, sign-ins,
+  checkpoints and the reports of jobs already leased; it resumes by itself once the
+  reserve and a quarter of it are free. The forecast keeps no history: two numbers per
+  file system, smoothed over about six hours. The same readings are in
+  `GET /api/v1/storage`, the `atlas_storage` MCP tool and `/metrics`
+  (`atlas_storage_*`, `atlas_engine_halted`), where `predict_linear` forecasts over as long
+  a window as Prometheus keeps
+  ([ADR-draft-storage-guard](docs/adr/draft-storage-guard.md)).
+
 - **A mail task forwards a message, reads an attachment, or exports one into an S3 Worker.**
   Three new mail operations hand a mail's document on. **Forward message** sends the mail
   with its attachments to new recipients, with a note above it — server-side through
@@ -275,6 +292,18 @@ governs a Worker:
 
 ### Changed
 
+- **The engine halts after a write it could not make durable.** A failed WAL sync, or a
+  failure to commit state after the log has the batch, stops the engine: every later write
+  is answered 503 until the server is restarted, reads go on, and the log says
+  `event=engine.halted` once. It had carried on, and ran the failed batch's commands again
+  with the next request — after their callers had been told they failed. The restart
+  recovers exactly what was acknowledged
+  ([ADR-draft-storage-guard](docs/adr/draft-storage-guard.md)).
+- **The server stops taking writes below a 1 GiB storage reserve by default.** A disk
+  with less than that available under the data directory now answers writes with 507
+  where it used to take them until it failed. Set `--storage-reserve-mb` to size the
+  reserve, or `0` to keep the old behaviour with the dashboard's warnings.
+
 - **The vendored form-js bundles are built from a lockfile, and checked.**
   `form-viewer.js` and `form-playground.js` are now built from
   `api/web/vendor/form-js/src/` — the entries, Atlas's form-js modules and a
@@ -342,6 +371,14 @@ governs a Worker:
   receive it, what a finding names) stay English and are marked as such.
 
 ### Fixed
+
+- **A server that ran its disk full restarts again.** A WAL write cut short by a full
+  disk left its torn bytes in the segment, and the next batch was written behind them;
+  the restart then found damage with data after it and refused to start until the log was
+  repaired by hand. A failed write is now cut off again and its batch dropped, a failed
+  fsync stops the log, and nothing is written behind a torn batch. A batch that failed is
+  also no longer written a second time with the next one
+  ([ADR-draft-storage-guard](docs/adr/draft-storage-guard.md)).
 
 - **A pill keeps to one line.** A status pill in a column narrower than its label folded
   inside itself, and its round ends turned the two lines into a tall blob: the expiry and

@@ -26,8 +26,11 @@ import (
 // operation it proxies to. Every entry must be a real API route and every
 // advertised tool must appear here (both asserted below).
 var mcpToolRoutes = map[string]string{
-	"atlas_info":           "GET /api/v1/info",
-	"atlas_stats":          "GET /api/v1/stats",
+	"atlas_info":  "GET /api/v1/info",
+	"atlas_stats": "GET /api/v1/stats",
+	// The storage guard (ADR-draft-storage-guard): a read, and the one that explains a
+	// 507 or 503 an agent has just been given.
+	"atlas_storage":        "GET /api/v1/storage",
 	"atlas_deploy":         "POST /api/v1/deployments",
 	"atlas_list_processes": "GET /api/v1/processes",
 	"atlas_product_usage":  "GET /api/v1/catalog-products/{id}/usage",
