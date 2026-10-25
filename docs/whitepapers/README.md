@@ -12,7 +12,7 @@ Architecture and product concept documents for atlas. Whitepapers explain motiva
 - [Technical whitepaper — Horizontal scaling (PDF)](atlas-technisches-whitepaper-horizontale-skalierung.pdf)
 - [Technical whitepaper — Horizontal scaling (DOCX source)](atlas-technisches-whitepaper-horizontale-skalierung.docx)
 
-The PDF and DOCX are preserved byte-for-byte from the former `docs/whitepapers/` directory. Their design proposals must be checked against current ADRs and implementation before being treated as shipped capabilities.
+The PDF and DOCX are kept byte-for-byte as originally committed. Their design proposals must be checked against current ADRs and implementation before being treated as shipped capabilities.
 
 ## Related information
 
@@ -20,4 +20,4 @@ The PDF and DOCX are preserved byte-for-byte from the former `docs/whitepapers/`
 - [Strategic roadmap](../../ROADMAP.md)
 - [ADR index](../adr/README.md)
 
-**Canonical location:** `docs/whitepapers/`. New whitepapers should be added here; do not recreate `docs/whitepaper/`.
+**Canonical location:** `docs/whitepapers/`. Every whitepaper, in any format, is added here and listed in this index; do not recreate `docs/whitepaper/` or start another whitepaper directory.

@@ -42,7 +42,7 @@ database is introduced.
 | Worker Type / configured Worker / Worker Instance identity | [ADR-0203](../adr/0203-worker-execution-model.md), [ADR-0208](../adr/0208-worker-type-packages.md) (Accepted/Partial) | Existing model and catalog; third-party package provenance, installation and pinned versions still partial |
 | Technical claims in manifests (T0) | [PR #1343](https://github.com/pblumer/atlas/pull/1343) merged; [ADR-0480](../adr/0480-technical-capability-contract.md) (Proposed/Partial); `workertype/capability.go`, `workertype/manifest.go` | **Code landed; architecture approval and B11 completion not claimed** |
 | Semantic contract envelope (T1a) | [PR #1346](https://github.com/pblumer/atlas/pull/1346), draft; separate proposed ADR there | In review, **not on main** |
-| Canonical conformance and publication | [ADR-0483](../adr/0483-technical-capability-conformance-governance.md) | **Accepted decision** (option 3); publication/evidence lifecycle not implemented. Schema-only work in [PR #1357](https://github.com/pblumer/atlas/pull/1357) is not provider certification |
+| Canonical conformance and publication | [Conformance governance draft](../adr/0483-technical-capability-conformance-governance.md) | Proposed decision, no code |
 | Single cross-layer query model | [ADR-0420](../adr/0420-one-graph-model-several-projections.md) (Proposed/Not started) | Not implemented. Previous **Milestone P is complete only for its original scope**, not this follow-on |
 | Governed external action execution | [ADR-0475](../adr/0475-identity-aware-worker-execution.md) (Proposed/Partial) | Supervised delegated SharePoint example exists; do **not** assume equivalent enforcement for all Worker Types |
 | Capability-based BPMN routing | [Binding and routing draft](../adr/0482-capability-aware-binding-and-routing.md) | Proposed decision; **no runtime feature yet** |
@@ -103,7 +103,7 @@ discovery and authorization.
 |---|---|---|
 | [ADR-0480 — Operation-level descriptive claims](../adr/0480-technical-capability-contract.md) | Proposed, code Partial | Declare CDA0 architecturally done |
 | PR #1346 semantic envelope draft | Draft, not merged; future number at merge | CDA1 accepted |
-| [ADR-0483](../adr/0483-technical-capability-conformance-governance.md) | **Accepted / Not started**; limited schema-only work remains in draft [PR #1357](https://github.com/pblumer/atlas/pull/1357) | CDA2 evidence/publication before trusted CDA3 |
+| [ADR-0483](../adr/0483-technical-capability-conformance-governance.md) | Proposed / Not started | CDA2, then trusted CDA3 |
 | [ADR-0420 — One graph](../adr/0420-one-graph-model-several-projections.md) | Proposed / Not started | CDA4. Must explicitly cover technical capability nodes, operation edges, visibility and provenance before acceptance |
 | [ADR-0475 — Identity-aware Worker authorization](../adr/0475-identity-aware-worker-execution.md) | Proposed / Partial | CDA7 provider-specific governed action |
 | [ADR-0482](../adr/0482-capability-aware-binding-and-routing.md) | Proposed / Not started | CDA6 validation and CDA7 execution |
