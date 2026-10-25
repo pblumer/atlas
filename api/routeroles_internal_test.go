@@ -163,6 +163,12 @@ var wantAdminRoutes = []string{
 	"DELETE /api/v1/catalogs/{id}",
 	"GET /api/v1/catalog-products/{id}/deletion",
 	"DELETE /api/v1/catalog-products/{id}",
+	// Deleting a version's finished instances for good
+	// (ADR-0486): history is evidence, the
+	// purge cannot be undone, and a production server switches it off altogether.
+	// The preview is the administrator's too, because it is how the purge is decided.
+	"GET /api/v1/processes/{key}/history-purge",
+	"POST /api/v1/processes/{key}/history-purge",
 	"DELETE /api/v1/settings/theme",
 	"PUT /api/v1/settings/logo",
 	"DELETE /api/v1/settings/logo",

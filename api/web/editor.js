@@ -11,6 +11,7 @@ import { attachJSONEditor } from "./json-editor.js";
 import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } from "./entra-attrmask.js";
 import { exchangeOperationOptions, exchangeParametersPlaceholder, exchangeParametersHint, exchangeIsListing, exchangeResultType, exchangeResultShape } from "./exchange-ops.js";
 import { googleContactsOperationOptions, googleContactsUses, googleContactsResultType, googleContactsResultShape, googleContactsMaxPlaceholder, googleContactsMaxHint, googleContactsQueryHint, googleContactsContactPlaceholder } from "./googlecontacts-ops.js";
+import { cardDAVOperationOptions, cardDAVUses, cardDAVResultType, cardDAVResultShape, cardDAVMaxPlaceholder, cardDAVMaxHint, cardDAVQueryHint, cardDAVContactPlaceholder } from "./carddav-ops.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { lookupSamples, sampleFor } from "./instance-samples.js";
 import { devLang } from "./dev-lang.js";
@@ -2408,6 +2409,18 @@ function devViewContext(modeler, api, field) {
     if (field.dataset.fxOn === "1") ctx.lockPrefix = (v) => (/^\s*=\s*/.exec(v) || [""])[0].length;
   } else if (lang === "powershell" || lang === "python" || lang === "javascript") {
     ctx.run = (source, variables) => api("POST", "/api/v1/scripts/run", { language: lang, source, variables });
+  } else if (lang === "template" || lang === "html-template") {
+    // A mail template is previewed by the server that will render it, with the rules
+    // a deploy applies (ADR-0487).
+    ctx.preview = (template, variables) => api("POST", "/api/v1/feel/template", { template, variables, html: lang === "html-template" });
+    ctx.previewKind = lang === "html-template" ? "html" : "text";
+  } else if (lang === "html") {
+    // An HTML body without placeholders is its own preview; one written as FEEL ('=')
+    // is evaluated by the server, as the mail will be.
+    ctx.preview = (template, variables) => (template.trimStart().startsWith("=")
+      ? api("POST", "/api/v1/feel/template", { template, variables, html: true })
+      : Promise.resolve({ ok: true, result: template, problems: [] }));
+    ctx.previewKind = "html";
   }
   return ctx;
 }
@@ -3351,15 +3364,33 @@ export function attachExpressionToggle(el, opts = {}) {
   else el.insertAdjacentElement("beforebegin", btn);
 
   let feelHandle = null;
+  // opts.literal makes the literal side a code field of its own — a mail template, whose
+  // placeholders are coloured and completed and which F2 lifts into the Developer View
+  // with a preview (ADR-0487). { lang: devLang descriptor, title }.
+  let literalHandle = null;
   const isExpr = () => el.value.trimStart().startsWith("=");
 
   function render() {
     const expr = isExpr();
     btn.classList.toggle("active", expr);
     btn.setAttribute("aria-pressed", expr ? "true" : "false");
-    // Only an expression field is a code field: a literal value has nothing for the
-    // Developer View to help with, so F2 stays inert until fx is on.
+    // One editor wraps the field at a time: the one leaving goes before the other comes.
+    if (expr && literalHandle) {
+      literalHandle.destroy();
+      literalHandle = null;
+    }
+    if (!expr && feelHandle) {
+      feelHandle.destroy();
+      feelHandle = null;
+    }
+    if (!expr && opts.literal && !literalHandle) {
+      literalHandle = attachCodeEditor(el, { lang: opts.literal.lang.module, variables: opts.variables, gutter: false, wrap: true });
+    }
+    // Only an expression field is a code field, unless its literal is a template: a
+    // plain literal has nothing for the Developer View to help with, so F2 stays inert
+    // until fx is on.
     if (expr) markDevField(el, "feel");
+    else if (opts.literal) markDevField(el, opts.literal.lang.id, { title: opts.literal.title });
     else delete el.dataset.devlang;
     if (expr && !feelHandle) {
       // The leading '=' stays in the field value (the save wiring and compiler key on
@@ -3371,9 +3402,6 @@ export function attachExpressionToggle(el, opts = {}) {
         validate: opts.validate,
         lockPrefix: (v) => (/^\s*=\s*/.exec(v) || [""])[0].length,
       });
-    } else if (!expr && feelHandle) {
-      feelHandle.destroy();
-      feelHandle = null;
     } else if (expr && feelHandle) {
       feelHandle.setVariables(opts.variables || []);
     }
@@ -4434,13 +4462,32 @@ const SERVICE_TASK_KINDS = [
       { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "forward" },
       { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "forward", hint: "Delivered but never shown in the message headers." },
       { key: "from", label: "From", placeholder: "leave empty for the Worker's default sender", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
-      { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
-      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: (v) => (v.operation === "reply"
+      {
+        // Placeholders (ADR-0487): the subject and both bodies become
+        // templates in the language form text views use — {{ }} placeholders, {{#if}}
+        // and {{#loop}} sections. Off is every mail task authored before templates
+        // existed, so an untouched task keeps meaning what it meant.
+        key: "templating", label: "Placeholders", type: "select", reRender: true,
+        options: [
+          { v: "", l: "Off — literal text, or FEEL with fx" },
+          { v: "true", l: "On — {{ }} placeholders, {{#if}} and {{#loop}}" },
+        ],
+        showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward",
+        hint: (v) => (v.templating === "true"
+          ? "Subject and bodies are templates: {{kunde.name}} inserts a value, {{#if bedingung}}…{{/if}} and {{#loop liste}}…{{/loop}} write a section conditionally or once per element, with FEEL between the braces. What the HTML body inserts is escaped. Press F2 in a field for the editor with a live preview."
+          : "On makes the subject and bodies templates with {{ }} placeholders — easier to read than a FEEL expression that joins strings, and previewed as you write."),
+      },
+      { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true, template: "template", showIf: (v) => !v.operation || v.operation === "send" },
+      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, template: "template", rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: (v) => (v.operation === "reply"
         ? "The reply's text. It goes to the original's Reply-To, or its From, under \"Re: \" and its subject, threaded beneath it."
         : v.operation === "forward"
           ? "Optional. The note written above the forwarded message, which follows under \"Fwd: \" and its subject. Every attachment is inspected before anything is sent; one that is refused stops the whole forward."
-          : "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion.") },
-      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
+          : v.templating === "true"
+            ? "Plain-text body with placeholders: Hallo {{kunde.name}}. Press F2 for the editor with a live preview, Ctrl+Space inside {{ }} for variables and functions."
+            : "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion.") },
+      { key: "bodyHtml", label: "HTML body", type: "html", template: "html-template", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: (v) => (v.templating === "true"
+        ? "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. Placeholders work as in the text, and what they insert is escaped. Press F2 for the editor with a live preview of the mail."
+        : "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view with a preview.") },
       { group: "Mailbox", showIf: (v) => !!v.operation && v.operation !== "send" && v.operation !== "reply" && v.operation !== "forward" },
       {
         key: "folder", label: "Folder", placeholder: "INBOX", fx: true, showIf: (v) => v.operation === "list",
@@ -4464,9 +4511,16 @@ const SERVICE_TASK_KINDS = [
         options: [{ v: "", l: "All messages" }, { v: "true", l: "Unread messages only" }],
       },
       {
-        key: "includeBody", label: "Text", type: "select", showIf: (v) => v.operation === "list" || v.operation === "get",
+        key: "includeBody", label: "Text", type: "select", showIf: (v) => v.operation === "list",
         options: [{ v: "", l: "Envelope only" }, { v: "true", l: "Include the text" }],
         hint: "The envelope is sender, recipients, subject, date, each attachment's id, name and size and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB; attachment content is read only by the attachment operations. What a process receives, every operator of a shared server can read — include the text only where the process needs it.",
+      },
+      {
+        // A get may read the HTML body as well (ADR-0489); a list may
+        // not, since its hundred answers share one variable — the compiler refuses it.
+        key: "includeBody", label: "Text", type: "select", showIf: (v) => v.operation === "get",
+        options: [{ v: "", l: "Envelope only" }, { v: "true", l: "Include the text" }, { v: "html", l: "Include the text and the HTML" }],
+        hint: "The envelope is sender, recipients, subject, date, each attachment's id, name and size and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB. The HTML version is cleaned of scripts, forms and everything else that runs, and cut to fit the variable; show it to a person with an E-mail view in a task form, which keeps remote images blocked until they are asked for. What a process receives, every operator of a shared server can read — include the text, let alone the HTML, only where the process needs it.",
       },
       { group: "Attachment", showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment" },
       {
@@ -4504,6 +4558,12 @@ const SERVICE_TASK_KINDS = [
               : "Receives what the mailbox answered: " + (v.operation === "list" ? "a list of messages, newest first." : "the message.")),
       },
     ],
+    // Only a get reads a message's HTML body (ADR-0489): a get turned
+    // into a list keeps its text and loses the HTML, rather than leaving a value the
+    // compiler refuses.
+    normalize: (props) => {
+      if (props.includeBody === "html" && props.operation !== "get") props.includeBody = "true";
+    },
   },
   {
     id: "csv", name: "Text File", group: "Files", desc: "Read or write a table in a text file: delimited (CSV), fixed-width, or attribute-value pairs", icon: "T",
@@ -5002,6 +5062,76 @@ const SERVICE_TASK_KINDS = [
         resultType: (v) => googleContactsResultType(v.operation || "find-contacts"),
         showIf: (v) => !!googleContactsResultType(v.operation || "find-contacts"),
         hint: (v) => googleContactsResultShape(v.operation || "find-contacts"),
+      },
+    ],
+  },
+  {
+    id: "carddav", name: "CardDAV contacts", group: "Applications",
+    desc: "Find, read, search, list, create, update and delete contacts in a CardDAV address book — iCloud, Nextcloud, mailbox.org, Radicale and most mail providers' — and put a group such as Kunden on one or take it off",
+    icon: "V",
+    // An address-book card on teal: the open standard beside Google's blue person, so
+    // the two contact Worker Types are told apart at a glance.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f766e"/><rect x="2.8" y="3.5" width="10.4" height="9" rx="1.2" fill="#fff"/><circle cx="6.3" cy="7" r="1.5" fill="#0f766e"/><path d="M4.1 11.1c.3-1.3 1.2-2 2.2-2s1.9.7 2.2 2z" fill="#0f766e"/><rect x="9.4" y="6.1" width="2.6" height=".9" fill="#0f766e"/><rect x="9.4" y="8.1" width="2.6" height=".9" fill="#0f766e"/></svg>`,
+    ext: "atlas:CarddavConnector",
+    fields: [
+      { group: "Address book" },
+      {
+        key: "connector", label: "Worker", datalist: "carddav", placeholder: "verkauf",
+        hint: "The configured CardDAV Worker whose address book this task uses, by its name under Workers in the Console. The server's address and the account's password reach that worker and never the engine. A value starting with = is a FEEL expression, so one process can choose the address book at runtime.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: cardDAVOperationOptions(),
+      },
+      {
+        key: "contactId", label: "Contact", placeholder: "=kunde.id", fx: true,
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "contactId"),
+        hint: "The contact, by the id a read, a find or a create answered with (…vcf, its name in the address book). Usually a FEEL expression (fx) naming that variable, e.g. =kunde.id.",
+      },
+      {
+        key: "query", label: "Query", placeholder: "=anfrage.absender", fx: true,
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "query"),
+        hint: (v) => cardDAVQueryHint(v.operation || "find-contacts"),
+      },
+      {
+        key: "field", label: "Custom field", placeholder: "Kundennummer",
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "field"),
+        hint: "Optional. The name of a custom field — the card's X- property without X-, so Kundennummer is X-Kundennummer; letters, digits and hyphens. The query is then compared with that field's value instead of with the e-mail addresses and phone numbers.",
+      },
+      {
+        key: "group", label: "Group", placeholder: "Kunden", fx: true,
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "group"),
+        hint: (v) => (["add-to-group", "remove-from-group"].includes(v.operation)
+          ? "The group, by its name, e.g. Kunden. Where the Worker keeps groups as cards of their own (iCloud, Fastmail) it must exist, and a misspelt name is refused; where it keeps them in CATEGORIES, a group exists by being on a contact."
+          : "Optional. Only the contacts in this group, by its name, e.g. Kunden."),
+      },
+      {
+        key: "contact", label: "Contact values", type: "json", rows: 8,
+        // Inline JSON and a variable are mutually exclusive (the compiler refuses both).
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "contact") && !v.contactVariable,
+        placeholder: (v) => cardDAVContactPlaceholder(v.operation || "create-contact"),
+        hint: (v) => "Keys: displayName, givenName, familyName, email, emails, phone, phones, organization, jobTitle, department, address, addresses (streetAddress, extendedAddress, poBox, postalCode, city, region, country, type), birthday (1980-05-17, or --05-17 without a year), notes, fields (custom fields by name)" +
+          (v.operation === "create-contact" ? " and groups (by name)." : "; groups change through Add to group and Remove from group.") +
+          " A string starting with = is a FEEL expression. A value that is null changes nothing, \"\" clears; email, phone and address change the preferred entry and keep the others, emails, phones and addresses replace the list. Every other property of the card — a photo included — is kept.",
+      },
+      {
+        key: "contactVariable", label: "Contact variable", placeholder: "neukunde",
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "contact") && !v.contact,
+        hint: "Instead of the values above: a process variable holding the contact object, for a process that assembles it itself — a form's answers, say. Its keys are checked when the task runs rather than at deploy.",
+      },
+      {
+        key: "maxResults", label: "Maximum results",
+        placeholder: (v) => cardDAVMaxPlaceholder(v.operation || "find-contacts"),
+        showIf: (v) => !!cardDAVMaxPlaceholder(v.operation || "find-contacts"),
+        hint: (v) => cardDAVMaxHint(v.operation || "find-contacts"),
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "kunden",
+        resultType: (v) => cardDAVResultType(v.operation || "find-contacts"),
+        showIf: (v) => !!cardDAVResultType(v.operation || "find-contacts"),
+        hint: (v) => cardDAVResultShape(v.operation || "find-contacts"),
       },
     ],
   },
@@ -6073,6 +6203,12 @@ function settleKindFields(kind, stored, props) {
     if (!f.showIf) return true;
     try { return !!f.showIf(values); } catch { return true; }
   };
+  // A mode field can belong to a mode itself: the mail task's placeholders switch means
+  // nothing to a list. One the operation hides is dropped like any other field, or it
+  // would stay in the XML, where the compiler refuses it.
+  for (const f of kind.fields) {
+    if (f.reRender && f.showIf && !shown(f, mode) && value(f.key) !== undefined) props[f.key] = undefined;
+  }
   // An attribute may be described more than once — CSV's columns are names for a
   // delimited file and name:width for a fixed-width one — so it is unused only when
   // every field that writes it is hidden.
@@ -10015,10 +10151,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       if (stKind.normalize) stKind.normalize(props);
       upsertExt(modeler, element, stKind.ext, props);
     });
+    // An attribute two fields describe (a list's and a get's text, CSV's columns) is one
+    // element on screen; it is wired once, or each change would save twice.
+    const wiredKindFields = new Set();
     for (const f of stKind.fields) {
       if (f.group || f.type === "map") continue;
       const el = body.querySelector("#f-st-" + f.key);
-      if (!el) continue;
+      if (!el || wiredKindFields.has(el)) continue;
+      wiredKindFields.add(el);
       el.addEventListener("change", () => {
         saveKindFields();
         if (f.reRender) show(element); // e.g. auth type: reveal the scheme's fields
@@ -10035,12 +10175,18 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // field element, so no save/load change is needed.
     const stFeelVars = variablesForCompletion(modeler, element);
     const stValidate = api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null;
-    const stAttachFx = (el) => { if (el) attachExpressionToggle(el, { variables: stFeelVars, validate: stValidate }); };
+    const stAttachFx = (el, literal) => { if (el) attachExpressionToggle(el, { variables: stFeelVars, validate: stValidate, literal }); };
+    // A mail task with placeholders on writes its subject and bodies as templates
+    // (ADR-0487): a field the catalog marks `template` is then a
+    // template editor on its literal side, and stays FEEL with fx on.
+    const stTemplating = (body.querySelector("#f-st-templating") || {}).value === "true";
+    const stTemplateLang = (f) => (stTemplating && f.template ? devLang(f.template) : null);
     // Every fx-capable text field (REST url, mail recipients/subject/body, the Remedy
     // form, …) gets the value-or-expression toggle; map value cells are handled below.
     for (const f of stKind.fields) {
       if (f.group || f.type === "map" || !f.fx) continue;
-      stAttachFx(body.querySelector("#f-st-" + f.key));
+      const tl = stTemplateLang(f);
+      stAttachFx(body.querySelector("#f-st-" + f.key), tl ? { lang: tl, title: f.label } : undefined);
     }
     // Markup fields (the mail worker's HTML body) get the shared code editor with
     // the HTML language module — tag/attribute colouring and variable completion
@@ -10052,8 +10198,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       // Wrapped and gutterless, like the FEEL fields inline: markup lines are long and
       // the property column is narrow, so horizontal scrolling would hide most of the
       // template. The Developer View is where it gets a gutter and the full width.
-      attachCodeEditor(el, { lang: htmlLang.module, variables: stFeelVars, gutter: false, wrap: true });
-      markDevField(el, "html", { title: f.label });
+      const markup = stTemplateLang(f) || htmlLang;
+      attachCodeEditor(el, { lang: markup.module, variables: stFeelVars, gutter: false, wrap: true });
+      markDevField(el, markup.id, { title: f.label });
     }
     // JSON fields (the Entra attributes template) get the shared JSON editor:
     // highlighting, live validation and auto-format. A '=' inside a string value is

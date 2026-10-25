@@ -86,8 +86,8 @@ var engineEvaluatedExpressions = map[string]bool{
 // connector/ldap/worker.go:190, connector/ad/worker.go:296, connector/jira/worker.go:82,
 // connector/discord/offload.go:141, connector/s3/offload.go:155,
 // connector/exchange/offload.go:100, connector/teamsphone/offload.go (resolveValue),
-// connector/googlecontacts/offload.go (Resolve and resolveValue) and
-// connector/agent/aitask.go:133, each over the scope variables handed to that call.
+// connector/googlecontacts/offload.go and connector/carddav/offload.go (Resolve and
+// resolveValue) and connector/agent/aitask.go:133, each over the scope variables handed to that call.
 //
 // THE EXEMPTION IS CONDITIONAL, and the condition is the next step's to satisfy: it holds
 // only while the values a worker binds are deciphered before it binds them. If the
@@ -209,6 +209,20 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.GoogleContactsField.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.GoogleContactsGroup.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.GoogleContactsContact.Expr":   "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+
+	// The CardDAV Worker's (ADR-0490).
+	"connectorTasks.CardDAVConnector.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.CardDAVContactID.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.CardDAVQuery.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.CardDAVField.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.CardDAVGroup.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.CardDAVContact.Expr":   "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+
+	// A mail template's FEEL (ADR-0487): rendered by the mail worker in
+	// connector/mail/offload.go (Resolve), over the same scope as the fields beside it.
+	"connectorTasks.MailSubjectTmpl.nodes.expr": "a mail template, rendered in a connector worker — the same edge as MailSubject",
+	"connectorTasks.BodyTmpl.nodes.expr":        "a mail template, rendered in a connector worker — the same edge as Body",
+	"connectorTasks.BodyHTMLTmpl.nodes.expr":    "a mail template, rendered in a connector worker — the same edge as BodyHTML",
 }
 
 // expressionKindByPath names each engine-evaluated path in the modeller's vocabulary, so

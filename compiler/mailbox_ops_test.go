@@ -176,3 +176,20 @@ func TestMailDocumentOperationsRefuseWhatTheyDoNotUse(t *testing.T) {
 		}
 	}
 }
+
+// includeBody="html" reads a message's HTML body as well — on a get, never on a list,
+// whose hundred answers share one variable (ADR-0489).
+func TestMailGetReadsTheHTMLBodyOnRequest(t *testing.T) {
+	_, d := mailDetail(t, `connector="m" operation="get" messageId="=mail.messageId" includeBody="html" resultVariable="mail"`)
+	if !d.MailIncludeBody || !d.MailIncludeHTML {
+		t.Errorf("includeBody=html = text %v, html %v; want both", d.MailIncludeBody, d.MailIncludeHTML)
+	}
+	_, d = mailDetail(t, `connector="m" operation="get" messageId="x" includeBody="true" resultVariable="mail"`)
+	if !d.MailIncludeBody || d.MailIncludeHTML {
+		t.Errorf("includeBody=true = text %v, html %v; want the text alone", d.MailIncludeBody, d.MailIncludeHTML)
+	}
+	_, err := Parse(1, 1, strings.NewReader(mailTaskBPMN(`connector="m" operation="list" includeBody="HTML" resultVariable="mails"`)))
+	if err == nil || !strings.Contains(err.Error(), "only a get reads a message's HTML body") {
+		t.Errorf("a list with includeBody=html = %v; want it refused, pointing at get", err)
+	}
+}

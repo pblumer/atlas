@@ -134,6 +134,7 @@ var releasedKinds = []releasedKind{
 	// (ADR-0141, amended). One package describes both.
 	{JobType: compiler.SharePointOpsJobType, ADR: 141, Class: classConnector, Package: "atlas.sharepoint-create-item"},
 	{JobType: compiler.GoogleContactsJobType, Slug: "google-contacts-worker", Class: classConnector, Package: "atlas.google-contacts"},
+	{JobType: compiler.CardDAVJobType, Slug: "carddav-worker", Class: classConnector, Package: "atlas.carddav"},
 }
 
 // packagesOwed is how many released connector kinds have no Repository package right

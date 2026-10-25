@@ -8,6 +8,7 @@
 //            the palette offer what it lists.
 //   remote   the adapter the preview's remote selects search through. A design-time
 //            preview is given made-up entries, never a live directory.
+//   locale   the language the e-mail view speaks ("de" or "en"); German without one.
 
 import './atlas/remote-source.js';
 
@@ -24,12 +25,14 @@ export class Playground extends BasePlayground {
       viewerAdditionalModules: [
         AtlasViewerModule,
         ...(atlas.remote ? [ { atlasRemote: [ 'value', atlas.remote ] } ] : []),
+        ...(atlas.locale ? [ { atlasLocale: [ 'value', atlas.locale ] } ] : []),
         ...viewerAdditionalModules
       ],
       editorAdditionalModules: [
         AtlasViewerModule,
         AtlasEditorModule,
         { atlasRemoteSources: [ 'value', atlas.sources || null ] },
+        ...(atlas.locale ? [ { atlasLocale: [ 'value', atlas.locale ] } ] : []),
         ...editorAdditionalModules
       ]
     });

@@ -243,7 +243,7 @@ Zwei Planungsdokumente verdienen einen Hinweis:
 
 - `docs/planning/0429-product-actions-plan.md` ist in allen markierten Slices umgesetzt;
   seine drei Punkte «Not in any slice yet» sind offen.
-- Die Vorlage unter `docs/planning/lebenszyklus-pro-position` wurde nie ausgeführt (eigener
+- Die Vorlage unter `docs/templates/lebenszyklus-pro-position` wurde nie ausgeführt (eigener
   Abschnitt «Ungeprüft»). Sie würde nach ADR-0429 beim Veröffentlichen abgelehnt, weil die
   Shop-Send-Task fehlt (`catalog/lifecycle.go`, `shopProblems`).
 

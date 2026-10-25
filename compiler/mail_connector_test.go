@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/expr/feelers"
 )
 
 // A service task bearing an <atlas:mailConnector> extension is an outbound mail
@@ -213,5 +216,115 @@ func TestParseMailConnectorHTMLBodyFeel(t *testing.T) {
 		t.Error("a broken FEEL html body must fail the deploy")
 	} else if !strings.Contains(err.Error(), "bodyHtml") {
 		t.Errorf("error should name the offending field, got %v", err)
+	}
+}
+
+// mailTemplatingModel is one mail task whose attributes the test fills in.
+const mailTemplatingModel = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas/schema/1.0">
+  <bpmn:process id="p">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:mailConnector connector="gmail" %s/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
+func mailTemplatingTask(t *testing.T, attrs string) *ConnectorTaskDetail {
+	t.Helper()
+	cp, err := Parse(1, 1, strings.NewReader(fmt.Sprintf(mailTemplatingModel, attrs)))
+	if err != nil {
+		t.Fatalf("Parse(%s): %v", attrs, err)
+	}
+	return cp.ConnectorTask(cp.Node(cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target).Detail)
+}
+
+// With templating on, a subject or body written in the template language is compiled
+// at deploy (ADR-0487) and renders over the variables it is given.
+func TestParseMailConnectorTemplating(t *testing.T) {
+	d := mailTemplatingTask(t, `templating="true" to="=customer.email"
+		subject="Bestellung {{order.id}}"
+		body="Hallo {{customer.name}}&#10;{{#loop order.items}}- {{name}}&#10;{{/loop}}"
+		bodyHtml="&lt;p&gt;{{customer.name}}&lt;/p&gt;"`)
+	if d.MailSubjectTmpl == nil || d.BodyTmpl == nil || d.BodyHTMLTmpl == nil {
+		t.Fatalf("templates = %v / %v / %v; want all three compiled", d.MailSubjectTmpl, d.BodyTmpl, d.BodyHTMLTmpl)
+	}
+	if d.To.Expr == nil {
+		t.Error("a recipient keeps its fx toggle under templating")
+	}
+	scope := feelers.Vars{
+		"customer": expr.FromJSON(map[string]any{"name": "Ada"}),
+		"order":    expr.FromJSON(map[string]any{"id": "42", "items": []any{map[string]any{"name": "Tee"}, map[string]any{"name": "Kaffee"}}}),
+	}
+	if got, _ := d.MailSubjectTmpl.Render(scope, nil); got != "Bestellung 42" {
+		t.Errorf("subject renders %q", got)
+	}
+	if got, _ := d.BodyTmpl.Render(scope, nil); got != "Hallo Ada\n- Tee\n- Kaffee\n" {
+		t.Errorf("body renders %q", got)
+	}
+}
+
+// Templating changes only what a placeholder in a literal means: a '=' value stays one
+// FEEL expression, a value without {{ stays a literal, and — the guarantee a deployed
+// model relies on — without the attribute a {{ is just text.
+func TestParseMailConnectorTemplatingLeavesOtherValuesAlone(t *testing.T) {
+	d := mailTemplatingTask(t, `to="a@example.com" body="Hallo {{name}}" bodyHtml="&lt;p&gt;{{name}}&lt;/p&gt;"`)
+	if d.BodyTmpl != nil || d.BodyHTMLTmpl != nil || d.Body.Literal != "Hallo {{name}}" {
+		t.Errorf("without templating a {{ must stay text; got template %v, body %+v", d.BodyTmpl, d.Body)
+	}
+	d = mailTemplatingTask(t, `templating="true" to="a@example.com" subject="Order shipped" body="=&quot;Hallo &quot; + name" bodyHtml="{{name}}"`)
+	if d.MailSubjectTmpl != nil || d.MailSubject.Literal != "Order shipped" {
+		t.Errorf("a subject without {{ stays a literal; got %v, %+v", d.MailSubjectTmpl, d.MailSubject)
+	}
+	if d.BodyTmpl != nil || d.Body.Expr == nil {
+		t.Errorf("a '=' body stays one FEEL expression; got template %v, body %+v", d.BodyTmpl, d.Body)
+	}
+	if d.BodyHTMLTmpl == nil {
+		t.Error("the HTML body is a template")
+	}
+	d = mailTemplatingTask(t, `templating="false" to="a@example.com" body="{{name}}"`)
+	if d.BodyTmpl != nil {
+		t.Error("templating=false must leave a {{ as text")
+	}
+	d = mailTemplatingTask(t, `operation="reply" messageId="=mail.messageId" templating="true" body="Danke, {{name}}"`)
+	if d.BodyTmpl == nil {
+		t.Error("a reply's body is a template too")
+	}
+}
+
+func TestParseMailConnectorTemplatingErrors(t *testing.T) {
+	for _, tc := range []struct{ attrs, want string }{
+		{`templating="yes" to="a@example.com" body="x"`, `templating="yes"`},
+		{`templating="true" to="a@example.com" body="Hallo&#10;{{#if vip}}Sehr geehrte"`, "body: line 2, column 1"},
+		{`templating="true" to="a@example.com" subject="{{ 1 + }}"`, "subject"},
+		{`templating="true" to="a@example.com" bodyHtml="{{#each items}}{{/each}}"`, "bodyHtml"},
+		{`operation="list" resultVariable="mails" templating="true"`, "does not use templating"},
+	} {
+		_, err := Parse(1, 1, strings.NewReader(fmt.Sprintf(mailTemplatingModel, tc.attrs)))
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("Parse(%s) = %v; want an error mentioning %q", tc.attrs, err, tc.want)
+		}
+	}
+}
+
+// A template's FEEL goes through the deploy gate like every other expression: a call
+// this build can only answer with null is refused at deploy and kept, reported, when a
+// definition already deployed is brought back (ADR-0388/0393).
+func TestParseMailConnectorTemplateFEELThroughTheGate(t *testing.T) {
+	model := fmt.Sprintf(mailTemplatingModel, `templating="true" to="a@example.com" body="Hallo {{ nosuchfunction(name) }}"`)
+	if _, err := Parse(1, 1, strings.NewReader(model)); err == nil {
+		t.Fatal("a template calling an unknown function must fail the deploy")
+	}
+	cp, problems, err := ReloadNamed(1, 1, strings.NewReader(model), "p")
+	if err != nil || cp == nil {
+		t.Fatalf("ReloadNamed: %v; a deployed definition must come back", err)
+	}
+	if len(problems) == 0 {
+		t.Error("the kept call is reported as drift")
 	}
 }
