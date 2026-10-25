@@ -1,10 +1,10 @@
 # ADR-0483: Technical capability contract publication and conformance governance
 
 - **Status:** Accepted
-- **Implementation:** Not started for publication/approval/revocation; schema-only foundation in [PR #1357](https://github.com/pblumer/atlas/pull/1357) is under review, not yet merged, and provides no verified-provider evidence
+- **Implementation:** Not started
 - **Date:** 2026-10-25
 - **Deciders:** atlas maintainers
-- **Scope boundary:** Only maintainer-reviewed, source-controlled contract artifacts and independently reviewed evidence may become trusted initially. External publishers, signature trust roots and third-party attestations require a separately accepted extension after ADR-0208 provenance/signature verification is implemented. Until then, external claims remain unverified candidates.
+- **Open question:** Which externally issued signature trust roots, third-party attestations and installation trust controls can be admitted once ADR-0208 signature verification is implemented? This accepted first-party decision explicitly excludes them; until a new accepted decision, external claims remain unverified candidates.
 - **Question checked:** 2026-10
 - **Decision recorded:** 2026-10-25; option 3 approved for the CDA programme. This acceptance is an architecture decision, not proof that a provider conforms or that code is integrated.
 
@@ -39,6 +39,8 @@ ADR-0208 specifies the Worker Type package trust model but its package-provenanc
 ## Decision outcome
 
 **Decision: option 3 — accepted.** Initially only maintainer-reviewed definitions and independently reviewed evidence committed alongside atlas can be trusted. This decision establishes the publication and conformance governance model; it does **not** certify existing providers or make a runtime selection decision. Do not derive `verified` from schema-only fixture success, a self-declared reviewer string or a submitted report.
+
+**Implementation status:** The publication, approval and revocation workflow is not implemented. Schema-only checks in [PR #1357](https://github.com/pblumer/atlas/pull/1357) are under review; they are not independently verified evidence and have not been integrated into `main`.
 
 ### Initial publication and trust boundary (accepted)
 
