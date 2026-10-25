@@ -1,7 +1,7 @@
 # Capability-driven Automation: delivery programme
 
 **Programme:** CDA (Capability-driven Automation)  
-**Baseline checked:** 2026-10-25, `main` plus the open [PR #1346](https://github.com/pblumer/atlas/pull/1346).  
+**Baseline checked:** 2026-10-25, `main` including merged [PR #1346](https://github.com/pblumer/atlas/pull/1346) and [ADR-0485](../adr/0485-technical-capability-semantics.md) (Proposed / Partial).  
 **Roadmap owner:** [Milestone CDA](../../ROADMAP.md#milestone-cda--capability-driven-automation-) in `ROADMAP.md`.  
 **Detailed historical slices:** [T0–T5 technical plan](technical-capability-contract.md); this programme is the **status and dependency authority** for cross-milestone delivery.
 
@@ -37,7 +37,7 @@ database is introduced.
 | Business capabilities, Value Streams, realizations and Panorama binding | [ADR-0305](../adr/0305-business-capabilities-and-value-streams.md) (Accepted/Partial), [ADR-0308](../adr/0308-panorama-binds-the-capability-register.md) (Accepted/Landed), `api/capability`, `api/panorama` | Implemented for the earlier business architecture scope; not a technical capability graph |
 | Worker Type / configured Worker / Worker Instance identity | [ADR-0203](../adr/0203-worker-execution-model.md), [ADR-0208](../adr/0208-worker-type-packages.md) (Accepted/Partial) | Existing model and catalog; third-party package provenance, installation and pinned versions still partial |
 | Technical claims in manifests (T0) | [PR #1343](https://github.com/pblumer/atlas/pull/1343) merged; [ADR-0480](../adr/0480-technical-capability-contract.md) (Proposed/Partial); `workertype/capability.go`, `workertype/manifest.go` | **Code landed; architecture approval and B11 completion not claimed** |
-| Semantic contract envelope (T1a) | [PR #1346](https://github.com/pblumer/atlas/pull/1346), draft; separate proposed ADR there | In review, **not on main** |
+| Semantic contract envelope (T1a) | [PR #1346](https://github.com/pblumer/atlas/pull/1346) merged; [ADR-0485](../adr/0485-technical-capability-semantics.md) (Proposed / Partial) | Parser/envelope implemented on `main`; architecture approval and full conformance pending |
 | Canonical conformance and publication | [Conformance governance draft](../adr/0483-technical-capability-conformance-governance.md) | Proposed decision, no code |
 | Single cross-layer query model | [ADR-0420](../adr/0420-one-graph-model-several-projections.md) (Proposed/Not started) | Not implemented. Previous **Milestone P is complete only for its original scope**, not this follow-on |
 | Governed external action execution | [ADR-0475](../adr/0475-identity-aware-worker-execution.md) (Proposed/Partial) | Supervised delegated SharePoint example exists; do **not** assume equivalent enforcement for all Worker Types |
@@ -53,7 +53,7 @@ without redeploying an existing opt-in BPMN process version:
 | Slice | Status | Previously | Ownership / placement | Depends on | Deliverable and acceptance gate |
 |---|---|---|---|---|---|
 | **CDA0 — Claims** | 🚧 Code merged, ADR-0480 Proposed | T0 / B11 | Worker Type contract; Milestone B11 | ADR-0203/0208 | Optional version/profile claims with valid/invalid and legacy manifest tests; do not call it landed until ADR approved and verification evidence is reviewed |
-| **CDA1 — Semantic envelope** | 🚧 Draft PR #1346 | T1a | `workertype`; Milestone 6 | CDA0 design review | Exact contract identity, resource semantics, schema root and strict parser; separate contact/account fixtures, no conformance claim |
+| **CDA1 — Semantic envelope** | 🚧 PR #1346 merged; ADR-0485 Proposed | T1a | `workertype`; Milestone 6 | CDA0 design review | Exact contract identity, resource semantics, schema root and strict parser on `main`; separate account/contact fixtures. Architecture acceptance pending; no provider or full JSON Schema conformance claim |
 | **CDA2 — Governance and conformance** | 🔲 Not started | T1b | Contract maintainers and reviewers; Milestone 6 | CDA1, acceptance of governance ADR, ADR-0208 trust boundaries | Normative artifact/digest, full offline JSON Schema validation, positive/negative mock fixtures, evidence/withdrawal lifecycle and independent review; provider claims cannot self-certify |
 | **CDA3 — Source-derived Worker claims** | 🔲 Not started | T2 | Provider catalogue owners; Milestone 6 | CDA2 | Entra or Google Contacts first, LDAP afterwards; correct per-operation contract/profile, no duplicate operation source, drift and negative-equivalence tests; label unknown/candidate/verified precisely |
 | **CDA4 — Technical-to-business graph** | 🔲 Not started | T3 | Graph/Panorama architecture, **new CDA track** | CDA2/CDA3, ADR-0420 acceptance or explicit extension | Provenance-bearing, stable-ID graph edges from Value Stream and authored realization to operation/contract and configured Worker; server-side bounded traversal and no unauthorized leakage |
@@ -74,7 +74,7 @@ the **account** contract, nor vice versa.
 ```text
 ADR-0203/0208 -> CDA0 (code merged; ADR-0480 still Proposed)
                         |
-                     CDA1 (#1346)
+                     CDA1 (#1346 merged; ADR-0485 Proposed)
                         |
       Governance ADR -> CDA2 conformance -> CDA3 provider evidence
                                              |
@@ -103,7 +103,7 @@ discovery and authorization.
 | Decision | Status | Required before |
 |---|---|---|
 | [ADR-0480 — Operation-level descriptive claims](../adr/0480-technical-capability-contract.md) | Proposed, code Partial | Declare CDA0 architecturally done |
-| PR #1346 semantic envelope draft | Draft, not merged; future number at merge | CDA1 accepted |
+| [ADR-0485 — Technical capability semantics](../adr/0485-technical-capability-semantics.md) | Proposed / Partial; PR #1346 merged | CDA1 accepted |
 | [ADR-0483](../adr/0483-technical-capability-conformance-governance.md) | Proposed / Not started | CDA2, then trusted CDA3 |
 | [ADR-0420 — One graph](../adr/0420-one-graph-model-several-projections.md) | Proposed / Not started | CDA4. Must explicitly cover technical capability nodes, operation edges, visibility and provenance before acceptance |
 | [ADR-0475 — Identity-aware Worker authorization](../adr/0475-identity-aware-worker-execution.md) | Proposed / Partial | CDA7 provider-specific governed action |
@@ -224,7 +224,7 @@ the `ROADMAP.md` CDA track. "Merged" is not synonymous with
 - T5c (new follow-up) = CDA8 — controlled Worker replacement without process redeployment
 
 The detailed [T0–T5 plan](technical-capability-contract.md) remains
-useful for technical task lists. In PR #1346 it is also being updated
-for T1a/T1b. This new programme deliberately lives in its **own file**
-to avoid rewriting that active PR's work or misrepresenting its draft
-changes as already on `main`.
+useful for technical task lists. PR #1346 merged the T1a envelope;
+its conformance follow-up (T1b/CDA2) remains unimplemented. This programme
+tracks architecture approval and integrated, evidenced delivery separately
+from a merged PR.
