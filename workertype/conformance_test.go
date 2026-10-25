@@ -171,3 +171,32 @@ func TestTechnicalSchemaFixturesNeedNegativeAndPositiveCoverage(t *testing.T) {
 		}
 	}
 }
+
+// TestTechnicalSchemaLoaderRefusesEmbeddedForeignMetaschemas reaches the
+// offline loader itself: Validate checks only $ref and the root $schema, so an
+// embedded resource naming its own metaschema is refused by the loader, never
+// fetched over the network or read from disk.
+func TestTechnicalSchemaLoaderRefusesEmbeddedForeignMetaschemas(t *testing.T) {
+	for _, meta := range []string{"https://external.example/meta.json", "file:///etc/passwd"} {
+		c := validTechnicalContract()
+		c.Spec.InputSchema = json.RawMessage(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"x":{"$ref":"#/$defs/x"}},"$defs":{"x":{"$id":"https://external.example/x.json","$schema":"` + meta + `","type":"string"}}}`)
+		if err := c.Validate(); err != nil {
+			t.Fatalf("envelope must leave this case to the loader: %v", err)
+		}
+		_, err := CompileTechnicalContract(c)
+		if err == nil || !strings.Contains(err.Error(), "is disabled") {
+			t.Fatalf("metaschema %s: want offline loader refusal, got %v", meta, err)
+		}
+	}
+}
+
+func TestTechnicalSchemaInstanceRejectsInvalidUTF8(t *testing.T) {
+	compiled, err := CompileTechnicalContract(validTechnicalContract())
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = compiled.ValidateInputJSON([]byte("{\"name\":\"a\xffb\"}"))
+	if err == nil || !strings.Contains(err.Error(), "UTF-8") {
+		t.Fatalf("invalid UTF-8 instance: want UTF-8 refusal, got %v", err)
+	}
+}

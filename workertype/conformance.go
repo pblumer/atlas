@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -74,6 +75,11 @@ func CompileTechnicalContract(contract TechnicalContract) (*CompiledTechnicalCon
 func decodeTechnicalSchemaInstance(raw []byte) (any, error) {
 	if len(raw) == 0 || len(raw) > MaxTechnicalSchemaInstanceBytes {
 		return nil, fmt.Errorf("JSON Schema instance must be 1..%d bytes", MaxTechnicalSchemaInstanceBytes)
+	}
+	// encoding/json would silently replace invalid bytes with U+FFFD and
+	// validate a different document than the one supplied.
+	if !utf8.Valid(raw) {
+		return nil, errors.New("JSON Schema instance is not valid UTF-8")
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()

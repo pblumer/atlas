@@ -76,7 +76,7 @@ positive/negative fixtures for account/contact schemas. Results explicitly say
 contract**, publish or withdraw evidence, mark a claim as `verified`, or
 authorize any job. Source-controlled schema fixtures are not live-provider tests.
 
-**Still open for T1b:** after acceptance of [ADR-0483](../adr/0483-technical-capability-conformance-governance.md),
+**Still open for T1b:** under [ADR-0483](../adr/0483-technical-capability-conformance-governance.md),
 add contract/content digest identity and canonical artifact publication, a
 provider-agnostic mock harness, provider-specific identity/error/idempotency
 checks, independently reviewed evidence, invalidation/revocation and controlled
