@@ -203,9 +203,11 @@ func EvaluateTechnicalSchemaFixtures(contract TechnicalContract, fixtures []Tech
 		return TechnicalSchemaReport{}, err
 	}
 	report := TechnicalSchemaReport{
-		ContractID: contract.Metadata.ID, ContractVersion: contract.Metadata.Version,
-		Profile: contract.Metadata.Profile, SchemaOnly: true,
-		Results: make([]TechnicalSchemaFixtureResult, 0, len(fixtures)),
+		ContractID:      contract.Metadata.ID,
+		ContractVersion: contract.Metadata.Version,
+		Profile:         contract.Metadata.Profile,
+		SchemaOnly:      true,
+		Results:         make([]TechnicalSchemaFixtureResult, 0, len(fixtures)),
 	}
 	for _, fixture := range fixtures {
 		var failure error
