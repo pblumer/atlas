@@ -57,7 +57,7 @@ This plan is intentionally **incremental**. No universal Directory Worker Type i
 
 **Target:** Milestone 6. **Depends on:** T0 and design review.
 
-**T1a — Contract envelope (current draft PR).** Add a separately versioned technical
+**T1a — Contract envelope (PR #1346 merged; ADR-0485 remains Proposed / Partial).** Add a separately versioned technical
 contract document, with resource kind and identity scope, JSON Schema Draft 2020-12
 roots, semantic error codes, idempotency, consistency and pagination constraints.
 Parse strictly in `workertype` at design time; reject duplicate identities, malformed
@@ -66,11 +66,21 @@ are explicitly **not** a published canonical corpus. See
 [ADR-0485](../adr/0485-technical-capability-semantics.md).
 No runtime routing or process-state changes.
 
-**T1b — Full schemas, conformance and publication (open).** Select a maintained
-JSON Schema validator with remote resolution disabled, add positive/negative fixture
-tests, a provider-agnostic mock harness, content-digest identity, reviewer approval,
-and immutable publication/versioning rules. Validate semantics against target
-providers where possible without creating credentials in the model.
+**T1b — Full schemas, conformance and publication (partially started).**
+The first schema-only foundation is [CDA2a PR #1357](https://github.com/pblumer/atlas/pull/1357)
+(tracked by [issue #1358](https://github.com/pblumer/atlas/issues/1358)):
+full JSON Schema Draft 2020-12 *keyword* validation of bounded input/output
+samples, offline compilation (external schema loaders disabled) and reviewed
+positive/negative fixtures for account/contact schemas. Results explicitly say
+`schemaOnly`; **they do not prove that an actual Worker implements the
+contract**, publish or withdraw evidence, mark a claim as `verified`, or
+authorize any job. Source-controlled schema fixtures are not live-provider tests.
+
+**Still open for T1b:** under [ADR-0483](../adr/0483-technical-capability-conformance-governance.md),
+add contract/content digest identity and canonical artifact publication, a
+provider-agnostic mock harness, provider-specific identity/error/idempotency
+checks, independently reviewed evidence, invalidation/revocation and controlled
+live integration tests. No automatic claim promotion or routing is allowed.
 
 **Acceptance:** Invalid descriptors and duplicate contract IDs fail immediately.
 T1b provider conformance cases fail on meaningful mismatches. No shared
