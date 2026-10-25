@@ -65,19 +65,20 @@ export function cadenceText(seconds) {
 
 // renderStorage fills the dashboard's alert slot and card slot from one reading.
 export async function renderStorage({ alertSlot, cardSlot, api, confirm = (m) => window.confirm(m) }) {
-  // The checkpoint status is a second request on purpose: a server that cannot answer it
-  // still shows its disk, and the card leaves out only what it could not read.
-  const [storage, status] = await Promise.allSettled([
-    api("GET", "/api/v1/storage"),
-    api("GET", "/api/v1/checkpoints?verify=false"),
-  ]);
-  if (storage.status !== "fulfilled") return;
-  const s = storage.value;
-  const cp = status.status === "fulfilled" ? status.value : null;
+  let s;
+  try { s = await api("GET", "/api/v1/storage"); } catch { return; }
   if (!s || !STATES.includes(s.state)) return;
   if (alertSlot) alertSlot.innerHTML = alertHTML(s);
   if (!cardSlot) return;
-  cardSlot.innerHTML = cardHTML(s, cp);
+  // The disk first, on its own: it is what the card is for, and it must not wait on the
+  // checkpoint status, which is a second request that can be slow or fail. The reclaim
+  // section fills its slot when that answer arrives, and stays empty when it does not.
+  cardSlot.innerHTML = cardHTML(s);
+  let cp;
+  try { cp = await api("GET", "/api/v1/checkpoints?verify=false"); } catch { return; }
+  const slot = cardSlot.querySelector(".storage-reclaim-slot");
+  if (!slot) return;
+  slot.innerHTML = reclaimHTML(cp);
   wireReclaim(cardSlot, { api, confirm, rerender: () => renderStorage({ alertSlot, cardSlot, api, confirm }) });
 }
 
@@ -234,8 +235,7 @@ export function cardHTML(s, cp) {
     wal: fmtBytes(atlas.walBytes), segments: fmtCount(atlas.walSegments || 0), state: fmtBytes(atlas.stateBytes),
   }))}</p>`);
   if (!(s.reserveBytes > 0)) parts.push(`<p class="muted">${esc(t("storage.freezeOff"))}</p>`);
-  const reclaim = reclaimHTML(cp);
-  if (reclaim) parts.push(reclaim);
+  parts.push(`<div class="storage-reclaim-slot">${reclaimHTML(cp)}</div>`);
   parts.push(`<p class="muted storage-note">${esc(t("storage.note"))}
     <a href="/handbuch.html#speicher" target="_blank" rel="noopener">${esc(t("storage.handbook"))} ↗</a></p>`);
   return `<div class="card storage-card" id="storage-card">

@@ -188,6 +188,12 @@ Console has. The checkpoint control stays off MCP, as ADR-0131 decided.
   log alone after the state store is thrown away), `api/checkpoint_compactonce_test.go`,
   `state/finishedcount_internal_test.go`, `mcp/tools_historypurge_test.go`,
   `cmd/atlas/instancepurge_test.go`, `e2e/history-purge.spec.mjs`.
+- Corrected after it shipped: the first build's `?verify=false` still verified every
+  checkpoint and only then answered from the manifests, and the storage card waited for
+  that answer, so on the 23 GiB store the card did not appear at all. The handler now
+  reads one or the other, `TestCheckpointStatusWithoutVerificationReadsNoStateFile` counts
+  the verifications a request makes, and the card draws the disk before it asks for the
+  checkpoint status.
 - Measured on a test store of 6,000 finished instances (not on the installation that
   asked): one purge costs about 190 µs end to end, so a batch of 1,000 holds the writer for
   roughly 0.2 s and one of 5,000 for 1.2 s; one purge event adds 128 bytes to the WAL for a

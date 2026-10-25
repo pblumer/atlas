@@ -110,8 +110,12 @@ func (s *Server) handleCheckpointStatus(w http.ResponseWriter, r *http.Request) 
 		}
 		verify = v
 	}
-	checkpoints := s.publishedCheckpoints()
-	if !verify {
+	// One or the other, never both: the verifying read is the expensive one, and asking
+	// for it only to replace its answer is what kept the dashboard card waiting.
+	var checkpoints []checkpointInfo
+	if verify {
+		checkpoints = s.publishedCheckpoints()
+	} else {
 		checkpoints = s.checkpointManifests()
 	}
 	resp := checkpointStatusResp{
@@ -141,7 +145,7 @@ func (s *Server) publishedCheckpoints() []checkpointInfo {
 	out := make([]checkpointInfo, 0, len(positions))
 	for _, pos := range positions {
 		info := checkpointInfo{Position: pos}
-		if m, err := checkpoint.Verify(s.checkpointRoot, pos); err != nil {
+		if m, err := s.verifyCheckpoint(s.checkpointRoot, pos); err != nil {
 			info.Error = err.Error()
 			// Fall back to the manifest alone so a checkpoint whose state files are
 			// damaged is still described rather than reduced to a bare position.

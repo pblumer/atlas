@@ -21,6 +21,7 @@
       <button class="btn" id="purge-slow">Delete finished (slow batches)</button>
       <button class="btn" id="storage-off">Storage card (compaction off)</button>
       <button class="btn" id="storage-on">Storage card (compaction on)</button>
+      <button class="btn" id="storage-hang">Storage card (checkpoint status never answers)</button>
     </div>
     <div id="storage-alert-slot"></div>
     <div id="storage-card-slot"></div>
@@ -41,7 +42,7 @@
       window.__confirms = [];
       const toast = (msg, kind) => window.__toasts.push({ msg, kind });
 
-      const makeAPI = ({ enabled = true, failOn = 0, slow = false, compaction = false } = {}) => {
+      const makeAPI = ({ enabled = true, failOn = 0, slow = false, compaction = false, hang = false } = {}) => {
         const left = { ...FINISHED };
         let posts = 0;
         return async (method, url) => {
@@ -82,6 +83,9 @@
             };
           }
           if (u.pathname === "/api/v1/checkpoints" && method === "GET") {
+            // A server re-reading tens of GiB of checkpoints answers after minutes, or a
+            // proxy gives up first: the card must not wait for it.
+            if (hang) return new Promise(() => {});
             return {
               enabled: true, intervalSeconds: 300, keep: 3, compaction, root: "/data/checkpoints",
               checkpoints: [{ position: 900, createdAt: 1 }], walSegments: 1449, walBytes: 97e9,
@@ -120,6 +124,15 @@
       };
       document.getElementById("storage-off").addEventListener("click", storage(false));
       document.getElementById("storage-on").addEventListener("click", storage(true));
+      document.getElementById("storage-hang").addEventListener("click", () => {
+        window.__calls = [];
+        // Not awaited: the reading never completes, and the card has to be drawn anyway.
+        renderStorage({
+          alertSlot: document.getElementById("storage-alert-slot"),
+          cardSlot: document.getElementById("storage-card-slot"),
+          api: makeAPI({ hang: true }),
+        });
+      });
 
       window.__ready = true;
     </script>

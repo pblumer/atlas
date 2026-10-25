@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/checkpoint"
 )
 
 // An administrator asks for one compaction pass on a server that does not compact on
@@ -122,5 +124,37 @@ func TestCheckpointStatusWithoutVerification(t *testing.T) {
 	}
 	if code, body := h.x.do(http.MethodGet, "/api/v1/checkpoints?verify=maybe", ""); code != http.StatusBadRequest {
 		t.Errorf("GET ?verify=maybe status=%d body=%s, want 400", code, body)
+	}
+}
+
+// TestCheckpointStatusWithoutVerificationReadsNoStateFile: ?verify=false re-hashes no
+// checkpoint at all. It used to verify every one and then throw the answer away, so on
+// a 23 GiB store each dashboard load read tens of GiB and the storage card, which
+// waited for the answer, never appeared (ADR-0486). Verification is counted where it
+// happens rather than inferred from the answer, because the answer looked right either
+// way.
+func TestCheckpointStatusWithoutVerificationReadsNoStateFile(t *testing.T) {
+	dir := t.TempDir()
+	h := newCompactionHarness(t, dir)
+	h.deploy()
+	h.create(2)
+	h.pass()
+
+	verified := 0
+	h.srv.verifyCheckpoint = func(root string, pos uint64) (*checkpoint.Manifest, error) {
+		verified++
+		return checkpoint.Verify(root, pos)
+	}
+	if code, body := h.x.do(http.MethodGet, "/api/v1/checkpoints?verify=false", ""); code != http.StatusOK {
+		t.Fatalf("GET ?verify=false status=%d body=%s", code, body)
+	}
+	if verified != 0 {
+		t.Fatalf("GET ?verify=false verified %d checkpoint(s), want none", verified)
+	}
+	if code, body := h.x.do(http.MethodGet, "/api/v1/checkpoints", ""); code != http.StatusOK {
+		t.Fatalf("GET status=%d body=%s", code, body)
+	}
+	if verified != 1 {
+		t.Errorf("the full status verified %d checkpoint(s), want the one published", verified)
 	}
 }
