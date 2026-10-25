@@ -63,6 +63,8 @@ governs a Worker:
   file example runs on a mockup Worker named `intranet`
   ([ADR-0484](docs/adr/0484-sharepoint-mock-mode.md)).
 
+- **Technical capabilities can be described with an independently versioned semantic contract.** A design-time JSON descriptor now records resource kind, identity scope, typed input/output schema roots, semantic errors, idempotency, consistency and pagination. Strict parsing rejects malformed contracts, duplicate identities and remote JSON Schema references. Sample account and contact contracts are tests, not proof of provider conformance; no Worker routing or policy enforcement changes ([ADR-draft-technical-capability-semantics](docs/adr/draft-technical-capability-semantics.md)).
+
 - **The dashboard shows the disk, and the server keeps a reserve free on it.** An
   administrator sees each file system the server writes to on the Console's dashboard: how
   much is used and free, where the reserve begins, what the WAL and the state store hold,

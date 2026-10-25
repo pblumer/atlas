@@ -1261,6 +1261,15 @@ Beyond a single node.
 
 Adoption and polish.
 
+- 🚧 **Technical capability semantics (T1a).** A strict, independent, versioned
+  descriptor for a Worker Type operation's claimed semantics: resource kind and
+  identity scope, JSON Schema roots, error taxonomy, idempotency, consistency and
+  pagination ([ADR-draft-technical-capability-semantics](docs/adr/draft-technical-capability-semantics.md)).
+  T1a validates the contract envelope without publishing a canonical production
+  corpus or certifying providers. **T1b** adds full JSON Schema verification and
+  provider conformance evidence; **T2** projects verified built-in operation claims
+  without copying operation tables (see
+  [implementation plan](docs/planning/technical-capability-contract.md)).
 - 🔲 Worker SDKs in more languages
 - 🚧 BPMN modeler interoperability (import from common tools): the Zeebe dialect round-trips, and a MIM worksheet imports ([ADR-0292](docs/adr/0292-mim-import-worksheet.md)); importing from Camunda 7 or Signavio is not built
 - 🚧 **Benchmark suite and published performance numbers** (v0.2.0 programme B):
