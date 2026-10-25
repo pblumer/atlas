@@ -86,9 +86,19 @@ API. The maintainer chose **repository provenance**:
 - **Single reviewer for now.** The maintainer (pblumer) is the only code owner
   and reviewer. Changes prepared by coding agents are pushed under the
   maintainer's account, so GitHub cannot record a separate approving review
-  for them; for those the approval is the maintainer's own merge. A merge
-  performed by a coding agent, even with the maintainer's credentials, is
-  **not** an approval.
+  for them. For those the approval is either the maintainer's own merge or a
+  pull-request comment by the maintainer that approves the merge and names
+  the exact head commit. A coding agent may merge only after such a comment
+  and only while the pull request's head is still that commit; any later push
+  needs a new comment. A merge by a coding agent without one is **not** an
+  approval.
+- This is a convention, not an enforced control. Agents act through the
+  maintainer's account, so GitHub attributes an agent's comment to the
+  maintainer exactly as it attributes the maintainer's own; the rule holds
+  only while no agent writes an approval comment itself. A separate account
+  or GitHub App identity for agents would make the two distinguishable and
+  let the maintainer approve agent pull requests with a real review; adopting
+  one amends this record.
 - Independence in this phase means separation between whoever authored the
   evidence (a contributor or a coding agent) and the maintainer's acceptance,
   not two independent people. Evidence approved this way records that a
