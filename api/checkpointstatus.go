@@ -136,8 +136,30 @@ func (s *Server) handleCheckpointStatus(w http.ResponseWriter, r *http.Request) 
 }
 
 // publishedCheckpoints describes every checkpoint currently on disk, newest last, each
-// with whether it still verifies.
+// with whether it still verifies — asked now, by re-hashing every one.
 func (s *Server) publishedCheckpoints() []checkpointInfo {
+	return s.checkpointRows(func(pos uint64) (*checkpoint.Manifest, error) {
+		return s.verifyCheckpoint(s.checkpointRoot, pos)
+	})
+}
+
+// rememberedCheckpoints is publishedCheckpoints with each verdict taken from what this
+// server remembers when the checkpoint's files are unchanged and the verdict is less
+// than a day old — what a metrics scrape asks
+// (ADR-draft-checkpoint-verdicts-are-remembered).
+func (s *Server) rememberedCheckpoints() []checkpointInfo {
+	rows := s.checkpointRows(s.rememberedVerify)
+	positions := make([]uint64, len(rows))
+	for i := range rows {
+		positions[i] = rows[i].Position
+	}
+	s.forgetCheckpointsExcept(positions)
+	return rows
+}
+
+// checkpointRows describes every checkpoint on disk, newest last, with the verdict verify
+// gives for it.
+func (s *Server) checkpointRows(verify func(pos uint64) (*checkpoint.Manifest, error)) []checkpointInfo {
 	positions, err := checkpoint.List(s.checkpointRoot)
 	if err != nil {
 		return nil
@@ -145,7 +167,7 @@ func (s *Server) publishedCheckpoints() []checkpointInfo {
 	out := make([]checkpointInfo, 0, len(positions))
 	for _, pos := range positions {
 		info := checkpointInfo{Position: pos}
-		if m, err := s.verifyCheckpoint(s.checkpointRoot, pos); err != nil {
+		if m, err := verify(pos); err != nil {
 			info.Error = err.Error()
 			// Fall back to the manifest alone so a checkpoint whose state files are
 			// damaged is still described rather than reduced to a bare position.
