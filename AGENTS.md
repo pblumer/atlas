@@ -93,7 +93,7 @@ checkpoint/ Recovery checkpoints and WAL compaction (ADR-0131)
 expr/       FEEL expression compilation and evaluation
   feelers/    The template language of form-js's text views — {{ FEEL }}, {{#if}}, {{#loop}} —
               compiled at deploy and rendered on the server, for mail texts
-              (ADR-draft-mail-templates)
+              (ADR-0487)
 job/        Job store, worker subscription, gRPC streaming protocol
 dmn/        DMN registry, resolver, validation, and the business-rule-task worker
 connector/  Worker Type implementations — one package per type (ADR-0203)

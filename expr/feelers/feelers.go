@@ -3,7 +3,7 @@
 // form-js's Text and HTML views evaluate their content with feelers
 // (bpmn-io/feelers 3.1.0, bundled in api/web/vendor/form-js): text with {{ FEEL }}
 // placeholders, {{#if FEEL}}…{{/if}} and {{#loop FEEL}}…{{/loop}} sections. A mail
-// text is written in the same language (ADR-draft-mail-templates) and is rendered on
+// text is written in the same language (ADR-0487) and is rendered on
 // the server, so this package implements it in Go: parsed, and every FEEL block
 // compiled, once when the model is deployed (I5); rendered when the mail is sent.
 //

@@ -246,7 +246,7 @@ const matches = (q, ...fields) => !q || fields.some((f) => String(f || "").toLow
 //              recent ones (a hit may name what it `match`ed). null: the process has
 //              no instance; a query that finds none answers with `instance: null`.
 //   preview    (src, vars) -> Promise<{ ok, result, problems, error, line, column }>
-//              the Preview panel (a mail template, ADR-draft-mail-templates): the
+//              the Preview panel (a mail template, ADR-0487): the
 //              text rendered with the sample variables, re-rendered as either changes
 //   previewKind "text" shows the rendered result as text, "html" as a sandboxed page
 //   lockPrefix (value) -> protected leading length (the fx '=' marker)

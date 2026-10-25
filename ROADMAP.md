@@ -689,7 +689,7 @@ The control-flow basics most real models use.
   the Graph and Gmail calls walked at a live tenant; re-checking a stored object's verdict
   before presenting it long after its export.
   **Mail texts are templates, previewed as they are written**
-  ([ADR-draft-mail-templates](docs/adr/draft-mail-templates.md)): with `templating="true"`
+  ([ADR-0487](docs/adr/0487-mail-templates.md)): with `templating="true"`
   a mail task's subject and bodies use the template language form text views already
   speak — `{{ FEEL }}` placeholders, `{{#if}}` and `{{#loop}}` sections — compiled at deploy
   and rendered by the worker, the HTML body escaping what a placeholder inserts; F2 opens

@@ -20,7 +20,7 @@ func template(t *testing.T, src string) *feelers.Template {
 }
 
 // TestMailConnectorTemplates is the send end to end with templates
-// (ADR-draft-mail-templates): the subject and both bodies render over the variables the
+// (ADR-0487): the subject and both bodies render over the variables the
 // task sees, the HTML body escapes what a placeholder inserts and keeps its own markup,
 // and a subject a section broke over two lines goes out as one.
 func TestMailConnectorTemplates(t *testing.T) {

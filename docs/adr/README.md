@@ -572,6 +572,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0484](0484-sharepoint-mock-mode.md) | A mockup provider for the SharePoint Worker Type | Accepted | Landed |
 | [0485](0485-technical-capability-semantics.md) | Versioned semantic contracts for technical capabilities | Proposed | Partial |
 | [0486](0486-operator-history-purge-and-compaction.md) | Deleting finished instances and compacting the WAL on an operator's request | Accepted | Landed |
+| [0487](0487-mail-templates.md) | A mail text is a template in the language form text views already speak | Accepted | Landed |
 
 ## The two states of a record
 

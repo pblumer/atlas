@@ -58,7 +58,7 @@ governs a Worker:
   `POST /api/v1/feel/template`, the HTML body as a sandboxed page without scripts; an HTML
   body without placeholders is previewed too. A task without the switch is unchanged, a
   `{{` in its text included
-  ([ADR-draft-mail-templates](docs/adr/draft-mail-templates.md)).
+  ([ADR-0487](docs/adr/0487-mail-templates.md)).
 
 - **Finished instances can be deleted from Operations.** An administrator deletes the
   finished instances of one version or of all versions that finished before a chosen moment,

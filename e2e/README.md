@@ -83,7 +83,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   `dev-view.spec.mjs` drives the search field itself: Enter searches, a pick stays inside the
   search, a search that finds nothing or fails keeps the instance on screen, and emptying the
   field returns to the recent instances.
-- **`mail-template.spec.mjs`** ([ADR-draft-mail-templates](../docs/adr/draft-mail-templates.md)):
+- **`mail-template.spec.mjs`** ([ADR-0487](../docs/adr/0487-mail-templates.md)):
   **mail templates** in the Modeler, on `mail-html-harness.html` with a mock renderer behind
   `POST /api/v1/feel/template` — the **Placeholders** select writes `templating="true"` and turns
   the subject and bodies into template fields that colour their `{{ }}` tags; F2 opens a body

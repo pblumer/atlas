@@ -4162,7 +4162,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .dev-run-detail.err { color: var(--danger); border-color: #f3c9c4; background: var(--danger-soft); }
 
 /* Preview panel — a mail template rendered with the sample variables
-   (ADR-draft-mail-templates). It takes a fair share of the column, since reading the
+   (ADR-0487). It takes a fair share of the column, since reading the
    result is the point; the code keeps the rest. An HTML body is shown as a sandboxed page (no
    scripts, no same-origin), the posture the outbox already gives a rendered mail. */
 .dev-run.dev-preview { flex: 0 0 48%; min-height: 220px; display: flex; flex-direction: column; }

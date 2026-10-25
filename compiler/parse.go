@@ -2813,7 +2813,7 @@ type xmlMailConnector struct {
 	BodyHtml string `xml:"bodyHtml,attr"`
 	// Templating switches the subject and both bodies to the template language of
 	// form-js's text views — {{ FEEL }} placeholders, {{#if}} and {{#loop}} sections
-	// (ADR-draft-mail-templates). Blank or false keeps every value literal-or-FEEL, as
+	// (ADR-0487). Blank or false keeps every value literal-or-FEEL, as
 	// it was before templates existed, so a deployed body that happens to contain {{
 	// keeps meaning what it meant.
 	Templating string `xml:"templating,attr"`

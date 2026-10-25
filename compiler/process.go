@@ -591,7 +591,7 @@ type ConnectorTaskDetail struct {
 	BodyHTML    RestExpr
 	// MailSubjectTmpl, BodyTmpl and BodyHTMLTmpl are set in place of the literal in
 	// MailSubject, Body and BodyHTML when the task switched templating on and the value
-	// uses the template language (ADR-draft-mail-templates). The worker renders them
+	// uses the template language (ADR-0487). The worker renders them
 	// over the scope's variables, escaping what a placeholder inserts into the HTML
 	// body; nil means the RestExpr beside it is the value, as it always was.
 	MailSubjectTmpl *feelers.Template

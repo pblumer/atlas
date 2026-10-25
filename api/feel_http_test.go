@@ -307,7 +307,7 @@ func TestEvaluateFeelBadRequest(t *testing.T) {
 }
 
 // TestRenderTemplate exercises the mail template preview the Modeler's editor calls
-// (ADR-draft-mail-templates): placeholders and sections render over the sample
+// (ADR-0487): placeholders and sections render over the sample
 // variables, an HTML body escapes what they insert, a '=' value is one FEEL
 // expression as it is in the mail, and a template the deploy would refuse is refused
 // here too, with its place.

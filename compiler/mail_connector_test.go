@@ -245,7 +245,7 @@ func mailTemplatingTask(t *testing.T, attrs string) *ConnectorTaskDetail {
 }
 
 // With templating on, a subject or body written in the template language is compiled
-// at deploy (ADR-draft-mail-templates) and renders over the variables it is given.
+// at deploy (ADR-0487) and renders over the variables it is given.
 func TestParseMailConnectorTemplating(t *testing.T) {
 	d := mailTemplatingTask(t, `templating="true" to="=customer.email"
 		subject="Bestellung {{order.id}}"

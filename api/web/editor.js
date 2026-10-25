@@ -2410,7 +2410,7 @@ function devViewContext(modeler, api, field) {
     ctx.run = (source, variables) => api("POST", "/api/v1/scripts/run", { language: lang, source, variables });
   } else if (lang === "template" || lang === "html-template") {
     // A mail template is previewed by the server that will render it, with the rules
-    // a deploy applies (ADR-draft-mail-templates).
+    // a deploy applies (ADR-0487).
     ctx.preview = (template, variables) => api("POST", "/api/v1/feel/template", { template, variables, html: lang === "html-template" });
     ctx.previewKind = lang === "html-template" ? "html" : "text";
   } else if (lang === "html") {
@@ -3365,7 +3365,7 @@ export function attachExpressionToggle(el, opts = {}) {
   let feelHandle = null;
   // opts.literal makes the literal side a code field of its own — a mail template, whose
   // placeholders are coloured and completed and which F2 lifts into the Developer View
-  // with a preview (ADR-draft-mail-templates). { lang: devLang descriptor, title }.
+  // with a preview (ADR-0487). { lang: devLang descriptor, title }.
   let literalHandle = null;
   const isExpr = () => el.value.trimStart().startsWith("=");
 
@@ -4462,7 +4462,7 @@ const SERVICE_TASK_KINDS = [
       { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "forward", hint: "Delivered but never shown in the message headers." },
       { key: "from", label: "From", placeholder: "leave empty for the Worker's default sender", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
       {
-        // Placeholders (ADR-draft-mail-templates): the subject and both bodies become
+        // Placeholders (ADR-0487): the subject and both bodies become
         // templates in the language form text views use — {{ }} placeholders, {{#if}}
         // and {{#loop}} sections. Off is every mail task authored before templates
         // existed, so an untouched task keeps meaning what it meant.
@@ -10089,7 +10089,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     const stValidate = api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null;
     const stAttachFx = (el, literal) => { if (el) attachExpressionToggle(el, { variables: stFeelVars, validate: stValidate, literal }); };
     // A mail task with placeholders on writes its subject and bodies as templates
-    // (ADR-draft-mail-templates): a field the catalog marks `template` is then a
+    // (ADR-0487): a field the catalog marks `template` is then a
     // template editor on its literal side, and stays FEEL with fx on.
     const stTemplating = (body.querySelector("#f-st-templating") || {}).value === "true";
     const stTemplateLang = (f) => (stTemplating && f.template ? devLang(f.template) : null);

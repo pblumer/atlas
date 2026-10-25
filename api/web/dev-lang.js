@@ -226,7 +226,7 @@ export const html = {
 
 // ---------- Templates ----------
 
-// The template language of a mail text (ADR-draft-mail-templates), which is the one
+// The template language of a mail text (ADR-0487), which is the one
 // form-js's text views already evaluate (feelers): text with {{ FEEL }} placeholders
 // and {{#if condition}}…{{/if}} / {{#loop list}}…{{/loop}} sections. The server
 // renders it (expr/feelers); here it is only coloured and completed.

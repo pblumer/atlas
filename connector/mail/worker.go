@@ -133,7 +133,7 @@ func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model
 }
 
 // mailText is a body: its template rendered over the variables the task sees when the
-// task compiled one (ADR-draft-mail-templates), else the literal-or-FEEL value it
+// task compiled one (ADR-0487), else the literal-or-FEEL value it
 // always was. escape is applied to what a placeholder inserts — html.EscapeString for
 // the HTML body, so a variable's value cannot add markup to the mail. A placeholder
 // that renders as nothing does so silently here, as a failed FEEL field always has;

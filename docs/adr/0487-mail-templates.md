@@ -1,4 +1,4 @@
-# ADR-DRAFT: A mail text is a template in the language form text views already speak
+# ADR-0487: A mail text is a template in the language form text views already speak
 
 - **Status:** Accepted
 - **Implementation:** Landed

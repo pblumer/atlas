@@ -1,5 +1,5 @@
 // End-to-end coverage for mail templates in the Modeler (api/web/editor.js,
-// dev-view.js, dev-lang.js; ADR-draft-mail-templates). With placeholders on, a mail
+// dev-view.js, dev-lang.js; ADR-0487). With placeholders on, a mail
 // task's subject and bodies are templates in the language form text views use: the
 // fields colour the {{ }} tags, F2 opens them in the Developer View, and the preview
 // renders them with sample variables through POST /api/v1/feel/template — a text

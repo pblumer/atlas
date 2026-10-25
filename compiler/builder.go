@@ -1844,7 +1844,7 @@ type MailConfig struct {
 	BodyHTML  RestExpr
 	// SubjectTemplate, BodyTemplate and BodyHTMLTemplate are the subject and bodies of
 	// a task that switched templating on, where they use the template language
-	// (ADR-draft-mail-templates); nil leaves the RestExpr beside them in charge.
+	// (ADR-0487); nil leaves the RestExpr beside them in charge.
 	SubjectTemplate  *feelers.Template
 	BodyTemplate     *feelers.Template
 	BodyHTMLTemplate *feelers.Template

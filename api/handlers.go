@@ -903,7 +903,7 @@ type renderTemplateResp struct {
 
 // handleRenderTemplate renders a mail text against sample variables, so the Modeler's
 // template editor can show what a mail will say before anything is deployed
-// (ADR-draft-mail-templates). It reads a value as a mail task with templating on
+// (ADR-0487). It reads a value as a mail task with templating on
 // does: a leading '=' makes it one FEEL expression, otherwise its {{ }} placeholders
 // and sections are the template language, compiled by the same rules a deploy
 // applies. With html set, what a placeholder inserts is escaped, as the HTML body's

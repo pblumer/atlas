@@ -210,7 +210,7 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.GoogleContactsGroup.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.GoogleContactsContact.Expr":   "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 
-	// A mail template's FEEL (ADR-draft-mail-templates): rendered by the mail worker in
+	// A mail template's FEEL (ADR-0487): rendered by the mail worker in
 	// connector/mail/offload.go (Resolve), over the same scope as the fields beside it.
 	"connectorTasks.MailSubjectTmpl.nodes.expr": "a mail template, rendered in a connector worker — the same edge as MailSubject",
 	"connectorTasks.BodyTmpl.nodes.expr":        "a mail template, rendered in a connector worker — the same edge as Body",
