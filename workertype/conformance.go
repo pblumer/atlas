@@ -217,7 +217,7 @@ func EvaluateTechnicalSchemaFixtures(contract TechnicalContract, fixtures []Tech
 			failure = compiled.ValidateOutputJSON(fixture.Document)
 		}
 		result := TechnicalSchemaFixtureResult{
-			Name: fixture.Name,
+			Name:   fixture.Name,
 			Passed: (failure == nil) == fixture.Valid,
 		}
 		if !result.Passed {
