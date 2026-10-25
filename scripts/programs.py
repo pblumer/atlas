@@ -56,6 +56,8 @@ def validate(root: Path, manifest: Path, data: object) -> dict:
         require(isinstance(data[key], str) and data[key].strip(),
                 f"{label}: missing {key}")
     require(data["status"] in STATES, f"{label}: invalid status")
+    require(data["status"] != "complete" or not data["owner"].lower().startswith("unassigned"),
+            f"{label}: completed programme requires an assigned owner")
     try:
         date = dt.date.fromisoformat(data["last_reviewed"])
         require(date.isoformat() == data["last_reviewed"], f"{label}: invalid date")
@@ -73,6 +75,8 @@ def validate(root: Path, manifest: Path, data: object) -> dict:
         require(isinstance(sid, str) and re.fullmatch(r"[A-Z][A-Z0-9-]*", sid)
                 is not None and sid not in graph, f"{label}: duplicate/invalid slice id")
         require(item["status"] in STATES, f"{label}/{sid}: invalid status")
+        require(item["status"] != "complete" or not item["owner"].lower().startswith("unassigned"),
+                f"{label}/{sid}: completed slice requires an assigned owner")
         for field in ("title", "owner", "note"):
             require(isinstance(item[field], str) and item[field].strip(),
                     f"{label}/{sid}: missing {field}")
@@ -146,7 +150,7 @@ def render(root: Path, programs: list[tuple[Path, dict]]) -> str:
         "Operational overview of multi-slice programmes for people and coding agents.",
         "See [delivery protocol](../development/program-delivery.md) and",
         "[strategic roadmap](../../ROADMAP.md).", "",
-        f"**{len(programs)} programme(s)** · {summary}", "",
+        f"**{len(programs)} {'programme' if len(programs) == 1 else 'programmes'}** · {summary}", "",
         "| Programme | Status | Completed slices | Owner | Next action |",
         "| --- | --- | --- | --- | --- |",
     ]
