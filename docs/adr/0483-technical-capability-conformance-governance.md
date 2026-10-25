@@ -1,15 +1,16 @@
 # ADR-0483: Technical capability contract publication and conformance governance
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Partial (schema-only foundation in [PR #1357](https://github.com/pblumer/atlas/pull/1357), pending merge; no verified-provider evidence yet)
 - **Date:** 2026-10-25
 - **Deciders:** atlas maintainers
-- **Open question:** Which external publisher trust roots and signed attestations may be accepted once ADR-0208 package provenance and signature verification are implemented? This proposal initially recognizes only maintainer-reviewed, source-controlled definitions and evidence.
+- **Scope boundary:** Only maintainer-reviewed, source-controlled contract artifacts and independently reviewed evidence may become trusted initially. External publishers, signature trust roots and third-party attestations require a separately accepted extension after ADR-0208 provenance/signature verification is implemented. Until then, external claims remain unverified candidates.
 - **Question checked:** 2026-10
+- **Decision recorded:** 2026-10-25; option 3 approved for the CDA programme. This acceptance is an architecture decision, not proof that a provider conforms or that code is integrated.
 
 ## Context and problem statement
 
-[ADR-0480](0480-technical-capability-contract.md) introduced optional `CapabilityClaim` descriptors on Worker Type operations. The draft semantic-envelope design in [PR #1346](https://github.com/pblumer/atlas/pull/1346) describes a contract independently of a provider. Neither a syntactically valid manifest claim nor a well-formed JSON Schema establishes that the operation really behaves as the contract promises.
+[ADR-0480](0480-technical-capability-contract.md) introduced optional `CapabilityClaim` descriptors on Worker Type operations. The versioned semantic-envelope implementation in merged [PR #1346](https://github.com/pblumer/atlas/pull/1346) describes a contract independently of a provider ([ADR-0485](0485-technical-capability-semantics.md), Proposed/Partial). Neither a syntactically valid manifest claim nor a well-formed JSON Schema establishes that the operation really behaves as the contract promises.
 
 Entra users are tenant-scoped authentication accounts, LDAP entries obey a configured directory schema, and Google Contacts are address-book records. Common verbs do not establish substitutability. If claims were trusted automatically, the graph would report false coverage and a future router could execute an authorized *different* action from the one a process requested.
 
@@ -37,7 +38,30 @@ ADR-0208 specifies the Worker Type package trust model but its package-provenanc
 
 ## Decision outcome
 
-Proposed choice: **option 3**, initially restricted to maintainer-reviewed definitions and tests committed alongside atlas. This record proposes the governance model; it does **not** certify existing providers or make a runtime selection decision.
+**Decision: option 3 — accepted.** Initially only maintainer-reviewed definitions and independently reviewed evidence committed alongside atlas can be trusted. This decision establishes the publication and conformance governance model; it does **not** certify existing providers or make a runtime selection decision. Do not derive `verified` from schema-only fixture success, a self-declared reviewer string or a submitted report.
+
+### Initial publication and trust boundary (accepted)
+
+- A repository-reviewed publication comprises the exact canonical contract,
+  its content digest, the exact Worker Type package/code digest and operation/job
+  type, reproducible conformance results (including meaningful negative cases),
+  and an **independent approval in the repository review history**. A string
+  such as `reviewer: alice` inside a JSON file is **not** proof of approval.
+- Recalculate digests from immutable bytes when verifying publication or
+  evidence; never rely on a claim-supplied hash alone. A changed contract,
+  package/operation, fixture or material test assumption invalidates the old
+  approval rather than silently updating it.
+- Maintain publication/withdrawal history as reviewable, append-only source
+  artifacts. A withdrawal or reapproval references the previous immutable
+  publication and includes a reason. It does not overwrite the original
+  contract or past evidence.
+- Statuses exposed outside build/review tooling are **candidate** until an
+  implementation securely binds the evidence and authenticates the approval
+  from trusted repository/installation provenance. This ADR authorizes no
+  direct `verified` property on an arbitrary manifest or API payload.
+- Package signing and external publisher onboarding are **not approved** by
+  this decision and cannot be added as an implementation shortcut; revisit
+  their trust anchors separately under ADR-0208.
 
 ### Normative identity and artifact ownership
 
@@ -84,7 +108,7 @@ No backwards-compatibility or substitutability inference is made merely because 
 
 ### Implementation boundaries and gates
 
-The proposed slices are CDA2 and CDA3 in [the CDA programme](../planning/capability-driven-automation-program.md):
+The delivery slices are CDA2 and CDA3 in [the CDA programme](../planning/capability-driven-automation-program.md):
 
 1. Specify the immutable artifact encoding and digest; choose a maintained JSON Schema Draft 2020-12 validator with remote resolution disabled.
 2. Create positive **and** adversarial conformance fixtures with meaningful assertions; test provider error mappings and idempotency.
@@ -111,7 +135,7 @@ No HTTP/MCP endpoint, new sidecar store, credential broker, routing action or WA
 - Good: Easy installation-specific edits.
 - Bad: Duplicated sources of truth, drift, and no immutable definition for deployed processes.
 
-### Option 3 — Immutable artifacts plus evidence (proposed)
+### Option 3 — Immutable artifacts plus evidence (accepted)
 - Good: Reviewable, auditable, reproducible and consistent with ADR-0208.
 - Bad: Requires a publication pipeline and withdrawal discipline.
 
