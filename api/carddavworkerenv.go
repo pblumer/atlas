@@ -21,7 +21,7 @@ const (
 
 // cardDAVWorkerEnv renders the address books a supervised CardDAV worker needs out of
 // the vault, one set of variables per CardDAV Worker the store holds
-// (ADR-draft-carddav-worker).
+// (ADR-0490).
 //
 // It is Google Contacts' arrangement with one difference: the endpoint is always
 // rendered, because CardDAV has no default server. [carddav.CheckBundle] is the one

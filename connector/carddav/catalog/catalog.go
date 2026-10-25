@@ -1,5 +1,5 @@
 // Package catalog is the CardDAV Worker's operation table and the contact shape a model
-// reads and writes (ADR-draft-carddav-worker): which values each operation needs and
+// reads and writes (ADR-0490): which values each operation needs and
 // takes, what it returns, and which keys a contact object may carry.
 //
 // It imports nothing of atlas's, for the reason connector/exchange/catalog gives: the

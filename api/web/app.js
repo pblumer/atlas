@@ -927,7 +927,7 @@ const WORKER_TYPES = [
   {
     id: "carddav", name: "CardDAV contacts", kind: "Contacts",
     desc: "Uses a CardDAV address book from a process \u2014 iCloud, Nextcloud, ownCloud, mailbox.org, Posteo, Infomaniak, Fastmail, Synology, Radicale and most mail providers\u0027 \u2014 with the operations and the contact of Google Contacts: finds a contact by e-mail address, phone number or a custom field, reads, searches, lists, creates, updates and deletes contacts, and puts a group such as Kunden on one or takes it off. An update keeps every property it does not change, a photo included, and a repeated create finds the contact the first round made instead of making a second. Configure each address book below: its URL, and the account\u0027s username and app-specific password in the vault, which never enter a model. Worker-only, and atlas supervises the worker for it.",
-    refs: "ADR-draft-carddav-worker", status: "active", statusLabel: "configured below",
+    refs: "ADR-0490", status: "active", statusLabel: "configured below",
   },
   {
     id: "mssql", name: "Microsoft SQL Server", kind: "Database",

@@ -7169,7 +7169,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		}}
 	case compiler.CardDAVJobTypeIndex:
 		// Google Contacts' arm with a CardDAV address book: the evaluated values travel,
-		// and nothing that says which server or as whom (ADR-draft-carddav-worker). The
+		// and nothing that says which server or as whom (ADR-0490). The
 		// create key does: it is derived from this installation's node id and the job key,
 		// so a create repeated after a lease elapsed names the contact the first round
 		// made, and no other installation's job names the same one.

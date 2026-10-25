@@ -456,7 +456,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 	{
 		// A CardDAV task finds, reads, searches, lists, creates, updates or deletes a
 		// contact in a CardDAV address book — iCloud, Nextcloud, mailbox.org, Radicale and
-		// most mail providers' — or changes its groups (ADR-draft-carddav-worker).
+		// most mail providers' — or changes its groups (ADR-0490).
 		// Worker-only for Google Contacts' reason: the password reads somebody's whole
 		// address book and has no business on the engine's run loop.
 		name:           connectorKindCardDAV,

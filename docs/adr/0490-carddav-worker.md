@@ -1,4 +1,4 @@
-# ADR-DRAFT: A CardDAV Worker Type — a process finds, keeps and labels contacts in any CardDAV address book
+# ADR-0490: A CardDAV Worker Type — a process finds, keeps and labels contacts in any CardDAV address book
 
 - **Status:** Accepted
 - **Implementation:** Landed

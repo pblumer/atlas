@@ -89,7 +89,7 @@ const (
 	// credentialsRef naming the vault bundle that says whose address book it is and as
 	// whom (connector/googlecontacts.Bundle). The engine builds no client from it.
 	connectorKindGoogleContacts = "googlecontacts"
-	// connectorKindCardDAV is the CardDAV Worker Type (ADR-draft-carddav-worker).
+	// connectorKindCardDAV is the CardDAV Worker Type (ADR-0490).
 	// Worker-only like Google Contacts: a record holds the endpoint — the address book's
 	// URL or the server's — and a credentialsRef naming the vault bundle with the
 	// account's username and password (connector/carddav.Bundle). The engine builds no

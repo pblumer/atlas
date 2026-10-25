@@ -20,7 +20,7 @@ import (
 //	ATLAS_TEST_CARDDAV_GROUP     for the group-vcards form: a group that exists (Apple
 //	                             Contacts cannot be asked to create one from here)
 //
-// It is the check ADR-draft-carddav-worker's open question asks for: it creates one
+// It is the check ADR-0490's open question asks for: it creates one
 // contact with a name no person has, changes it, puts it in a group and takes it out
 // again, and deletes it. What the provider's own app shows meanwhile is the part a test
 // cannot see — look at it.

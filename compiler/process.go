@@ -1160,7 +1160,7 @@ type ConnectorTaskDetail struct {
 	GoogleContactsContact    RestExpr
 	GoogleContactsContactVar int32
 	GoogleContactsMaxResults int32
-	// CardDAV fields (JobType == CardDAVJobType, ADR-draft-carddav-worker): Google
+	// CardDAV fields (JobType == CardDAVJobType, ADR-0490): Google
 	// Contacts' fields, for the CardDAV Worker Type's own task. Connector (above) names
 	// the configured address book, and CardDAVConnector carries it as literal-or-FEEL.
 	// CardDAVOp is the interned operation — a row of connector/carddav/catalog.

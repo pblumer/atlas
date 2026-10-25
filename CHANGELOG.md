@@ -59,7 +59,7 @@ governs a Worker:
   property of the card it does not change, a photo and Apple's labels included, and a
   repeated `create-contact` finds the contact the first round made instead of making a
   second; a missing contact can be caught as `CARDDAV_CONTACT_NOT_FOUND`
-  ([ADR-draft-carddav-worker](docs/adr/draft-carddav-worker.md)).
+  ([ADR-0490](docs/adr/0490-carddav-worker.md)).
 - **A received mail's HTML can be shown to a person in a task form.** A mail task's
   **Read message** reads the HTML body as well with `includeBody="html"` (*Include the text
   and the HTML*), for IMAP, Gmail and Microsoft Graph; a list does not, and the compiler

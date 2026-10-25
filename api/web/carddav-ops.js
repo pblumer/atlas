@@ -1,5 +1,5 @@
 // carddav-ops.js — what the Modeler knows about the CardDAV Worker's operations
-// (ADR-draft-carddav-worker): each operation's label, which values it needs and takes,
+// (ADR-0490): each operation's label, which values it needs and takes,
 // what it returns, and the bound a listing takes by default and at most.
 //
 // It is a copy of connector/carddav/catalog, the table the compiler and the worker read.

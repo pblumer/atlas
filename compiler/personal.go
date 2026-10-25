@@ -210,7 +210,7 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.GoogleContactsGroup.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.GoogleContactsContact.Expr":   "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 
-	// The CardDAV Worker's (ADR-draft-carddav-worker).
+	// The CardDAV Worker's (ADR-0490).
 	"connectorTasks.CardDAVConnector.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.CardDAVContactID.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.CardDAVQuery.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",

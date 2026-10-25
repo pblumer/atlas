@@ -518,7 +518,7 @@ const GoogleContactsJobType = "io.atlas.googlecontacts"
 const GoogleContactsJobTypeIndex int32 = 36
 
 // CardDAVJobType is the reserved job type a CardDAV task carries
-// (ADR-draft-carddav-worker). One job type serves every operation on an address book —
+// (ADR-0490). One job type serves every operation on an address book —
 // find, read, search, list, create, update and delete a contact, and change its groups —
 // because they share a server, a credential and WebDAV's answers; the operation is a
 // modeled value, as it is for Google Contacts.
@@ -2455,7 +2455,7 @@ func (b *Builder) AddGoogleContactsConnectorTask(cfg GoogleContactsConfig) int32
 }
 
 // CardDAVConfig is the deploy-time configuration of a CardDAV task
-// (ADR-draft-carddav-worker). Worker names the configured address book and WorkerExpr
+// (ADR-0490). Worker names the configured address book and WorkerExpr
 // carries it as literal-or-FEEL when a process picks the address book at runtime; Op is
 // a row of connector/carddav/catalog. ContactID, Query, Field and Group are
 // literal-or-FEEL values. Contact is the authored contact object compiled to one FEEL

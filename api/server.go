@@ -206,7 +206,7 @@ type Server struct {
 
 	// nodeID is this installation's stable runtime id (ADR-0189 §6), read once at
 	// construction and read-only thereafter. A CardDAV create derives its contact's name
-	// from it and the job key (ADR-draft-carddav-worker), which is why it is kept here
+	// from it and the job key (ADR-0490), which is why it is kept here
 	// rather than read from the settings store on the run loop for every job handed out.
 	nodeID string
 

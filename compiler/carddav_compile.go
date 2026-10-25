@@ -11,7 +11,7 @@ import (
 
 // compileCardDAVConnectorTask compiles an <atlas:carddavConnector> task: one operation on
 // a CardDAV address book through a Worker an operator configured
-// (ADR-draft-carddav-worker).
+// (ADR-0490).
 //
 // It is compileGoogleContactsConnectorTask over the CardDAV catalog, on purpose: the two
 // Worker Types take the same attributes with the same meaning, and the operation table

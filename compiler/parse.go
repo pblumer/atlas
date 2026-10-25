@@ -2453,7 +2453,7 @@ type xmlServiceTask struct {
 	// directory — through an account a *worker* holds the credential for.
 	GoogleContacts *xmlGoogleContactsConnector `xml:"extensionElements>googleContactsConnector"`
 	// CardDAV, when present, marks this service task a CardDAV task
-	// (ADR-draft-carddav-worker): one operation on a CardDAV address book — find, read,
+	// (ADR-0490): one operation on a CardDAV address book — find, read,
 	// search, list, create, update or delete a contact, or change its groups — through a
 	// server a *worker* holds the credential for.
 	CardDAV *xmlCardDAVConnector `xml:"extensionElements>carddavConnector"`
@@ -2756,7 +2756,7 @@ type xmlGoogleContactsConnector struct {
 }
 
 // xmlCardDAVConnector is the <atlas:carddavConnector> extension on a service task
-// (ADR-draft-carddav-worker). It has <atlas:googleContactsConnector>'s attributes, read
+// (ADR-0490). It has <atlas:googleContactsConnector>'s attributes, read
 // the same way: connector names the CardDAV Worker (literal-or-FEEL), and there is no
 // credential attribute, because none enters the engine. operation is a row of
 // connector/carddav/catalog.

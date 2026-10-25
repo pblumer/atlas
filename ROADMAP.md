@@ -645,7 +645,7 @@ The control-flow basics most real models use.
   account (the record's open question), and a form-lookup provider so a person picks a
   customer in a task form ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
   **CardDAV address books are a Worker Type too**
-  ([ADR-draft-carddav-worker](docs/adr/draft-carddav-worker.md)): a service task marked
+  ([ADR-0490](docs/adr/0490-carddav-worker.md)): a service task marked
   `<atlas:carddavConnector connector operation …>` runs Google Contacts' operations and
   contact — less the directory search — against iCloud, Nextcloud, ownCloud, mailbox.org,
   Posteo, Infomaniak, Fastmail, Synology, Radicale and Baïkal, nine operations in one table

@@ -3,7 +3,7 @@
 // and the task's extension states only what the chosen operation uses — the compiler
 // refuses a value an operation does not use ("does not use query"), and a field the panel
 // hides is one it cannot clear. Driven through the real vendored bpmn-js, asserting
-// against the exported XML the deploy sends (ADR-draft-carddav-worker).
+// against the exported XML the deploy sends (ADR-0490).
 import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
