@@ -119,7 +119,9 @@
         "CDA7"
       ],
       "issues": [],
-      "prs": [],
+      "prs": [
+        1355
+      ],
       "note": "Review the proposed controlled-rebinding ADR. Operator-authorized A-to-B binding revisions affect only future jobs; existing queued/leased jobs stay pinned. Per-partition cutover, tenant/policy scope and crash/replay must be proven. No automatic dynamic selection."
     }
   ]
