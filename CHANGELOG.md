@@ -46,6 +46,8 @@ governs a Worker:
 
 ### Added
 
+- **Technical capability contracts can be checked against complete JSON Schema Draft 2020-12 offline.** Design-time input and output validation now checks schema keywords with no remote schema loading, bounded payloads and positive/negative account/contact fixtures. Reports are deliberately schema-only: they do not certify a Worker Type, publish conformance evidence, authorize a job or change runtime routing (CDA2a, ADR-0483 Proposed).
+
 - **A SharePoint Worker can be a mockup.** A SharePoint Worker with the provider **Mockup**
   needs no tenant, no app registration and no credential: every operation runs against a
   site this server keeps in its memory, in the engine and in a supervised worker alike,
