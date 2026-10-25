@@ -10,7 +10,7 @@ See [delivery protocol](../development/program-delivery.md) and
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
-| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 0/8 | unassigned (maintainer assignment required) | Assign a programme owner; review PR #1351 and PR #1346; decide ADR-0480. |
+| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 0/9 | unassigned (maintainer assignment required) | Assign a programme owner; review PR #1346, ADR-0480 and the proposed controlled Worker-rebinding decision. |
 
 ## Capability-driven Automation (CDA)
 
@@ -26,8 +26,10 @@ Connect business outcomes to verified technical operation semantics and, only af
 | **CDA3** — Verified Worker Type mappings | planned | unassigned | CDA2 | — | Prove account versus contact distinction; source-derived provider mappings with no drift. |
 | **CDA4** — Cross-layer architecture graph | planned | unassigned | CDA2, CDA3 | — | Accept/extend ADR-0420; stable identities, provenance, bounded traversals and visibility. |
 | **CDA5** — Panorama and API/MCP discovery | planned | unassigned | CDA4 | — | Read-only impact, coverage and gap queries; no unsupported runtime claims. |
-| **CDA6** — Capability-aware BPMN binding | planned | unassigned | CDA2, CDA3 | — | Approve binding ADR; pin one verified Worker at deployment without changing runtime. |
-| **CDA7** — Policy-gated governed execution | planned | unassigned | CDA6 | — | Require provider-specific ADR-0475 enforcement, fsync-gated effects and recovery equality; no dynamic fallback. |
+| **CDA6** — Capability-aware BPMN binding | planned | unassigned | CDA2, CDA3 | — | Approve ADR-0482; keep a stable logical binding slot and explicit initially pinned Worker so a later authorized revision need not redeploy BPMN. No runtime rebinding in CDA6. |
+| **CDA7** — Policy-gated governed execution | planned | unassigned | CDA6 | — | Prove provider-specific ADR-0475 enforcement, fsync-gated effects and replay equality for the initially pinned binding. No automatic fallback or configured Worker hot-swap in CDA7. |
+
+| **CDA8** — Controlled Worker rebinding without redeployment | planned | unassigned | CDA6, CDA7 | — | Review the proposed controlled-rebinding ADR. Operator-authorized A-to-B binding revisions affect only future jobs; existing queued/leased jobs stay pinned. Per-partition cutover, tenant/policy scope and crash/replay must be proven. No automatic dynamic selection. |
 
 ## Updating the register
 
