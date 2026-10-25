@@ -1,0 +1,62 @@
+name: Programme slice
+description: Track an independently reviewable slice of an approved multi-step programme.
+title: "[PROGRAMME/Slice] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read docs/development/program-delivery.md and the linked programme
+        manifest before assigning an agent. A slice is complete only after
+        merged changes, acceptance evidence and an explicit handoff.
+  - type: input
+    id: programme
+    attributes:
+      label: Programme ID
+      description: Match docs/programs/<id>/program.json.
+      placeholder: cda
+    validations:
+      required: true
+  - type: input
+    id: slice
+    attributes:
+      label: Slice ID
+      description: Match the roadmap and programme manifest.
+      placeholder: CDA2
+    validations:
+      required: true
+  - type: input
+    id: owner
+    attributes:
+      label: Accountable slice owner
+      description: Name the human maintainer coordinating this slice (unassigned is not ready for implementation).
+      placeholder: "@maintainer"
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Vertical outcome and acceptance tests
+      description: Describe the end-to-end behavior, observable results, negative cases and any recovery tests.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependency and decision gates
+      description: List prerequisite slice IDs, ADR approval status, interface/PR versions and blocked paths.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and agent boundaries
+      description: Specify allowed files and API surfaces, exclusions, branch and handoff recipient.
+    validations:
+      required: true
+  - type: textarea
+    id: handoff
+    attributes:
+      label: Handoff and integration
+      description: After the PR merges, record exact verification, remaining issues, the next executable slice and the updated manifest.
+    validations:
+      required: false
