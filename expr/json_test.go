@@ -195,3 +195,27 @@ func TestAContextOfBuiltValuesReadsBack(t *testing.T) {
 		t.Fatalf("result = %v", v)
 	}
 }
+
+// TestContextMemberAndKeys pins the two readers the template language uses on a loop
+// item: a context answers its members and its keys in order, anything else answers
+// that it is not a context.
+func TestContextMemberAndKeys(t *testing.T) {
+	ctx := expr.FromJSON(map[string]any{"name": "Ada", "age": json.Number("36")})
+	v, ok := expr.ContextMember(ctx, "name")
+	if !ok || v.String() != "Ada" {
+		t.Fatalf("expr.ContextMember(name) = %v, %v; want Ada, true", v, ok)
+	}
+	if _, ok := expr.ContextMember(ctx, "missing"); ok {
+		t.Error("expr.ContextMember(missing) reported a member")
+	}
+	if _, ok := expr.ContextMember(expr.String("x"), "name"); ok {
+		t.Error("ContextMember on a string reported a member")
+	}
+	keys, ok := expr.ContextKeys(ctx)
+	if !ok || len(keys) != 2 || keys[0] != "age" || keys[1] != "name" {
+		t.Fatalf("ContextKeys = %v, %v; want [age name], true", keys, ok)
+	}
+	if _, ok := expr.ContextKeys(expr.ListOf(expr.Number(1))); ok {
+		t.Error("ContextKeys on a list reported a context")
+	}
+}

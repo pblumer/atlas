@@ -153,6 +153,38 @@ func TestSharePointRegistryFromEnvRefusesANamedInstanceItCannotBuild(t *testing.
 	}
 }
 
+// A mockup instance needs no credential, only the server that keeps its site; it is
+// built as the forwarder to that site, and named without the address it is a startup
+// error rather than a worker whose every job fails (ADR-0484).
+func TestSharePointRegistryFromEnvBuildsAMockup(t *testing.T) {
+	env := map[string]string{
+		"ATLAS_SHAREPOINT_CONNECTORS":    "intranet",
+		"ATLAS_SHAREPOINT_INTRANET_MOCK": "1",
+		"ATLAS_SHAREPOINT_MOCK_URL":      "http://atlas.example/api/v1/sharepoint/mock-sites",
+	}
+	reg, names, err := sharepointRegistryFromEnv(func(k string) string { return env[k] })
+	if err != nil {
+		t.Fatalf("sharepointRegistryFromEnv: %v", err)
+	}
+	if len(names) != 1 {
+		t.Fatalf("names = %v", names)
+	}
+	if c, _ := reg.Client("intranet"); c == nil {
+		t.Fatal("the mockup was not registered")
+	} else if _, ok := c.(*sharepoint.RemoteMock); !ok {
+		t.Errorf("client = %T, want the forwarder to the server's site", c)
+	}
+
+	delete(env, "ATLAS_SHAREPOINT_MOCK_URL")
+	if _, _, err := sharepointRegistryFromEnv(func(k string) string { return env[k] }); err == nil || !strings.Contains(err.Error(), "ATLAS_SHAREPOINT_MOCK_URL") {
+		t.Errorf("a mockup without the server's address = %v, want a startup error naming the variable", err)
+	}
+	env["ATLAS_SHAREPOINT_INTRANET_MOCK"] = "vielleicht"
+	if _, _, err := sharepointRegistryFromEnv(func(k string) string { return env[k] }); err == nil {
+		t.Error("a MOCK value that is not yes or no was accepted")
+	}
+}
+
 // No CONNECTORS is unconfigured, not misconfigured: a nil registry and no error, which
 // the caller reports as a kind this worker does not serve.
 func TestSharePointRegistryFromEnvIsUnconfiguredWithoutNames(t *testing.T) {

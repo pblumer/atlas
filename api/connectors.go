@@ -306,6 +306,11 @@ func (s *Server) buildMailClients() (map[string]mail.Client, map[string]string, 
 // is misconfigured — unparseable, a missing field — is skipped (its tasks park)
 // rather than failing the whole rebuild. The resolved secret is the OAuth credential
 // JSON bundle held in the vault (I6), never a value in a model.
+//
+// A record whose provider is the mockup binds to its site in s.sharePointMocks instead,
+// and the rebuild is where a site whose Worker was deleted, or switched to Graph, is
+// let go (ADR-0484). A disabled or governed mockup keeps its
+// site: switching a Worker off is not asking for its content to be thrown away.
 func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, map[string]string, error) {
 	clients := map[string]sharepoint.Client{}
 	problems := map[string]string{}
@@ -313,9 +318,22 @@ func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, map[str
 	if err != nil {
 		return nil, nil, err
 	}
+	var mocks []string
+	defer func() {
+		if s.sharePointMocks != nil {
+			s.sharePointMocks.Keep(mocks...)
+		}
+	}()
 	for _, c := range recs {
 		if c.Kind != connectorKindSharePoint {
 			continue
+		}
+		mock := c.Provider == sharepoint.MockProvider
+		if mock && s.sharePointMocks != nil {
+			// Made here for every mockup, not only the ones this engine serves: a
+			// governed one is served by a supervised worker, which forwards to it.
+			s.sharePointMocks.Site(c.Name)
+			mocks = append(mocks, c.Name)
 		}
 		if !c.Enabled {
 			problems[c.Name] = problemDisabled
@@ -328,6 +346,14 @@ func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, map[str
 		// served only by a supervised Worker Instance that asks first.
 		if c.Identity != nil {
 			problems[c.Name] = problemGovernedInProcess
+			continue
+		}
+		if mock {
+			if s.sharePointMocks == nil {
+				problems[c.Name] = "sharepoint: this server keeps no mockups"
+				continue
+			}
+			clients[c.Name] = s.sharePointMocks.Site(c.Name)
 			continue
 		}
 		secret := s.resolveConnectorSecret(c.CredentialsRef)
@@ -996,6 +1022,10 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		// administrator moves it only to another Microsoft Graph.
 		if rec.Identity != nil && authz.IsDelegated(rec.Identity.Mode) && !delegatedEndpointAllowed(rec.Endpoint) {
 			badRequest = "a delegated Worker's endpoint must be Microsoft Graph (or blank): it is where a person's token is sent"
+			return
+		}
+		if rec.Identity != nil && authz.IsDelegated(rec.Identity.Mode) && rec.Provider == sharepoint.MockProvider {
+			badRequest = mockDelegatedRefusal
 			return
 		}
 		if saveErr = s.connectors.Save(rec); saveErr != nil {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/url"
 	"slices"
 	"strconv"
@@ -145,8 +146,8 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 			MaxResults:  int(detail.MailMaxResults),
 			IncludeBody: detail.MailIncludeBody,
 			UnreadOnly:  detail.MailUnreadOnly,
-			Body:        resolveValue(detail.Body, piKey, scopeVars),
-			HTML:        resolveValue(detail.BodyHTML, piKey, scopeVars),
+			Body:        mailText(detail.BodyTmpl, detail.Body, piKey, scopeVars, nil),
+			HTML:        mailText(detail.BodyHTMLTmpl, detail.BodyHTML, piKey, scopeVars, html.EscapeString),
 			MessageID:   strconv.FormatUint(jobKey, 10),
 		}
 		if detail.ResultVar >= 0 {
@@ -200,9 +201,9 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		To:        to,
 		Cc:        cc,
 		Bcc:       bcc,
-		Subject:   resolveValue(detail.MailSubject, piKey, scopeVars),
-		Body:      resolveValue(detail.Body, piKey, scopeVars),
-		HTML:      resolveValue(detail.BodyHTML, piKey, scopeVars),
+		Subject:   mailSubject(detail, piKey, scopeVars),
+		Body:      mailText(detail.BodyTmpl, detail.Body, piKey, scopeVars, nil),
+		HTML:      mailText(detail.BodyHTMLTmpl, detail.BodyHTML, piKey, scopeVars, html.EscapeString),
 		MessageID: strconv.FormatUint(jobKey, 10),
 	}, nil
 }

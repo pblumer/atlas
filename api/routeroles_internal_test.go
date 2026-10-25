@@ -96,6 +96,11 @@ var wantAdminRoutes = []string{
 	// process bound* travel with them, and nothing can tell a password on its way into
 	// a table from an id — a stronger reason than the directory's, for the same gate.
 	"GET /api/v1/sql/mock-journal",
+	// And what a SharePoint mockup holds: invented sites, filled with whatever a process
+	// wrote — applicants, amounts, letters. Emptying one sits behind the same gate as
+	// reading it, so only the person who can see a site can throw it away.
+	"GET /api/v1/mocks",
+	"DELETE /api/v1/sharepoint/mock-sites/{worker}",
 
 	// Credentials, in every shape Atlas has one.
 	"POST /api/v1/targets",
@@ -158,6 +163,12 @@ var wantAdminRoutes = []string{
 	"DELETE /api/v1/catalogs/{id}",
 	"GET /api/v1/catalog-products/{id}/deletion",
 	"DELETE /api/v1/catalog-products/{id}",
+	// Deleting a version's finished instances for good
+	// (ADR-0486): history is evidence, the
+	// purge cannot be undone, and a production server switches it off altogether.
+	// The preview is the administrator's too, because it is how the purge is decided.
+	"GET /api/v1/processes/{key}/history-purge",
+	"POST /api/v1/processes/{key}/history-purge",
 	"DELETE /api/v1/settings/theme",
 	"PUT /api/v1/settings/logo",
 	"DELETE /api/v1/settings/logo",

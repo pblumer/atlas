@@ -64,6 +64,16 @@ in progress (🚧), and not started (🔲); the [`CHANGELOG.md`](CHANGELOG.md) r
 what shipped in each release. Pick work from the current milestone, and check the
 [layout](docs/ARCHITECTURE.md#component-map) — not every package exists yet.
 
+## Programme delivery
+
+For larger initiatives coordinated across maintainers or coding agents, start with
+[all programmes](docs/programs/README.md) and the
+[Programme Delivery Protocol](docs/development/program-delivery.md).
+The programme manifest is the operational status source; the ROADMAP is strategic.
+After each integration, record acceptance evidence, blockers and the next executable
+handoff, then regenerate the overview with `python3 scripts/programs.py`.
+CI checks the overview against the manifests.
+
 ## Where things live
 
 ```

@@ -73,7 +73,10 @@ import { fmtCount } from "./numfmt.js";
 // is rendered beside the fields rather than left in another tab.
 import { workerTypeDocHTML } from "./workertypedocs.js";
 import { fmtDateTime, fmtTime } from "./datefmt.js";
-import { installReadableIds, readableId, takenProcessIds, freshProcessId } from "./elementids.js";
+import {
+  installReadableIds, readableId, takenProcessIds, freshProcessId,
+  installNameDerivedIds, deployedElementIds,
+} from "./elementids.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -877,6 +880,15 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   ]);
   // Every element drawn from here on is named <type>_<yyyymmdd>_<researcher>.
   installReadableIds(modeler, { processTaken: (id) => known.has(id) });
+  // Naming an element names its id too, unless a deployed version of the process
+  // carries that id (ADR-0474, amended 2026-10-23). Until the deployed ids have
+  // arrived, or when not all of them could be read, every id the diagram arrived with
+  // is kept; elements drawn in this session are free from the start.
+  const nameIds = { ids: new Set(), imported: new Set(), complete: false };
+  installNameDerivedIds(modeler, {
+    isProtected: (id) => nameIds.ids.has(id) || (!nameIds.complete && nameIds.imported.has(id)),
+  });
+  modeler.atlasNameIdsReady = Promise.resolve();
   current = modeler;
   window.__atlasModeler = modeler; // exposed for scripted/end-to-end testing
 
@@ -892,6 +904,13 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       await modeler.importXML(repairModel(typeof xml === "string" ? xml : String(xml)));
     }
     modeler.get("canvas").zoom("fit-viewport");
+    nameIds.imported = new Set(modeler.get("elementRegistry").getAll().map((el) => el.businessObject && el.businessObject.id));
+    const processIds = (modeler.getDefinitions().rootElements || [])
+      .filter((el) => el.$type === "bpmn:Process").map((el) => el.id);
+    modeler.atlasNameIdsReady = deployedElementIds(api, processIds).then((r) => {
+      nameIds.ids = r.ids;
+      nameIds.complete = r.complete;
+    });
     const pbo = rootProcess(modeler);
     if (pbo) {
       const nm = pbo.name || pbo.id || "Diagram";
@@ -2390,6 +2409,18 @@ function devViewContext(modeler, api, field) {
     if (field.dataset.fxOn === "1") ctx.lockPrefix = (v) => (/^\s*=\s*/.exec(v) || [""])[0].length;
   } else if (lang === "powershell" || lang === "python" || lang === "javascript") {
     ctx.run = (source, variables) => api("POST", "/api/v1/scripts/run", { language: lang, source, variables });
+  } else if (lang === "template" || lang === "html-template") {
+    // A mail template is previewed by the server that will render it, with the rules
+    // a deploy applies (ADR-0487).
+    ctx.preview = (template, variables) => api("POST", "/api/v1/feel/template", { template, variables, html: lang === "html-template" });
+    ctx.previewKind = lang === "html-template" ? "html" : "text";
+  } else if (lang === "html") {
+    // An HTML body without placeholders is its own preview; one written as FEEL ('=')
+    // is evaluated by the server, as the mail will be.
+    ctx.preview = (template, variables) => (template.trimStart().startsWith("=")
+      ? api("POST", "/api/v1/feel/template", { template, variables, html: true })
+      : Promise.resolve({ ok: true, result: template, problems: [] }));
+    ctx.previewKind = "html";
   }
   return ctx;
 }
@@ -3333,15 +3364,33 @@ export function attachExpressionToggle(el, opts = {}) {
   else el.insertAdjacentElement("beforebegin", btn);
 
   let feelHandle = null;
+  // opts.literal makes the literal side a code field of its own — a mail template, whose
+  // placeholders are coloured and completed and which F2 lifts into the Developer View
+  // with a preview (ADR-0487). { lang: devLang descriptor, title }.
+  let literalHandle = null;
   const isExpr = () => el.value.trimStart().startsWith("=");
 
   function render() {
     const expr = isExpr();
     btn.classList.toggle("active", expr);
     btn.setAttribute("aria-pressed", expr ? "true" : "false");
-    // Only an expression field is a code field: a literal value has nothing for the
-    // Developer View to help with, so F2 stays inert until fx is on.
+    // One editor wraps the field at a time: the one leaving goes before the other comes.
+    if (expr && literalHandle) {
+      literalHandle.destroy();
+      literalHandle = null;
+    }
+    if (!expr && feelHandle) {
+      feelHandle.destroy();
+      feelHandle = null;
+    }
+    if (!expr && opts.literal && !literalHandle) {
+      literalHandle = attachCodeEditor(el, { lang: opts.literal.lang.module, variables: opts.variables, gutter: false, wrap: true });
+    }
+    // Only an expression field is a code field, unless its literal is a template: a
+    // plain literal has nothing for the Developer View to help with, so F2 stays inert
+    // until fx is on.
     if (expr) markDevField(el, "feel");
+    else if (opts.literal) markDevField(el, opts.literal.lang.id, { title: opts.literal.title });
     else delete el.dataset.devlang;
     if (expr && !feelHandle) {
       // The leading '=' stays in the field value (the save wiring and compiler key on
@@ -3353,9 +3402,6 @@ export function attachExpressionToggle(el, opts = {}) {
         validate: opts.validate,
         lockPrefix: (v) => (/^\s*=\s*/.exec(v) || [""])[0].length,
       });
-    } else if (!expr && feelHandle) {
-      feelHandle.destroy();
-      feelHandle = null;
     } else if (expr && feelHandle) {
       feelHandle.setVariables(opts.variables || []);
     }
@@ -4416,13 +4462,32 @@ const SERVICE_TASK_KINDS = [
       { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "forward" },
       { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "forward", hint: "Delivered but never shown in the message headers." },
       { key: "from", label: "From", placeholder: "leave empty for the Worker's default sender", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
-      { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
-      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: (v) => (v.operation === "reply"
+      {
+        // Placeholders (ADR-0487): the subject and both bodies become
+        // templates in the language form text views use — {{ }} placeholders, {{#if}}
+        // and {{#loop}} sections. Off is every mail task authored before templates
+        // existed, so an untouched task keeps meaning what it meant.
+        key: "templating", label: "Placeholders", type: "select", reRender: true,
+        options: [
+          { v: "", l: "Off — literal text, or FEEL with fx" },
+          { v: "true", l: "On — {{ }} placeholders, {{#if}} and {{#loop}}" },
+        ],
+        showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward",
+        hint: (v) => (v.templating === "true"
+          ? "Subject and bodies are templates: {{kunde.name}} inserts a value, {{#if bedingung}}…{{/if}} and {{#loop liste}}…{{/loop}} write a section conditionally or once per element, with FEEL between the braces. What the HTML body inserts is escaped. Press F2 in a field for the editor with a live preview."
+          : "On makes the subject and bodies templates with {{ }} placeholders — easier to read than a FEEL expression that joins strings, and previewed as you write."),
+      },
+      { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true, template: "template", showIf: (v) => !v.operation || v.operation === "send" },
+      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, template: "template", rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: (v) => (v.operation === "reply"
         ? "The reply's text. It goes to the original's Reply-To, or its From, under \"Re: \" and its subject, threaded beneath it."
         : v.operation === "forward"
           ? "Optional. The note written above the forwarded message, which follows under \"Fwd: \" and its subject. Every attachment is inspected before anything is sent; one that is refused stops the whole forward."
-          : "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion.") },
-      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
+          : v.templating === "true"
+            ? "Plain-text body with placeholders: Hallo {{kunde.name}}. Press F2 for the editor with a live preview, Ctrl+Space inside {{ }} for variables and functions."
+            : "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion.") },
+      { key: "bodyHtml", label: "HTML body", type: "html", template: "html-template", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: (v) => (v.templating === "true"
+        ? "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. Placeholders work as in the text, and what they insert is escaped. Press F2 for the editor with a live preview of the mail."
+        : "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view with a preview.") },
       { group: "Mailbox", showIf: (v) => !!v.operation && v.operation !== "send" && v.operation !== "reply" && v.operation !== "forward" },
       {
         key: "folder", label: "Folder", placeholder: "INBOX", fx: true, showIf: (v) => v.operation === "list",
@@ -6125,6 +6190,12 @@ function settleKindFields(kind, stored, props) {
     if (!f.showIf) return true;
     try { return !!f.showIf(values); } catch { return true; }
   };
+  // A mode field can belong to a mode itself: the mail task's placeholders switch means
+  // nothing to a list. One the operation hides is dropped like any other field, or it
+  // would stay in the XML, where the compiler refuses it.
+  for (const f of kind.fields) {
+    if (f.reRender && f.showIf && !shown(f, mode) && value(f.key) !== undefined) props[f.key] = undefined;
+  }
   // An attribute may be described more than once — CSV's columns are names for a
   // delimited file and name:width for a fixed-width one — so it is unused only when
   // every field that writes it is hidden.
@@ -10087,12 +10158,18 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // field element, so no save/load change is needed.
     const stFeelVars = variablesForCompletion(modeler, element);
     const stValidate = api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null;
-    const stAttachFx = (el) => { if (el) attachExpressionToggle(el, { variables: stFeelVars, validate: stValidate }); };
+    const stAttachFx = (el, literal) => { if (el) attachExpressionToggle(el, { variables: stFeelVars, validate: stValidate, literal }); };
+    // A mail task with placeholders on writes its subject and bodies as templates
+    // (ADR-0487): a field the catalog marks `template` is then a
+    // template editor on its literal side, and stays FEEL with fx on.
+    const stTemplating = (body.querySelector("#f-st-templating") || {}).value === "true";
+    const stTemplateLang = (f) => (stTemplating && f.template ? devLang(f.template) : null);
     // Every fx-capable text field (REST url, mail recipients/subject/body, the Remedy
     // form, …) gets the value-or-expression toggle; map value cells are handled below.
     for (const f of stKind.fields) {
       if (f.group || f.type === "map" || !f.fx) continue;
-      stAttachFx(body.querySelector("#f-st-" + f.key));
+      const tl = stTemplateLang(f);
+      stAttachFx(body.querySelector("#f-st-" + f.key), tl ? { lang: tl, title: f.label } : undefined);
     }
     // Markup fields (the mail worker's HTML body) get the shared code editor with
     // the HTML language module — tag/attribute colouring and variable completion
@@ -10104,8 +10181,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       // Wrapped and gutterless, like the FEEL fields inline: markup lines are long and
       // the property column is narrow, so horizontal scrolling would hide most of the
       // template. The Developer View is where it gets a gutter and the full width.
-      attachCodeEditor(el, { lang: htmlLang.module, variables: stFeelVars, gutter: false, wrap: true });
-      markDevField(el, "html", { title: f.label });
+      const markup = stTemplateLang(f) || htmlLang;
+      attachCodeEditor(el, { lang: markup.module, variables: stFeelVars, gutter: false, wrap: true });
+      markDevField(el, markup.id, { title: f.label });
     }
     // JSON fields (the Entra attributes template) get the shared JSON editor:
     // highlighting, live validation and auto-format. A '=' inside a string value is

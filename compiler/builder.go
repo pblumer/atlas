@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/expr/feelers"
 )
 
 // DMNJobType is the reserved job type business rule tasks carry. The in-process
@@ -1857,7 +1858,13 @@ type MailConfig struct {
 	Subject   RestExpr
 	Body      RestExpr
 	BodyHTML  RestExpr
-	Retries   int32
+	// SubjectTemplate, BodyTemplate and BodyHTMLTemplate are the subject and bodies of
+	// a task that switched templating on, where they use the template language
+	// (ADR-0487); nil leaves the RestExpr beside them in charge.
+	SubjectTemplate  *feelers.Template
+	BodyTemplate     *feelers.Template
+	BodyHTMLTemplate *feelers.Template
+	Retries          int32
 	// The mailbox half (ADR-0438): the operation ("" is send) and
 	// what it takes. ResultVar names the variable list, get and move answer into.
 	Operation   string
@@ -1908,6 +1915,9 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 		MailSubject:     cfg.Subject,
 		Body:            cfg.Body,
 		BodyHTML:        cfg.BodyHTML,
+		MailSubjectTmpl: cfg.SubjectTemplate,
+		BodyTmpl:        cfg.BodyTemplate,
+		BodyHTMLTmpl:    cfg.BodyHTMLTemplate,
 		Retries:         cfg.Retries,
 		MailOp:          cfg.Operation,
 		MailFolder:      cfg.Folder,

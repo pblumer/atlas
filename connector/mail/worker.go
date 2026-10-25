@@ -8,6 +8,7 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/expr/feelers"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -129,6 +130,56 @@ func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model
 	}
 	_, _, text := expr.Classify(v)
 	return text
+}
+
+// mailText is a body: its template rendered over the variables the task sees when the
+// task compiled one (ADR-0487), else the literal-or-FEEL value it
+// always was. escape is applied to what a placeholder inserts — html.EscapeString for
+// the HTML body, so a variable's value cannot add markup to the mail. A placeholder
+// that renders as nothing does so silently here, as a failed FEEL field always has;
+// the Modeler's preview is where an author is told.
+func mailText(tpl *feelers.Template, rv compiler.RestExpr, piKey uint64, scopeVars map[string]model.VariableValue, escape func(string) string) string {
+	if tpl == nil {
+		return resolveValue(rv, piKey, scopeVars)
+	}
+	out, _ := tpl.Render(templateScope{piKey: piKey, vars: scopeVars}, escape)
+	return out
+}
+
+// mailSubject is a send's subject. A template's sections can leave line breaks in it,
+// and a subject is one line: they become spaces rather than reaching the header.
+func mailSubject(detail *compiler.ConnectorTaskDetail, piKey uint64, scopeVars map[string]model.VariableValue) string {
+	if detail.MailSubjectTmpl == nil {
+		return resolveValue(detail.MailSubject, piKey, scopeVars)
+	}
+	return headerSafe(mailText(detail.MailSubjectTmpl, detail.MailSubject, piKey, scopeVars, nil))
+}
+
+// templateScope is what a mail template's names resolve against: the variables the
+// task sees and the processInstanceKey builtin, bound exactly as [bindVars] binds them
+// for a FEEL field, so a placeholder and an fx value read the same names alike.
+type templateScope struct {
+	piKey uint64
+	vars  map[string]model.VariableValue
+}
+
+func (s templateScope) Lookup(name string) (expr.Value, bool) {
+	if name == builtinProcessInstanceKey {
+		return expr.String(strconv.FormatUint(s.piKey, 10)), true
+	}
+	v, ok := s.vars[name]
+	if !ok {
+		return nil, false
+	}
+	return expr.FromStored(toExprKind(v.Kind), v.Bool, v.Text), true
+}
+
+func (s templateScope) Names() []string {
+	out := make([]string, 0, len(s.vars)+1)
+	for n := range s.vars {
+		out = append(out, n)
+	}
+	return append(out, builtinProcessInstanceKey)
 }
 
 // bindVars turns the named variables the task sees into a FEEL binding. A name absent

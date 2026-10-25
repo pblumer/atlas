@@ -305,3 +305,76 @@ func TestEvaluateFeelBadRequest(t *testing.T) {
 		t.Fatalf("status=%d, want 400", code)
 	}
 }
+
+// TestRenderTemplate exercises the mail template preview the Modeler's editor calls
+// (ADR-0487): placeholders and sections render over the sample
+// variables, an HTML body escapes what they insert, a '=' value is one FEEL
+// expression as it is in the mail, and a template the deploy would refuse is refused
+// here too, with its place.
+func TestRenderTemplate(t *testing.T) {
+	ts := newTestServer(t)
+	type problem struct {
+		Expression string `json:"expression"`
+		Message    string `json:"message"`
+	}
+	type resp struct {
+		OK       bool      `json:"ok"`
+		Result   string    `json:"result"`
+		Problems []problem `json:"problems"`
+		Error    string    `json:"error"`
+		Line     int       `json:"line"`
+		Column   int       `json:"column"`
+	}
+	for _, tc := range []struct {
+		name, body string
+		want       resp
+	}{
+		{"placeholders and a loop",
+			`{"template":"Hallo {{kunde.name}}\n{{#loop positionen}}\n- {{menge}} × {{artikel}}\n{{/loop}}","variables":{"kunde":{"name":"Ada"},"positionen":[{"artikel":"Tee","menge":2}]}}`,
+			resp{OK: true, Result: "Hallo Ada\n- 2 × Tee\n"}},
+		{"html escapes inserts", `{"template":"<p>{{name}}</p>","variables":{"name":"<b>&"},"html":true}`,
+			resp{OK: true, Result: "<p>&lt;b&gt;&amp;</p>"}},
+		{"text does not escape", `{"template":"{{name}}","variables":{"name":"<b>"}}`, resp{OK: true, Result: "<b>"}},
+		{"a null placeholder is reported", `{"template":"Hallo {{kunde.nmae}}","variables":{"kunde":{"name":"Ada"}}}`,
+			resp{OK: true, Result: "Hallo ", Problems: []problem{{Expression: "kunde.nmae", Message: "is null, so it renders as nothing"}}}},
+		{"plain text", `{"template":"Guten Tag"}`, resp{OK: true, Result: "Guten Tag"}},
+		{"equals is one FEEL expression", `{"template":"= \"<p>\" + name + \"</p>\"","variables":{"name":"Ada"},"html":true}`,
+			resp{OK: true, Result: "<p>Ada</p>"}},
+		{"equals FEEL that does not compile", `{"template":"=1 +"}`, resp{OK: false}},
+		{"equals FEEL calling nothing", `{"template":"=nosuchfunction(1)"}`, resp{OK: false}},
+		{"unclosed section", `{"template":"a\n{{#if vip}}b"}`, resp{OK: false, Line: 2, Column: 1}},
+		{"a call the deploy refuses", `{"template":"{{ nosuchfunction(x) }}"}`, resp{OK: false, Line: 1, Column: 1}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			code, body := doReq(t, ts, http.MethodPost, "/api/v1/feel/template", tc.body, "application/json")
+			if code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", code, body)
+			}
+			var got resp
+			if err := json.Unmarshal(body, &got); err != nil {
+				t.Fatalf("unmarshal %s: %v", body, err)
+			}
+			if got.OK != tc.want.OK {
+				t.Fatalf("ok=%v want %v (%s)", got.OK, tc.want.OK, body)
+			}
+			if !got.OK {
+				if got.Error == "" {
+					t.Error("a refusal carries a message")
+				}
+				if got.Line != tc.want.Line || got.Column != tc.want.Column {
+					t.Errorf("place = %d:%d, want %d:%d", got.Line, got.Column, tc.want.Line, tc.want.Column)
+				}
+				return
+			}
+			if got.Result != tc.want.Result {
+				t.Errorf("result = %q, want %q", got.Result, tc.want.Result)
+			}
+			if len(got.Problems) != len(tc.want.Problems) || (len(got.Problems) > 0 && got.Problems[0] != tc.want.Problems[0]) {
+				t.Errorf("problems = %+v, want %+v", got.Problems, tc.want.Problems)
+			}
+			if got.Problems == nil {
+				t.Error("problems is an empty list, never null, so the editor can read it without a guard")
+			}
+		})
+	}
+}

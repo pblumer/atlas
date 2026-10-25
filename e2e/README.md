@@ -61,6 +61,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   change event, keeping an fx field's `=`; a focused dmn-js output cell gets a spark and Apply types
   into it, while an input cell (a unary test) is not written to; and without an AI Worker the chat
   is absent and the rest still works.
+- **`history-purge.spec.mjs`** ([ADR-0486](../docs/adr/0486-operator-history-purge-and-compaction.md)):
+  deleting a process's finished instances and the storage card's reclaim section against a
+  stubbed API — the preview counts every version with one cut-off and writes nothing, and says
+  that deleting frees no disk until the WAL is compacted and that the Finished column does not go
+  down; only the process id typed exactly arms the delete; the batches run newest version first,
+  each repeating the cut-off and passing the cursor, until nothing remains; a server that switched
+  the purge off keeps it disarmed; a failure part-way says how many already went; a purge can be
+  stopped between two batches and cannot be closed while one runs; and the card reads the
+  checkpoints without verifying them, says when compaction is off, asks before compacting once,
+  and reports what the pass removed.
 - **`instance-samples.spec.mjs`** ([ADR-0145](../docs/adr/0145-developer-view-for-code-fields.md),
   amended): the **live values** the Developer View and the Variables panel show, against a
   mock API — the picker lists the newest instances of every version of the process, running
@@ -73,6 +83,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   `dev-view.spec.mjs` drives the search field itself: Enter searches, a pick stays inside the
   search, a search that finds nothing or fails keeps the instance on screen, and emptying the
   field returns to the recent instances.
+- **`mail-template.spec.mjs`** ([ADR-0487](../docs/adr/0487-mail-templates.md)):
+  **mail templates** in the Modeler, on `mail-html-harness.html` with a mock renderer behind
+  `POST /api/v1/feel/template` — the **Placeholders** select writes `templating="true"` and turns
+  the subject and bodies into template fields that colour their `{{ }}` tags; F2 opens a body
+  with a **Preview** that renders it with the sample variables, again on every edit, points out
+  a placeholder that rendered as nothing and sends `html: false`; an HTML template is previewed
+  in an `<iframe sandbox="">` with its values escaped and `html: true`; a template that does not
+  compile shows its line and column and dims the last rendering; an HTML body without
+  placeholders previews itself without a request; and an operation that sends no text drops
+  the switch from the XML.
 - **`token-simulation.spec.mjs`** — message semantics across two pools (ADR-0101): a thrown
   message **delivers to a waiting catch** (both pools complete), a message with **nothing
   waiting is not buffered** (the later catch still parks), and a parked catch **still fires
@@ -329,6 +349,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   already holds is never minted; and a process id held by a draft, by a deployment, or
   only by the server's availability check is not chosen — for the new diagram nor for a
   pool added to it.
+
+- **`element-name-ids.spec.mjs`** ([ADR-0474](../docs/adr/0474-readable-element-ids.md), amended):
+  **an element's id follows its name**, on the same harness. The name segment spells
+  umlauts out, drops accents and symbols and stays within 60 characters; naming a task,
+  gateway, event or flow in the panel or on the canvas renames its id; a second and a
+  third element of a type with the same name get `_01` and `_02`; a renamed element's id
+  follows and frees the old one; an empty or letterless name, an id the author typed, an
+  id a deployed version carries and the process's own id are kept; and one undo takes
+  back name and id together.
 
 - **`form-doors.spec.mjs`** ([ADR-0465](../docs/adr/0465-form-doors.md)):
   the **way from a step to its form and back**, through the real app (`index.html` →

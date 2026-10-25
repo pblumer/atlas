@@ -562,6 +562,14 @@ The control-flow basics most real models use.
   type and every other operation rides `io.atlas.sharepoint`, so a worker built before
   the operations never performs one as a create. Sharing links, an idempotency column
   against a duplicated create, and a `select` on file reads are follow-ups.
+  A SharePoint Worker with the provider **Mockup**
+  ([ADR-0484](docs/adr/0484-sharepoint-mock-mode.md)) needs no
+  tenant: its operations run against a site in the server's memory — a supervised worker
+  forwards them there — answering in Graph's shapes, refusing what SharePoint refuses, and
+  filtering in a stated OData subset. Operations › Diagnostics › Mockups shows its lists,
+  libraries and journal through `GET /api/v1/mocks`, the first piece of the one mockup view
+  ([ADR-0216](docs/adr/0216-mockups-are-one-view.md)); moving the AD and SQL mockups into
+  that view is a follow-up.
   **Jira is another Worker Type in the catalog**
   ([ADR-0201](docs/adr/0201-jira-connector.md)): a service task marked
   `<atlas:jiraConnector connector operation …>` performs one Atlassian Jira operation
@@ -695,6 +703,13 @@ The control-flow basics most real models use.
   catches it. Still open: an ICAP client for antivirus gateways that do not speak clamd;
   the Graph and Gmail calls walked at a live tenant; re-checking a stored object's verdict
   before presenting it long after its export.
+  **Mail texts are templates, previewed as they are written**
+  ([ADR-0487](docs/adr/0487-mail-templates.md)): with `templating="true"`
+  a mail task's subject and bodies use the template language form text views already
+  speak — `{{ FEEL }}` placeholders, `{{#if}}` and `{{#loop}}` sections — compiled at deploy
+  and rendered by the worker, the HTML body escaping what a placeholder inserts; F2 opens
+  each field with a preview rendered by `POST /api/v1/feel/template`. Still open: reading a
+  received mail's HTML body and showing it to a person in a task form, decided separately.
   The same reader also runs the other way: `atlas openapi-template --spec x.yaml --out
   dir` writes one element-template package per operation, in the repository catalog's
   own shape ([ADR-0300](docs/adr/0300-openapi-element-templates.md)) —
@@ -1141,6 +1156,17 @@ What it takes to run this for real.
   back. Underneath, a WAL write cut short is cut off again, and the engine halts after a
   batch it could not make durable instead of running refused commands later. Open: whether
   1 GiB covers a large store's compaction output (the record's open question)
+- ✅ An administrator gives disk back where the disk is shown
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)),
+  the "purge now" follow-up ADR-0115, ADR-0144 and ADR-0146 named. Operations deletes a
+  version's finished instances up to a cut-off — the history no `atlas:historyTtl` reaches —
+  in bounded batches through the retention purge event and behind its export gate
+  (`GET`/`POST /api/v1/processes/{key}/history-purge`, two MCP tools, `--instance-purge=false`
+  to refuse it on production). The storage card says whether the WAL is compacted, what the
+  last pass did, and compacts once on request (`POST /api/v1/checkpoints?compact=true`, also
+  on a frozen server); `ATLAS_COMPACT_WAL` switches compaction on from the environment. Open:
+  whether the retention sweep should purge records without a terminal position when no
+  exporter runs, as the manual purge does
 - ✅ Exported-log stream for downstream analytics: the OpenSearch exporter ([ADR-0114](docs/adr/0114-opensearch-event-exporter.md)) and the CloudEvents feed, pushed to a receiver ([ADR-0433](docs/adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md))
 - ✅ **Instance migration**
   ([ADR-0162](docs/adr/0162-process-instance-migration.md)): move running
@@ -1268,6 +1294,15 @@ Beyond a single node.
 
 Adoption and polish.
 
+- 🚧 **Technical capability semantics (T1a).** A strict, independent, versioned
+  descriptor for a Worker Type operation's claimed semantics: resource kind and
+  identity scope, JSON Schema roots, error taxonomy, idempotency, consistency and
+  pagination ([ADR-0485](docs/adr/0485-technical-capability-semantics.md)).
+  T1a validates the contract envelope without publishing a canonical production
+  corpus or certifying providers. **T1b** adds full JSON Schema verification and
+  provider conformance evidence; **T2** projects verified built-in operation claims
+  without copying operation tables (see
+  [implementation plan](docs/planning/technical-capability-contract.md)).
 - 🔲 Worker SDKs in more languages
 - 🚧 BPMN modeler interoperability (import from common tools): the Zeebe dialect round-trips, and a MIM worksheet imports ([ADR-0292](docs/adr/0292-mim-import-worksheet.md)); importing from Camunda 7 or Signavio is not built
 - 🚧 **Benchmark suite and published performance numbers** (v0.2.0 programme B):
@@ -2261,6 +2296,93 @@ exists to settle it. No approval workflow: `state` is a field somebody sets, and
 is the engine an organisation would model such a workflow *in*.
 
 ---
+
+## Milestone IAE — Identity-aware Execution 🚧
+
+A dedicated cross-milestone [delivery programme](docs/planning/identity-aware-execution-program.md) for linked external user identities, managed Connections, delegated OAuth, enforceable per-action authorization, DMN/FEEL-backed business policy, trusted approval obligations, separation of duties and durable attribution. [ADR-0475](docs/adr/0475-identity-aware-worker-execution.md) is **Proposed / Partial**: a supervised delegated SharePoint example does **not** establish enforcement for every Worker Type or externally hosted Worker Instance.
+
+- 🚧 **IAE0 — Architecture, threat model and decision gates.** Review ADR-0475, current code, trust boundaries, revocation, retention and compatibility before treating this as a universal security guarantee.
+- 🚧 **IAE1–IAE2 — External identities, Connections and delegated OAuth.** Build on existing Atlas principals, vault and OAuth mechanics; finish secure connection ownership, token rotation and provider consent lifecycle. Existing app-only and certificate Workers remain compatible.
+- 🚧 **IAE3–IAE4 — Policy decisions and enforced external execution.** Versioned fail-closed PDP, trusted PIP and an enforceable pre-effect PEP with durable action-bound decisions, lease fencing and recovery. Existing supervised SharePoint coverage is only a partial baseline; validate every supported execution mode.
+- 🔲 **IAE5 — Approval obligations and separation of duties.** Bind real, distinct approving principals to the exact action and policy revision; do not trust process variables as authorization evidence.
+- 🔲 **IAE6 — Console, API and Operations.** Linked identities, Connection management, policy publication/simulation, worker binding, readable audit and correctly scoped visibility.
+- 🔲 **IAE7 — Provider-by-provider adoption.** Microsoft Mail, selected Entra/Google/Jira/REST paths only after compatibility and enforceable credential boundaries are proven; no blanket claims.
+- 🔲 **IAE8 — Controlled SharePoint PoC and readiness review.** Test a real consented site and delegated user under applicable tenant policy, separately from simulated tests.
+
+**Programme boundary:** [CDA](docs/planning/capability-driven-automation-program.md) establishes *what* technical operation a Worker supports and how an opt-in BPMN task binds it; IAE establishes *who* may perform the particular external action, *as whom* and with which durable decision evidence. **CDA7 requires IAE4 enforcement for its chosen provider, but technical conformance is never authorization.** Follow the detailed [IAE gates and evidence register](docs/planning/identity-aware-execution-program.md).
+
+---
+
+## Milestone CDA — Capability-driven Automation 🚧
+
+A separate cross-milestone programme joining the existing Business Capability
+register, BPMN service tasks, versioned technical operation contracts, Worker
+Types, configured Workers, and identity-aware policy enforcement. Its
+[delivery programme](docs/planning/capability-driven-automation-program.md)
+is the status/dependency authority; the original [T0–T5 plan](docs/planning/technical-capability-contract.md)
+retains the technical task detail. This track **does not reopen completed
+Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
+**A descriptive claim is not proof of conformance, and conformance is not authorization.**
+
+- 🚧 **CDA0 — Declarative Worker Type operation claims (T0 / B11).**
+  [PR #1343](https://github.com/pblumer/atlas/pull/1343) merged the
+  manifest fields and validation on `main`. [ADR-0480](docs/adr/0480-technical-capability-contract.md)
+  is **Proposed / Partial**; the claims remain advisory and no capability
+  routing exists. Keep B11 open until the architecture decision and
+  verification gates have been reviewed.
+- 🚧 **CDA1 — Canonical semantic contract envelope (T1a / Milestone 6).**
+  [PR #1346](https://github.com/pblumer/atlas/pull/1346) is a **draft,
+  not merged** at this baseline: exact ID/version/profile, resource kind,
+  identity scope and strict schema envelope. No proof of provider behavior.
+  This slice must be accepted before CDA2.
+- 🔲 **CDA2 — Contract governance and conformance (T1b / Milestone 6).**
+  Decide independent publication, immutable contract digest, offline
+  JSON Schema validation, positive/negative conformance evidence, expiry,
+  reviewer approval and withdrawal in
+  [ADR-0483](docs/adr/0483-technical-capability-conformance-governance.md).
+  A Worker Type cannot certify its own claims.
+- 🔲 **CDA3 — Verifiable built-in operation mappings (T2 / Milestone 6).**
+  Derive from existing provider operation catalogues, first distinguishing
+  an Entra account from a Google contact and an LDAP entry. Mark unknown,
+  candidate, verified and withdrawn truthfully, prevent catalogue drift;
+  no implicit provider substitution. Depends on CDA2 and ADR-0208's
+  relevant trust/pinning prerequisites.
+- 🔲 **CDA4 — Cross-layer technical capability graph (T3).**
+  Extend proposed [ADR-0420](docs/adr/0420-one-graph-model-several-projections.md)
+  with stable technical capability and Worker operation nodes, authored
+  versus derived provenance, a bounded off-loop query and source-specific
+  authorization. Depends on CDA2/CDA3 and acceptance of the graph model;
+  the previous Milestone P scope stays marked done.
+- 🔲 **CDA5 — Panorama, API and MCP discovery and impact (T4).**
+  Explain the path Value Stream → authored Business Capability realization →
+  BPMN task → exact technical operation → configured Worker, including
+  verified evidence, unknown links, gaps and restricted traversal.
+  Prove a Worker outage impact query without exposing hidden resources.
+  Depends on CDA4; do not display runtime execution support not yet built.
+- 🔲 **CDA6 — Capability-aware BPMN deployment binding (T5a).**
+  An opt-in service task declares one exact verified contract and freezes
+  one explicitly chosen Worker at deployment; reject missing, ambiguous,
+  withdrawn or mismatched bindings. Preserve existing BPMN and job types.
+  Governed by [ADR-0482](docs/adr/0482-capability-aware-binding-and-routing.md);
+  depends on CDA2/CDA3 and the accepted binding decision. **No new
+  execution behavior in this slice.**
+- 🔲 **CDA7 — Governed execution and recovery (T5b).**
+  Enable one narrow provider path through [ADR-0475](docs/adr/0475-identity-aware-worker-execution.md)
+  authorization only when that Worker's enforcement exists: pin target,
+  deny without fallback, durable decisions before `fsync`-gated effects,
+  live/replay equality, deterministic retries, no hot-path allocations,
+  and a legacy-BPMN compatibility test. Depends on CDA6 and an accepted
+  routing decision. **Dynamic choice among multiple Workers is not
+  authorized by this milestone**; it needs its own approved event/policy
+  and recovery design.
+
+**Milestone gates:** CDA2 requires independent semantic conformance, CDA4
+requires accepted provenance/visibility semantics, CDA6 requires an approved
+BPMN binding, and CDA7 requires an approved replay-safe execution policy
+with provider enforcement. The full [ADR decision matrix and acceptance
+tests](docs/planning/capability-driven-automation-program.md) are the
+review checklist. Treat `Proposed`, `Partial`, `Merged`, and `Landed`
+as distinct states.
 
 ## Milestone K — Service catalogue, orders & the portal 🚧
 

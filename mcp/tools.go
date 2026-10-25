@@ -506,6 +506,85 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_finished_instances_deletion",
+			Description: "Read what deleting a process version's finished instances FOR GOOD would " +
+				"consider, without deleting anything: how many finished before the cut-off 'before' " +
+				"(RFC 3339 or unix nanoseconds, default now — the answer repeats the moment it used), " +
+				"how many are still running and stay, the gate a purge waits on ('exporter': only what " +
+				"OpenSearch already holds; 'durable': no exporter runs), the version's atlas:historyTtl " +
+				"and the server-wide retention age, whether this server allows the purge ('enabled') and " +
+				"what 'confirm' must repeat. Pass the small DEFINITION key from atlas_list_processes. " +
+				"Administrators only. Call it before atlas_delete_finished_instances and tell the person " +
+				"the count. For a process that runs again and again, atlas:historyTtl on the model deletes " +
+				"its finished instances without anybody asking.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":    map[string]any{"type": "integer", "description": "The process DEFINITION key (from atlas_list_processes)."},
+					"before": stringProp("Optional cut-off: instances that finished strictly before it. RFC 3339 or unix nanoseconds; default now."),
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				q := url.Values{}
+				if before := optString(args, "before"); before != "" {
+					q.Set("before", before)
+				}
+				return asText(c.get(historyPurgePath(key, q)))
+			},
+		},
+		{
+			Name: "atlas_delete_finished_instances",
+			Description: "Delete one batch of a process version's finished instances FOR GOOD — those " +
+				"that finished before 'before' (default now), newest first, at most 'limit' (default " +
+				"1000, max 5000). There is no undo. Running instances are never touched, and an instance " +
+				"whose events the OpenSearch exporter does not have yet is passed over and counted in " +
+				"'held'. Returns {purged, held, remaining, nextCursor}: while 'remaining' is true, call " +
+				"again with the same arguments and 'after' set to 'nextCursor'. Meant for development and " +
+				"test installations, for clearing the runs of a test; refused with 403 on a server started " +
+				"with --instance-purge=false. Administrators only. 'confirm' must repeat the process id. " +
+				"Only call this when the person asked for these instances to be deleted and has seen the " +
+				"count from atlas_finished_instances_deletion. It does not free disk by itself: the log " +
+				"keeps every event until WAL compaction removes it.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":     map[string]any{"type": "integer", "description": "The process DEFINITION key (from atlas_list_processes)."},
+					"confirm": stringProp("The process id of that definition. Anything else deletes nothing."),
+					"before":  stringProp("Optional cut-off: instances that finished strictly before it. RFC 3339 or unix nanoseconds; default now. Repeat the preview's 'before' so both mean the same instances."),
+					"limit":   map[string]any{"type": "integer", "minimum": 1, "description": "Most instances to delete in this call (default 1000, capped at 5000)."},
+					"after":   stringProp("The 'nextCursor' of the previous call, to continue where it stopped."),
+				},
+				"required": []any{"key", "confirm"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				confirm, err := argString(args, "confirm")
+				if err != nil {
+					return "", err
+				}
+				q := url.Values{"confirm": {confirm}}
+				for _, name := range []string{"before", "after"} {
+					if v := optString(args, name); v != "" {
+						q.Set(name, v)
+					}
+				}
+				if limit, ok, err := optPositiveUint(args, "limit"); err != nil {
+					return "", err
+				} else if ok {
+					q.Set("limit", strconv.FormatUint(limit, 10))
+				}
+				return asText(c.post(historyPurgePath(key, q), "application/json", []byte("{}")))
+			},
+		},
+		{
 			Name: "atlas_delete_process",
 			Description: "Delete a deployed process definition by its key, removing it from the engine " +
 				"and from disk. Refused with a conflict error if the definition still has running " +
@@ -1489,4 +1568,14 @@ func asText(body []byte, err error) (string, error) {
 // json.Number-typed key arguments.
 func parseUint(s string) (uint64, error) {
 	return strconv.ParseUint(s, 10, 64)
+}
+
+// historyPurgePath is the route the two history-purge tools proxy
+// (ADR-0486), with its query.
+func historyPurgePath(key uint64, q url.Values) string {
+	path := "/api/v1/processes/" + strconv.FormatUint(key, 10) + "/history-purge"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	return path
 }

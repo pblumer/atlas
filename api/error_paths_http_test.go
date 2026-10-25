@@ -54,6 +54,7 @@ func TestMalformedBodyRejected(t *testing.T) {
 	cases := []string{
 		"/api/v1/feel/validate",
 		"/api/v1/feel/evaluate",
+		"/api/v1/feel/template",
 		"/api/v1/scripts/run",
 		"/api/v1/messages",
 		"/api/v1/processes/1/instances",
