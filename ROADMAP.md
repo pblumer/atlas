@@ -2264,6 +2264,22 @@ is the engine an organisation would model such a workflow *in*.
 
 ---
 
+## Milestone IAE — Identity-aware Execution 🚧
+
+A dedicated cross-milestone [delivery programme](docs/planning/identity-aware-execution-program.md) for linked external user identities, managed Connections, delegated OAuth, enforceable per-action authorization, DMN/FEEL-backed business policy, trusted approval obligations, separation of duties and durable attribution. [ADR-0475](docs/adr/0475-identity-aware-worker-execution.md) is **Proposed / Partial**: a supervised delegated SharePoint example does **not** establish enforcement for every Worker Type or externally hosted Worker Instance.
+
+- 🚧 **IAE0 — Architecture, threat model and decision gates.** Review ADR-0475, current code, trust boundaries, revocation, retention and compatibility before treating this as a universal security guarantee.
+- 🚧 **IAE1–IAE2 — External identities, Connections and delegated OAuth.** Build on existing Atlas principals, vault and OAuth mechanics; finish secure connection ownership, token rotation and provider consent lifecycle. Existing app-only and certificate Workers remain compatible.
+- 🚧 **IAE3–IAE4 — Policy decisions and enforced external execution.** Versioned fail-closed PDP, trusted PIP and an enforceable pre-effect PEP with durable action-bound decisions, lease fencing and recovery. Existing supervised SharePoint coverage is only a partial baseline; validate every supported execution mode.
+- 🔲 **IAE5 — Approval obligations and separation of duties.** Bind real, distinct approving principals to the exact action and policy revision; do not trust process variables as authorization evidence.
+- 🔲 **IAE6 — Console, API and Operations.** Linked identities, Connection management, policy publication/simulation, worker binding, readable audit and correctly scoped visibility.
+- 🔲 **IAE7 — Provider-by-provider adoption.** Microsoft Mail, selected Entra/Google/Jira/REST paths only after compatibility and enforceable credential boundaries are proven; no blanket claims.
+- 🔲 **IAE8 — Controlled SharePoint PoC and readiness review.** Test a real consented site and delegated user under applicable tenant policy, separately from simulated tests.
+
+**Programme boundary:** [CDA](docs/planning/capability-driven-automation-program.md) establishes *what* technical operation a Worker supports and how an opt-in BPMN task binds it; IAE establishes *who* may perform the particular external action, *as whom* and with which durable decision evidence. **CDA7 requires IAE4 enforcement for its chosen provider, but technical conformance is never authorization.** Follow the detailed [IAE gates and evidence register](docs/planning/identity-aware-execution-program.md).
+
+---
+
 ## Milestone CDA — Capability-driven Automation 🚧
 
 A separate cross-milestone programme joining the existing Business Capability
