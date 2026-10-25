@@ -449,6 +449,21 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.S3JobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunS3Job(ctx, j, reg)
 			})
+		case "paperless":
+			// Experimental external-only path: plain BPMN service-task jobs of
+			// type paperless.v1, never a reserved engine job index.
+			clients, names, err := paperlessRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if clients == nil {
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[paperlessJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunPaperlessJob(ctx, j, clients)
+			})
 		case "exchange":
 			reg, names, err := exchangeRegistryFromEnv(env)
 			if err != nil {
@@ -587,6 +602,7 @@ var endpointKeys = map[string]struct{ prefix, field string }{
 	"googlesheets": {googleSheetsEnvPrefix, "ENDPOINT"},
 	"jira":         {jiraEnvPrefix, "URL"},
 	"mail":         {mailEnvPrefix, "ENDPOINT"},
+	"paperless":    {paperlessEnvPrefix, "URL"},
 	"remedy":       {remedyEnvPrefix, "ENDPOINT"},
 	"s3":           {s3EnvPrefix, "URL"},
 	"sharepoint":   {sharepointEnvPrefix, "ENDPOINT"},
@@ -655,7 +671,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "agent", "carddav", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "teamsphone", "temis", "webscrape"}
+	return []string{"ad", "agent", "carddav", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "paperless", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "teamsphone", "temis", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.

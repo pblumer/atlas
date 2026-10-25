@@ -665,7 +665,11 @@ The control-flow basics most real models use.
   separately designed streamed upload path. OCR text and document bytes must
   not enter process variables/WAL by default. Slice A is an executable search →
   human-review workflow; Slice C depends on an explicitly authorized external
-  document source and retry/duplicate reconciliation. No implementation has landed.
+  document source and retry/duplicate reconciliation. A preliminary external-only
+  `paperless.v1` job handler and metadata-safe API client now exist (see
+  [planning](docs/planning/paperless-worker-v1.md)); the first-class compiler,
+  Modeler/Console, Repository package, supervised vault setup and end-to-end
+  recovery verification are still outstanding.
   **On Windows, the Go Workers take the route PowerShell takes**
   ([ADR-0464](docs/adr/0464-windows-system-proxy.md)): outbound
   HTTP follows a proxy variable when one is set and otherwise the account's PAC, WPAD or

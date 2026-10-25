@@ -44,6 +44,7 @@ var connectorJobTypes = map[string][]string{
 	"mail":         {compiler.MailJobType},
 	"mariadb":      {compiler.MariaDBJobType},
 	"mssql":        {compiler.MsSqlJobType},
+	"paperless":    {paperlessJobType},
 	"postgres":     {compiler.PostgresJobType},
 	"remedy":       {compiler.RemedyJobType},
 	"rest":         {compiler.RestJobType},
@@ -160,6 +161,12 @@ func configuredEnvFor(t *testing.T, kind string) map[string]string {
 		return map[string]string{
 			"ATLAS_POSTGRES_CONNECTORS": "hr-db",
 			"ATLAS_POSTGRES_HR_DB_DSN":  "postgres://u:p@127.0.0.1:1/hr",
+		}
+	case "paperless":
+		return map[string]string{
+			"ATLAS_PAPERLESS_CONNECTORS":   "archiv",
+			"ATLAS_PAPERLESS_ARCHIV_URL":   "https://paperless.example.com",
+			"ATLAS_PAPERLESS_ARCHIV_TOKEN": "test-token",
 		}
 	case "remedy":
 		return map[string]string{
