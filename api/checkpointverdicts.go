@@ -12,7 +12,7 @@ import (
 )
 
 // Whether a published checkpoint still verifies, remembered rather than re-read on every
-// scrape (ADR-draft-checkpoint-verdicts-are-remembered).
+// scrape (ADR-0488).
 //
 // Verifying a checkpoint re-hashes every byte of its state files. The /metrics gauges
 // asked that question of every checkpoint on every scrape, so a Prometheus scraping a

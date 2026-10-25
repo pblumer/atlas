@@ -146,7 +146,7 @@ func (s *Server) publishedCheckpoints() []checkpointInfo {
 // rememberedCheckpoints is publishedCheckpoints with each verdict taken from what this
 // server remembers when the checkpoint's files are unchanged and the verdict is less
 // than a day old — what a metrics scrape asks
-// (ADR-draft-checkpoint-verdicts-are-remembered).
+// (ADR-0488).
 func (s *Server) rememberedCheckpoints() []checkpointInfo {
 	rows := s.checkpointRows(s.rememberedVerify)
 	positions := make([]uint64, len(rows))

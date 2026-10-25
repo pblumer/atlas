@@ -457,7 +457,7 @@ governs a Worker:
   checkpoint the server publishes counts as verified, because publishing hashed it. A
   replaced or rewritten file is still reported at the next scrape, rot that changes no
   metadata within a day. `GET /api/v1/checkpoints` still verifies afresh
-  ([ADR-draft-checkpoint-verdicts-are-remembered](docs/adr/draft-checkpoint-verdicts-are-remembered.md)).
+  ([ADR-0488](docs/adr/0488-checkpoint-verdicts-are-remembered.md)).
 - **The storage card appears again on a large store.** `GET /api/v1/checkpoints?verify=false`
   verified every checkpoint before answering from the manifests, so each dashboard load
   re-read the state files of every checkpoint — tens of GiB on a store of 23 GiB — and the

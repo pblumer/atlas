@@ -181,7 +181,7 @@ func (c *durabilityCollector) Collect(ch chan<- prometheus.Metric) {
 
 	// Remembered verdicts, not a fresh read: verifying re-hashes every checkpoint's state
 	// files, which on a large store is minutes of disk per scrape
-	// (ADR-draft-checkpoint-verdicts-are-remembered).
+	// (ADR-0488).
 	published := s.rememberedCheckpoints()
 	gauge(c.checkpoints, float64(len(published)))
 	// "Newest that still verifies" rather than "newest": an unverifiable checkpoint

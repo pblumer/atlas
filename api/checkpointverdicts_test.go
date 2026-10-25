@@ -12,7 +12,7 @@ import (
 
 // The /metrics checkpoint gauges remember whether a checkpoint verified instead of
 // re-hashing every checkpoint on every scrape
-// (ADR-draft-checkpoint-verdicts-are-remembered). The verifications a scrape makes are
+// (ADR-0488). The verifications a scrape makes are
 // counted where they happen; the gauges' values are held by metrics_test.go, which this
 // must leave passing — a corrupted checkpoint is still reported at the next scrape.
 

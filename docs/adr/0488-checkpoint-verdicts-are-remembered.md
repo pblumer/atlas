@@ -1,4 +1,4 @@
-# ADR-DRAFT: A checkpoint's verdict is remembered, not re-read on every scrape
+# ADR-0488: A checkpoint's verdict is remembered, not re-read on every scrape
 
 - **Status:** Accepted
 - **Implementation:** Landed

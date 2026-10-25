@@ -778,7 +778,7 @@ type Server struct {
 	verifyCheckpoint func(root string, pos uint64) (*checkpoint.Manifest, error)
 	// verdicts remembers whether each published checkpoint verified, for the /metrics
 	// gauges, which would otherwise re-hash every checkpoint on every scrape
-	// (ADR-draft-checkpoint-verdicts-are-remembered).
+	// (ADR-0488).
 	verdicts           checkpointVerdicts
 	checkpointInterval time.Duration
 	checkpointKeep     int
@@ -2889,7 +2889,7 @@ func (s *Server) takeCheckpoint() (uint64, error) {
 	}
 	pos := staged.AppliedPosition()
 	// The commit just hashed exactly the files it published, which is the verification
-	// a metrics scrape would otherwise repeat (ADR-draft-checkpoint-verdicts-are-remembered).
+	// a metrics scrape would otherwise repeat (ADR-0488).
 	// A position that was already published hashed nothing, so it renews no verdict.
 	if !staged.AlreadyPublished() {
 		s.rememberPublished(pos)
