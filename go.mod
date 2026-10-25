@@ -15,6 +15,7 @@ require (
 	github.com/pblumer/temis v0.0.0-20260928134659-8cb3c88b5356
 	github.com/prometheus/client_golang v1.15.0
 	github.com/prometheus/client_model v0.3.0
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	go.opentelemetry.io/otel v1.45.0
 	go.opentelemetry.io/otel/sdk v1.45.0
 	go.opentelemetry.io/otel/trace v1.45.0
