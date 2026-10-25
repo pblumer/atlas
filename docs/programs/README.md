@@ -10,7 +10,7 @@ See [delivery protocol](../development/program-delivery.md) and
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
-| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 0/8 | unassigned (maintainer assignment required) | Assign a programme owner; review PR #1351 and PR #1346; decide ADR-0480. |
+| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 0/8 | unassigned (maintainer assignment required) | Assign a programme owner; review CDA0/CDA1 architecture gates; finish CI of schema-only PR #1357, then implement independent evidence under accepted ADR-0483. |
 
 ## Capability-driven Automation (CDA)
 
@@ -21,8 +21,8 @@ Connect business outcomes to verified technical operation semantics and, only af
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
 | **CDA0** — Declarative operation claims | active | unassigned | — | [PR #1343](https://github.com/pblumer/atlas/pull/1343) | PR #1343 merged; ADR-0480 remains Proposed/Partial. Review architecture approval and completion evidence before closing. |
-| **CDA1** — Semantic contract envelope | active | unassigned | CDA0 | [PR #1346](https://github.com/pblumer/atlas/pull/1346) | Draft PR #1346; exact semantics and parser only, not provider conformance. |
-| **CDA2** — Contract governance and conformance | planned | unassigned | CDA1 | — | Accept governance ADR; offline full JSON Schema checks, independent evidence, publication and revocation. |
+| **CDA1** — Semantic contract envelope | active | unassigned | CDA0 | [PR #1346](https://github.com/pblumer/atlas/pull/1346) | PR #1346 merged the exact technical-contract envelope on main; ADR-0485 remains Proposed/Partial, so no provider conformance or completed-slice claim. |
+| **CDA2** — Contract governance and conformance | active | unassigned | CDA1 | [PR #1357](https://github.com/pblumer/atlas/pull/1357), [Issue #1358](https://github.com/pblumer/atlas/issues/1358) | ADR-0483 Accepted (option 3). Schema-only PR #1357 in review. Independent operation/package-bound evidence, reviewer approval, revocation and publication are not yet implemented; no Worker is verified. |
 | **CDA3** — Verified Worker Type mappings | planned | unassigned | CDA2 | — | Prove account versus contact distinction; source-derived provider mappings with no drift. |
 | **CDA4** — Cross-layer architecture graph | planned | unassigned | CDA2, CDA3 | — | Accept/extend ADR-0420; stable identities, provenance, bounded traversals and visibility. |
 | **CDA5** — Panorama and API/MCP discovery | planned | unassigned | CDA4 | — | Read-only impact, coverage and gap queries; no unsupported runtime claims. |
