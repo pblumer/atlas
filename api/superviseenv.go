@@ -854,7 +854,7 @@ const (
 	sharepointConnectorsEnv = sharepointEnvPrefix + "CONNECTORS"
 	// sharepointMockURLEnv is where a worker forwards the operations of a mockup
 	// Worker (ATLAS_SHAREPOINT_<NAME>_MOCK=1): this server's site for it, over the API
-	// (ADR-draft-sharepoint-mock-mode).
+	// (ADR-0484).
 	sharepointMockURLEnv = sharepointEnvPrefix + "MOCK_URL"
 )
 
@@ -929,7 +929,7 @@ func (s *Server) sharepointWorkerEnv() []string {
 			}
 			// A mockup has no endpoint and no credential: the child is told only that it
 			// is one, and forwards each operation to this server's site for it
-			// (ADR-draft-sharepoint-mock-mode). Without an address to forward to it
+			// (ADR-0484). Without an address to forward to it
 			// could only refuse the Worker at startup, taking the other instances it
 			// serves down with it, so then it is left out and its tasks wait here.
 			if c.Provider == sharepoint.MockProvider {

@@ -51,7 +51,7 @@ Die Schritte im Detail stehen im Handbuch unter *Runbooks → SharePoint*.
 ## Ohne Tenant: mit dem Mockup
 
 Wer (noch) keine Site hat, legt den Worker mit dem Provider **Mockup** an
-([ADR-draft-sharepoint-mock-mode](../../docs/adr/draft-sharepoint-mock-mode.md)):
+([ADR-0484](../../docs/adr/0484-sharepoint-mock-mode.md)):
 *Console → Workers → New worker*, Typ *Microsoft SharePoint*, Provider *Mockup*, Name
 `intranet` — ohne Secret und ohne Endpoint. Jede Operation läuft dann gegen eine Site im
 Arbeitsspeicher von atlas.

@@ -8253,7 +8253,7 @@ async function viewSQLMockJournal() {
 
 // viewMockups is the Operations "Mockups" view (ADR-0216): one card per mockup, drawn by
 // its kind's renderer in mockups.js. Today the SharePoint Workers with the Mockup
-// provider (ADR-draft-sharepoint-mock-mode) are its cards; the AD and SQL mockups keep
+// provider (ADR-0484) are its cards; the AD and SQL mockups keep
 // their pages until they move here, and the page links to them so the question "what is
 // simulated right now" still has one starting point. This is the page around the cards —
 // the refresh, the folds a refresh must not undo, and emptying a SharePoint site.

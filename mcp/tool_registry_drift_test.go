@@ -464,7 +464,7 @@ var mcpOmittedRoutes = map[string]string{
 	// The SharePoint mockup's site: the operation route is a worker's transport, not an
 	// agent's action — an agent that wants a list item written models a SharePoint task —
 	// and the read and the reset are the operator's picture of a mockup run
-	// (ADR-draft-sharepoint-mock-mode).
+	// (ADR-0484).
 	"POST /api/v1/sharepoint/mock-sites/{worker}":   "worker performing a mockup Worker's operation, not an agent action",
 	"GET /api/v1/mocks":                             "an operator's view of the mockups (ADR-0216); an agent reads what a job did from the job",
 	"DELETE /api/v1/sharepoint/mock-sites/{worker}": "an operator emptying a mockup site between trial runs, not an agent action",

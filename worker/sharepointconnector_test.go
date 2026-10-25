@@ -155,7 +155,7 @@ func TestSharePointRegistryFromEnvRefusesANamedInstanceItCannotBuild(t *testing.
 
 // A mockup instance needs no credential, only the server that keeps its site; it is
 // built as the forwarder to that site, and named without the address it is a startup
-// error rather than a worker whose every job fails (ADR-draft-sharepoint-mock-mode).
+// error rather than a worker whose every job fails (ADR-0484).
 func TestSharePointRegistryFromEnvBuildsAMockup(t *testing.T) {
 	env := map[string]string{
 		"ATLAS_SHAREPOINT_CONNECTORS":    "intranet",

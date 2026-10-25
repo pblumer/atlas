@@ -61,7 +61,7 @@ governs a Worker:
   A mockup is never delegated. The new
   `examples/sharepoint-fallakte/sharepoint-testdaten.bpmn` fills an empty site so the case
   file example runs on a mockup Worker named `intranet`
-  ([ADR-draft-sharepoint-mock-mode](docs/adr/draft-sharepoint-mock-mode.md)).
+  ([ADR-0484](docs/adr/0484-sharepoint-mock-mode.md)).
 
 - **The dashboard shows the disk, and the server keeps a reserve free on it.** An
   administrator sees each file system the server writes to on the Console's dashboard: how

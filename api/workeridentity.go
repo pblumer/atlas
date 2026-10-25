@@ -95,7 +95,7 @@ var graphHosts = map[string]bool{
 // releases a person's token to the Worker on every permitted job, and a mockup reaches
 // no tenant to spend it on — so the release would be a credential handed out for
 // nothing. A mockup may still be governed with the service identity, which releases
-// none (ADR-draft-sharepoint-mock-mode).
+// none (ADR-0484).
 const mockDelegatedRefusal = "a SharePoint mockup cannot be delegated: it reaches no tenant, so a person's token released to it would be spent on nothing; govern it with the service identity, or switch it to Microsoft Graph first"
 
 // delegatedEndpointAllowed reports whether a delegated Worker may act against

@@ -569,6 +569,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0481](0481-storage-guard.md) | A storage reserve, and an engine that halts on a failed write | Accepted | Landed |
 | [0482](0482-capability-aware-binding-and-routing.md) | Capability-aware BPMN binding and deterministic authorized Worker selection | Proposed | Not started |
 | [0483](0483-technical-capability-conformance-governance.md) | Technical capability contract publication and conformance governance | Proposed | Not started |
+| [0484](0484-sharepoint-mock-mode.md) | A mockup provider for the SharePoint Worker Type | Accepted | Landed |
 
 ## The two states of a record
 

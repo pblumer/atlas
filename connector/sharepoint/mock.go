@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// The mockup provider (ADR-draft-sharepoint-mock-mode).
+// The mockup provider (ADR-0484).
 //
 // A SharePoint Worker whose provider is [MockProvider] reaches no tenant: its operations
 // run against a [MockSite] in the memory of the Atlas server that holds the Worker

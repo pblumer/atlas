@@ -930,14 +930,14 @@ func validateS3Connector(p *createConnectorParams) string {
 // validateSharePointConnector validates a SharePoint create request: it defaults its
 // Graph API base (endpoint is an optional override) and needs a credentialsRef
 // naming a vault OAuth auth bundle (ADR-0141) — unless the provider is the mockup,
-// which needs neither (ADR-draft-sharepoint-mock-mode). Sender is mail-only.
+// which needs neither (ADR-0484). Sender is mail-only.
 func validateSharePointConnector(p *createConnectorParams) string {
 	p.Sender = ""
 	if p.Provider == sharepoint.MockProvider {
 		// A mockup reaches no tenant and authenticates against nothing, so an endpoint
 		// or a credential written into the form would be dead configuration that reads
 		// as if it were in use — the preview mail provider's rule
-		// (ADR-draft-sharepoint-mock-mode).
+		// (ADR-0484).
 		p.Endpoint, p.CredentialsRef = "", ""
 		return ""
 	}

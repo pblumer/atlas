@@ -13,7 +13,7 @@ import (
 	"github.com/pblumer/atlas/worker"
 )
 
-// The SharePoint mockup (ADR-draft-sharepoint-mock-mode) is a provider of the
+// The SharePoint mockup (ADR-0484) is a provider of the
 // SharePoint Worker Type: a record that says so binds to a site in this server's
 // memory, in the engine and in a supervised worker alike.
 

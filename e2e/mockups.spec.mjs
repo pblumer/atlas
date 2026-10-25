@@ -1,6 +1,6 @@
 // e2e for the Operations "Mockups" view's content (api/web/mockups.js, ADR-0216): one
 // card per mockup, drawn by its kind's renderer. The SharePoint card
-// (ADR-draft-sharepoint-mock-mode) shows each list as a table of its items, each library
+// (ADR-0484) shows each list as a table of its items, each library
 // as its files with their properties, and the journal beneath, where a refused operation
 // is the row an author came to find; a kind with no renderer still gets a plain card.
 import { test, expect } from "@playwright/test";

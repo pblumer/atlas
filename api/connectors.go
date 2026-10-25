@@ -309,7 +309,7 @@ func (s *Server) buildMailClients() (map[string]mail.Client, map[string]string, 
 //
 // A record whose provider is the mockup binds to its site in s.sharePointMocks instead,
 // and the rebuild is where a site whose Worker was deleted, or switched to Graph, is
-// let go (ADR-draft-sharepoint-mock-mode). A disabled or governed mockup keeps its
+// let go (ADR-0484). A disabled or governed mockup keeps its
 // site: switching a Worker off is not asking for its content to be thrown away.
 func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, map[string]string, error) {
 	clients := map[string]sharepoint.Client{}

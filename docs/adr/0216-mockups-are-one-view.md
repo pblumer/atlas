@@ -10,7 +10,7 @@
 > this record's envelope (kind, source, target, at, summary, data), collected at read
 > time, and Operations › Diagnostics › **Mockups** draws them through a `kind → renderer`
 > map with a plain fallback (`api/web/mockups.js`). Its first and only kind is the
-> SharePoint mockup ([ADR-draft-sharepoint-mock-mode](draft-sharepoint-mock-mode.md)), a
+> SharePoint mockup ([ADR-0484](0484-sharepoint-mock-mode.md)), a
 > provider on the Worker record as this record designed for Jira. Not built: `POST
 > /api/v1/mocks` and the report store for worker-held mockups, the move of the AD and SQL
 > pages into this view (Mock directory and Mock database still have their own entries),

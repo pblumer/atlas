@@ -4382,7 +4382,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .sqlmock-detail { margin-top: 2px; font-size: 12px; color: var(--err, #b3261e); overflow-wrap: anywhere; }
 .sqlmock-table tr + tr > td, .sqlmock-table tr + tr > th { padding-top: 8px; }
 
-/* ---------- Mockups (ADR-0216) and the SharePoint card (ADR-draft-sharepoint-mock-mode) ---------- */
+/* ---------- Mockups (ADR-0216) and the SharePoint card (ADR-0484) ---------- */
 /* Between its two siblings: a site has state, drawn as one table per list or library,
    and a journal, drawn as the mock database draws its sequence. */
 .spmock-list { margin-top: 8px; }

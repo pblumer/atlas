@@ -10,7 +10,7 @@ import (
 	"github.com/pblumer/atlas/connector/sharepoint"
 )
 
-// The SharePoint mockup's server half (ADR-draft-sharepoint-mock-mode).
+// The SharePoint mockup's server half (ADR-0484).
 //
 // A SharePoint Worker whose provider is the mockup reaches no tenant: its operations run
 // against a site in this server's memory (s.sharePointMocks). The site lives here and

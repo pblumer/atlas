@@ -2,7 +2,7 @@
 // renderer chosen by the kind it mocks, and a plain one for a kind nobody has written a
 // renderer for — visible the day it reports, well drawn once somebody writes its card.
 //
-// The first kind here is SharePoint (ADR-draft-sharepoint-mock-mode). Its card sits
+// The first kind here is SharePoint (ADR-0484). Its card sits
 // between the two mockups that still have pages of their own: the mock directory
 // (ADR-0213) draws state, because that mockup has state; the mock database (ADR-0224)
 // draws a sequence, because that one has none. A SharePoint mockup has both — a site

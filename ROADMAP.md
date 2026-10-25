@@ -563,7 +563,7 @@ The control-flow basics most real models use.
   the operations never performs one as a create. Sharing links, an idempotency column
   against a duplicated create, and a `select` on file reads are follow-ups.
   A SharePoint Worker with the provider **Mockup**
-  ([ADR-draft-sharepoint-mock-mode](docs/adr/draft-sharepoint-mock-mode.md)) needs no
+  ([ADR-0484](docs/adr/0484-sharepoint-mock-mode.md)) needs no
   tenant: its operations run against a site in the server's memory — a supervised worker
   forwards them there — answering in Graph's shapes, refusing what SharePoint refuses, and
   filtering in a stated OData subset. Operations › Diagnostics › Mockups shows its lists,

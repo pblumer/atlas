@@ -49,7 +49,7 @@ export function workerCreateBody(form) {
   };
   if (body.kind === "mail") body.provider = get("provider") || "smtp";
   // A SharePoint Worker reaches Microsoft Graph unless it is the mockup, whose site is
-  // kept in this server's memory (ADR-draft-sharepoint-mock-mode). Graph has no provider
+  // kept in this server's memory (ADR-0484). Graph has no provider
   // name of its own, so only the mockup sends one.
   if (body.kind === "sharepoint" && get("provider")) body.provider = get("provider");
   // An SMTP mail Worker reads its mailbox over IMAP when it names an endpoint for it

@@ -5,7 +5,7 @@
   "Antraege" und die Briefvorlage in der Bibliothek "Vorlagen".
 
   Gedacht für einen SharePoint-Worker mit dem Provider "Mockup"
-  (ADR-draft-sharepoint-mock-mode): Dort gibt es keine Person, die Listen anlegt und
+  (ADR-0484): Dort gibt es keine Person, die Listen anlegt und
   einen Antrag erfasst, und eine Liste entsteht, wenn ein Task zum ersten Mal in sie
   schreibt. Dieser Prozess ist diese Person.
 

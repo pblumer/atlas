@@ -16,7 +16,7 @@ const sharepointEnvPrefix = "ATLAS_SHAREPOINT_"
 // sharepointMockURLEnv is the Atlas server route a mockup instance
 // (ATLAS_SHAREPOINT_<NAME>_MOCK=1) forwards its operations to: the server keeps the
 // site, so what one run wrote survives this worker being restarted
-// (ADR-draft-sharepoint-mock-mode).
+// (ADR-0484).
 const sharepointMockURLEnv = sharepointEnvPrefix + "MOCK_URL"
 
 // sharepointRegistryFromEnv builds the SharePoint instances this worker holds.
@@ -42,7 +42,7 @@ const sharepointMockURLEnv = sharepointEnvPrefix + "MOCK_URL"
 //
 // ATLAS_SHAREPOINT_<NAME>_MOCK=1 makes an instance a mockup instead: it holds no
 // credential and reaches no tenant, and forwards each operation to the Atlas server
-// at ATLAS_SHAREPOINT_MOCK_URL, which keeps the site (ADR-draft-sharepoint-mock-mode).
+// at ATLAS_SHAREPOINT_MOCK_URL, which keeps the site (ADR-0484).
 func sharepointRegistryFromEnv(env func(string) string) (*sharepoint.Registry, []string, error) {
 	reg, names, _, err := sharepointSourcesFromEnv(env)
 	return reg, names, err

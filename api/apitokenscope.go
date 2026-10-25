@@ -181,7 +181,7 @@ var apiScopeAllowed = map[string][]string{
 		"POST /api/v1/ad/mock-directory",
 		"POST /api/v1/sql/mock-journal",
 		// A worker in SharePoint mockup mode performs its operations here: the site is
-		// the server's, so it outlives the worker (ADR-draft-sharepoint-mock-mode).
+		// the server's, so it outlives the worker (ADR-0484).
 		"POST /api/v1/sharepoint/mock-sites/{worker}",
 	},
 	// One route, and not one of /api/v1's: the exposition is mounted beside the

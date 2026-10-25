@@ -152,7 +152,7 @@ test("a Gmail create carries no IMAP endpoint, even with one left in the hidden 
 });
 
 // A SharePoint Worker is Microsoft Graph unless it is the mockup, whose site atlas keeps
-// in its own memory (ADR-draft-sharepoint-mock-mode). Graph has no provider name, so
+// in its own memory (ADR-0484). Graph has no provider name, so
 // only the mockup sends one — and the mockup asks for no credential, which is the
 // point of it.
 test("a SharePoint mockup create carries its provider and asks for no credential", async ({ page }) => {

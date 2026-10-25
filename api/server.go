@@ -603,7 +603,7 @@ type Server struct {
 	sharePointRegistry *sharepoint.Registry
 
 	// sharePointMocks holds the site of every SharePoint Worker whose provider is the
-	// mockup (ADR-draft-sharepoint-mock-mode). It is created with the registry but never
+	// mockup (ADR-0484). It is created with the registry but never
 	// swapped with it: a rebuild re-binds the clients and must not throw away what a run
 	// wrote into a site. It holds its own lock — a supervised worker forwards its
 	// operations here off the run loop while the engine's own handler writes from the job
