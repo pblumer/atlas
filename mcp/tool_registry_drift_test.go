@@ -568,6 +568,7 @@ var mcpOmittedRoutes = map[string]string{
 	// Expression/script sandboxes: authored inside BPMN, not called standalone.
 	"POST /api/v1/feel/validate": "modeler-time expression check, not a scenario action",
 	"POST /api/v1/feel/evaluate": "modeler-time expression check, not a scenario action",
+	"POST /api/v1/feel/template": "modeler-time preview of a mail template, not a scenario action",
 	"POST /api/v1/scripts/run":   "modeler-time script check, not a scenario action",
 
 	// CSV batch start: driven from a user task inside the process (ADR-0084).

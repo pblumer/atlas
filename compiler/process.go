@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/expr/feelers"
 )
 
 // BpmnType is the kind of a BPMN element. It is stored in element-instance state
@@ -588,6 +589,14 @@ type ConnectorTaskDetail struct {
 	MailSubject RestExpr
 	Body        RestExpr
 	BodyHTML    RestExpr
+	// MailSubjectTmpl, BodyTmpl and BodyHTMLTmpl are set in place of the literal in
+	// MailSubject, Body and BodyHTML when the task switched templating on and the value
+	// uses the template language (ADR-draft-mail-templates). The worker renders them
+	// over the scope's variables, escaping what a placeholder inserts into the HTML
+	// body; nil means the RestExpr beside it is the value, as it always was.
+	MailSubjectTmpl *feelers.Template
+	BodyTmpl        *feelers.Template
+	BodyHTMLTmpl    *feelers.Template
 	// Mailbox fields (JobType == MailJobType, ADR-0438). MailOp is the
 	// operation, "" being send — every mail task authored before mailboxes existed.
 	// MailFolder is the folder a list reads, MailMessage the message an operation

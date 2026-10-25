@@ -83,6 +83,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   `dev-view.spec.mjs` drives the search field itself: Enter searches, a pick stays inside the
   search, a search that finds nothing or fails keeps the instance on screen, and emptying the
   field returns to the recent instances.
+- **`mail-template.spec.mjs`** ([ADR-draft-mail-templates](../docs/adr/draft-mail-templates.md)):
+  **mail templates** in the Modeler, on `mail-html-harness.html` with a mock renderer behind
+  `POST /api/v1/feel/template` — the **Placeholders** select writes `templating="true"` and turns
+  the subject and bodies into template fields that colour their `{{ }}` tags; F2 opens a body
+  with a **Preview** that renders it with the sample variables, again on every edit, points out
+  a placeholder that rendered as nothing and sends `html: false`; an HTML template is previewed
+  in an `<iframe sandbox="">` with its values escaped and `html: true`; a template that does not
+  compile shows its line and column and dims the last rendering; an HTML body without
+  placeholders previews itself without a request; and an operation that sends no text drops
+  the switch from the XML.
 - **`token-simulation.spec.mjs`** — message semantics across two pools (ADR-0101): a thrown
   message **delivers to a waiting catch** (both pools complete), a message with **nothing
   waiting is not buffered** (the later catch still parks), and a parked catch **still fires

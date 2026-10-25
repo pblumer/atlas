@@ -7384,6 +7384,30 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p data-l="en"><b>Before the first real send:</b> check that the sender address is actually allowed to send
           (SPF/DKIM), and send the first batch to yourself. An automation sending two hundred wrong emails is faster
           than any correction.</p>
+        <p data-l="de"><b>Texte mit Platzhaltern.</b> Stellst du beim Mail-Task <b>Placeholders</b> auf <i>On</i>,
+          sind Betreff, Text und HTML-Text Vorlagen in derselben Sprache wie die Textansichten der Formulare:
+          <code>{{kunde.vorname}}</code> setzt einen Wert ein, <code>{{#if betrag &gt; 1000}}…{{/if}}</code> schreibt
+          einen Abschnitt nur, wenn die Bedingung zutrifft, und <code>{{#loop positionen}}…{{/loop}}</code> einmal pro
+          Element einer Liste. Zwischen den Klammern steht FEEL. In einer Schleife sind die Felder des Elements direkt
+          verfügbar, und <code>this</code> ist das Element selbst; die Prozessvariablen erreichst du dort über
+          <code>parent</code>, etwa <code>{{parent.waehrung}}</code>. Was ein Platzhalter in den HTML-Text einsetzt,
+          wird maskiert – ein Wert kann also kein Markup hinzufügen. Mit <kbd>F2</kbd> öffnest du ein Feld im Editor
+          mit <b>Preview</b>: Er zeigt die Mail mit Beispielwerten, vorbefüllt aus einer laufenden Instanz, und
+          rendert sie neu, sobald du etwas änderst. Eine fehlerhafte Vorlage, etwa ein <code>{{#if}}</code> ohne
+          <code>{{/if}}</code>, lehnt bereits das Deployment ab, mit Zeile und Spalte. Ohne diese Einstellung bleibt
+          alles wie bisher: Ein Wert ist wörtlicher Text, mit <code>=</code> davor ein FEEL-Ausdruck.</p>
+        <p data-l="en"><b>Texts with placeholders.</b> Set <b>Placeholders</b> to <i>On</i> on a mail task, and its
+          subject, text and HTML text are templates in the same language as the forms' text views:
+          <code>{{kunde.vorname}}</code> inserts a value, <code>{{#if betrag &gt; 1000}}…{{/if}}</code> writes a section
+          only when the condition holds, and <code>{{#loop positionen}}…{{/loop}}</code> writes it once per element of a
+          list. Between the braces is FEEL. Inside a loop the element's fields are available directly and
+          <code>this</code> is the element itself; the process variables are reached there through <code>parent</code>,
+          for example <code>{{parent.waehrung}}</code>. What a placeholder inserts into the HTML text is escaped, so a
+          value cannot add markup. <kbd>F2</kbd> opens a field in the editor with a <b>Preview</b>: it shows the mail with
+          sample values, prefilled from a running instance, and renders it again as soon as you change something. A
+          broken template, such as an <code>{{#if}}</code> without <code>{{/if}}</code>, is already refused at deploy,
+          with its line and column. Without the setting everything stays as it was: a value is literal text, and with a
+          leading <code>=</code> a FEEL expression.</p>
         <p data-l="de"><b>Das Postfach lesen.</b> Derselbe Worker kann sein Postfach auch lesen: ein
           <b>Watch</b> unter <i>Events…</i> veröffentlicht neue Mail eines Ordners als Message, und ein Mail-Task mit
           einer <b>Operation</b> listet, liest, verschiebt, markiert, löscht (in den Papierkorb) oder beantwortet eine

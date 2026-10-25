@@ -310,6 +310,7 @@
         { "name": "subject", "type": "String", "isAttr": true },
         { "name": "body", "type": "String", "isAttr": true },
         { "name": "bodyHtml", "type": "String", "isAttr": true },
+        { "name": "templating", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true },
         { "name": "operation", "type": "String", "isAttr": true },
         { "name": "folder", "type": "String", "isAttr": true },

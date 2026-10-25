@@ -688,6 +688,13 @@ The control-flow basics most real models use.
   catches it. Still open: an ICAP client for antivirus gateways that do not speak clamd;
   the Graph and Gmail calls walked at a live tenant; re-checking a stored object's verdict
   before presenting it long after its export.
+  **Mail texts are templates, previewed as they are written**
+  ([ADR-draft-mail-templates](docs/adr/draft-mail-templates.md)): with `templating="true"`
+  a mail task's subject and bodies use the template language form text views already
+  speak — `{{ FEEL }}` placeholders, `{{#if}}` and `{{#loop}}` sections — compiled at deploy
+  and rendered by the worker, the HTML body escaping what a placeholder inserts; F2 opens
+  each field with a preview rendered by `POST /api/v1/feel/template`. Still open: reading a
+  received mail's HTML body and showing it to a person in a task form, decided separately.
   The same reader also runs the other way: `atlas openapi-template --spec x.yaml --out
   dir` writes one element-template package per operation, in the repository catalog's
   own shape ([ADR-0300](docs/adr/0300-openapi-element-templates.md)) —
