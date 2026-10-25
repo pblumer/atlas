@@ -449,6 +449,13 @@ governs a Worker:
 
 ### Fixed
 
+- **The storage card appears again on a large store.** `GET /api/v1/checkpoints?verify=false`
+  verified every checkpoint before answering from the manifests, so each dashboard load
+  re-read the state files of every checkpoint — tens of GiB on a store of 23 GiB — and the
+  storage card, which waited for that answer, did not appear. The listing now reads the
+  manifests only, and the card shows the disk at once and adds *Giving space back* when the
+  checkpoint status arrives
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)).
 - **A server that ran its disk full restarts again.** A WAL write cut short by a full
   disk left its torn bytes in the segment, and the next batch was written behind them;
   the restart then found damage with data after it and refused to start until the log was

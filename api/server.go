@@ -771,7 +771,11 @@ type Server struct {
 	// The snapshot itself runs on the run loop (via do), which is what makes its
 	// position exact: no batch can be half-applied while it is taken (invariant I3).
 	// Pruning runs off the loop — it only removes directories this goroutine published.
-	checkpointRoot     string
+	checkpointRoot string
+	// verifyCheckpoint re-hashes one published checkpoint's state files against its
+	// manifest — checkpoint.Verify, held here so a test can count the whole-store reads
+	// a request costs (ADR-0486). Set in New.
+	verifyCheckpoint   func(root string, pos uint64) (*checkpoint.Manifest, error)
 	checkpointInterval time.Duration
 	checkpointKeep     int
 	// checkpointTicks, when non-nil, replaces the checkpoint loop's real ticker so a
@@ -1781,6 +1785,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// path through checkpoint.Dir, and a knob here could only make them disagree
 	// (ADR-0131). Set outside the literal for the same alignment reason as above.
 	s.checkpointRoot = checkpoint.Dir(dataDir)
+	s.verifyCheckpoint = checkpoint.Verify
 	// The documentation area is a service rather than a set of Server methods
 	// (ADR-0147). It is built here, after the Server exists, because two of its
 	// collaborators are the server's: the shared public-route rate limiter, and the

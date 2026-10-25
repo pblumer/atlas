@@ -161,3 +161,14 @@ test("a server that compacts on its own offers one button, and it asks nothing",
   expect((await calls(page)).filter((c) => c.startsWith("POST"))).toEqual(["POST /api/v1/checkpoints"]);
   expect(page.__errors, "page errors").toEqual([]);
 });
+
+test("the disk is shown even when the checkpoint status never answers", async ({ page }) => {
+  await page.locator("#storage-hang").click();
+  const card = page.locator("#storage-card");
+  await expect(card).toBeVisible();
+  await expect(card).toContainText("Davon Atlas");
+  await expect(card).toContainText("Segmenten");
+  // The reclaim section waits for its own answer and is simply not drawn without one.
+  await expect(card.locator(".storage-reclaim")).toHaveCount(0);
+  expect(page.__errors, "page errors").toEqual([]);
+});
