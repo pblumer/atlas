@@ -2349,9 +2349,9 @@ Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
   [ADR-0483](docs/adr/0483-technical-capability-conformance-governance.md)
   is **Accepted**: immutable source-controlled contracts, independent
   digest-bound evidence, explicit reviewer approval and withdrawal.
-  [PR #1357](https://github.com/pblumer/atlas/pull/1357) (schema-only) and
-  [PR #1360](https://github.com/pblumer/atlas/pull/1360) (content digests)
-  are drafts in review, **not on `main`**; publication, verified
+  [PR #1357](https://github.com/pblumer/atlas/pull/1357) merged offline,
+  schema-only validation; [PR #1360](https://github.com/pblumer/atlas/pull/1360)
+  (content digests) is a draft in review; publication, verified
   provider evidence and revocation are not yet implemented. No Worker Type
   can certify its own claims or obtain runtime routing from JSON validation.
 - 🔲 **CDA3 — Verifiable built-in operation mappings (T2 / Milestone 6).**

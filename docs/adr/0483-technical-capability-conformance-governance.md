@@ -1,7 +1,7 @@
 # ADR-0483: Technical capability contract publication and conformance governance
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-25
 - **Deciders:** atlas maintainers
 - **Open question:** Which externally issued signature trust roots, third-party attestations and installation trust controls can be admitted once ADR-0208 signature verification is implemented? This accepted first-party decision explicitly excludes them; until a new accepted decision, external claims remain unverified candidates.
@@ -40,7 +40,7 @@ ADR-0208 specifies the Worker Type package trust model but its package-provenanc
 
 **Decision: option 3 — accepted.** Initially only maintainer-reviewed definitions and independently reviewed evidence committed alongside atlas can be trusted. This decision establishes the publication and conformance governance model; it does **not** certify existing providers or make a runtime selection decision. Do not derive `verified` from schema-only fixture success, a self-declared reviewer string or a submitted report.
 
-**Implementation status:** The publication, approval and revocation workflow is not implemented. Schema-only checks in [PR #1357](https://github.com/pblumer/atlas/pull/1357) and content digests in [PR #1360](https://github.com/pblumer/atlas/pull/1360) are under review; they are not independently verified evidence and have not been integrated into `main`.
+**Implementation status:** Step 1's validator is on `main`: [PR #1357](https://github.com/pblumer/atlas/pull/1357) added offline Draft 2020-12 schema validation with remote loading disabled and schema-only fixtures. Content digests in [PR #1360](https://github.com/pblumer/atlas/pull/1360) are under review. The publication, approval and revocation workflow is not implemented, and nothing on `main` is independently verified evidence.
 
 ### Initial publication and trust boundary (accepted)
 

@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-25",
   "plan": "../../planning/capability-driven-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-cda--capability-driven-automation-",
-  "next_action": "Get schema-only PR #1357 green and reviewed, then rebase digest PR #1360 onto it; decide ADR-0480 and ADR-0485 so CDA0/CDA1 can close (three slices are active against the default WIP limit of two); assign slice coordinators.",
+  "next_action": "Bring digest PR #1360 up to date with main and decide its canonical JSON profile and the implementation digest of built-in Worker Types; configure CODEOWNERS and branch protection before the first evidence record; decide ADR-0480 and ADR-0485 so CDA0/CDA1 can close (three slices are active against the default WIP limit of two).",
   "slices": [
     {
       "id": "CDA0",
@@ -50,7 +50,7 @@
         1357,
         1360
       ],
-      "note": "ADR-0483 Accepted (option 3). Drafts in review: schema-only PR #1357, content digests PR #1360. Independent operation/package-bound evidence, reviewer approval, revocation and publication are not yet implemented; no Worker is verified."
+      "note": "ADR-0483 Accepted (option 3). CDA2a schema-only validation merged in PR #1357; content digests PR #1360 in review. Independent operation/package-bound evidence, reviewer approval, revocation and publication are not yet implemented; no Worker is verified."
     },
     {
       "id": "CDA3",
