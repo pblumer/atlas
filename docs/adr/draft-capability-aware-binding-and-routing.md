@@ -85,7 +85,7 @@ Persisting the target does not solve the at-least-once side-effect problem: prov
 
 ### 6. Delivery gates
 
-CDA5 first delivers authoring and **deployment validation**, without executable capability routing: reject ambiguous/unverified claims and show the frozen binding plan. CDA6 then enables the first *narrow* governed executable path only after:
+CDA6 first delivers authoring and **deployment validation**, without executable capability routing: reject ambiguous/unverified claims and show the frozen binding plan. CDA7 then enables the first *narrow* governed executable path only after:
 
 1. Contract evidence is current under the [conformance-governance proposal](draft-technical-capability-conformance-governance.md).
 2. ADR-0475's relevant provider enforcement and identity boundary are in place, with fail-closed negative tests.
