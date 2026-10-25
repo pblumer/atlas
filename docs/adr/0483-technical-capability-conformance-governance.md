@@ -6,7 +6,7 @@
 - **Deciders:** atlas maintainers
 - **Open question:** Which externally issued signature trust roots, third-party attestations and installation trust controls can be admitted once ADR-0208 signature verification is implemented? This accepted first-party decision explicitly excludes them; until a new accepted decision, external claims remain unverified candidates.
 - **Question checked:** 2026-10
-- **Decision recorded:** 2026-10-25; option 3 approved for the CDA programme. This acceptance is an architecture decision, not proof that a provider conforms or that code is integrated.
+- **Decision recorded:** 2026-10-25; option 3 approved for the CDA programme, with approval authenticated by repository provenance and the maintainer as sole reviewer for now (see *Approval authority in the initial phase*). This acceptance is an architecture decision, not proof that a provider conforms or that code is integrated.
 
 ## Context and problem statement
 
@@ -64,6 +64,38 @@ ADR-0208 specifies the Worker Type package trust model but its package-provenanc
 - Package signing and external publisher onboarding are **not approved** by
   this decision and cannot be added as an implementation shortcut; revisit
   their trust anchors separately under ADR-0208.
+
+### Approval authority in the initial phase (accepted)
+
+Three ways to authenticate the independent approval were weighed for CDA2:
+repository provenance, reviewer signatures checked against a key list in the
+repository, and a CI job that reads pull-request reviews through the GitHub
+API. The maintainer chose **repository provenance**:
+
+- Evidence, publication and withdrawal records live in a source path owned
+  through `CODEOWNERS`. A record counts as approved only once it reached the
+  protected `main` branch through a pull request that the code owner approved
+  or personally merged. Build tooling verifies offline everything a file can
+  prove (recomputed digests, the binding to the contract identity and to the
+  exact Worker Type operation, staleness, append-only withdrawal) and takes
+  the protected-branch history as the approval itself.
+- The code cannot authenticate a person on its own. Branch protection and the
+  code-owner rule are therefore part of the trust boundary: they must be in
+  force before the first record is published, because other collaborators
+  with write access could otherwise merge evidence without the code owner.
+- **Single reviewer for now.** The maintainer (pblumer) is the only code owner
+  and reviewer. Changes prepared by coding agents are pushed under the
+  maintainer's account, so GitHub cannot record a separate approving review
+  for them; for those the approval is the maintainer's own merge. A merge
+  performed by a coding agent, even with the maintainer's credentials, is
+  **not** an approval.
+- Independence in this phase means separation between whoever authored the
+  evidence (a contributor or a coding agent) and the maintainer's acceptance,
+  not two independent people. Evidence approved this way records that a
+  single maintainer approved it, so a later, stricter rule can tell such
+  approvals apart instead of silently inheriting them.
+- Reviewer signatures and API-verified reviews are not adopted. Adding a
+  second reviewer or a stricter rule amends this record.
 
 ### Normative identity and artifact ownership
 

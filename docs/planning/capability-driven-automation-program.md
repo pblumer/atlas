@@ -121,9 +121,13 @@ implemented merely because Panorama already has a starmap.
    contracts versus CDA0's within-operation `id@version` duplicate
    rejection: agree whether one operation may later claim multiple
    profiles, and test any manifest change explicitly.
-2. **Evidence authority and expiry.** Confirm the canonical artifact
-   encoding, review authority, conformance runner, revalidation triggers
-   and withdrawal semantics; no third-party trust without ADR-0208.
+2. **Evidence authority and expiry.** Review authority is decided in
+   ADR-0483: repository provenance (`CODEOWNERS`, protected `main`) with the
+   maintainer as sole reviewer for now. Still open: the canonical artifact
+   encoding (PR #1360's Go `encoding/json` profile versus RFC 8785), the
+   digest of a built-in Worker Type's implementation, the conformance runner,
+   revalidation triggers and withdrawal semantics; no third-party trust
+   without ADR-0208.
 3. **Graph provenance.** Update proposed ADR-0420 before accepting it:
    namespaced `technical-capability` and `worker-type-operation`
    nodes, `declares` vs `verified-by` distinctions, and how a BPMN
