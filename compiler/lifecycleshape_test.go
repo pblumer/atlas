@@ -18,10 +18,10 @@ func parseShape(t *testing.T, xml string) *compiler.CompiledProcess {
 }
 
 // TestTheLifecycleTemplateWaitsWhereItShould: the per-position template in
-// docs/planning waits for a change and a return at the gateway and for a return on
+// docs/templates waits for a change and a return at the gateway and for a return on
 // the change step, every catch keyed on the position, and every cycle in it waits.
 func TestTheLifecycleTemplateWaitsWhereItShould(t *testing.T) {
-	raw, err := os.ReadFile("../docs/planning/lebenszyklus-pro-position/proc_produkt_lebenszyklus_vorlage.bpmn")
+	raw, err := os.ReadFile("../docs/templates/lebenszyklus-pro-position/proc_produkt_lebenszyklus_vorlage.bpmn")
 	if err != nil {
 		t.Fatal(err)
 	}
