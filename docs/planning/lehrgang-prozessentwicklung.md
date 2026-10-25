@@ -128,7 +128,7 @@ Antwort, Tätigkeit und Erfolgsmass je Modul, Vorbereitungs-Checkliste) und das
 Teilnehmenden-Arbeitsblatt [lehrgang-arbeitsblatt.md](lehrgang-arbeitsblatt.md) (dieselben
 Vorhersagefragen ohne Antworten, Erfolg als Beobachtungsauftrag). Getrennt gehalten, damit
 die didaktische Leitlinie «Vorhersage vor Ausführung» nicht durch mitgelieferte Antworten
-entwertet wird. Beide liegen in `docs/planning/` neben diesem Plan.
+entwertet wird. Beide liegen in `docs/training/` neben diesem Plan.
 
 ### Phase 4 — Lehrgangsseite
 
