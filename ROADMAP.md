@@ -644,13 +644,32 @@ The control-flow basics most real models use.
   Sheets bundle with the Workspace user it acts as. Still open: a run against a real
   account (the record's open question), and a form-lookup provider so a person picks a
   customer in a task form ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
+  **CardDAV address books are a Worker Type too**
+  ([ADR-0490](docs/adr/0490-carddav-worker.md)): a service task marked
+  `<atlas:carddavConnector connector operation …>` runs Google Contacts' operations and
+  contact — less the directory search — against iCloud, Nextcloud, ownCloud, mailbox.org,
+  Posteo, Infomaniak, Fastmail, Synology, Radicale and Baïkal, nine operations in one table
+  (`connector/carddav/catalog`). The address book is found from the server's URL
+  (RFC 6764 well-known, principal, home); groups are `CATEGORIES` or Apple's group cards,
+  one form per Worker; an update rewrites only the properties a contact key maps to, so a
+  photo and every other client's properties survive; and `create-contact` is safe to
+  repeat, because the contact's name is derived from the job and written with
+  `If-None-Match: *`. Worker-only and supervised by default. Walked against Radicale and
+  Xandikos; still open: a run against iCloud, Nextcloud and the hosted mail providers (the
+  record's open question), Exchange mailbox contacts through Microsoft Graph, and no
+  capability claim yet — the two contact Worker Types are not declared interchangeable
+  ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
   **Proposed: Paperless-ngx Worker** ([ADR draft](docs/adr/0479-paperless-ngx-worker.md)):
   reference-only document search, authenticated presentation, safe metadata operations
   and retry-safe `add-correspondent` (lookup/create with conflict recovery) before a
   separately designed streamed upload path. OCR text and document bytes must
   not enter process variables/WAL by default. Slice A is an executable search →
   human-review workflow; Slice C depends on an explicitly authorized external
-  document source and retry/duplicate reconciliation. No implementation has landed.
+  document source and retry/duplicate reconciliation. A preliminary external-only
+  `paperless.v1` job handler and metadata-safe API client now exist (see
+  [planning](docs/planning/paperless-worker-v1.md)); the first-class compiler,
+  Modeler/Console, Repository package, supervised vault setup and end-to-end
+  recovery verification are still outstanding.
   **On Windows, the Go Workers take the route PowerShell takes**
   ([ADR-0464](docs/adr/0464-windows-system-proxy.md)): outbound
   HTTP follows a proxy variable when one is set and otherwise the account's PAC, WPAD or
@@ -688,6 +707,19 @@ The control-flow basics most real models use.
   catches it. Still open: an ICAP client for antivirus gateways that do not speak clamd;
   the Graph and Gmail calls walked at a live tenant; re-checking a stored object's verdict
   before presenting it long after its export.
+  **Mail texts are templates, previewed as they are written**
+  ([ADR-0487](docs/adr/0487-mail-templates.md)): with `templating="true"`
+  a mail task's subject and bodies use the template language form text views already
+  speak — `{{ FEEL }}` placeholders, `{{#if}}` and `{{#loop}}` sections — compiled at deploy
+  and rendered by the worker, the HTML body escaping what a placeholder inserts; F2 opens
+  each field with a preview rendered by `POST /api/v1/feel/template`.
+  **A received mail's HTML is shown in a task form**
+  ([ADR-0489](docs/adr/0489-mail-html-view.md)): a get with
+  `includeBody="html"` reads the HTML body as well, cleaned on the server of what runs and
+  cut to fit the variable, and the form component *E-mail view* (`mailview`) shows it in a
+  sandboxed frame with remote images blocked until the reader loads them; the view never
+  submits the mail back. Still open: the HTML body on an inbound mail watch, inline `cid:`
+  images, the Graph and Gmail HTML reads walked at a live mailbox.
   The same reader also runs the other way: `atlas openapi-template --spec x.yaml --out
   dir` writes one element-template package per operation, in the repository catalog's
   own shape ([ADR-0300](docs/adr/0300-openapi-element-templates.md)) —
@@ -1134,6 +1166,17 @@ What it takes to run this for real.
   back. Underneath, a WAL write cut short is cut off again, and the engine halts after a
   batch it could not make durable instead of running refused commands later. Open: whether
   1 GiB covers a large store's compaction output (the record's open question)
+- ✅ An administrator gives disk back where the disk is shown
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)),
+  the "purge now" follow-up ADR-0115, ADR-0144 and ADR-0146 named. Operations deletes a
+  version's finished instances up to a cut-off — the history no `atlas:historyTtl` reaches —
+  in bounded batches through the retention purge event and behind its export gate
+  (`GET`/`POST /api/v1/processes/{key}/history-purge`, two MCP tools, `--instance-purge=false`
+  to refuse it on production). The storage card says whether the WAL is compacted, what the
+  last pass did, and compacts once on request (`POST /api/v1/checkpoints?compact=true`, also
+  on a frozen server); `ATLAS_COMPACT_WAL` switches compaction on from the environment. Open:
+  whether the retention sweep should purge records without a terminal position when no
+  exporter runs, as the manual purge does
 - ✅ Exported-log stream for downstream analytics: the OpenSearch exporter ([ADR-0114](docs/adr/0114-opensearch-event-exporter.md)) and the CloudEvents feed, pushed to a receiver ([ADR-0433](docs/adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md))
 - ✅ **Instance migration**
   ([ADR-0162](docs/adr/0162-process-instance-migration.md)): move running
@@ -2261,6 +2304,22 @@ an industry reference model (BIAN, ACORD, eTOM) maps its levels onto tags and is
 later slice; doing it inside B1 would drag the hierarchy question into the record that
 exists to settle it. No approval workflow: `state` is a field somebody sets, and Atlas
 is the engine an organisation would model such a workflow *in*.
+
+---
+
+## Milestone IAE — Identity-aware Execution 🚧
+
+A dedicated cross-milestone [delivery programme](docs/planning/identity-aware-execution-program.md) for linked external user identities, managed Connections, delegated OAuth, enforceable per-action authorization, DMN/FEEL-backed business policy, trusted approval obligations, separation of duties and durable attribution. [ADR-0475](docs/adr/0475-identity-aware-worker-execution.md) is **Proposed / Partial**: a supervised delegated SharePoint example does **not** establish enforcement for every Worker Type or externally hosted Worker Instance.
+
+- 🚧 **IAE0 — Architecture, threat model and decision gates.** Review ADR-0475, current code, trust boundaries, revocation, retention and compatibility before treating this as a universal security guarantee.
+- 🚧 **IAE1–IAE2 — External identities, Connections and delegated OAuth.** Build on existing Atlas principals, vault and OAuth mechanics; finish secure connection ownership, token rotation and provider consent lifecycle. Existing app-only and certificate Workers remain compatible.
+- 🚧 **IAE3–IAE4 — Policy decisions and enforced external execution.** Versioned fail-closed PDP, trusted PIP and an enforceable pre-effect PEP with durable action-bound decisions, lease fencing and recovery. Existing supervised SharePoint coverage is only a partial baseline; validate every supported execution mode.
+- 🔲 **IAE5 — Approval obligations and separation of duties.** Bind real, distinct approving principals to the exact action and policy revision; do not trust process variables as authorization evidence.
+- 🔲 **IAE6 — Console, API and Operations.** Linked identities, Connection management, policy publication/simulation, worker binding, readable audit and correctly scoped visibility.
+- 🔲 **IAE7 — Provider-by-provider adoption.** Microsoft Mail, selected Entra/Google/Jira/REST paths only after compatibility and enforceable credential boundaries are proven; no blanket claims.
+- 🔲 **IAE8 — Controlled SharePoint PoC and readiness review.** Test a real consented site and delegated user under applicable tenant policy, separately from simulated tests.
+
+**Programme boundary:** [CDA](docs/planning/capability-driven-automation-program.md) establishes *what* technical operation a Worker supports and how an opt-in BPMN task binds it; IAE establishes *who* may perform the particular external action, *as whom* and with which durable decision evidence. **CDA7 requires IAE4 enforcement for its chosen provider, but technical conformance is never authorization.** Follow the detailed [IAE gates and evidence register](docs/planning/identity-aware-execution-program.md).
 
 ---
 

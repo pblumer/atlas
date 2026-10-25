@@ -100,6 +100,26 @@
         return mountFormEditor(view, { api, toast: noop, formId: "form-dir" });
       };
       window.__saved = null;
+      // __mountMailView opens a form with an e-mail view (ADR-0489) and a
+      // text field; saves are captured.
+      window.__mountMailView = () => {
+        const api = async (method, url, body) => {
+          if (/\/forms\/[^/]+\/availability$/.test(url)) return { id: "form-mail", available: true };
+          if (method === "GET" && /\/forms\/[^/]+$/.test(url)) {
+            return { id: "form-mail", name: "Mail prüfen", projectId: "", schema: { type: "default", id: "form-mail", components: [
+              { type: "mailview", id: "Field_mail", key: "mail", label: "E-Mail" },
+              { type: "textfield", id: "Field_note", key: "note", label: "Notiz" },
+            ] } };
+          }
+          if (method === "POST" && url.endsWith("/forms")) {
+            window.__saved = JSON.parse(JSON.stringify(body));
+            return { id: body.id, name: body.name, renamedFrom: "" };
+          }
+          if (url.endsWith("/projects") || url.endsWith("/applications")) return [];
+          return {};
+        };
+        return mountFormEditor(view, { api, toast: noop, formId: "form-mail" });
+      };
       window.__mountDivergent = () => {
         const api = async (method, url, body) => {
           if (/\/forms\/[^/]+\/availability$/.test(url)) {

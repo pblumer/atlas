@@ -40,6 +40,10 @@ type imapMailbox struct {
 // can receive in full and never pulls a megabyte part across to throw it away.
 const imapBodyFetchBytes = 8 * MaxBodyBytes
 
+// imapHTMLFetchBytes is the same for an HTML part, which is cut at MaxHTMLBytes only
+// once it is cleaned — comments, scripts and styles a mail carries can be most of it.
+const imapHTMLFetchBytes = 4 * MaxHTMLBytes
+
 func newIMAPMailbox(endpoint, user, password string, send func(context.Context, Message) error) (*imapMailbox, error) {
 	ep, err := parseIMAPEndpoint(endpoint)
 	if err != nil {
@@ -249,7 +253,7 @@ func (m *imapMailbox) WatchSince(ctx context.Context, req WatchRequest) (WatchPa
 		if len(fresh) == 0 {
 			return nil
 		}
-		envs, err := fetchEnvelopes(ic, req.Folder, f.validity, fresh, req.IncludeBody)
+		envs, err := fetchEnvelopes(ic, req.Folder, f.validity, fresh, readOf(req.IncludeBody))
 		if err != nil {
 			return err
 		}
@@ -290,7 +294,7 @@ func (m *imapMailbox) List(ctx context.Context, req ListRequest) ([]Envelope, er
 		if len(uids) == 0 {
 			return nil
 		}
-		envs, err := fetchEnvelopes(ic, req.Folder, f.validity, uids, req.IncludeBody)
+		envs, err := fetchEnvelopes(ic, req.Folder, f.validity, uids, readOf(req.IncludeBody))
 		if err != nil {
 			return err
 		}
@@ -303,6 +307,15 @@ func (m *imapMailbox) List(ctx context.Context, req ListRequest) ([]Envelope, er
 }
 
 func (m *imapMailbox) Get(ctx context.Context, id string, includeBody bool) (Envelope, error) {
+	return m.get(ctx, id, readOf(includeBody))
+}
+
+// GetHTML implements [HTMLMailbox].
+func (m *imapMailbox) GetHTML(ctx context.Context, id string) (Envelope, error) {
+	return m.get(ctx, id, readHTML)
+}
+
+func (m *imapMailbox) get(ctx context.Context, id string, body bodyRead) (Envelope, error) {
 	var out Envelope
 	err := m.session(ctx, func(ic *imapConn) error {
 		uid, folder, err := openMessage(ic, id, false)
@@ -310,7 +323,7 @@ func (m *imapMailbox) Get(ctx context.Context, id string, includeBody bool) (Env
 			return err
 		}
 		validity, _, _, _ := parseIMAPMessageID(id)
-		envs, err := fetchEnvelopes(ic, folder, validity, []uint32{uid}, includeBody)
+		envs, err := fetchEnvelopes(ic, folder, validity, []uint32{uid}, body)
 		if err != nil {
 			return err
 		}
@@ -326,7 +339,7 @@ func (m *imapMailbox) Get(ctx context.Context, id string, includeBody bool) (Env
 // fetchEnvelopes fetches headers, flags, arrival time and structure for a set of
 // UIDs in one round trip, then each body that was asked for in one more. BODY.PEEK is
 // used throughout, so reading a message never marks it read.
-func fetchEnvelopes(ic *imapConn, folder string, validity uint32, uids []uint32, includeBody bool) ([]Envelope, error) {
+func fetchEnvelopes(ic *imapConn, folder string, validity uint32, uids []uint32, body bodyRead) ([]Envelope, error) {
 	set := make([]string, len(uids))
 	for i, u := range uids {
 		set[i] = strconv.FormatUint(uint64(u), 10)
@@ -375,19 +388,31 @@ func fetchEnvelopes(ic *imapConn, folder string, validity uint32, uids []uint32,
 		if !ok {
 			continue // expunged between the search and the fetch
 		}
-		if includeBody {
+		if body >= readText {
 			plain, htmlPart := f.root.bodyParts()
 			var cut bool
-			body, err := bodyFromParts(plain, htmlPart, func(p *mimePart) ([]byte, error) {
-				raw, err := fetchSection(ic, f.uid, p.Section)
+			text, err := bodyFromParts(plain, htmlPart, func(p *mimePart) ([]byte, error) {
+				raw, err := fetchSection(ic, f.uid, p.Section, imapBodyFetchBytes)
 				cut = p.Size > imapBodyFetchBytes
 				return raw, err
 			})
 			if err != nil {
 				return nil, err
 			}
-			f.env.Body, f.env.BodyTruncated = capBody(body)
+			f.env.Body, f.env.BodyTruncated = capBody(text)
 			f.env.BodyTruncated = f.env.BodyTruncated || cut
+			if body == readHTML {
+				var htmlCut bool
+				markup, err := htmlFromPart(htmlPart, func(p *mimePart) ([]byte, error) {
+					raw, err := fetchSection(ic, f.uid, p.Section, imapHTMLFetchBytes)
+					htmlCut = p.Size > imapHTMLFetchBytes
+					return raw, err
+				})
+				if err != nil {
+					return nil, err
+				}
+				f.env.setHTML(markup, htmlCut)
+			}
 		}
 		out = append(out, f.env)
 	}
@@ -412,8 +437,8 @@ func fetchItems(r imapResponse) map[string]any {
 }
 
 // fetchSection reads the first imapBodyFetchBytes of one body part.
-func fetchSection(ic *imapConn, uid uint32, section string) ([]byte, error) {
-	resp, err := ic.cmd(fmt.Sprintf("UID FETCH %d (BODY.PEEK[%s]<0.%d>)", uid, section, imapBodyFetchBytes))
+func fetchSection(ic *imapConn, uid uint32, section string, limit int) ([]byte, error) {
+	resp, err := ic.cmd(fmt.Sprintf("UID FETCH %d (BODY.PEEK[%s]<0.%d>)", uid, section, limit))
 	if err != nil {
 		return nil, err
 	}

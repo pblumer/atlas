@@ -7,8 +7,12 @@
          diagram holding one mail task, to verify the HTML body field
          (ADR-0079 amended): it renders as an HTML code editor, opens in the Developer
          View with F2 (ADR-0145), and writes back to <atlas:mailConnector bodyHtml>
-         where the compiler reads it. Mounted in deployment mode (key set, draftId
-         null) so no live collaboration SSE is attached. -->
+         where the compiler reads it. Activity_tpl is a mail task with placeholders on
+         (ADR-0487): its subject and bodies are templates, previewed in
+         the Developer View through POST /api/v1/feel/template, which the mock answers
+         with a small renderer and records in window.__templateCalls. Mounted in
+         deployment mode (key set, draftId null) so no live collaboration SSE is
+         attached. -->
     <link rel="stylesheet" href="/app.css" />
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }
@@ -37,20 +41,54 @@
       </bpmn:extensionElements>
       <bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:serviceTask id="Activity_tpl" name="Bestätigen">
+      <bpmn:extensionElements>
+        <atlas:mailConnector connector="office365" to="=kunde.email" templating="true"
+                             subject="Bestellung {{bestellung.nummer}}"
+                             body="Hallo {{kunde.name}}"
+                             bodyHtml="&lt;p&gt;Hallo &lt;b&gt;{{kunde.name}}&lt;/b&gt;&lt;/p&gt;"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f2</bpmn:incoming></bpmn:endEvent>
     <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Activity_mail"/>
-    <bpmn:sequenceFlow id="f1" sourceRef="Activity_mail" targetRef="End_1"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Activity_mail" targetRef="Activity_tpl"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="Activity_tpl" targetRef="End_1"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="mailer">
     <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Activity_mail_di" bpmnElement="Activity_mail"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="420" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Activity_tpl_di" bpmnElement="Activity_tpl"><dc:Bounds x="410" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="570" y="120" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
-    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="410" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="510" y="138"/><di:waypoint x="570" y="138"/></bpmndi:BPMNEdge>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
-      const api = async (method, url) => {
+      // renderTemplate stands in for the server's renderer: placeholders that name a
+      // path, escaped for an HTML body, a null reported, an unclosed {{#if}} refused
+      // with its place. Enough to drive the preview; the real rules are Go's.
+      const escHTML = (v) => String(v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&#34;", "'": "&#39;" }[c]));
+      const renderTemplate = ({ template = "", variables = {}, html = false }) => {
+        if (/\{\{#if /.test(template) && !/\{\{\/if\}\}/.test(template)) {
+          return { ok: false, error: "line 1, column 1: this section is never closed with {{/if}}", line: 1, column: 1, problems: [] };
+        }
+        const problems = [];
+        const result = template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, path) => {
+          const v = path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), variables || {});
+          if (v == null) { problems.push({ expression: path, message: "is null, so it renders as nothing" }); return ""; }
+          return html ? escHTML(v) : String(v);
+        });
+        return { ok: true, result, problems };
+      };
+      window.__templateCalls = [];
+
+      const api = async (method, url, body) => {
+        if (method === "POST" && /\/feel\/template$/.test(url)) {
+          window.__templateCalls.push(body);
+          return renderTemplate(body || {});
+        }
         if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
         if (method === "GET" && /\/processes$/.test(url)) return [];
         if (method === "GET" && /\/drafts$/.test(url)) return [];

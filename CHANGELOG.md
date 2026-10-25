@@ -46,6 +46,76 @@ governs a Worker:
 
 ### Added
 
+- **A process finds, keeps and labels the people in any CardDAV address book.** A new
+  CardDAV Worker Type reaches the address book that comes with most mail accounts outside
+  Google and Microsoft — iCloud, Nextcloud, ownCloud, mailbox.org, Posteo, Infomaniak,
+  Fastmail, Synology, Radicale, Baïkal — with the operations and the flat contact of the
+  Google Contacts Worker: find a contact by e-mail address, phone number or a custom field,
+  read, search, list, create, update and delete contacts, and put a group such as *Kunden*
+  on one or take it off. A Worker names its endpoint — the address book's URL or the
+  server's, from which the address book is found — and a vault bundle with the account's
+  username, its app-specific password and whether the server keeps groups in `CATEGORIES`
+  or, as iCloud and Fastmail do, as group cards of their own. An update keeps every
+  property of the card it does not change, a photo and Apple's labels included, and a
+  repeated `create-contact` finds the contact the first round made instead of making a
+  second; a missing contact can be caught as `CARDDAV_CONTACT_NOT_FOUND`
+  ([ADR-0490](docs/adr/0490-carddav-worker.md)).
+- **A received mail's HTML can be shown to a person in a task form.** A mail task's
+  **Read message** reads the HTML body as well with `includeBody="html"` (*Include the text
+  and the HTML*), for IMAP, Gmail and Microsoft Graph; a list does not, and the compiler
+  says so. The HTML is cleaned before it becomes a variable — scripts, frames, forms, meta
+  refreshes, event handlers and addresses that run code are removed, links open in a new
+  tab — and cut to fit the variable budget, with `htmlTruncated` saying so. The new form
+  component **E-mail view** (`mailview`) shows that variable: the envelope, then the HTML
+  in a sandboxed frame that runs no script, or the text. **Remote images stay blocked**
+  until the reader presses **Load images**, so the sender does not learn when and from
+  where the task was opened, and the page's address is never sent along. The view only
+  reads: completing the task does not send the mail back, the task's holder may read the
+  variable it shows, and a public start form does not let a caller set it
+  ([ADR-0489](docs/adr/0489-mail-html-view.md)).
+
+- **Mail texts are templates, with a live preview.** With **Placeholders** switched on, a
+  mail task's subject, text body and HTML body are written in the template language
+  form text views already use: `{{kunde.name}}` inserts a value, `{{#if …}}…{{/if}}` writes
+  a section only when its condition holds and `{{#loop …}}…{{/loop}}` once per element of
+  a list, with FEEL between the braces (`templating="true"` on `<atlas:mailConnector>`,
+  also for a reply and the note above a forward). A malformed template is refused at
+  deploy with its line and column, and what a placeholder inserts into the HTML body is
+  escaped. F2 opens each field in the Developer View with a **Preview** that renders it
+  with sample variables — prefilled from a live instance — through the new
+  `POST /api/v1/feel/template`, the HTML body as a sandboxed page without scripts; an HTML
+  body without placeholders is previewed too. A task without the switch is unchanged, a
+  `{{` in its text included
+  ([ADR-0487](docs/adr/0487-mail-templates.md)).
+
+- **Finished instances can be deleted from Operations.** An administrator deletes the
+  finished instances of one version or of all versions that finished before a chosen moment,
+  from the ⋯ menu of a process row (*Delete finished instances…*), or with
+  `GET`/`POST /api/v1/processes/{key}/history-purge` and the MCP tools
+  `atlas_finished_instances_deletion` and `atlas_delete_finished_instances`. The dialog counts
+  first, deletes only once the process id is typed, runs in batches of at most 1000, newest
+  first, and can be stopped between two. Running instances are never touched, and with the
+  OpenSearch exporter on nothing is deleted before the exporter has it. Each delete is the
+  purge event history retention already uses, so recovery replays it. It reaches the history
+  no `atlas:historyTtl` covers — everything that finished before a process declared one — in
+  minutes rather than in the days the server-wide age needs per pass. It frees no disk by
+  itself: every deleted instance adds an event to the WAL until compaction removes it, and the
+  overview's Finished column, which counts every instance that ever finished, does not go
+  down. On by default; a production installation, whose history is evidence, starts with
+  `--instance-purge=false` (`ATLAS_INSTANCE_PURGE=false`, Helm `atlas.instancePurge`), and
+  while it is on every start logs a WARN, `event=server.instance_purge_enabled`
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)).
+- **The WAL can be compacted once from the Console.** The storage card on the dashboard now
+  says whether the WAL is compacted on every checkpoint and what the last pass did, and offers
+  *Checkpoint now* and, on a server started without `--compact-wal`, *Compact once* after a
+  confirmation. `POST /api/v1/checkpoints?compact=true` does the same: one pass with every gate
+  a scheduled one has — a verified checkpoint, the exporter and retention watermarks, no backup
+  streaming — and its answer says whether it compacted. Because that route is allowed on a
+  frozen server, a server below its storage reserve can give WAL space back without a restart.
+  `--compact-wal` also reads `ATLAS_COMPACT_WAL=true`, and `GET /api/v1/checkpoints?verify=false`
+  describes the checkpoints from their manifests instead of re-reading every state file, which
+  is what the card asks for
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)).
 - **A SharePoint Worker can be a mockup.** A SharePoint Worker with the provider **Mockup**
   needs no tenant, no app registration and no credential: every operation runs against a
   site this server keeps in its memory, in the engine and in a supervised worker alike,
@@ -407,6 +477,22 @@ governs a Worker:
 
 ### Fixed
 
+- **A metrics scrape no longer re-reads every checkpoint.** The checkpoint gauges on
+  `/metrics` verified every published checkpoint on every scrape, which re-hashes all of
+  its state files: on a store of 23 GiB with three checkpoints kept, up to 70 GiB of reading
+  per scrape, long past any scrape timeout. A verdict is now remembered per checkpoint,
+  keyed by its files' names, sizes and modification times, and renewed at least daily; a
+  checkpoint the server publishes counts as verified, because publishing hashed it. A
+  replaced or rewritten file is still reported at the next scrape, rot that changes no
+  metadata within a day. `GET /api/v1/checkpoints` still verifies afresh
+  ([ADR-0488](docs/adr/0488-checkpoint-verdicts-are-remembered.md)).
+- **The storage card appears again on a large store.** `GET /api/v1/checkpoints?verify=false`
+  verified every checkpoint before answering from the manifests, so each dashboard load
+  re-read the state files of every checkpoint — tens of GiB on a store of 23 GiB — and the
+  storage card, which waited for that answer, did not appear. The listing now reads the
+  manifests only, and the card shows the disk at once and adds *Giving space back* when the
+  checkpoint status arrives
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)).
 - **A server that ran its disk full restarts again.** A WAL write cut short by a full
   disk left its torn bytes in the segment, and the next batch was written behind them;
   the restart then found damage with data after it and refused to start until the log was

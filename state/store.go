@@ -1100,6 +1100,20 @@ func (q queries) FinishedInstancesOfDefDesc(procDefKey uint64, beforeCompletedAt
 	return q.instancesOfDefDesc(lo, hi, keyProcessInstanceHistory, fn)
 }
 
+// CountFinishedOfDefBefore counts the finished instances of one definition that
+// completed strictly before the cut-off, which is how many a history purge up to it
+// would consider (ADR-0486). It walks the
+// piDoneByDef index entries of that range and decodes no record, so a preview over
+// millions of instances reads millions of keys and nothing else.
+func (q queries) CountFinishedOfDefBefore(procDefKey uint64, before int64) (int, error) {
+	count := 0
+	err := q.scanRange(instanceDoneByDefPrefix(procDefKey), keyInstanceDoneByDef(procDefKey, before, 0), func(_, _ []byte) error {
+		count++
+		return nil
+	})
+	return count, err
+}
+
 // InstancesOnElementDesc calls fn with every live instance of one definition that
 // currently holds a token on the given element, in DESCENDING instance-key order —
 // newest first — starting just below `before`; before == 0 starts from the newest.

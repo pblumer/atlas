@@ -6,11 +6,12 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**1 programme** · active: 1 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
+**2 programmes** · active: 2 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
 | [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 0/9 | unassigned (maintainer assignment required) | Assign a programme owner; review ADR-0480/0485 acceptance and the proposed controlled Worker-rebinding decision. |
+| [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | unassigned (maintainer assignment required) | Assign a human programme owner; review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
 
 ## Capability-driven Automation (CDA)
 
@@ -29,6 +30,24 @@ Connect business outcomes to verified technical operation semantics and, only af
 | **CDA6** — Capability-aware BPMN binding | planned | unassigned | CDA2, CDA3 | — | Approve ADR-0482; keep a stable logical binding slot and explicit initially pinned Worker so a later authorized revision need not redeploy BPMN. No runtime rebinding in CDA6. |
 | **CDA7** — Policy-gated governed execution | planned | unassigned | CDA6 | — | Prove provider-specific ADR-0475 enforcement, fsync-gated effects and replay equality for the initially pinned binding. No automatic fallback or configured Worker hot-swap in CDA7. |
 | **CDA8** — Controlled Worker rebinding without redeployment | planned | unassigned | CDA6, CDA7 | [PR #1355](https://github.com/pblumer/atlas/pull/1355) | Review the proposed controlled-rebinding ADR. Operator-authorized A-to-B binding revisions affect only future jobs; existing queued/leased jobs stay pinned. Per-partition cutover, tenant/policy scope and crash/replay must be proven. No automatic dynamic selection. |
+
+## Identity-aware Execution (IAE)
+
+Govern external Worker actions through explicit identities, managed Connections, versioned authorization policies, obligations, durable pre-effect decisions and attributable audit evidence; provider enforcement is verified per execution mode, never assumed.
+
+**[Programme plan](../planning/identity-aware-execution-program.md) · [Roadmap track](../../ROADMAP.md#milestone-iae--identity-aware-execution-) · [Manifest](iae/program.json) · Reviewed: 2026-10-25**
+
+| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
+| --- | --- | --- | --- | --- | --- |
+| **IAE0** — Architecture, ADR and threat model | active | unassigned | — | [PR #1354](https://github.com/pblumer/atlas/pull/1354) | PR #1354 merged the initial plan; ADR-0475 remains Proposed/Partial. Review and accept trust boundaries, revocation, audit and migration gates. |
+| **IAE1** — External identities and Connections | active | unassigned | IAE0 | — | Partial foundation; verify multiple external identity linking, connection ownership and binding, encrypted credentials, revocation and restart behavior. |
+| **IAE2** — Provider authentication and token lifecycle | active | unassigned | IAE1 | — | Partial Microsoft supervised path; verify PKCE, token rotation, consent, restart safety and compatibility with app-only credentials. |
+| **IAE3** — Policy administration and deterministic decisions | active | unassigned | IAE0 | — | Partial policy seam; define immutable revisions, trusted attributes, non-overridable guards, fail-closed combining and FEEL/DMN tests. |
+| **IAE4** — Authorization enforcement before external effects | active | unassigned | IAE1, IAE2, IAE3 | — | Narrow supervised SharePoint example only. Prove fenced action binding, fsync-gated decisions, retries and recovery; remote Worker enforcement remains unresolved. |
+| **IAE5** — Approval obligations and separation of duties | planned | unassigned | IAE3, IAE4 | — | Bind independent verified approvals to exact action parameters and expiry; no process-variable authorization shortcuts. |
+| **IAE6** — Console, Operations and audit | planned | unassigned | IAE1, IAE3, IAE4, IAE5 | — | Deliver user identity linking, Connection and policy management, simulator, Worker bindings and accessible audited decision history. |
+| **IAE7** — Additional Worker Type enforcement | planned | unassigned | IAE4, IAE6 | — | Provider-by-provider proof for Microsoft Mail, selected Entra, Google, Jira/REST; no general security claim before verified PEP. |
+| **IAE8** — Controlled SharePoint PoC and readiness | planned | unassigned | IAE4, IAE5, IAE6 | — | Test against an explicitly consented tenant/site with denied and approved operations; separate mocked evidence from real BIT validation. |
 
 ## Updating the register
 

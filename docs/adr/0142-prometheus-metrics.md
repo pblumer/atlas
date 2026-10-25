@@ -434,6 +434,7 @@ This ADR is **not implemented in one change**. The slices:
 
 ## Links
 
+- amended by ADR-0488 (the checkpoint gauges remember each checkpoint's verdict instead of re-hashing every checkpoint on every scrape)
 - builds on ADR-0010 (CGO-free, few dependencies), ADR-0005 (durable-before-visible),
   ADR-0001/0002 (event sourcing, single writer)
 - reads what ADR-0131 (recovery checkpoints and WAL compaction) publishes, and reuses

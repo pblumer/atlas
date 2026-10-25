@@ -166,3 +166,16 @@ func TestShapeReadsStoredStructuredValues(t *testing.T) {
 		t.Errorf("refused %v, want [address]", bad)
 	}
 }
+
+// A mail view shows a variable and submits nothing (ADR-0489): the
+// public start does not take its key from a caller, and the task's reader is allowed
+// to see it.
+func TestAMailViewIsReadNeverWritten(t *testing.T) {
+	schema := `{"components":[{"type":"mailview","key":"mail"},{"type":"textfield","key":"note"}]}`
+	if bad := shapeCheck(t, schema, `{"mail":{"html":"<p>x</p>"},"note":"ok"}`); !slices.Equal(bad, []string{"mail"}) {
+		t.Errorf("notOnForm = %v; a mail view's key is not the caller's to set", bad)
+	}
+	if reads := formBindingsOf([]byte(schema)); reads.children["mail"] == nil || reads.children["note"] == nil {
+		t.Errorf("bindings = %v; the mail view's variable is one the form reads", reads.children)
+	}
+}

@@ -454,6 +454,17 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes:       []int32{compiler.GoogleContactsJobTypeIndex},
 	},
 	{
+		// A CardDAV task finds, reads, searches, lists, creates, updates or deletes a
+		// contact in a CardDAV address book — iCloud, Nextcloud, mailbox.org, Radicale and
+		// most mail providers' — or changes its groups (ADR-0490).
+		// Worker-only for Google Contacts' reason: the password reads somebody's whole
+		// address book and has no business on the engine's run loop.
+		name:           connectorKindCardDAV,
+		workerOnly:     true,
+		validateCreate: validateCardDAVConnector,
+		jobTypes:       []int32{compiler.CardDAVJobTypeIndex},
+	},
+	{
 		// An Active Directory task performs one directory operation against a
 		// domain controller an operator configured here
 		// (ADR-0206). The URL lives in the record and the
@@ -715,7 +726,7 @@ func DefaultOffloadedKinds() []string {
 // flag, no restart of Atlas. That is what makes the tenant a Console entry rather than a
 // deployment change.
 func DefaultSupervisedWorkerOnlyKinds() []string {
-	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindGoogleContacts, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
+	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindGoogleContacts, connectorKindCardDAV, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
 }
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
@@ -1026,6 +1037,22 @@ func validateGoogleContactsConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender, p.Model = "", "", ""
 	if p.CredentialsRef == "" {
 		return "a googlecontacts worker requires a credentialsRef naming a vault bundle: {method: serviceAccount, clientEmail, privateKey, subject} or {method: refreshToken, clientId, clientSecret, refreshToken}"
+	}
+	return ""
+}
+
+// validateCardDAVConnector checks an address book a Console operator is adding. Unlike
+// Google Contacts it needs an endpoint — CardDAV has no one address for everyone — and,
+// like Jira, a credentialsRef naming the vault bundle with the account's username and
+// password. Whether the endpoint is https and the bundle well-formed is decided where
+// the client is built (carddav.CheckBundle), which is also what supervision asks.
+func validateCardDAVConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if p.Endpoint == "" {
+		return "a carddav worker requires an endpoint: the address book's URL, or the server's (https://cloud.example.ch/remote.php/dav, https://contacts.icloud.com)"
+	}
+	if p.CredentialsRef == "" {
+		return "a carddav worker requires a credentialsRef naming a vault bundle: {username, password, groups}"
 	}
 	return ""
 }

@@ -1,0 +1,47 @@
+{
+  "id": "atlas.carddav",
+  "version": "1.0.0",
+  "kind": "connector",
+  "title": "CardDAV contacts",
+  "author": "Atlas core",
+  "description": "Use a CardDAV address book from a process — iCloud, Nextcloud, ownCloud, mailbox.org, Posteo, Infomaniak, Fastmail, Synology, SOGo, Radicale, Baïkal and most mail providers' — with the operations and the contact of the Google Contacts Worker: find a contact by e-mail address, phone number or a custom field such as a customer number, read, search, list, create, update or delete contacts, and put a group such as Kunden on one or take it off. A model names the Worker and the operation; the server's URL and the account's username and app-specific password live in the Worker and the vault and reach only the worker (ADR-0490). A contact is one flat object: email, phone, organization, address, birthday, notes, fields (the card's X- properties by name) and groups (CATEGORIES, or Apple's group cards for iCloud and Fastmail). An update keeps every property it does not change, a photo included. Find reads the address book and compares exactly, and a repeated create finds the contact the first round made instead of making a second. A missing contact carries the code CARDDAV_CONTACT_NOT_FOUND and is thrown as a BPMN error when the process catches it.",
+  "engineCompat": ">=0.13",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "CardDAV contacts",
+    "id": "atlas.carddav",
+    "appliesTo": ["bpmn:ServiceTask"],
+    "properties": [
+      { "label": "Worker", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:connector" },
+        "description": "Name of the configured CardDAV Worker (Console → Workers) whose address book the task uses, never a credential. The attribute behind this field is spelled connector like its siblings'." },
+      { "label": "Operation", "type": "Dropdown", "value": "find-contacts", "binding": { "type": "property", "name": "atlas:operation" },
+        "choices": [
+          { "name": "Find contacts (e-mail, phone or custom field)", "value": "find-contacts" },
+          { "name": "Read contact", "value": "get-contact" },
+          { "name": "Search contacts", "value": "search-contacts" },
+          { "name": "List contacts", "value": "list-contacts" },
+          { "name": "Create contact", "value": "create-contact" },
+          { "name": "Update contact", "value": "update-contact" },
+          { "name": "Delete contact", "value": "delete-contact" },
+          { "name": "Add to group", "value": "add-to-group" },
+          { "name": "Remove from group", "value": "remove-from-group" }
+        ] },
+      { "label": "Contact (read, update, delete, groups)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:contactId" },
+        "description": "The contact by the id a read, a find or a create answered with (…vcf), e.g. =kunde.id." },
+      { "label": "Query (find, search)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:query" },
+        "description": "Find: an e-mail address or a phone number, compared exactly — or a custom field's value. Search: text contained in a name, the organization, an e-mail address or a phone number." },
+      { "label": "Custom field (find)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:field" },
+        "description": "Optional. Compare the query with this custom field, e.g. Kundennummer (the vCard property X-Kundennummer), instead of with the e-mail addresses and phone numbers." },
+      { "label": "Group (groups; optional on find and list)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:group" },
+        "description": "A group by its name, e.g. Kunden. With group vCards (iCloud, Fastmail) it must exist; with CATEGORIES a group exists by being on a contact." },
+      { "label": "Contact values (create, update)", "type": "Text", "value": "", "binding": { "type": "property", "name": "atlas:contact" },
+        "description": "A JSON object with displayName, givenName, familyName, email, emails, phone, phones, organization, jobTitle, department, address, addresses, birthday, notes, fields and — on create — groups. A string starting with = is a FEEL expression. null changes nothing, \"\" clears; email, phone and address change the preferred entry, emails, phones and addresses replace the list." },
+      { "label": "Contact variable (create, update)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:contactVariable" },
+        "description": "Instead of the values above: a process variable holding the contact object." },
+      { "label": "Maximum results (find, search, list)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:maxResults" },
+        "description": "Find and list fail above it rather than return a short list (defaults 100 and 500); the search returns its first matches up to it (default 10, at most 100)." },
+      { "label": "Result variable", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:resultVariable" },
+        "description": "Receives the contact or the list of contacts. Delete and the two group operations return nothing, and the compiler refuses a result variable on them." }
+    ]
+  }
+}

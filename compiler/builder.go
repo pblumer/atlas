@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/expr/feelers"
 )
 
 // DMNJobType is the reserved job type business rule tasks carry. The in-process
@@ -516,6 +517,21 @@ const GoogleContactsJobType = "io.atlas.googlecontacts"
 // always 36.
 const GoogleContactsJobTypeIndex int32 = 36
 
+// CardDAVJobType is the reserved job type a CardDAV task carries
+// (ADR-0490). One job type serves every operation on an address book —
+// find, read, search, list, create, update and delete a contact, and change its groups —
+// because they share a server, a credential and WebDAV's answers; the operation is a
+// modeled value, as it is for Google Contacts.
+//
+// Like Google Contacts', nothing in the engine subscribes to it: the kind is
+// worker-only, so the password that reads somebody's address book never enters the
+// engine.
+const CardDAVJobType = "io.atlas.carddav"
+
+// CardDAVJobTypeIndex is the interned index CardDAVJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it thirty-eighth, so it is always 37.
+const CardDAVJobTypeIndex int32 = 37
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -562,6 +578,7 @@ var reservedJobTypes = []string{
 	// From here on a name longer than the column above gets a block of its own, so
 	// appending one does not realign every index before it.
 	GoogleContactsJobType, // 36
+	CardDAVJobType,        // 37
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -1841,7 +1858,13 @@ type MailConfig struct {
 	Subject   RestExpr
 	Body      RestExpr
 	BodyHTML  RestExpr
-	Retries   int32
+	// SubjectTemplate, BodyTemplate and BodyHTMLTemplate are the subject and bodies of
+	// a task that switched templating on, where they use the template language
+	// (ADR-0487); nil leaves the RestExpr beside them in charge.
+	SubjectTemplate  *feelers.Template
+	BodyTemplate     *feelers.Template
+	BodyHTMLTemplate *feelers.Template
+	Retries          int32
 	// The mailbox half (ADR-0438): the operation ("" is send) and
 	// what it takes. ResultVar names the variable list, get and move answer into.
 	Operation   string
@@ -1850,6 +1873,9 @@ type MailConfig struct {
 	Destination RestExpr
 	MaxResults  int32
 	IncludeBody bool
+	// IncludeHTML is includeBody="html": a get reads the HTML body as well
+	// (ADR-0489).
+	IncludeHTML bool
 	UnreadOnly  bool
 	ResultVar   string
 	// The documents half (ADR-0478): the attachment an
@@ -1892,6 +1918,9 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 		MailSubject:     cfg.Subject,
 		Body:            cfg.Body,
 		BodyHTML:        cfg.BodyHTML,
+		MailSubjectTmpl: cfg.SubjectTemplate,
+		BodyTmpl:        cfg.BodyTemplate,
+		BodyHTMLTmpl:    cfg.BodyHTMLTemplate,
 		Retries:         cfg.Retries,
 		MailOp:          cfg.Operation,
 		MailFolder:      cfg.Folder,
@@ -1899,6 +1928,7 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 		MailDestination: cfg.Destination,
 		MailMaxResults:  cfg.MaxResults,
 		MailIncludeBody: cfg.IncludeBody,
+		MailIncludeHTML: cfg.IncludeHTML,
 		MailUnreadOnly:  cfg.UnreadOnly,
 		// The documents half.
 		MailAttachment:   cfg.Attachment,
@@ -2420,6 +2450,59 @@ func (b *Builder) AddGoogleContactsConnectorTask(cfg GoogleContactsConfig) int32
 		GoogleContactsContact:    cfg.Contact,
 		GoogleContactsContactVar: b.intern(cfg.ContactVar),
 		GoogleContactsMaxResults: cfg.MaxResults,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// CardDAVConfig is the deploy-time configuration of a CardDAV task
+// (ADR-0490). Worker names the configured address book and WorkerExpr
+// carries it as literal-or-FEEL when a process picks the address book at runtime; Op is
+// a row of connector/carddav/catalog. ContactID, Query, Field and Group are
+// literal-or-FEEL values. Contact is the authored contact object compiled to one FEEL
+// context, ContactVar the variable holding it instead; the compiler has refused a model
+// that sets both. MaxResults bounds a listing, with its default applied, and is zero on
+// every other operation.
+type CardDAVConfig struct {
+	Worker     string
+	WorkerExpr RestExpr
+	Op         string
+	ContactID  RestExpr
+	Query      RestExpr
+	Field      RestExpr
+	Group      RestExpr
+	Contact    RestExpr
+	ContactVar string
+	MaxResults int32
+	ResultVar  string
+	Retries    int32
+}
+
+// AddCardDAVConnectorTask adds a CardDAV task and returns its element id. Like a service
+// task it creates a job on activation and waits; the job carries the reserved
+// CardDAVJobType, which nothing in the engine subscribes to — the kind is worker-only,
+// so the job waits for a worker that holds the address book's credential.
+func (b *Builder) AddCardDAVConnectorTask(cfg CardDAVConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:           b.intern(CardDAVJobType),
+		Connector:         b.intern(cfg.Worker),
+		CardDAVConnector:  cfg.WorkerExpr,
+		Subject:           -1, // not a clio task
+		EventType:         -1,
+		ClioQuery:         -1,
+		ReduceSpec:        -1,
+		Method:            -1, // an address-book operation, not an HTTP method, is authored
+		Auth:              -1, // the credential lives on the worker
+		ResultVar:         b.intern(cfg.ResultVar),
+		Retries:           cfg.Retries,
+		CardDAVOp:         b.intern(cfg.Op),
+		CardDAVContactID:  cfg.ContactID,
+		CardDAVQuery:      cfg.Query,
+		CardDAVField:      cfg.Field,
+		CardDAVGroup:      cfg.Group,
+		CardDAVContact:    cfg.Contact,
+		CardDAVContactVar: b.intern(cfg.ContactVar),
+		CardDAVMaxResults: cfg.MaxResults,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

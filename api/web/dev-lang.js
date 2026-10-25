@@ -224,6 +224,94 @@ export const html = {
   tooltip() { return null; },
 };
 
+// ---------- Templates ----------
+
+// The template language of a mail text (ADR-0487), which is the one
+// form-js's text views already evaluate (feelers): text with {{ FEEL }} placeholders
+// and {{#if condition}}…{{/if}} / {{#loop list}}…{{/loop}} sections. The server
+// renders it (expr/feelers); here it is only coloured and completed.
+//
+// tokenizeTemplate colours each tag and the FEEL inside it, and hands the text
+// between the tags to `text` — plain text for a text body, tokenizeHTML for an HTML
+// one. Like the other tokenizers it is a highlighter: a placeholder inside an HTML
+// attribute splits the tag around it, and the colours there are approximate.
+export function tokenizeTemplate(src, text = plainText) {
+  const out = [];
+  const add = (tokens) => { for (const t of tokens) if (t.value) out.push(t); };
+  const s = String(src);
+  let i = 0;
+  while (i < s.length) {
+    const open = s.indexOf("{{", i);
+    if (open === -1) { add(text(s.slice(i))); break; }
+    if (open > i) add(text(s.slice(i, open)));
+    const close = s.indexOf("}}", open + 2);
+    const inner = s.slice(open + 2, close === -1 ? s.length : close);
+    const head = /^(?:#if |#loop |\/if|\/loop|=)?/.exec(inner)[0];
+    out.push({ type: "tpl-tag", value: "{{" + head });
+    add(feel.tokenize(inner.slice(head.length)));
+    if (close === -1) break;
+    out.push({ type: "tpl-tag", value: "}}" });
+    i = close + 2;
+  }
+  return out;
+}
+
+function plainText(text) { return [{ type: "text", value: text }]; }
+
+// inTag reports whether the caret — the end of `before` — stands inside an open
+// {{ … }}, where what is typed is FEEL.
+function inTag(before) {
+  const open = before.lastIndexOf("{{");
+  return open !== -1 && before.indexOf("}}", open) === -1;
+}
+
+function wordPrefix(before) {
+  const m = /[A-Za-z_][A-Za-z0-9_]*$/.exec(before);
+  return m ? { text: m[0], start: before.length - m[0].length } : { text: "", start: before.length };
+}
+
+// templateModule builds the code-editor module for a template over a text language:
+// inside a tag it is FEEL (variables, builtins, keywords); outside it offers each
+// variable as a whole placeholder, and whatever the text language offers itself.
+function templateModule(text, textCompletions) {
+  return {
+    tokenize: (src) => tokenizeTemplate(src, text),
+    prefix(before) { return inTag(before) ? feel.prefix(before) : wordPrefix(before); },
+    completions(prefix, ctx) {
+      if (inTag(ctx.before || "")) return feel.completions(prefix, ctx);
+      const placeholders = variableItems(ctx).map((v) => ({ ...v, insert: "{{" + v.insert + "}}", detail: (v.detail || "variable") + " · placeholder" }));
+      return rank([...textCompletions(), ...placeholders], prefix);
+    },
+    replaceStart(before, item) {
+      return inTag(before) ? feel.replaceStart(before, item) : wordPrefix(before).start;
+    },
+    tooltip(name) { return feel.tooltip(name); },
+  };
+}
+
+export const template = templateModule(plainText, () => []);
+
+export const htmlTemplate = templateModule(tokenizeHTML,
+  () => HTML_TAGS.map((t) => ({ label: t, kind: "type", insert: t, detail: "element" })));
+
+// templateReference is the Functions pane of a template: the language's own tags
+// first, then FEEL's catalogue, since every placeholder and condition is FEEL.
+function templateReference() {
+  return [
+    {
+      title: "Template",
+      items: [
+        { name: "{{ expression }}", sig: "{{ FEEL }}", doc: "Inserts the value of a FEEL expression. A number or date is written as FEEL writes it; null — a variable that is not set — inserts nothing. In an HTML body the value is escaped, so it cannot add markup.", ex: "Guten Tag {{kunde.vorname}}, Ihre Bestellung {{bestellung.nummer}} ist unterwegs.", insert: "{{}}", call: false },
+        { name: "{{#if condition}}", sig: "{{#if FEEL}} … {{/if}}", doc: "Writes its section only when the condition holds. False, null, 0 and an empty text do not; every other value does. There is no else: write a second section with the opposite condition.", ex: "{{#if betrag > 1000}}\nDiese Bestellung muss freigegeben werden.\n{{/if}}", insert: "{{#if }}\n\n{{/if}}", call: false },
+        { name: "{{#loop list}}", sig: "{{#loop FEEL}} … {{/loop}}", doc: "Writes its section once for every element of a list. Inside, an element's fields are names of their own and `this` is the element itself; the variables outside the loop are reached through `parent`.", ex: "{{#loop positionen}}\n- {{menge}} × {{artikel}} ({{parent.waehrung}})\n{{/loop}}", insert: "{{#loop }}\n\n{{/loop}}", call: false },
+        { name: "this", sig: "this", doc: "Inside a loop, the current element — for a list of texts or numbers, the value itself.", ex: "{{#loop tags}}#{{this}} {{/loop}}", insert: "this", call: false },
+        { name: "parent", sig: "parent", doc: "Inside a loop, the names around it: parent.kunde is the variable kunde, parent.parent reaches two loops up.", ex: "{{#loop positionen}}{{artikel}} für {{parent.kunde.name}}\n{{/loop}}", insert: "parent.", call: false },
+      ],
+    },
+    ...feelReference(),
+  ];
+}
+
 // json adapts json-editor.js's tokenizer to the code-editor token contract: a JSON
 // key colours like a variable, everything else keeps its name.
 const JSON_TOK = { key: "variable", string: "string", number: "number", literal: "literal", punct: "punct", error: "error", ws: "ws" };
@@ -457,9 +545,22 @@ const SNIPPETS = {
     { title: "Link", doc: "Point at a policy or a ticket.", code: "[Policy](https://intranet.example.com/policy)" },
   ],
   html: [
-    { title: "Paragraph", doc: "A minimal fragment.", code: "<p>Guten Tag <strong>{{name}}</strong>,</p>" },
+    { title: "Paragraph", doc: "A minimal fragment. Switch on templates to put a variable into it.", code: "<p>Guten Tag,</p>\n<p>Ihre Bestellung ist <strong>unterwegs</strong>.</p>" },
     { title: "Table", doc: "A small data table.", code: '<table>\n  <tr><th>Position</th><th>Betrag</th></tr>\n  <tr><td>A-1</td><td>120.00</td></tr>\n</table>' },
     { title: "Button link", doc: "A call to action in an e-mail body.", code: '<a href="https://atlas.example.com/tasks" style="padding:8px 12px;background:#0b5cff;color:#fff;border-radius:6px;text-decoration:none">Aufgabe öffnen</a>' },
+  ],
+  template: [
+    { title: "Greeting", doc: "Placeholders read variables, and a path reads into one.", code: "Guten Tag {{kunde.vorname}} {{kunde.name}}" },
+    { title: "Condition", doc: "The section is written only when the condition holds. Tags on lines of their own leave no empty line behind.", code: "{{#if betrag > 1000}}\nDiese Bestellung muss freigegeben werden.\n{{/if}}" },
+    { title: "List", doc: "One line per element; the element's fields are names inside the loop.", code: "{{#loop positionen}}\n- {{menge}} × {{artikel}}\n{{/loop}}" },
+    { title: "Variable outside the loop", doc: "Inside a loop, the process variables are reached through parent.", code: "{{#loop positionen}}\n- {{artikel}}: {{betrag}} {{parent.waehrung}}\n{{/loop}}" },
+    { title: "Computed value", doc: "A placeholder holds any FEEL expression.", code: "Total: {{sum(for p in positionen return p.betrag)}} {{waehrung}}" },
+  ],
+  "html-template": [
+    { title: "Greeting", doc: "What a placeholder inserts is escaped, so a name cannot add markup.", code: "<p>Guten Tag <strong>{{kunde.vorname}}</strong>,</p>" },
+    { title: "Table from a list", doc: "One row per element of a list.", code: "<table>\n  <tr><th>Artikel</th><th>Menge</th></tr>\n{{#loop positionen}}\n  <tr><td>{{artikel}}</td><td>{{menge}}</td></tr>\n{{/loop}}\n</table>" },
+    { title: "Conditional block", doc: "Shown only when the condition holds.", code: "{{#if dringend}}\n<p style=\"color:#b42318\"><b>Bitte bis {{frist}} erledigen.</b></p>\n{{/if}}" },
+    { title: "Button link", doc: "A link whose address comes from a variable.", code: '<a href="{{link}}" style="padding:8px 12px;background:#0b5cff;color:#fff;border-radius:6px;text-decoration:none">Aufgabe öffnen</a>' },
   ],
 };
 
@@ -498,8 +599,18 @@ const LANGS = {
   },
   html: {
     id: "html", label: "HTML", module: html, wrap: false, gutter: true,
-    overview: "An HTML fragment — an e-mail body or a small form. Keep it a fragment (no <code>&lt;html&gt;</code> wrapper) and inline any styling, since the renderer strips stylesheets.",
+    overview: "An HTML fragment — an e-mail body or a small form. Keep it a fragment (no <code>&lt;html&gt;</code> wrapper) and inline any styling, since many mail clients strip stylesheets.",
     reference: () => [],
+  },
+  template: {
+    id: "template", label: "Template", module: template, wrap: true, gutter: true,
+    overview: "A text with placeholders. <code>{{kunde.name}}</code> inserts a value, <code>{{#if …}}…{{/if}}</code> writes a section only when its condition holds, <code>{{#loop …}}…{{/loop}}</code> writes it once per element of a list. Everything between the braces is FEEL. It is the language form text views use, so a text reads the same in a mail and in a form. The preview renders it with the sample variables.",
+    reference: templateReference,
+  },
+  "html-template": {
+    id: "html-template", label: "HTML template", module: htmlTemplate, wrap: false, gutter: true,
+    overview: "HTML with placeholders: <code>{{kunde.name}}</code>, <code>{{#if …}}…{{/if}}</code> and <code>{{#loop …}}…{{/loop}}</code>, with FEEL between the braces. What a placeholder inserts is escaped, so a variable cannot add markup to the mail. Inline any styling, since many mail clients strip stylesheets. The preview renders the mail as a sandboxed page, without scripts.",
+    reference: templateReference,
   },
 };
 

@@ -20,7 +20,7 @@ A plain mutable name/alias lookup at each job activation is not a solution. It w
 ## Decision drivers
 
 - Keep immutable BPMN/compiled deployments and legacy explicit Worker bindings intact.
-- Preserve all six [engine invariants](../architecture/invariants.md): no per-command allocation, durable-before-visible, partition single writer, deterministic replay via one \`applyToState\`, compilation before execution, and fact-bearing events.
+- Preserve all six [engine invariants](../architecture/invariants.md): no per-command allocation, durable-before-visible, partition single writer, deterministic replay via one `applyToState`, compilation before execution, and fact-bearing events.
 - Enforce exact contract identity and independently reviewed conformance per [ADR-0483](0483-technical-capability-conformance-governance.md); a manifest claim alone is never enough.
 - Make target-system identity, tenant/resource scope and policy effects visible to a human before the switch.
 - No unapproved fallback after a Worker error, denial, missing identity, expired evidence or lease timeout.
@@ -50,7 +50,7 @@ The intended product capability is **controlled rebinding without BPMN redeploym
 
 ### 2. Immutable model with a versioned binding slot
 
-A capability-bound Service Task names an exact \`(id, version, profile)\`
+A capability-bound Service Task names an exact `(id, version, profile)`
 **semantic contract** plus a stable **logical binding slot**. The slot is a
 deployment-scoped identity (process deployment version + BPMN element ID),
 not a new global Worker Type or a display name.
@@ -72,7 +72,7 @@ separately approved compatibility path.
 ### 3. Preconditions and operator experience
 
 A privileged operator requests a switch from Worker A to Worker B, with an
-\`expectedRevision\` (optimistic concurrency), reason and effective deployment
+`expectedRevision` (optimistic concurrency), reason and effective deployment
 scope. The Console should offer **Preview -> Validate -> Approve -> Apply ->
 Observe**, including old/new Worker identity, Worker Type package/digest,
 contract/profile, endpoint/tenant/resource scope, credential mode, policy
@@ -121,7 +121,7 @@ an implementation decision subject to ADR review):
    freezes the chosen configured Worker, operation and binding revision
    as durable routing facts (or through an equivalent explicitly versioned
    event before any lease). Replay reads those facts through
-   \`applyToState\` and never queries today's Worker catalogue.
+   `applyToState` and never queries today's Worker catalogue.
 4. Jobs created **before** that cutover, whether queued or leased, retain
    their original target and authorization context. Failed/leased jobs
    cannot silently move to B; they must complete, drain, park as an
@@ -157,7 +157,7 @@ Runtime authorization remains **per external action** as required by
 ADR-0475; operator permission to rebind does not authorize the job.
 When a new target is effective, policy decisions must be based on that
 target and must not reuse old target-specific approvals. External calls
-remain after \`fsync\`, with at-least-once, idempotency and incident
+remain after `fsync`, with at-least-once, idempotency and incident
 semantics honestly disclosed.
 
 ### 6. Admission, observability and compatibility gates
@@ -183,7 +183,7 @@ An initial implementation must prove:
 4. **Negative checks:** missing/stale evidence, contract/profile mismatch,
    target/tenant mismatch, privileged-identity change, denied operator
    or job policy, multiple candidate ambiguity, and concurrent
-   \`expectedRevision\` conflict all fail closed.
+   `expectedRevision` conflict all fail closed.
 5. **Crash/restart/replay:** state equality for initial bind, cutover,
    rollback, interrupted multi-partition rollout, post-fsync visibility,
    lease epoch fencing, and no external effects during replay.

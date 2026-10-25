@@ -228,6 +228,9 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// Google Contacts is Exchange's shape: the bundle says whose address book and as
 		// whom, it lives in the vault, and a supervised worker has no vault of its own.
 		connectorKindGoogleContacts: s.googleContactsWorkerEnv,
+		// CardDAV likewise: the bundle holds the password and the endpoint says which
+		// server, and a supervised worker has neither of its own.
+		connectorKindCardDAV: s.cardDAVWorkerEnv,
 		// The three SQL products. Unlike every kind above them the *whole* configuration
 		// is the secret — a DSN has no public half — so what is rendered here is one
 		// connection string per configured database and nothing else

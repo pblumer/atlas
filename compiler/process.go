@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/expr/feelers"
 )
 
 // BpmnType is the kind of a BPMN element. It is stored in element-instance state
@@ -588,6 +589,14 @@ type ConnectorTaskDetail struct {
 	MailSubject RestExpr
 	Body        RestExpr
 	BodyHTML    RestExpr
+	// MailSubjectTmpl, BodyTmpl and BodyHTMLTmpl are set in place of the literal in
+	// MailSubject, Body and BodyHTML when the task switched templating on and the value
+	// uses the template language (ADR-0487). The worker renders them
+	// over the scope's variables, escaping what a placeholder inserts into the HTML
+	// body; nil means the RestExpr beside it is the value, as it always was.
+	MailSubjectTmpl *feelers.Template
+	BodyTmpl        *feelers.Template
+	BodyHTMLTmpl    *feelers.Template
 	// Mailbox fields (JobType == MailJobType, ADR-0438). MailOp is the
 	// operation, "" being send — every mail task authored before mailboxes existed.
 	// MailFolder is the folder a list reads, MailMessage the message an operation
@@ -601,6 +610,9 @@ type ConnectorTaskDetail struct {
 	MailDestination RestExpr
 	MailMaxResults  int32
 	MailIncludeBody bool
+	// MailIncludeHTML is a get's includeBody="html": the HTML body is read as well
+	// (ADR-0489).
+	MailIncludeHTML bool
 	MailUnreadOnly  bool
 	// The documents half (ADR-0478). MailAttachment is
 	// the attachment get-attachment and export-attachment address, literal-or-FEEL;
@@ -1148,6 +1160,23 @@ type ConnectorTaskDetail struct {
 	GoogleContactsContact    RestExpr
 	GoogleContactsContactVar int32
 	GoogleContactsMaxResults int32
+	// CardDAV fields (JobType == CardDAVJobType, ADR-0490): Google
+	// Contacts' fields, for the CardDAV Worker Type's own task. Connector (above) names
+	// the configured address book, and CardDAVConnector carries it as literal-or-FEEL.
+	// CardDAVOp is the interned operation — a row of connector/carddav/catalog.
+	// CardDAVContact is the authored contact object compiled to one FEEL context at
+	// deploy (I5), and CardDAVContactVar names the variable holding it instead.
+	// CardDAVMaxResults bounds a listing, with its default applied, and is zero on every
+	// other operation. All are the zero value for a task of another kind.
+	CardDAVConnector  RestExpr
+	CardDAVOp         int32
+	CardDAVContactID  RestExpr
+	CardDAVQuery      RestExpr
+	CardDAVField      RestExpr
+	CardDAVGroup      RestExpr
+	CardDAVContact    RestExpr
+	CardDAVContactVar int32
+	CardDAVMaxResults int32
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

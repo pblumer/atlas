@@ -5,6 +5,10 @@
 **Roadmap owner:** [Milestone CDA](../../ROADMAP.md#milestone-cda--capability-driven-automation-) in `ROADMAP.md`.  
 **Detailed historical slices:** [T0–T5 technical plan](technical-capability-contract.md); this programme is the **status and dependency authority** for cross-milestone delivery.
 
+## Programme boundary: policy authority
+
+[Identity-aware Execution (IAE)](identity-aware-execution-program.md) is the separate programme authority for linked external identities, managed Connections, delegated OAuth, versioned PDP/PEP policy, approval obligations, separation of duties and durable action evidence, governed by proposed/partial ADR-0475. CDA does **not** implement a second authorization system. CDA6/7 use the supported IAE provider-specific authorization seam after exact semantic contract binding; IAE4 is a hard acceptance gate for CDA7's chosen Worker. The independently reviewed technical claim/conformance programme remains CDA-owned. Do not treat the merged [PR #1346](https://github.com/pblumer/atlas/pull/1346) as a policy-enforcement PR.
+
 ## Outcome, not a synonym for job dispatch
 
 Connect what the business needs, the process that realizes it, the precisely
