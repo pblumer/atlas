@@ -63,7 +63,7 @@ roots, semantic error codes, idempotency, consistency and pagination constraints
 Parse strictly in `workertype` at design time; reject duplicate identities, malformed
 metadata and external JSON Schema references. Sample account and contact fixtures
 are explicitly **not** a published canonical corpus. See
-[ADR-draft-technical-capability-semantics](../adr/draft-technical-capability-semantics.md).
+[ADR-0485](../adr/0485-technical-capability-semantics.md).
 No runtime routing or process-state changes.
 
 **T1b — Full schemas, conformance and publication (open).** Select a maintained

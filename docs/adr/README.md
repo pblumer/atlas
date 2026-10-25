@@ -570,6 +570,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0482](0482-capability-aware-binding-and-routing.md) | Capability-aware BPMN binding and deterministic authorized Worker selection | Proposed | Not started |
 | [0483](0483-technical-capability-conformance-governance.md) | Technical capability contract publication and conformance governance | Proposed | Not started |
 | [0484](0484-sharepoint-mock-mode.md) | A mockup provider for the SharePoint Worker Type | Accepted | Landed |
+| [0485](0485-technical-capability-semantics.md) | Versioned semantic contracts for technical capabilities | Proposed | Partial |
 
 ## The two states of a record
 

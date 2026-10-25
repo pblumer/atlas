@@ -1264,7 +1264,7 @@ Adoption and polish.
 - 🚧 **Technical capability semantics (T1a).** A strict, independent, versioned
   descriptor for a Worker Type operation's claimed semantics: resource kind and
   identity scope, JSON Schema roots, error taxonomy, idempotency, consistency and
-  pagination ([ADR-draft-technical-capability-semantics](docs/adr/draft-technical-capability-semantics.md)).
+  pagination ([ADR-0485](docs/adr/0485-technical-capability-semantics.md)).
   T1a validates the contract envelope without publishing a canonical production
   corpus or certifying providers. **T1b** adds full JSON Schema verification and
   provider conformance evidence; **T2** projects verified built-in operation claims

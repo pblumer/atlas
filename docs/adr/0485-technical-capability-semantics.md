@@ -1,4 +1,4 @@
-# ADR-DRAFT: Versioned semantic contracts for technical capabilities
+# ADR-0485: Versioned semantic contracts for technical capabilities
 
 - **Status:** Proposed
 - **Implementation:** Partial

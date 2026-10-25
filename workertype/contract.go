@@ -34,7 +34,7 @@ var technicalErrorCodePattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 
 // TechnicalContract is a versioned definition of *one* technical capability,
 // never proof that a provider implements it or a permission to route a job.
-// See ADR-draft-technical-capability-semantics and ADR-0480.
+// See ADR-0485 and ADR-0480.
 type TechnicalContract struct {
 	APIVersion string           `json:"apiVersion"`
 	Kind       string           `json:"kind"`
