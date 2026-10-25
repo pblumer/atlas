@@ -159,6 +159,7 @@ Backup and restore, including whole-instance snapshots ([ADR-0107](docs/adr/0107
 - **[Catalogue standards](docs/comparisons/catalogue-standards.md)** — the catalogue, order, and inventory models mapped onto TM Forum's TMF620/622/637, the Open Service Broker API, and open-source identity governance: what corresponds, where atlas differs on purpose, and what was examined and found inapplicable
 - **[Deploying atlas](deploy/)** — the container image ([`Dockerfile`](Dockerfile)) and a [Helm chart](deploy/helm/atlas) for running the server on Kubernetes
 - **[Compliance](docs/compliance/)** — the Swiss federal **ISDS-Konzept** (P042-Hi01) answered for atlas, in German, plus the product gaps a Bund deployment would have to close
+- **[Programmes](docs/programs/README.md)** — tracked delivery overview of multi-slice work, dependencies and linked PRs · **[Programme delivery protocol](docs/development/program-delivery.md)** — rules for human and agent collaboration
 - **[Roadmap](ROADMAP.md)** — where this is going · **[Changelog](CHANGELOG.md)** — what changed in each release
 - **[Contributing](CONTRIBUTING.md)** · **[Development](DEVELOPMENT.md)** · **[Security](SECURITY.md)**
 

@@ -1,0 +1,41 @@
+name: Programme registry
+
+on:
+  pull_request:
+    paths:
+      - 'docs/programs/**'
+      - 'docs/development/program-delivery.md'
+      - 'scripts/programs.py'
+      - 'scripts/test_programs.py'
+      - '.github/workflows/programs.yml'
+      - 'AGENTS.md'
+      - 'CONTRIBUTING.md'
+      - 'DEVELOPMENT.md'
+      - 'README.md'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/programs/**'
+      - 'docs/development/program-delivery.md'
+      - 'scripts/programs.py'
+      - 'scripts/test_programs.py'
+      - '.github/workflows/programs.yml'
+      - 'AGENTS.md'
+      - 'CONTRIBUTING.md'
+      - 'DEVELOPMENT.md'
+      - 'README.md'
+
+permissions:
+  contents: read
+
+jobs:
+  programme-index:
+    name: validate programme registry
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test manifest validation and generator
+        run: python3 -m unittest discover -s scripts -p 'test_programs.py' -v
+      - name: Check generated index is current
+        run: python3 scripts/programs.py --check
