@@ -336,7 +336,8 @@ Proposed edge vocabulary and truth conditions:
 - `declares-capability`: operation *claims* an exact semantic contract;
   provenance `declared` and **candidate**, never silently `verified`.
 - `verified-by`: one reviewed conformance evidence record binds the
-  exact operation/package digest and contract digest; provenance
+  exact operation/package digest and contract digest; the edge is
+  **derived from reviewed evidence** and has verification status
   `verified` only while the evidence remains current. See the
   [conformance governance draft](draft-technical-capability-conformance-governance.md).
 - `binds-operation`: a service-task binding explicitly names or
