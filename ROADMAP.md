@@ -2273,7 +2273,7 @@ Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
   Decide independent publication, immutable contract digest, offline
   JSON Schema validation, positive/negative conformance evidence, expiry,
   reviewer approval and withdrawal in
-  [ADR-draft-technical-capability-conformance-governance](docs/adr/draft-technical-capability-conformance-governance.md).
+  [ADR-0483](docs/adr/0483-technical-capability-conformance-governance.md).
   A Worker Type cannot certify its own claims.
 - 🔲 **CDA3 — Verifiable built-in operation mappings (T2 / Milestone 6).**
   Derive from existing provider operation catalogues, first distinguishing
@@ -2297,7 +2297,7 @@ Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
   An opt-in service task declares one exact verified contract and freezes
   one explicitly chosen Worker at deployment; reject missing, ambiguous,
   withdrawn or mismatched bindings. Preserve existing BPMN and job types.
-  Governed by [ADR-draft-capability-aware-binding-and-routing](docs/adr/draft-capability-aware-binding-and-routing.md);
+  Governed by [ADR-0482](docs/adr/0482-capability-aware-binding-and-routing.md);
   depends on CDA2/CDA3 and the accepted binding decision. **No new
   execution behavior in this slice.**
 - 🔲 **CDA7 — Governed execution and recovery (T5b).**

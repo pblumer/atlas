@@ -1,4 +1,4 @@
-# ADR-DRAFT: Technical capability contract publication and conformance governance
+# ADR-0483: Technical capability contract publication and conformance governance
 
 - **Status:** Proposed
 - **Implementation:** Not started

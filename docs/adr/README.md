@@ -567,6 +567,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0479](0479-paperless-ngx-worker.md) | Paperless-ngx Worker with reference-only document handling | Proposed | Not started |
 | [0480](0480-technical-capability-contract.md) | Technical capability claims on Worker Type operations | Proposed | Partial |
 | [0481](0481-storage-guard.md) | A storage reserve, and an engine that halts on a failed write | Accepted | Landed |
+| [0482](0482-capability-aware-binding-and-routing.md) | Capability-aware BPMN binding and deterministic authorized Worker selection | Proposed | Not started |
+| [0483](0483-technical-capability-conformance-governance.md) | Technical capability contract publication and conformance governance | Proposed | Not started |
 
 ## The two states of a record
 

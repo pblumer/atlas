@@ -339,7 +339,7 @@ Proposed edge vocabulary and truth conditions:
   exact operation/package digest and contract digest; the edge is
   **derived from reviewed evidence** and has verification status
   `verified` only while the evidence remains current. See the
-  [conformance governance draft](draft-technical-capability-conformance-governance.md).
+  [conformance governance draft](0483-technical-capability-conformance-governance.md).
 - `binds-operation`: a service-task binding explicitly names or
   resolves the operation according to deployment metadata. An
   operation with a similar name must not create this edge.
