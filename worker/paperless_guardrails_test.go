@@ -20,17 +20,17 @@ func TestPaperlessWorkerRequiresUsableCredentials(t *testing.T) {
 		env  map[string]string
 	}{
 		{"missing-token", map[string]string{
-			"ATLAS_PAPERLESS_CONNECTORS": "archive",
+			"ATLAS_PAPERLESS_CONNECTORS":  "archive",
 			"ATLAS_PAPERLESS_ARCHIVE_URL": "https://paperless.example.test",
 		}},
 		{"http-not-allowed", map[string]string{
-			"ATLAS_PAPERLESS_CONNECTORS": "archive",
-			"ATLAS_PAPERLESS_ARCHIVE_URL": "http://paperless.example.test",
+			"ATLAS_PAPERLESS_CONNECTORS":    "archive",
+			"ATLAS_PAPERLESS_ARCHIVE_URL":   "http://paperless.example.test",
 			"ATLAS_PAPERLESS_ARCHIVE_TOKEN": "sensitive",
 		}},
 		{"duplicate-name", map[string]string{
-			"ATLAS_PAPERLESS_CONNECTORS": "archive,archive",
-			"ATLAS_PAPERLESS_ARCHIVE_URL": "https://paperless.example.test",
+			"ATLAS_PAPERLESS_CONNECTORS":    "archive,archive",
+			"ATLAS_PAPERLESS_ARCHIVE_URL":   "https://paperless.example.test",
 			"ATLAS_PAPERLESS_ARCHIVE_TOKEN": "sensitive",
 		}},
 	} {
@@ -50,9 +50,9 @@ func TestPaperlessWorkerDiscardsProviderResultWhenNotMapped(t *testing.T) {
 	defer s.Close()
 
 	env := map[string]string{
-		"ATLAS_PAPERLESS_CONNECTORS": "archive",
-		"ATLAS_PAPERLESS_ARCHIVE_URL": s.URL,
-		"ATLAS_PAPERLESS_ARCHIVE_TOKEN": "test-token",
+		"ATLAS_PAPERLESS_CONNECTORS":         "archive",
+		"ATLAS_PAPERLESS_ARCHIVE_URL":        s.URL,
+		"ATLAS_PAPERLESS_ARCHIVE_TOKEN":      "test-token",
 		"ATLAS_PAPERLESS_ARCHIVE_ALLOW_HTTP": "true",
 	}
 	built, err := BuiltinConnectors(func(k string) string { return env[k] }, "paperless")
@@ -61,8 +61,8 @@ func TestPaperlessWorkerDiscardsProviderResultWhenNotMapped(t *testing.T) {
 	}
 	result, err := built.Handlers[paperlessJobType].Run(context.Background(), Job{Variables: map[string]any{
 		"paperless": map[string]any{
-			"worker": "archive",
-			"operation": "get-document",
+			"worker":     "archive",
+			"operation":  "get-document",
 			"documentId": 4,
 		},
 	}})
@@ -91,9 +91,9 @@ func TestPaperlessWorkerRefusesOversizedRequestBeforeProviderCall(t *testing.T) 
 	}
 	_, err = RunPaperlessJob(context.Background(), Job{Variables: map[string]any{
 		"paperless": map[string]any{
-			"worker": "archive",
-			"operation": "search-documents",
-			"query": strings.Repeat("too much untrusted input", 1024),
+			"worker":         "archive",
+			"operation":      "search-documents",
+			"query":          strings.Repeat("too much untrusted input", 1024),
 			"resultVariable": "documents",
 		},
 	}}, clients)
