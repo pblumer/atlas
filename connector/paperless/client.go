@@ -14,9 +14,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-)
 
-const maxResponseBytes = 4 << 20
+	"github.com/pblumer/atlas/limits"
+)
 
 // Options controls a worker's outbound transport.
 type Options struct {
@@ -238,7 +238,7 @@ func (c *Client) request(ctx context.Context, method, path string, query url.Val
 	if dst == nil {
 		return resp.StatusCode, nil
 	}
-	dec := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes+1))
+	dec := json.NewDecoder(io.LimitReader(resp.Body, limits.Default().Payload+1))
 	if err := dec.Decode(dst); err != nil {
 		return 0, errors.New("paperless: invalid or excessive API response")
 	}
