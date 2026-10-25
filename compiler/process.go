@@ -1160,6 +1160,23 @@ type ConnectorTaskDetail struct {
 	GoogleContactsContact    RestExpr
 	GoogleContactsContactVar int32
 	GoogleContactsMaxResults int32
+	// CardDAV fields (JobType == CardDAVJobType, ADR-draft-carddav-worker): Google
+	// Contacts' fields, for the CardDAV Worker Type's own task. Connector (above) names
+	// the configured address book, and CardDAVConnector carries it as literal-or-FEEL.
+	// CardDAVOp is the interned operation — a row of connector/carddav/catalog.
+	// CardDAVContact is the authored contact object compiled to one FEEL context at
+	// deploy (I5), and CardDAVContactVar names the variable holding it instead.
+	// CardDAVMaxResults bounds a listing, with its default applied, and is zero on every
+	// other operation. All are the zero value for a task of another kind.
+	CardDAVConnector  RestExpr
+	CardDAVOp         int32
+	CardDAVContactID  RestExpr
+	CardDAVQuery      RestExpr
+	CardDAVField      RestExpr
+	CardDAVGroup      RestExpr
+	CardDAVContact    RestExpr
+	CardDAVContactVar int32
+	CardDAVMaxResults int32
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

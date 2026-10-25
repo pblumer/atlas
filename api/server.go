@@ -204,6 +204,12 @@ type Server struct {
 	// else needs it, so it is set once at construction and read-only thereafter.
 	dataDir string
 
+	// nodeID is this installation's stable runtime id (ADR-0189 §6), read once at
+	// construction and read-only thereafter. A CardDAV create derives its contact's name
+	// from it and the job key (ADR-draft-carddav-worker), which is why it is kept here
+	// rather than read from the settings store on the run loop for every job handed out.
+	nodeID string
+
 	// runLoop is the single-writer goroutine that owns the processor, the store
 	// and the registries; every handler reaches them through it (I3, ADR-0002).
 	// quit stops it, and every background sweeper alongside it.
@@ -1664,7 +1670,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// somebody's GET, and a data directory this server cannot write to is an
 	// operator's problem to see at startup rather than weeks later on a request
 	// (ADR-0189 §6).
-	if _, err := ensureNodeIdentity(settings); err != nil {
+	node, err := ensureNodeIdentity(settings)
+	if err != nil {
 		return nil, err
 	}
 	// DMN reference models are resolved either from a temis model service (when
@@ -1678,6 +1685,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		proc:             proc,
 		store:            store,
 		dataDir:          dataDir,
+		nodeID:           node.ID,
 		limits:           limits.Default(), // WithLimits overrides; there is no "no budget"
 		remoteNodes:      newRemoteNodeCache(),
 		remoteLandscapes: newRemoteLandscapeCache(),

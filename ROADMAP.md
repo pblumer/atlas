@@ -644,6 +644,21 @@ The control-flow basics most real models use.
   Sheets bundle with the Workspace user it acts as. Still open: a run against a real
   account (the record's open question), and a form-lookup provider so a person picks a
   customer in a task form ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
+  **CardDAV address books are a Worker Type too**
+  ([ADR-draft-carddav-worker](docs/adr/draft-carddav-worker.md)): a service task marked
+  `<atlas:carddavConnector connector operation …>` runs Google Contacts' operations and
+  contact — less the directory search — against iCloud, Nextcloud, ownCloud, mailbox.org,
+  Posteo, Infomaniak, Fastmail, Synology, Radicale and Baïkal, nine operations in one table
+  (`connector/carddav/catalog`). The address book is found from the server's URL
+  (RFC 6764 well-known, principal, home); groups are `CATEGORIES` or Apple's group cards,
+  one form per Worker; an update rewrites only the properties a contact key maps to, so a
+  photo and every other client's properties survive; and `create-contact` is safe to
+  repeat, because the contact's name is derived from the job and written with
+  `If-None-Match: *`. Worker-only and supervised by default. Walked against Radicale and
+  Xandikos; still open: a run against iCloud, Nextcloud and the hosted mail providers (the
+  record's open question), Exchange mailbox contacts through Microsoft Graph, and no
+  capability claim yet — the two contact Worker Types are not declared interchangeable
+  ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
   **Proposed: Paperless-ngx Worker** ([ADR draft](docs/adr/0479-paperless-ngx-worker.md)):
   reference-only document search, authenticated presentation, safe metadata operations
   and retry-safe `add-correspondent` (lookup/create with conflict recovery) before a

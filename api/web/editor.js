@@ -11,6 +11,7 @@ import { attachJSONEditor } from "./json-editor.js";
 import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } from "./entra-attrmask.js";
 import { exchangeOperationOptions, exchangeParametersPlaceholder, exchangeParametersHint, exchangeIsListing, exchangeResultType, exchangeResultShape } from "./exchange-ops.js";
 import { googleContactsOperationOptions, googleContactsUses, googleContactsResultType, googleContactsResultShape, googleContactsMaxPlaceholder, googleContactsMaxHint, googleContactsQueryHint, googleContactsContactPlaceholder } from "./googlecontacts-ops.js";
+import { cardDAVOperationOptions, cardDAVUses, cardDAVResultType, cardDAVResultShape, cardDAVMaxPlaceholder, cardDAVMaxHint, cardDAVQueryHint, cardDAVContactPlaceholder } from "./carddav-ops.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { lookupSamples, sampleFor } from "./instance-samples.js";
 import { devLang } from "./dev-lang.js";
@@ -5061,6 +5062,76 @@ const SERVICE_TASK_KINDS = [
         resultType: (v) => googleContactsResultType(v.operation || "find-contacts"),
         showIf: (v) => !!googleContactsResultType(v.operation || "find-contacts"),
         hint: (v) => googleContactsResultShape(v.operation || "find-contacts"),
+      },
+    ],
+  },
+  {
+    id: "carddav", name: "CardDAV contacts", group: "Applications",
+    desc: "Find, read, search, list, create, update and delete contacts in a CardDAV address book — iCloud, Nextcloud, mailbox.org, Radicale and most mail providers' — and put a group such as Kunden on one or take it off",
+    icon: "V",
+    // An address-book card on teal: the open standard beside Google's blue person, so
+    // the two contact Worker Types are told apart at a glance.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f766e"/><rect x="2.8" y="3.5" width="10.4" height="9" rx="1.2" fill="#fff"/><circle cx="6.3" cy="7" r="1.5" fill="#0f766e"/><path d="M4.1 11.1c.3-1.3 1.2-2 2.2-2s1.9.7 2.2 2z" fill="#0f766e"/><rect x="9.4" y="6.1" width="2.6" height=".9" fill="#0f766e"/><rect x="9.4" y="8.1" width="2.6" height=".9" fill="#0f766e"/></svg>`,
+    ext: "atlas:CarddavConnector",
+    fields: [
+      { group: "Address book" },
+      {
+        key: "connector", label: "Worker", datalist: "carddav", placeholder: "verkauf",
+        hint: "The configured CardDAV Worker whose address book this task uses, by its name under Workers in the Console. The server's address and the account's password reach that worker and never the engine. A value starting with = is a FEEL expression, so one process can choose the address book at runtime.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: cardDAVOperationOptions(),
+      },
+      {
+        key: "contactId", label: "Contact", placeholder: "=kunde.id", fx: true,
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "contactId"),
+        hint: "The contact, by the id a read, a find or a create answered with (…vcf, its name in the address book). Usually a FEEL expression (fx) naming that variable, e.g. =kunde.id.",
+      },
+      {
+        key: "query", label: "Query", placeholder: "=anfrage.absender", fx: true,
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "query"),
+        hint: (v) => cardDAVQueryHint(v.operation || "find-contacts"),
+      },
+      {
+        key: "field", label: "Custom field", placeholder: "Kundennummer",
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "field"),
+        hint: "Optional. The name of a custom field — the card's X- property without X-, so Kundennummer is X-Kundennummer; letters, digits and hyphens. The query is then compared with that field's value instead of with the e-mail addresses and phone numbers.",
+      },
+      {
+        key: "group", label: "Group", placeholder: "Kunden", fx: true,
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "group"),
+        hint: (v) => (["add-to-group", "remove-from-group"].includes(v.operation)
+          ? "The group, by its name, e.g. Kunden. Where the Worker keeps groups as cards of their own (iCloud, Fastmail) it must exist, and a misspelt name is refused; where it keeps them in CATEGORIES, a group exists by being on a contact."
+          : "Optional. Only the contacts in this group, by its name, e.g. Kunden."),
+      },
+      {
+        key: "contact", label: "Contact values", type: "json", rows: 8,
+        // Inline JSON and a variable are mutually exclusive (the compiler refuses both).
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "contact") && !v.contactVariable,
+        placeholder: (v) => cardDAVContactPlaceholder(v.operation || "create-contact"),
+        hint: (v) => "Keys: displayName, givenName, familyName, email, emails, phone, phones, organization, jobTitle, department, address, addresses (streetAddress, extendedAddress, poBox, postalCode, city, region, country, type), birthday (1980-05-17, or --05-17 without a year), notes, fields (custom fields by name)" +
+          (v.operation === "create-contact" ? " and groups (by name)." : "; groups change through Add to group and Remove from group.") +
+          " A string starting with = is a FEEL expression. A value that is null changes nothing, \"\" clears; email, phone and address change the preferred entry and keep the others, emails, phones and addresses replace the list. Every other property of the card — a photo included — is kept.",
+      },
+      {
+        key: "contactVariable", label: "Contact variable", placeholder: "neukunde",
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "contact") && !v.contact,
+        hint: "Instead of the values above: a process variable holding the contact object, for a process that assembles it itself — a form's answers, say. Its keys are checked when the task runs rather than at deploy.",
+      },
+      {
+        key: "maxResults", label: "Maximum results",
+        placeholder: (v) => cardDAVMaxPlaceholder(v.operation || "find-contacts"),
+        showIf: (v) => !!cardDAVMaxPlaceholder(v.operation || "find-contacts"),
+        hint: (v) => cardDAVMaxHint(v.operation || "find-contacts"),
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "kunden",
+        resultType: (v) => cardDAVResultType(v.operation || "find-contacts"),
+        showIf: (v) => !!cardDAVResultType(v.operation || "find-contacts"),
+        hint: (v) => cardDAVResultShape(v.operation || "find-contacts"),
       },
     ],
   },

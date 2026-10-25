@@ -150,6 +150,11 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.GoogleContacts.Retries },
 		compile: compileGoogleContactsConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.CardDAV != nil },
+		retries: func(st xmlServiceTask) string { return st.CardDAV.Retries },
+		compile: compileCardDAVConnectorTask,
+	},
 }
 
 // The directory-file formats and directions a model can author. They are spelled here
