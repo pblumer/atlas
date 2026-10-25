@@ -12,6 +12,7 @@ import (
 
 	"github.com/pblumer/atlas/connector/carddav/catalog"
 	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/limits"
 )
 
 func card(uid, fn, n, extra string) string {
@@ -714,5 +715,27 @@ func TestARedirectedListingKeepsItsMembers(t *testing.T) {
 	}
 	if k := run1(t, reg, Job{Operation: "get-contact", ContactID: "anna.vcf"})["r"].(map[string]any); k["familyName"] != "Muster" {
 		t.Errorf("contact = %v", k)
+	}
+}
+
+// Photos make one batch of cards far larger than another: a batch whose answer is above
+// the payload budget is asked for again in halves, and only a single card above it is
+// refused, by its name.
+func TestABatchAboveThePayloadBudgetIsHalved(t *testing.T) {
+	f := seeded(t)
+	photo := strings.Repeat("A", int(limits.Default().Payload*6/10))
+	f.put("foto1.vcf", card("f1", "Foto Eins", "Eins;Foto;;;", "PHOTO;ENCODING=b;TYPE=JPEG:"+photo+"\r\n"))
+	f.put("foto2.vcf", card("f2", "Foto Zwei", "Zwei;Foto;;;", "PHOTO;ENCODING=b;TYPE=JPEG:"+photo+"\r\n"))
+	reg := registry(t, f, "", "")
+	if l := list1(t, run1(t, reg, Job{Operation: "list-contacts", MaxResults: 10})); len(l) != 5 {
+		t.Errorf("listed %d contacts", len(l))
+	}
+	if f.count("REPORT") < 3 {
+		t.Errorf("%d multigets; the oversized batch was not halved", f.count("REPORT"))
+	}
+	f.put("riesig.vcf", card("r", "Riesig", "Riesig;;;;", "PHOTO;ENCODING=b;TYPE=JPEG:"+strings.Repeat("A", int(limits.Default().Payload))+"\r\n"))
+	err := runErr(registry(t, f, "", ""), Job{Operation: "list-contacts"})
+	if err == nil || !strings.Contains(err.Error(), "riesig.vcf is larger than the installation's payload budget") {
+		t.Errorf("err = %v", err)
 	}
 }

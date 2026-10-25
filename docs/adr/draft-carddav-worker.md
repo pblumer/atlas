@@ -86,7 +86,7 @@ Chosen option: **1 — a CardDAV Worker Type**, kind `carddav`, reserved job typ
 |---|---|
 | 1 Operations are process steps | Yes — nine named operations, below, each a task with a verb on it. |
 | 2 The generic path is blocked or lossy | **Blocked** for discovery and every read of more than one contact: the REST Worker cannot author `PROPFIND` or `REPORT`. **Lossy** where it reaches: a vCard update has to keep every property it does not change, and no FEEL expression a model author writes does that reliably. |
-| 3 The work fits a job | Yes. Each operation is one to a few dozen HTTP requests, bounded: a find reads at most 25 000 contacts in batches of 50, a response is read up to 32 MiB. Every operation is safe to run twice, `create-contact` included (below). |
+| 3 The work fits a job | Yes. Each operation is one to a few dozen HTTP requests, bounded: a find reads at most 25 000 contacts in batches of 50, and an answer is read up to the installation's payload budget (`limits.Payload`, 8 MiB by default) — a batch whose photos take it above that is asked for again in halves, and a single card above it is refused by name. Every operation is safe to run twice, `create-contact` included (below). |
 | 4 One credential shape | Yes — `{username, password}`, the password usually an app-specific one, with one non-secret setting beside it (`groups`). HTTP Basic authentication only. |
 | 5 Arrives complete | Registry row, Repository package `atlas.carddav`, setup entry and handbook card, in this change. |
 

@@ -66,7 +66,7 @@ func (b *book) scan(ctx context.Context) error {
 	}
 	for start := 0; start < len(ms); start += multigetBatch {
 		batch := ms[start:min(start+multigetBatch, len(ms))]
-		got, err := b.c.multiget(ctx, b.coll, batch)
+		got, err := b.fetch(ctx, batch)
 		if err != nil {
 			return err
 		}
@@ -92,6 +92,32 @@ func (b *book) scan(ctx context.Context) error {
 	sort.Slice(b.groups, func(i, j int) bool { return strings.ToLower(b.groups[i].name) < strings.ToLower(b.groups[j].name) })
 	b.read = true
 	return nil
+}
+
+// fetch reads a batch of cards, asking for it again in halves when the answer is
+// larger than the payload budget — photos make one batch of fifty cards far larger than
+// another. A single card above the budget is refused, naming it.
+func (b *book) fetch(ctx context.Context, ms []member) (map[string]fetched, error) {
+	got, err := b.c.multiget(ctx, b.coll, ms)
+	if !errors.Is(err, errAnswerTooLarge) {
+		return got, err
+	}
+	if len(ms) == 1 {
+		return nil, fmt.Errorf("carddav: the address book's %s is larger than the installation's payload budget (limits.Payload): %w", ms[0].id, err)
+	}
+	half := len(ms) / 2
+	first, err := b.fetch(ctx, ms[:half])
+	if err != nil {
+		return nil, err
+	}
+	rest, err := b.fetch(ctx, ms[half:])
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range rest {
+		first[k] = v
+	}
+	return first, nil
 }
 
 // groupsOf is a contact's groups in the Worker's form: its categories, or the names of

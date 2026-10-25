@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/connector/clientreg"
+	"github.com/pblumer/atlas/limits"
 )
 
 // Client speaks WebDAV and CardDAV (RFC 4918, RFC 6352) to one configured Worker: one
@@ -42,10 +43,11 @@ type Registry = clientreg.Registry[*Client]
 // NewRegistry creates an empty registry.
 func NewRegistry() *Registry { return clientreg.New[*Client]() }
 
-// maxResponseBytes bounds one answer. The largest the operations ask for is a batch of
-// [multigetBatch] cards, which a photo in each can take to a few MiB; an answer above it
-// is refused rather than read short, because a short listing is a wrong one.
-const maxResponseBytes = 32 << 20
+// errAnswerTooLarge is an answer above the installation's Payload budget
+// (limits.Payload, 8 MiB by default). It is refused rather than read short, because a
+// short listing is a wrong one; a batch of cards that meets it is asked for again in
+// halves (book.fetch).
+var errAnswerTooLarge = errors.New("the answer is larger than the installation's payload budget")
 
 // maxRedirects bounds the hops one request follows — a server's discovery redirect, a
 // load balancer's — before it is refused as a loop.
@@ -83,7 +85,7 @@ func isStatus(err error, statuses ...int) bool {
 	return false
 }
 
-// reply is one answer, read whole within [maxResponseBytes].
+// reply is one answer, read whole within the installation's payload budget.
 type reply struct {
 	status int
 	header http.Header
@@ -122,13 +124,14 @@ func (c *Client) do(ctx context.Context, call, method string, u *url.URL, hdr ht
 		if err != nil {
 			return nil, fmt.Errorf("carddav: %s: the server could not be reached: %w", call, unwrapURLError(err))
 		}
-		raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+		budget := limits.Default().Payload
+		raw, err := io.ReadAll(io.LimitReader(resp.Body, limits.Default().Payload+1))
 		resp.Body.Close()
 		if err != nil {
 			return nil, fmt.Errorf("carddav: %s: reading the answer: %w", call, unwrapURLError(err))
 		}
-		if len(raw) > maxResponseBytes {
-			return nil, fmt.Errorf("carddav: %s: the server answered with more than %d MiB", call, maxResponseBytes>>20)
+		if int64(len(raw)) > budget {
+			return nil, fmt.Errorf("carddav: %s: the server answered with more than %d MiB: %w", call, budget>>20, errAnswerTooLarge)
 		}
 		switch resp.StatusCode {
 		case http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther, http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
@@ -545,8 +548,9 @@ type fetched struct {
 	etag string
 }
 
-// multigetBatch is how many cards one addressbook-multiget asks for: small enough that
-// a batch of cards with photos stays well inside [maxResponseBytes].
+// multigetBatch is how many cards one addressbook-multiget asks for: few enough that a
+// batch of cards with photos usually stays inside the payload budget, and a batch that
+// does not is halved rather than failed.
 const multigetBatch = 50
 
 // multiget reads the cards of the members named, keyed by decoded path. A member a

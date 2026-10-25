@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/limits"
 )
 
 func TestParseBundle(t *testing.T) {
@@ -102,8 +104,8 @@ func TestServerAnswersThatAreFailures(t *testing.T) {
 		}, "not a WebDAV multistatus"},
 		{"too large", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusMultiStatus)
-			_, _ = w.Write(make([]byte, maxResponseBytes+10))
-		}, "more than 32 MiB"},
+			_, _ = w.Write(make([]byte, limits.Default().Payload+10))
+		}, "more than 8 MiB"},
 		{"a redirect without a location", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusFound) }, "HTTP 302"},
 		{"a redirect to no URL", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Location", "http://[::1")
