@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-25",
   "plan": "../../planning/capability-driven-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-cda--capability-driven-automation-",
-  "next_action": "Assign a programme owner; review PR #1346, ADR-0480 and the proposed controlled Worker-rebinding decision.",
+  "next_action": "Assign a programme owner; review ADR-0480/0485 acceptance and the proposed controlled Worker-rebinding decision.",
   "slices": [
     {
       "id": "CDA0",
@@ -33,7 +33,7 @@
       "prs": [
         1346
       ],
-      "note": "Draft PR #1346; exact semantics and parser only, not provider conformance."
+      "note": "PR #1346 merged the strict contract envelope into main; ADR-0485 remains Proposed/Partial. Full JSON Schema and provider conformance are not implemented; architecture acceptance remains open."
     },
     {
       "id": "CDA2",
