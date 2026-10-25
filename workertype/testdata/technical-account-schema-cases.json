@@ -1,0 +1,50 @@
+[
+  {
+    "name": "create account with enabled flag",
+    "direction": "input",
+    "document": {
+      "userName": "alice",
+      "enabled": true
+    },
+    "valid": true
+  },
+  {
+    "name": "missing account username",
+    "direction": "input",
+    "document": {
+      "enabled": true
+    },
+    "valid": false
+  },
+  {
+    "name": "account rejects contact properties",
+    "direction": "input",
+    "document": {
+      "displayName": "Alice",
+      "email": "alice@example.org"
+    },
+    "valid": false
+  },
+  {
+    "name": "account creation response",
+    "direction": "output",
+    "document": {
+      "accountId": "tenant-123"
+    },
+    "valid": true
+  },
+  {
+    "name": "missing account ID",
+    "direction": "output",
+    "document": {},
+    "valid": false
+  },
+  {
+    "name": "wrong account ID type",
+    "direction": "output",
+    "document": {
+      "accountId": 123
+    },
+    "valid": false
+  }
+]
