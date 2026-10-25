@@ -224,16 +224,16 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		{"GET", "/api/v1/checkpoints", s.handleCheckpointStatus, apiOp{
-			summary: "Recovery-checkpoint and WAL-compaction status: what is configured, every published checkpoint and whether it still verifies, the last pass's outcome, and the WAL's current footprint (admin-only when auth is on) (ADR-0131)", tag: "System", role: RoleAdmin,
+			summary: "Recovery-checkpoint and WAL-compaction status: what is configured, every published checkpoint and whether it still verifies, the last pass's outcome, and the WAL's current footprint (admin-only when auth is on) (ADR-0131). Verifying re-reads every checkpoint's state files; `?verify=false` describes them from their manifests and leaves `verified` out, which is what the dashboard asks for", tag: "System", role: RoleAdmin,
 			resp: jsonBody("Checkpoint status", schemaObj(map[string]any{
 				"enabled": tBool(), "intervalSeconds": tInteger(), "keep": tInteger(),
 				"compaction": tBool(), "root": tString(), "checkpoints": tArray(),
 				"lastPass": tObject(), "walSegments": tInteger(), "walBytes": tInteger(),
 			}))}},
 		{"POST", "/api/v1/checkpoints", s.handleCheckpointNow, apiOp{
-			summary: "Take a recovery checkpoint now — and compact the WAL if compaction is enabled — instead of waiting for the next scheduled pass; 409 when checkpointing is disabled (admin-only when auth is on) (ADR-0131)", tag: "System", role: RoleAdmin,
+			summary: "Take a recovery checkpoint now — and compact the WAL if compaction is enabled — instead of waiting for the next scheduled pass; 409 when checkpointing is disabled (admin-only when auth is on) (ADR-0131). `?compact=true` compacts on this one pass on a server started without --compact-wal, with the same gates as a scheduled pass (a verified checkpoint, the exporter and retention watermarks, no backup streaming); it deletes WAL segments irreversibly, and `compaction` in the answer says whether the pass compacted", tag: "System", role: RoleAdmin,
 			resp: jsonBody("What the pass did", schemaObj(map[string]any{
-				"at": tInteger(), "position": tInteger(), "checkpointError": tString(),
+				"at": tInteger(), "position": tInteger(), "checkpointError": tString(), "compaction": tBool(),
 				"segmentsRemoved": tInteger(), "compactionError": tString(), "note": tString(),
 			}))}},
 
@@ -492,6 +492,15 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/processes/{key}/cancel-instances", s.handleCancelInstancesOfProcess, apiOp{
 			summary: "Cancel a bounded batch of a definition's running instances (?limit=, default 5000, max 50000); repeat while the response reports remaining=true", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Bulk cancellation result", tObject())}},
+		// Deleting a version's finished instances for good, on an administrator's request
+		// (ADR-draft-operator-history-purge-and-compaction): the preview, then the delete in
+		// bounded batches. Refused on a server started with --instance-purge=false.
+		{"GET", "/api/v1/processes/{key}/history-purge", s.handleHistoryPurgePreview, apiOp{
+			summary: "What deleting this version's finished instances for good would consider: how many finished before the cut-off `?before=` (RFC 3339 or unix nanoseconds, default now; the answer repeats the moment it used), how many are running and stay, the gate a purge waits on (`exporter`: only what OpenSearch already holds; `durable`: no exporter runs), what the version declares as atlas:historyTtl and the server-wide retention age, whether this server allows the purge (`enabled`) and what `confirm` must repeat. Counts index keys and changes nothing. The purge does not free disk by itself: the WAL keeps every event until compaction removes it (POST /api/v1/checkpoints?compact=true)", tag: "Instances", role: RoleAdmin,
+			resp: jsonBody("The purge plan", tObject())}},
+		{"POST", "/api/v1/processes/{key}/history-purge", s.handleHistoryPurge, apiOp{
+			summary: "Delete one bounded batch of this version's finished instances for good — those that finished before `?before=` (default now), newest first, at most `?limit=` (default 1000, max 5000). Each is the durable purge event history retention uses, so recovery replays it; an instance whose events are not yet exported is passed over and counted in `held`. Repeat while `remaining` is true, passing `nextCursor` as `?after=`. Running instances are never touched. Permanent and meant for a development or test installation: refused with 403 on a server started with --instance-purge=false (ATLAS_INSTANCE_PURGE=false), and with 400 unless `?confirm=` repeats the process id", tag: "Instances", role: RoleAdmin,
+			resp: jsonBody("The batch carried out", tObject())}},
 		{"POST", "/api/v1/instances/terminate", s.handleTerminateInstances, apiOp{
 			summary: "Terminate a selected set of running instances — body {keys:[…]} for an explicit selection, or {processDefKey, q?, limit?} to terminate a definition's matching instances (repeat while remaining=true)", tag: "Instances", role: RoleOperator,
 			req:  jsonBody("Selection", schemaObj(map[string]any{"keys": tArray(), "processDefKey": tInteger(), "q": tString(), "limit": tInteger()})),

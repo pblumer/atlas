@@ -307,7 +307,15 @@ func runServe(args []string) error {
 	checkpointKeep := fs.Int("checkpoint-keep", 3, "how many recovery checkpoints to keep; each pins the state files it captured, so this bounds their disk (ADR-0131)")
 	// WAL compaction (ADR-0131): opt-in, off by default. Unlike checkpointing it deletes
 	// data, so — like history retention (ADR-0115) — an operator turns it on deliberately.
-	compactWAL := fs.Bool("compact-wal", false, "delete WAL segments already covered by a recovery checkpoint and every consumer watermark (ADR-0131), bounding the log's disk; off by default because it is irreversible. Requires checkpointing")
+	// ATLAS_COMPACT_WAL lets a container turn it on where its other settings are, and is
+	// read as strictly as the other switches: "ATLAS_COMPACT_WAL=ture" stops the start
+	// rather than leave the log growing where its operator believes it is bounded
+	// (ADR-draft-operator-history-purge-and-compaction).
+	compactDefault, err := envSwitch("ATLAS_COMPACT_WAL", false)
+	if err != nil {
+		return err
+	}
+	compactWAL := fs.Bool("compact-wal", compactDefault, "delete WAL segments already covered by a recovery checkpoint and every consumer watermark (ADR-0131), bounding the log's disk; off by default because it is irreversible. Requires checkpointing. An administrator can still compact once from the Console or with POST /api/v1/checkpoints?compact=true (or ATLAS_COMPACT_WAL=true)")
 	// Distributed traces (ADR-0142), off unless a collector is configured. The endpoint
 	// is the OTLP/HTTP base URL — Atlas posts to <endpoint>/v1/traces — and the standard
 	// OTEL_EXPORTER_OTLP_ENDPOINT is honored so a deployment that already sets it for
@@ -354,6 +362,14 @@ func runServe(args []string) error {
 		return err
 	}
 	cataloguePurge := fs.Bool("catalogue-purge", purgeDefault, "let an administrator delete a catalogue or a product for good, with its releases, its own products, the orders placed from it, the instances working them and the holds they granted (ADR-0469); on by default (opt-out), --catalogue-purge=false to refuse it. Switch it off on a production installation: there a product is withdrawn and a catalogue kept, because orders and held rights resolve through them. GET /api/v1/catalogs/{id}/deletion shows what a purge would remove either way (or ATLAS_CATALOGUE_PURGE=false)")
+	// Deleting a version's finished instances for good on an administrator's request
+	// (ADR-draft-operator-history-purge-and-compaction): on by default for the catalogue
+	// purge's reason — a development server needs nothing — and read as strictly.
+	instancePurgeDefault, err := envSwitch("ATLAS_INSTANCE_PURGE", true)
+	if err != nil {
+		return err
+	}
+	instancePurge := fs.Bool("instance-purge", instancePurgeDefault, "let an administrator delete a process version's finished instances for good, those that finished before a cut-off, from Operations or POST /api/v1/processes/{key}/history-purge; running instances are never touched and nothing is deleted before the exporter has it. On by default (opt-out), --instance-purge=false to refuse it, which a production installation whose history is evidence should set (or ATLAS_INSTANCE_PURGE=false)")
 	catalogue := fs.Bool("catalogue", catalogueDefault, "serve the shop, the catalogue, the orders and the inventory — their routes, the shop page, their Console menus and MCP tools (ADR-0312); on by default (opt-out), --catalogue=false to switch the whole area off. Nothing stored is removed, deployed processes run unchanged, and turning it back on is a restart (or ATLAS_CATALOGUE=false)")
 	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. With --auth on (the default) it sits behind the boundary like every other route: a scraper needs an API token of scope metrics (ADR-0198)")
 	// The read side of the exposition above, and a different server: this is where
@@ -401,7 +417,7 @@ func runServe(args []string) error {
 		Password: os.Getenv("ATLAS_METRICS_PASSWORD"),
 		Instance: strings.TrimSpace(*metricsInstance),
 	}
-	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch, receiptTTL: *triggerReceiptTTL, feedTTL: *eventFeedTTL, logTTL: *eventLogTTL, messageTTLMax: *messageTTLMax}
+	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch, receiptTTL: *triggerReceiptTTL, feedTTL: *eventFeedTTL, logTTL: *eventLogTTL, messageTTLMax: *messageTTLMax, instancePurgeOff: !*instancePurge}
 	storeCfg := storeConfig{cacheMB: *stateCacheMB, memtableMB: *stateMemtableMB, reserveMB: *storageReserveMB}
 	trace := tracing.Config{
 		Endpoint:    *traceEndpoint,
@@ -541,6 +557,10 @@ type retentionConfig struct {
 	// logTTL is how long a row of the event log is kept (ADR-0472 §4); zero
 	// keeps the default of 30 days.
 	logTTL time.Duration
+	// instancePurgeOff refuses an administrator's delete of finished instances
+	// (--instance-purge=false). Spelled "off" so the zero value is the shipped default,
+	// which allows it (ADR-draft-operator-history-purge-and-compaction).
+	instancePurgeOff bool
 	// messageTTLMax is the longest time to live a published message may ask for
 	// (ADR-0370); zero keeps the default of seven days.
 	messageTTLMax time.Duration
@@ -733,6 +753,9 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	}
 	if !cataloguePurge {
 		apiOpts = append(apiOpts, api.WithoutCataloguePurge())
+	}
+	if retention.instancePurgeOff {
+		apiOpts = append(apiOpts, api.WithoutInstancePurge())
 	}
 	if !catalogue {
 		apiOpts = append(apiOpts, api.WithoutCatalogue())
@@ -1014,6 +1037,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 			slog.String("docs", base+"/api/docs"), slog.String("openapi", base+"/api/v1/openapi.json"))
 	}
 	logCatalogueSwitches(catalogue, cataloguePurge)
+	logInstancePurgeSwitch(!retention.instancePurgeOff)
 	if metricsOn {
 		logging.Info(logging.ServerMetrics,
 			"Prometheus metrics enabled (with --auth on, a scraper needs an API token of scope metrics; ADR-0198)",
@@ -1040,6 +1064,20 @@ func logCatalogueSwitches(catalogue, cataloguePurge bool) {
 				"start a production installation with --catalogue-purge=false (ATLAS_CATALOGUE_PURGE=false) to refuse it",
 			slog.String("switch", "--catalogue-purge=false"))
 	}
+}
+
+// logInstancePurgeSwitch says at start that an administrator can delete finished
+// instances for good (ADR-draft-operator-history-purge-and-compaction). The switch is an
+// opt-out, like the catalogue purge, so a production installation upgraded without
+// --instance-purge=false would allow it and nothing else would tell its operator.
+func logInstancePurgeSwitch(on bool) {
+	if !on {
+		return
+	}
+	logging.Warn(logging.ServerInstancePurgeEnabled,
+		"an administrator can delete finished process instances for good; "+
+			"start a production installation with --instance-purge=false (ATLAS_INSTANCE_PURGE=false) to refuse it",
+		slog.String("switch", "--instance-purge=false"))
 }
 
 // runMCP serves the Model Context Protocol adapter on stdio, proxying tool calls

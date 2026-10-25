@@ -1134,6 +1134,17 @@ What it takes to run this for real.
   back. Underneath, a WAL write cut short is cut off again, and the engine halts after a
   batch it could not make durable instead of running refused commands later. Open: whether
   1 GiB covers a large store's compaction output (the record's open question)
+- ✅ An administrator gives disk back where the disk is shown
+  ([ADR-draft-operator-history-purge-and-compaction](docs/adr/draft-operator-history-purge-and-compaction.md)),
+  the "purge now" follow-up ADR-0115, ADR-0144 and ADR-0146 named. Operations deletes a
+  version's finished instances up to a cut-off — the history no `atlas:historyTtl` reaches —
+  in bounded batches through the retention purge event and behind its export gate
+  (`GET`/`POST /api/v1/processes/{key}/history-purge`, two MCP tools, `--instance-purge=false`
+  to refuse it on production). The storage card says whether the WAL is compacted, what the
+  last pass did, and compacts once on request (`POST /api/v1/checkpoints?compact=true`, also
+  on a frozen server); `ATLAS_COMPACT_WAL` switches compaction on from the environment. Open:
+  whether the retention sweep should purge records without a terminal position when no
+  exporter runs, as the manual purge does
 - ✅ Exported-log stream for downstream analytics: the OpenSearch exporter ([ADR-0114](docs/adr/0114-opensearch-event-exporter.md)) and the CloudEvents feed, pushed to a receiver ([ADR-0433](docs/adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md))
 - ✅ **Instance migration**
   ([ADR-0162](docs/adr/0162-process-instance-migration.md)): move running
