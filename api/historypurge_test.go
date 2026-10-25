@@ -18,7 +18,7 @@ import (
 
 // An administrator deletes a deployed version's finished instances up to a cut-off,
 // in bounded batches, through the purge event retention already uses
-// (ADR-draft-operator-history-purge-and-compaction). These tests reuse the
+// (ADR-0486). These tests reuse the
 // deterministic retention harness: one fake clock stamps CompletedAt and answers the
 // default cut-off, so which instance is "before" is decided by the test, never by
 // timing.

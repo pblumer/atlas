@@ -9,7 +9,7 @@ import (
 
 // TestEveryMessageThePurgeAndReclaimSurfacesAskForExists holds the purge dialog, the
 // storage card's reclaim section and the Operations menu entry to the catalogue
-// (ADR-draft-operator-history-purge-and-compaction, ADR-0267): every literal key they
+// (ADR-0486, ADR-0267): every literal key they
 // look up is in both locales. A typo in a key is otherwise found by the administrator
 // about to delete five million instances, reading a raw id where the warning belongs.
 func TestEveryMessageThePurgeAndReclaimSurfacesAskForExists(t *testing.T) {

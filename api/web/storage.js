@@ -12,7 +12,7 @@
 // server sends numbers and ids only.
 //
 // Below the disk, the card says how Atlas gives space back and offers it
-// (ADR-draft-operator-history-purge-and-compaction): whether the WAL is compacted on
+// (ADR-0486): whether the WAL is compacted on
 // every checkpoint, what the last pass did, a checkpoint now and — on a server not
 // started with --compact-wal — one compaction pass after a confirmation. It reads the
 // checkpoint status with ?verify=false: the full read re-hashes every checkpoint, which

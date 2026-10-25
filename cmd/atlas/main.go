@@ -310,7 +310,7 @@ func runServe(args []string) error {
 	// ATLAS_COMPACT_WAL lets a container turn it on where its other settings are, and is
 	// read as strictly as the other switches: "ATLAS_COMPACT_WAL=ture" stops the start
 	// rather than leave the log growing where its operator believes it is bounded
-	// (ADR-draft-operator-history-purge-and-compaction).
+	// (ADR-0486).
 	compactDefault, err := envSwitch("ATLAS_COMPACT_WAL", false)
 	if err != nil {
 		return err
@@ -363,7 +363,7 @@ func runServe(args []string) error {
 	}
 	cataloguePurge := fs.Bool("catalogue-purge", purgeDefault, "let an administrator delete a catalogue or a product for good, with its releases, its own products, the orders placed from it, the instances working them and the holds they granted (ADR-0469); on by default (opt-out), --catalogue-purge=false to refuse it. Switch it off on a production installation: there a product is withdrawn and a catalogue kept, because orders and held rights resolve through them. GET /api/v1/catalogs/{id}/deletion shows what a purge would remove either way (or ATLAS_CATALOGUE_PURGE=false)")
 	// Deleting a version's finished instances for good on an administrator's request
-	// (ADR-draft-operator-history-purge-and-compaction): on by default for the catalogue
+	// (ADR-0486): on by default for the catalogue
 	// purge's reason — a development server needs nothing — and read as strictly.
 	instancePurgeDefault, err := envSwitch("ATLAS_INSTANCE_PURGE", true)
 	if err != nil {
@@ -559,7 +559,7 @@ type retentionConfig struct {
 	logTTL time.Duration
 	// instancePurgeOff refuses an administrator's delete of finished instances
 	// (--instance-purge=false). Spelled "off" so the zero value is the shipped default,
-	// which allows it (ADR-draft-operator-history-purge-and-compaction).
+	// which allows it (ADR-0486).
 	instancePurgeOff bool
 	// messageTTLMax is the longest time to live a published message may ask for
 	// (ADR-0370); zero keeps the default of seven days.
@@ -1067,7 +1067,7 @@ func logCatalogueSwitches(catalogue, cataloguePurge bool) {
 }
 
 // logInstancePurgeSwitch says at start that an administrator can delete finished
-// instances for good (ADR-draft-operator-history-purge-and-compaction). The switch is an
+// instances for good (ADR-0486). The switch is an
 // opt-out, like the catalogue purge, so a production installation upgraded without
 // --instance-purge=false would allow it and nothing else would tell its operator.
 func logInstancePurgeSwitch(on bool) {

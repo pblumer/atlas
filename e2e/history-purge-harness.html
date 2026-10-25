@@ -5,7 +5,7 @@
     <title>Atlas history purge and storage reclaim e2e harness</title>
     <!-- Drives the real api/web/historypurge.js dialog and the real api/web/storage.js
          card against a mock `api` that answers the way the server does
-         (ADR-draft-operator-history-purge-and-compaction): the preview counts and changes
+         (ADR-0486): the preview counts and changes
          nothing, the delete hands back bounded batches with `remaining` and a cursor, and
          the checkpoint control answers one pass. The page scaffolding is the test's own —
          app.js boots the whole console on import and cannot be loaded here — so this

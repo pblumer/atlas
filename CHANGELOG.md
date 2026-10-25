@@ -62,7 +62,7 @@ governs a Worker:
   down. On by default; a production installation, whose history is evidence, starts with
   `--instance-purge=false` (`ATLAS_INSTANCE_PURGE=false`, Helm `atlas.instancePurge`), and
   while it is on every start logs a WARN, `event=server.instance_purge_enabled`
-  ([ADR-draft-operator-history-purge-and-compaction](docs/adr/draft-operator-history-purge-and-compaction.md)).
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)).
 - **The WAL can be compacted once from the Console.** The storage card on the dashboard now
   says whether the WAL is compacted on every checkpoint and what the last pass did, and offers
   *Checkpoint now* and, on a server started without `--compact-wal`, *Compact once* after a
@@ -73,7 +73,7 @@ governs a Worker:
   `--compact-wal` also reads `ATLAS_COMPACT_WAL=true`, and `GET /api/v1/checkpoints?verify=false`
   describes the checkpoints from their manifests instead of re-reading every state file, which
   is what the card asks for
-  ([ADR-draft-operator-history-purge-and-compaction](docs/adr/draft-operator-history-purge-and-compaction.md)).
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)).
 - **A SharePoint Worker can be a mockup.** A SharePoint Worker with the provider **Mockup**
   needs no tenant, no app registration and no credential: every operation runs against a
   site this server keeps in its memory, in the engine and in a supervised worker alike,

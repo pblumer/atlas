@@ -428,7 +428,7 @@ var (
 )
 
 // Deleting finished instances and compacting the WAL on an administrator's request
-// (ADR-draft-operator-history-purge-and-compaction).
+// (ADR-0486).
 var (
 	// HistoryPurged is one batch of finished instances an administrator deleted for
 	// good, with who asked, the version and how many went.

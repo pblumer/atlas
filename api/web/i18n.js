@@ -519,7 +519,7 @@ const CATALOGS = {
     "storage.when.year": "mehr als einem Jahr",
 
     // How the card gives disk back, and deleting finished instances from Operations
-    // (ADR-draft-operator-history-purge-and-compaction). historypurge_i18n_test.go holds
+    // (ADR-0486). historypurge_i18n_test.go holds
     // both modules to these keys in both languages.
     "storage.reclaim.title": "Platz zurückgewinnen",
     "storage.reclaim.noCheckpoints": "Checkpoints sind ausgeschaltet (--checkpoint-interval=0). Ohne Checkpoint lässt sich das WAL nicht kompaktieren.",

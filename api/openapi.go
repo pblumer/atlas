@@ -493,7 +493,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Cancel a bounded batch of a definition's running instances (?limit=, default 5000, max 50000); repeat while the response reports remaining=true", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Bulk cancellation result", tObject())}},
 		// Deleting a version's finished instances for good, on an administrator's request
-		// (ADR-draft-operator-history-purge-and-compaction): the preview, then the delete in
+		// (ADR-0486): the preview, then the delete in
 		// bounded batches. Refused on a server started with --instance-purge=false.
 		{"GET", "/api/v1/processes/{key}/history-purge", s.handleHistoryPurgePreview, apiOp{
 			summary: "What deleting this version's finished instances for good would consider: how many finished before the cut-off `?before=` (RFC 3339 or unix nanoseconds, default now; the answer repeats the moment it used), how many are running and stay, the gate a purge waits on (`exporter`: only what OpenSearch already holds; `durable`: no exporter runs), what the version declares as atlas:historyTtl and the server-wide retention age, whether this server allows the purge (`enabled`) and what `confirm` must repeat. Counts index keys and changes nothing. The purge does not free disk by itself: the WAL keeps every event until compaction removes it (POST /api/v1/checkpoints?compact=true)", tag: "Instances", role: RoleAdmin,

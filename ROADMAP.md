@@ -1135,7 +1135,7 @@ What it takes to run this for real.
   batch it could not make durable instead of running refused commands later. Open: whether
   1 GiB covers a large store's compaction output (the record's open question)
 - ✅ An administrator gives disk back where the disk is shown
-  ([ADR-draft-operator-history-purge-and-compaction](docs/adr/draft-operator-history-purge-and-compaction.md)),
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)),
   the "purge now" follow-up ADR-0115, ADR-0144 and ADR-0146 named. Operations deletes a
   version's finished instances up to a cut-off — the history no `atlas:historyTtl` reaches —
   in bounded batches through the retention purge event and behind its export gate

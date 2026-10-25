@@ -1,4 +1,4 @@
-# ADR-DRAFT: Deleting finished instances and compacting the WAL on an operator's request
+# ADR-0486: Deleting finished instances and compacting the WAL on an operator's request
 
 - **Status:** Accepted
 - **Implementation:** Landed

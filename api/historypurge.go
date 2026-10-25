@@ -16,7 +16,7 @@ import (
 )
 
 // Deleting a version's finished instances on an administrator's request
-// (ADR-draft-operator-history-purge-and-compaction).
+// (ADR-0486).
 //
 // History retention deletes on a policy: a definition's atlas:historyTtl, frozen onto an
 // instance when it finishes, or the server-wide --retention-max-age (ADR-0115, ADR-0144,

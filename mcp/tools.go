@@ -1571,7 +1571,7 @@ func parseUint(s string) (uint64, error) {
 }
 
 // historyPurgePath is the route the two history-purge tools proxy
-// (ADR-draft-operator-history-purge-and-compaction), with its query.
+// (ADR-0486), with its query.
 func historyPurgePath(key uint64, q url.Values) string {
 	path := "/api/v1/processes/" + strconv.FormatUint(key, 10) + "/history-purge"
 	if len(q) > 0 {

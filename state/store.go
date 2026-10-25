@@ -1102,7 +1102,7 @@ func (q queries) FinishedInstancesOfDefDesc(procDefKey uint64, beforeCompletedAt
 
 // CountFinishedOfDefBefore counts the finished instances of one definition that
 // completed strictly before the cut-off, which is how many a history purge up to it
-// would consider (ADR-draft-operator-history-purge-and-compaction). It walks the
+// would consider (ADR-0486). It walks the
 // piDoneByDef index entries of that range and decodes no record, so a preview over
 // millions of instances reads millions of keys and nothing else.
 func (q queries) CountFinishedOfDefBefore(procDefKey uint64, before int64) (int, error) {

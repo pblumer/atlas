@@ -7,7 +7,7 @@ import (
 )
 
 // TestCountFinishedOfDefBefore pins the count a history-purge preview shows
-// (ADR-draft-operator-history-purge-and-compaction): the finished instances of one
+// (ADR-0486): the finished instances of one
 // definition that completed strictly before a cut-off, read off the by-definition index
 // without decoding a record — and nothing of another definition.
 func TestCountFinishedOfDefBefore(t *testing.T) {

@@ -1,6 +1,6 @@
 // End-to-end coverage for deleting finished instances (api/web/historypurge.js) and the
 // storage card's reclaim section (api/web/storage.js)
-// (ADR-draft-operator-history-purge-and-compaction).
+// (ADR-0486).
 //
 // The server already refuses a purge that does not repeat the process id and already
 // passes over what the exporter does not have. What these tests are about is whether an

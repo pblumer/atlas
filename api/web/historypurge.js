@@ -1,5 +1,5 @@
 // Deleting a process's finished instances for good, from the Operations overview
-// (ADR-draft-operator-history-purge-and-compaction).
+// (ADR-0486).
 //
 // The server answers what a purge would consider without changing anything
 // (GET …/history-purge) and deletes in bounded batches (POST, repeated while it says

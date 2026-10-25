@@ -8,7 +8,7 @@ import (
 )
 
 // An administrator asks for one compaction pass on a server that does not compact on
-// its own (ADR-draft-operator-history-purge-and-compaction). The flag decides whether
+// its own (ADR-0486). The flag decides whether
 // compaction runs by itself; the request is the person's choice for one pass, and the
 // pass keeps every gate the scheduled one has.
 

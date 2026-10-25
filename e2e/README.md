@@ -61,7 +61,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   change event, keeping an fx field's `=`; a focused dmn-js output cell gets a spark and Apply types
   into it, while an input cell (a unary test) is not written to; and without an AI Worker the chat
   is absent and the rest still works.
-- **`history-purge.spec.mjs`** ([ADR-draft-operator-history-purge-and-compaction](../docs/adr/draft-operator-history-purge-and-compaction.md)):
+- **`history-purge.spec.mjs`** ([ADR-0486](../docs/adr/0486-operator-history-purge-and-compaction.md)):
   deleting a process's finished instances and the storage card's reclaim section against a
   stubbed API — the preview counts every version with one cut-off and writes nothing, and says
   that deleting frees no disk until the WAL is compacted and that the Finished column does not go

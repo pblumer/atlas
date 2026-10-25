@@ -98,7 +98,7 @@ type checkpointPassResp = checkpointPass
 // Verifying a checkpoint re-hashes every byte of its state files, and on a store of
 // tens of GiB that is minutes of reading per checkpoint. ?verify=false describes them
 // from their manifests instead — what the dashboard asks for every time it loads
-// (ADR-draft-operator-history-purge-and-compaction) — and the full read stays the
+// (ADR-0486) — and the full read stays the
 // default, because "does it still verify" is the question this endpoint was built for.
 func (s *Server) handleCheckpointStatus(w http.ResponseWriter, r *http.Request) {
 	verify := true
@@ -207,7 +207,7 @@ func (s *Server) walFootprint() (int, int64) {
 // no goroutine to ask, which is a 409 rather than a hang or a silent no-op.
 //
 // ?compact=true compacts on this pass even on a server started without --compact-wal
-// (ADR-draft-operator-history-purge-and-compaction): the flag decides whether
+// (ADR-0486): the flag decides whether
 // compaction runs on its own, and an administrator asking for it is the person the flag
 // leaves the choice to. The route is allowed on a frozen server (ADR-0481), so this is
 // also how a server that froze without --compact-wal gives WAL space back.

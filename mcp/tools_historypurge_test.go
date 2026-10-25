@@ -8,7 +8,7 @@ import (
 	"github.com/pblumer/atlas/api"
 )
 
-// The history-purge tools (ADR-draft-operator-history-purge-and-compaction): an agent
+// The history-purge tools (ADR-0486): an agent
 // that ran a test over many records clears its runs — the preview first, then the
 // delete with the process id repeated, on every server not started with
 // --instance-purge=false.

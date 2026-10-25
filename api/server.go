@@ -874,7 +874,7 @@ type Server struct {
 	cataloguePurgeOff bool
 	// instancePurgeOff is an administrator's delete of a version's finished instances
 	// switched off with --instance-purge=false / WithoutInstancePurge
-	// (ADR-draft-operator-history-purge-and-compaction). "off" for the same reason as
+	// (ADR-0486). "off" for the same reason as
 	// cataloguePurgeOff: the purge is an opt-out, so the zero value allows it. Set once
 	// before Handler is mounted.
 	instancePurgeOff bool
@@ -2798,7 +2798,7 @@ func (s *Server) checkpointLoop(every time.Duration) {
 //
 // compact asks for compaction on this one pass when the server does not compact on its
 // own: an administrator's request, after a confirmation, is the choice --compact-wal
-// leaves to a person (ADR-draft-operator-history-purge-and-compaction). It changes
+// leaves to a person (ADR-0486). It changes
 // nothing about the cut — the same checkpoint, watermarks and backup gate decide it.
 //
 // last carries the position most recently *logged* as published. An idle server

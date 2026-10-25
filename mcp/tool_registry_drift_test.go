@@ -158,7 +158,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_search_instances":             "GET /api/v1/instances/search",
 	"atlas_instance_data_objects":        "GET /api/v1/instances/{key}/data-objects",
 	"atlas_terminate_instances":          "POST /api/v1/instances/terminate",
-	// Clearing a test's runs (ADR-draft-operator-history-purge-and-compaction): the
+	// Clearing a test's runs (ADR-0486): the
 	// preview, and the administrator's delete a production server switches off.
 	"atlas_finished_instances_deletion": "GET /api/v1/processes/{key}/history-purge",
 	"atlas_delete_finished_instances":   "POST /api/v1/processes/{key}/history-purge",

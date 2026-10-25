@@ -365,7 +365,7 @@ recovery behaves exactly as it did before.
    this is storage housekeeping over the data directory, not something an agent drives a
    scenario with, and the control deletes WAL segments when compaction is on.
 
-   *Extended by ADR-draft-operator-history-purge-and-compaction:* `POST
+   *Extended by ADR-0486:* `POST
    /api/v1/checkpoints?compact=true` compacts on that one pass on a server started without
    `--compact-wal`, with every gate above; `--compact-wal` also reads `ATLAS_COMPACT_WAL`; and
    `GET /api/v1/checkpoints?verify=false` describes the checkpoints from their manifests

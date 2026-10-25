@@ -6451,7 +6451,7 @@ async function viewInstances() {
         );
       }
       // Deleting finished instances for good is an administrator's, and offered only
-      // where there are some (ADR-draft-operator-history-purge-and-compaction). The
+      // where there are some (ADR-0486). The
       // dialog reads its own counts: the Finished column counts every instance that
       // ever finished, including the ones already deleted.
       if (s.finished && mayUse("admin")) {
@@ -6503,7 +6503,7 @@ async function viewInstances() {
       return;
     }
     // Delete a process's finished instances for good, a version or all of them, up to
-    // a cut-off (ADR-draft-operator-history-purge-and-compaction).
+    // a cut-off (ADR-0486).
     if (act === "purge") {
       const g = allGroups.find((x) => x.processId === b.dataset.proc);
       if (!g) return;

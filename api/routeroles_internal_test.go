@@ -164,7 +164,7 @@ var wantAdminRoutes = []string{
 	"GET /api/v1/catalog-products/{id}/deletion",
 	"DELETE /api/v1/catalog-products/{id}",
 	// Deleting a version's finished instances for good
-	// (ADR-draft-operator-history-purge-and-compaction): history is evidence, the
+	// (ADR-0486): history is evidence, the
 	// purge cannot be undone, and a production server switches it off altogether.
 	// The preview is the administrator's too, because it is how the purge is decided.
 	"GET /api/v1/processes/{key}/history-purge",

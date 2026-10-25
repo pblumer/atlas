@@ -10,7 +10,7 @@ import (
 )
 
 // Deleting finished instances is an opt-out
-// (ADR-draft-operator-history-purge-and-compaction), as the catalogue purge is, so a
+// (ADR-0486), as the catalogue purge is, so a
 // production installation keeps its history only if somebody set
 // --instance-purge=false. The start says so, as a WARN under a stable event name.
 
