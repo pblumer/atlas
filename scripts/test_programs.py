@@ -98,6 +98,13 @@ class ProgrammeIndexTests(unittest.TestCase):
         self.write()
         self.assert_invalid("complete programme still has open slices")
 
+    def test_completion_requires_accountable_owner(self):
+        self.data["slices"][0]["status"] = "complete"
+        self.data["slices"][0]["owner"] = "unassigned"
+        self.data["slices"][0]["evidence"] = ["../../planning/sample.md"]
+        self.write()
+        self.assert_invalid("completed slice requires an assigned owner")
+
     def test_invalid_github_references_are_rejected(self):
         self.data["slices"][0]["prs"] = ["34"]
         self.write()
