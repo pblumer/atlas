@@ -10,7 +10,7 @@ See [delivery protocol](../development/program-delivery.md) and
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
-| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 0/9 | unassigned (maintainer assignment required) | Assign a programme owner; review PR #1346, ADR-0480 and the proposed controlled Worker-rebinding decision. |
+| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 0/9 | unassigned (maintainer assignment required) | Assign a programme owner; review ADR-0480/0485 acceptance and the proposed controlled Worker-rebinding decision. |
 
 ## Capability-driven Automation (CDA)
 
@@ -21,7 +21,7 @@ Connect business outcomes to verified technical operation semantics and, only af
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
 | **CDA0** — Declarative operation claims | active | unassigned | — | [PR #1343](https://github.com/pblumer/atlas/pull/1343) | PR #1343 merged; ADR-0480 remains Proposed/Partial. Review architecture approval and completion evidence before closing. |
-| **CDA1** — Semantic contract envelope | active | unassigned | CDA0 | [PR #1346](https://github.com/pblumer/atlas/pull/1346) | Draft PR #1346; exact semantics and parser only, not provider conformance. |
+| **CDA1** — Semantic contract envelope | active | unassigned | CDA0 | [PR #1346](https://github.com/pblumer/atlas/pull/1346) | PR #1346 merged the strict contract envelope into main; ADR-0485 remains Proposed/Partial. Full JSON Schema and provider conformance are not implemented; architecture acceptance remains open. |
 | **CDA2** — Contract governance and conformance | planned | unassigned | CDA1 | — | Accept governance ADR; offline full JSON Schema checks, independent evidence, publication and revocation. |
 | **CDA3** — Verified Worker Type mappings | planned | unassigned | CDA2 | — | Prove account versus contact distinction; source-derived provider mappings with no drift. |
 | **CDA4** — Cross-layer architecture graph | planned | unassigned | CDA2, CDA3 | — | Accept/extend ADR-0420; stable identities, provenance, bounded traversals and visibility. |
