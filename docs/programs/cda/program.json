@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-25",
   "plan": "../../planning/capability-driven-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-cda--capability-driven-automation-",
-  "next_action": "Assign a programme owner; review PR #1351 and PR #1346; decide ADR-0480.",
+  "next_action": "Assign a programme owner; review CDA0/CDA1 architecture gates; finish CI of schema-only PR #1357, then implement independent evidence under accepted ADR-0483.",
   "slices": [
     {
       "id": "CDA0",
@@ -33,19 +33,23 @@
       "prs": [
         1346
       ],
-      "note": "Draft PR #1346; exact semantics and parser only, not provider conformance."
+      "note": "PR #1346 merged the exact technical-contract envelope on main; ADR-0485 remains Proposed/Partial, so no provider conformance or completed-slice claim."
     },
     {
       "id": "CDA2",
       "title": "Contract governance and conformance",
-      "status": "planned",
+      "status": "active",
       "owner": "unassigned",
       "depends_on": [
         "CDA1"
       ],
-      "issues": [],
-      "prs": [],
-      "note": "Accept governance ADR; offline full JSON Schema checks, independent evidence, publication and revocation."
+      "issues": [
+        1358
+      ],
+      "prs": [
+        1357
+      ],
+      "note": "ADR-0483 Accepted (option 3). Schema-only PR #1357 in review. Independent operation/package-bound evidence, reviewer approval, revocation and publication are not yet implemented; no Worker is verified."
     },
     {
       "id": "CDA3",
