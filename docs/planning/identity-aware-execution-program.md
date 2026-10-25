@@ -5,7 +5,7 @@
 **Roadmap owner:** [Milestone IAE](../../ROADMAP.md#milestone-iae--identity-aware-execution-).  
 **Architecture authority:** [ADR-0475](../adr/0475-identity-aware-worker-execution.md) (**Proposed / Partial**).  
 **Related programme:** [Capability-driven Automation (CDA)](capability-driven-automation-program.md). CDA governs semantic Worker operation contracts, discovery and opt-in capability routing; IAE governs *who can act, as whom, under which policy, with what durable evidence*.  
-**Communication artifact:** [Identity-Aware Workflow Execution whitepaper](../whitepaper/identity-aware-workflow-execution.md) (strategic stakeholder narrative; not an accepted ADR or proof of completed implementation).
+**Communication artifact:** [Identity-Aware Workflow Execution whitepaper](../whitepapers/identity-aware-workflow-execution.md) (strategic stakeholder narrative; not an accepted ADR or proof of completed implementation).
 
 ## Outcome and boundaries
 
