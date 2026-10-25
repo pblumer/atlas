@@ -449,6 +449,15 @@ governs a Worker:
 
 ### Fixed
 
+- **A metrics scrape no longer re-reads every checkpoint.** The checkpoint gauges on
+  `/metrics` verified every published checkpoint on every scrape, which re-hashes all of
+  its state files: on a store of 23 GiB with three checkpoints kept, up to 70 GiB of reading
+  per scrape, long past any scrape timeout. A verdict is now remembered per checkpoint,
+  keyed by its files' names, sizes and modification times, and renewed at least daily; a
+  checkpoint the server publishes counts as verified, because publishing hashed it. A
+  replaced or rewritten file is still reported at the next scrape, rot that changes no
+  metadata within a day. `GET /api/v1/checkpoints` still verifies afresh
+  ([ADR-draft-checkpoint-verdicts-are-remembered](docs/adr/draft-checkpoint-verdicts-are-remembered.md)).
 - **The storage card appears again on a large store.** `GET /api/v1/checkpoints?verify=false`
   verified every checkpoint before answering from the manifests, so each dashboard load
   re-read the state files of every checkpoint — tens of GiB on a store of 23 GiB — and the

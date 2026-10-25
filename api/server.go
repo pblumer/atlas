@@ -775,7 +775,11 @@ type Server struct {
 	// verifyCheckpoint re-hashes one published checkpoint's state files against its
 	// manifest — checkpoint.Verify, held here so a test can count the whole-store reads
 	// a request costs (ADR-0486). Set in New.
-	verifyCheckpoint   func(root string, pos uint64) (*checkpoint.Manifest, error)
+	verifyCheckpoint func(root string, pos uint64) (*checkpoint.Manifest, error)
+	// verdicts remembers whether each published checkpoint verified, for the /metrics
+	// gauges, which would otherwise re-hash every checkpoint on every scrape
+	// (ADR-draft-checkpoint-verdicts-are-remembered).
+	verdicts           checkpointVerdicts
 	checkpointInterval time.Duration
 	checkpointKeep     int
 	// checkpointTicks, when non-nil, replaces the checkpoint loop's real ticker so a
@@ -2884,6 +2888,12 @@ func (s *Server) takeCheckpoint() (uint64, error) {
 		return 0, err
 	}
 	pos := staged.AppliedPosition()
+	// The commit just hashed exactly the files it published, which is the verification
+	// a metrics scrape would otherwise repeat (ADR-draft-checkpoint-verdicts-are-remembered).
+	// A position that was already published hashed nothing, so it renews no verdict.
+	if !staged.AlreadyPublished() {
+		s.rememberPublished(pos)
+	}
 	if err := checkpoint.Prune(s.checkpointRoot, s.checkpointKeep); err != nil {
 		// The checkpoint is published either way; a failed prune costs disk, not recovery,
 		// so it is reported without discarding the position that was captured.
