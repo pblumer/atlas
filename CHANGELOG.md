@@ -46,6 +46,20 @@ governs a Worker:
 
 ### Added
 
+- **A process finds, keeps and labels the people in any CardDAV address book.** A new
+  CardDAV Worker Type reaches the address book that comes with most mail accounts outside
+  Google and Microsoft — iCloud, Nextcloud, ownCloud, mailbox.org, Posteo, Infomaniak,
+  Fastmail, Synology, Radicale, Baïkal — with the operations and the flat contact of the
+  Google Contacts Worker: find a contact by e-mail address, phone number or a custom field,
+  read, search, list, create, update and delete contacts, and put a group such as *Kunden*
+  on one or take it off. A Worker names its endpoint — the address book's URL or the
+  server's, from which the address book is found — and a vault bundle with the account's
+  username, its app-specific password and whether the server keeps groups in `CATEGORIES`
+  or, as iCloud and Fastmail do, as group cards of their own. An update keeps every
+  property of the card it does not change, a photo and Apple's labels included, and a
+  repeated `create-contact` finds the contact the first round made instead of making a
+  second; a missing contact can be caught as `CARDDAV_CONTACT_NOT_FOUND`
+  ([ADR-draft-carddav-worker](docs/adr/draft-carddav-worker.md)).
 - **The dashboard shows the disk, and the server keeps a reserve free on it.** An
   administrator sees each file system the server writes to on the Console's dashboard: how
   much is used and free, where the reserve begins, what the WAL and the state store hold,

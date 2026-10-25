@@ -20,6 +20,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/agent"
+	"github.com/pblumer/atlas/connector/carddav"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/discord"
@@ -7076,6 +7077,22 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"connector": j.Connector, "operation": j.Operation, "contactId": j.ContactID,
 			"query": j.Query, "field": j.Field, "group": j.Group, "contact": j.Contact,
 			"maxResults": j.MaxResults, "resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
+		}}
+	case compiler.CardDAVJobTypeIndex:
+		// Google Contacts' arm with a CardDAV address book: the evaluated values travel,
+		// and nothing that says which server or as whom (ADR-draft-carddav-worker). The
+		// create key does: it is derived from this installation's node id and the job key,
+		// so a create repeated after a lease elapsed names the contact the first round
+		// made, and no other installation's job names the same one.
+		j, err := carddav.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey, jobKey, s.nodeID)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "carddav", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "contactId": j.ContactID,
+			"query": j.Query, "field": j.Field, "group": j.Group, "contact": j.Contact,
+			"maxResults": j.MaxResults, "resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
+			"createKey": j.CreateKey,
 		}}
 	case compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex:
 		// One arm for the three clio operations: the resolved job says which it is, so

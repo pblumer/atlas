@@ -51,6 +51,7 @@ func TestReservedJobTypesMatchTheirIndices(t *testing.T) {
 		SharePointOpsJobType: SharePointOpsJobTypeIndex,
 
 		GoogleContactsJobType: GoogleContactsJobTypeIndex,
+		CardDAVJobType:        CardDAVJobTypeIndex,
 	}
 
 	reserved := ReservedJobTypes()
