@@ -146,6 +146,7 @@ operational copy is dropped.
 
 ## Links
 
+- extended by ADR-0486 (an administrator's purge of a version's finished instances up to a cut-off, through this purge event and behind this gate)
 - companion to ADR-0085 (process-instance TTL — bounds the *active* set; this bounds the
   *finished* set, the follow-up it named) and ADR-0114 (OpenSearch exporter — this consumes
   its high-water mark as the delete gate)

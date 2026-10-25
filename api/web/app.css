@@ -787,6 +787,18 @@ textarea::placeholder {
 .storage-nums { font-size: 12px; }
 .storage-forecast { margin: 4px 0 8px; }
 .storage-error { color: var(--danger); }
+/* How the card gives disk back, and the dialog that deletes finished instances
+   (ADR-0486). */
+.storage-reclaim { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; }
+.storage-reclaim-title { font-size: 14px; margin: 0 0 6px; }
+.storage-reclaim-actions { gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; }
+.storage-reclaim-result:empty { display: none; }
+.confirm-modal.purge-modal { width: min(560px, 94vw); }
+.purge-preview { margin: 10px 0 4px; min-height: 1.4em; }
+.purge-preview p, .purge-progress p { margin: 4px 0; }
+.purge-versions, .purge-notes { margin: 4px 0 8px 18px; padding: 0; font-size: 12.5px; }
+.purge-off { color: var(--danger); }
+.purge-progress { margin-top: 10px; }
 #api-tokens #tok-soon ul { margin: 6px 0; padding-left: 18px; }
 /* The variable editor inside the incident's fix dialog (ADR-0158). */
 .inc-vars-modal { max-width: 620px; width: 92vw; }

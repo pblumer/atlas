@@ -35,6 +35,7 @@ import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWor
 // already read the handbook.
 import { workerKindDocHTML } from "./workertypedocs.js";
 import { migrateProcessFlow, runningByDefinition } from "./migrationdialog.js";
+import { purgeFinishedFlow } from "./historypurge.js";
 import { openPickModal } from "./pickmodal.js";
 import { openApplicationDeleteDialog, forceReason } from "./deletedialog.js";
 import { refDeleteWarning } from "./dmnref-impact.js";
@@ -6449,6 +6450,16 @@ async function viewInstances() {
           { label: "Terminate all running", icon: "⛔", act: "term", data: { proc: g.processId }, danger: true },
         );
       }
+      // Deleting finished instances for good is an administrator's, and offered only
+      // where there are some (ADR-0486). The
+      // dialog reads its own counts: the Finished column counts every instance that
+      // ever finished, including the ones already deleted.
+      if (s.finished && mayUse("admin")) {
+        menuItems.push(
+          { sep: true },
+          { label: tr("purge.menu"), icon: "✕", act: "purge", data: { proc: g.processId }, danger: true },
+        );
+      }
       // A running count says nothing about a token being *stuck*: an instance parked
       // behind an incident is counted as running like any other (ADR-0151).
       const inc = incidentCell(g);
@@ -6487,6 +6498,20 @@ async function viewInstances() {
         // How many instances a version holds: the per-version running counts the
         // overview already read, so the picker says which one is worth draining.
         runningOf: (v) => runningByDef.get(String(v.key)) || 0,
+        onDone: load,
+      });
+      return;
+    }
+    // Delete a process's finished instances for good, a version or all of them, up to
+    // a cut-off (ADR-0486).
+    if (act === "purge") {
+      const g = allGroups.find((x) => x.processId === b.dataset.proc);
+      if (!g) return;
+      await purgeFinishedFlow({
+        api, toast,
+        processId: g.processId,
+        processName: g.latest.name || g.processId,
+        versions: g.versions,
         onDone: load,
       });
       return;

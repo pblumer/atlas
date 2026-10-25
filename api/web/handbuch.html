@@ -9620,14 +9620,61 @@ groups:
         restart recovers exactly what was acknowledged. Carrying on without a restart would be wrong: commands whose
         callers had already been given an error would run later after all.</p>
       <p data-l="de"><b>Platz freigeben.</b> Lösche Dateien ausserhalb des Datenverzeichnisses oder vergrössere das
-        Volume. Im Datenverzeichnis selbst löschst du nichts von Hand. Das WAL wächst, solange
-        <code>--compact-wal</code> ausgeschaltet ist, und das ist der Standard. Mit Checkpoints und
-        <code>--compact-wal</code> gibt jeder Checkpoint die Segmente frei, die er abdeckt;
-        <code>POST /api/v1/checkpoints</code> löst das sofort aus, auch im eingefrorenen Zustand.</p>
+        Volume. Im Datenverzeichnis selbst löschst du nichts von Hand. Den grössten Teil belegt meist das WAL: Es
+        behält jedes Ereignis, solange <code>--compact-wal</code> ausgeschaltet ist, und das ist der Standard. Mit
+        Checkpoints und <code>--compact-wal</code> (oder <code>ATLAS_COMPACT_WAL=true</code>) gibt jeder Checkpoint
+        die Segmente frei, die er abdeckt. Ohne die Option kompaktierst du einmalig: auf der Speicher-Karte im
+        Dashboard mit <i>Einmal kompaktieren</i> oder mit <code>POST /api/v1/checkpoints?compact=true</code>. Beides
+        geht auch im eingefrorenen Zustand und ohne Neustart. Gelöscht werden nur Segmente, die ein geprüfter
+        Checkpoint abdeckt und die weder der OpenSearch-Exporter noch ein laufendes Backup noch braucht; das lässt
+        sich nicht rückgängig machen. Der Durchlauf prüft dabei die Checkpoints, was bei einem grossen
+        Zustandsspeicher einige Minuten dauern kann. Die Karte selbst liest die Checkpoints ohne Prüfung
+        (<code>GET /api/v1/checkpoints?verify=false</code>).</p>
       <p data-l="en"><b>Freeing space.</b> Delete files outside the data directory, or grow the volume. Inside the
-        data directory, delete nothing by hand. The WAL grows for as long as <code>--compact-wal</code> is off, which
-        is the default. With checkpoints and <code>--compact-wal</code>, each checkpoint frees the segments it
-        covers; <code>POST /api/v1/checkpoints</code> takes one at once, also while the server is frozen.</p>
+        data directory, delete nothing by hand. Most of it is usually the WAL: it keeps every event for as long as
+        <code>--compact-wal</code> is off, which is the default. With checkpoints and <code>--compact-wal</code> (or
+        <code>ATLAS_COMPACT_WAL=true</code>), each checkpoint frees the segments it covers. Without the option you
+        compact once: with <i>Compact once</i> on the storage card of the dashboard, or with
+        <code>POST /api/v1/checkpoints?compact=true</code>. Both work while the server is frozen and need no restart.
+        Only segments a verified checkpoint covers and neither the OpenSearch exporter nor a backup in progress still
+        needs are deleted, and that cannot be undone. The pass verifies the checkpoints, which can take a few minutes
+        on a large state store. The card itself reads the checkpoints without verifying them
+        (<code>GET /api/v1/checkpoints?verify=false</code>).</p>
+      <div id="instanzen-loeschen" style="scroll-margin-top:66px"></div>
+      <p data-l="de"><b>Beendete Instanzen löschen.</b> Unter Operations löscht ein Administrator im Menü ⋯ einer
+        Prozesszeile mit <i>Beendete Instanzen löschen…</i> die beendeten Instanzen einer Version oder aller
+        Versionen, die vor einem gewählten Zeitpunkt beendet wurden, mit ihrem Verlauf, ihren Variablen und ihren
+        Entscheidungen. Der Dialog zählt zuerst, was betroffen ist. Gelöscht wird erst, wenn du die Prozess-ID
+        eintippst, und zwar in Paketen von höchstens 1000 Instanzen, die neuesten zuerst; zwischen zwei Paketen kannst
+        du anhalten. Laufende Instanzen bleiben unberührt. Sollen sie mitgehen, beendest du sie vorher mit
+        <i>Terminate all running</i>. Läuft der OpenSearch-Exporter, wird nur gelöscht, was er bereits übernommen
+        hat; der Rest bleibt und wird gezählt. Das Löschen ist dasselbe Ereignis, das die Aufbewahrung verwendet, und
+        übersteht darum jeden Neustart.</p>
+      <p data-l="en"><b>Deleting finished instances.</b> In Operations, an administrator uses <i>Delete finished
+        instances…</i> in the ⋯ menu of a process row to delete the finished instances of one version or of all
+        versions that finished before a chosen moment, with their history, their variables and their decisions. The
+        dialog first counts what is affected. Nothing goes until you type the process id, and then it goes in batches
+        of at most 1000 instances, newest first; you can stop between two batches. Running instances are not touched.
+        If they should go too, end them first with <i>Terminate all running</i>. While the OpenSearch exporter runs,
+        only what it already holds is deleted; the rest stays and is counted. The delete is the same event retention
+        uses, so it survives every restart.</p>
+      <p data-l="de">Zwei Dinge überraschen. Löschen allein gibt keinen Platz frei: Jede gelöschte Instanz schreibt
+        zuerst ein Ereignis ins WAL, frei wird der Platz erst durch die Kompaktierung danach. Und die Spalte
+        <i>Finished</i> der Übersicht zählt alle jemals beendeten Instanzen und sinkt deshalb nicht. Auf einer
+        Produktionsinstallation, deren Verlauf als Nachweis dient, schaltest du das Löschen mit
+        <code>--instance-purge=false</code> (<code>ATLAS_INSTANCE_PURGE=false</code>) aus. Für einen Prozess, der
+        immer wieder läuft, ist <code>atlas:historyTtl</code> am Prozess die bessere Lösung: Dann löscht Atlas seine
+        beendeten Instanzen von selbst. Über die API heisst das <code>GET</code> und
+        <code>POST /api/v1/processes/{key}/history-purge</code>, über MCP
+        <code>atlas_finished_instances_deletion</code> und <code>atlas_delete_finished_instances</code>.</p>
+      <p data-l="en">Two things surprise people. Deleting alone frees no space: every deleted instance first writes
+        an event to the WAL, and the space is freed by compacting afterwards. And the overview's <i>Finished</i>
+        column counts every instance that ever finished, so it does not go down. On a production installation whose
+        history serves as evidence, switch the delete off with <code>--instance-purge=false</code>
+        (<code>ATLAS_INSTANCE_PURGE=false</code>). For a process that runs again and again,
+        <code>atlas:historyTtl</code> on the process is the better answer: Atlas then deletes its finished instances
+        by itself. Over the API this is <code>GET</code> and <code>POST /api/v1/processes/{key}/history-purge</code>,
+        over MCP <code>atlas_finished_instances_deletion</code> and <code>atlas_delete_finished_instances</code>.</p>
       <p data-l="de"><b>Prognose.</b> Atlas glättet den Verbrauch je Dateisystem über etwa sechs Stunden und hält dafür
         nur zwei Zahlen im Speicher. Eine Prognose erscheint nach einer Stunde Beobachtung und beginnt bei jedem
         Neustart von vorn. Erreicht sie die Reserve innerhalb einer Woche, zeigt das Dashboard eine Warnung. Für einen
@@ -9687,14 +9734,16 @@ groups:
         <code>atlas:historyTtl</code>). Das Löschen ist <b>export-gesteuert</b>: Läuft ein OpenSearch-Exporter,
         wird nur gelöscht, was er schon ausgeliefert hat; läuft keiner, gilt der gesicherte Stand des
         Ereignisprotokolls als Archiv. So verschwindet nichts, das nicht anderswo liegt. Der Lauf ist flaggen- und
-        timergesteuert (<code>--retention-interval</code>, <code>--retention-batch</code>); eine HTTP-Route dafür
-        gibt es nicht.</p>
+        timergesteuert (<code>--retention-interval</code>, <code>--retention-batch</code>). Wer nicht auf ihn warten
+        will, löscht die beendeten Instanzen eines Prozesses von Hand, hinter demselben Export-Gate (siehe
+        <a href="#instanzen-loeschen">Beendete Instanzen löschen</a>).</p>
       <p data-l="en">Finished cases pile up. <code>--retention-max-age</code> deletes completed instances older
         than it (ADR-0115; default 0 = off, leaving only a per-process <code>atlas:historyTtl</code>). The deletion
         is <b>export-gated</b>: with an OpenSearch exporter running, only what it has already shipped is deleted;
         with none, the durable event log stands as the archive. So nothing disappears that is not held elsewhere.
-        The sweep is flag- and timer-driven (<code>--retention-interval</code>, <code>--retention-batch</code>);
-        there is no HTTP route for it.</p>
+        The sweep is flag- and timer-driven (<code>--retention-interval</code>, <code>--retention-batch</code>).
+        Whoever does not want to wait for it deletes a process's finished instances by hand, behind the same export
+        gate (see <a href="#instanzen-loeschen">Deleting finished instances</a>).</p>
 
       <h4 data-l="de">Sichern und wiederherstellen</h4><h4 data-l="en">Backing up and restoring</h4>
       <p data-l="de">Zwei Sicherungen, für zwei Fragen. <code>GET /api/v1/backup</code> lädt die

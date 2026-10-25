@@ -427,6 +427,21 @@ var (
 	ExporterTickFailed = newEvent("exporter.tick_failed")
 )
 
+// Deleting finished instances and compacting the WAL on an administrator's request
+// (ADR-0486).
+var (
+	// HistoryPurged is one batch of finished instances an administrator deleted for
+	// good, with who asked, the version and how many went.
+	HistoryPurged = newEvent("history.purged")
+	// ServerInstancePurgeEnabled is a server on which an administrator may delete
+	// finished instances for good: said at every start, like the catalogue purge,
+	// because the switch is an opt-out a production installation has to set.
+	ServerInstancePurgeEnabled = newEvent("server.instance_purge_enabled")
+	// WALCompactionRequested is a compaction pass an administrator asked for on a
+	// server not started with --compact-wal.
+	WALCompactionRequested = newEvent("wal_compaction.requested")
+)
+
 // Identity, secrets, and provisioning (ADR-0044/0070/0123).
 var (
 	VaultKeyGenerated = newEvent("vault.key_generated")

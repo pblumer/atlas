@@ -571,6 +571,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0483](0483-technical-capability-conformance-governance.md) | Technical capability contract publication and conformance governance | Proposed | Not started |
 | [0484](0484-sharepoint-mock-mode.md) | A mockup provider for the SharePoint Worker Type | Accepted | Landed |
 | [0485](0485-technical-capability-semantics.md) | Versioned semantic contracts for technical capabilities | Proposed | Partial |
+| [0486](0486-operator-history-purge-and-compaction.md) | Deleting finished instances and compacting the WAL on an operator's request | Accepted | Landed |
 
 ## The two states of a record
 
