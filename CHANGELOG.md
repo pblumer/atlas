@@ -46,6 +46,8 @@ governs a Worker:
 
 ### Added
 
+- **Technical capability contracts have stable, offline content digests.** Canonical JSON encoding and SHA-256 identify immutable semantic contract bytes for future CDA2 conformance evidence. Duplicate JSON members, invalid documents and excess nesting are rejected, including inside nested schema objects. A digest does not certify a Worker, grant routing permission or imply independent approval (ADR-0483).
+
 - **A SharePoint Worker can be a mockup.** A SharePoint Worker with the provider **Mockup**
   needs no tenant, no app registration and no credential: every operation runs against a
   site this server keeps in its memory, in the engine and in a supervised worker alike,
