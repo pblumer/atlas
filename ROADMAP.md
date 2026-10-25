@@ -562,6 +562,14 @@ The control-flow basics most real models use.
   type and every other operation rides `io.atlas.sharepoint`, so a worker built before
   the operations never performs one as a create. Sharing links, an idempotency column
   against a duplicated create, and a `select` on file reads are follow-ups.
+  A SharePoint Worker with the provider **Mockup**
+  ([ADR-draft-sharepoint-mock-mode](docs/adr/draft-sharepoint-mock-mode.md)) needs no
+  tenant: its operations run against a site in the server's memory — a supervised worker
+  forwards them there — answering in Graph's shapes, refusing what SharePoint refuses, and
+  filtering in a stated OData subset. Operations › Diagnostics › Mockups shows its lists,
+  libraries and journal through `GET /api/v1/mocks`, the first piece of the one mockup view
+  ([ADR-0216](docs/adr/0216-mockups-are-one-view.md)); moving the AD and SQL mockups into
+  that view is a follow-up.
   **Jira is another Worker Type in the catalog**
   ([ADR-0201](docs/adr/0201-jira-connector.md)): a service task marked
   `<atlas:jiraConnector connector operation …>` performs one Atlassian Jira operation

@@ -602,6 +602,15 @@ type Server struct {
 	// the run loop, so it needs no lock.
 	sharePointRegistry *sharepoint.Registry
 
+	// sharePointMocks holds the site of every SharePoint Worker whose provider is the
+	// mockup (ADR-draft-sharepoint-mock-mode). It is created with the registry but never
+	// swapped with it: a rebuild re-binds the clients and must not throw away what a run
+	// wrote into a site. It holds its own lock — a supervised worker forwards its
+	// operations here off the run loop while the engine's own handler writes from the job
+	// goroutine — and is deliberately not durable, like the preview outbox: nothing in it
+	// exists anywhere else, so nothing survives a restart.
+	sharePointMocks *sharepoint.MockSites
+
 	// remedyRegistry resolves a worker name to a BMC Remedy AR System client for
 	// Remedy tasks (ADR-0106), built from the managed worker store at
 	// startup and rebuilt on every worker change, with each instance's credential

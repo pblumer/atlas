@@ -46,6 +46,23 @@ governs a Worker:
 
 ### Added
 
+- **A SharePoint Worker can be a mockup.** A SharePoint Worker with the provider **Mockup**
+  needs no tenant, no app registration and no credential: every operation runs against a
+  site this server keeps in its memory, in the engine and in a supervised worker alike,
+  which forwards each operation to `POST /api/v1/sharepoint/mock-sites/{worker}`. It
+  answers in Graph's shapes and refuses what SharePoint refuses — a missing item or file, a
+  list item in a document library, a file where a folder is asked for, a filter on a column
+  the list does not have — and filters in a stated subset of OData (`eq`, `ne`, `gt`, `ge`,
+  `lt`, `le`, `startswith`, `and`, `or`, `not`), refusing the rest. A list or library exists
+  from the first task that writes to it; the site is gone when the server restarts.
+  **Operations → Diagnostics → Mockups** shows each mockup's lists, libraries and newest 200
+  operations, and empties a site for the next run; it reads `GET /api/v1/mocks`, the first
+  part of the one mockup view [ADR-0216](docs/adr/0216-mockups-are-one-view.md) decided.
+  A mockup is never delegated. The new
+  `examples/sharepoint-fallakte/sharepoint-testdaten.bpmn` fills an empty site so the case
+  file example runs on a mockup Worker named `intranet`
+  ([ADR-draft-sharepoint-mock-mode](docs/adr/draft-sharepoint-mock-mode.md)).
+
 - **The dashboard shows the disk, and the server keeps a reserve free on it.** An
   administrator sees each file system the server writes to on the Console's dashboard: how
   much is used and free, where the reserve begins, what the WAL and the state store hold,
