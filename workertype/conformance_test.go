@@ -10,17 +10,26 @@ import (
 func fixtureContract(t *testing.T, filename string) TechnicalContract {
 	t.Helper()
 	raw, err := os.ReadFile("testdata/" + filename)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	c, err := ParseTechnicalContractJSON(raw)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	return c
 }
 
 func TestTechnicalSchemaCompilerChecksFullKeywords(t *testing.T) {
 	c := fixtureContract(t, "technical-account-create.json")
 	compiled, err := CompileTechnicalContract(c)
-	if err != nil { t.Fatal(err) }
-	cases := []struct { label, direction, raw string; valid bool }{
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		label, direction, raw string
+		valid                 bool
+	}{
 		{"input positive", "input", `{"userName":"alice","enabled":true}`, true},
 		{"required", "input", `{"enabled":true}`, false},
 		{"wrong type", "input", `{"userName":"alice","enabled":"true"}`, false},
@@ -47,9 +56,13 @@ func TestTechnicalSchemaCompilerChecksFullKeywords(t *testing.T) {
 
 func TestTechnicalSchemaAccountAndContactRemainDifferent(t *testing.T) {
 	account, err := CompileTechnicalContract(fixtureContract(t, "technical-account-create.json"))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	contact, err := CompileTechnicalContract(fixtureContract(t, "technical-contact-create.json"))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := account.ValidateInputJSON([]byte(`{"displayName":"Alice","email":"a@example.org"}`)); err == nil {
 		t.Fatal("contact is not an account")
 	}
@@ -79,57 +92,77 @@ func TestTechnicalSchemaLocalDefsAndNullOutput(t *testing.T) {
 	c.Spec.InputSchema = json.RawMessage(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"name":{"$ref":"#/$defs/n"}},"required":["name"],"$defs":{"n":{"type":"string","minLength":3,"pattern":"^[a-z]+$"}},"additionalProperties":false}`)
 	c.Spec.OutputSchema = json.RawMessage(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"null"}`)
 	s, err := CompileTechnicalContract(c)
-	if err != nil { t.Fatal(err) }
-	if err := s.ValidateInputJSON([]byte(`{"name":"alice"}`)); err != nil { t.Fatal(err) }
-	for _, bad := range []string{`{"name":"ab"}`, `{"name":"ALICE"}`, `{"name":"alice","extra":true}`} {
-		if err := s.ValidateInputJSON([]byte(bad)); err == nil { t.Fatalf("bad input accepted: %s", bad) }
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := s.ValidateOutputJSON([]byte("null")); err != nil { t.Fatal(err) }
-	if err := s.ValidateOutputJSON([]byte("{}")); err == nil { t.Fatal("null != object") }
+	if err := s.ValidateInputJSON([]byte(`{"name":"alice"}`)); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{`{"name":"ab"}`, `{"name":"ALICE"}`, `{"name":"alice","extra":true}`} {
+		if err := s.ValidateInputJSON([]byte(bad)); err == nil {
+			t.Fatalf("bad input accepted: %s", bad)
+		}
+	}
+	if err := s.ValidateOutputJSON([]byte("null")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ValidateOutputJSON([]byte("{}")); err == nil {
+		t.Fatal("null != object")
+	}
 }
 
 func TestTechnicalSchemaInvalidInstances(t *testing.T) {
 	s, err := CompileTechnicalContract(validTechnicalContract())
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, bad := range []string{"{", `{"email":"x"} {"email":"y"}`, "", strings.Repeat("x", MaxTechnicalSchemaInstanceBytes+1)} {
-		if err := s.ValidateInputJSON([]byte(bad)); err == nil { t.Fatalf("bad payload (len %d) accepted", len(bad)) }
+		if err := s.ValidateInputJSON([]byte(bad)); err == nil {
+			t.Fatalf("bad payload (len %d) accepted", len(bad))
+		}
 	}
 }
 
 func TestTechnicalSchemaFixturesAreOnlySchemaChecks(t *testing.T) {
 	c := fixtureContract(t, "technical-account-create.json")
 	cases := []TechnicalSchemaFixture{
-		{Name:"input valid", Direction:"input", Document:json.RawMessage(`{"userName":"alice"}`), Valid:true},
-		{Name:"input required", Direction:"input", Document:json.RawMessage(`{"enabled":true}`), Valid:false},
-		{Name:"output valid", Direction:"output", Document:json.RawMessage(`{"accountId":"A-1"}`), Valid:true},
-		{Name:"output required", Direction:"output", Document:json.RawMessage(`{}`), Valid:false},
+		{Name: "input valid", Direction: "input", Document: json.RawMessage(`{"userName":"alice"}`), Valid: true},
+		{Name: "input required", Direction: "input", Document: json.RawMessage(`{"enabled":true}`), Valid: false},
+		{Name: "output valid", Direction: "output", Document: json.RawMessage(`{"accountId":"A-1"}`), Valid: true},
+		{Name: "output required", Direction: "output", Document: json.RawMessage(`{}`), Valid: false},
 	}
 	report, err := EvaluateTechnicalSchemaFixtures(c, cases)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !report.SchemaOnly || !report.AllPassed() || len(report.Results) != 4 || report.ContractID != c.Metadata.ID {
 		t.Fatalf("report must be schema-only: %+v", report)
 	}
 	cases[0].Document = json.RawMessage(`{"displayName":"Alice"}`)
 	report, err = EvaluateTechnicalSchemaFixtures(c, cases)
-	if err != nil { t.Fatal(err) }
-	if report.AllPassed() || report.Results[0].Passed { t.Fatalf("false positive: %+v", report) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.AllPassed() || report.Results[0].Passed {
+		t.Fatalf("false positive: %+v", report)
+	}
 }
 
 func TestTechnicalSchemaFixturesNeedNegativeAndPositiveCoverage(t *testing.T) {
 	c := validTechnicalContract()
 	emptyOrMissing := [][]TechnicalSchemaFixture{
 		nil,
-		{{Name:"only positive", Direction:"input", Document:json.RawMessage(`{}`), Valid:true}},
+		{{Name: "only positive", Direction: "input", Document: json.RawMessage(`{}`), Valid: true}},
 		{
-			{Name:"i+", Direction:"input", Document:json.RawMessage(`{}`), Valid:true},
-			{Name:"i-", Direction:"input", Document:json.RawMessage(`[]`), Valid:false},
-			{Name:"o+", Direction:"output", Document:json.RawMessage(`{}`), Valid:true},
+			{Name: "i+", Direction: "input", Document: json.RawMessage(`{}`), Valid: true},
+			{Name: "i-", Direction: "input", Document: json.RawMessage(`[]`), Valid: false},
+			{Name: "o+", Direction: "output", Document: json.RawMessage(`{}`), Valid: true},
 		},
 		{
-			{Name:"i+", Direction:"input", Document:json.RawMessage(`{}`), Valid:true},
-			{Name:"i-", Direction:"input", Document:json.RawMessage("{"), Valid:false},
-			{Name:"o+", Direction:"output", Document:json.RawMessage(`{}`), Valid:true},
-			{Name:"o-", Direction:"output", Document:json.RawMessage(`[]`), Valid:false},
+			{Name: "i+", Direction: "input", Document: json.RawMessage(`{}`), Valid: true},
+			{Name: "i-", Direction: "input", Document: json.RawMessage("{"), Valid: false},
+			{Name: "o+", Direction: "output", Document: json.RawMessage(`{}`), Valid: true},
+			{Name: "o-", Direction: "output", Document: json.RawMessage(`[]`), Valid: false},
 		},
 	}
 	for _, fixtures := range emptyOrMissing {
