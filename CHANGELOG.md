@@ -58,7 +58,7 @@ governs a Worker:
   where the task was opened, and the page's address is never sent along. The view only
   reads: completing the task does not send the mail back, the task's holder may read the
   variable it shows, and a public start form does not let a caller set it
-  ([ADR-draft-mail-html-view](docs/adr/draft-mail-html-view.md)).
+  ([ADR-0489](docs/adr/0489-mail-html-view.md)).
 
 - **Mail texts are templates, with a live preview.** With **Placeholders** switched on, a
   mail task's subject, text body and HTML body are written in the template language

@@ -137,7 +137,7 @@ test("an operation that sends nothing drops the placeholders switch", async ({ p
   expect(page.__errors).toEqual([]);
 });
 
-// A get may read the HTML body as well; a list may not (ADR-draft-mail-html-view). The
+// A get may read the HTML body as well; a list may not (ADR-0489). The
 // panel offers it where it is allowed and takes it back when a get becomes a list.
 test("Read message offers the HTML body, and a list takes it back", async ({ page }) => {
   await openMessage(page, "Activity_mail");

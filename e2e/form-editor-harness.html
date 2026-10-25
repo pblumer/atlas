@@ -100,7 +100,7 @@
         return mountFormEditor(view, { api, toast: noop, formId: "form-dir" });
       };
       window.__saved = null;
-      // __mountMailView opens a form with an e-mail view (ADR-draft-mail-html-view) and a
+      // __mountMailView opens a form with an e-mail view (ADR-0489) and a
       // text field; saves are captured.
       window.__mountMailView = () => {
         const api = async (method, url, body) => {

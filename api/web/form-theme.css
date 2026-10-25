@@ -172,7 +172,7 @@
   border-radius: 4px; padding: 4px 10px; cursor: pointer; color: var(--text, #14161a);
 }
 
-/* The e-mail view (ADR-draft-mail-html-view): the mail a mail task read,
+/* The e-mail view (ADR-0489): the mail a mail task read,
    shown in a task form — its envelope, then the HTML version in a sandboxed frame or
    the text. The frame keeps a white page, as a mail client does: a mail is written for
    one. The box under it can be pulled taller, since a frame cannot size itself to a

@@ -167,7 +167,7 @@ func TestShapeReadsStoredStructuredValues(t *testing.T) {
 	}
 }
 
-// A mail view shows a variable and submits nothing (ADR-draft-mail-html-view): the
+// A mail view shows a variable and submits nothing (ADR-0489): the
 // public start does not take its key from a caller, and the task's reader is allowed
 // to see it.
 func TestAMailViewIsReadNeverWritten(t *testing.T) {

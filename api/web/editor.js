@@ -4515,7 +4515,7 @@ const SERVICE_TASK_KINDS = [
         hint: "The envelope is sender, recipients, subject, date, each attachment's id, name and size and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB; attachment content is read only by the attachment operations. What a process receives, every operator of a shared server can read — include the text only where the process needs it.",
       },
       {
-        // A get may read the HTML body as well (ADR-draft-mail-html-view); a list may
+        // A get may read the HTML body as well (ADR-0489); a list may
         // not, since its hundred answers share one variable — the compiler refuses it.
         key: "includeBody", label: "Text", type: "select", showIf: (v) => v.operation === "get",
         options: [{ v: "", l: "Envelope only" }, { v: "true", l: "Include the text" }, { v: "html", l: "Include the text and the HTML" }],
@@ -4557,7 +4557,7 @@ const SERVICE_TASK_KINDS = [
               : "Receives what the mailbox answered: " + (v.operation === "list" ? "a list of messages, newest first." : "the message.")),
       },
     ],
-    // Only a get reads a message's HTML body (ADR-draft-mail-html-view): a get turned
+    // Only a get reads a message's HTML body (ADR-0489): a get turned
     // into a list keeps its text and loses the HTML, rather than leaving a value the
     // compiler refuses.
     normalize: (props) => {

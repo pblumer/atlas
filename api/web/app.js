@@ -9411,7 +9411,7 @@ async function viewTasks(preselectKey) {
       // without one asks nothing.
       const lookups = { transport: taskTransport(t.key), data: data || {} };
       // atlasLocale: the e-mail view speaks the language the Tasks app does
-      // (ADR-draft-mail-html-view).
+      // (ADR-0489).
       const form = new Form({ container: host, atlasRemote: remoteAdapter(lookups), atlasLocale: trLocale() });
       await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }

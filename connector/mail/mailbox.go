@@ -99,7 +99,7 @@ const MaxBodyBytes = 64 << 10
 
 // MaxHTMLBytes is where a message's HTML body is cut, once it is cleaned (htmlclean.go).
 // The HTML body is opt-in on top of the text, and only for a get
-// (ADR-draft-mail-html-view): it is markup a stranger wrote, usually several times
+// (ADR-0489): it is markup a stranger wrote, usually several times
 // the size of the text it carries, and the variable it lands in is persisted with the
 // instance. What still does not fit a process variable is cut further when the answer
 // is assembled (fitHTML).
@@ -176,7 +176,7 @@ type Envelope struct {
 	// BodyTruncated says it was cut at MaxBodyBytes.
 	Body          string
 	BodyTruncated bool
-	// HTML is the HTML body, set only when a get asked for it (ADR-draft-mail-html-view):
+	// HTML is the HTML body, set only when a get asked for it (ADR-0489):
 	// decoded as the provider read it, and cleaned and cut at MaxHTMLBytes when the
 	// answer is assembled (fitHTML) — whoever implemented the mailbox. HTMLTruncated says
 	// it was cut. withHTML records that it was asked for, so a message without an HTML
@@ -361,7 +361,7 @@ type Mailbox interface {
 }
 
 // HTMLMailbox is a mailbox that also reads a message's HTML body, for a get that asks for
-// it (ADR-draft-mail-html-view). Every provider's mailbox is one; it is an interface of
+// it (ADR-0489). Every provider's mailbox is one; it is an interface of
 // its own so the operations that never need markup keep the narrower Mailbox.
 type HTMLMailbox interface {
 	// GetHTML reads one message with its text and its HTML body, cleaned.

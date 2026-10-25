@@ -611,7 +611,7 @@ type ConnectorTaskDetail struct {
 	MailMaxResults  int32
 	MailIncludeBody bool
 	// MailIncludeHTML is a get's includeBody="html": the HTML body is read as well
-	// (ADR-draft-mail-html-view).
+	// (ADR-0489).
 	MailIncludeHTML bool
 	MailUnreadOnly  bool
 	// The documents half (ADR-0478). MailAttachment is

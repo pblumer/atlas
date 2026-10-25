@@ -24,7 +24,7 @@ func (c *htmlMailbox) GetHTML(_ context.Context, id string) (mail.Envelope, erro
 }
 
 // TestGetWithHTMLEndToEnd: a get with includeBody="html" resolves to a job asking for the
-// HTML body, and the variable it completes with carries it (ADR-draft-mail-html-view).
+// HTML body, and the variable it completes with carries it (ADR-0489).
 func TestGetWithHTMLEndToEnd(t *testing.T) {
 	log, store := openStore(t)
 	target, err := expr.CompileAuto(`mail.messageId`)

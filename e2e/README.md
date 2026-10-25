@@ -83,7 +83,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   `dev-view.spec.mjs` drives the search field itself: Enter searches, a pick stays inside the
   search, a search that finds nothing or fails keeps the instance on screen, and emptying the
   field returns to the recent instances.
-- **`mail-view.spec.mjs`** ([ADR-draft-mail-html-view](../docs/adr/draft-mail-html-view.md)):
+- **`mail-view.spec.mjs`** ([ADR-0489](../docs/adr/0489-mail-html-view.md)):
   the **E-mail view** form component, on the real vendored viewer (`mail-view-harness.html`)
   and in the form editor — the envelope is text, never markup; the HTML is in an
   `<iframe sandbox="allow-popups allow-popups-to-escape-sandbox">` whose own policy blocks

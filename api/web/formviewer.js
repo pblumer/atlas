@@ -143,7 +143,7 @@ export function scrollToFirstInvalidField(hostId) {
 // real one: a checkbox writes a boolean whatever it is labelled, a taglist writes an
 // array. Components not listed here write a string — every text-shaped input does, and
 // so does a select or a radio, whose value is one of its option keys.
-// MAIL_VIEW_TYPE is the e-mail view (ADR-draft-mail-html-view): it names a variable
+// MAIL_VIEW_TYPE is the e-mail view (ADR-0489): it names a variable
 // by its key to show it, and the form never submits it, so it is no variable the form
 // writes.
 const MAIL_VIEW_TYPE = "mailview";

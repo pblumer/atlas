@@ -84,7 +84,7 @@ func (s *formShape) add(components any, withDisabled bool) {
 			at.add(comp["components"], withDisabled)
 		case mailViewType:
 			// A mail view shows a variable and submits nothing
-			// (ADR-draft-mail-html-view): what it binds is read, never written.
+			// (ADR-0489): what it binds is read, never written.
 			if k, _ := comp["key"].(string); k != "" && withDisabled {
 				s.at(k).field = true
 			}

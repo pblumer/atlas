@@ -8,7 +8,7 @@ import (
 )
 
 // TestCleanHTMLKeepsTheMailAndDropsWhatRuns pins what a received mail's HTML loses
-// before it becomes a variable (ADR-draft-mail-html-view): everything that runs,
+// before it becomes a variable (ADR-0489): everything that runs,
 // embeds, posts or reloads, and every address that runs code — while its layout,
 // styles, images and links stay.
 func TestCleanHTMLKeepsTheMailAndDropsWhatRuns(t *testing.T) {

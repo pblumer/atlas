@@ -178,7 +178,7 @@ func TestMailDocumentOperationsRefuseWhatTheyDoNotUse(t *testing.T) {
 }
 
 // includeBody="html" reads a message's HTML body as well — on a get, never on a list,
-// whose hundred answers share one variable (ADR-draft-mail-html-view).
+// whose hundred answers share one variable (ADR-0489).
 func TestMailGetReadsTheHTMLBodyOnRequest(t *testing.T) {
 	_, d := mailDetail(t, `connector="m" operation="get" messageId="=mail.messageId" includeBody="html" resultVariable="mail"`)
 	if !d.MailIncludeBody || !d.MailIncludeHTML {

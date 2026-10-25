@@ -699,7 +699,7 @@ The control-flow basics most real models use.
   and rendered by the worker, the HTML body escaping what a placeholder inserts; F2 opens
   each field with a preview rendered by `POST /api/v1/feel/template`.
   **A received mail's HTML is shown in a task form**
-  ([ADR-draft-mail-html-view](docs/adr/draft-mail-html-view.md)): a get with
+  ([ADR-0489](docs/adr/0489-mail-html-view.md)): a get with
   `includeBody="html"` reads the HTML body as well, cleaned on the server of what runs and
   cut to fit the variable, and the form component *E-mail view* (`mailview`) shows it in a
   sandboxed frame with remote images blocked until the reader loads them; the view never

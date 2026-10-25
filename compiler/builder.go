@@ -1858,7 +1858,7 @@ type MailConfig struct {
 	MaxResults  int32
 	IncludeBody bool
 	// IncludeHTML is includeBody="html": a get reads the HTML body as well
-	// (ADR-draft-mail-html-view).
+	// (ADR-0489).
 	IncludeHTML bool
 	UnreadOnly  bool
 	ResultVar   string

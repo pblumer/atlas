@@ -72,7 +72,7 @@ type Job struct {
 	MaxResults  int    `json:"maxResults,omitempty"`
 	IncludeBody bool   `json:"includeBody,omitempty"`
 	// IncludeHTML asks a get for the HTML body as well, cleaned
-	// (ADR-draft-mail-html-view). A Worker Instance older than the field ignores it
+	// (ADR-0489). A Worker Instance older than the field ignores it
 	// and answers the text alone, which is what the task asked for before.
 	IncludeHTML    bool   `json:"includeHtml,omitempty"`
 	UnreadOnly     bool   `json:"unreadOnly,omitempty"`

@@ -6897,7 +6897,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"operation": j.Operation, "folder": j.Folder, "target": j.Target,
 			"destination": j.Destination, "maxResults": j.MaxResults,
 			"includeBody": j.IncludeBody, "unreadOnly": j.UnreadOnly,
-			// A get's HTML body (ADR-draft-mail-html-view).
+			// A get's HTML body (ADR-0489).
 			"includeHtml":    j.IncludeHTML,
 			"resultVariable": j.ResultVariable,
 			// The documents half (ADR-0478): which

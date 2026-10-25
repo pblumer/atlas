@@ -1,4 +1,4 @@
-// End-to-end coverage for the e-mail view (ADR-draft-mail-html-view): the form
+// End-to-end coverage for the e-mail view (ADR-0489): the form
 // component that shows a mail a mail task read. It runs on the real vendored form-js
 // viewer (mail-view-harness.html) and in the real form editor (form-editor-harness.html).
 // What it must hold: the HTML is rendered in a sandboxed frame that runs no script and

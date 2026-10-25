@@ -1,4 +1,4 @@
-# ADR-DRAFT: A received mail's HTML body, read on request and shown in a task form
+# ADR-0489: A received mail's HTML body, read on request and shown in a task form
 
 - **Status:** Accepted
 - **Implementation:** Landed

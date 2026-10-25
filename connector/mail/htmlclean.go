@@ -9,7 +9,7 @@ import (
 )
 
 // Cleaning a received mail's HTML body before it becomes a process variable
-// (ADR-draft-mail-html-view).
+// (ADR-0489).
 //
 // The HTML is written by whoever sent the mail. It is shown to a person in a task form,
 // inside a sandboxed frame that runs no script and loads nothing until that person asks

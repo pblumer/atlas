@@ -1511,7 +1511,7 @@ func mailMaxResults(taskID, raw string) (int32, error) {
 }
 
 // mailBody reads includeBody: false (or blank) for the envelope, true for the text too,
-// and html for the text and the HTML body — on a get only (ADR-draft-mail-html-view). A
+// and html for the text and the HTML body — on a get only (ADR-0489). A
 // list answers up to a hundred messages into one variable, and a hundred HTML bodies
 // are not something a variable can hold, so a list that wants one reads it with a get.
 func mailBody(taskID, op, raw string) (text, html bool, err error) {
