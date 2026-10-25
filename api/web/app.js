@@ -60,6 +60,7 @@ import { viewAIAccess } from "./aiaccess.js";
 import { installDiagramShortcuts, setShortcutsEnabled, starButton, noteDiagramOpened } from "./diagram-shortcuts.js";
 import { renderKeyFeatures, paintKeyFeatures } from "./key-features.js";
 import { fmtDate, fmtDateTime } from "./datefmt.js";
+import { mockupsHTML } from "./mockups.js";
 import { prefs, loadPrefs } from "./prefs.js";
 import { renderDisplaySettings } from "./displaysettings.js";
 
@@ -759,6 +760,9 @@ const TOPNAV = {
       { name: "Call activities", route: "#/operations/call-activities", role: "any" },
       { name: "Mock directory", route: "#/operations/ad-mock", role: "admin" },
       { name: "Mock database", route: "#/operations/sql-mock", role: "admin" },
+      // The one view ADR-0216 settles on, where every mockup
+      // is to land; SharePoint's is the first, and the two above move in later.
+      { name: "Mockups", route: "#/operations/mockups", role: "admin" },
     ] },
   ],
   tasks: [
@@ -8247,6 +8251,95 @@ async function viewSQLMockJournal() {
   window.__atlasCleanup = () => clearInterval(timer);
 }
 
+// viewMockups is the Operations "Mockups" view (ADR-0216): one card per mockup, drawn by
+// its kind's renderer in mockups.js. Today the SharePoint Workers with the Mockup
+// provider (ADR-0484) are its cards; the AD and SQL mockups keep
+// their pages until they move here, and the page links to them so the question "what is
+// simulated right now" still has one starting point. This is the page around the cards —
+// the refresh, the folds a refresh must not undo, and emptying a SharePoint site.
+async function viewMockups() {
+  const gen = navGen;
+  view.innerHTML = `
+    <div class="between">
+      <h1>Mockups</h1>
+      <span class="row" style="gap:12px; align-items:center">
+        <label class="field inline" style="margin:0"><input type="checkbox" id="spmock-follow" checked> Auto-refresh</label>
+        <button class="btn neutral" id="spmock-refresh" title="Reload what the mockups hold">Refresh</button>
+      </span>
+    </div>
+    <p class="muted">What the mockups hold and every operation they were asked, newest last.
+    Nothing here reached a real system. A <b>SharePoint</b> Worker with the provider <b>Mockup</b>
+    keeps its site in this server's memory: a list or library exists from the first time a task
+    writes to it, and a restart of atlas empties it. An operation shown in red was <b>refused</b> —
+    as the real site would have refused it — and failed its task with the reason given. The
+    <a href="#/operations/ad-mock">mock directory</a>, the <a href="#/operations/sql-mock">mock
+    database</a> and the <a href="#/operations/outbox">preview outbox</a> still have pages of
+    their own.</p>
+    <div id="spmock-list"><p class="empty">Loading…</p></div>`;
+  const list = document.getElementById("spmock-list");
+
+  // Folds are remembered by worker and section, both ways, so a refresh neither reopens
+  // what somebody closed nor closes what they opened.
+  const keyOf = (d) => {
+    const w = d.closest("[data-worker]");
+    return `${w ? w.dataset.worker : ""}|${d.dataset.k || ""}`;
+  };
+  const foldState = () => {
+    const state = new Map();
+    for (const d of list.querySelectorAll("details")) state.set(keyOf(d), d.open);
+    return state;
+  };
+  const refold = (state) => {
+    for (const d of list.querySelectorAll("details")) {
+      const was = state.get(keyOf(d));
+      if (was !== undefined) d.open = was;
+    }
+  };
+
+  let rendered = null;
+  const load = async () => {
+    let data;
+    try {
+      data = await api("GET", "/api/v1/mocks");
+    } catch (e) {
+      rendered = null;
+      list.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
+      return;
+    }
+    const fresh = JSON.stringify(data);
+    if (fresh === rendered) return;
+    const folds = foldState();
+    rendered = fresh;
+    list.innerHTML = mockupsHTML(data);
+    refold(folds);
+  };
+
+  list.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-spmock-clear]");
+    if (!btn) return;
+    // The button sits in the card's summary; without this the click would also fold it.
+    e.preventDefault();
+    const worker = btn.dataset.spmockClear;
+    if (!confirm(`Empty the mockup site of ${worker}? Its lists, libraries and journal are gone; nothing outside this server is touched.`)) return;
+    try {
+      await api("DELETE", "/api/v1/sharepoint/mock-sites/" + encodeURIComponent(worker));
+      toast(`The site of ${worker} is empty`, "ok");
+    } catch (err) {
+      toast("Could not empty the site: " + (err && err.message ? err.message : err), "warn");
+    }
+    await load();
+  });
+
+  await load();
+  if (superseded(gen)) return;
+  document.getElementById("spmock-refresh").addEventListener("click", load);
+  const follow = document.getElementById("spmock-follow");
+  // Five seconds, like its two siblings: a mockup run is watched while clicking through a
+  // process, and the read is a small in-memory snapshot off the engine's run loop.
+  const timer = setInterval(() => { if (follow.checked) load(); }, 5000);
+  window.__atlasCleanup = () => clearInterval(timer);
+}
+
 // viewDecisionDetail lists every evaluation of one decision — its "instances" —
 // newest first, each showing the exact inputs it saw, the outputs it produced, and
 // (expandable) the temis trace of which rules fired (ADR-0066). This is the
@@ -11608,6 +11701,7 @@ async function route() {
     }
     if (path === "#/operations/ad-mock") return await viewADMockDirectory();
     if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
+    if (path === "#/operations/mockups") return await viewMockups();
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/tasks/recertification") {
       // Taken before the import, as the routes above take it: the closure is read

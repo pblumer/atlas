@@ -562,6 +562,14 @@ The control-flow basics most real models use.
   type and every other operation rides `io.atlas.sharepoint`, so a worker built before
   the operations never performs one as a create. Sharing links, an idempotency column
   against a duplicated create, and a `select` on file reads are follow-ups.
+  A SharePoint Worker with the provider **Mockup**
+  ([ADR-0484](docs/adr/0484-sharepoint-mock-mode.md)) needs no
+  tenant: its operations run against a site in the server's memory — a supervised worker
+  forwards them there — answering in Graph's shapes, refusing what SharePoint refuses, and
+  filtering in a stated OData subset. Operations › Diagnostics › Mockups shows its lists,
+  libraries and journal through `GET /api/v1/mocks`, the first piece of the one mockup view
+  ([ADR-0216](docs/adr/0216-mockups-are-one-view.md)); moving the AD and SQL mockups into
+  that view is a follow-up.
   **Jira is another Worker Type in the catalog**
   ([ADR-0201](docs/adr/0201-jira-connector.md)): a service task marked
   `<atlas:jiraConnector connector operation …>` performs one Atlassian Jira operation
@@ -2255,6 +2263,77 @@ exists to settle it. No approval workflow: `state` is a field somebody sets, and
 is the engine an organisation would model such a workflow *in*.
 
 ---
+
+## Milestone CDA — Capability-driven Automation 🚧
+
+A separate cross-milestone programme joining the existing Business Capability
+register, BPMN service tasks, versioned technical operation contracts, Worker
+Types, configured Workers, and identity-aware policy enforcement. Its
+[delivery programme](docs/planning/capability-driven-automation-program.md)
+is the status/dependency authority; the original [T0–T5 plan](docs/planning/technical-capability-contract.md)
+retains the technical task detail. This track **does not reopen completed
+Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
+**A descriptive claim is not proof of conformance, and conformance is not authorization.**
+
+- 🚧 **CDA0 — Declarative Worker Type operation claims (T0 / B11).**
+  [PR #1343](https://github.com/pblumer/atlas/pull/1343) merged the
+  manifest fields and validation on `main`. [ADR-0480](docs/adr/0480-technical-capability-contract.md)
+  is **Proposed / Partial**; the claims remain advisory and no capability
+  routing exists. Keep B11 open until the architecture decision and
+  verification gates have been reviewed.
+- 🚧 **CDA1 — Canonical semantic contract envelope (T1a / Milestone 6).**
+  [PR #1346](https://github.com/pblumer/atlas/pull/1346) is a **draft,
+  not merged** at this baseline: exact ID/version/profile, resource kind,
+  identity scope and strict schema envelope. No proof of provider behavior.
+  This slice must be accepted before CDA2.
+- 🔲 **CDA2 — Contract governance and conformance (T1b / Milestone 6).**
+  Decide independent publication, immutable contract digest, offline
+  JSON Schema validation, positive/negative conformance evidence, expiry,
+  reviewer approval and withdrawal in
+  [ADR-0483](docs/adr/0483-technical-capability-conformance-governance.md).
+  A Worker Type cannot certify its own claims.
+- 🔲 **CDA3 — Verifiable built-in operation mappings (T2 / Milestone 6).**
+  Derive from existing provider operation catalogues, first distinguishing
+  an Entra account from a Google contact and an LDAP entry. Mark unknown,
+  candidate, verified and withdrawn truthfully, prevent catalogue drift;
+  no implicit provider substitution. Depends on CDA2 and ADR-0208's
+  relevant trust/pinning prerequisites.
+- 🔲 **CDA4 — Cross-layer technical capability graph (T3).**
+  Extend proposed [ADR-0420](docs/adr/0420-one-graph-model-several-projections.md)
+  with stable technical capability and Worker operation nodes, authored
+  versus derived provenance, a bounded off-loop query and source-specific
+  authorization. Depends on CDA2/CDA3 and acceptance of the graph model;
+  the previous Milestone P scope stays marked done.
+- 🔲 **CDA5 — Panorama, API and MCP discovery and impact (T4).**
+  Explain the path Value Stream → authored Business Capability realization →
+  BPMN task → exact technical operation → configured Worker, including
+  verified evidence, unknown links, gaps and restricted traversal.
+  Prove a Worker outage impact query without exposing hidden resources.
+  Depends on CDA4; do not display runtime execution support not yet built.
+- 🔲 **CDA6 — Capability-aware BPMN deployment binding (T5a).**
+  An opt-in service task declares one exact verified contract and freezes
+  one explicitly chosen Worker at deployment; reject missing, ambiguous,
+  withdrawn or mismatched bindings. Preserve existing BPMN and job types.
+  Governed by [ADR-0482](docs/adr/0482-capability-aware-binding-and-routing.md);
+  depends on CDA2/CDA3 and the accepted binding decision. **No new
+  execution behavior in this slice.**
+- 🔲 **CDA7 — Governed execution and recovery (T5b).**
+  Enable one narrow provider path through [ADR-0475](docs/adr/0475-identity-aware-worker-execution.md)
+  authorization only when that Worker's enforcement exists: pin target,
+  deny without fallback, durable decisions before `fsync`-gated effects,
+  live/replay equality, deterministic retries, no hot-path allocations,
+  and a legacy-BPMN compatibility test. Depends on CDA6 and an accepted
+  routing decision. **Dynamic choice among multiple Workers is not
+  authorized by this milestone**; it needs its own approved event/policy
+  and recovery design.
+
+**Milestone gates:** CDA2 requires independent semantic conformance, CDA4
+requires accepted provenance/visibility semantics, CDA6 requires an approved
+BPMN binding, and CDA7 requires an approved replay-safe execution policy
+with provider enforcement. The full [ADR decision matrix and acceptance
+tests](docs/planning/capability-driven-automation-program.md) are the
+review checklist. Treat `Proposed`, `Partial`, `Merged`, and `Landed`
+as distinct states.
 
 ## Milestone K — Service catalogue, orders & the portal 🚧
 

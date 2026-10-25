@@ -46,7 +46,25 @@ governs a Worker:
 
 ### Added
 
+- **A SharePoint Worker can be a mockup.** A SharePoint Worker with the provider **Mockup**
+  needs no tenant, no app registration and no credential: every operation runs against a
+  site this server keeps in its memory, in the engine and in a supervised worker alike,
+  which forwards each operation to `POST /api/v1/sharepoint/mock-sites/{worker}`. It
+  answers in Graph's shapes and refuses what SharePoint refuses — a missing item or file, a
+  list item in a document library, a file where a folder is asked for, a filter on a column
+  the list does not have — and filters in a stated subset of OData (`eq`, `ne`, `gt`, `ge`,
+  `lt`, `le`, `startswith`, `and`, `or`, `not`), refusing the rest. A list or library exists
+  from the first task that writes to it; the site is gone when the server restarts.
+  **Operations → Diagnostics → Mockups** shows each mockup's lists, libraries and newest 200
+  operations, and empties a site for the next run; it reads `GET /api/v1/mocks`, the first
+  part of the one mockup view [ADR-0216](docs/adr/0216-mockups-are-one-view.md) decided.
+  A mockup is never delegated. The new
+  `examples/sharepoint-fallakte/sharepoint-testdaten.bpmn` fills an empty site so the case
+  file example runs on a mockup Worker named `intranet`
+  ([ADR-0484](docs/adr/0484-sharepoint-mock-mode.md)).
+
 - **Technical capabilities can be described with an independently versioned semantic contract.** A design-time JSON descriptor now records resource kind, identity scope, typed input/output schema roots, semantic errors, idempotency, consistency and pagination. Strict parsing rejects malformed contracts, duplicate identities and remote JSON Schema references. Sample account and contact contracts are tests, not proof of provider conformance; no Worker routing or policy enforcement changes ([ADR-draft-technical-capability-semantics](docs/adr/draft-technical-capability-semantics.md)).
+
 - **The dashboard shows the disk, and the server keeps a reserve free on it.** An
   administrator sees each file system the server writes to on the Console's dashboard: how
   much is used and free, where the reserve begins, what the WAL and the state store hold,
@@ -341,6 +359,15 @@ governs a Worker:
   installation and the server's availability check, and a draft save that still collides
   is refused as before. Ids already in a diagram are not changed
   ([ADR-0474](docs/adr/0474-readable-element-ids.md)).
+- **Naming an element names its id.** Typing "Microsoft Teams bestellen" as an element's
+  name, in the properties panel or on the canvas, renames its id to
+  `activity_microsoft_teams_bestellen`; a second element of the same type with the same
+  name gets `_01`, a third `_02`. The id follows later renames, and one undo takes back
+  name and id together. It moves only while it is automatic — the readable placeholder,
+  bpmn-js's random id, or the one the previous name produced — and never when a deployed
+  version of the process carries it, so instances, migration and bindings keep their
+  handle. An id typed by the author and a process's own id are not touched
+  ([ADR-0474](docs/adr/0474-readable-element-ids.md), amended 2026-10-23).
 - **Completing a task checks a directory field's value first.** A value that is not an
   object id, or an object where an id was expected, is refused with 400; by default the
   entry is looked up once more under the field's filters, and one the directory no longer

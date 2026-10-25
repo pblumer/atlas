@@ -304,7 +304,13 @@ func runExample(t *testing.T, file string, site *fakeSite, vars ...model.Variabl
 	srv := httptest.NewServer(site)
 	t.Cleanup(srv.Close)
 	site.url = "https://contoso.sharepoint.com/sites/verwaltung"
+	return runExampleOn(t, file, sharepoint.NewGraphClient(staticToken{}, srv.URL), vars...)
+}
 
+// runExampleOn deploys one example model and runs it to completion with the Worker
+// "intranet" bound to client.
+func runExampleOn(t *testing.T, file string, client sharepoint.Client, vars ...model.VariableValue) (*state.Store, *compiler.CompiledProcess) {
+	t.Helper()
 	f, err := os.Open("../../examples/sharepoint-fallakte/" + file)
 	if err != nil {
 		t.Fatalf("open %s: %v", file, err)
@@ -315,7 +321,7 @@ func runExample(t *testing.T, file string, site *fakeSite, vars ...model.Variabl
 		t.Fatalf("compile %s: %v", file, err)
 	}
 	reg := sharepoint.NewRegistry()
-	reg.Register("intranet", sharepoint.NewGraphClient(staticToken{}, srv.URL))
+	reg.Register("intranet", client)
 
 	log, store := openStore(t)
 	p := engine.New(1, log, store, &fixedClock{})

@@ -96,6 +96,11 @@ var wantAdminRoutes = []string{
 	// process bound* travel with them, and nothing can tell a password on its way into
 	// a table from an id — a stronger reason than the directory's, for the same gate.
 	"GET /api/v1/sql/mock-journal",
+	// And what a SharePoint mockup holds: invented sites, filled with whatever a process
+	// wrote — applicants, amounts, letters. Emptying one sits behind the same gate as
+	// reading it, so only the person who can see a site can throw it away.
+	"GET /api/v1/mocks",
+	"DELETE /api/v1/sharepoint/mock-sites/{worker}",
 
 	// Credentials, in every shape Atlas has one.
 	"POST /api/v1/targets",

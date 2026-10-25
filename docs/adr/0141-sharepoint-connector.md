@@ -290,3 +290,6 @@ two apart.
   standard library)
 - the 2026-10-23 amendment takes the thumbprint credential from
   [ADR-0172](0172-entra-id-connector.md)'s amendment of 2026-10-19
+- extended by [ADR-0484](0484-sharepoint-mock-mode.md): a `mock`
+  provider whose site lives in the server's memory, so a SharePoint model runs without a
+  tenant

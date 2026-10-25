@@ -458,12 +458,20 @@ var mcpOmittedRoutes = map[string]string{
 	// The mock database's journal, omitted for the same two reasons as the directory
 	// above it — and the read for a third: it carries the values a process bound, which
 	// is the widest thing this surface could hand out on a hunch.
-	"POST /api/v1/sql/mock-journal":     "worker reporting the mockup run it answered, not an agent action",
-	"GET /api/v1/sql/mock-journal":      "an operator's view of a mockup run; an agent reads what a job did from the job",
-	"POST /api/v1/workers/{id}/restart": "restarts an operating-system process; an operator action, deliberately not an agent one",
-	"GET /api/v1/checkpoints":           "admin recovery-checkpoint status, not an agent action",
-	"GET /api/v1/catalogue-switch":      "admin diagnosis of what switching the catalogue off strands, shown on the Console's dashboard; not an agent action",
-	"POST /api/v1/checkpoints":          "admin on-demand checkpoint/compaction, not an agent action",
+	"POST /api/v1/sql/mock-journal": "worker reporting the mockup run it answered, not an agent action",
+	"GET /api/v1/sql/mock-journal":  "an operator's view of a mockup run; an agent reads what a job did from the job",
+
+	// The SharePoint mockup's site: the operation route is a worker's transport, not an
+	// agent's action — an agent that wants a list item written models a SharePoint task —
+	// and the read and the reset are the operator's picture of a mockup run
+	// (ADR-0484).
+	"POST /api/v1/sharepoint/mock-sites/{worker}":   "worker performing a mockup Worker's operation, not an agent action",
+	"GET /api/v1/mocks":                             "an operator's view of the mockups (ADR-0216); an agent reads what a job did from the job",
+	"DELETE /api/v1/sharepoint/mock-sites/{worker}": "an operator emptying a mockup site between trial runs, not an agent action",
+	"POST /api/v1/workers/{id}/restart":             "restarts an operating-system process; an operator action, deliberately not an agent one",
+	"GET /api/v1/checkpoints":                       "admin recovery-checkpoint status, not an agent action",
+	"GET /api/v1/catalogue-switch":                  "admin diagnosis of what switching the catalogue off strands, shown on the Console's dashboard; not an agent action",
+	"POST /api/v1/checkpoints":                      "admin on-demand checkpoint/compaction, not an agent action",
 
 	// Per-server call-activity target overrides (ADR-0105): admin operator config,
 	// like workers — an agent reads the resolution via atlas_call_activities but

@@ -72,7 +72,10 @@ import { fmtCount } from "./numfmt.js";
 // is rendered beside the fields rather than left in another tab.
 import { workerTypeDocHTML } from "./workertypedocs.js";
 import { fmtDateTime, fmtTime } from "./datefmt.js";
-import { installReadableIds, readableId, takenProcessIds, freshProcessId } from "./elementids.js";
+import {
+  installReadableIds, readableId, takenProcessIds, freshProcessId,
+  installNameDerivedIds, deployedElementIds,
+} from "./elementids.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -876,6 +879,15 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   ]);
   // Every element drawn from here on is named <type>_<yyyymmdd>_<researcher>.
   installReadableIds(modeler, { processTaken: (id) => known.has(id) });
+  // Naming an element names its id too, unless a deployed version of the process
+  // carries that id (ADR-0474, amended 2026-10-23). Until the deployed ids have
+  // arrived, or when not all of them could be read, every id the diagram arrived with
+  // is kept; elements drawn in this session are free from the start.
+  const nameIds = { ids: new Set(), imported: new Set(), complete: false };
+  installNameDerivedIds(modeler, {
+    isProtected: (id) => nameIds.ids.has(id) || (!nameIds.complete && nameIds.imported.has(id)),
+  });
+  modeler.atlasNameIdsReady = Promise.resolve();
   current = modeler;
   window.__atlasModeler = modeler; // exposed for scripted/end-to-end testing
 
@@ -891,6 +903,13 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       await modeler.importXML(repairModel(typeof xml === "string" ? xml : String(xml)));
     }
     modeler.get("canvas").zoom("fit-viewport");
+    nameIds.imported = new Set(modeler.get("elementRegistry").getAll().map((el) => el.businessObject && el.businessObject.id));
+    const processIds = (modeler.getDefinitions().rootElements || [])
+      .filter((el) => el.$type === "bpmn:Process").map((el) => el.id);
+    modeler.atlasNameIdsReady = deployedElementIds(api, processIds).then((r) => {
+      nameIds.ids = r.ids;
+      nameIds.complete = r.complete;
+    });
     const pbo = rootProcess(modeler);
     if (pbo) {
       const nm = pbo.name || pbo.id || "Diagram";

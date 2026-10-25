@@ -153,7 +153,7 @@ Atlas supervises is an operator's choice, not the model's (ADR-0164/0168):
 ```
 connector/rest/        HTTP REST outbound (ADR-0067)
 connector/mail/        Outbound mail: SMTP, Gmail, Microsoft Graph (ADR-0079/0093)
-connector/sharepoint/  SharePoint lists and document libraries via Graph (ADR-0141)
+connector/sharepoint/  SharePoint lists and document libraries via Graph (ADR-0141), and its mockup (ADR-0484)
 connector/remedy/      BMC Remedy AR System (ADR-0106)
 connector/jira/        Atlassian Jira issues (ADR-0201)
 connector/googlesheets/ Google Sheets and Drive (ADR-0235)
