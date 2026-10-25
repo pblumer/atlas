@@ -7,6 +7,9 @@ Thanks for your interest in Atlas. The project is in early development, so the m
 - Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and the relevant deep-dives in [`docs/architecture/`](docs/architecture/).
 - Skim the [ADRs](docs/adr/). They explain *why* things are the way they are. If your change contradicts an ADR, that's fine — but it means writing a new ADR that supersedes it, not quietly diverging.
 - For anything non-trivial, open an issue first to align on approach before writing code.
+- For multi-PR or multi-agent work, check the [programme registry](docs/programs/README.md)
+  and follow the [Programme Delivery Protocol](docs/development/program-delivery.md)
+  before starting new slices; link a programme/slice ID to the issue and PR.
 
 ## Language
 
