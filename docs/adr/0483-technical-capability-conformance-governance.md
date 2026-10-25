@@ -1,10 +1,10 @@
 # ADR-0483: Technical capability contract publication and conformance governance
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-10-25
 - **Deciders:** atlas maintainers
-- **Open question:** Which external publisher trust roots and signed attestations may be accepted once ADR-0208 package provenance and signature verification are implemented? This proposal initially recognizes only maintainer-reviewed, source-controlled definitions and evidence.
+- **Deferred decision:** External publisher trust roots and signed attestations remain out of scope until ADR-0208 package provenance and signature verification are implemented. The accepted initial trust model recognizes only maintainer-reviewed, source-controlled definitions and evidence.
 - **Question checked:** 2026-10
 
 ## Context and problem statement
@@ -37,7 +37,7 @@ ADR-0208 specifies the Worker Type package trust model but its package-provenanc
 
 ## Decision outcome
 
-Proposed choice: **option 3**, initially restricted to maintainer-reviewed definitions and tests committed alongside atlas. This record proposes the governance model; it does **not** certify existing providers or make a runtime selection decision.
+**Accepted decision: option 3**, initially restricted to maintainer-reviewed definitions and tests committed alongside atlas. This record establishes the governance model; its implementation is **Not started**, and acceptance does **not** certify existing providers, promote manifest claims, or authorize runtime selection.
 
 ### Normative identity and artifact ownership
 
@@ -111,7 +111,7 @@ No HTTP/MCP endpoint, new sidecar store, credential broker, routing action or WA
 - Good: Easy installation-specific edits.
 - Bad: Duplicated sources of truth, drift, and no immutable definition for deployed processes.
 
-### Option 3 — Immutable artifacts plus evidence (proposed)
+### Option 3 — Immutable artifacts plus evidence (accepted)
 - Good: Reviewable, auditable, reproducible and consistent with ADR-0208.
 - Bad: Requires a publication pipeline and withdrawal discipline.
 
