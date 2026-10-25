@@ -6,7 +6,7 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**1 programme(s)** · active: 1 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
+**1 programme** · active: 1 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
