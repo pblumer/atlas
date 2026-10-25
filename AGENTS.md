@@ -231,6 +231,14 @@ numbers (`docs/adr/number.go`, `make adr-number`).
 
 ## How to approach a task
 
+**Programme work (mandatory for multi-PR or multi-agent initiatives):** Start at the
+[all-programmes registry](docs/programs/README.md), read the programme manifest
+and delivery plan, and follow the [Programme Delivery Protocol](docs/development/program-delivery.md).
+Confirm the responsible owner, dependency and accepted ADR gates before beginning a
+slice. An agent must leave a durable post-merge handoff, update the manifest and
+regenerate the index; a green or merged PR alone does not complete a slice.
+Do not start additional parallel slices for a programme with no accountable owner.
+
 1. **Locate it on the roadmap.** [`ROADMAP.md`](ROADMAP.md) is organized by milestone. Confirm the task belongs to the current milestone and isn't blocked by an unstarted dependency.
 2. **Read the relevant deep-dive(s)** for the package you're touching, plus any ADR they reference.
 3. **Check the invariants** above against your plan *before* writing code.
