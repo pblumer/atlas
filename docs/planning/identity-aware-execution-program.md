@@ -5,7 +5,7 @@
 **Roadmap owner:** [Milestone IAE](../../ROADMAP.md#milestone-iae--identity-aware-execution-).  
 **Architecture authority:** [ADR-0475](../adr/0475-identity-aware-worker-execution.md) (**Proposed / Partial**).  
 **Related programme:** [Capability-driven Automation (CDA)](capability-driven-automation-program.md). CDA governs semantic Worker operation contracts, discovery and opt-in capability routing; IAE governs *who can act, as whom, under which policy, with what durable evidence*.  
-**Communication artifact:** [Identity-Aware Workflow Execution whitepaper](../whitepaper/identity-aware-workflow-execution.md) (strategic stakeholder narrative; not an accepted ADR or proof of completed implementation).
+**Communication artifact:** [Identity-Aware Workflow Execution whitepaper](../whitepapers/identity-aware-workflow-execution.md) (strategic stakeholder narrative; not an accepted ADR or proof of completed implementation).
 
 ## Outcome and boundaries
 
@@ -109,7 +109,7 @@ Do not block core security and recovery work on the CDA graph or provider contra
 
 ## Whitepaper and positioning
 
-Stakeholder narrative: *Identity-aware Workflow Execution — policy-enforced, attributable actions with durable evidence*. The previously produced externally shared whitepaper is an explanatory deliverable, **not** an accepted ADR or implementation proof. Publication of a vetted source document/PDF into the repository remains an explicit programme task. No unverified artifact path is linked here.
+Stakeholder narrative: *Identity-aware Workflow Execution — policy-enforced, attributable actions with durable evidence*. The previously produced externally shared whitepaper is an explanatory deliverable, **not** an accepted ADR or implementation proof. The Markdown source is published in [docs/whitepapers](../whitepapers/identity-aware-workflow-execution.md). Publication of a separately vetted PDF remains a distinct task; this source document is not implementation evidence.
 
 Comparison with n8n: [docs/comparisons/n8n.md](../comparisons/n8n.md). n8n offers end-user credentials in some editions; do **not** claim per-user OAuth is exclusive to atlas. Proposed differentiation is **the combination** of per-action policy, trusted approval obligations, immutable policy revision, pre-effect durability, identity attribution and replayable evidence, subject to measured product validation.
 

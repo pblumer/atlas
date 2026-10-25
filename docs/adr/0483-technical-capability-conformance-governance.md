@@ -1,6 +1,6 @@
 # ADR-0483: Technical capability contract publication and conformance governance
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-10-25
 - **Deciders:** atlas maintainers
@@ -37,7 +37,9 @@ ADR-0208 specifies the Worker Type package trust model but its package-provenanc
 
 ## Decision outcome
 
-Proposed choice: **option 3**, initially restricted to maintainer-reviewed definitions and tests committed alongside atlas. This record proposes the governance model; it does **not** certify existing providers or make a runtime selection decision.
+**Decision accepted on 2026-10-25**, following maintainer confirmation of option 3. The question of externally trusted publisher roots and signed attestations remains open and must be reviewed before third-party verification is enabled.
+
+**Accepted decision: option 3.** Canonical contract artifacts are immutable and source-controlled, and conformance evidence is bound to the exact contract and Worker Type operation/package digest. The initial trust boundary is restricted to maintainer-reviewed definitions and evidence committed alongside atlas. This decision does **not** certify any existing provider, authorize a Worker, or introduce runtime selection. The implementation remains **Not started** until the publication/evidence lifecycle is delivered.
 
 ### Normative identity and artifact ownership
 
@@ -111,7 +113,7 @@ No HTTP/MCP endpoint, new sidecar store, credential broker, routing action or WA
 - Good: Easy installation-specific edits.
 - Bad: Duplicated sources of truth, drift, and no immutable definition for deployed processes.
 
-### Option 3 — Immutable artifacts plus evidence (proposed)
+### Option 3 — Immutable artifacts plus evidence (accepted)
 - Good: Reviewable, auditable, reproducible and consistent with ADR-0208.
 - Bad: Requires a publication pipeline and withdrawal discipline.
 
