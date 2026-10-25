@@ -74,7 +74,7 @@ The `present-document` operation requires a `documentId`, verifies it through th
 
 ## Safety and current limitations
 
-- Response JSON is limited to 4 MiB; an unusually large OCR-bearing provider payload is rejected rather than truncated or written to WAL.
+- Response JSON is bounded by the central `limits.Payload` budget (8 MiB by default); an unusually large OCR-bearing provider payload is rejected rather than truncated or written to WAL.
 - Document searches return at most 25 projected rows per page; correspondents are scanned over at most 50 pages of 100 before refusing a create when uniqueness cannot be established.
 - Errors return HTTP status and a sanitized description, not a provider response body.
 - API version 10 is requested explicitly. Confirm compatibility against your Paperless-ngx installation.
