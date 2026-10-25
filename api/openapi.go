@@ -269,6 +269,15 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Evaluation result", schemaObj(map[string]any{
 				"ok": tBool(), "result": tObject(), "kind": tString(), "error": tString(),
 			}))}},
+		{"POST", "/api/v1/feel/template", s.handleRenderTemplate, apiOp{
+			summary: "Render a mail text against sample variables as a mail task with templating on would (ADR-draft-mail-templates): a leading '=' makes it one FEEL expression, otherwise its {{ }} placeholders, {{#if}} and {{#loop}} sections are compiled by the deploy's rules and rendered; with html, what a placeholder inserts is escaped. Answers the text, every placeholder that rendered as nothing, or the compile error with its line and column. Nothing is stored",
+			tag:     "FEEL", role: RoleModeler,
+			req: jsonBody("Template, variables and whether it is an HTML body", schemaObj(map[string]any{
+				"template": tString(), "variables": tObject(), "html": tBool(),
+			}, "template")),
+			resp: jsonBody("Rendered text", schemaObj(map[string]any{
+				"ok": tBool(), "result": tString(), "problems": tArray(), "error": tString(), "line": tInteger(), "column": tInteger(),
+			}))}},
 		// The FEEL assistant (ADR-0445): a conversation that writes an
 		// expression, asked of the agent Worker an operator configured (ADR-0255), and
 		// checked by this engine before the author sees it. Nothing is stored — the

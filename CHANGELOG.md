@@ -46,6 +46,20 @@ governs a Worker:
 
 ### Added
 
+- **Mail texts are templates, with a live preview.** With **Placeholders** switched on, a
+  mail task's subject, text body and HTML body are written in the template language
+  form text views already use: `{{kunde.name}}` inserts a value, `{{#if …}}…{{/if}}` writes
+  a section only when its condition holds and `{{#loop …}}…{{/loop}}` once per element of
+  a list, with FEEL between the braces (`templating="true"` on `<atlas:mailConnector>`,
+  also for a reply and the note above a forward). A malformed template is refused at
+  deploy with its line and column, and what a placeholder inserts into the HTML body is
+  escaped. F2 opens each field in the Developer View with a **Preview** that renders it
+  with sample variables — prefilled from a live instance — through the new
+  `POST /api/v1/feel/template`, the HTML body as a sandboxed page without scripts; an HTML
+  body without placeholders is previewed too. A task without the switch is unchanged, a
+  `{{` in its text included
+  ([ADR-draft-mail-templates](docs/adr/draft-mail-templates.md)).
+
 - **A SharePoint Worker can be a mockup.** A SharePoint Worker with the provider **Mockup**
   needs no tenant, no app registration and no credential: every operation runs against a
   site this server keeps in its memory, in the engine and in a supervised worker alike,

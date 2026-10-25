@@ -2811,6 +2811,12 @@ type xmlMailConnector struct {
 	// which stays the plain-text alternative; blank means the message is text-only,
 	// exactly as before the field existed.
 	BodyHtml string `xml:"bodyHtml,attr"`
+	// Templating switches the subject and both bodies to the template language of
+	// form-js's text views — {{ FEEL }} placeholders, {{#if}} and {{#loop}} sections
+	// (ADR-draft-mail-templates). Blank or false keeps every value literal-or-FEEL, as
+	// it was before templates existed, so a deployed body that happens to contain {{
+	// keeps meaning what it meant.
+	Templating string `xml:"templating,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

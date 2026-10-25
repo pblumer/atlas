@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -45,6 +46,7 @@ import (
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/expr/feelers"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -880,6 +882,91 @@ func (s *Server) handleEvaluateFeel(w http.ResponseWriter, r *http.Request) {
 		result = "null"
 	}
 	httpapi.JSON(w, http.StatusOK, evalFeelResp{OK: true, Result: result, Kind: kind.Label()})
+}
+
+type renderTemplateReq struct {
+	Template  string         `json:"template"`
+	Variables map[string]any `json:"variables"`
+	HTML      bool           `json:"html"`
+}
+
+type renderTemplateResp struct {
+	OK       bool              `json:"ok"`
+	Result   string            `json:"result"`
+	Problems []feelers.Problem `json:"problems"`
+	Error    string            `json:"error,omitempty"`
+	// Line and Column place a template that does not compile; 0 when it compiled or
+	// the fault has no place (a '=' value's FEEL).
+	Line   int `json:"line,omitempty"`
+	Column int `json:"column,omitempty"`
+}
+
+// handleRenderTemplate renders a mail text against sample variables, so the Modeler's
+// template editor can show what a mail will say before anything is deployed
+// (ADR-draft-mail-templates). It reads a value as a mail task with templating on
+// does: a leading '=' makes it one FEEL expression, otherwise its {{ }} placeholders
+// and sections are the template language, compiled by the same rules a deploy
+// applies. With html set, what a placeholder inserts is escaped, as the HTML body's
+// is. Like the FEEL evaluate route it is a pure compile and render over a
+// caller-supplied scope: no state is read or written, so it runs off the
+// single-writer loop.
+func (s *Server) handleRenderTemplate(w http.ResponseWriter, r *http.Request) {
+	dec := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Request))
+	dec.UseNumber()
+	var req renderTemplateReq
+	if err := dec.Decode(&req); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+	bindings, err := feelBindings(req.Variables)
+	if err != nil {
+		httpapi.JSON(w, http.StatusOK, renderTemplateResp{OK: false, Error: err.Error(), Problems: []feelers.Problem{}})
+		return
+	}
+	if trimmed := strings.TrimSpace(req.Template); strings.HasPrefix(trimmed, "=") {
+		compiled, err := gatedFEEL(strings.TrimSpace(trimmed[1:]))
+		if err != nil {
+			httpapi.JSON(w, http.StatusOK, renderTemplateResp{OK: false, Error: err.Error(), Problems: []feelers.Problem{}})
+			return
+		}
+		v, err := compiled.Eval(bindings)
+		if err != nil {
+			httpapi.JSON(w, http.StatusOK, renderTemplateResp{OK: false, Error: err.Error(), Problems: []feelers.Problem{}})
+			return
+		}
+		_, _, text := expr.Classify(v)
+		httpapi.JSON(w, http.StatusOK, renderTemplateResp{OK: true, Result: text, Problems: []feelers.Problem{}})
+		return
+	}
+	tpl, err := feelers.Compile(req.Template, gatedFEEL)
+	if err != nil {
+		resp := renderTemplateResp{OK: false, Error: err.Error(), Problems: []feelers.Problem{}}
+		var fe *feelers.Error
+		if errors.As(err, &fe) {
+			resp.Line, resp.Column = fe.Line, fe.Column
+		}
+		httpapi.JSON(w, http.StatusOK, resp)
+		return
+	}
+	var escape func(string) string
+	if req.HTML {
+		escape = html.EscapeString
+	}
+	out, problems := tpl.Render(feelers.Vars(bindings), escape)
+	if problems == nil {
+		problems = []feelers.Problem{}
+	}
+	httpapi.JSON(w, http.StatusOK, renderTemplateResp{OK: true, Result: out, Problems: problems})
+}
+
+// gatedFEEL compiles one of a template's FEEL blocks as a deploy does: refusing a call
+// this build can only ever answer with null (ADR-0388) before compiling it, so a
+// preview never passes what the deploy would then refuse.
+func gatedFEEL(src string) (*expr.Compiled, error) {
+	if err := expr.CheckCallsError(src); err != nil {
+		return nil, err
+	}
+	return expr.CompileAuto(src)
 }
 
 // feelBindings converts the JSON sample variables into FEEL values. Numbers keep
