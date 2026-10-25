@@ -158,7 +158,7 @@ func configuredEnvFor(t *testing.T, kind string) map[string]string {
 	case "paperless":
 		return map[string]string{
 			"ATLAS_PAPERLESS_CONNECTORS":   "archiv",
-			"ATLAS_PAPERLESS_ARCHIV_URL":  "https://paperless.example.com",
+			"ATLAS_PAPERLESS_ARCHIV_URL":   "https://paperless.example.com",
 			"ATLAS_PAPERLESS_ARCHIV_TOKEN": "test-token",
 		}
 	case "remedy":
