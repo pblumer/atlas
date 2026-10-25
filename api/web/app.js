@@ -41,7 +41,7 @@ import { openApplicationDeleteDialog, forceReason } from "./deletedialog.js";
 import { refDeleteWarning } from "./dmnref-impact.js";
 import { versionDeleteState, holderNote } from "./decision-cleanup.js";
 import { frozenMark } from "./frozen-decisions.js";
-import { t as tr, plural as trPlural } from "./i18n.js";
+import { t as tr, plural as trPlural, locale as trLocale } from "./i18n.js";
 import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./taskfolders.js";
 import { runImport } from "./infomodel-import.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
@@ -9410,7 +9410,9 @@ async function viewTasks(preselectKey) {
       // themselves; a directory field saved as a textfield has it attached below. A form
       // without one asks nothing.
       const lookups = { transport: taskTransport(t.key), data: data || {} };
-      const form = new Form({ container: host, atlasRemote: remoteAdapter(lookups) });
+      // atlasLocale: the e-mail view speaks the language the Tasks app does
+      // (ADR-draft-mail-html-view).
+      const form = new Form({ container: host, atlasRemote: remoteAdapter(lookups), atlasLocale: trLocale() });
       await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;

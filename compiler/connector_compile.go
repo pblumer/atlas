@@ -1373,7 +1373,7 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 			return 0, err
 		}
 	}
-	if cfg.IncludeBody, err = mailFlag(st.Id, "includeBody", cn.IncludeBody); err != nil {
+	if cfg.IncludeBody, cfg.IncludeHTML, err = mailBody(st.Id, op, cn.IncludeBody); err != nil {
 		return 0, err
 	}
 	templating, err := mailFlag(st.Id, "templating", cn.Templating)
@@ -1508,6 +1508,21 @@ func mailMaxResults(taskID, raw string) (int32, error) {
 		return 0, fmt.Errorf("compiler: mail task %q has a maxResults of %d; a list answers between 1 and %d messages", taskID, n, mailMaxResultsCeiling)
 	}
 	return int32(n), nil
+}
+
+// mailBody reads includeBody: false (or blank) for the envelope, true for the text too,
+// and html for the text and the HTML body — on a get only (ADR-draft-mail-html-view). A
+// list answers up to a hundred messages into one variable, and a hundred HTML bodies
+// are not something a variable can hold, so a list that wants one reads it with a get.
+func mailBody(taskID, op, raw string) (text, html bool, err error) {
+	if strings.EqualFold(strings.TrimSpace(raw), "html") {
+		if op != "get" {
+			return false, false, fmt.Errorf("compiler: mail task %q has includeBody=%q; only a get reads a message's HTML body — a list answers up to %d messages into one variable, so read the one you need with a get", taskID, raw, mailMaxResultsCeiling)
+		}
+		return true, true, nil
+	}
+	text, err = mailFlag(taskID, "includeBody", raw)
+	return text, false, err
 }
 
 // mailFlag reads a literal true/false attribute. It is not FEEL: whether a body is read

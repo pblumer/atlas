@@ -129,7 +129,7 @@ func graphTime(s string) time.Time {
 
 // envelope turns a Graph message into an Envelope, fetching the attachment list when
 // the message has one.
-func (m graphMailbox) envelope(ctx context.Context, g graphMsg, folder string, includeBody bool) (Envelope, error) {
+func (m graphMailbox) envelope(ctx context.Context, g graphMsg, folder string, body bodyRead) (Envelope, error) {
 	e := Envelope{
 		ID:                g.ID,
 		InternetMessageID: g.InternetMessageID,
@@ -160,12 +160,23 @@ func (m graphMailbox) envelope(ctx context.Context, g graphMsg, folder string, i
 		}
 	}
 	e.Auth = parseAuthResults(auth)
-	if includeBody && g.Body != nil {
+	if body >= readText && g.Body != nil {
 		text := g.Body.Content
-		if strings.EqualFold(g.Body.ContentType, "html") {
+		isHTML := strings.EqualFold(g.Body.ContentType, "html")
+		if isHTML {
 			text = htmlToText(text)
 		}
 		e.Body, e.BodyTruncated = capBody(text)
+		if body == readHTML {
+			// Graph carries one body. Asked for without the text preference it is the
+			// HTML one, and the text above is derived from it; a plain-text message has
+			// no HTML to give.
+			markup := ""
+			if isHTML {
+				markup = g.Body.Content
+			}
+			e.setHTML(markup, false)
+		}
 	}
 	if g.HasAttachments {
 		atts, err := m.attachments(ctx, g.ID)
@@ -372,7 +383,7 @@ func (m graphMailbox) WatchSince(ctx context.Context, req WatchRequest) (WatchPa
 		if hasCursor && (at.Before(cur.at) || (at.Equal(cur.at) && cur.seen[g.ID])) {
 			continue
 		}
-		e, err := m.envelope(ctx, g, req.Folder, req.IncludeBody)
+		e, err := m.envelope(ctx, g, req.Folder, readOf(req.IncludeBody))
 		if err != nil {
 			return WatchPage{}, err
 		}
@@ -407,7 +418,7 @@ func (m graphMailbox) List(ctx context.Context, req ListRequest) ([]Envelope, er
 	}
 	out := make([]Envelope, 0, len(msgs))
 	for _, g := range msgs {
-		e, err := m.envelope(ctx, g, req.Folder, req.IncludeBody)
+		e, err := m.envelope(ctx, g, req.Folder, readOf(req.IncludeBody))
 		if err != nil {
 			return nil, err
 		}
@@ -421,16 +432,29 @@ func (m graphMailbox) message(id string) string {
 }
 
 func (m graphMailbox) Get(ctx context.Context, id string, includeBody bool) (Envelope, error) {
+	return m.get(ctx, id, readOf(includeBody))
+}
+
+// GetHTML implements [HTMLMailbox].
+func (m graphMailbox) GetHTML(ctx context.Context, id string) (Envelope, error) {
+	return m.get(ctx, id, readHTML)
+}
+
+func (m graphMailbox) get(ctx context.Context, id string, body bodyRead) (Envelope, error) {
 	sel := graphSelect
-	if includeBody {
+	if body >= readText {
 		sel += ",body"
+	}
+	prefer := graphPrefer(body == readText)
+	if body == readHTML {
+		prefer = graphPrefer(false) // the body as Graph keeps it: HTML for an HTML mail
 	}
 	var g graphMsg
 	u := m.message(id) + "?" + odataQuery([][2]string{{"$select", sel}})
-	if err := apiJSON(ctx, m.c.http, m.c.tokens, http.MethodGet, u, graphPrefer(includeBody), nil, &g, "graph get message"); err != nil {
+	if err := apiJSON(ctx, m.c.http, m.c.tokens, http.MethodGet, u, prefer, nil, &g, "graph get message"); err != nil {
 		return Envelope{}, err
 	}
-	return m.envelope(ctx, g, "", includeBody)
+	return m.envelope(ctx, g, "", body)
 }
 
 func (m graphMailbox) Move(ctx context.Context, id, destination string) (string, error) {
