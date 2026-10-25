@@ -1,7 +1,7 @@
 # ADR-0483: Technical capability contract publication and conformance governance
 
 - **Status:** Accepted
-- **Implementation:** Partial (schema-only foundation in [PR #1357](https://github.com/pblumer/atlas/pull/1357), pending merge; no verified-provider evidence yet)
+- **Implementation:** Not started for publication/approval/revocation; schema-only foundation in [PR #1357](https://github.com/pblumer/atlas/pull/1357) is under review, not yet merged, and provides no verified-provider evidence
 - **Date:** 2026-10-25
 - **Deciders:** atlas maintainers
 - **Scope boundary:** Only maintainer-reviewed, source-controlled contract artifacts and independently reviewed evidence may become trusted initially. External publishers, signature trust roots and third-party attestations require a separately accepted extension after ADR-0208 provenance/signature verification is implemented. Until then, external claims remain unverified candidates.
