@@ -136,3 +136,21 @@ test("an operation that sends nothing drops the placeholders switch", async ({ p
   await expect(page.locator("#f-st-templating")).toBeVisible();
   expect(page.__errors).toEqual([]);
 });
+
+// A get may read the HTML body as well; a list may not (ADR-0489). The
+// panel offers it where it is allowed and takes it back when a get becomes a list.
+test("Read message offers the HTML body, and a list takes it back", async ({ page }) => {
+  await openMessage(page, "Activity_mail");
+  await page.locator(".pgroup-head", { hasText: "Mail worker" }).click();
+  await page.locator("#f-st-operation").selectOption("get");
+  await page.locator(".pgroup-head", { hasText: "Mailbox" }).click();
+  const text = page.locator("#f-st-includeBody");
+  await expect(text.locator("option")).toHaveText(["Envelope only", "Include the text", "Include the text and the HTML"]);
+  await text.selectOption("html");
+  await expect.poll(async () => /includeBody="html"/.test(await taskXML(page, "Activity_mail"))).toBe(true);
+
+  await page.locator("#f-st-operation").selectOption("list");
+  await expect.poll(async () => /includeBody="true"/.test(await taskXML(page, "Activity_mail"))).toBe(true);
+  await expect(page.locator("#f-st-includeBody option")).toHaveText(["Envelope only", "Include the text"]);
+  expect(page.__errors).toEqual([]);
+});

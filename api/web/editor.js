@@ -4511,9 +4511,16 @@ const SERVICE_TASK_KINDS = [
         options: [{ v: "", l: "All messages" }, { v: "true", l: "Unread messages only" }],
       },
       {
-        key: "includeBody", label: "Text", type: "select", showIf: (v) => v.operation === "list" || v.operation === "get",
+        key: "includeBody", label: "Text", type: "select", showIf: (v) => v.operation === "list",
         options: [{ v: "", l: "Envelope only" }, { v: "true", l: "Include the text" }],
         hint: "The envelope is sender, recipients, subject, date, each attachment's id, name and size and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB; attachment content is read only by the attachment operations. What a process receives, every operator of a shared server can read — include the text only where the process needs it.",
+      },
+      {
+        // A get may read the HTML body as well (ADR-0489); a list may
+        // not, since its hundred answers share one variable — the compiler refuses it.
+        key: "includeBody", label: "Text", type: "select", showIf: (v) => v.operation === "get",
+        options: [{ v: "", l: "Envelope only" }, { v: "true", l: "Include the text" }, { v: "html", l: "Include the text and the HTML" }],
+        hint: "The envelope is sender, recipients, subject, date, each attachment's id, name and size and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB. The HTML version is cleaned of scripts, forms and everything else that runs, and cut to fit the variable; show it to a person with an E-mail view in a task form, which keeps remote images blocked until they are asked for. What a process receives, every operator of a shared server can read — include the text, let alone the HTML, only where the process needs it.",
       },
       { group: "Attachment", showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment" },
       {
@@ -4551,6 +4558,12 @@ const SERVICE_TASK_KINDS = [
               : "Receives what the mailbox answered: " + (v.operation === "list" ? "a list of messages, newest first." : "the message.")),
       },
     ],
+    // Only a get reads a message's HTML body (ADR-0489): a get turned
+    // into a list keeps its text and loses the HTML, rather than leaving a value the
+    // compiler refuses.
+    normalize: (props) => {
+      if (props.includeBody === "html" && props.operation !== "get") props.includeBody = "true";
+    },
   },
   {
     id: "csv", name: "Text File", group: "Files", desc: "Read or write a table in a text file: delimited (CSV), fixed-width, or attribute-value pairs", icon: "T",
@@ -10138,10 +10151,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       if (stKind.normalize) stKind.normalize(props);
       upsertExt(modeler, element, stKind.ext, props);
     });
+    // An attribute two fields describe (a list's and a get's text, CSV's columns) is one
+    // element on screen; it is wired once, or each change would save twice.
+    const wiredKindFields = new Set();
     for (const f of stKind.fields) {
       if (f.group || f.type === "map") continue;
       const el = body.querySelector("#f-st-" + f.key);
-      if (!el) continue;
+      if (!el || wiredKindFields.has(el)) continue;
+      wiredKindFields.add(el);
       el.addEventListener("change", () => {
         saveKindFields();
         if (f.reRender) show(element); // e.g. auth type: reveal the scheme's fields

@@ -60,6 +60,20 @@ governs a Worker:
   repeated `create-contact` finds the contact the first round made instead of making a
   second; a missing contact can be caught as `CARDDAV_CONTACT_NOT_FOUND`
   ([ADR-draft-carddav-worker](docs/adr/draft-carddav-worker.md)).
+- **A received mail's HTML can be shown to a person in a task form.** A mail task's
+  **Read message** reads the HTML body as well with `includeBody="html"` (*Include the text
+  and the HTML*), for IMAP, Gmail and Microsoft Graph; a list does not, and the compiler
+  says so. The HTML is cleaned before it becomes a variable — scripts, frames, forms, meta
+  refreshes, event handlers and addresses that run code are removed, links open in a new
+  tab — and cut to fit the variable budget, with `htmlTruncated` saying so. The new form
+  component **E-mail view** (`mailview`) shows that variable: the envelope, then the HTML
+  in a sandboxed frame that runs no script, or the text. **Remote images stay blocked**
+  until the reader presses **Load images**, so the sender does not learn when and from
+  where the task was opened, and the page's address is never sent along. The view only
+  reads: completing the task does not send the mail back, the task's holder may read the
+  variable it shows, and a public start form does not let a caller set it
+  ([ADR-0489](docs/adr/0489-mail-html-view.md)).
+
 - **Mail texts are templates, with a live preview.** With **Placeholders** switched on, a
   mail task's subject, text body and HTML body are written in the template language
   form text views already use: `{{kunde.name}}` inserts a value, `{{#if …}}…{{/if}}` writes

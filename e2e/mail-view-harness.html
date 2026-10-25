@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas e-mail view e2e harness</title>
+    <!-- Drives the real vendored form-js viewer with Atlas's e-mail view
+         (ADR-0489), the way the Tasks app mounts a task form:
+         loadFormViewer, a Form with atlasLocale, importSchema with the instance's
+         variables. __mount(data, opts) renders the form with a mail view on `mail` and a
+         text field on `note`; __submit() answers what completing the task would send. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div style="padding: 18px; max-width: 760px">
+      <div id="host"></div>
+    </div>
+    <script type="module">
+      import { loadFormViewer } from "/formviewer.js";
+
+      window.__schema = {
+        type: "default",
+        id: "mail-review",
+        components: [
+          { type: "mailview", id: "Field_mail", key: "mail", label: "Eingegangene E-Mail" },
+          { type: "textfield", id: "Field_note", key: "note", label: "Notiz" },
+        ],
+      };
+
+      // A mail as a get with includeBody="html" answers it: the HTML already cleaned by
+      // the server, with a remote image, a CSS background from elsewhere and a link.
+      window.__mail = {
+        messageId: "m-1",
+        from: "anna@example.com", fromName: "Anna Muster",
+        to: ["support@example.com"], cc: ["team@example.com"],
+        subject: "Rechnung 42 <dringend>",
+        receivedAt: "2026-10-25T08:30:00Z",
+        attachments: [{ id: "2", name: "Rechnung-42.pdf", contentType: "application/pdf", size: 52341 }],
+        body: "Guten Tag\nAnbei die Rechnung.",
+        bodyTruncated: false,
+        html: '<html><head><style>p{color:#333}</style></head><body><p id="hello">Guten Tag <b>Support</b></p>' +
+          '<img id="logo" src="https://img.example/logo.png" alt="Logo">' +
+          '<div style="background:url(https://img.example/bg.png)">Hintergrund</div>' +
+          '<a id="link" href="https://shop.example/rechnung/42" target="_blank" rel="noopener noreferrer">Rechnung ansehen</a></body></html>',
+        htmlTruncated: false,
+      };
+
+      let form = null;
+      window.__mount = async (data, opts = {}) => {
+        const { Form } = await loadFormViewer();
+        if (form) { try { form.destroy(); } catch { /* noop */ } }
+        const host = document.getElementById("host");
+        host.innerHTML = "";
+        form = new Form({ container: host, ...(opts.locale ? { atlasLocale: opts.locale } : {}) });
+        await form.importSchema(opts.schema || window.__schema, data);
+        window.__mounted = true;
+      };
+      window.__submit = () => form.submit().data;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

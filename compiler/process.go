@@ -610,6 +610,9 @@ type ConnectorTaskDetail struct {
 	MailDestination RestExpr
 	MailMaxResults  int32
 	MailIncludeBody bool
+	// MailIncludeHTML is a get's includeBody="html": the HTML body is read as well
+	// (ADR-0489).
+	MailIncludeHTML bool
 	MailUnreadOnly  bool
 	// The documents half (ADR-0478). MailAttachment is
 	// the attachment get-attachment and export-attachment address, literal-or-FEEL;

@@ -574,6 +574,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0486](0486-operator-history-purge-and-compaction.md) | Deleting finished instances and compacting the WAL on an operator's request | Accepted | Landed |
 | [0487](0487-mail-templates.md) | A mail text is a template in the language form text views already speak | Accepted | Landed |
 | [0488](0488-checkpoint-verdicts-are-remembered.md) | A checkpoint's verdict is remembered, not re-read on every scrape | Accepted | Landed |
+| [0489](0489-mail-html-view.md) | A received mail's HTML body, read on request and shown in a task form | Accepted | Landed |
 
 ## The two states of a record
 

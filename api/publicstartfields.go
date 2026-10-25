@@ -37,6 +37,10 @@ type formShape struct {
 	children map[string]*formShape
 }
 
+// mailViewType is the form component that shows an e-mail a mail task read: Atlas's
+// own, registered in the vendored viewer (api/web/vendor/form-js/src/atlas/mailview.jsx).
+const mailViewType = "mailview"
+
 // formShapeOf reads the submittable paths of a form-js schema. A disabled field is shown
 // but never submitted (_getSubmitData in the vendored viewer skips it), so it is left
 // out: a value the form only displays, a price a worker computed between two screens,
@@ -78,6 +82,12 @@ func (s *formShape) add(components any, withDisabled bool) {
 				}
 			}
 			at.add(comp["components"], withDisabled)
+		case mailViewType:
+			// A mail view shows a variable and submits nothing
+			// (ADR-0489): what it binds is read, never written.
+			if k, _ := comp["key"].(string); k != "" && withDisabled {
+				s.at(k).field = true
+			}
 		default:
 			if k, _ := comp["key"].(string); k != "" && (withDisabled || comp["disabled"] != true) {
 				s.at(k).field = true
