@@ -2282,10 +2282,12 @@ Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
   routing exists. Keep B11 open until the architecture decision and
   verification gates have been reviewed.
 - 🚧 **CDA1 — Canonical semantic contract envelope (T1a / Milestone 6).**
-  [PR #1346](https://github.com/pblumer/atlas/pull/1346) is a **draft,
-  not merged** at this baseline: exact ID/version/profile, resource kind,
-  identity scope and strict schema envelope. No proof of provider behavior.
-  This slice must be accepted before CDA2.
+  [PR #1346](https://github.com/pblumer/atlas/pull/1346) merged the
+  strict ID/version/profile, resource kind, identity scope and JSON Schema
+  envelope on `main`. [ADR-0485](docs/adr/0485-technical-capability-semantics.md)
+  remains **Proposed / Partial**. This does **not** establish full JSON
+  Schema conformance, approved provider behavior or routing eligibility;
+  review the architecture gate before declaring CDA1 complete.
 - 🔲 **CDA2 — Contract governance and conformance (T1b / Milestone 6).**
   Decide independent publication, immutable contract digest, offline
   JSON Schema validation, positive/negative conformance evidence, expiry,
