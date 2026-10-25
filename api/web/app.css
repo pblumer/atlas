@@ -787,6 +787,18 @@ textarea::placeholder {
 .storage-nums { font-size: 12px; }
 .storage-forecast { margin: 4px 0 8px; }
 .storage-error { color: var(--danger); }
+/* How the card gives disk back, and the dialog that deletes finished instances
+   (ADR-0486). */
+.storage-reclaim { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; }
+.storage-reclaim-title { font-size: 14px; margin: 0 0 6px; }
+.storage-reclaim-actions { gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; }
+.storage-reclaim-result:empty { display: none; }
+.confirm-modal.purge-modal { width: min(560px, 94vw); }
+.purge-preview { margin: 10px 0 4px; min-height: 1.4em; }
+.purge-preview p, .purge-progress p { margin: 4px 0; }
+.purge-versions, .purge-notes { margin: 4px 0 8px 18px; padding: 0; font-size: 12.5px; }
+.purge-off { color: var(--danger); }
+.purge-progress { margin-top: 10px; }
 #api-tokens #tok-soon ul { margin: 6px 0; padding-left: 18px; }
 /* The variable editor inside the incident's fix dialog (ADR-0158). */
 .inc-vars-modal { max-width: 620px; width: 92vw; }
@@ -1466,6 +1478,8 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .tok-html-tag    { color: #116329; }
 .tok-html-attr   { color: #8250df; }
 .tok-html-entity { color: #953800; }
+/* Template tags — {{ }}, {{#if }}, {{/loop}} — around the FEEL they hold (dev-lang.js). */
+.tok-tpl-tag     { color: #0550ae; font-weight: 700; }
 
 /* Completion popup. */
 .feel-pop {
@@ -4147,6 +4161,30 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 }
 .dev-run-detail.err { color: var(--danger); border-color: #f3c9c4; background: var(--danger-soft); }
 
+/* Preview panel — a mail template rendered with the sample variables
+   (ADR-0487). It takes a fair share of the column, since reading the
+   result is the point; the code keeps the rest. An HTML body is shown as a sandboxed page (no
+   scripts, no same-origin), the posture the outbox already gives a rendered mail. */
+.dev-run.dev-preview { flex: 0 0 48%; min-height: 220px; display: flex; flex-direction: column; }
+.dev-run.dev-preview[hidden] { display: none; }
+.dev-run.dev-preview .dev-run-vars { max-height: 18vh; flex: 0 0 auto; }
+.dev-preview-out { flex: 1 1 auto; min-height: 0; display: flex; }
+.dev-preview-out.stale { opacity: .45; }
+.dev-preview-text {
+  flex: 1 1 auto; margin: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+  font: 13px/1.55 system-ui, sans-serif; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px;
+}
+.dev-preview-html {
+  flex: 1 1 auto; width: 100%; min-height: 120px; border: 1px solid var(--border);
+  border-radius: 6px; background: #fff;
+}
+.dev-preview-problems {
+  margin: 0; padding: 6px 8px 6px 24px; font-size: 12px; color: var(--warn);
+  background: var(--surface); border: 1px dashed var(--border); border-radius: 6px;
+  max-height: 80px; overflow: auto;
+}
+
 /* Side panel: tabs + one filter + the active pane. */
 .dev-side {
   flex: 0 0 320px; min-width: 0; display: flex; flex-direction: column;
@@ -4381,6 +4419,23 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .sqlmock-failed .sqlmock-stmt { color: var(--err, #b3261e); }
 .sqlmock-detail { margin-top: 2px; font-size: 12px; color: var(--err, #b3261e); overflow-wrap: anywhere; }
 .sqlmock-table tr + tr > td, .sqlmock-table tr + tr > th { padding-top: 8px; }
+
+/* ---------- Mockups (ADR-0216) and the SharePoint card (ADR-0484) ---------- */
+/* Between its two siblings: a site has state, drawn as one table per list or library,
+   and a journal, drawn as the mock database draws its sequence. */
+.spmock-list { margin-top: 8px; }
+.spmock-list > summary { cursor: pointer; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.spmock-list > summary::marker { color: var(--muted); }
+.spmock-table { width: 100%; margin: 4px 0 0; }
+.spmock-table thead th { border-bottom: 1px solid var(--border); padding: 2px 12px 2px 0; }
+.spmock-table td { padding: 2px 12px 2px 0; }
+.spmock-folder td:first-child code { font-weight: 600; }
+.spmock-size { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
+.spmock-journal .spmock-at { white-space: nowrap; width: 1%; padding-right: 12px; font-size: 12px; }
+/* A kind with no card of its own yet (ADR-0216): its data as served, plainly. */
+.mockups-data {
+  margin: 8px 0 0; max-height: 360px; overflow: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
 
 /* ---------- Secret shape hints (ADR-0155) ---------- */
 /* A vault secret is a name and an opaque string, so the form has to say what the

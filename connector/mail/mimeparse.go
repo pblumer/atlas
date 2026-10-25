@@ -387,6 +387,22 @@ func (p *mimePart) attachments() []Attachment {
 	return out
 }
 
+// htmlFromPart decodes a message's HTML part for a read that asked for the HTML body,
+// or answers "" for a message that has none.
+func htmlFromPart(htmlPart *mimePart, read func(*mimePart) ([]byte, error)) (string, error) {
+	if htmlPart == nil {
+		return "", nil
+	}
+	raw := htmlPart.Data
+	if raw == nil && read != nil {
+		var err error
+		if raw, err = read(htmlPart); err != nil {
+			return "", err
+		}
+	}
+	return decodeContent(raw, htmlPart.Encoding, htmlPart.charset()), nil
+}
+
 // bodyFromParts makes a body out of a message's text parts: the plain-text part when
 // there is one, else the HTML part reduced to its text. read fetches a part's content
 // when the provider did not hand it over inline.

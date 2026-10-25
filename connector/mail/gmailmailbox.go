@@ -260,13 +260,13 @@ func (p gmailPart) toMIME() mimePart {
 }
 
 func (m gmailMailbox) get(ctx context.Context, id string, includeBody bool) (Envelope, error) {
-	e, _, err := m.getWithThread(ctx, id, includeBody)
+	e, _, err := m.getWithThread(ctx, id, readOf(includeBody))
 	return e, err
 }
 
 // getWithThread reads one message and also answers its thread, which a reply posts
 // into.
-func (m gmailMailbox) getWithThread(ctx context.Context, id string, includeBody bool) (Envelope, string, error) {
+func (m gmailMailbox) getWithThread(ctx context.Context, id string, body bodyRead) (Envelope, string, error) {
 	var g gmailMessage
 	u := m.base() + "/messages/" + url.PathEscape(strings.TrimSpace(id)) + "?format=full"
 	if err := apiJSON(ctx, m.c.http, m.read(), http.MethodGet, u, "", nil, &g, "gmail get message"); err != nil {
@@ -294,15 +294,23 @@ func (m gmailMailbox) getWithThread(ctx context.Context, id string, includeBody 
 	}
 	root := h.toMIME()
 	e.Attachments = root.attachments()
-	if includeBody {
+	if body >= readText {
 		plain, htmlPart := root.bodyParts()
-		body, err := bodyFromParts(plain, htmlPart, func(p *mimePart) ([]byte, error) {
+		read := func(p *mimePart) ([]byte, error) {
 			return m.attachmentData(ctx, g.ID, p.Params["x-gmail-attachment-id"])
-		})
+		}
+		text, err := bodyFromParts(plain, htmlPart, read)
 		if err != nil {
 			return Envelope{}, "", err
 		}
-		e.Body, e.BodyTruncated = capBody(body)
+		e.Body, e.BodyTruncated = capBody(text)
+		if body == readHTML {
+			markup, err := htmlFromPart(htmlPart, read)
+			if err != nil {
+				return Envelope{}, "", err
+			}
+			e.setHTML(markup, false)
+		}
 	}
 	return e, g.ThreadID, nil
 }
@@ -360,6 +368,12 @@ func (m gmailMailbox) List(ctx context.Context, req ListRequest) ([]Envelope, er
 
 func (m gmailMailbox) Get(ctx context.Context, id string, includeBody bool) (Envelope, error) {
 	return m.get(ctx, id, includeBody)
+}
+
+// GetHTML implements [HTMLMailbox].
+func (m gmailMailbox) GetHTML(ctx context.Context, id string) (Envelope, error) {
+	e, _, err := m.getWithThread(ctx, id, readHTML)
+	return e, err
 }
 
 // --- changing the mailbox ---
@@ -540,7 +554,7 @@ func (m gmailMailbox) uploadBase() string {
 
 // Reply frames the reply like a send and posts it into the original's thread.
 func (m gmailMailbox) Reply(ctx context.Context, id string, r Reply) error {
-	orig, thread, err := m.getWithThread(ctx, id, false)
+	orig, thread, err := m.getWithThread(ctx, id, readEnvelope)
 	if err != nil {
 		return err
 	}

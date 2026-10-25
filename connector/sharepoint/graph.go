@@ -73,31 +73,11 @@ func NewGraphClient(tokens TokenSource, baseURL string) *GraphClient {
 // the job stays pending and is retried, then raises an incident (ADR-0061), rather than
 // completing a token on work that did not happen.
 func (c *GraphClient) Do(ctx context.Context, req Request) (any, error) {
-	op := req.Operation
-	if op == "" {
-		op = OpCreateItem
+	p, err := prepare(req)
+	if err != nil {
+		return nil, err
 	}
-	spec, ok := Ops[op]
-	if !ok {
-		return nil, fmt.Errorf("sharepoint: unknown operation %q (want %s)", req.Operation, strings.Join(OpNames(), ", "))
-	}
-	// What the request is missing is refused before anything is called — a site lookup
-	// included — because the compiler has refused most of it already and what is left
-	// is a FEEL value that resolved to nothing.
-	if spec.NeedsList && strings.TrimSpace(req.List) == "" {
-		return nil, fmt.Errorf("sharepoint: %s has no list", op)
-	}
-	if spec.NeedsItemID && strings.TrimSpace(req.ItemID) == "" {
-		return nil, fmt.Errorf("sharepoint: %s has no itemId", op)
-	}
-	var path cleanedPath
-	if !spec.NeedsList {
-		p, err := cleanPath(op, req.Path, spec.TakesPath && !spec.NeedsPath)
-		if err != nil {
-			return nil, err
-		}
-		path = p
-	}
+	op, spec, path := p.op, p.spec, p.path
 	site, err := c.siteBase(ctx, op, req.Site)
 	if err != nil {
 		return nil, err
@@ -406,6 +386,47 @@ func (c *GraphClient) remove(ctx context.Context, op, endpoint, path string) (an
 	return answer, nil
 }
 
+// prepared is a request that has passed the checks every client makes before it does
+// anything: the operation it names, what that operation is, and its path made safe.
+type prepared struct {
+	op   string
+	spec Op
+	path cleanedPath
+}
+
+// prepare refuses what a request is missing, before anything is called — a site lookup
+// included. The compiler has refused most of it already; what is left is a FEEL value
+// that resolved to nothing. Both clients start here, so the mockup refuses exactly the
+// requests the real site would never be sent.
+func prepare(req Request) (prepared, error) {
+	op := req.Operation
+	if op == "" {
+		op = OpCreateItem
+	}
+	spec, ok := Ops[op]
+	if !ok {
+		return prepared{}, fmt.Errorf("sharepoint: unknown operation %q (want %s)", req.Operation, strings.Join(OpNames(), ", "))
+	}
+	if strings.TrimSpace(req.Site) == "" {
+		return prepared{}, fmt.Errorf("sharepoint: %s has no site", op)
+	}
+	if spec.NeedsList && strings.TrimSpace(req.List) == "" {
+		return prepared{}, fmt.Errorf("sharepoint: %s has no list", op)
+	}
+	if spec.NeedsItemID && strings.TrimSpace(req.ItemID) == "" {
+		return prepared{}, fmt.Errorf("sharepoint: %s has no itemId", op)
+	}
+	p := prepared{op: op, spec: spec}
+	if !spec.NeedsList {
+		path, err := cleanPath(op, req.Path, spec.TakesPath && !spec.NeedsPath)
+		if err != nil {
+			return prepared{}, err
+		}
+		p.path = path
+	}
+	return p, nil
+}
+
 // graphResponse is one answer, read under the variable budget.
 type graphResponse struct {
 	status int
@@ -588,10 +609,7 @@ func (c *GraphClient) siteBase(ctx context.Context, op, raw string) (string, err
 // as it is; a URL, a host and path, or a bare host is looked up once and remembered,
 // because Graph addresses everything beneath a site by its id.
 func (c *GraphClient) siteID(ctx context.Context, op, raw string) (string, error) {
-	ref := strings.TrimSpace(raw)
-	if ref == "" {
-		return "", fmt.Errorf("sharepoint: %s has no site", op)
-	}
+	ref := strings.TrimSpace(raw) // prepare has refused an empty one
 	host, path, isID := parseSite(ref)
 	if isID {
 		return escapeSiteID(ref), nil

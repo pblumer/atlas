@@ -301,7 +301,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0213](0213-ad-mock-directory-in-the-console.md) | The mock Active Directory is visible in the Console | Accepted | Landed |
 | [0214](0214-jira-inbound-issue-watch.md) | Jira as an inbound event source — a polled issue watch, deduplicated per issue | Accepted | Landed |
 | [0215](0215-modeler-playground.md) | The Modeler Playground — batch simulation and analysis of a draft | Accepted | Landed |
-| [0216](0216-mockups-are-one-view.md) | Mockups are one view, not one per kind | Accepted | Not started |
+| [0216](0216-mockups-are-one-view.md) | Mockups are one view, not one per kind | Accepted | Partial |
 | [0217](0217-openapi-mock-server.md) | A mock REST API served from an OpenAPI document | Accepted (amended) | Landed |
 | [0218](0218-jira-default-offload.md) | Jira runs on a worker by default | Accepted | Landed |
 | [0219](0219-variable-write-attribution.md) | Variable write attribution | Accepted | Landed |
@@ -559,7 +559,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0471](0471-release-architecture-sketch.md) | A release carries its architecture sketch, and a worker publishes it to Confluence | Accepted (amended) | Partial |
 | [0472](0472-event-log.md) | Atlas keeps a log of the signals and messages that were sent | Accepted (2026-10-22) | Landed |
 | [0473](0473-form-remote-data-sources.md) | A form looks remote data up through an ephemeral worker query | Accepted (amended) | Landed |
-| [0474](0474-readable-element-ids.md) | Readable ids for new BPMN elements | Accepted | Landed |
+| [0474](0474-readable-element-ids.md) | Readable ids for new BPMN elements | Accepted (amended) | Landed |
 | [0475](0475-identity-aware-worker-execution.md) | Identity-aware Worker execution and policy-based authorization | Proposed | Partial |
 | [0476](0476-google-contacts-worker.md) | A Google Contacts Worker Type — a process finds, keeps and labels the people it works with | Accepted | Landed |
 | [0477](0477-last-login-day.md) | The roster says on which day an account last signed in | Accepted | Landed |
@@ -567,6 +567,15 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0479](0479-paperless-ngx-worker.md) | Paperless-ngx Worker with reference-only document handling | Proposed | Not started |
 | [0480](0480-technical-capability-contract.md) | Technical capability claims on Worker Type operations | Proposed | Partial |
 | [0481](0481-storage-guard.md) | A storage reserve, and an engine that halts on a failed write | Accepted | Landed |
+| [0482](0482-capability-aware-binding-and-routing.md) | Capability-aware BPMN binding and deterministic authorized Worker selection | Proposed | Not started |
+| [0483](0483-technical-capability-conformance-governance.md) | Technical capability contract publication and conformance governance | Proposed | Not started |
+| [0484](0484-sharepoint-mock-mode.md) | A mockup provider for the SharePoint Worker Type | Accepted | Landed |
+| [0485](0485-technical-capability-semantics.md) | Versioned semantic contracts for technical capabilities | Proposed | Partial |
+| [0486](0486-operator-history-purge-and-compaction.md) | Deleting finished instances and compacting the WAL on an operator's request | Accepted | Landed |
+| [0487](0487-mail-templates.md) | A mail text is a template in the language form text views already speak | Accepted | Landed |
+| [0488](0488-checkpoint-verdicts-are-remembered.md) | A checkpoint's verdict is remembered, not re-read on every scrape | Accepted | Landed |
+| [0489](0489-mail-html-view.md) | A received mail's HTML body, read on request and shown in a task form | Accepted | Landed |
+| [0490](0490-carddav-worker.md) | A CardDAV Worker Type — a process finds, keeps and labels contacts in any CardDAV address book | Accepted | Landed |
 
 ## The two states of a record
 

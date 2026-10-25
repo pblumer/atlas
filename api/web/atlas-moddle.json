@@ -310,6 +310,7 @@
         { "name": "subject", "type": "String", "isAttr": true },
         { "name": "body", "type": "String", "isAttr": true },
         { "name": "bodyHtml", "type": "String", "isAttr": true },
+        { "name": "templating", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true },
         { "name": "operation", "type": "String", "isAttr": true },
         { "name": "folder", "type": "String", "isAttr": true },
@@ -513,6 +514,24 @@
       "properties": [
         { "name": "name", "type": "String", "isAttr": true },
         { "name": "value", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "CarddavConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "contactId", "type": "String", "isAttr": true },
+        { "name": "query", "type": "String", "isAttr": true },
+        { "name": "field", "type": "String", "isAttr": true },
+        { "name": "group", "type": "String", "isAttr": true },
+        { "name": "contact", "type": "String", "isAttr": true },
+        { "name": "contactVariable", "type": "String", "isAttr": true },
+        { "name": "maxResults", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
       ]
     },
     {

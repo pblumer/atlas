@@ -1,0 +1,35 @@
+{
+  "apiVersion": "atlas.io/technical-capability/v1alpha1",
+  "kind": "TechnicalCapabilityContract",
+  "metadata": {
+    "id": "io.atlas.contact.record.create",
+    "version": "1.0.0",
+    "profile": "address-book",
+    "name": "Create address-book contact"
+  },
+  "spec": {
+    "resourceKind": "contact-record",
+    "identityScope": "address-book",
+    "verb": "create",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": { "email": { "type": "string" }, "displayName": { "type": "string" } },
+      "required": ["displayName"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": { "id": { "type": "string" } },
+      "required": ["id"],
+      "additionalProperties": false
+    },
+    "errors": [
+      {"code": "CONTACT_ALREADY_EXISTS", "description": "A matching contact already exists", "retryable": false}
+    ],
+    "idempotency": "non-idempotent",
+    "consistency": "provider-defined",
+    "pagination": "none"
+  }
+}

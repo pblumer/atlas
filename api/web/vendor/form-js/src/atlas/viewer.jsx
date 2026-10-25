@@ -22,6 +22,7 @@ import {
 } from '@bpmn-io/form-js-viewer';
 
 import { DATA_SOURCE_MEMBER, isRemoteSelect } from './remote-source.js';
+import { MAIL_VIEW_TYPE, MailView } from './mailview.jsx';
 
 // The longest value a remote select keeps from the data a form is opened with. An id is
 // short; anything longer is not one, and is dropped as form-js drops a select's value
@@ -182,13 +183,17 @@ function hasRemoteSource(options) {
 class AtlasRemoteFields {
   constructor(formFields) {
     formFields.register('select', AtlasSelect);
+    // The e-mail view (ADR-draft-mail-html-view): Atlas's own component, in every
+    // form this bundle renders and in the editor's palette, canvas and preview.
+    formFields.register(MAIL_VIEW_TYPE, MailView);
   }
 }
 
 AtlasRemoteFields.$inject = [ 'formFields' ];
 
-// AtlasViewerModule registers the select above. It is part of every form this bundle
-// renders (viewer.js) and of the form editor's canvas and preview (playground.js).
+// AtlasViewerModule registers the select above and the e-mail view. It is part of every
+// form this bundle renders (viewer.js) and of the form editor's canvas and preview
+// (playground.js).
 export const AtlasViewerModule = {
   __init__: [ 'atlasRemoteFields' ],
   atlasRemoteFields: [ 'type', AtlasRemoteFields ]

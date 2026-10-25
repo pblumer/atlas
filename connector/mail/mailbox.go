@@ -97,6 +97,30 @@ const (
 // a process can tell a short mail from a shortened one.
 const MaxBodyBytes = 64 << 10
 
+// MaxHTMLBytes is where a message's HTML body is cut, once it is cleaned (htmlclean.go).
+// The HTML body is opt-in on top of the text, and only for a get
+// (ADR-0489): it is markup a stranger wrote, usually several times
+// the size of the text it carries, and the variable it lands in is persisted with the
+// instance. What still does not fit a process variable is cut further when the answer
+// is assembled (fitHTML).
+const MaxHTMLBytes = 256 << 10
+
+// bodyRead is how much of a message's content one read carries.
+type bodyRead uint8
+
+const (
+	readEnvelope bodyRead = iota
+	readText
+	readHTML
+)
+
+func readOf(includeBody bool) bodyRead {
+	if includeBody {
+		return readText
+	}
+	return readEnvelope
+}
+
 // Attachment is what a process learns about an attachment: that it exists, and what it
 // is called, its type and its size. Never its content (ADR-0438).
 //
@@ -152,9 +176,25 @@ type Envelope struct {
 	// BodyTruncated says it was cut at MaxBodyBytes.
 	Body          string
 	BodyTruncated bool
+	// HTML is the HTML body, set only when a get asked for it (ADR-0489):
+	// decoded as the provider read it, and cleaned and cut at MaxHTMLBytes when the
+	// answer is assembled (fitHTML) — whoever implemented the mailbox. HTMLTruncated says
+	// it was cut. withHTML records that it was asked for, so a message without an HTML
+	// part answers an empty html rather than none.
+	HTML          string
+	HTMLTruncated bool
+	withHTML      bool
 	// References is the message's own References header, which a reply extends. It
 	// is not part of what a process sees.
 	References string
+}
+
+// setHTML records a message's HTML body as a provider read it; cut says it read only
+// part of it.
+func (e *Envelope) setHTML(raw string, cut bool) {
+	e.withHTML = true
+	e.HTML = raw
+	e.HTMLTruncated = cut
 }
 
 // Fields is the envelope as process variables. The body is included only when the
@@ -186,6 +226,10 @@ func (e Envelope) Fields(includeBody bool) map[string]any {
 	if includeBody {
 		out["body"] = e.Body
 		out["bodyTruncated"] = e.BodyTruncated
+	}
+	if e.withHTML {
+		out["html"] = e.HTML
+		out["htmlTruncated"] = e.HTMLTruncated
 	}
 	return out
 }
@@ -314,6 +358,14 @@ type Mailbox interface {
 	Attachment(ctx context.Context, id, attachmentID string) (Document, error)
 	// Forward sends the message, attachments included, to new recipients.
 	Forward(ctx context.Context, id string, f Forward) error
+}
+
+// HTMLMailbox is a mailbox that also reads a message's HTML body, for a get that asks for
+// it (ADR-0489). Every provider's mailbox is one; it is an interface of
+// its own so the operations that never need markup keep the narrower Mailbox.
+type HTMLMailbox interface {
+	// GetHTML reads one message with its text and its HTML body, cleaned.
+	GetHTML(ctx context.Context, id string) (Envelope, error)
 }
 
 // MailboxOf answers the mailbox behind a Worker's client, or why it has none. A client

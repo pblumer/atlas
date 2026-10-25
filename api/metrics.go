@@ -71,9 +71,9 @@ func newDurabilityCollector(s *Server) *durabilityCollector {
 		appliedPosition: d("applied_log_position", "Highest log position the state store has durably applied."),
 		checkpoints:     d("checkpoints", "Recovery checkpoints currently published on disk."),
 		checkpointPos: d("checkpoint_position",
-			"Applied log position of the newest checkpoint that still verifies; 0 when there is none."),
+			"Applied log position of the newest checkpoint that still verifies; 0 when there is none. Verified again when its files change, and at least daily."),
 		checkpointAge: d("checkpoint_age_seconds",
-			"Age of the newest checkpoint that still verifies; the log past it is what a restart replays."),
+			"Age of the newest checkpoint that still verifies; the log past it is what a restart replays. Verified again when its files change, and at least daily."),
 		lastPassAt:      d("checkpoint_last_pass_timestamp_seconds", "When the last checkpoint pass ran, in unix seconds."),
 		lastPassFailed:  d("checkpoint_last_pass_failed", "1 when the last checkpoint pass reported an error, else 0."),
 		lastPassRemoved: d("checkpoint_last_pass_segments_removed", "WAL segments the last pass compacted away."),
@@ -179,7 +179,10 @@ func (c *durabilityCollector) Collect(ch chan<- prometheus.Metric) {
 		gauge(c.appliedPosition, float64(applied))
 	}
 
-	published := s.publishedCheckpoints()
+	// Remembered verdicts, not a fresh read: verifying re-hashes every checkpoint's state
+	// files, which on a large store is minutes of disk per scrape
+	// (ADR-0488).
+	published := s.rememberedCheckpoints()
 	gauge(c.checkpoints, float64(len(published)))
 	// "Newest that still verifies" rather than "newest": an unverifiable checkpoint
 	// licenses no compaction and would not carry a restore, so counting it here would

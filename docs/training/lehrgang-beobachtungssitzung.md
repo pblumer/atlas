@@ -158,7 +158,7 @@ Je Person:
 - Anwendung der Entscheidungsregel aus Abschnitt 1;
 - jede Stelle der Kategorie D als Issue erfasst (Fehler oder Lücke im Handbuch);
 - das Ergebnis anonymisiert (P1 bis P3) festgehalten in
-  `docs/planning/lehrgang-beobachtung-ergebnis.md`.
+  `docs/training/lehrgang-beobachtung-ergebnis.md`.
 
 Dieselbe Aufgabe lösen im Pilot die Teilnehmenden nach dem Lehrgang. Der Vergleich ist
 bei so wenigen Personen qualitativ, nicht statistisch; er zeigt, ob sich die Art der

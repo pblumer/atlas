@@ -164,7 +164,7 @@ test("the Operations pages for looking into something sit behind Diagnostics", a
   await page.locator("#topnav .topnav-group-btn", { hasText: "Diagnostics" }).click();
   const menu = page.locator("#topnav .topnav-group .dropdown-menu");
   await expect(menu).toBeVisible();
-  await expect(menu.locator("a")).toHaveText(["Messages", "Event log", "Outbox", "Call activities", "Mock directory", "Mock database"]);
+  await expect(menu.locator("a")).toHaveText(["Messages", "Event log", "Outbox", "Call activities", "Mock directory", "Mock database", "Mockups"]);
   await menu.locator("a", { hasText: "Outbox" }).click();
   await expect(page).toHaveURL(/#\/operations\/outbox$/);
   await expect(page.locator("#topnav .topnav-group-btn")).toHaveClass(/active/);

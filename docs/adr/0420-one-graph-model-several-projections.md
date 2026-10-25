@@ -317,6 +317,57 @@ it more pressing, because a path is a disclosure a single node is not.
   view itself — see its pros and cons below.
 - **No change to the starmap** beyond fixes until §7's bar is met.
 
+### Proposed CDA extension: technical operation and capability nodes (not built)
+
+The [Capability-driven Automation programme](../planning/capability-driven-automation-program.md)
+adds a *proposed* catalogue extension to this same model. This paragraph
+does not accept ADR-0420, introduce a second store, or claim existing
+Panorama/mesh support:
+
+| Graph kind | Stable identity | Owning source and layer |
+|---|---|---|
+| `technical-capability` | contract `id + exact version + profile` | immutable published semantic contract artifact; derived catalogue projection |
+| `worker-type-operation` | Worker Type `id + package version/digest + operation id` | authoritative manifest or built-in provider operation table; derived |
+| `configured-worker` | existing immutable Worker reference (not Worker Instance name) | existing configured Worker registry; derived |
+| `service-task-binding` | deployment/process version + BPMN element ID | compiled/deployed BPMN or authored extension, never inferred from its display label |
+
+Proposed edge vocabulary and truth conditions:
+
+- `declares-capability`: operation *claims* an exact semantic contract;
+  provenance `declared` and **candidate**, never silently `verified`.
+- `verified-by`: one reviewed conformance evidence record binds the
+  exact operation/package digest and contract digest; the edge is
+  **derived from reviewed evidence** and has verification status
+  `verified` only while the evidence remains current. See the
+  [conformance governance draft](0483-technical-capability-conformance-governance.md).
+- `binds-operation`: a service-task binding explicitly names or
+  resolves the operation according to deployment metadata. An
+  operation with a similar name must not create this edge.
+- `implements-type`: an existing configured Worker references its
+  Worker Type; availability, execution identity and authorization
+  are separate properties, never inferred from this link.
+
+Value Stream -> Stage -> Business Capability -> Process retains the
+**authored** realization in ADR-0305 as its own fact. A service task
+calling an operation cannot derive that a process *realizes* a Business
+Capability. Distinguish declared, derived and observed relations per
+§2; an absent mapping is a reported gap, not a guessed edge.
+
+Every new graph node/edge inherits the owning area's sharing and
+authorization rule (§8). Traversal stops at a restricted node by
+default; no names, identities, result counts or hidden paths may
+leak. Queries are budgeted and resolved **off the processor loop**
+without storing a synchronized graph or scanning all instances on
+the single writer. An optional UI successor must keep authored
+architecture separate from runtime observations.
+
+Before accepting this extension, review the final identity, evidence
+publication and Worker Type installation/version semantics against
+[ADR-0480](0480-technical-capability-contract.md),
+[ADR-0208](0208-worker-type-packages.md) and
+[ADR-0475](0475-identity-aware-worker-execution.md). No capability
+selection or authorization is part of the graph.
+
 ### Build order
 
 1. **The catalogue** (§1) with its test, covering the kinds the mesh and the register

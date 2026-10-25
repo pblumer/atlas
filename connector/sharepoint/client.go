@@ -207,40 +207,41 @@ func OpNames() []string {
 // so what reaches a client is plain data.
 //
 // Which fields carry a value follows from Operation, and the compiler has already
-// refused a model that set one the operation does not use.
+// refused a model that set one the operation does not use. The JSON names are the wire
+// form a worker in mockup mode forwards an operation in ([RemoteMock]).
 type Request struct {
 	// Operation is one of [Ops]; empty is [OpCreateItem].
-	Operation string
+	Operation string `json:"operation,omitempty"`
 	// Site addresses the site: a Graph site id ("host,siteId,webId"), a host and
 	// server-relative path ("contoso.sharepoint.com:/sites/hr"), or the site's URL.
-	Site string
+	Site string `json:"site"`
 	// List is the list an item operation acts on, or the document library a file
 	// operation does; empty there means the site's default library.
-	List string
+	List string `json:"list,omitempty"`
 	// ItemID addresses one list item.
-	ItemID string
+	ItemID string `json:"itemId,omitempty"`
 	// Path addresses one file or folder inside the library, relative to its top level.
-	Path string
+	Path string `json:"path,omitempty"`
 	// Fields are column values, each keeping the JSON shape its FEEL value had — a
 	// number stays a number, a list a list — because Graph reads a multi-choice or a
 	// lookup column from that shape and nothing else.
-	Fields map[string]any
+	Fields map[string]any `json:"fields,omitempty"`
 	// Content is what upload-file writes, in the form Encoding names.
-	Content string
+	Content string `json:"content,omitempty"`
 	// Encoding is EncodingText or EncodingBase64; the compiler has already applied the
 	// default.
-	Encoding string
+	Encoding string `json:"encoding,omitempty"`
 	// Filter is list-items' OData filter, Select the columns a read answers with.
-	Filter string
-	Select string
+	Filter string `json:"filter,omitempty"`
+	Select string `json:"select,omitempty"`
 	// PageToken resumes a listing where an earlier page stopped: the nextPageToken that
 	// page answered with, passed back unchanged.
-	PageToken string
+	PageToken string `json:"pageToken,omitempty"`
 	// MaxResults is a listing's page size; the compiler has already applied the default
 	// and refused a value past [MaxPageSize].
-	MaxResults int32
+	MaxResults int32 `json:"maxResults,omitempty"`
 	// RequestID is the job key, carried for tracing.
-	RequestID string
+	RequestID string `json:"requestId,omitempty"`
 }
 
 // Client performs one operation through one configured SharePoint provider. It is an

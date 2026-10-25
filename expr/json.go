@@ -111,6 +111,28 @@ func ContextOf(members map[string]Value) Value {
 	return ctx
 }
 
+// ContextMember answers the member name of a FEEL context, and whether v is a
+// context that holds it. With ContextKeys it is how the template language
+// (expr/feelers) reads a loop item's fields without the rest of Atlas importing the
+// FEEL value package.
+func ContextMember(v Value, name string) (Value, bool) {
+	c, ok := v.(*value.Context)
+	if !ok {
+		return nil, false
+	}
+	return c.Get(name)
+}
+
+// ContextKeys answers a FEEL context's member names in the context's own order, and
+// whether v is a context at all.
+func ContextKeys(v Value) ([]string, bool) {
+	c, ok := v.(*value.Context)
+	if !ok {
+		return nil, false
+	}
+	return c.Keys(), true
+}
+
 // valueToGo maps a FEEL value to the Go shape encoding/json marshals into
 // canonical JSON. Numbers become json.Number so their exact decimal text is
 // emitted verbatim; a value with no JSON image (temporal, range, function)

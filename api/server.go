@@ -204,6 +204,12 @@ type Server struct {
 	// else needs it, so it is set once at construction and read-only thereafter.
 	dataDir string
 
+	// nodeID is this installation's stable runtime id (ADR-0189 §6), read once at
+	// construction and read-only thereafter. A CardDAV create derives its contact's name
+	// from it and the job key (ADR-0490), which is why it is kept here
+	// rather than read from the settings store on the run loop for every job handed out.
+	nodeID string
+
 	// runLoop is the single-writer goroutine that owns the processor, the store
 	// and the registries; every handler reaches them through it (I3, ADR-0002).
 	// quit stops it, and every background sweeper alongside it.
@@ -602,6 +608,15 @@ type Server struct {
 	// the run loop, so it needs no lock.
 	sharePointRegistry *sharepoint.Registry
 
+	// sharePointMocks holds the site of every SharePoint Worker whose provider is the
+	// mockup (ADR-0484). It is created with the registry but never
+	// swapped with it: a rebuild re-binds the clients and must not throw away what a run
+	// wrote into a site. It holds its own lock — a supervised worker forwards its
+	// operations here off the run loop while the engine's own handler writes from the job
+	// goroutine — and is deliberately not durable, like the preview outbox: nothing in it
+	// exists anywhere else, so nothing survives a restart.
+	sharePointMocks *sharepoint.MockSites
+
 	// remedyRegistry resolves a worker name to a BMC Remedy AR System client for
 	// Remedy tasks (ADR-0106), built from the managed worker store at
 	// startup and rebuilt on every worker change, with each instance's credential
@@ -762,7 +777,15 @@ type Server struct {
 	// The snapshot itself runs on the run loop (via do), which is what makes its
 	// position exact: no batch can be half-applied while it is taken (invariant I3).
 	// Pruning runs off the loop — it only removes directories this goroutine published.
-	checkpointRoot     string
+	checkpointRoot string
+	// verifyCheckpoint re-hashes one published checkpoint's state files against its
+	// manifest — checkpoint.Verify, held here so a test can count the whole-store reads
+	// a request costs (ADR-0486). Set in New.
+	verifyCheckpoint func(root string, pos uint64) (*checkpoint.Manifest, error)
+	// verdicts remembers whether each published checkpoint verified, for the /metrics
+	// gauges, which would otherwise re-hash every checkpoint on every scrape
+	// (ADR-0488).
+	verdicts           checkpointVerdicts
 	checkpointInterval time.Duration
 	checkpointKeep     int
 	// checkpointTicks, when non-nil, replaces the checkpoint loop's real ticker so a
@@ -793,7 +816,7 @@ type Server struct {
 	// goroutine* is the point: an operator's pass and a scheduled one then serialize by
 	// construction rather than by a lock, and both run the same code. It is nil when
 	// checkpointing is off, which is what makes the endpoint's refusal honest.
-	checkpointRequests chan chan checkpointPass
+	checkpointRequests chan checkpointRequest
 	// lastPass is the most recent pass's outcome, for the status endpoint. Written by the
 	// checkpoint goroutine, read by handler goroutines, hence the mutex.
 	lastPassMu sync.Mutex
@@ -863,6 +886,12 @@ type Server struct {
 	// that must not be able to delete orders and holds says so. Set once before
 	// Handler is mounted.
 	cataloguePurgeOff bool
+	// instancePurgeOff is an administrator's delete of a version's finished instances
+	// switched off with --instance-purge=false / WithoutInstancePurge
+	// (ADR-0486). "off" for the same reason as
+	// cataloguePurgeOff: the purge is an opt-out, so the zero value allows it. Set once
+	// before Handler is mounted.
+	instancePurgeOff bool
 	// catalogueReporting is every process id that calls the order routes, read once
 	// at start when the catalogue is off (processesReportingToOrders); nil otherwise.
 	catalogueReporting map[string]bool
@@ -1641,7 +1670,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// somebody's GET, and a data directory this server cannot write to is an
 	// operator's problem to see at startup rather than weeks later on a request
 	// (ADR-0189 §6).
-	if _, err := ensureNodeIdentity(settings); err != nil {
+	node, err := ensureNodeIdentity(settings)
+	if err != nil {
 		return nil, err
 	}
 	// DMN reference models are resolved either from a temis model service (when
@@ -1655,6 +1685,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		proc:             proc,
 		store:            store,
 		dataDir:          dataDir,
+		nodeID:           node.ID,
 		limits:           limits.Default(), // WithLimits overrides; there is no "no budget"
 		remoteNodes:      newRemoteNodeCache(),
 		remoteLandscapes: newRemoteLandscapeCache(),
@@ -1766,6 +1797,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// path through checkpoint.Dir, and a knob here could only make them disagree
 	// (ADR-0131). Set outside the literal for the same alignment reason as above.
 	s.checkpointRoot = checkpoint.Dir(dataDir)
+	s.verifyCheckpoint = checkpoint.Verify
 	// The documentation area is a service rather than a set of Server methods
 	// (ADR-0147). It is built here, after the Server exists, because two of its
 	// collaborators are the server's: the shared public-route rate limiter, and the
@@ -2473,7 +2505,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		}
 	}
 	if s.checkpointInterval > 0 {
-		s.checkpointRequests = make(chan chan checkpointPass)
+		s.checkpointRequests = make(chan checkpointRequest)
 		s.wg.Add(1)
 		go s.checkpointLoop(s.checkpointInterval)
 	}
@@ -2753,18 +2785,18 @@ func (s *Server) checkpointLoop(every time.Duration) {
 		select {
 		case <-s.quit:
 			return
-		case reply := <-s.checkpointRequests:
+		case req := <-s.checkpointRequests:
 			// An operator asked for a pass (ADR-0131 slice 8). It runs *here*, on the same
 			// goroutine as the cadence, so an on-demand pass and a scheduled one can never
 			// overlap — and it is the same pass, not a second code path.
-			res := s.runCheckpointPass(&last)
+			res := s.runCheckpointPass(&last, req.compact)
 			select {
-			case reply <- res:
+			case req.reply <- res:
 			case <-s.quit:
 				return
 			}
 		case <-ticks:
-			s.runCheckpointPass(&last)
+			s.runCheckpointPass(&last, false)
 			if s.checkpointDone != nil {
 				select {
 				case s.checkpointDone <- struct{}{}:
@@ -2781,11 +2813,16 @@ func (s *Server) checkpointLoop(every time.Duration) {
 // two together keeps them in one order. It records the result for the status endpoint
 // and returns it for the operator who asked.
 //
+// compact asks for compaction on this one pass when the server does not compact on its
+// own: an administrator's request, after a confirmation, is the choice --compact-wal
+// leaves to a person (ADR-0486). It changes
+// nothing about the cut — the same checkpoint, watermarks and backup gate decide it.
+//
 // last carries the position most recently *logged* as published. An idle server
 // re-publishes nothing (Publish is a no-op at an existing position), so tracking it keeps
 // the cadence from logging the same line forever. Only the checkpoint goroutine touches
 // it, so it needs no lock.
-func (s *Server) runCheckpointPass(last *uint64) checkpointPass {
+func (s *Server) runCheckpointPass(last *uint64, compact bool) checkpointPass {
 	res := checkpointPass{At: s.now()}
 	pos, err := s.takeCheckpoint()
 	res.Position = pos
@@ -2797,7 +2834,8 @@ func (s *Server) runCheckpointPass(last *uint64) checkpointPass {
 		logging.Info(logging.CheckpointPublished, "published a recovery checkpoint; recovery replays only past it",
 			slog.Uint64("position", pos))
 	}
-	if s.compactWAL {
+	if s.compactWAL || compact {
+		res.Compaction = true
 		removed, note, cerr := s.compactLog()
 		res.SegmentsRemoved = removed
 		res.Note = note
@@ -2858,6 +2896,12 @@ func (s *Server) takeCheckpoint() (uint64, error) {
 		return 0, err
 	}
 	pos := staged.AppliedPosition()
+	// The commit just hashed exactly the files it published, which is the verification
+	// a metrics scrape would otherwise repeat (ADR-0488).
+	// A position that was already published hashed nothing, so it renews no verdict.
+	if !staged.AlreadyPublished() {
+		s.rememberPublished(pos)
+	}
 	if err := checkpoint.Prune(s.checkpointRoot, s.checkpointKeep); err != nil {
 		// The checkpoint is published either way; a failed prune costs disk, not recovery,
 		// so it is reported without discarding the position that was captured.

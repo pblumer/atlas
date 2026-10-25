@@ -5,7 +5,7 @@ form-viewer.js and form-playground.js are pre-built ESM bundles of:
   - @bpmn-io/form-js-playground@1.24.0   (form-playground.js only)
   - preact@10.29.8                       (the one Preact all of the above resolve to)
   - feelers@3.1.0                        (pinned by an override, see below)
-  - Atlas's own form-js modules in src/atlas/ (ADR-0473)
+  - Atlas's own form-js modules in src/atlas/ (ADR-0473, ADR-draft-mail-html-view)
   - esbuild@0.28.2                       (bundler only; not shipped)
 
 with every transitive dependency fixed by src/package-lock.json.
@@ -16,6 +16,11 @@ is patched or copied:
   - remote-source.js adds a fourth options source, "Remote data source", to the
     tables form-js describes its options sources in (Static, Input data, Expression).
     Everything in form-js that deals with options sources reads those tables.
+  - mailview.jsx is the e-mail view (ADR-draft-mail-html-view), a component of its
+    own type, "mailview": it shows the mail a mail task read into a variable — the
+    envelope, the text, and the cleaned HTML body in a sandboxed frame that loads no
+    remote image until the reader asks. It is not keyed, so the form never submits it.
+    viewer.jsx registers it; editor.jsx gives it its Label and Variable entries.
   - viewer.jsx registers the component every select renders through. It renders
     form-js's own Select for the three sources form-js knows, and for the remote one a
     field that mounts the search the page provides as the `atlasRemote` service
@@ -67,7 +72,7 @@ properties-panel.css and form-js-playground's dist/assets/form-js-playground.css
 verbatim (README.md). License: see LICENSE.
 
 SHA-256 form-viewer.js:
-e10be6bd8974ca47a00855b68b8b9607758c6e47f1e6954b874bc6a619861d00
+fea3df381936e23f7ea80c0ab7ac9a6527094dc2ab116d3c5ee745a49640b7bb
 
 SHA-256 form-playground.js:
-c700b4a8cbbc043e7ca3bdbc9885176f3a92eea0059908d618847b632908941e
+85d5f9790b3f92fbed35d16166b2931eafef8eda7ba0d73b02790fe9fc9dbc60

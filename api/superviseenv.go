@@ -228,6 +228,9 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// Google Contacts is Exchange's shape: the bundle says whose address book and as
 		// whom, it lives in the vault, and a supervised worker has no vault of its own.
 		connectorKindGoogleContacts: s.googleContactsWorkerEnv,
+		// CardDAV likewise: the bundle holds the password and the endpoint says which
+		// server, and a supervised worker has neither of its own.
+		connectorKindCardDAV: s.cardDAVWorkerEnv,
 		// The three SQL products. Unlike every kind above them the *whole* configuration
 		// is the secret — a DSN has no public half — so what is rendered here is one
 		// connection string per configured database and nothing else
@@ -852,6 +855,10 @@ func remedyBundleParse(raw string) (remedyCredentials, bool) {
 const (
 	sharepointEnvPrefix     = "ATLAS_SHAREPOINT_"
 	sharepointConnectorsEnv = sharepointEnvPrefix + "CONNECTORS"
+	// sharepointMockURLEnv is where a worker forwards the operations of a mockup
+	// Worker (ATLAS_SHAREPOINT_<NAME>_MOCK=1): this server's site for it, over the API
+	// (ADR-0484).
+	sharepointMockURLEnv = sharepointEnvPrefix + "MOCK_URL"
 )
 
 // sharepointWorkerEnv renders this server's SharePoint instances as the environment a
@@ -884,6 +891,7 @@ func (s *Server) sharepointWorkerEnv() []string {
 		names     []string
 		fromStore bool // a store instance contributed a name; only then must CONNECTORS be rendered
 		brokered  bool // a delegated Worker is among them; only then is the broker key handed over
+		mocked    bool // a mockup is among them; only then is the mockup's address handed over
 	)
 	seen := map[string]bool{}
 	addName := func(n string) {
@@ -920,6 +928,21 @@ func (s *Server) sharepointWorkerEnv() []string {
 				logging.Warn(logging.WorkerSupervisorFailed,
 					"two sharepoint workers share one environment name; the second is not handed to the supervised worker",
 					slog.String("connector", c.Name), slog.String("collidesWith", first))
+				continue
+			}
+			// A mockup has no endpoint and no credential: the child is told only that it
+			// is one, and forwards each operation to this server's site for it
+			// (ADR-0484). Without an address to forward to it
+			// could only refuse the Worker at startup, taking the other instances it
+			// serves down with it, so then it is left out and its tasks wait here.
+			if c.Provider == sharepoint.MockProvider {
+				if s.superviseURL == "" {
+					continue
+				}
+				taken[envKey] = c.Name
+				env = append(env, sharepointEnvPrefix+envKey+"_MOCK=1")
+				addName(c.Name)
+				fromStore, mocked = true, true
 				continue
 			}
 			// A delegated Worker's credential is brokered per authorized job and never
@@ -976,6 +999,9 @@ func (s *Server) sharepointWorkerEnv() []string {
 	// only with it, that process is handed a person's token (handleAuthorizeJob).
 	if brokered && s.brokerKey != "" {
 		env = append(env, brokerKeyEnv+"="+s.brokerKey)
+	}
+	if mocked {
+		env = append(env, sharepointMockURLEnv+"="+strings.TrimRight(s.superviseURL, "/")+"/api/v1/sharepoint/mock-sites")
 	}
 	return append(env, sharepointConnectorsEnv+"="+strings.Join(names, ","))
 }

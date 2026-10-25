@@ -177,6 +177,13 @@ atlas:
     # While it is true, every start logs a WARN (event=server.catalogue_purge_enabled).
     purge: true
 
+  # -- Let an administrator delete a process version's finished instances for good,
+  # those that finished before a cut-off (--instance-purge). Running instances are
+  # never touched, and nothing is deleted before the OpenSearch exporter has it. On by
+  # default (opt-out). SET IT TO false ON PRODUCTION, where the history is evidence.
+  # While it is true, every start logs a WARN (event=server.instance_purge_enabled).
+  instancePurge: true
+
   # -- Script task workers. Each shells out to an interpreter and runs arbitrary
   # code (ADR-0047). The default image bundles python3 and node, so those are ON;
   # PowerShell is OFF because the default image does not ship pwsh — build the

@@ -81,6 +81,11 @@ type Staged struct {
 // AppliedPosition is the log position this checkpoint captures.
 func (s *Staged) AppliedPosition() uint64 { return s.m.AppliedPosition }
 
+// AlreadyPublished reports that a checkpoint was already published at this position when
+// it was staged, so Commit writes and hashes nothing. A caller that treats a commit as a
+// fresh verification of the files on disk must not do so then.
+func (s *Staged) AlreadyPublished() bool { return s.published }
+
 // Stage snapshots the state under a temporary directory and returns the staged
 // checkpoint for [Staged.Commit] to publish.
 //

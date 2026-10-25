@@ -14,6 +14,7 @@ import (
 	"github.com/pblumer/atlas/api/identity"
 	"github.com/pblumer/atlas/api/policy"
 	"github.com/pblumer/atlas/authz"
+	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -90,6 +91,13 @@ var graphHosts = map[string]bool{
 	"microsoftgraph.chinacloudapi.cn": true,
 }
 
+// mockDelegatedRefusal says why a SharePoint mockup is never delegated: delegation
+// releases a person's token to the Worker on every permitted job, and a mockup reaches
+// no tenant to spend it on — so the release would be a credential handed out for
+// nothing. A mockup may still be governed with the service identity, which releases
+// none (ADR-0484).
+const mockDelegatedRefusal = "a SharePoint mockup cannot be delegated: it reaches no tenant, so a person's token released to it would be spent on nothing; govern it with the service identity, or switch it to Microsoft Graph first"
+
 // delegatedEndpointAllowed reports whether a delegated Worker may act against
 // endpoint: the default (blank) or HTTPS to a Microsoft Graph host.
 func delegatedEndpointAllowed(endpoint string) bool {
@@ -155,6 +163,9 @@ func (s *Server) validateIdentity(rec connector, wi workerIdentity) string {
 	}
 	if s.identity == nil {
 		return "delegated connections are not available on this server (the vault is disabled)"
+	}
+	if rec.Provider == sharepoint.MockProvider {
+		return mockDelegatedRefusal
 	}
 	if !delegatedEndpointAllowed(rec.Endpoint) {
 		return "a delegated Worker sends a person's token to its endpoint, which must therefore be Microsoft Graph (or blank); Worker " +

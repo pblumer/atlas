@@ -216,7 +216,12 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		// the vault at build time (ADR-0041).
 		name:           connectorKindSharePoint,
 		validateCreate: validateSharePointConnector,
-		newRegistry:    func(s *Server) { s.sharePointRegistry = sharepoint.NewRegistry() },
+		newRegistry: func(s *Server) {
+			s.sharePointRegistry = sharepoint.NewRegistry()
+			// The mockups outlive every rebuild, as the preview outbox does: a rebuild
+			// re-binds the clients and must not empty a site a run has written to.
+			s.sharePointMocks = sharepoint.NewMockSites(nil)
+		},
 		registerHandlers: func(s *Server, store *state.Store) {
 			for _, jobType := range []int32{compiler.SharePointJobTypeIndex, compiler.SharePointOpsJobTypeIndex} {
 				s.jobRunner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
@@ -447,6 +452,17 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		workerOnly:     true,
 		validateCreate: validateGoogleContactsConnector,
 		jobTypes:       []int32{compiler.GoogleContactsJobTypeIndex},
+	},
+	{
+		// A CardDAV task finds, reads, searches, lists, creates, updates or deletes a
+		// contact in a CardDAV address book — iCloud, Nextcloud, mailbox.org, Radicale and
+		// most mail providers' — or changes its groups (ADR-0490).
+		// Worker-only for Google Contacts' reason: the password reads somebody's whole
+		// address book and has no business on the engine's run loop.
+		name:           connectorKindCardDAV,
+		workerOnly:     true,
+		validateCreate: validateCardDAVConnector,
+		jobTypes:       []int32{compiler.CardDAVJobTypeIndex},
 	},
 	{
 		// An Active Directory task performs one directory operation against a
@@ -710,7 +726,7 @@ func DefaultOffloadedKinds() []string {
 // flag, no restart of Atlas. That is what makes the tenant a Console entry rather than a
 // deployment change.
 func DefaultSupervisedWorkerOnlyKinds() []string {
-	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindGoogleContacts, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
+	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindGoogleContacts, connectorKindCardDAV, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
 }
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
@@ -924,11 +940,24 @@ func validateS3Connector(p *createConnectorParams) string {
 
 // validateSharePointConnector validates a SharePoint create request: it defaults its
 // Graph API base (endpoint is an optional override) and needs a credentialsRef
-// naming a vault OAuth auth bundle (ADR-0141). Provider/Sender are mail-only.
+// naming a vault OAuth auth bundle (ADR-0141) — unless the provider is the mockup,
+// which needs neither (ADR-0484). Sender is mail-only.
 func validateSharePointConnector(p *createConnectorParams) string {
-	p.Provider, p.Sender = "", ""
+	p.Sender = ""
+	if p.Provider == sharepoint.MockProvider {
+		// A mockup reaches no tenant and authenticates against nothing, so an endpoint
+		// or a credential written into the form would be dead configuration that reads
+		// as if it were in use — the preview mail provider's rule
+		// (ADR-0484).
+		p.Endpoint, p.CredentialsRef = "", ""
+		return ""
+	}
+	// Anything else is Microsoft Graph, which has no provider name of its own: a record
+	// stored before the mockup existed has none, and a client that sends one — the
+	// Console once sent the mail form's — must still create the same Worker.
+	p.Provider = ""
 	if p.CredentialsRef == "" {
-		return "a sharepoint worker requires a credentialsRef naming a vault auth bundle"
+		return "a sharepoint worker requires a credentialsRef naming a vault auth bundle (or provider \"mock\" for a mockup that reaches no tenant)"
 	}
 	return ""
 }
@@ -1012,6 +1041,22 @@ func validateGoogleContactsConnector(p *createConnectorParams) string {
 	return ""
 }
 
+// validateCardDAVConnector checks an address book a Console operator is adding. Unlike
+// Google Contacts it needs an endpoint — CardDAV has no one address for everyone — and,
+// like Jira, a credentialsRef naming the vault bundle with the account's username and
+// password. Whether the endpoint is https and the bundle well-formed is decided where
+// the client is built (carddav.CheckBundle), which is also what supervision asks.
+func validateCardDAVConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if p.Endpoint == "" {
+		return "a carddav worker requires an endpoint: the address book's URL, or the server's (https://cloud.example.ch/remote.php/dav, https://contacts.icloud.com)"
+	}
+	if p.CredentialsRef == "" {
+		return "a carddav worker requires a credentialsRef naming a vault bundle: {username, password, groups}"
+	}
+	return ""
+}
+
 // validateExchangeConnector checks an Exchange organization a Console operator is
 // adding. Everything that says which organization and as whom lives in the vault bundle
 // the credentialsRef names — Online's {organization, clientId, certificate or
@@ -1054,6 +1099,10 @@ func normalizeConnectorUpdate(rec *connector) string {
 		validate = validateAgentConnector
 	case connectorKindCloudEvents:
 		validate = validateCloudEventsConnector
+	case connectorKindSharePoint:
+		// Switching to or from the mockup changes what is required: Graph needs a
+		// credential, the mockup takes none.
+		validate = validateSharePointConnector
 	default:
 		return ""
 	}

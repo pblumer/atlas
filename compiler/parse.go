@@ -2452,6 +2452,11 @@ type xmlServiceTask struct {
 	// list, create, update or delete a contact, label one, or search the organization's
 	// directory — through an account a *worker* holds the credential for.
 	GoogleContacts *xmlGoogleContactsConnector `xml:"extensionElements>googleContactsConnector"`
+	// CardDAV, when present, marks this service task a CardDAV task
+	// (ADR-0490): one operation on a CardDAV address book — find, read,
+	// search, list, create, update or delete a contact, or change its groups — through a
+	// server a *worker* holds the credential for.
+	CardDAV *xmlCardDAVConnector `xml:"extensionElements>carddavConnector"`
 	// Agent, when present, marks this service task an AI task: one call to a language
 	// model, one answer into one variable (ADR-0256). It is the same extension element an
 	// ad-hoc container carries, read for its other half — prompt and resultVariable rather
@@ -2750,6 +2755,27 @@ type xmlGoogleContactsConnector struct {
 	Retries string `xml:"retries,attr"`
 }
 
+// xmlCardDAVConnector is the <atlas:carddavConnector> extension on a service task
+// (ADR-0490). It has <atlas:googleContactsConnector>'s attributes, read
+// the same way: connector names the CardDAV Worker (literal-or-FEEL), and there is no
+// credential attribute, because none enters the engine. operation is a row of
+// connector/carddav/catalog.
+type xmlCardDAVConnector struct {
+	Connector       string `xml:"connector,attr"`
+	Operation       string `xml:"operation,attr"`
+	ContactID       string `xml:"contactId,attr"`
+	Query           string `xml:"query,attr"`
+	Field           string `xml:"field,attr"`
+	Group           string `xml:"group,attr"`
+	Contact         string `xml:"contact,attr"`
+	ContactVariable string `xml:"contactVariable,attr"`
+	MaxResults      string `xml:"maxResults,attr"`
+	ResultVariable  string `xml:"resultVariable,attr"`
+	// Retries is the task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
 // xmlLdapConnector is the <atlas:ldapConnector> extension on a service task
 // (ADR-0154). url is the server; bindDN/bindSecret authenticate the bind (bindSecret
 // a reference, never a value, ADR-0041); startTLS upgrades a plain connection.
@@ -2811,6 +2837,12 @@ type xmlMailConnector struct {
 	// which stays the plain-text alternative; blank means the message is text-only,
 	// exactly as before the field existed.
 	BodyHtml string `xml:"bodyHtml,attr"`
+	// Templating switches the subject and both bodies to the template language of
+	// form-js's text views — {{ FEEL }} placeholders, {{#if}} and {{#loop}} sections
+	// (ADR-0487). Blank or false keeps every value literal-or-FEEL, as
+	// it was before templates existed, so a deployed body that happens to contain {{
+	// keeps meaning what it meant.
+	Templating string `xml:"templating,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

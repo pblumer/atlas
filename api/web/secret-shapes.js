@@ -11,8 +11,8 @@
 // connector/sharepoint/oauth.go's, api/connectors.go's remedyCredentials, and
 // connector/jira/rest.go's, connector/googlesheets/oauth.go's,
 // connector/discord/rest.go's and connector/s3/rest.go's credentialBundle, and
-// connector/exchange/config.go's and connector/googlecontacts/config.go's Bundle. A field
-// added there is a field added here.
+// connector/exchange/config.go's, connector/googlecontacts/config.go's and
+// connector/carddav/config.go's Bundle. A field added there is a field added here.
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -96,6 +96,12 @@ export const SECRET_SHAPES = {
       subject: "verkauf@firma.ch",
     },
     note: "<code>clientEmail</code> and <code>privateKey</code> are <code>client_email</code> and <code>private_key</code> from the service account's JSON key file. <code>subject</code> is the Workspace user whose contacts the Worker reads and changes; the service account needs <b>domain-wide delegation</b> for <code>https://www.googleapis.com/auth/contacts</code> (Admin console &rsaquo; Security &rsaquo; API controls). Search directory also needs <code>directory.readonly</code>: name both in <code>\"scope\"</code>, separated by a space, and delegate both. A gmail.com account has no delegation: store <code>{\"method\": \"refreshToken\", \"clientId\", \"clientSecret\", \"refreshToken\"}</code> instead.",
+  },
+  "carddav:": {
+    what: "the CardDAV account's username and password (JSON), and which form its groups take",
+    fields: ["username", "password"],
+    skeleton: { username: "verkauf@firma.ch", password: "\u2026", groups: "categories" },
+    note: "Use an <b>app-specific password</b> where the provider issues one: iCloud requires it, and Fastmail, mailbox.org and a Nextcloud with two-factor sign-in offer it. <code>\"groups\"</code> is <code>\"categories\"</code> (the default: Nextcloud, ownCloud, most servers) or <code>\"group-vcards\"</code> for iCloud and Fastmail, whose groups are cards of their own. The server's address is the Worker's endpoint, not part of this bundle.",
   },
   "entra:": {
     what: "a Microsoft Entra ID app credential bundle (JSON): {tenantId, clientId} with a clientSecret, a certificate or a certificateThumbprint",

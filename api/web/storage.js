@@ -10,8 +10,16 @@
 //
 // The words are the Console's, keyed by the state the server reports (ADR-0267); the
 // server sends numbers and ids only.
+//
+// Below the disk, the card says how Atlas gives space back and offers it
+// (ADR-0486): whether the WAL is compacted on
+// every checkpoint, what the last pass did, a checkpoint now and — on a server not
+// started with --compact-wal — one compaction pass after a confirmation. It reads the
+// checkpoint status with ?verify=false: the full read re-hashes every checkpoint, which
+// on a large store is minutes of disk for every dashboard load.
 
 import { fmtCount } from "./numfmt.js";
+import { fmtDateTime } from "./datefmt.js";
 import { plural, t } from "./i18n.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
@@ -46,13 +54,106 @@ export function whenText(seconds) {
   return plural("storage.when.days", Math.round(s / 86400));
 }
 
+// cadenceText says how often checkpoints are taken: minutes below an hour, hours
+// above. A cadence is configured in whole minutes in practice, so nothing finer is said.
+export function cadenceText(seconds) {
+  const s = Number(seconds);
+  if (!Number.isFinite(s) || s <= 0) return "";
+  if (s < 3600) return plural("storage.every.minutes", Math.max(1, Math.round(s / 60)));
+  return plural("storage.every.hours", Math.round(s / 3600));
+}
+
 // renderStorage fills the dashboard's alert slot and card slot from one reading.
-export async function renderStorage({ alertSlot, cardSlot, api }) {
+export async function renderStorage({ alertSlot, cardSlot, api, confirm = (m) => window.confirm(m) }) {
   let s;
   try { s = await api("GET", "/api/v1/storage"); } catch { return; }
   if (!s || !STATES.includes(s.state)) return;
   if (alertSlot) alertSlot.innerHTML = alertHTML(s);
-  if (cardSlot) cardSlot.innerHTML = cardHTML(s);
+  if (!cardSlot) return;
+  // The disk first, on its own: it is what the card is for, and it must not wait on the
+  // checkpoint status, which is a second request that can be slow or fail. The reclaim
+  // section fills its slot when that answer arrives, and stays empty when it does not.
+  cardSlot.innerHTML = cardHTML(s);
+  let cp;
+  try { cp = await api("GET", "/api/v1/checkpoints?verify=false"); } catch { return; }
+  const slot = cardSlot.querySelector(".storage-reclaim-slot");
+  if (!slot) return;
+  slot.innerHTML = reclaimHTML(cp);
+  wireReclaim(cardSlot, { api, confirm, rerender: () => renderStorage({ alertSlot, cardSlot, api, confirm }) });
+}
+
+// wireReclaim binds the card's buttons. A pass can take minutes on a large store —
+// verifying a checkpoint reads all of it — and a proxy in front of the server may give
+// up first, so a missing answer is said as one, not as a failed pass.
+function wireReclaim(slot, { api, confirm, rerender }) {
+  const buttons = [...slot.querySelectorAll("[data-reclaim]")];
+  for (const b of buttons) {
+    b.addEventListener("click", async () => {
+      const compact = b.dataset.reclaim === "compact";
+      if (compact && !confirm(t("storage.reclaim.confirm"))) return;
+      const label = b.textContent;
+      for (const x of buttons) x.disabled = true;
+      b.textContent = t("storage.reclaim.running");
+      let msg;
+      try {
+        msg = passText(await api("POST", compact ? "/api/v1/checkpoints?compact=true" : "/api/v1/checkpoints"));
+        // The card is drawn again from a fresh reading, so the disk and the last pass
+        // it shows are the ones this pass left; the answer goes under the buttons.
+        await rerender();
+      } catch (e) {
+        msg = !e.status || e.status >= 500
+          ? t("storage.reclaim.noAnswer", { error: e.message })
+          : t("storage.reclaim.failed", { error: e.message });
+      }
+      // Still on screen means the card was not drawn again — the pass failed, or the
+      // fresh reading did — so the buttons are given back.
+      if (b.isConnected) {
+        for (const x of buttons) x.disabled = false;
+        b.textContent = label;
+      }
+      const out = slot.querySelector(".storage-reclaim-result");
+      if (out) out.textContent = msg;
+    });
+  }
+}
+
+// passText says what one checkpoint pass did, in the words a person reads after pressing
+// the button.
+export function passText(p) {
+  if (!p) return "";
+  if (p.checkpointError) return t("storage.reclaim.checkpointFailed", { error: p.checkpointError });
+  const parts = [p.position ? t("storage.reclaim.checkpointAt", { position: fmtCount(p.position) }) : t("storage.reclaim.checkpointNone")];
+  if (p.compaction) {
+    if (p.compactionError) parts.push(t("storage.reclaim.compactionFailed", { error: p.compactionError }));
+    else if (p.segmentsRemoved > 0) parts.push(plural("storage.reclaim.removed", p.segmentsRemoved, { n: fmtCount(p.segmentsRemoved) }));
+    else parts.push(p.note ? t("storage.reclaim.skipped", { note: p.note }) : t("storage.reclaim.nothing"));
+  }
+  return parts.join(" ");
+}
+
+// reclaimHTML is how this server gives disk back, from the checkpoint status. Nothing
+// when the status could not be read.
+export function reclaimHTML(cp) {
+  if (!cp) return "";
+  const lines = [`<h3 class="storage-reclaim-title">${esc(t("storage.reclaim.title"))}</h3>`];
+  if (!cp.enabled) {
+    lines.push(`<p class="muted">${esc(t("storage.reclaim.noCheckpoints"))}</p>`);
+    return `<div class="storage-reclaim">${lines.join("\n      ")}</div>`;
+  }
+  const every = cadenceText(cp.intervalSeconds || 0);
+  lines.push(`<p>${esc(cp.compaction ? t("storage.reclaim.on", { every }) : t("storage.reclaim.off"))}</p>`);
+  if (cp.lastPass) {
+    const when = fmtDateTime(new Date(Number(cp.lastPass.at) / 1e6));
+    lines.push(`<p class="muted">${esc(t("storage.reclaim.last", { when }))} ${esc(passText(cp.lastPass))}</p>`);
+  }
+  const buttons = cp.compaction
+    ? [`<button class="btn" data-reclaim="checkpoint">${esc(t("storage.reclaim.checkpointCompact"))}</button>`]
+    : [`<button class="btn neutral" data-reclaim="checkpoint">${esc(t("storage.reclaim.checkpoint"))}</button>`,
+      `<button class="btn danger" data-reclaim="compact">${esc(t("storage.reclaim.compactOnce"))}</button>`];
+  lines.push(`<div class="row storage-reclaim-actions">${buttons.join("")}</div>`);
+  lines.push(`<p class="storage-reclaim-result" aria-live="polite"></p>`);
+  lines.push(`<p class="muted">${esc(t("storage.reclaim.purgeHint"))}</p>`);
+  return `<div class="storage-reclaim">${lines.join("\n      ")}</div>`;
 }
 
 function deciding(s) {
@@ -121,8 +222,9 @@ function forecastHTML(s) {
     <span class="muted">(${esc(t("storage.forecast.basis"))})</span></p>`;
 }
 
-// cardHTML is the administrator's card: the disk at a glance, then what it is used for.
-export function cardHTML(s) {
+// cardHTML is the administrator's card: the disk at a glance, then what it is used for,
+// then how to give it back when the checkpoint status could be read.
+export function cardHTML(s, cp) {
   const fss = Array.isArray(s.fileSystems) ? s.fileSystems : [];
   const atlas = s.atlas || {};
   const parts = [];
@@ -133,6 +235,7 @@ export function cardHTML(s) {
     wal: fmtBytes(atlas.walBytes), segments: fmtCount(atlas.walSegments || 0), state: fmtBytes(atlas.stateBytes),
   }))}</p>`);
   if (!(s.reserveBytes > 0)) parts.push(`<p class="muted">${esc(t("storage.freezeOff"))}</p>`);
+  parts.push(`<div class="storage-reclaim-slot">${reclaimHTML(cp)}</div>`);
   parts.push(`<p class="muted storage-note">${esc(t("storage.note"))}
     <a href="/handbuch.html#speicher" target="_blank" rel="noopener">${esc(t("storage.handbook"))} ↗</a></p>`);
   return `<div class="card storage-card" id="storage-card">

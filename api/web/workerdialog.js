@@ -48,6 +48,10 @@ export function workerCreateBody(form) {
     credentialsRef: get("credentialsRef"),
   };
   if (body.kind === "mail") body.provider = get("provider") || "smtp";
+  // A SharePoint Worker reaches Microsoft Graph unless it is the mockup, whose site is
+  // kept in this server's memory (ADR-0484). Graph has no provider
+  // name of its own, so only the mockup sends one.
+  if (body.kind === "sharepoint" && get("provider")) body.provider = get("provider");
   // An SMTP mail Worker reads its mailbox over IMAP when it names an endpoint for it
   // (ADR-0438); the native providers read through their own API, so
   // the field belongs to SMTP alone and a value left in it for another provider stays
@@ -110,6 +114,9 @@ export function workerShape(kind, provider) {
   const preview = mail && provider === "preview";
   const native = mail && provider !== "smtp" && !preview;
   const sharepoint = kind === "sharepoint";
+  // A SharePoint mockup is preview's counterpart for a site: it reaches no tenant and
+  // authenticates against nothing, so it has no credential to name.
+  const spMock = sharepoint && provider === "mock";
   const remedy = kind === "remedy";
   // Jira is Remedy's shape exactly: a site to reach and a credential bundle to reach
   // it with, neither derivable from the other.
@@ -129,6 +136,9 @@ export function workerShape(kind, provider) {
   // everyone, so the credential bundle — which also says whose address book — is the
   // whole configuration.
   const googlecontacts = kind === "googlecontacts";
+  // CardDAV is Jira's shape: a server to reach and an account to reach it with, neither
+  // derivable from the other — every provider runs its own CardDAV server.
+  const carddav = kind === "carddav";
   // S3 is the one bundle kind whose endpoint is still worth authoring, and it carries
   // two meanings at once: empty is AWS at the region the bundle names, and anything else
   // is the store the installation runs — which is also what decides that its buckets are
@@ -183,10 +193,11 @@ export function workerShape(kind, provider) {
     // authenticates; a SQL worker dials its connection string. The rest have no
     // check yet, and the server says so by name rather than silently doing nothing.
     test: mail || sql,
-    provider: mail || agent,
+    provider: mail || agent || sharepoint,
     // The provider select's options follow the kind: mail picks a transport, an agent
-    // picks a wire format. One list per kind, so the form cannot offer SMTP to an agent.
-    providerOptions: agent ? AGENT_PROTOCOLS : (mail ? PROVIDERS : []),
+    // picks a wire format, SharePoint Graph or the mockup. One list per kind, so the
+    // form cannot offer SMTP to an agent.
+    providerOptions: agent ? AGENT_PROTOCOLS : (mail ? PROVIDERS : (sharepoint ? SHAREPOINT_PROVIDERS : [])),
     // An agent Worker names the model it asks, and since ADR-0256 that is the *default*
     // rather than the only source: a task or an agent container may name its own, so one
     // Worker — one endpoint, one key — serves a cheap classification and a strong piece
@@ -206,7 +217,7 @@ export function workerShape(kind, provider) {
     // An agent's key is required *unless* an endpoint is named — a self-hosted endpoint
     // may legitimately need none — so the form asks for it without insisting, and the
     // server refuses a record with neither.
-    credRef: preview ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad || s3 || exchange ? "required" : "optional")),
+    credRef: preview || spMock ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad || s3 || exchange || carddav ? "required" : "optional")),
     modelPlaceholder: provider === "chat-completions" ? "gpt-4o" : "claude-opus-5",
     endpointPlaceholder: agent
       ? (provider === "chat-completions"
@@ -220,6 +231,8 @@ export function workerShape(kind, provider) {
       ? "https://minio.example:9000 (empty = AWS)"
       : exchange
       ? "http://exch01.contoso.local/PowerShell/ (empty = Exchange Online)"
+      : carddav
+      ? "https://cloud.example.ch/remote.php/dav"
       : (ad ? "ldaps://dc.example.com:636"
         : (remedy ? "https://helix.example.com:8008" : (jira ? "https://acme.atlassian.net" : "https://temis.internal"))),
     credRefLabel: agent
@@ -236,6 +249,8 @@ export function workerShape(kind, provider) {
       ? "Credential reference (vault {organization, clientId, certificate} or {target: onprem, …})"
       : googlecontacts
       ? "Credential reference (vault Google auth bundle with subject)"
+      : carddav
+      ? "Credential reference (vault {username, password, groups})"
       : googlesheets
       ? "Credential reference (vault Google auth bundle)"
       : jira
@@ -260,6 +275,8 @@ export function workerShape(kind, provider) {
       ? "exo_contoso (vault Exchange bundle)"
       : googlecontacts
       ? "google_contacts_verkauf (vault JSON bundle)"
+      : carddav
+      ? "carddav_verkauf (vault {username, password, groups})"
       : googlesheets
       ? "google_sheets_auth (vault JSON bundle)"
       : jira
@@ -284,10 +301,14 @@ export function workerShape(kind, provider) {
       ? "The credential reference names a vault bundle that says which organization this is and as whom \u2014 never a value. <b>Exchange Online:</b> <code>{\"organization\": \"contoso.onmicrosoft.com\", \"clientId\": \"\u2026\", \"certificate\": \"-----BEGIN CERTIFICATE-----\u2026-----BEGIN PRIVATE KEY-----\u2026\"}</code> for an app registration with <code>Exchange.ManageAsApp</code> and an Exchange role; leave the <b>endpoint empty</b>. <b>Exchange Server:</b> <code>{\"target\": \"onprem\"}</code>, with <code>username</code> and <code>password</code> unless the worker runs as a Kerberos service account, and the server\u0027s <b>Remote PowerShell URI</b> as endpoint \u2014 that worker needs PowerShell on its host, in practice a Windows domain member running <code>atlas worker --connector exchange</code>."
       : googlecontacts
       ? "The credential reference names a JSON auth bundle in the vault \u2014 never a secret value \u2014 and the bundle also says <b>whose address book</b> this Worker uses. In a Google Workspace: <code>{\"method\": \"serviceAccount\", \"clientEmail\": \"\u2026@\u2026.iam.gserviceaccount.com\", \"privateKey\": \"-----BEGIN PRIVATE KEY-----\u2026\", \"subject\": \"verkauf@firma.ch\"}</code>; the <b>subject is required</b>, because a service account has no contacts of its own, and the service account needs <b>domain-wide delegation</b> for the contacts scope. For a gmail.com account: <code>{\"method\": \"refreshToken\", \"clientId\": \"\u2026\", \"clientSecret\": \"\u2026\", \"refreshToken\": \"\u2026\"}</code>. Search directory needs the directory scope as well: add <code>\"scope\": \"https://www.googleapis.com/auth/contacts https://www.googleapis.com/auth/directory.readonly\"</code>. One Worker per address book."
+      : carddav
+      ? "The <b>endpoint</b> is the address book\u0027s URL, or any URL of the server it can be found from \u2014 <code>https://cloud.example.ch/remote.php/dav</code> for Nextcloud, <code>https://contacts.icloud.com</code> for iCloud, the server\u0027s root for Radicale or Baïkal. When the account has more than one address book, the first task says which ones there are, and you set the endpoint to the one this Worker uses. It must be <b>https</b>. The credential reference names a vault bundle \u2014 never a value: <code>{\"username\": \"\u2026\", \"password\": \"\u2026\", \"groups\": \"categories\"}</code>, with an <b>app-specific password</b> where the provider issues one, and <code>\"groups\": \"group-vcards\"</code> for iCloud and Fastmail. One Worker per address book."
       : googlesheets
       ? "The credential reference names a JSON auth bundle in the vault \u2014 never a secret value. A <b>service account</b> is the normal shape: <code>{\"method\": \"serviceAccount\", \"clientEmail\": \"\u2026@\u2026.iam.gserviceaccount.com\", \"privateKey\": \"-----BEGIN PRIVATE KEY-----\u2026\"}</code>, copied out of the JSON key file Google hands out. A service account owns nothing by itself: <b>share each spreadsheet or folder with its address</b>, exactly as you would with a colleague, or it will read a 403 where you see a document."
       : ad
       ? "The directory's <b>LDAP URL</b> and a vault bundle holding the service account: <code>{\"bindDN\": \"cn=svc-atlas,ou=Dienstkonten,dc=example,dc=com\", \"password\": \"\u2026\"}</code>. Use <b>ldaps://</b> unless you enable StartTLS \u2014 Active Directory refuses to set a password over an unencrypted channel, so an <code>ldap://</code> directory works for everything except the one thing a joiner needs. A model names this worker and says nothing else about the directory."
+      : spMock
+      ? "Needs nothing else: every operation runs against a site atlas keeps in its own memory \u2014 lists and libraries appear the first time a task writes to them \u2014 and you see what a run wrote in <b>Operations &rsaquo; Diagnostics &rsaquo; Mockups</b>. The way to try a SharePoint process before you own a tenant; a restart of atlas empties the site."
       : sql
       ? "The <b>whole connection string</b> is the credential \u2014 it is sealed into the vault and the record keeps only a reference, so the Console can never show it back. Atlas supervises a worker for this kind, and it picks the database up as soon as you save; no restart and no start parameter. To replace a connection string later, overwrite its vault key under <b>Secrets</b>."
       : (!mail
@@ -305,6 +326,13 @@ export function workerShape(kind, provider) {
 const AGENT_PROTOCOLS = [
   ["messages", "Messages (Anthropic)"],
   ["chat-completions", "Chat Completions (OpenAI-compatible)"],
+];
+
+// SHAREPOINT_PROVIDERS: Graph is the record without a provider, as every SharePoint
+// Worker created before the mockup existed is.
+const SHAREPOINT_PROVIDERS = [
+  ["", "Microsoft Graph"],
+  ["mock", "Mockup (in-app site)"],
 ];
 
 const PROVIDERS = [
@@ -544,6 +572,9 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
         patch.provider = providerSel.value;
         patch.model = modelIn.value.trim();
       }
+      // Switching a SharePoint Worker to the mockup or back; the server clears the
+      // credential reference the mockup does not use.
+      if (c.kind === "sharepoint") patch.provider = providerSel.value;
       close({ patch, extra });
     };
 

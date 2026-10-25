@@ -1,0 +1,113 @@
+{
+  "id": "cda",
+  "name": "Capability-driven Automation",
+  "summary": "Connect business outcomes to verified technical operation semantics and, only after architectural approval, deterministic and policy-authorized Worker execution. Discovery and execution are separate delivery gates.",
+  "status": "active",
+  "owner": "unassigned (maintainer assignment required)",
+  "last_reviewed": "2026-10-25",
+  "plan": "../../planning/capability-driven-automation-program.md",
+  "milestone": "../../../ROADMAP.md#milestone-cda--capability-driven-automation-",
+  "next_action": "Assign a programme owner; review PR #1351 and PR #1346; decide ADR-0480.",
+  "slices": [
+    {
+      "id": "CDA0",
+      "title": "Declarative operation claims",
+      "status": "active",
+      "owner": "unassigned",
+      "depends_on": [],
+      "issues": [],
+      "prs": [
+        1343
+      ],
+      "note": "PR #1343 merged; ADR-0480 remains Proposed/Partial. Review architecture approval and completion evidence before closing."
+    },
+    {
+      "id": "CDA1",
+      "title": "Semantic contract envelope",
+      "status": "active",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA0"
+      ],
+      "issues": [],
+      "prs": [
+        1346
+      ],
+      "note": "Draft PR #1346; exact semantics and parser only, not provider conformance."
+    },
+    {
+      "id": "CDA2",
+      "title": "Contract governance and conformance",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Accept governance ADR; offline full JSON Schema checks, independent evidence, publication and revocation."
+    },
+    {
+      "id": "CDA3",
+      "title": "Verified Worker Type mappings",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA2"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Prove account versus contact distinction; source-derived provider mappings with no drift."
+    },
+    {
+      "id": "CDA4",
+      "title": "Cross-layer architecture graph",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA2",
+        "CDA3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Accept/extend ADR-0420; stable identities, provenance, bounded traversals and visibility."
+    },
+    {
+      "id": "CDA5",
+      "title": "Panorama and API/MCP discovery",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA4"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Read-only impact, coverage and gap queries; no unsupported runtime claims."
+    },
+    {
+      "id": "CDA6",
+      "title": "Capability-aware BPMN binding",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA2",
+        "CDA3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Approve binding ADR; pin one verified Worker at deployment without changing runtime."
+    },
+    {
+      "id": "CDA7",
+      "title": "Policy-gated governed execution",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA6"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Require provider-specific ADR-0475 enforcement, fsync-gated effects and recovery equality; no dynamic fallback."
+    }
+  ]
+}

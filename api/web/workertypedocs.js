@@ -297,8 +297,9 @@ export const WORKER_TYPE_DOCS = {
   sharepoint: {
     anchor: "runbook-sharepoint", title: "SharePoint",
     checked: "2026-09",
-    needs: `A configured SharePoint Worker in ${WORKERS}: a vault bundle for Microsoft Graph with tenant, client and a secret, a certificate, or — on Windows — a certificate's thumbprint. No endpoint — Graph's address is the same for everyone.`,
+    needs: `A configured SharePoint Worker in ${WORKERS}: a vault bundle for Microsoft Graph with tenant, client and a secret, a certificate, or — on Windows — a certificate's thumbprint. No endpoint — Graph's address is the same for everyone. Or the <b>Mockup</b> provider, which needs none of it.`,
     steps: [
+      `<b>Start with the mockup.</b> ${WORKERS} &rarr; <b>New worker</b>: type <b>Microsoft SharePoint</b>, provider <b>Mockup</b>, a name. Every operation then runs against a site atlas keeps in its own memory — a list or library exists from the first task that writes to it — and <i>Operations &rsaquo; Diagnostics &rsaquo; Mockups</i> shows what a run wrote. A SharePoint process can be built and demonstrated with no tenant; going live is switching the same Worker to <b>Microsoft Graph</b>.`,
       `The groundwork is Entra ID's: an <b>app registration</b>, a client secret or — recommended for an app that runs unattended — a certificate uploaded under <i>Certificates &amp; secrets</i>, and admin consent. Note tenant id and client id.`,
       `Grant the <b>site-specific</b> permission <code>Sites.Selected</code> and then grant this app access to the individual sites it works on. <code>Sites.ReadWrite.All</code> works too and is the grant an audit writes up.`,
       `Store the bundle in the vault: ${VAULT}, e.g. <code>sharepoint_auth</code> holding <code>{"method": "clientCredentials", "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code> — or <code>"certificate"</code>, the certificate and its unencrypted private key as one PEM text, in place of <code>clientSecret</code>. On a Windows server, <code>"certificateThumbprint"</code> may name a certificate already in the store instead (the service account's <code>CurrentUser\\My</code>, or <code>LocalMachine\\My</code>), as for Entra ID; its key signs there and may be non-exportable. One of the three.`,
@@ -365,6 +366,19 @@ export const WORKER_TYPE_DOCS = {
       `<b>Without a Workspace</b> (a gmail.com account): an OAuth client of type <i>Desktop app</i>, one consent with the contacts scope, and the refresh token it yields — <code>{"method": "refreshToken", "clientId": "…", "clientSecret": "…", "refreshToken": "…"}</code>.`,
     ],
     trap: `Delegation grants exactly the scopes listed. A scope in the bundle that is not delegated fails the token request — for every operation, not only the one that needed it. And an OAuth client still in <i>Testing</i> expires its refresh token after 7 days.`,
+  },
+
+  carddav: {
+    anchor: "runbook-carddav", title: "CardDAV contacts",
+    checked: "2026-10",
+    needs: `A configured CardDAV Worker in ${WORKERS} per address book: its endpoint, and a vault bundle with the account's username and password. <i>Walked against Radicale and Xandikos; the provider steps are written from the providers' documentation and have not yet been walked in an iCloud, Nextcloud or mail provider account.</i>`,
+    steps: [
+      `At the provider, create an <b>app-specific password</b> for the account where it issues one — <b>iCloud</b>: <i>account.apple.com</i> &rarr; <i>Sign-In and Security</i> &rarr; <b>App-Specific Passwords</b> (required); <b>Nextcloud</b>: <i>Settings</i> &rarr; <i>Security</i> &rarr; <b>Create new app password</b> (required with two-factor sign-in).`,
+      `Note the <b>endpoint</b>: <code>https://contacts.icloud.com</code> for iCloud, <code>https://&lt;server&gt;/remote.php/dav</code> for Nextcloud and ownCloud, the server's address for Radicale (<code>…/dav.php</code> for Baïkal), otherwise the CardDAV address the provider's help names. The address book is found from it; when the account has several, the first task names them, and you set the endpoint to the one this Worker uses.`,
+      `Store the bundle in the vault: ${VAULT}, e.g. <code>carddav_verkauf</code> holding <code>{"username": "verkauf@firma.ch", "password": "…", "groups": "categories"}</code> — <code>"groups": "group-vcards"</code> for <b>iCloud and Fastmail</b>, whose groups are cards of their own.`,
+      `${WORKERS} &rarr; <b>New worker</b>: type <b>CardDAV contacts</b>, a name, the endpoint, credential reference <code>carddav_verkauf</code>. One Worker per address book.`,
+    ],
+    trap: `The account's own password is refused where the provider requires an app-specific one — iCloud always, Nextcloud with two-factor sign-in — and the task fails with <code>HTTP 401</code>. A group form that does not match the server's is silent instead: an iCloud address book in the <code>categories</code> form keeps every group in a field Apple Contacts never shows.`,
   },
 
   discord: {

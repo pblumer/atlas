@@ -9,6 +9,7 @@ ihm eine Fallakte an, und wenn er erledigt ist, räumt ein zweiter Prozess sie w
 |---|---|---|
 | `sharepoint-fallakte.bpmn` | Aus einem Antrag eine Fallakte machen: Ordner, ausgefüllte Eingangsbestätigung, nachgeführter Antrag, Protokolleintrag. | `get-item`, `create-folder`, `download-file`, `get-file`, `upload-file`, `update-item`, `create-item` |
 | `sharepoint-aufraeumen.bpmn` | Erledigte Anträge seitenweise finden und zu jedem den Fallordner und den Eintrag löschen. | `list-items` (Filter, Seiten), `delete-file`, `delete-item` |
+| `sharepoint-testdaten.bpmn` | Eine leere Site so füllen, wie eine Person es getan hätte: ein Antrag und die Briefvorlage — für einen Worker mit dem Provider *Mockup*. | `create-item`, `upload-file` |
 
 `list-folder` fehlt in den beiden Abläufen; es blättert wie `list-items`, mit `pageToken`
 und `nextPageToken`.
@@ -46,6 +47,33 @@ Die Adresse der Site und die Namen der Listen stehen an **einer** Stelle, im Scr
    `intranet`, Credential-Referenz `sharepoint_auth`, kein Endpoint.
 
 Die Schritte im Detail stehen im Handbuch unter *Runbooks → SharePoint*.
+
+## Ohne Tenant: mit dem Mockup
+
+Wer (noch) keine Site hat, legt den Worker mit dem Provider **Mockup** an
+([ADR-0484](../../docs/adr/0484-sharepoint-mock-mode.md)):
+*Console → Workers → New worker*, Typ *Microsoft SharePoint*, Provider *Mockup*, Name
+`intranet` — ohne Secret und ohne Endpoint. Jede Operation läuft dann gegen eine Site im
+Arbeitsspeicher von atlas.
+
+Auf dem Mockup gibt es niemanden, der die Listen anlegt und einen Antrag erfasst; eine Liste
+oder Bibliothek entsteht dort, wenn ein Task zum ersten Mal in sie schreibt. Diese Rolle
+übernimmt `sharepoint-testdaten.bpmn`:
+
+1. «Testdaten anlegen» ohne Variablen starten. Er legt einen Antrag in `Antraege` an und die
+   Briefvorlage in `Vorlagen` und hinterlässt die Variable `antragId` (beim ersten Lauf `"1"`).
+2. «Fallakte anlegen» mit dieser `antragId` starten.
+3. «Testdaten anlegen» noch einmal starten, diesmal mit `{"status": "Erledigt"}`: Das ergibt
+   einen erledigten Antrag. Dann `proc_sharepoint_aufraeumen` ohne Variablen starten — er
+   findet den erledigten Antrag und löscht ihn; der aus Schritt 2, der auf *In Bearbeitung*
+   steht, bleibt.
+
+Was jeder Lauf geschrieben hat, zeigt *Operations → Diagnostics → Mockups*; dort leert
+*Empty site* die Site für den nächsten Versuch. Ein Neustart von atlas leert sie ebenfalls.
+
+Der Wechsel auf die echte Site ist ein Wechsel des Workers: Provider *Microsoft Graph* und
+die Credential-Referenz setzen. Die Modelle bleiben, wie sie sind; die Listen, Bibliotheken
+und Spalten aus der Tabelle oben müssen dort aber von Hand angelegt sein.
 
 ## Ausprobieren
 
@@ -89,4 +117,5 @@ Papierkorb der Site.
   Lauf den Antrag wieder.
 
 Beide Abläufe laufen in `connector/sharepoint/example_test.go` gegen eine nachgebildete Site
-durch — mit dem echten Compiler, der echten Engine und dem echten Graph-Client.
+durch — mit dem echten Compiler, der echten Engine und dem echten Graph-Client —, und alle
+drei in `connector/sharepoint/mock_test.go` gegen das Mockup.

@@ -4245,6 +4245,16 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             runbook</a>; the worker is called <code>intranet</code> here. Which lists, libraries and columns the
             site needs is in the process documentation and in the example's README. Columns are named by their
             internal name, not by the heading the list shows.</p>
+          <p data-l="de"><b>Ohne Tenant:</b> Lege den Worker <code>intranet</code> mit dem Provider <b>Mockup</b> an,
+            starte zuerst «Testdaten anlegen» (<code>sharepoint-testdaten.bpmn</code>) und dann «Fallakte anlegen» mit
+            der <code>antragId</code>, die dieser Lauf hinterlassen hat. Was entstanden ist, zeigt
+            <a href="/#/operations/mockups">Betrieb &rsaquo; Diagnostics &rsaquo; Mockups</a>
+            (<a href="#sharepoint-mockup">mehr zum Mockup</a>).</p>
+          <p data-l="en"><b>Without a tenant:</b> create the worker <code>intranet</code> with the provider
+            <b>Mockup</b>, start "Testdaten anlegen" (<code>sharepoint-testdaten.bpmn</code>) first and then
+            "Fallakte anlegen" with the <code>antragId</code> that run left behind. What came of it is shown under
+            <a href="/#/operations/mockups">Operations &rsaquo; Diagnostics &rsaquo; Mockups</a>
+            (<a href="#sharepoint-mockup">more on the mockup</a>).</p>
           <p data-l="de"><b>Drei Dinge, die das Modell vormacht.</b> Ein Spaltenwert behält den Typ seines
             FEEL-Werts: <code>=antrag.fields.Betrag &gt; 10000</code> kommt in der Ja/Nein-Spalte als Ja oder
             Nein an, <code>=number(antragId)</code> in der Zahlenspalte als Zahl, und ein Ausdruck, der
@@ -5832,6 +5842,13 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <p data-l="en">People interact with the process through <b>forms</b>: as a <b>start form</b> (collects data when
         the instance is created) or at a <b>user task</b> (in the Tasks inbox). The Modeler has a form editor;
         submitted fields become process variables.</p>
+      <p data-l="de"><b>Eine gelesene Mail im Formular.</b> Die Komponente <b>E-mail view</b> zeigt eine Mail an, die
+        ein Mail-Task gelesen hat – Umschlag, Text und HTML-Fassung, externe Bilder erst auf Wunsch. Sie zeigt nur an
+        und schickt nichts zurück. Wie du die HTML-Fassung liest, steht unter
+        <a href="#runbook-mail">Mail</a>.</p>
+      <p data-l="en"><b>A mail that was read, in a form.</b> The component <b>E-mail view</b> shows a mail a mail task
+        read – envelope, text and HTML version, remote images only on request. It only shows and submits nothing.
+        How to read the HTML version is under <a href="#runbook-mail">Mail</a>.</p>
       <p data-l="de"><b>Vom Schritt ins Formular und zurück.</b> Unter der Auswahl <i>Linked form</i> am
         Start-Ereignis, am User-Task und beim <i>Repair form</i> eines Service-Tasks stehen zwei Knöpfe:
         <b>Open form</b> öffnet das verknüpfte Formular im Formular-Editor, <b>＋ New form</b> legt ein neues an;
@@ -6769,6 +6786,92 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked October 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
       </div>
 
+      <div class="card" id="runbook-carddav">
+        <h4>CardDAV contacts</h4>
+        <p data-l="de">Ein CardDAV-Worker steht für <b>ein Adressbuch</b> auf einem CardDAV-Server: iCloud, Nextcloud,
+          ownCloud, mailbox.org, Posteo, Infomaniak, Fastmail, Synology, Radicale, Baïkal und die meisten Mail-Anbieter
+          ausser Google und Microsoft. Ein Prozess hat darin dieselben Operationen und denselben Kontakt wie bei Google
+          Contacts: Er findet einen Kunden anhand seiner E-Mail-Adresse, Telefonnummer oder einer Kundennummer, liest,
+          sucht, legt an, ändert und löscht Kontakte und setzt eine Gruppe wie <i>Kunden</i>. <i>Die Schritte sind mit
+          Radicale und Xandikos durchgegangen worden; die Schritte bei den Anbietern sind aus deren Dokumentation
+          geschrieben und noch nicht in einem iCloud-, Nextcloud- oder Mail-Konto durchgegangen worden.</i></p>
+        <p data-l="en">A CardDAV worker stands for <b>one address book</b> on a CardDAV server: iCloud, Nextcloud,
+          ownCloud, mailbox.org, Posteo, Infomaniak, Fastmail, Synology, Radicale, Baïkal and most mail providers other
+          than Google and Microsoft. A process has the same operations and the same contact in it as in Google Contacts:
+          it finds a customer by e-mail address, phone number or a customer number, reads, searches, creates, changes
+          and deletes contacts, and puts a group such as <i>Kunden</i> on one. <i>These steps have been walked with
+          Radicale and Xandikos; the provider steps are written from the providers' documentation and have not yet been
+          walked in an iCloud, Nextcloud or mail provider account.</i></p>
+        <ol>
+          <li data-l="de">Beim Anbieter ein <b>App-Passwort</b> für das Konto anlegen, wo er eines vergibt: bei
+            <b>iCloud</b> unter <i>account.apple.com → Anmeldung und Sicherheit → App-spezifische Passwörter</i>
+            (Pflicht), bei <b>Nextcloud</b> unter <i>Einstellungen → Sicherheit → Neues App-Passwort erstellen</i>
+            (Pflicht mit Zwei-Faktor-Anmeldung).</li>
+          <li data-l="en">At the provider, create an <b>app-specific password</b> for the account where it issues
+            one: for <b>iCloud</b> under <i>account.apple.com → Sign-In and Security → App-Specific Passwords</i>
+            (required), for <b>Nextcloud</b> under <i>Settings → Security → Create new app password</i> (required with
+            two-factor sign-in).</li>
+          <li data-l="de">Den <b>Endpoint</b> notieren: <code>https://contacts.icloud.com</code> für iCloud,
+            <code>https://&lt;server&gt;/remote.php/dav</code> für Nextcloud und ownCloud, die Adresse des Servers für
+            Radicale (<code>…/dav.php</code> für Baïkal), sonst die CardDAV-Adresse aus der Hilfe des Anbieters. Der
+            Worker findet das Adressbuch von dort aus selbst. Hat das Konto mehrere, nennt der erste Task sie alle, und
+            du setzt den Endpoint auf das gemeinte.</li>
+          <li data-l="en">Note the <b>endpoint</b>: <code>https://contacts.icloud.com</code> for iCloud,
+            <code>https://&lt;server&gt;/remote.php/dav</code> for Nextcloud and ownCloud, the server's address for
+            Radicale (<code>…/dav.php</code> for Baïkal), otherwise the CardDAV address the provider's help names. The
+            worker finds the address book from there. If the account has several, the first task names them all, and
+            you set the endpoint to the one meant.</li>
+          <li data-l="de">Secret anlegen, z.&nbsp;B. <code>carddav_verkauf</code>: <code>{"username":
+            "verkauf@firma.ch", "password": "…", "groups": "categories"}</code>. Für <b>iCloud und Fastmail</b> gilt
+            <code>"groups": "group-vcards"</code>, weil dort jede Gruppe eine eigene Karte ist.</li>
+          <li data-l="en">Create a secret, e.g. <code>carddav_verkauf</code>: <code>{"username": "verkauf@firma.ch",
+            "password": "…", "groups": "categories"}</code>. For <b>iCloud and Fastmail</b> use <code>"groups":
+            "group-vcards"</code>, because there every group is a card of its own.</li>
+          <li data-l="de">Worker anlegen: Typ <b>CardDAV contacts</b>, ein Name (den ein Task nennt), der Endpoint und
+            die Credential-Referenz <code>carddav_verkauf</code>. Pro Adressbuch ein Worker. Speichern genügt; atlas
+            startet den beaufsichtigten Worker mit der neuen Umgebung selbst neu.</li>
+          <li data-l="en">Create the worker: type <b>CardDAV contacts</b>, a name (which a task states), the endpoint
+            and the credential reference <code>carddav_verkauf</code>. One worker per address book. Saving is enough;
+            atlas restarts the supervised worker with the new environment by itself.</li>
+        </ol>
+        <div class="note warn">
+          <span class="lbl" data-l="de">Die Gruppenform muss zum Server passen</span><span class="lbl" data-l="en">The group form must match the server</span>
+          <p data-l="de" style="margin:.3em 0 0">CardDAV-Server speichern Gruppen auf zwei Arten, die sich nicht
+            vertragen: als Eigenschaft <code>CATEGORIES</code> im Kontakt (Nextcloud, ownCloud, die meisten Server) oder
+            als eigene Gruppenkarte (iCloud, Fastmail, wie Apple Contacts es tut). Eine falsche Wahl meldet keinen
+            Fehler: Ein iCloud-Adressbuch in der Form <code>categories</code> speichert jede Gruppe in einem Feld, das
+            Apple Contacts nie anzeigt. In der Form <code>group-vcards</code> muss eine Gruppe bereits existieren; ein
+            falsch geschriebener Name wird abgelehnt.</p>
+          <p data-l="en" style="margin:.3em 0 0">CardDAV servers keep groups in two forms that do not mix: as the
+            contact's <code>CATEGORIES</code> property (Nextcloud, ownCloud, most servers), or as a group card of its
+            own (iCloud, Fastmail, as Apple Contacts does). A wrong choice reports no error: an iCloud address book in
+            the <code>categories</code> form keeps every group in a field Apple Contacts never shows. In the
+            <code>group-vcards</code> form a group must already exist; a misspelt name is refused.</p>
+        </div>
+        <p data-l="de"><b>Was ein Schreiben behält:</b> Eine Änderung schreibt nur die Eigenschaften, die ein Feld des
+          Kontakts betrifft. Foto, Apples Beschriftungen und alles, was andere Programme in die Karte geschrieben haben,
+          bleiben so, wie sie waren. Benutzerdefinierte Felder sind <code>X-</code>-Eigenschaften der Karte
+          (<code>Kundennummer</code> ist <code>X-Kundennummer</code>), die die meisten Kontakt-Apps nicht anzeigen.</p>
+        <p data-l="en"><b>What a write keeps:</b> a change writes only the properties a field of the contact maps to.
+          The photo, Apple's labels and everything other programs wrote into the card stay as they were. Custom fields
+          are the card's <code>X-</code> properties (<code>Kundennummer</code> is <code>X-Kundennummer</code>), which
+          most contact apps do not show.</p>
+        <p data-l="de"><b>Keine doppelten Kontakte:</b> Anders als bei Google wählt atlas den Namen eines neuen Kontakts
+          selbst, abgeleitet aus dem Job. Bricht die Verbindung ab, nachdem der Server den Kontakt angelegt hat, findet
+          die Wiederholung diesen Kontakt, statt einen zweiten anzulegen.</p>
+        <p data-l="en"><b>No duplicate contacts:</b> unlike Google, atlas chooses a new contact's name itself, derived
+          from the job. If the connection breaks after the server created the contact, the retry finds that contact
+          instead of creating a second one.</p>
+        <p data-l="de"><b>Fehlende Kontakte abfangen:</b> Existiert ein Kontakt nicht mehr, endet <i>Kontakt
+          lesen</i>, <i>Kontakt ändern</i> oder eine Gruppenänderung mit dem Fehlercode
+          <code>CARDDAV_CONTACT_NOT_FOUND</code>, wenn der Prozess ihn mit einem Fehler-Grenzereignis abfängt; sonst
+          entsteht ein Vorfall.</p>
+        <p data-l="en"><b>Catching missing contacts:</b> if a contact no longer exists, <i>Read contact</i>, <i>Update
+          contact</i> or a group change ends with the error code <code>CARDDAV_CONTACT_NOT_FOUND</code> when the
+          process catches it with an error boundary event; otherwise an incident is raised.</p>
+        <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked October 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
+      </div>
+
       <div class="card" id="runbook-entra">
         <h4>Microsoft Entra ID</h4>
         <p data-l="de">Das wertvollste Geheimnis, das ein atlas-Worker hält: Eine Anwendungsberechtigung wie
@@ -7374,6 +7477,30 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p data-l="en"><b>Before the first real send:</b> check that the sender address is actually allowed to send
           (SPF/DKIM), and send the first batch to yourself. An automation sending two hundred wrong emails is faster
           than any correction.</p>
+        <p data-l="de"><b>Texte mit Platzhaltern.</b> Stellst du beim Mail-Task <b>Placeholders</b> auf <i>On</i>,
+          sind Betreff, Text und HTML-Text Vorlagen in derselben Sprache wie die Textansichten der Formulare:
+          <code>{{kunde.vorname}}</code> setzt einen Wert ein, <code>{{#if betrag &gt; 1000}}…{{/if}}</code> schreibt
+          einen Abschnitt nur, wenn die Bedingung zutrifft, und <code>{{#loop positionen}}…{{/loop}}</code> einmal pro
+          Element einer Liste. Zwischen den Klammern steht FEEL. In einer Schleife sind die Felder des Elements direkt
+          verfügbar, und <code>this</code> ist das Element selbst; die Prozessvariablen erreichst du dort über
+          <code>parent</code>, etwa <code>{{parent.waehrung}}</code>. Was ein Platzhalter in den HTML-Text einsetzt,
+          wird maskiert – ein Wert kann also kein Markup hinzufügen. Mit <kbd>F2</kbd> öffnest du ein Feld im Editor
+          mit <b>Preview</b>: Er zeigt die Mail mit Beispielwerten, vorbefüllt aus einer laufenden Instanz, und
+          rendert sie neu, sobald du etwas änderst. Eine fehlerhafte Vorlage, etwa ein <code>{{#if}}</code> ohne
+          <code>{{/if}}</code>, lehnt bereits das Deployment ab, mit Zeile und Spalte. Ohne diese Einstellung bleibt
+          alles wie bisher: Ein Wert ist wörtlicher Text, mit <code>=</code> davor ein FEEL-Ausdruck.</p>
+        <p data-l="en"><b>Texts with placeholders.</b> Set <b>Placeholders</b> to <i>On</i> on a mail task, and its
+          subject, text and HTML text are templates in the same language as the forms' text views:
+          <code>{{kunde.vorname}}</code> inserts a value, <code>{{#if betrag &gt; 1000}}…{{/if}}</code> writes a section
+          only when the condition holds, and <code>{{#loop positionen}}…{{/loop}}</code> writes it once per element of a
+          list. Between the braces is FEEL. Inside a loop the element's fields are available directly and
+          <code>this</code> is the element itself; the process variables are reached there through <code>parent</code>,
+          for example <code>{{parent.waehrung}}</code>. What a placeholder inserts into the HTML text is escaped, so a
+          value cannot add markup. <kbd>F2</kbd> opens a field in the editor with a <b>Preview</b>: it shows the mail with
+          sample values, prefilled from a running instance, and renders it again as soon as you change something. A
+          broken template, such as an <code>{{#if}}</code> without <code>{{/if}}</code>, is already refused at deploy,
+          with its line and column. Without the setting everything stays as it was: a value is literal text, and with a
+          leading <code>=</code> a FEEL expression.</p>
         <p data-l="de"><b>Das Postfach lesen.</b> Derselbe Worker kann sein Postfach auch lesen: ein
           <b>Watch</b> unter <i>Events…</i> veröffentlicht neue Mail eines Ordners als Message, und ein Mail-Task mit
           einer <b>Operation</b> listet, liest, verschiebt, markiert, löscht (in den Papierkorb) oder beantwortet eine
@@ -7407,6 +7534,36 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           A watch on a worker with no mailbox – SMTP without an IMAP endpoint, or Preview – is refused. A watch that
           cannot read, say because the login is refused or a permission is missing, shows <b>not reading</b> in its row
           under <i>Events…</i> from its first poll on, with since when and why.</p>
+        <p data-l="de"><b>Eine HTML-Mail jemandem zeigen.</b> Wähle bei <i>Read message</i> unter
+          <i>Text</i> die Option <b>Include the text and the HTML</b> (<code>includeBody="html"</code>). Dann liest der
+          Task neben dem Text auch die HTML-Fassung. Bevor sie in der Variable landet, entfernt Atlas alles, was
+          ausgeführt würde: Skripte, eingebettete Seiten, Formulare, automatische Weiterleitungen, Event-Handler und
+          Adressen wie <code>javascript:</code>. Links öffnen sich in einem neuen Tab. Ist die Mail zu gross für eine
+          Variable, wird sie gekürzt, und <code>mail.htmlTruncated</code> sagt das. Eine Liste liest kein HTML: Lies
+          die eine Mail, die du brauchst, mit <i>Read message</i> über ihre <code>messageId</code>. Im Formular des
+          User-Tasks zeigt die Komponente <b>E-mail view</b> (Gruppe <i>Presentation</i>) die Mail an. Unter
+          <i>Variable</i> trägst du die Ergebnisvariable ein, etwa <code>mail</code>. Die Ansicht zeigt Absender,
+          Empfänger, Datum und Anhänge und darunter die HTML-Fassung in einem abgeschotteten Rahmen ohne Skripte; die
+          Textfassung ist einen Klick entfernt. <b>Externe Bilder bleiben blockiert</b>, bis die bearbeitende Person
+          auf <b>Bilder laden</b> klickt. Sonst würde der Absender bei jedem Öffnen der Aufgabe erfahren, wann und von
+          wo die Mail gelesen wird. Die Ansicht schreibt nichts zurück: Beim Abschliessen der Aufgabe wird die Mail
+          nicht erneut gespeichert. Bilder, die als Anhang in der Mail stecken (<code>cid:</code>), erscheinen nicht.
+          Bedenke: Wie der Text liegt auch das HTML im Log und in den Backups – lies es nur, wo der Prozess es
+          braucht.</p>
+        <p data-l="en"><b>Showing an HTML mail to someone.</b> On <i>Read message</i>, choose <b>Include the text and the
+          HTML</b> under <i>Text</i> (<code>includeBody="html"</code>), and the task reads the HTML version beside the
+          text. Before it lands in the variable, Atlas removes everything that would run: scripts, embedded pages,
+          forms, automatic redirects, event handlers and addresses such as <code>javascript:</code>. Links open in a
+          new tab. A mail too large for a variable is cut, and <code>mail.htmlTruncated</code> says so. A list reads
+          no HTML: read the one mail you need with <i>Read message</i> by its <code>messageId</code>. In the user
+          task's form, the component <b>E-mail view</b> (group <i>Presentation</i>) shows the mail. Under
+          <i>Variable</i>, enter the result variable, such as <code>mail</code>. The view shows sender, recipients,
+          date and attachments, and below them the HTML version in an isolated frame without scripts; the text
+          version is one click away. <b>Remote images stay blocked</b> until the person working the task clicks
+          <b>Load images</b>. Otherwise the sender would learn, each time the task is opened, when and from where the
+          mail is read. The view writes nothing back: completing the task does not store the mail again. Images the
+          mail carries as attachments (<code>cid:</code>) do not appear. Keep in mind: like the text, the HTML is in
+          the log and the backups – read it only where the process needs it.</p>
         <p data-l="de"><b>Wer darf mitlesen?</b> Ein Mail-Worker gehört dem, der ihn angelegt hat, und ist privat, bis
           er geteilt wird. Ein Prozess, der ein Postfach liest oder ändert, lässt sich nur deployen, wenn der Worker mit
           dir geteilt ist – lesen braucht <i>darf sehen</i>, ändern <i>darf ändern</i>. Der Watch beansprucht seinen
@@ -7607,6 +7764,15 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           <a href="#runbook-entra">Entra&nbsp;ID</a>: an app registration, a client secret, admin consent. Secret:
           <code>{"method": "clientCredentials", "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code>, no
           endpoint.</p>
+        <p data-l="de"><b>Ohne Tenant ausprobieren:</b> Wähle beim Anlegen des Workers den Provider
+          <b>Mockup</b>. Er braucht weder App-Registrierung noch Secret noch Endpoint; jede Operation läuft
+          gegen eine Site im Arbeitsspeicher von atlas. Der Weg in die Produktion ist ein Wechsel des
+          Workers auf <b>Microsoft Graph</b> mit einer Credential-Referenz, das Modell bleibt, wie es ist.
+          Mehr dazu unter <a href="#testen">Testen &amp; Simulieren</a>.</p>
+        <p data-l="en"><b>Trying it without a tenant:</b> choose the provider <b>Mockup</b> when you create the
+          worker. It needs no app registration, no secret and no endpoint; every operation runs against a site
+          in atlas's memory. Going live is switching the worker to <b>Microsoft Graph</b> with a credential
+          reference; the model stays as it is. More under <a href="#testen">Test &amp; simulate</a>.</p>
         <p data-l="de">Statt des Client-Secrets kann das Secret ein <b>Zertifikat</b> tragen:
           <code>"certificate"</code> enthält das Zertifikat und seinen unverschlüsselten privaten Schlüssel als einen
           PEM-Text. Das Zertifikat lädst du in der App-Registrierung unter <i>Zertifikate &amp; Geheimnisse</i> hoch.
@@ -8853,6 +9019,85 @@ atlas worker --connector mssql</code></pre>
           database.</p>
       </div>
 
+      <div id="sharepoint-mockup" style="scroll-margin-top:66px"></div>
+      <h3 data-l="de">Eine SharePoint-Site ausprobieren, ohne Tenant</h3>
+      <h3 data-l="en">Trying a SharePoint site without a tenant</h3>
+      <p data-l="de">Ein SharePoint-Worker mit dem Provider <b>Mockup</b> erreicht kein Microsoft 365. Jede
+        Operation läuft gegen eine Site, die atlas in seinem Arbeitsspeicher hält: im Server, auch wenn ein
+        überwachter Worker die Jobs ausführt — der reicht jede Operation an den Server weiter. Deshalb übersteht
+        die Site einen Neustart des Workers, aber nicht einen Neustart von atlas. Anlegen unter
+        <a href="/#/console/workers">Console → Workers</a> → <b>New worker</b>: Typ <b>Microsoft SharePoint</b>,
+        Provider <b>Mockup</b>, ein Name — sonst nichts.</p>
+      <p data-l="en">A SharePoint worker with the provider <b>Mockup</b> reaches no Microsoft 365. Every operation
+        runs against a site atlas holds in its memory: in the server, even when a supervised worker runs the
+        jobs — that worker hands each operation on to the server. So the site survives a restart of the worker,
+        but not a restart of atlas. Create it under <a href="/#/console/workers">Console → Workers</a> →
+        <b>New worker</b>: type <b>Microsoft SharePoint</b>, provider <b>Mockup</b>, a name — nothing else.</p>
+      <p data-l="de">Das Mockup antwortet in den Formen, in denen Graph antwortet: ein Eintrag mit seinen Spalten
+        unter <code>fields</code>, eine Seite mit <code>items</code>, <code>hasMore</code> und
+        <code>nextPageToken</code>, eine Datei mit <code>webUrl</code> und ihren Eigenschaften unter
+        <code>listItem.fields</code>. Und es lehnt ab, was SharePoint ablehnt: einen Eintrag oder eine Datei, die
+        es nicht gibt, einen Listeneintrag in einer Dokumentbibliothek, eine Datei, wo ein Ordner verlangt ist,
+        einen Filter auf eine Spalte, die die Liste nicht hat. Was fehlt, beantwortet es wie der echte Worker:
+        <code>deleted=false</code> beim Löschen, <code>exists=false</code> bei <code>get-file</code>, sonst
+        scheitert die Aufgabe mit dem Grund.</p>
+      <p data-l="en">The mockup answers in the shapes Graph answers in: an item with its columns under
+        <code>fields</code>, a page with <code>items</code>, <code>hasMore</code> and <code>nextPageToken</code>,
+        a file with <code>webUrl</code> and its properties under <code>listItem.fields</code>. And it refuses
+        what SharePoint refuses: an item or a file that is not there, a list item in a document library, a file
+        where a folder is asked for, a filter on a column the list does not have. Something missing is answered
+        as the real worker answers it: <code>deleted=false</code> on a delete, <code>exists=false</code> on
+        <code>get-file</code>, and otherwise the task fails with the reason.</p>
+      <p data-l="de"><b>Wo es nachsichtiger ist als SharePoint:</b> Eine Liste oder Bibliothek entsteht, wenn ein
+        Task zum ersten Mal in sie schreibt — <code>create-item</code> legt eine Liste an,
+        <code>upload-file</code> und <code>create-folder</code> eine Bibliothek —, und ihre Spalten sind die, in
+        die geschrieben wurde. Auf einer echten Site legt das eine Person vorher an. Eine Liste, in die noch nie
+        geschrieben wurde, gibt es auch im Mockup nicht. Für das Beispiel <a href="#bsp-sharepoint-fallakte">Fallakte</a>
+        übernimmt der Prozess <code>sharepoint-testdaten.bpmn</code> diese Rolle: Er legt einen Antrag und die
+        Briefvorlage an, danach läuft «Fallakte anlegen» mit der <code>antragId</code>, die er hinterlässt.</p>
+      <p data-l="en"><b>Where it is more forgiving than SharePoint:</b> a list or library comes into being the
+        first time a task writes to it — <code>create-item</code> makes a list, <code>upload-file</code> and
+        <code>create-folder</code> a library — and its columns are the ones written to. On a real site a person
+        makes those beforehand. A list nobody has written to does not exist in the mockup either. For the
+        <a href="#bsp-sharepoint-fallakte">case file</a> example the process <code>sharepoint-testdaten.bpmn</code>
+        plays that part: it creates a request and the letter template, after which "Fallakte anlegen" runs with
+        the <code>antragId</code> it leaves behind.</p>
+      <p data-l="de"><b>Der Filter</b> von <code>list-items</code> ist eine benannte Teilmenge von OData:
+        <code>fields/Spalte eq|ne|gt|ge|lt|le Wert</code> mit Text in einfachen Anführungszeichen, einer Zahl,
+        <code>true</code>, <code>false</code> oder <code>null</code>; <code>startswith(fields/Spalte,'Text')</code>;
+        <code>and</code>, <code>or</code>, <code>not</code> und Klammern. Text wird ohne Rücksicht auf Gross- und
+        Kleinschreibung verglichen. Alles andere lehnt das Mockup ab, statt zu raten, was gemeint sein könnte.</p>
+      <p data-l="en"><b>The filter</b> of <code>list-items</code> is a stated subset of OData:
+        <code>fields/column eq|ne|gt|ge|lt|le value</code> with text in single quotes, a number, <code>true</code>,
+        <code>false</code> or <code>null</code>; <code>startswith(fields/column,'text')</code>; <code>and</code>,
+        <code>or</code>, <code>not</code> and parentheses. Text compares without regard to case. Anything else
+        the mockup refuses rather than guess what it might mean.</p>
+      <p data-l="de"><b>Was ein Lauf getan hat</b>, steht unter
+        <a href="/#/operations/mockups">Betrieb &rsaquo; Diagnostics &rsaquo; Mockups</a>: pro Worker eine Karte mit
+        jeder Liste als Tabelle ihrer Einträge, jeder Bibliothek mit ihren Dateien und Eigenschaften und darunter
+        die letzten 200 Operationen — abgelehnte rot, mit dem Grund. <b>Empty site</b> leert die Site für den
+        nächsten Versuch. Die Ansicht ist Administratoren vorbehalten, aus dem Grund, aus dem es das
+        Mock-Verzeichnis ist: Was ein Prozess hineinschreibt, ist erfunden, sieht aber aus wie echte Daten.</p>
+      <p data-l="en"><b>What a run did</b> is under
+        <a href="/#/operations/mockups">Operations &rsaquo; Diagnostics &rsaquo; Mockups</a>: one card per worker,
+        each list as a table of its items, each library with its files and properties, and underneath the newest
+        200 operations — refused ones in red, with the reason. <b>Empty site</b> clears the site for the next try.
+        The view is admin-only, for the reason the mock directory is: what a process writes into it is invented
+        but looks like real data.</p>
+
+      <div class="note warn">
+        <span class="lbl" data-l="de">Was das Mockup nicht kann</span><span class="lbl" data-l="en">What the mockup cannot do</span>
+        <p data-l="de" style="margin:.3em 0 0">Die Dateien einer Bibliothek sind im Mockup nicht als Listeneinträge
+          erreichbar (<code>get-item</code> auf eine Bibliothek wird abgelehnt), was SharePoint erlaubt. Berechtigungen,
+          Versionen und Inhaltstypen gibt es nicht, und ein Filter, den das Mockup annimmt, kann auf einer echten Site
+          trotzdem scheitern — etwa an einer Spalte ohne Index. Ein Prozess, der auf dem Mockup durchläuft, ist
+          ausprobiert, nicht abgenommen.</p>
+        <p data-l="en" style="margin:.3em 0 0">A library's files are not reachable as list items in the mockup
+          (<code>get-item</code> on a library is refused), which SharePoint allows. There are no permissions, versions
+          or content types, and a filter the mockup accepts can still fail on a real site — on a column without an
+          index, for instance. A process that runs through on the mockup has been tried out, not signed off.</p>
+      </div>
+
       <div class="note">
         <span class="lbl" data-l="de">Empfohlener Test-Rhythmus</span><span class="lbl" data-l="en">Recommended test rhythm</span>
         <p data-l="de" style="margin:.3em 0 0">Simuliere den Fluss → prüfe deine FEEL-Ausdrücke → lass im
@@ -9498,14 +9743,61 @@ groups:
         restart recovers exactly what was acknowledged. Carrying on without a restart would be wrong: commands whose
         callers had already been given an error would run later after all.</p>
       <p data-l="de"><b>Platz freigeben.</b> Lösche Dateien ausserhalb des Datenverzeichnisses oder vergrössere das
-        Volume. Im Datenverzeichnis selbst löschst du nichts von Hand. Das WAL wächst, solange
-        <code>--compact-wal</code> ausgeschaltet ist, und das ist der Standard. Mit Checkpoints und
-        <code>--compact-wal</code> gibt jeder Checkpoint die Segmente frei, die er abdeckt;
-        <code>POST /api/v1/checkpoints</code> löst das sofort aus, auch im eingefrorenen Zustand.</p>
+        Volume. Im Datenverzeichnis selbst löschst du nichts von Hand. Den grössten Teil belegt meist das WAL: Es
+        behält jedes Ereignis, solange <code>--compact-wal</code> ausgeschaltet ist, und das ist der Standard. Mit
+        Checkpoints und <code>--compact-wal</code> (oder <code>ATLAS_COMPACT_WAL=true</code>) gibt jeder Checkpoint
+        die Segmente frei, die er abdeckt. Ohne die Option kompaktierst du einmalig: auf der Speicher-Karte im
+        Dashboard mit <i>Einmal kompaktieren</i> oder mit <code>POST /api/v1/checkpoints?compact=true</code>. Beides
+        geht auch im eingefrorenen Zustand und ohne Neustart. Gelöscht werden nur Segmente, die ein geprüfter
+        Checkpoint abdeckt und die weder der OpenSearch-Exporter noch ein laufendes Backup noch braucht; das lässt
+        sich nicht rückgängig machen. Der Durchlauf prüft dabei die Checkpoints, was bei einem grossen
+        Zustandsspeicher einige Minuten dauern kann. Die Karte selbst liest die Checkpoints ohne Prüfung
+        (<code>GET /api/v1/checkpoints?verify=false</code>).</p>
       <p data-l="en"><b>Freeing space.</b> Delete files outside the data directory, or grow the volume. Inside the
-        data directory, delete nothing by hand. The WAL grows for as long as <code>--compact-wal</code> is off, which
-        is the default. With checkpoints and <code>--compact-wal</code>, each checkpoint frees the segments it
-        covers; <code>POST /api/v1/checkpoints</code> takes one at once, also while the server is frozen.</p>
+        data directory, delete nothing by hand. Most of it is usually the WAL: it keeps every event for as long as
+        <code>--compact-wal</code> is off, which is the default. With checkpoints and <code>--compact-wal</code> (or
+        <code>ATLAS_COMPACT_WAL=true</code>), each checkpoint frees the segments it covers. Without the option you
+        compact once: with <i>Compact once</i> on the storage card of the dashboard, or with
+        <code>POST /api/v1/checkpoints?compact=true</code>. Both work while the server is frozen and need no restart.
+        Only segments a verified checkpoint covers and neither the OpenSearch exporter nor a backup in progress still
+        needs are deleted, and that cannot be undone. The pass verifies the checkpoints, which can take a few minutes
+        on a large state store. The card itself reads the checkpoints without verifying them
+        (<code>GET /api/v1/checkpoints?verify=false</code>).</p>
+      <div id="instanzen-loeschen" style="scroll-margin-top:66px"></div>
+      <p data-l="de"><b>Beendete Instanzen löschen.</b> Unter Operations löscht ein Administrator im Menü ⋯ einer
+        Prozesszeile mit <i>Beendete Instanzen löschen…</i> die beendeten Instanzen einer Version oder aller
+        Versionen, die vor einem gewählten Zeitpunkt beendet wurden, mit ihrem Verlauf, ihren Variablen und ihren
+        Entscheidungen. Der Dialog zählt zuerst, was betroffen ist. Gelöscht wird erst, wenn du die Prozess-ID
+        eintippst, und zwar in Paketen von höchstens 1000 Instanzen, die neuesten zuerst; zwischen zwei Paketen kannst
+        du anhalten. Laufende Instanzen bleiben unberührt. Sollen sie mitgehen, beendest du sie vorher mit
+        <i>Terminate all running</i>. Läuft der OpenSearch-Exporter, wird nur gelöscht, was er bereits übernommen
+        hat; der Rest bleibt und wird gezählt. Das Löschen ist dasselbe Ereignis, das die Aufbewahrung verwendet, und
+        übersteht darum jeden Neustart.</p>
+      <p data-l="en"><b>Deleting finished instances.</b> In Operations, an administrator uses <i>Delete finished
+        instances…</i> in the ⋯ menu of a process row to delete the finished instances of one version or of all
+        versions that finished before a chosen moment, with their history, their variables and their decisions. The
+        dialog first counts what is affected. Nothing goes until you type the process id, and then it goes in batches
+        of at most 1000 instances, newest first; you can stop between two batches. Running instances are not touched.
+        If they should go too, end them first with <i>Terminate all running</i>. While the OpenSearch exporter runs,
+        only what it already holds is deleted; the rest stays and is counted. The delete is the same event retention
+        uses, so it survives every restart.</p>
+      <p data-l="de">Zwei Dinge überraschen. Löschen allein gibt keinen Platz frei: Jede gelöschte Instanz schreibt
+        zuerst ein Ereignis ins WAL, frei wird der Platz erst durch die Kompaktierung danach. Und die Spalte
+        <i>Finished</i> der Übersicht zählt alle jemals beendeten Instanzen und sinkt deshalb nicht. Auf einer
+        Produktionsinstallation, deren Verlauf als Nachweis dient, schaltest du das Löschen mit
+        <code>--instance-purge=false</code> (<code>ATLAS_INSTANCE_PURGE=false</code>) aus. Für einen Prozess, der
+        immer wieder läuft, ist <code>atlas:historyTtl</code> am Prozess die bessere Lösung: Dann löscht Atlas seine
+        beendeten Instanzen von selbst. Über die API heisst das <code>GET</code> und
+        <code>POST /api/v1/processes/{key}/history-purge</code>, über MCP
+        <code>atlas_finished_instances_deletion</code> und <code>atlas_delete_finished_instances</code>.</p>
+      <p data-l="en">Two things surprise people. Deleting alone frees no space: every deleted instance first writes
+        an event to the WAL, and the space is freed by compacting afterwards. And the overview's <i>Finished</i>
+        column counts every instance that ever finished, so it does not go down. On a production installation whose
+        history serves as evidence, switch the delete off with <code>--instance-purge=false</code>
+        (<code>ATLAS_INSTANCE_PURGE=false</code>). For a process that runs again and again,
+        <code>atlas:historyTtl</code> on the process is the better answer: Atlas then deletes its finished instances
+        by itself. Over the API this is <code>GET</code> and <code>POST /api/v1/processes/{key}/history-purge</code>,
+        over MCP <code>atlas_finished_instances_deletion</code> and <code>atlas_delete_finished_instances</code>.</p>
       <p data-l="de"><b>Prognose.</b> Atlas glättet den Verbrauch je Dateisystem über etwa sechs Stunden und hält dafür
         nur zwei Zahlen im Speicher. Eine Prognose erscheint nach einer Stunde Beobachtung und beginnt bei jedem
         Neustart von vorn. Erreicht sie die Reserve innerhalb einer Woche, zeigt das Dashboard eine Warnung. Für einen
@@ -9565,14 +9857,16 @@ groups:
         <code>atlas:historyTtl</code>). Das Löschen ist <b>export-gesteuert</b>: Läuft ein OpenSearch-Exporter,
         wird nur gelöscht, was er schon ausgeliefert hat; läuft keiner, gilt der gesicherte Stand des
         Ereignisprotokolls als Archiv. So verschwindet nichts, das nicht anderswo liegt. Der Lauf ist flaggen- und
-        timergesteuert (<code>--retention-interval</code>, <code>--retention-batch</code>); eine HTTP-Route dafür
-        gibt es nicht.</p>
+        timergesteuert (<code>--retention-interval</code>, <code>--retention-batch</code>). Wer nicht auf ihn warten
+        will, löscht die beendeten Instanzen eines Prozesses von Hand, hinter demselben Export-Gate (siehe
+        <a href="#instanzen-loeschen">Beendete Instanzen löschen</a>).</p>
       <p data-l="en">Finished cases pile up. <code>--retention-max-age</code> deletes completed instances older
         than it (ADR-0115; default 0 = off, leaving only a per-process <code>atlas:historyTtl</code>). The deletion
         is <b>export-gated</b>: with an OpenSearch exporter running, only what it has already shipped is deleted;
         with none, the durable event log stands as the archive. So nothing disappears that is not held elsewhere.
-        The sweep is flag- and timer-driven (<code>--retention-interval</code>, <code>--retention-batch</code>);
-        there is no HTTP route for it.</p>
+        The sweep is flag- and timer-driven (<code>--retention-interval</code>, <code>--retention-batch</code>).
+        Whoever does not want to wait for it deletes a process's finished instances by hand, behind the same export
+        gate (see <a href="#instanzen-loeschen">Deleting finished instances</a>).</p>
 
       <h4 data-l="de">Sichern und wiederherstellen</h4><h4 data-l="en">Backing up and restoring</h4>
       <p data-l="de">Zwei Sicherungen, für zwei Fragen. <code>GET /api/v1/backup</code> lädt die

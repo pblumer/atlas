@@ -1,6 +1,6 @@
 # ADR-0474: Readable ids for new BPMN elements
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-23: a named element's id follows its name)
 - **Implementation:** Landed
 - **Date:** 2026-10-23
 - **Deciders:** Atlas maintainers
@@ -75,6 +75,35 @@ Ids already in a diagram are never rewritten.
 - **Follow-ups / risks to watch:** DMN elements (decisions, input and output clauses) keep
   dmn-js's ids; extending the scheme to the decision editor would go through its own moddle.
   A server-side mint that reserves a process id would close the remaining race.
+
+> **Amendment (2026-10-23): a named element's id follows its name.** Naming an element
+> "Microsoft Teams bestellen" — in the properties panel or on the canvas — renames its id
+> to `activity_microsoft_teams_bestellen`, so the author is spared typing the id as well.
+> The type segment is the one above; the name segment is the name in lowercase ASCII,
+> words joined by underscores (umlauts spelled out, `ä` → `ae`, `ß` → `ss`; other accents
+> dropped; at most 60 characters, cut at a word). When another element of the diagram
+> holds the id, `_01`, `_02`, … follows, so two elements with the same name never share
+> an id; a different type tells them apart without a counter. The rename runs inside the
+> naming command (`postExecuted` of `element.updateProperties` / `element.updateLabel`),
+> so one undo takes back name and id together.
+>
+> The id follows the name only while nobody chose it and nothing outside the diagram can
+> know it:
+>
+> - **Only an automatic id moves** — the readable placeholder above, bpmn-js's random
+>   default (`Activity_0abc123`), or the id the element's previous name produced. An id
+>   the author typed stays, and so does one they changed after the name produced it.
+> - **A deployed id stays.** Instances, their migration between versions, capability and
+>   landscape bindings know an element by its id. When the Modeler opens a diagram it
+>   reads the element ids of the deployed versions of its processes (the 25 newest); an
+>   id among them is never renamed. Until they have arrived — or when a version could not
+>   be read, or there are more — every id the diagram was opened with is kept, and only
+>   elements drawn in the session follow their names.
+> - **A process, a collaboration and the definitions keep their ids** whatever their
+>   name: a process id is the identity drafts and deployments are filed under.
+>
+> A name without a letter or digit (`???`, an empty one) leaves the id as it is. A peer in
+> a live session (ADR-0140) holding the old id's lock releases it with its next selection.
 
 ## Pros and cons of the options
 

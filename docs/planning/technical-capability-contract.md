@@ -16,7 +16,7 @@ This plan is intentionally **incremental**. No universal Directory Worker Type i
 |---|---|---|
 | Business capabilities and value streams | `api/capability`, ADR-0305 / Milestone B | Records, realization and gap/coverage/measurement APIs implemented; document-level exchange B9 open |
 | Panorama business bindings | ADR-0308, `api/panorama` | Implemented |
-| Worker Type package manifest | `workertype/manifest.go`, ADR-0207/0208 | Package metadata supports operations `id` and `jobType`; package lifecycle is partly implemented |
+| Worker Type package manifest | `workertype/manifest.go`, ADR-0207/0208 | Manifest supports optional validated `capabilities` claims since PR #1343; package lifecycle is partly implemented |
 | Built-in Worker Type metadata | `api/builtinworkertypes.go`, `api/workertypes.go` | Type/version/runtime-mode view exists; do not duplicate provider operation tables |
 | Identity-aware authorization | `authz`, `api/authorize.go`, ADR-0475 | Partial; supervised delegated SharePoint path is the proven example; no all-provider policy enforcement assumption |
 | Unified architecture graph | ADR-0420 | Proposed, not implemented; separate provenance-aware model and server traversal are prerequisite |
@@ -57,9 +57,35 @@ This plan is intentionally **incremental**. No universal Directory Worker Type i
 
 **Target:** Milestone 6. **Depends on:** T0 and design review.
 
-Define a separately versioned, immutable vocabulary of semantic operation contracts, including: identifier, request/result JSON Schema, optional/unknown fields, error set, pagination/bounds, idempotency/retry semantics, and eventual-consistency constraints. A contract must say what constitutes an account, entry, or contact. Keep conformance tests provider-agnostic, with mocked providers.
+**T1a — Contract envelope (PR #1346 merged; ADR-0485 remains Proposed / Partial).** Add a separately versioned technical
+contract document, with resource kind and identity scope, JSON Schema Draft 2020-12
+roots, semantic error codes, idempotency, consistency and pagination constraints.
+Parse strictly in `workertype` at design time; reject duplicate identities, malformed
+metadata and external JSON Schema references. Sample account and contact fixtures
+are explicitly **not** a published canonical corpus. See
+[ADR-0485](../adr/0485-technical-capability-semantics.md).
+No runtime routing or process-state changes.
 
-**Acceptance:** Conformance cases fail on meaningful mismatches. No shared `directory.user.create` claim is published for Entra/LDAP/Contacts without evidence. Third-party declarations remain untrusted until provenance/conformance is established.
+**T1b — Full schemas, conformance and publication (partially started).**
+The first schema-only foundation is [CDA2a PR #1357](https://github.com/pblumer/atlas/pull/1357)
+(tracked by [issue #1358](https://github.com/pblumer/atlas/issues/1358)):
+full JSON Schema Draft 2020-12 *keyword* validation of bounded input/output
+samples, offline compilation (external schema loaders disabled) and reviewed
+positive/negative fixtures for account/contact schemas. Results explicitly say
+`schemaOnly`; **they do not prove that an actual Worker implements the
+contract**, publish or withdraw evidence, mark a claim as `verified`, or
+authorize any job. Source-controlled schema fixtures are not live-provider tests.
+
+**Still open for T1b:** under [ADR-0483](../adr/0483-technical-capability-conformance-governance.md),
+add contract/content digest identity and canonical artifact publication, a
+provider-agnostic mock harness, provider-specific identity/error/idempotency
+checks, independently reviewed evidence, invalidation/revocation and controlled
+live integration tests. No automatic claim promotion or routing is allowed.
+
+**Acceptance:** Invalid descriptors and duplicate contract IDs fail immediately.
+T1b provider conformance cases fail on meaningful mismatches. No shared
+`directory.user.create` claim is published for Entra/LDAP/Contacts without
+independent evidence. Third-party claims are untrusted until verified.
 
 ## T2 — Project built-in Worker Type operation capabilities
 
