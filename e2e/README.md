@@ -61,6 +61,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   change event, keeping an fx field's `=`; a focused dmn-js output cell gets a spark and Apply types
   into it, while an input cell (a unary test) is not written to; and without an AI Worker the chat
   is absent and the rest still works.
+- **`history-purge.spec.mjs`** ([ADR-draft-operator-history-purge-and-compaction](../docs/adr/draft-operator-history-purge-and-compaction.md)):
+  deleting a process's finished instances and the storage card's reclaim section against a
+  stubbed API — the preview counts every version with one cut-off and writes nothing, and says
+  that deleting frees no disk until the WAL is compacted and that the Finished column does not go
+  down; only the process id typed exactly arms the delete; the batches run newest version first,
+  each repeating the cut-off and passing the cursor, until nothing remains; a server that switched
+  the purge off keeps it disarmed; a failure part-way says how many already went; a purge can be
+  stopped between two batches and cannot be closed while one runs; and the card reads the
+  checkpoints without verifying them, says when compaction is off, asks before compacting once,
+  and reports what the pass removed.
 - **`instance-samples.spec.mjs`** ([ADR-0145](../docs/adr/0145-developer-view-for-code-fields.md),
   amended): the **live values** the Developer View and the Variables panel show, against a
   mock API — the picker lists the newest instances of every version of the process, running

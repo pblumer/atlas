@@ -802,7 +802,7 @@ type Server struct {
 	// goroutine* is the point: an operator's pass and a scheduled one then serialize by
 	// construction rather than by a lock, and both run the same code. It is nil when
 	// checkpointing is off, which is what makes the endpoint's refusal honest.
-	checkpointRequests chan chan checkpointPass
+	checkpointRequests chan checkpointRequest
 	// lastPass is the most recent pass's outcome, for the status endpoint. Written by the
 	// checkpoint goroutine, read by handler goroutines, hence the mutex.
 	lastPassMu sync.Mutex
@@ -872,6 +872,12 @@ type Server struct {
 	// that must not be able to delete orders and holds says so. Set once before
 	// Handler is mounted.
 	cataloguePurgeOff bool
+	// instancePurgeOff is an administrator's delete of a version's finished instances
+	// switched off with --instance-purge=false / WithoutInstancePurge
+	// (ADR-draft-operator-history-purge-and-compaction). "off" for the same reason as
+	// cataloguePurgeOff: the purge is an opt-out, so the zero value allows it. Set once
+	// before Handler is mounted.
+	instancePurgeOff bool
 	// catalogueReporting is every process id that calls the order routes, read once
 	// at start when the catalogue is off (processesReportingToOrders); nil otherwise.
 	catalogueReporting map[string]bool
@@ -2482,7 +2488,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		}
 	}
 	if s.checkpointInterval > 0 {
-		s.checkpointRequests = make(chan chan checkpointPass)
+		s.checkpointRequests = make(chan checkpointRequest)
 		s.wg.Add(1)
 		go s.checkpointLoop(s.checkpointInterval)
 	}
@@ -2762,18 +2768,18 @@ func (s *Server) checkpointLoop(every time.Duration) {
 		select {
 		case <-s.quit:
 			return
-		case reply := <-s.checkpointRequests:
+		case req := <-s.checkpointRequests:
 			// An operator asked for a pass (ADR-0131 slice 8). It runs *here*, on the same
 			// goroutine as the cadence, so an on-demand pass and a scheduled one can never
 			// overlap — and it is the same pass, not a second code path.
-			res := s.runCheckpointPass(&last)
+			res := s.runCheckpointPass(&last, req.compact)
 			select {
-			case reply <- res:
+			case req.reply <- res:
 			case <-s.quit:
 				return
 			}
 		case <-ticks:
-			s.runCheckpointPass(&last)
+			s.runCheckpointPass(&last, false)
 			if s.checkpointDone != nil {
 				select {
 				case s.checkpointDone <- struct{}{}:
@@ -2790,11 +2796,16 @@ func (s *Server) checkpointLoop(every time.Duration) {
 // two together keeps them in one order. It records the result for the status endpoint
 // and returns it for the operator who asked.
 //
+// compact asks for compaction on this one pass when the server does not compact on its
+// own: an administrator's request, after a confirmation, is the choice --compact-wal
+// leaves to a person (ADR-draft-operator-history-purge-and-compaction). It changes
+// nothing about the cut — the same checkpoint, watermarks and backup gate decide it.
+//
 // last carries the position most recently *logged* as published. An idle server
 // re-publishes nothing (Publish is a no-op at an existing position), so tracking it keeps
 // the cadence from logging the same line forever. Only the checkpoint goroutine touches
 // it, so it needs no lock.
-func (s *Server) runCheckpointPass(last *uint64) checkpointPass {
+func (s *Server) runCheckpointPass(last *uint64, compact bool) checkpointPass {
 	res := checkpointPass{At: s.now()}
 	pos, err := s.takeCheckpoint()
 	res.Position = pos
@@ -2806,7 +2817,8 @@ func (s *Server) runCheckpointPass(last *uint64) checkpointPass {
 		logging.Info(logging.CheckpointPublished, "published a recovery checkpoint; recovery replays only past it",
 			slog.Uint64("position", pos))
 	}
-	if s.compactWAL {
+	if s.compactWAL || compact {
+		res.Compaction = true
 		removed, note, cerr := s.compactLog()
 		res.SegmentsRemoved = removed
 		res.Note = note

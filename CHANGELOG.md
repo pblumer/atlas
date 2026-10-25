@@ -46,6 +46,34 @@ governs a Worker:
 
 ### Added
 
+- **Finished instances can be deleted from Operations.** An administrator deletes the
+  finished instances of one version or of all versions that finished before a chosen moment,
+  from the ⋯ menu of a process row (*Delete finished instances…*), or with
+  `GET`/`POST /api/v1/processes/{key}/history-purge` and the MCP tools
+  `atlas_finished_instances_deletion` and `atlas_delete_finished_instances`. The dialog counts
+  first, deletes only once the process id is typed, runs in batches of at most 1000, newest
+  first, and can be stopped between two. Running instances are never touched, and with the
+  OpenSearch exporter on nothing is deleted before the exporter has it. Each delete is the
+  purge event history retention already uses, so recovery replays it. It reaches the history
+  no `atlas:historyTtl` covers — everything that finished before a process declared one — in
+  minutes rather than in the days the server-wide age needs per pass. It frees no disk by
+  itself: every deleted instance adds an event to the WAL until compaction removes it, and the
+  overview's Finished column, which counts every instance that ever finished, does not go
+  down. On by default; a production installation, whose history is evidence, starts with
+  `--instance-purge=false` (`ATLAS_INSTANCE_PURGE=false`, Helm `atlas.instancePurge`), and
+  while it is on every start logs a WARN, `event=server.instance_purge_enabled`
+  ([ADR-draft-operator-history-purge-and-compaction](docs/adr/draft-operator-history-purge-and-compaction.md)).
+- **The WAL can be compacted once from the Console.** The storage card on the dashboard now
+  says whether the WAL is compacted on every checkpoint and what the last pass did, and offers
+  *Checkpoint now* and, on a server started without `--compact-wal`, *Compact once* after a
+  confirmation. `POST /api/v1/checkpoints?compact=true` does the same: one pass with every gate
+  a scheduled one has — a verified checkpoint, the exporter and retention watermarks, no backup
+  streaming — and its answer says whether it compacted. Because that route is allowed on a
+  frozen server, a server below its storage reserve can give WAL space back without a restart.
+  `--compact-wal` also reads `ATLAS_COMPACT_WAL=true`, and `GET /api/v1/checkpoints?verify=false`
+  describes the checkpoints from their manifests instead of re-reading every state file, which
+  is what the card asks for
+  ([ADR-draft-operator-history-purge-and-compaction](docs/adr/draft-operator-history-purge-and-compaction.md)).
 - **A SharePoint Worker can be a mockup.** A SharePoint Worker with the provider **Mockup**
   needs no tenant, no app registration and no credential: every operation runs against a
   site this server keeps in its memory, in the engine and in a supervised worker alike,
