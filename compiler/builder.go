@@ -1857,6 +1857,9 @@ type MailConfig struct {
 	Destination RestExpr
 	MaxResults  int32
 	IncludeBody bool
+	// IncludeHTML is includeBody="html": a get reads the HTML body as well
+	// (ADR-draft-mail-html-view).
+	IncludeHTML bool
 	UnreadOnly  bool
 	ResultVar   string
 	// The documents half (ADR-0478): the attachment an
@@ -1909,6 +1912,7 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 		MailDestination: cfg.Destination,
 		MailMaxResults:  cfg.MaxResults,
 		MailIncludeBody: cfg.IncludeBody,
+		MailIncludeHTML: cfg.IncludeHTML,
 		MailUnreadOnly:  cfg.UnreadOnly,
 		// The documents half.
 		MailAttachment:   cfg.Attachment,

@@ -34,6 +34,7 @@ import {
   isLegacyDirectoryField,
   isRemoteSelect
 } from './remote-source.js';
+import { MAIL_VIEW_TYPE } from './mailview.jsx';
 
 // The palette entry that adds a select searching the first remote source. It is a preset,
 // not a type of its own: what it creates is a select, and a select is what is saved.
@@ -619,6 +620,35 @@ function ConvertEntry(props) {
   );
 }
 
+// ---------- the e-mail view (ADR-draft-mail-html-view) -------------------------------------
+
+// MAIL_KEY is what a variable name may be: names joined by dots, as a key is everywhere.
+const MAIL_KEY = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/;
+
+function MailViewLabelEntry(props) {
+  const { id, field, editField } = props;
+  return (
+    <PanelInput
+      id={ id }
+      label="Label"
+      value={ field.label || '' }
+      onCommit={ (v) => editField(field, 'label', v) } />
+  );
+}
+
+function MailViewKeyEntry(props) {
+  const { id, field, editField } = props;
+  return (
+    <PanelInput
+      id={ id }
+      label="Variable"
+      value={ field.key || '' }
+      validate={ (v) => (MAIL_KEY.test(v.trim()) ? null : 'A variable name, such as mail or request.mail.') }
+      description="The variable a mail task's Read message wrote — its result variable. The form shows the mail and never submits it. With Text set to text and HTML, the HTML version is shown too; remote images stay blocked until the reader loads them."
+      onCommit={ (v) => editField(field, 'key', v.trim()) } />
+  );
+}
+
 // ---------- the provider ------------------------------------------------------------------
 
 class AtlasRemotePropertiesProvider {
@@ -652,10 +682,26 @@ class AtlasRemotePropertiesProvider {
         }
       }
 
+      if (field.type === MAIL_VIEW_TYPE) return this._mailView(groups, field, editField);
       if (isRemoteSelect(field)) return this._remote(groups, ctx);
       if (isLegacyDirectoryField(field)) return this._legacy(groups, ctx);
       return groups;
     };
+  }
+
+  // _mailView gives the e-mail view what form-js gives a field it knows: a label, and
+  // the variable it shows. form-js offers neither for a component that is not keyed.
+  _mailView(groups, field, editField) {
+    const entries = [
+      { id: 'atlasMail-label', component: MailViewLabelEntry, field, editField, isEdited: isEditedValue },
+      { id: 'atlasMail-key', component: MailViewKeyEntry, field, editField, isEdited: isEditedValue }
+    ];
+    const general = groups.find((g) => g.id === 'general');
+    if (general && Array.isArray(general.entries)) {
+      general.entries = [ ...general.entries.filter((e) => e.id !== 'label' && e.id !== 'key'), ...entries ];
+      return groups;
+    }
+    return [ { id: 'general', label: 'General', entries }, ...groups ];
   }
 
   _remote(groups, ctx) {

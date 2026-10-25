@@ -7,7 +7,8 @@ lodash/isEqual, ids, classnames). The bundles inline them so they load buildless
 (ADR-0012), the same way bpmn-js is vendored (ADR-0013).
 
   - form-viewer.js renders a form: form-js's Form, with Atlas's select whose
-    options can come from a remote data source (ADR-0473).
+    options can come from a remote data source (ADR-0473) and Atlas's e-mail view
+    (ADR-draft-mail-html-view).
   - form-playground.js is the form editor: form-js's Playground — the split
     editor, preview, input and output surface of the reference modeler — with the
     same select and the properties that edit its remote source.

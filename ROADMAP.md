@@ -697,8 +697,14 @@ The control-flow basics most real models use.
   a mail task's subject and bodies use the template language form text views already
   speak — `{{ FEEL }}` placeholders, `{{#if}}` and `{{#loop}}` sections — compiled at deploy
   and rendered by the worker, the HTML body escaping what a placeholder inserts; F2 opens
-  each field with a preview rendered by `POST /api/v1/feel/template`. Still open: reading a
-  received mail's HTML body and showing it to a person in a task form, decided separately.
+  each field with a preview rendered by `POST /api/v1/feel/template`.
+  **A received mail's HTML is shown in a task form**
+  ([ADR-draft-mail-html-view](docs/adr/draft-mail-html-view.md)): a get with
+  `includeBody="html"` reads the HTML body as well, cleaned on the server of what runs and
+  cut to fit the variable, and the form component *E-mail view* (`mailview`) shows it in a
+  sandboxed frame with remote images blocked until the reader loads them; the view never
+  submits the mail back. Still open: the HTML body on an inbound mail watch, inline `cid:`
+  images, the Graph and Gmail HTML reads walked at a live mailbox.
   The same reader also runs the other way: `atlas openapi-template --spec x.yaml --out
   dir` writes one element-template package per operation, in the repository catalog's
   own shape ([ADR-0300](docs/adr/0300-openapi-element-templates.md)) —

@@ -83,6 +83,17 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   `dev-view.spec.mjs` drives the search field itself: Enter searches, a pick stays inside the
   search, a search that finds nothing or fails keeps the instance on screen, and emptying the
   field returns to the recent instances.
+- **`mail-view.spec.mjs`** ([ADR-draft-mail-html-view](../docs/adr/draft-mail-html-view.md)):
+  the **E-mail view** form component, on the real vendored viewer (`mail-view-harness.html`)
+  and in the form editor — the envelope is text, never markup; the HTML is in an
+  `<iframe sandbox="allow-popups allow-popups-to-escape-sandbox">` whose own policy blocks
+  remote images (no request reaches the image host) until *Bilder laden*, which loads them;
+  a script the server might have missed does not run; the text version is a tab away;
+  submitting the form never carries the mail; a mail without HTML, without content or
+  without a value says so; the view speaks the page's `atlasLocale` and reads a group's
+  path; and in the editor the view is in the palette, and its Label and Variable entries
+  edit what is saved. `mail-template.spec.mjs` covers the Modeler's *Include the text and
+  the HTML* on Read message and its removal when a get becomes a list.
 - **`mail-template.spec.mjs`** ([ADR-0487](../docs/adr/0487-mail-templates.md)):
   **mail templates** in the Modeler, on `mail-html-harness.html` with a mock renderer behind
   `POST /api/v1/feel/template` — the **Placeholders** select writes `templating="true"` and turns
