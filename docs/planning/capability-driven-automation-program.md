@@ -69,25 +69,21 @@ the **account** contract, nor vice versa.
 ### Ordered dependencies
 
 ```text
-ADR-0203/0208 + CDA0 (merged, approval pending)
-                |
-             CDA1 (#1346)
-                |
- Governance ADR -> CDA2 conformance -> CDA3 provider evidence
-                        |                    |
-                        +--------------------+
-                                  |
-                    ADR-0420 extension/acceptance
-                                  |
-                                CDA4 graph -> CDA5 discovery/impact
-                                  |
-                        Binding/routing ADR
-                                  |
-                         CDA6 deploy-time binding
-                                  |
-          ADR-0475 provider enforcement and recovery gates
-                                  |
-                         CDA7 governed execution
+ADR-0203/0208 -> CDA0 (code merged; ADR-0480 still Proposed)
+                        |
+                     CDA1 (#1346)
+                        |
+      Governance ADR -> CDA2 conformance -> CDA3 provider evidence
+                                             |
+                         +-------------------+-------------------+
+                         |                                       |
+             ADR-0420 accepted                              Binding ADR
+                         |                                       |
+                  CDA4 read graph                        CDA6 pinned BPMN binding
+                         |                                       |
+                  CDA5 discovery                         ADR-0475 provider enforcement
+                                                                 |
+                                                        CDA7 governed execution
 ```
 
 CDA6 can prototype deployment validation once CDA2/CDA3 are available;
