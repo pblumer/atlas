@@ -8744,7 +8744,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       const declared = readStartVariables(proc);
       startVarsHTML = `
         <h3 data-group="Start variables">${esc(tr("bpmn.group.startVariables"))}</h3>
-        <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
+        <div id="sv-list">${declared.map((v) => startVarRowHTML(v)).join("")}</div>
         <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="${esc(tr("pnl.main.addVariableTitle"))}">${esc(tr("pnl.main.addVariable"))}</button>
         <p class="muted" style="font-size:12px">${tr("pnl.main.pool.startVarsHint")}</p>
         <h3 data-group="Constants">${esc(tr("bpmn.group.constants"))}</h3>
@@ -8817,7 +8817,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           const declared = readStartVariables(rootBo);
           startVarsHTML = `
             <h3 data-group="Start variables">${esc(tr("bpmn.group.startVariables"))}</h3>
-            <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
+            <div id="sv-list">${declared.map((v) => startVarRowHTML(v)).join("")}</div>
             <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="${esc(tr("pnl.main.addVariableTitle"))}">${esc(tr("pnl.main.addVariable"))}</button>
             <p class="muted" style="font-size:12px">${tr("pnl.main.proc.startVarsHint")}</p>
             <h3 data-group="Constants">${esc(tr("bpmn.group.constants"))}</h3>
