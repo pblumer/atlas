@@ -87,10 +87,82 @@ func TestEveryViewThatOffersThePanelAlsoDrawsIt(t *testing.T) {
 		if !strings.Contains(body, "infoButton(") {
 			continue // a view with no button owes no panel
 		}
-		if !strings.Contains(body, "infoPanel(") {
+		if !strings.Contains(body, "infoPanel(") && !strings.Contains(body, "infoDialog(") {
 			t.Errorf("%s draws the info button and never the panel, so pressing it "+
 				"does nothing at all — the control answers and the answer is blank",
 				view.name)
 		}
+	}
+}
+
+// TestTheInfoPanelOpensAsADialog: the "i" opens its panel over the page, where
+// the person pressing it is looking, and not under the last row of a long
+// catalogue. The dialog says what it is to a screen reader, closes on its own
+// button and on Escape, and every view that draws the panel draws it this way.
+func TestTheInfoPanelOpensAsADialog(t *testing.T) {
+	src := readWeb(t, "shop.js")
+	dialog := webRegion(t, src, "function infoDialog(", "\n}")
+	for _, want := range []string{"role: 'dialog'", "'aria-modal': 'true'", "t('info.close')", "infoPanel(rel, item)",
+		"e.target === e.currentTarget"} {
+		if !strings.Contains(dialog, want) {
+			t.Errorf("infoDialog lacks %s", want)
+		}
+	}
+	if !strings.Contains(src, "e.key === 'Escape' && state.info") {
+		t.Error("Escape does not close the info dialog")
+	}
+	for _, view := range []struct{ name, from, to string }{
+		{"the catalogue", "function renderCatalogue(", "\nfunction renderBasket("},
+		{"the basket", "function renderBasket(", "\n// --- What a product needs"},
+		{"what somebody holds", "function renderServices(", "\n// The brand mark"},
+	} {
+		body := webRegion(t, src, view.from, view.to)
+		if strings.Contains(body, "infoPanel(") {
+			t.Errorf("%s still draws the panel inline instead of as a dialog", view.name)
+		}
+	}
+	if n := strings.Count(src, "'info.close':"); n != 4 {
+		t.Errorf("info.close is translated %d times, want once per locale (de, en, fr, it)", n)
+	}
+	if !strings.Contains(readWeb(t, "shop.html"), ".info-backdrop") {
+		t.Error("shop.html has no style for the dialog's backdrop")
+	}
+}
+
+// TestAMarketOfferingsInfoIsItsFactSheet: the "i" of a product with parts — a
+// market offering, and only that — opens a fact sheet: the offering's
+// description, then the included services' descriptions, then the optional ones',
+// in that order, with a way to copy it and to print it alone.
+func TestAMarketOfferingsInfoIsItsFactSheet(t *testing.T) {
+	src := readWeb(t, "shop.js")
+	panel := webRegion(t, src, "function infoPanel(", "\n}")
+	if !strings.Contains(panel, "if (carried.length || offered.length) return factsheet(rel, item);") {
+		t.Error("the info panel does not hand a market offering to its fact sheet")
+	}
+	sheet := webRegion(t, src, "function factsheet(", "\n}")
+	offering := strings.Index(sheet, "t('factsheet.offering')")
+	included := strings.Index(sheet, "t('factsheet.included')")
+	optional := strings.Index(sheet, "t('factsheet.optional')")
+	if offering < 0 || included < offering || optional < included {
+		t.Errorf("the fact sheet's sections are not offering, included, optional in that order (%d, %d, %d)",
+			offering, included, optional)
+	}
+	for _, want := range []string{"copyText(factsheetText(rel, item))", "printFactsheet", "descriptionOf(p)"} {
+		if !strings.Contains(sheet, want) {
+			t.Errorf("the fact sheet lacks %s", want)
+		}
+	}
+	text := webRegion(t, src, "function factsheetText(", "\n}")
+	if strings.Index(text, "'includes'") > strings.Index(text, "'options'") {
+		t.Error("the copied fact sheet does not list the included services before the optional ones")
+	}
+	for _, key := range []string{"factsheet.offering", "factsheet.included", "factsheet.optional", "factsheet.copy",
+		"factsheet.print", "factsheet.copied", "factsheet.copyFailed", "factsheet.noDescription"} {
+		if n := strings.Count(src, "'"+key+"':"); n != 4 {
+			t.Errorf("%s is translated %d times, want once per locale (de, en, fr, it)", key, n)
+		}
+	}
+	if !strings.Contains(readWeb(t, "shop.html"), "body.printing-factsheet .factsheet") {
+		t.Error("shop.html has no print style that puts the fact sheet alone on the paper")
 	}
 }

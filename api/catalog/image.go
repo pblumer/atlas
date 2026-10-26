@@ -85,6 +85,57 @@ func (s *Store) SavePicture(itemID string, data []byte, contentType string) erro
 	return sidecar.FsyncDir(s.pictures)
 }
 
+// ownPicturePath is where an item's own picture waits while a content source
+// supplies the product's picture (ContentState.Own).
+func (s *Store) ownPicturePath(itemID, ext string) string {
+	return filepath.Join(s.pictures, hex.EncodeToString([]byte(itemID))+".own."+ext)
+}
+
+// StashPicture sets an item's picture aside, so a picture a source supplies can
+// take its place and an unlink can put it back. It reports whether there was one.
+// A picture set aside before is replaced: there is one own picture per item.
+func (s *Store) StashPicture(itemID string) (bool, error) {
+	if err := s.dropOwnPicture(itemID); err != nil {
+		return false, err
+	}
+	had := false
+	for _, ext := range brandimage.Picture.Exts() {
+		err := os.Rename(s.picturePath(itemID, ext), s.ownPicturePath(itemID, ext))
+		switch {
+		case err == nil:
+			had = true
+		case !os.IsNotExist(err):
+			return false, fmt.Errorf("catalogstore: set picture aside: %w", err)
+		}
+	}
+	return had, sidecar.FsyncDir(s.pictures)
+}
+
+// RestorePicture puts an item's own picture back in place of the one a source
+// supplied, or leaves the item without a picture when none was set aside.
+func (s *Store) RestorePicture(itemID string) error {
+	if err := s.ClearPicture(itemID); err != nil {
+		return err
+	}
+	for _, ext := range brandimage.Picture.Exts() {
+		err := os.Rename(s.ownPicturePath(itemID, ext), s.picturePath(itemID, ext))
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("catalogstore: put picture back: %w", err)
+		}
+	}
+	return sidecar.FsyncDir(s.pictures)
+}
+
+// dropOwnPicture removes a picture set aside, whatever format it was in.
+func (s *Store) dropOwnPicture(itemID string) error {
+	for _, ext := range brandimage.Picture.Exts() {
+		if err := os.Remove(s.ownPicturePath(itemID, ext)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("catalogstore: remove own picture: %w", err)
+		}
+	}
+	return nil
+}
+
 // ClearPicture removes an item's picture, whatever format it was in. An item that
 // had none is not an error: the caller asked for a state, and it holds.
 func (s *Store) ClearPicture(itemID string) error {

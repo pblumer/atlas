@@ -186,6 +186,34 @@
         font:inherit; font-size:13px; cursor:pointer; padding:0; }
   .sq:disabled { opacity:.45; cursor:default; }
   .sq.info { color:var(--muted); }
+  /* The "i" opens its panel over the page (infoDialog in shop.js), where the
+     person is looking, instead of under the last row of a long catalogue. */
+  .info-backdrop { position:fixed; inset:0; z-index:50; display:flex; align-items:flex-start;
+                   justify-content:center; padding:48px 16px; overflow-y:auto;
+                   background:rgba(15,23,42,.45); }
+  .info-dialog { position:relative; width:100%; max-width:640px; }
+  .info-dialog .card { box-shadow:0 12px 32px rgba(15,23,42,.25); padding-right:48px; }
+  .info-close { position:absolute; top:12px; right:12px; z-index:1; font-size:16px; }
+  body.dialog-open { overflow:hidden; }
+  /* A market offering's fact sheet (factsheet in shop.js): the offering, then
+     what is included, then what is optional, each service under its name. */
+  .factsheet-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:4px 0 12px; }
+  .factsheet-section { margin-top:16px; }
+  .factsheet-section h4 { margin:0 0 8px; font-size:15px; }
+  .factsheet-part { margin:0 0 12px; }
+  .factsheet-part h5 { margin:0 0 4px; font-size:14px; }
+  .factsheet-facts { margin-top:16px; border-top:1px solid var(--border); padding-top:8px; }
+  /* Printing the fact sheet puts it alone on the paper. */
+  @media print {
+    body.printing-factsheet * { visibility:hidden; }
+    body.printing-factsheet .factsheet, body.printing-factsheet .factsheet * { visibility:visible; }
+    body.printing-factsheet { background:#fff; }
+    body.printing-factsheet .info-backdrop, body.printing-factsheet .info-dialog {
+      position:static; background:none; padding:0; overflow:visible; max-width:none; }
+    body.printing-factsheet .factsheet { position:absolute; left:0; top:0; width:100%; box-shadow:none;
+                                         border:0; padding:0; }
+    body.printing-factsheet .factsheet-actions, body.printing-factsheet .info-close { display:none; }
+  }
 
   /* The favourites bar above the cascade. */
   .favbar { display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:12px;
