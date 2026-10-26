@@ -79,9 +79,9 @@ test("an agent-driven ad-hoc shows its agent, and a plain one does not", async (
 // everything starts at once, the other says entry starts nothing.
 test("the panel says which entry semantics is in force", async ({ page }) => {
   await open(page, "plain");
-  await expect(page.locator("#p-body")).toContainText("starts at once");
+  await expect(page.locator("#p-body")).toContainText("startet sofort");
   await open(page, "agent");
-  await expect(page.locator("#p-body")).toContainText("Entry starts nothing");
+  await expect(page.locator("#p-body")).toContainText("Der Eintritt startet nichts");
 });
 
 test("switching a plain ad-hoc to an agent writes the connector, and back removes it", async ({ page }) => {

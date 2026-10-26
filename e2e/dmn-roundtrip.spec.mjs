@@ -29,7 +29,7 @@ test("＋ New decision leaves for the decision editor, carrying the task it was 
   await page.evaluate(() => window.__mount());
   await openTask(page, "Activity_rule");
 
-  await expect(page.locator("#f-dmn-new")).toHaveText("＋ New decision");
+  await expect(page.locator("#f-dmn-new")).toHaveText("＋ Neue Entscheidung");
   await page.locator("#f-dmn-new").click();
 
   // The route names the diagram to come back to and the task to wire, which is what

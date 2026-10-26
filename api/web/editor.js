@@ -8434,7 +8434,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       if (!inner || inner.stereotype === "enumeration") continue;
       const nested = (inner.attributes || []).filter((x) => x.name)
         .map((x) => option(`${a.name}.${x.name}`, `${a.name}.${x.name}${shape(x)}`)).join("");
-      if (nested) out += `<optgroup label="inside ${esc(a.name)} · ${esc(a.type)}">${nested}</optgroup>`;
+      if (nested) out += `<optgroup label="${esc(tr("pnl.main.member.inside", { name: a.name, type: a.type }))}">${nested}</optgroup>`;
     }
     return { html: out, lists: (path) => seen.includes(path) };
   }
@@ -8444,10 +8444,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   function memberSelectHTML(cls, current, attrs = `id="f-assoc-to"`) {
     const { html, lists } = memberOptionsHTML(cls, current);
     if (!html) return "";
-    return `<select ${attrs} title="The members ${esc(cls.name)} declares">
-      <option value=""${current ? "" : " selected"}>— the whole object —</option>
-      ${html}${strayOptionHTML(current, lists(current), `not a member of ${cls.name}`)}
-      <option ${OTHER}>Another member, not modelled yet…</option>
+    return `<select ${attrs} title="${esc(tr("pnl.main.member.title", { name: cls.name }))}">
+      <option value=""${current ? "" : " selected"}>${esc(tr("pnl.main.member.whole"))}</option>
+      ${html}${strayOptionHTML(current, lists(current), tr("pnl.main.member.notMember", { name: cls.name }))}
+      <option ${OTHER}>${esc(tr("pnl.main.member.other"))}</option>
     </select>`;
   }
 
@@ -8499,10 +8499,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     const lit = (enumeration.literals || []).map((l) =>
       `<option value="${esc(l)}"${l === current ? " selected" : ""}>${esc(l)}</option>`).join("");
     const other = !current && String(stored || "").trim() !== "";
-    return `<select ${attrs} title="The values ${esc(enumeration.name)} declares">
-      <option value=""${current || other ? "" : " selected"}>— not set —</option>
+    return `<select ${attrs} title="${esc(tr("pnl.main.literal.title", { name: enumeration.name }))}">
+      <option value=""${current || other ? "" : " selected"}>${esc(tr("pnl.main.literal.notSet"))}</option>
       ${lit}
-      <option ${OTHER}${other ? " selected" : ""}>A FEEL expression instead…</option>
+      <option ${OTHER}${other ? " selected" : ""}>${esc(tr("pnl.main.literal.other"))}</option>
     </select>`;
   }
 
@@ -8524,10 +8524,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     const enumeration = enumTypingMember(cls, toBody);
     const chosen = enumeration ? literalOf(fromBody, enumeration) : "";
     const freeValue = `<label class="field"${enumeration && chosen ? " hidden" : ""} id="f-dw-expr-${i}-field">
-        <span>${enumeration ? "FEEL expression" : "FEEL value"} <i class="io-fx" title="This value is a FEEL expression">fx</i></span>
+        <span>${esc(enumeration ? tr("pnl.main.dw.feelExpr") : tr("pnl.main.dw.feelValue"))} <i class="io-fx" title="${esc(tr("pnl.main.dw.fxTitle"))}">fx</i></span>
         <input type="text" class="dw-from" id="f-dw-expr-${i}" value="${esc(fromBody || "")}" placeholder="=amount * 1.19" spellcheck="false"/></label>`;
     const valueField = enumeration
-      ? `<label class="field"><span>Value <span class="muted">(${esc(enumeration.name)})</span></span>
+      ? `<label class="field"><span>${esc(tr("pnl.main.dw.value"))} <span class="muted">(${esc(enumeration.name)})</span></span>
           ${literalSelectHTML(enumeration, chosen, fromBody, `class="dw-lit"`)}</label>
          ${freeValue}`
       : freeValue;
@@ -8535,12 +8535,12 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       <div class="io-map-head">
         <span class="io-map-chevron" aria-hidden="true">▾</span>
         <span class="io-map-title">${esc(dataWriteTitle(toBody))}</span>
-        <button type="button" class="io-map-del" title="Delete write" aria-label="Delete write">${ioTrashIcon}</button>
+        <button type="button" class="io-map-del" title="${esc(tr("pnl.main.dw.delete"))}" aria-label="${esc(tr("pnl.main.dw.delete"))}">${ioTrashIcon}</button>
       </div>
       <div class="io-map-body">
-        <label class="field"><span>Target member <span class="muted">(optional)</span></span>
+        <label class="field"><span>${esc(tr("pnl.main.dw.target"))} <span class="muted">(${esc(tr("pnl.main.optional"))})</span></span>
           ${picker || `<input type="text" class="dw-to" value="${esc(toBody || "")}" placeholder="name"/>`}</label>
-        ${picker ? otherFieldHTML(`f-dw-other-${i}`, "Member path", "customer.name") : ""}
+        ${picker ? otherFieldHTML(`f-dw-other-${i}`, tr("pnl.main.dw.memberPath"), "customer.name") : ""}
         ${valueField}
       </div>
     </div>`;
@@ -8562,9 +8562,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       (a.from && a.from.body) || "", (a.to && a.to.body) || "")).join("");
     return `<div class="io-group" data-write-group="1" data-group="Writes" data-standalone-group="1">
       <div class="io-group-head">
-        <span class="io-group-title">Writes ${esc(objectName)}</span>
-        <button type="button" class="io-group-add" title="Add a write" aria-label="Add a write">＋</button>
-        <span class="io-group-count" title="Writes">${assignments.length}</span>
+        <span class="io-group-title">${esc(tr("pnl.main.dw.groupTitle", { name: objectName }))}</span>
+        <button type="button" class="io-group-add" title="${esc(tr("pnl.main.dw.add"))}" aria-label="${esc(tr("pnl.main.dw.add"))}">＋</button>
+        <span class="io-group-count" title="${esc(tr("pnl.main.dw.count"))}">${assignments.length}</span>
         <span class="io-group-chevron" aria-hidden="true">▾</span>
       </div>
       <div class="io-group-body">
@@ -8590,12 +8590,12 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       `<optgroup label="${esc(g.name)}">${g.classes.map((c) => {
         const key = (c.identity || []).join(", ");
         return `<option value="${esc(c.name)}"${c.name === current ? " selected" : ""}>${esc(c.name)}${
-          key ? ` · key ${esc(key)}` : ""}</option>`;
+          key ? ` · ${esc(tr("pnl.main.class.key", { key }))}` : ""}</option>`;
       }).join("")}</optgroup>`).join("");
-    return `<select id="f-itemtype" title="The classes this application models">
-      <option value=""${current ? "" : " selected"}>— none —</option>
-      ${groups}${strayOptionHTML(current, vocab.classes.some((c) => c.name === current), "not modelled yet")}
-      <option ${OTHER}>Another class, not modelled yet…</option>
+    return `<select id="f-itemtype" title="${esc(tr("pnl.main.class.title"))}">
+      <option value=""${current ? "" : " selected"}>${esc(tr("pnl.main.none"))}</option>
+      ${groups}${strayOptionHTML(current, vocab.classes.some((c) => c.name === current), tr("pnl.main.class.notModelled"))}
+      <option ${OTHER}>${esc(tr("pnl.main.class.other"))}</option>
     </select>`;
   }
 
@@ -8613,14 +8613,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         return `<li${isKey ? ' class="key"' : ""}><span class="n">${isKey ? "⚿ " : ""}${esc(a.name)}</span>` +
           `<span class="t">${esc(a.type || "")}${esc(mult)}</span></li>`;
       });
-    const empty = stereo === "enumeration" ? "no literals yet" : "no attributes yet";
+    const empty = esc(stereo === "enumeration" ? tr("pnl.main.class.noLiterals") : tr("pnl.main.class.noAttributes"));
     return `<div class="im-card">
       <div class="im-card-head">
         <span class="im-card-stereo">«${esc(stereo)}»</span>
         <b class="im-card-name">${esc(c.name)}</b>
         <span style="flex:1"></span>
         <a class="im-card-open" href="#/data/m/${encodeURIComponent(c.modelId)}" target="_blank" rel="noopener"
-           title="Open ${esc(c.modelName)} in the information model">Open ↗</a>
+           title="${esc(tr("pnl.main.class.openTitle", { name: c.modelName }))}">${esc(tr("pnl.main.class.open"))}</a>
       </div>
       <ul class="im-card-attrs">${rows.join("") || `<li class="none">${empty}</li>`}</ul>
     </div>`;
@@ -8707,7 +8707,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         .replaceElement(element, { type: "bpmn:Participant", isExpanded: true });
       selection.select(replaced);
       show(replaced); // now an executable pool: elements can be dropped in
-    } catch { toast("could not add a process to this pool", "err"); }
+    } catch { toast(tr("pnl.main.pool.addFailed"), "err"); }
   }
 
   // showPool renders the Details panel for a collaboration pool (Participant).
@@ -8715,21 +8715,21 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   // identity — its name, and its start variables), or offers to create one when
   // the pool is an empty black box that can't yet hold elements.
   function showPool(element, bo) {
-    icon.textContent = "PL"; typename.textContent = "Pool";
-    nameEl.textContent = bo.name || bo.id || "(pool)";
+    icon.textContent = "PL"; typename.textContent = tr("pnl.main.head.pool");
+    nameEl.textContent = bo.name || bo.id || tr("pnl.main.head.poolUnnamed");
     const proc = bo.processRef;
     const poolFields = `
       <h3 data-group="Pool">${esc(tr("bpmn.group.pool"))}</h3>
-      <label class="field"><span>Name</span><input type="text" id="f-poolname" value="${esc(bo.name || "")}" placeholder="Teilnehmer"/></label>
-      <label class="field"><span>Pool ID</span><input type="text" id="f-poolid" value="${esc(bo.id || "")}" spellcheck="false"/></label>
-      ${documentationField(bo, "f-doc", "Who this participant is, what they are responsible for…")}`;
+      <label class="field"><span>${esc(tr("pnl.main.name"))}</span><input type="text" id="f-poolname" value="${esc(bo.name || "")}" placeholder="Teilnehmer"/></label>
+      <label class="field"><span>${esc(tr("pnl.main.pool.id"))}</span><input type="text" id="f-poolid" value="${esc(bo.id || "")}" spellcheck="false"/></label>
+      ${documentationField(bo, "f-doc", tr("pnl.main.pool.docPlaceholder"))}`;
 
     if (!proc) {
       body.innerHTML = `${poolFields}
-        <p class="muted" style="font-size:12px">A pool is a <b>participant</b> — it doesn't hold the flow itself, it <i>executes a process</i>. This pool has <b>no process</b>, so it can't contain elements or run.</p>
+        <p class="muted" style="font-size:12px">${tr("pnl.main.pool.noProcess")}</p>
         <h3 data-group="Process">${esc(tr("bpmn.group.process"))}</h3>
-        <p class="muted" style="font-size:12px">Add the process that sits between the pool and its elements — the participant runs it, and the elements you draw live inside it.</p>
-        <button type="button" class="btn" id="f-addproc" style="margin-top:6px" title="Add a process to this collaboration">+ Add a process</button>`;
+        <p class="muted" style="font-size:12px">${tr("pnl.main.pool.addProcessHint")}</p>
+        <button type="button" class="btn" id="f-addproc" style="margin-top:6px" title="${esc(tr("pnl.main.pool.addProcessTitle"))}">${esc(tr("pnl.main.pool.addProcess"))}</button>`;
       body.querySelector("#f-poolname").addEventListener("change", (e) => {
         try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
       });
@@ -8745,21 +8745,21 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       startVarsHTML = `
         <h3 data-group="Start variables">${esc(tr("bpmn.group.startVariables"))}</h3>
         <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
-        <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
-        <p class="muted" style="font-size:12px">Declared on this pool's process, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks. With a start form, the ones the form does not ask for are asked beneath it. The engine ignores the declaration; it's authoring metadata, so an instance started through the API gets no default. A value nobody enters is a constant, below.</p>
+        <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="${esc(tr("pnl.main.addVariableTitle"))}">${esc(tr("pnl.main.addVariable"))}</button>
+        <p class="muted" style="font-size:12px">${tr("pnl.main.pool.startVarsHint")}</p>
         <h3 data-group="Constants">${esc(tr("bpmn.group.constants"))}</h3>
         <div id="cv-list">${readConstants(proc).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value, source: c.source }, true)).join("")}</div>
-        <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
-        <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Its name is written in capitals (TENANT_ID). Set its source to <b>application</b> or <b>server</b> and it is read as <code>application.NAME</code> or <code>server.NAME</code>, taking what the application — or the installation, for every application — holds on each installation (the application's Constants tab, Admin → Engine → Server constants), with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
+        <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="${esc(tr("pnl.main.addConstantTitle"))}">${esc(tr("pnl.main.addConstant"))}</button>
+        <p class="muted" style="font-size:12px">${tr("pnl.main.constantsHint")}</p>`;
     }
     body.innerHTML = `${poolFields}
-      <p class="muted" style="font-size:12px">The pool is a <b>participant</b> that executes the process below. The elements live in that process — the pool only labels who runs it.</p>
+      <p class="muted" style="font-size:12px">${tr("pnl.main.pool.hint")}</p>
       <h3 data-group="Process">${esc(tr("bpmn.group.process"))}</h3>
-      <label class="field"><span>Process name</span><input type="text" id="f-procname" value="${esc(proc.name || "")}" placeholder="Order fulfillment"/></label>
-      <label class="field"><span>Process ID</span><input type="text" id="f-procid" value="${esc(proc.id || "")}" placeholder="order-fulfillment"/></label>
-      <p class="muted" style="font-size:12px">Each pool deploys as its own process; the <b>Process ID</b> is that deployment's identity — instances group by it, and renaming it deploys a new process rather than a new version. The <i>first</i> pool's process id is also what this draft is stored under, so renaming that one moves the draft on the next Save.</p>
-      ${documentationField(proc, "f-procdoc", "What this process achieves, who it serves, when it runs…")}
-      <p class="muted" style="font-size:12px">Two descriptions, two subjects: the one above documents the <b>pool</b> (the participant), this one the <b>process</b> it executes. Every element inside takes its own.</p>
+      <label class="field"><span>${esc(tr("pnl.main.pool.procName"))}</span><input type="text" id="f-procname" value="${esc(proc.name || "")}" placeholder="Order fulfillment"/></label>
+      <label class="field"><span>${esc(tr("pnl.main.processId"))}</span><input type="text" id="f-procid" value="${esc(proc.id || "")}" placeholder="order-fulfillment"/></label>
+      <p class="muted" style="font-size:12px">${tr("pnl.main.pool.procIdHint")}</p>
+      ${documentationField(proc, "f-procdoc", tr("pnl.main.procDocPlaceholder"))}
+      <p class="muted" style="font-size:12px">${tr("pnl.main.pool.twoDocs")}</p>
       ${startVarsHTML}`;
     body.querySelector("#f-poolname").addEventListener("change", (e) => {
       try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
@@ -8770,7 +8770,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     });
     body.querySelector("#f-procid").addEventListener("change", (e) => {
       const v = (e.target.value || "").trim();
-      if (v) { try { modeling.updateModdleProperties(element, proc, { id: v }); } catch { toast("invalid process id", "err"); } }
+      if (v) { try { modeling.updateModdleProperties(element, proc, { id: v }); } catch { toast(tr("pnl.main.invalidProcessId"), "err"); } }
     });
     // Only the pool whose process keys the draft is renaming the artifact; the others
     // deploy under their own id and collide with nothing on disk.
@@ -8798,7 +8798,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       if (v === element.businessObject.id) return;
       if (!v) { show(element); return; }
       try { modeling.updateProperties(element, { id: v }); }
-      catch { toast("invalid id — must be unique and a valid identifier", "err"); show(element); }
+      catch { toast(tr("pnl.main.invalidId"), "err"); show(element); }
     });
   }
 
@@ -8808,8 +8808,8 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       // (this is how you rename a diagram; the id is the deployed process id).
       const rootBo = rootProcess(modeler);
       if (rootBo) {
-        icon.textContent = "PR"; typename.textContent = "Process";
-        nameEl.textContent = rootBo.name || rootBo.id || "(process)";
+        icon.textContent = "PR"; typename.textContent = tr("pnl.main.head.process");
+        nameEl.textContent = rootBo.name || rootBo.id || tr("pnl.main.head.processUnnamed");
         // The declaration editor is executable detail, so it lives on the
         // Implement tab (like a task's script or a branch's condition).
         let startVarsHTML = "";
@@ -8818,33 +8818,33 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           startVarsHTML = `
             <h3 data-group="Start variables">${esc(tr("bpmn.group.startVariables"))}</h3>
             <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
-            <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
-            <p class="muted" style="font-size:12px">Declared here, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks — instead of raw JSON. With a start form on the start event, the ones the form does not ask for are asked beneath it, on Deploy &amp; run, Start instance and the Tasks app's Start. The engine ignores the declaration; it's authoring metadata, so an instance started through the API or a public link gets no default. A value nobody enters is a constant, below.</p>
+            <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="${esc(tr("pnl.main.addVariableTitle"))}">${esc(tr("pnl.main.addVariable"))}</button>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.proc.startVarsHint")}</p>
             <h3 data-group="Constants">${esc(tr("bpmn.group.constants"))}</h3>
             <div id="cv-list">${readConstants(rootBo).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value, source: c.source }, true)).join("")}</div>
-            <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
-            <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Its name is written in capitals (TENANT_ID). Set its source to <b>application</b> or <b>server</b> and it is read as <code>application.NAME</code> or <code>server.NAME</code>, taking what the application — or the installation, for every application — holds on each installation (the application's Constants tab, Admin → Engine → Server constants), with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
+            <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="${esc(tr("pnl.main.addConstantTitle"))}">${esc(tr("pnl.main.addConstant"))}</button>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.constantsHint")}</p>`;
         }
         body.innerHTML = `
           <h3 data-group="Process">${esc(tr("bpmn.group.process"))}</h3>
-          <label class="field"><span>Name</span><input type="text" id="f-pname" value="${esc(rootBo.name || "")}" placeholder="Order fulfillment"/></label>
-          <label class="field"><span>Process ID</span><input type="text" id="f-pid" value="${esc(rootBo.id || "")}" placeholder="order-fulfillment"/></label>
-          <p class="muted" style="font-size:12px">The Process ID is the identity deployments and instances are grouped by, and it is also what this draft is stored under &mdash; so <b>renaming it moves the draft</b> to the new id on the next Save rather than leaving a copy behind at the old one. An id another draft already holds is refused, never overwritten. Renaming it and deploying creates a new process rather than a new version.</p>
-          ${documentationField(rootBo, "f-doc", "What this process achieves, who it serves, when it runs…")}
-          <p class="muted" style="font-size:12px">The <b>Documentation</b> is the process's own description — the place for the summary a reader needs before following the diagram. Every element takes one too; select it to write its part.</p>
-          <label class="field"><span>Version tag</span><input type="text" id="f-pver" value="${esc(rootBo.versionTag || "")}" placeholder="1.0.0"/></label>
-          <label class="pcheck"><input type="checkbox" id="f-pexec"${rootBo.isExecutable !== false ? " checked" : ""}/> <span>Executable</span></label>
-          <p class="muted" style="font-size:12px">An <b>executable</b> process can be started and offered in the start lists; leave it off for a descriptive-only diagram. <b>Version tag</b> is an optional label for this revision.</p>
-          <label class="field"><span>Instance TTL</span><input type="text" id="f-pttl" value="${esc(rootBo.instanceTtl || "")}" placeholder="P7D"/></label>
-          <p class="muted" style="font-size:12px">A self-cleaning <b>time-to-live</b> for instances of this process, as an ISO-8601 duration (e.g. <code>P7D</code> = 7 days, <code>PT12H</code> = 12 hours, <code>PT30M</code> = 30 minutes). An instance that outlives its TTL is automatically terminated and moved to history — where it stays queryable and can still be exported. It bounds how long an instance may <i>run</i>, not how long its record is kept; <b>History TTL</b> below decides that. Leave empty for no TTL (instances live until they complete or are cancelled). Set it above the longest run you legitimately expect.</p>
-          <label class="field"><span>History TTL</span><input type="text" id="f-phttl" value="${esc(rootBo.historyTtl || "")}" placeholder="P30D"/></label>
-          <p class="muted" style="font-size:12px">How long a <b>finished</b> instance of this process is kept before it is deleted for good, as an ISO-8601 duration (e.g. <code>P30D</code> = 30 days). Completed and terminated instances stay listed, queryable and exportable until it elapses; then retention removes the instance and everything it carried — variables, step history, decisions. Leave empty to fall back to the server-wide retention age, if the operator configured one. The delete is permanent and only ever happens once the instance's events are safely exported.</p>
-          <label class="field"><span>Searchable variables</span><input type="text" id="f-psearch" value="${esc(rootBo.searchable || "")}" placeholder="identityId, item"/></label>
+          <label class="field"><span>${esc(tr("pnl.main.name"))}</span><input type="text" id="f-pname" value="${esc(rootBo.name || "")}" placeholder="Order fulfillment"/></label>
+          <label class="field"><span>${esc(tr("pnl.main.processId"))}</span><input type="text" id="f-pid" value="${esc(rootBo.id || "")}" placeholder="order-fulfillment"/></label>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.proc.idHint")}</p>
+          ${documentationField(rootBo, "f-doc", tr("pnl.main.procDocPlaceholder"))}
+          <p class="muted" style="font-size:12px">${tr("pnl.main.proc.docHint")}</p>
+          <label class="field"><span>${esc(tr("pnl.main.proc.versionTag"))}</span><input type="text" id="f-pver" value="${esc(rootBo.versionTag || "")}" placeholder="1.0.0"/></label>
+          <label class="pcheck"><input type="checkbox" id="f-pexec"${rootBo.isExecutable !== false ? " checked" : ""}/> <span>${esc(tr("pnl.main.proc.executable"))}</span></label>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.proc.execHint")}</p>
+          <label class="field"><span>${esc(tr("pnl.main.proc.ttl"))}</span><input type="text" id="f-pttl" value="${esc(rootBo.instanceTtl || "")}" placeholder="P7D"/></label>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.proc.ttlHint")}</p>
+          <label class="field"><span>${esc(tr("pnl.main.proc.historyTtl"))}</span><input type="text" id="f-phttl" value="${esc(rootBo.historyTtl || "")}" placeholder="P30D"/></label>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.proc.historyTtlHint")}</p>
+          <label class="field"><span>${esc(tr("pnl.main.proc.searchable"))}</span><input type="text" id="f-psearch" value="${esc(rootBo.searchable || "")}" placeholder="identityId, item"/></label>
           <div id="f-psearch-marks" class="sv-marks"></div>
-          <p class="muted" style="font-size:12px">The variable names this process wants to be <b>found by</b>, comma-separated. A declared name is answered from a value index, so searching <code>identityId=MT-1998</code> over this version in Operations costs the number of matches instead of a read through every instance &mdash; and a trailing <code>*</code> asks for a prefix. Indexed is a variable at the instance's <b>top level</b> whose value is text, a number or true/false and stays under 256 bytes; a JSON structure or a variable local to one activity is not. A declared name is matched <b>exactly</b>, upper and lower case included, while an undeclared one keeps the read-through search it always had. Declaring nothing costs nothing, so name the one or two business keys you actually search by &mdash; a status that thousands of instances share is a poor declaration. It applies to instances started after the next deploy.</p>
-          <label class="field"><span>Personal variables</span><input type="text" id="f-ppersonal" value="${esc(rootBo.personal || "")}" placeholder="vorname, nachname"/></label>
-          <label class="field"><span>Data subject variable</span><input type="text" id="f-psubject" value="${esc(rootBo.dataSubject || "")}" placeholder="personalnummer"/></label>
-          <p class="muted" style="font-size:12px">The variables that hold <b>personal data</b>, comma-separated, and the one variable holding the <b>id of the person</b> they are about. A declared name is enciphered under a key belonging to that person before it ever reaches the engine, and erasing the person destroys that one key &mdash; which makes every copy of every value unreadable at once, including the backups nobody can reach any more. The price is that the engine can no longer read the value: a declared variable may be written, carried and handed to a worker, but it may <b>not appear in any expression</b> the engine evaluates &mdash; no gateway or flow condition, no input/output mapping, no script. Build what you need from it inside the worker that needs the result, where the plaintext exists for one call. The deploy refuses a model that breaks this, and refuses the two declarations apart: personal data with no subject could never be erased, and a subject with nothing personal enciphers nothing.</p>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.proc.searchHint")}</p>
+          <label class="field"><span>${esc(tr("pnl.main.proc.personal"))}</span><input type="text" id="f-ppersonal" value="${esc(rootBo.personal || "")}" placeholder="vorname, nachname"/></label>
+          <label class="field"><span>${esc(tr("pnl.main.proc.subject"))}</span><input type="text" id="f-psubject" value="${esc(rootBo.dataSubject || "")}" placeholder="personalnummer"/></label>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.proc.personalHint")}</p>
           ${startVarsHTML}
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
@@ -8856,7 +8856,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         });
         body.querySelector("#f-pid").addEventListener("change", (e) => {
           const v = (e.target.value || "").trim();
-          if (v) { try { modeling.updateProperties(rootEl, { id: v }); } catch { toast("invalid process id", "err"); } }
+          if (v) { try { modeling.updateProperties(rootEl, { id: v }); } catch { toast(tr("pnl.main.invalidProcessId"), "err"); } }
         });
         // The Process ID is the draft's filename on the server, so it is checked as it
         // is typed: an id another draft already holds turns the field red here rather
@@ -8876,14 +8876,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           // non-positive TTL at deploy (ADR-0085). Catch it here so the mistake surfaces
           // while authoring instead of as a failed deploy — but still store what was typed
           // so the field never silently drops the user's value.
-          if (v && !isValidTtl(v)) toast("Instance TTL must be a positive ISO-8601 duration, e.g. P7D or PT12H", "err");
+          if (v && !isValidTtl(v)) toast(tr("pnl.main.proc.ttlInvalid"), "err");
           try { modeling.updateProperties(rootEl, { instanceTtl: v || undefined }); } catch { /* ignore */ }
         });
         body.querySelector("#f-phttl").addEventListener("change", (e) => {
           const v = (e.target.value || "").trim();
           // Validated exactly like the instance TTL: warn while authoring, but store what
           // was typed — the deploy is the authority that rejects a bad value (ADR-0145).
-          if (v && !isValidTtl(v)) toast("History TTL must be a positive ISO-8601 duration, e.g. P30D or PT12H", "err");
+          if (v && !isValidTtl(v)) toast(tr("pnl.main.proc.historyTtlInvalid"), "err");
           try { modeling.updateProperties(rootEl, { historyTtl: v || undefined }); } catch { /* ignore */ }
         });
         // The marks are painted as the author types, not on change: the point of them is
@@ -8937,13 +8937,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       // A collaboration root has no single process to rename; each pool
       // (participant) executes its own process, configured by selecting the pool.
       if (isCollaborationRoot(modeler)) {
-        icon.textContent = "CO"; typename.textContent = "Collaboration"; nameEl.textContent = "(collaboration)";
+        icon.textContent = "CO"; typename.textContent = tr("pnl.main.head.collaboration"); nameEl.textContent = tr("pnl.main.head.collaborationUnnamed");
         const collabEl = modeler.get("canvas").getRootElement();
         body.innerHTML = `
           <h3 data-group="Collaboration">${esc(tr("bpmn.group.collaboration"))}</h3>
-          <p class="muted" style="font-size:12px">This diagram has several <b>pools</b>. A pool is a <b>participant</b> that <i>executes a process</i> — the process holds the flow, the pool just names who runs it, and each deploys as its own process. Select a pool to name it and configure the process it runs, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b>: a throw event in one pool and a catch event in another that reference the <b>same message</b> below.</p>
-          ${documentationField(collabEl.businessObject, "f-doc", "What this collaboration is about, who the participants are…")}
-          <p class="muted" style="font-size:12px">The <b>Documentation</b> describes the collaboration as a whole; each pool and each element inside it takes its own.</p>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.collab.hint")}</p>
+          ${documentationField(collabEl.businessObject, "f-doc", tr("pnl.main.collab.docPlaceholder"))}
+          <p class="muted" style="font-size:12px">${tr("pnl.main.collab.docHint")}</p>
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
           ${errorsManagerHTML(modeler)}
@@ -8955,8 +8955,8 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         wireEscalationsManager(body, modeler, () => show(null));
         return;
       }
-      icon.textContent = "–"; typename.textContent = "No selection"; nameEl.textContent = "—";
-      body.innerHTML = `<p class="muted">Select an element to see its properties.</p>`;
+      icon.textContent = "–"; typename.textContent = tr("bpmn.props.noSelection"); nameEl.textContent = "—";
+      body.innerHTML = `<p class="muted">${esc(tr("bpmn.props.selectHint"))}</p>`;
       return;
     }
     const bo = element.businessObject || {};
@@ -8972,8 +8972,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       "bpmn:DataInputAssociation": "IA",
     };
     icon.textContent = badges[bo.$type] || type.slice(0, 2).toUpperCase();
-    typename.textContent = type;
-    nameEl.textContent = bo.name || bo.id || "(unnamed)";
+    const typeKey = "pnl.main.type." + type;
+    typename.textContent = tr(typeKey) === typeKey ? type : tr(typeKey);
+    nameEl.textContent = bo.name || bo.id || tr("pnl.main.head.unnamed");
 
     // A pool (Participant) is not itself executable — in BPMN it *executes* a
     // process: participant → processRef → the flow elements. The pool's own name
@@ -9003,10 +9004,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // name IS the diagram label (e.g. the branch outcome "Großauftrag").
     let html = `
       <h3 data-group="General">${esc(tr("bpmn.group.general"))}</h3>
-      <label class="field"><span>${isSeqFlow ? "Label" : "Name"}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
-      <label class="field"><span>ID</span><input type="text" id="f-id" value="${esc(bo.id || "")}" spellcheck="false"/></label>
-      ${documentationField(bo, "f-doc", isUserTask ? "What the assignee has to check, decide or attach…" : isSeqFlow ? "When this path is taken, and why…" : "What this step is for, when it applies, who owns it…")}
-      <p class="muted" style="font-size:12px">The <b>Documentation</b> is prose about this element — what it is for, the rule behind it, who owns it. The engine never acts on it, but it is part of the model, so it travels with every deploy, export and version.${isUserTask ? " On a <b>user task</b> it is more than a note: the Tasks app shows it to the assignee as the <b>work instruction</b>, above the form — so write it to the person who will do the work." : ""}</p>`;
+      <label class="field"><span>${esc(isSeqFlow ? tr("pnl.main.gen.label") : tr("pnl.main.name"))}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
+      <label class="field"><span>${esc(tr("pnl.main.gen.id"))}</span><input type="text" id="f-id" value="${esc(bo.id || "")}" spellcheck="false"/></label>
+      ${documentationField(bo, "f-doc", isUserTask ? tr("pnl.main.gen.docUserTask") : isSeqFlow ? tr("pnl.main.gen.docFlow") : tr("pnl.main.gen.docStep"))}
+      <p class="muted" style="font-size:12px">${tr("pnl.main.gen.docHint")}${isUserTask ? " " + tr("pnl.main.gen.docHintUserTask") : ""}</p>`;
 
     // A data object is the data a process carries — first-class in Atlas, not just
     // decoration (ADR-0053). Its name is the engine's variable-like identity and its
@@ -9022,9 +9023,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       const curName = (bo.dataObjectRef && (bo.dataObjectRef.name || bo.dataObjectRef.id)) || "";
       let pointsTo = "";
       if (names.length > 1) {
-        pointsTo = `<label class="field"><span>Points to</span>
+        pointsTo = `<label class="field"><span>${esc(tr("pnl.main.do.pointsTo"))}</span>
           <select id="f-pointsto">${names.map((n) => `<option value="${esc(n.id)}" ${n.name === curName ? "selected" : ""}>${esc(n.name)}</option>`).join("")}</select></label>
-          <p class="muted" style="font-size:12px">Point this box at an existing data object to show <b>the same object in several places</b> — one logical object, so you can put it next to each activity without long arrows across the diagram.</p>`;
+          <p class="muted" style="font-size:12px">${tr("pnl.main.do.pointsToHint")}</p>`;
       }
       const itemType = itemTypeOf(bo.dataObjectRef);
       // A panel rendered before the fetch lands re-renders when it does. An empty
@@ -9054,38 +9055,32 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       const noApplication = !projectId;
       const nothingModelled = projectId && vocab.loaded && !vocab.classes.length;
       html += `<h3 data-group="Data object">${esc(tr("bpmn.group.dataObject"))}</h3>
-        <label class="field"><span>Class <span class="muted">(what this datum is)</span></span>
+        <label class="field"><span>${esc(tr("pnl.main.do.class"))} <span class="muted">(${esc(tr("pnl.main.do.classWhat"))})</span></span>
           ${vocab.classes.length ? classSelectHTML(itemType)
             : `<input type="text" id="f-itemtype" value="${esc(itemType)}" placeholder="Order"/>`}</label>
-        ${vocab.classes.length ? otherFieldHTML("f-itemtype-other", "Class name", "Order") : ""}
-        ${noApplication ? `<p class="im-nomatch">This diagram is not filed under an application, so there is
-          no information model to resolve a class against — and nothing here can be checked, which is why the
-          Problems panel is empty rather than clean. Open this process's <b>draft</b> from its application, or
-          deploy it from there, and the classes it models are offered here.</p>` : ""}
-        ${nothingModelled ? `<p class="im-nomatch">This application models no data yet, so there is no class to
-          point at. Draw one under <b>Data › Model</b> and it is offered here.
-          <a href="#/data" target="_blank" rel="noopener">Open Data ↗</a></p>` : ""}
+        ${vocab.classes.length ? otherFieldHTML("f-itemtype-other", tr("pnl.main.do.className"), "Order") : ""}
+        ${noApplication ? `<p class="im-nomatch">${tr("pnl.main.do.noApplication")}</p>` : ""}
+        ${nothingModelled ? `<p class="im-nomatch">${tr("pnl.main.do.nothingModelled")}
+          <a href="#/data" target="_blank" rel="noopener">${esc(tr("pnl.main.do.openData"))}</a></p>` : ""}
         ${known ? classCardHTML(known) : ""}
-        ${unresolved ? `<p class="im-nomatch">No class called <b>${esc(itemType)}</b> is modelled in this
-          application yet — the Problems panel lists it, and a deploy is not refused for it.
+        ${unresolved ? `<p class="im-nomatch">${tr("pnl.main.do.unresolved", { name: esc(itemType) })}
           ${vocab.models.length ? `<button type="button" class="btn ghost small" id="f-itemtype-create"
-            data-name="${esc(itemType)}">+ Model it now</button>` : ""}</p>` : ""}
-        <label class="field"><span>Data state</span>
-          ${declared.length ? `<select id="f-datastate" title="The states ${esc(known.name)} declares">
-              <option value=""${stateName ? "" : " selected"}>— none —</option>
+            data-name="${esc(itemType)}">${esc(tr("pnl.main.do.modelNow"))}</button>` : ""}</p>` : ""}
+        <label class="field"><span>${esc(tr("pnl.main.do.dataState"))}</span>
+          ${declared.length ? `<select id="f-datastate" title="${esc(tr("pnl.main.do.statesTitle", { name: known.name }))}">
+              <option value=""${stateName ? "" : " selected"}>${esc(tr("pnl.main.none"))}</option>
               ${declared.map((s) => `<option value="${esc(s.name)}"${s.name === stateName ? " selected" : ""}>${
-                esc(s.name)}${s.initial ? " · start" : ""}${s.final ? " · final" : ""}</option>`).join("")}
-              ${strayOptionHTML(stateName, declared.some((s) => s.name === stateName), `not a state of ${known.name}`)}
-              <option ${OTHER}>Another state, not declared yet…</option>
+                esc(s.name)}${s.initial ? ` · ${esc(tr("pnl.main.do.stateStart"))}` : ""}${s.final ? ` · ${esc(tr("pnl.main.do.stateFinal"))}` : ""}</option>`).join("")}
+              ${strayOptionHTML(stateName, declared.some((s) => s.name === stateName), tr("pnl.main.do.notState", { name: known.name }))}
+              <option ${OTHER}>${esc(tr("pnl.main.do.otherState"))}</option>
             </select>`
             : `<input type="text" id="f-datastate" value="${esc(stateName)}" placeholder="received"/>`}</label>
-        ${declared.length ? otherFieldHTML("f-datastate-other", "State name", "received") : ""}
-        ${declared.length ? `<p class="muted" style="font-size:12px">These are the states
-          <b>${esc(known.name)}</b> declares in its lifecycle — <a href="#/data/m/${encodeURIComponent(known.modelId)}"
-          target="_blank" rel="noopener">open it ↗</a> to add one.</p>` : ""}
-        <label class="field checkbox"><input type="checkbox" id="f-collection" ${collection ? "checked" : ""}/> <span>Collection (a list of items)</span></label>
+        ${declared.length ? otherFieldHTML("f-datastate-other", tr("pnl.main.do.stateName"), "received") : ""}
+        ${declared.length ? `<p class="muted" style="font-size:12px">${tr("pnl.main.do.statesHint", {
+          name: esc(known.name), href: esc("#/data/m/" + encodeURIComponent(known.modelId)) })}</p>` : ""}
+        <label class="field checkbox"><input type="checkbox" id="f-collection" ${collection ? "checked" : ""}/> <span>${esc(tr("pnl.main.do.collection"))}</span></label>
         ${pointsTo}
-        <p class="muted" style="font-size:12px">The <b>Class</b> is what this datum is, from the application's information model under <b>Data</b> — BPMN's <code>itemSubjectRef</code>. It is what lets two processes agree that their <code>order</code> is the same kind of thing, and what a write to a member of this object is checked against. A data object carries a value <i>and</i> a <b>data state</b> — <code>order [received]</code> → <code>[approved]</code>. The state set here is where the object starts each instance; a <b>data output association</b> (an arrow from an activity to this object) advances it and writes its value, a <b>data input association</b> reads it back, and the full state history is recorded per instance and survives restart. The <b>Name</b> is how the engine identifies it.</p>`;
+        <p class="muted" style="font-size:12px">${tr("pnl.main.do.hint")}</p>`;
     }
 
     // A data association is the arrow between an activity and a data object — it is
@@ -9108,19 +9103,15 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // One row per <assignment>, and one empty row for an arrow that has none yet,
         // so the arrow that writes one member looks and edits as it always did.
         const rows = (bo.assignment && bo.assignment.length) ? bo.assignment : [{}];
-        const hints = `<p class="muted io-group-hint">When the activity completes it writes <b>${esc(dataRefName(bo.targetRef))}</b>: each write's <b>FEEL value</b> (over the instance's variables) goes into its <b>Target member</b>, and the object's data state advances to the one on the target reference. Leave <b>Target member</b> empty to write the whole object; set it (e.g. <code>name</code>) to update just that field and keep the rest. Several writes are applied <b>in order</b> and recorded as <b>one</b> change to the object, so one activity that fills in a whole record is one arrow and not one arrow per field.</p>
-          ${writes ? `<p class="muted io-group-hint">The members offered are the ones
-            <b>${esc(writes.name)}</b> declares — <a href="#/data/m/${encodeURIComponent(writes.modelId)}"
-            target="_blank" rel="noopener">open it ↗</a> to add one. They say what this object is
-            <i>shaped</i> like, which is a different thing from what a <b>FEEL value</b> above can
-            read: that expression sees the instance's <b>variables</b>, and a data object is not one
-            of them.</p>` : ""}`;
+        const hints = `<p class="muted io-group-hint">${tr("pnl.main.dw.hint", { name: esc(dataRefName(bo.targetRef)) })}</p>
+          ${writes ? `<p class="muted io-group-hint">${tr("pnl.main.dw.membersHint", {
+            name: esc(writes.name), href: esc("#/data/m/" + encodeURIComponent(writes.modelId)) })}</p>` : ""}`;
         html += dataWritesGroupHTML(writes, rows, dataRefName(bo.targetRef), hints);
       } else {
         html += `<h3 data-group="Reads data object">${esc(tr("bpmn.group.readsDataObject"))}</h3>
-          <label class="field"><span>Target variable</span><input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="order"/></label>
-          <label class="field"><span>Transform <span class="muted">(optional)</span></span><input type="text" id="f-assoc-from" value="${esc(fromBody)}" placeholder="=order.amount"/></label>
-          <p class="muted" style="font-size:12px">At activation this reads <b>${esc(dataRefName(bo.sourceRef))}</b> into the <b>Target variable</b>, so the activity's FEEL can use it. Leave <b>Transform</b> empty to copy the object's value; set it (the object is available under its name) to compute the value written into the variable.</p>`;
+          <label class="field"><span>${esc(tr("pnl.main.dr.target"))}</span><input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="order"/></label>
+          <label class="field"><span>${esc(tr("pnl.main.dr.transform"))} <span class="muted">(${esc(tr("pnl.main.optional"))})</span></span><input type="text" id="f-assoc-from" value="${esc(fromBody)}" placeholder="=order.amount"/></label>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.dr.hint", { name: esc(dataRefName(bo.sourceRef)) })}</p>`;
       }
     }
 
@@ -9129,7 +9120,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // A receive task waits for a correlating message, then continues (ADR-0102). It is
         // an activity, so it takes the shared message picker (the receive task holds its
         // messageRef directly, which messageRefHolder resolves for the field handlers).
-        html += messageFieldsHTML(modeler, bo, "The receive task waits until this message is published (or thrown) with a matching correlation key, then continues. Attach a timer boundary event for a wait-or-time-out.");
+        html += messageFieldsHTML(modeler, bo, tr("pnl.main.rt.hint"));
         html += multiInstanceHTML(bo); // wait for the message once per iteration
       } else if (bo.$type === "bpmn:SendTask") {
         // The single outbound element (ADR-0112): a kind picker chooses what it sends —
@@ -9149,13 +9140,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       } else if (isActivity(bo)) {
         const t = bo.$type;
         html += `
-          <label class="field"><span>Task type</span>
+          <label class="field"><span>${esc(tr("pnl.main.task.type"))}</span>
             <select id="f-tasktype">
-              <option value="bpmn:Task" ${t === "bpmn:Task" ? "selected" : ""}>Undefined task</option>
-              <option value="bpmn:ScriptTask" ${t === "bpmn:ScriptTask" ? "selected" : ""}>Script task (FEEL or a scripting language)</option>
-              <option value="bpmn:ServiceTask" ${t === "bpmn:ServiceTask" ? "selected" : ""}>Service task (job worker)</option>
-              <option value="bpmn:BusinessRuleTask" ${t === "bpmn:BusinessRuleTask" ? "selected" : ""}>Business rule task (DMN)</option>
-              <option value="bpmn:UserTask" ${t === "bpmn:UserTask" ? "selected" : ""}>User task</option>
+              <option value="bpmn:Task" ${t === "bpmn:Task" ? "selected" : ""}>${esc(tr("pnl.main.task.undefined"))}</option>
+              <option value="bpmn:ScriptTask" ${t === "bpmn:ScriptTask" ? "selected" : ""}>${esc(tr("pnl.main.task.script"))}</option>
+              <option value="bpmn:ServiceTask" ${t === "bpmn:ServiceTask" ? "selected" : ""}>${esc(tr("pnl.main.task.service"))}</option>
+              <option value="bpmn:BusinessRuleTask" ${t === "bpmn:BusinessRuleTask" ? "selected" : ""}>${esc(tr("pnl.main.task.businessRule"))}</option>
+              <option value="bpmn:UserTask" ${t === "bpmn:UserTask" ? "selected" : ""}>${esc(tr("pnl.main.task.user"))}</option>
             </select></label>`;
 
         if (t === "bpmn:ScriptTask") {
@@ -9165,7 +9156,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           // which the task carries; both are still bpmn:ScriptTask.
           const js = findExt(bo, "atlas:JobScript");
           const lang = js ? (js.language || "powershell") : "feel";
-          const opts = [`<option value="feel" ${lang === "feel" ? "selected" : ""}>FEEL (built-in, runs in the engine)</option>`]
+          const opts = [`<option value="feel" ${lang === "feel" ? "selected" : ""}>${esc(tr("pnl.main.script.feelOption"))}</option>`]
             .concat(Object.entries(JOB_LANGS).map(([k, v]) =>
               `<option value="${k}" ${lang === k ? "selected" : ""}>${v.label}</option>`));
           // FEEL is evaluated inline by the engine and creates no job, so it has no
@@ -9173,36 +9164,36 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           // itself or leaves for a worker — and it is offloaded by default, which this
           // panel never said (ADR-0183).
           html += `<h3 data-group="Script">${esc(tr("bpmn.group.script"))}</h3>
-            <label class="field"><span>Language${placementBadgeHTML(lang)}</span>
+            <label class="field"><span>${esc(tr("pnl.main.script.language"))}${placementBadgeHTML(lang)}</span>
               <select id="f-scriptlang">${opts.join("")}</select></label>
             ${placementNoticeHTML(lang, "script")}`;
           if (lang === "feel") {
             const s = findExt(bo, "zeebe:Script") || {};
             const exprText = (s.expression || "").replace(/^=\s*/, "");
-            html += `<label class="field"><span>Expression (FEEL)</span>
+            html += `<label class="field"><span>${esc(tr("pnl.main.script.expression"))}</span>
                 <textarea id="f-expr" rows="3" placeholder="amount * (1 + taxRate)">${esc(exprText)}</textarea></label>
-              <label class="field"><span>Result variable</span>
+              <label class="field"><span>${esc(tr("pnl.main.resultVar"))}</span>
                 <input type="text" id="f-result" value="${esc(s.resultVariable || "")}" placeholder="gross"/></label>`;
           } else {
             const meta = JOB_LANGS[lang] || JOB_LANGS.powershell;
-            html += `<label class="field"><span>Script (${meta.short})</span>
+            html += `<label class="field"><span>${esc(tr("pnl.main.script.script", { lang: meta.short }))}</span>
                 <textarea id="f-psbody" rows="6" spellcheck="false" placeholder='${meta.placeholder}'>${esc(js && js.source || "")}</textarea></label>
-              <label class="field"><span>Result variable</span>
+              <label class="field"><span>${esc(tr("pnl.main.resultVar"))}</span>
                 <input type="text" id="f-psresult" value="${esc((js && js.resultVariable) || "")}" placeholder="Greeting"/></label>
               <p class="muted" style="font-size:12px">${meta.hint}</p>
               <h3 data-group="Failure handling">${esc(tr("bpmn.group.failureHandling"))}</h3>
-              <label class="field"><span>Retries</span>
+              <label class="field"><span>${esc(tr("pnl.main.retries"))}</span>
                 <input type="number" id="f-psretries" min="1" step="1" value="${esc((js && js.retries) || "")}" placeholder="3"/></label>
               <p class="muted" style="font-size:12px">${RETRIES_FIELD.hint}</p>
               <div class="feel-test" data-run-lang="${lang}">
-                <label class="field"><span>Test — sample variables (JSON)</span>
+                <label class="field"><span>${esc(tr("pnl.main.script.testVars"))}</span>
                   <textarea class="ps-run-vars" rows="2" spellcheck="false" placeholder='{ "Vorname": "Anna" }'></textarea></label>
                 <div class="feel-test-row">
-                  <button type="button" class="btn neutral ps-run" title="Run this script against the sample variables">Run</button>
+                  <button type="button" class="btn neutral ps-run" title="${esc(tr("pnl.main.script.runTitle"))}">${esc(tr("pnl.main.script.run"))}</button>
                   <span class="feel-test-out ps-run-out" aria-live="polite"></span>
                 </div>
                 <pre class="ps-run-detail" hidden></pre>
-                <p class="muted" style="font-size:12px">Runs the script through the real interpreter with these variables — no deploy needed. The language's worker must be enabled on the server.</p>
+                <p class="muted" style="font-size:12px">${tr("pnl.main.script.runHint")}</p>
               </div>`;
           }
         } else if (t === "bpmn:ServiceTask") {
@@ -9226,10 +9217,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           // worker. The badge and notice below answer that from the server instead.
           const brtKind = mode === "connector" ? "temis" : "dmn";
           html += `<h3 data-group="Called decision (DMN)">${esc(tr("bpmn.group.calledDecision"))}</h3>
-            <label class="field"><span>Evaluation${placementBadgeHTML(brtKind)}</span>
+            <label class="field"><span>${esc(tr("pnl.main.brt.evaluation"))}${placementBadgeHTML(brtKind)}</span>
               <select id="f-brt-mode">
-                <option value="local" ${mode === "local" ? "selected" : ""}>Embedded DMN — a decision deployed here</option>
-                <option value="connector" ${mode === "connector" ? "selected" : ""}>External (temis worker)</option>
+                <option value="local" ${mode === "local" ? "selected" : ""}>${esc(tr("pnl.main.brt.embedded"))}</option>
+                <option value="connector" ${mode === "connector" ? "selected" : ""}>${esc(tr("pnl.main.brt.external"))}</option>
               </select></label>
             ${placementNoticeHTML(brtKind, brtKind)}`;
           if (mode === "connector") {
@@ -9239,7 +9230,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             // where it is — it belongs to the Evaluation field it sits under, and it is
             // one paragraph rather than a screen.
             html += workerTypeInfoHTML("temis", true, null);
-            html += `<label class="field"><span>Worker</span>
+            html += `<label class="field"><span>${esc(tr("pnl.main.worker"))}</span>
               <input type="text" id="f-connector" list="dl-connector" autocomplete="off" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/>
               <datalist id="dl-connector"></datalist></label>
               <p class="muted" id="nt-connector" style="font-size:12px"></p>`;
@@ -9256,32 +9247,32 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             : "latest";
           const unknownBinding = !["latest", "version", "deployment"].includes(binding);
           const bindingField = mode === "local" ? `
-            <label class="field"><span>Binding</span>
+            <label class="field"><span>${esc(tr("pnl.main.binding"))}</span>
               <select id="f-brt-binding">
-                <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest version when the task runs</option>
-                <option value="version" ${binding === "version" ? "selected" : ""}>Version — a deployed version you choose</option>
-                <option value="deployment" ${binding === "deployment" ? "selected" : ""}>Deployment — the model deployed with this process</option>
-                ${unknownBinding ? `<option value="${esc(binding)}" selected>${esc(binding)} — not supported, the deploy refuses it</option>` : ""}
+                <option value="latest" ${binding === "latest" ? "selected" : ""}>${esc(tr("pnl.main.brt.latest"))}</option>
+                <option value="version" ${binding === "version" ? "selected" : ""}>${esc(tr("pnl.main.brt.version"))}</option>
+                <option value="deployment" ${binding === "deployment" ? "selected" : ""}>${esc(tr("pnl.main.brt.deployment"))}</option>
+                ${unknownBinding ? `<option value="${esc(binding)}" selected>${esc(binding)} — ${esc(tr("pnl.main.brt.unsupported"))}</option>` : ""}
               </select></label>
-            <label class="field" id="f-brt-version-wrap"${binding === "version" ? "" : " hidden"}><span>Version</span>
-              <select id="f-brt-version"><option value="${esc(pinnedVersion)}">${pinnedVersion ? "v" + esc(pinnedVersion) : "— choose a deployed version —"}</option></select></label>` : "";
-          html += `<label class="field"><span>Decision</span>
-              <select id="f-decision-pick"><option value="">${cd.decisionId ? esc(cd.decisionId) + " (current)" : "— choose a decision —"}</option></select></label>
+            <label class="field" id="f-brt-version-wrap"${binding === "version" ? "" : " hidden"}><span>${esc(tr("pnl.main.brt.versionLabel"))}</span>
+              <select id="f-brt-version"><option value="${esc(pinnedVersion)}">${pinnedVersion ? "v" + esc(pinnedVersion) : esc(tr("pnl.main.brt.chooseVersion"))}</option></select></label>` : "";
+          html += `<label class="field"><span>${esc(tr("pnl.main.brt.decision"))}</span>
+              <select id="f-decision-pick"><option value="">${cd.decisionId ? esc(tr("pnl.main.brt.current", { id: cd.decisionId })) : esc(tr("pnl.main.brt.chooseDecision"))}</option></select></label>
             <div style="display:flex; gap:8px; margin:-4px 0 6px">
-              <button type="button" class="btn ghost" id="f-dmn-new" title="Create a new decision">＋ New decision</button>
-              <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"} title="Edit the selected decision">Edit</button>
+              <button type="button" class="btn ghost" id="f-dmn-new" title="${esc(tr("pnl.main.brt.newTitle"))}">${esc(tr("pnl.main.brt.new"))}</button>
+              <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"} title="${esc(tr("pnl.main.brt.editTitle"))}">${esc(tr("common.edit"))}</button>
             </div>
-            <label class="field"><span>Decision ID <span class="field-derived">derived</span></span>
-              <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="pick a decision above" readonly title="Set by the decision picked above — no need to type it"/></label>
-            <label class="field"><span>Result variable</span>
+            <label class="field"><span>${esc(tr("pnl.main.brt.decisionId"))} <span class="field-derived">${esc(tr("pnl.main.brt.derived"))}</span></span>
+              <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="${esc(tr("pnl.main.brt.decisionIdPlaceholder"))}" readonly title="${esc(tr("pnl.main.brt.decisionIdTitle"))}"/></label>
+            <label class="field"><span>${esc(tr("pnl.main.resultVar"))}</span>
               <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>${bindingField}
-            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its id, inputs and result variable. <b>Latest</b> evaluates the newest deployed version each time the task runs, so a newly deployed version takes effect without redeploying the process. <b>Version</b> evaluates the version you choose, whatever is deployed after it; it is an atlas setting, and Camunda ignores it and runs the newest. <b>Deployment</b> evaluates the model deployed together with this process.</p>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.brt.hint")}</p>
             <h3 data-group="Failure handling">${esc(tr("bpmn.group.failureHandling"))}</h3>
-            <label class="field"><span>Retries</span>
+            <label class="field"><span>${esc(tr("pnl.main.retries"))}</span>
               <input type="number" id="f-brt-retries" min="1" step="1" value="${esc(cd.retries || "")}" placeholder="3"/></label>
             <p class="muted" style="font-size:12px">${RETRIES_FIELD.hint}</p>
             <h3 data-group="Decision inputs">${esc(tr("bpmn.group.decisionInputs"))}</h3>
-            <p class="muted" style="font-size:12px">Each row feeds one decision input. Pick a variable from the list or type any FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.brt.inputsHint")}</p>
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>
             <div id="dmn-inputs-drift" class="dmn-drift" hidden></div>
             <datalist id="dmn-vars-dl">${varOpts}</datalist>
@@ -9293,26 +9284,24 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
           html += `<h3 data-group="Form">${esc(tr("bpmn.group.form"))}</h3>
-            <label class="field"><span>Linked form</span>
+            <label class="field"><span>${esc(tr("pnl.main.linkedForm"))}</span>
               <select id="f-form">
-                <option value="">— none —</option>
+                <option value="">${esc(tr("pnl.main.none"))}</option>
                 ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
               </select></label>
             ${formDoorsHTML(newFormHref(bo, true, projectId))}
-            <p class="muted" style="font-size:12px">The form the Tasks app renders for this task, submitted as its variables.
-              <b>＋ New form</b> creates one; coming back to the draft links it to this task.</p>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.ut.formHint")}</p>
             <h3 data-group="Assignment">${esc(tr("bpmn.group.assignment"))}</h3>
-            <label class="field"><span>Assignee</span>
+            <label class="field"><span>${esc(tr("pnl.main.ut.assignee"))}</span>
               <textarea id="f-assignee" rows="1" spellcheck="false" placeholder="editor">${esc(a.assignee || "")}</textarea></label>
-            <label class="field"><span>Candidate groups</span>
+            <label class="field"><span>${esc(tr("pnl.main.ut.candidateGroups"))}</span>
               <textarea id="f-groups" rows="1" spellcheck="false" placeholder="reviewers">${esc(a.candidateGroups || "")}</textarea></label>
             <h3 data-group="Schedule">${esc(tr("bpmn.group.schedule"))}</h3>
-            <label class="field"><span>Priority</span>
+            <label class="field"><span>${esc(tr("pnl.main.ut.priority"))}</span>
               <input type="number" id="f-priority" min="0" max="100" value="${esc(pr.priority || "50")}" placeholder="50"/></label>
-            <label class="field"><span>Due in</span>
+            <label class="field"><span>${esc(tr("pnl.main.ut.due"))}</span>
               <textarea id="f-due" rows="1" spellcheck="false" placeholder="P2D, PT4H, PT30M">${esc(sch.dueDate || "")}</textarea></label>
-            <p class="muted" style="font-size:12px">An ISO-8601 duration measured from when the task appears
-              (e.g. <b>P2D</b> = 2 days, <b>PT4H</b> = 4 hours). Leave blank for no due date. Priority 0–100; higher sorts first.</p>`;
+            <p class="muted" style="font-size:12px">${tr("pnl.main.ut.dueHint")}</p>`;
         }
         // What this activity is to the agent, when it sits in an agent-driven ad-hoc
         // (ADR-0253). Empty everywhere else.
@@ -9343,7 +9332,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // subprocess is not a task. Input mappings write a variable into the
         // subprocess scope on entry (its inner elements see it, up the chain); output
         // mappings promote selected values to the enclosing scope on completion.
-        html += `<p class="muted" style="font-size:12px">Pass variables in and out of this subprocess. <b>Input mappings</b> create variables its inner elements see (its local scope); <b>output mappings</b> promote selected values back to the enclosing scope when it completes.</p>`;
+        html += `<p class="muted" style="font-size:12px">${tr("pnl.main.sub.hint")}</p>`;
         html += agentToolHTML(bo); // a subprocess can be an agent's tool too (ADR-0253)
         html += ioMappingsHTML(bo);
         html += multiInstanceHTML(bo); // ADR-0077: run this subprocess once per collection element
@@ -9362,43 +9351,43 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const cancelRemaining = bo.cancelRemainingInstances !== false;
         const ac = agentConnectorOf(bo);
         html += `<h3 data-group="Ad-hoc subprocess">${esc(tr("bpmn.group.adHoc"))}</h3>
-          <label class="field"><span>What starts its activities${ac ? placementBadgeHTML("agent") : ""}</span>
+          <label class="field"><span>${esc(tr("pnl.main.adhoc.starts"))}${ac ? placementBadgeHTML("agent") : ""}</span>
             <select id="f-adhocmode">
-              <option value="all" ${ac ? "" : "selected"}>All at once — every unconnected activity starts on entry</option>
-              <option value="agent" ${ac ? "selected" : ""}>An agent decides — it picks which to run, round by round</option>
+              <option value="all" ${ac ? "" : "selected"}>${esc(tr("pnl.main.adhoc.all"))}</option>
+              <option value="agent" ${ac ? "selected" : ""}>${esc(tr("pnl.main.adhoc.agent"))}</option>
             </select></label>`;
         if (!ac) {
-          html += `<p class="muted" style="font-size:12px">Its contained activities are <b>not</b> connected by sequence flows: every activity with no incoming flow starts <b>at once</b> when the subprocess is entered, and runs independently. Use it for flexible, case-management work. With no completion condition below, it finishes when all of them are done.</p>`;
+          html += `<p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.allHint")}</p>`;
         } else {
-          html += `<p class="muted" style="font-size:12px">Entry starts <b>nothing</b>. Each round, the agent is offered the contained activities that no sequence flow leads to — those are its <b>tools</b> — and it either calls some of them or answers and finishes. What it may reach is this diagram and nothing else, which is what makes an agent's reach reviewable.</p>
+          html += `<p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.agentHint")}</p>
             <h3 data-group="Agent">${esc(tr("bpmn.group.agent"))}</h3>
-            <label class="field"><span>Worker</span>
+            <label class="field"><span>${esc(tr("pnl.main.worker"))}</span>
               <input type="text" id="f-agent-connector" list="dl-agent-connector" autocomplete="off" value="${esc(ac.connector || "")}" placeholder="anthropic_pb"/>
               <datalist id="dl-agent-connector"></datalist></label>
             <p class="muted" id="nt-agent-connector" style="font-size:12px"></p>
-            <label class="field"><span>Model</span>
-              <input type="text" id="f-agent-model" value="${esc(ac.model || "")}" placeholder="leave empty for the Worker's own model"/></label>
-            <p class="muted" style="font-size:12px">The Worker holding the model endpoint and its credential — neither travels in the model (<b>General → Documentation</b> on this subprocess is the agent's <b>goal</b>: the sentence the model reads to know what it is here for). <b>Model</b> is which language model it asks, by the provider's own id; leave it empty and whatever that Worker is configured for runs.</p>
-            <label class="field"><span>May read</span>
+            <label class="field"><span>${esc(tr("pnl.main.adhoc.model"))}</span>
+              <input type="text" id="f-agent-model" value="${esc(ac.model || "")}" placeholder="${esc(tr("pnl.main.adhoc.modelPlaceholder"))}"/></label>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.workerHint")}</p>
+            <label class="field"><span>${esc(tr("pnl.main.adhoc.mayRead"))}</span>
               <input type="text" id="f-agent-context" value="${esc(ac.context || "")}" placeholder="dossier, kunde"/></label>
-            <p class="muted" style="font-size:12px">The variables this agent is given, by name, comma-separated. What an agent may <b>reach</b> is the diagram; what it may <b>read</b> is this list — so a reviewer sees both on the element. A name the instance does not carry is sent as <code>(not set)</code>, so the agent says so rather than inventing a value. Leave it empty and the agent knows only its goal, its tools, and what its own calls returned — which is a real design when its tools fetch what it needs.</p>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.readHint")}</p>
             <h3 data-group="Tool results">${esc(tr("bpmn.group.toolResults"))}</h3>
-            <label class="field"><span>Collect results into</span>
+            <label class="field"><span>${esc(tr("pnl.main.adhoc.collectInto"))}</span>
               <input type="text" id="f-agent-resultcoll" value="${esc(ac.resultCollection || "")}" placeholder="toolCallResults"/></label>
-            <label class="field"><span>What to collect (FEEL)</span>
+            <label class="field"><span>${esc(tr("pnl.main.adhoc.collectWhat"))}</span>
               <textarea id="f-agent-resultelem" rows="1" spellcheck="false" placeholder="toolCallResult">${esc((ac.resultElement || "").replace(/^=\s*/, ""))}</textarea></label>
-            <p class="muted" style="font-size:12px">After each tool call finishes, this expression is evaluated in that activity's scope and appended to the collection. The next round is given what came back — it is the agent's memory of its own run, and the reason a round can build on the one before it. Leave both empty and the agent sees nothing of what its calls returned.</p>`;
+            <p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.collectHint")}</p>`;
         }
         html += `<h3 data-group="Completion condition (FEEL)">${esc(tr("bpmn.group.completionCondition"))}</h3>
-          <label class="field"><span>Expression</span>
+          <label class="field"><span>${esc(tr("pnl.main.expression"))}</span>
             <textarea id="f-adhoccond" rows="2" placeholder="approvals >= 2">${esc((bo.completionCondition && bo.completionCondition.body || "").replace(/^=\s*/, ""))}</textarea></label>
-          <p class="muted" style="font-size:12px">Re-evaluated each time a contained activity completes. The first time it is true the subprocess finishes. Leave empty to finish only when every contained activity is done.</p>`;
-        html += `<label class="field"><span>When it completes</span>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.condHint")}</p>`;
+        html += `<label class="field"><span>${esc(tr("pnl.main.adhoc.whenCompletes"))}</span>
             <select id="f-adhoccancel">
-              <option value="true" ${cancelRemaining ? "selected" : ""}>Cancel the activities still running</option>
-              <option value="false" ${cancelRemaining ? "" : "selected"}>Let them finish first</option>
+              <option value="true" ${cancelRemaining ? "selected" : ""}>${esc(tr("pnl.main.adhoc.cancelRunning"))}</option>
+              <option value="false" ${cancelRemaining ? "" : "selected"}>${esc(tr("pnl.main.adhoc.letFinish"))}</option>
             </select></label>
-          <p class="muted" style="font-size:12px">Applies when the completion condition becomes true while other contained activities are still running.</p>`;
+          <p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.cancelHint")}</p>`;
         html += ioMappingsHTML(bo);
       } else if (bo.$type === "bpmn:CallActivity") {
         // A call activity invokes a *separate* deployed process as a child instance
@@ -9411,35 +9400,35 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const propParent = ce.propagateAllParentVariables !== false; // default true (Zeebe)
         const propChild = ce.propagateAllChildVariables !== false;   // default true (Zeebe)
         html += `<h3 data-group="Called process">${esc(tr("bpmn.group.calledProcess"))}</h3>
-          <label class="field"><span>Process ID</span>
+          <label class="field"><span>${esc(tr("pnl.main.processId"))}</span>
             <input type="text" id="f-call-processid" list="f-call-proc-list" autocomplete="off" value="${esc(ce.processId || "")}" placeholder="pruefe-auftrag"/>
             <datalist id="f-call-proc-list"></datalist></label>
           <div class="field-actions">
-            <button type="button" class="btn ghost small" id="f-call-open" title="Open the called process — its draft, or the newest deployed version. On the diagram, double-click the shape's ＋ (ADR-0076).">&#8627; Open called process</button>
-            <button type="button" class="btn ghost small" id="f-call-newproc" title="Create a new process for this call activity to call">&#43; Create new process</button>
+            <button type="button" class="btn ghost small" id="f-call-open" title="${esc(tr("pnl.main.call.openTitle"))}">&#8627; ${esc(tr("pnl.main.call.open"))}</button>
+            <button type="button" class="btn ghost small" id="f-call-newproc" title="${esc(tr("pnl.main.call.newProcTitle"))}">&#43; ${esc(tr("pnl.main.call.newProc"))}</button>
           </div>
-          <label class="field"><span>Binding</span>
+          <label class="field"><span>${esc(tr("pnl.main.binding"))}</span>
             <select id="f-call-binding">
-              <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest deployed version</option>
-              <option value="deployment" ${binding === "deployment" ? "selected" : ""}>Deployment — pinned to this deploy</option>
+              <option value="latest" ${binding === "latest" ? "selected" : ""}>${esc(tr("pnl.main.call.latest"))}</option>
+              <option value="deployment" ${binding === "deployment" ? "selected" : ""}>${esc(tr("pnl.main.call.deployment"))}</option>
             </select></label>
-          <p class="muted" style="font-size:12px">Starts the process with this <b>id</b> as a child instance and waits for it to finish. <b>Latest</b> calls the newest deployed version; <b>Deployment</b> pins to the version deployed alongside this one.</p>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.call.hint")}</p>
           <h3 data-group="Variables">${esc(tr("bpmn.group.variables"))}</h3>
-          <label class="field checkbox"><input type="checkbox" id="f-call-prop-parent" ${propParent ? "checked" : ""}/> <span>Pass all caller variables in</span></label>
-          <label class="field checkbox"><input type="checkbox" id="f-call-prop-child" ${propChild ? "checked" : ""}/> <span>Return all child variables out</span></label>
-          <p class="muted" style="font-size:12px">With a box <b>unchecked</b>, only the matching mappings below cross that direction — the child sees only what you map in, or the caller gets back only what you map out (isolation).</p>`;
+          <label class="field checkbox"><input type="checkbox" id="f-call-prop-parent" ${propParent ? "checked" : ""}/> <span>${esc(tr("pnl.main.call.propParent"))}</span></label>
+          <label class="field checkbox"><input type="checkbox" id="f-call-prop-child" ${propChild ? "checked" : ""}/> <span>${esc(tr("pnl.main.call.propChild"))}</span></label>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.call.propHint")}</p>`;
         html += agentToolHTML(bo); // a call activity can be an agent's tool too (ADR-0253)
         html += ioMappingsHTML(bo);
         html += multiInstanceHTML(bo); // ADR-0077: call the process once per collection element
       } else if (isDefaultFlow) {
         html += `<h3 data-group="Condition (FEEL)">${esc(tr("bpmn.group.conditionFeel"))}</h3>
-          <p class="muted" style="font-size:12px">This is the gateway's <b>default flow</b> — taken when no other branch's condition matches, so it carries no condition of its own.</p>`;
+          <p class="muted" style="font-size:12px">${tr("pnl.main.flow.defaultHint")}</p>`;
       } else if (isGatewayFlow) {
         const condText = ((bo.conditionExpression && bo.conditionExpression.body) || "").replace(/^=\s*/, "");
         html += `<h3 data-group="Condition (FEEL)">${esc(tr("bpmn.group.conditionFeel"))}</h3>
-          <label class="field"><span>Expression</span>
+          <label class="field"><span>${esc(tr("pnl.main.expression"))}</span>
             <textarea id="f-cond" rows="2" placeholder="amount > 100">${esc(condText)}</textarea></label>
-          <p class="muted" style="font-size:12px">Evaluated when the token reaches the gateway; the first branch whose condition holds is taken.</p>`;
+          <p class="muted" style="font-size:12px">${tr("pnl.main.flow.condHint")}</p>`;
       } else if (bo.$type === "bpmn:IntermediateCatchEvent") {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
@@ -9447,19 +9436,17 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const link = linkDefOf(bo);
         const cond = conditionalDefOf(bo);
         if (timer) {
-          html += timerFieldsHTML(timer, ["duration", "date"], `The event waits, then continues (ADR-0054).
-            <b>Duration</b> waits that long (<b>PT30S</b>, <b>PT5M</b>, <b>P1DT2H</b>); <b>Date &amp; time</b> waits until that instant.
-            A catch fires once, so it has no cycle.`);
+          html += timerFieldsHTML(timer, ["duration", "date"], tr("pnl.main.ice.timer"));
         } else if (msg) {
-          html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
+          html += messageFieldsHTML(modeler, msg, tr("pnl.main.ice.msg"));
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).", true);
+          html += signalFieldsHTML(modeler, sig, tr("pnl.main.ice.sig"), true);
         } else if (link) {
-          html += linkFieldsHTML(link, "This is the landing point of a <b>link throw</b> with the same name in the same scope (an off-page connector). It does not wait — a token arriving via the link flows straight on. Draw it with no incoming sequence flow.");
+          html += linkFieldsHTML(link, tr("pnl.main.ice.link"));
         } else if (cond) {
-          html += conditionalFieldsHTML(cond, "The event waits until this boolean condition over the instance's variables becomes true — re-evaluated on every variable change — then continues. If it already holds when the token arrives, it passes straight through.");
+          html += conditionalFieldsHTML(cond, tr("pnl.main.ice.cond"));
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Conditional</b>, or <b>Link</b> intermediate catch event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">${tr("pnl.main.ice.none")}</p>`;
         }
       } else if (bo.$type === "bpmn:IntermediateThrowEvent") {
         const msg = messageDefOf(bo);
@@ -9467,15 +9454,15 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const escl = escalationDefOf(bo);
         const link = linkDefOf(bo);
         if (msg) {
-          html += messageFieldsHTML(modeler, msg, "On reaching this event the message is published; any instance waiting on it with a matching correlation key continues.");
+          html += messageFieldsHTML(modeler, msg, tr("pnl.main.ite.msg"));
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.", false);
+          html += signalFieldsHTML(modeler, sig, tr("pnl.main.ite.sig"), false);
         } else if (escl) {
-          html += escalationFieldsHTML(modeler, escl, "On reaching this event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, and the token then continues on its outgoing flow (unless an interrupting catch aborts it). Uncaught, it is harmless.");
+          html += escalationFieldsHTML(modeler, escl, tr("pnl.main.ite.esc"));
         } else if (link) {
-          html += linkFieldsHTML(link, "On reaching this event the token jumps to the <b>link catch</b> with the same name in the same scope — an off-page connector / goto, in place of a sequence flow. Draw it with no outgoing sequence flow; deploy fails if no matching link catch exists.");
+          html += linkFieldsHTML(link, tr("pnl.main.ite.link"));
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, <b>Escalation</b>, or <b>Link</b> throw event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">${tr("pnl.main.ite.none")}</p>`;
         }
       } else if (bo.$type === "bpmn:BoundaryEvent") {
         // A boundary event is attached to an activity and arms while it runs. Its
@@ -9492,40 +9479,39 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (err) {
           // An error boundary is always interrupting — no cancelActivity toggle (ADR-0089).
           html += `<h3 data-group="Behaviour">${esc(tr("bpmn.group.behaviour"))}</h3>
-            <p class="muted" style="font-size:12px">An <b>error boundary</b> is always <b>interrupting</b>: a matching thrown error cancels the attached activity (and its job) and routes the token out this event.</p>`;
-          html += errorFieldsHTML(modeler, err, "The event fires when the attached activity throws a matching error — an error end event inside it, a worker failing its job to the code, or an error propagating up from a called process.");
+            <p class="muted" style="font-size:12px">${tr("pnl.main.bnd.errBehaviour")}</p>`;
+          html += errorFieldsHTML(modeler, err, tr("pnl.main.bnd.err"));
         } else if (cancel) {
           // A cancel boundary may attach only to a transaction and is always interrupting — no
           // cancelActivity toggle and no trigger fields (ADR-0108).
           html += `<h3 data-group="Behaviour">${esc(tr("bpmn.group.behaviour"))}</h3>
-            <p class="muted" style="font-size:12px">A <b>cancel boundary</b> attaches only to a <b>transaction</b> and is always <b>interrupting</b>: when a cancel end event inside the transaction fires, its completed activities are compensated (in reverse order) and the token is then routed out this event. Draw it on a transaction subprocess.</p>`;
+            <p class="muted" style="font-size:12px">${tr("pnl.main.bnd.cancel")}</p>`;
         } else {
           const interrupting = bo.cancelActivity !== false;
           html += `<h3 data-group="Behaviour">${esc(tr("bpmn.group.behaviour"))}</h3>
-            <label class="field"><span>On trigger</span>
+            <label class="field"><span>${esc(tr("pnl.main.onTrigger"))}</span>
               <select id="f-cancelactivity">
-                <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the activity</option>
-                <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
+                <option value="true" ${interrupting ? "selected" : ""}>${esc(tr("pnl.main.bnd.interrupting"))}</option>
+                <option value="false" ${interrupting ? "" : "selected"}>${esc(tr("pnl.main.nonInterrupting"))}</option>
               </select></label>
-            <p class="muted" style="font-size:12px">Interrupting cancels the attached activity (and its job) and routes the token out this event; non-interrupting spawns a parallel token and lets the activity continue.</p>`;
+            <p class="muted" style="font-size:12px">${tr("pnl.main.bnd.behaviourHint")}</p>`;
           if (timer) {
             const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
             const cycleNote = interrupting
-              ? "An interrupting boundary fires once, so it has no cycle."
-              : "A non-interrupting boundary may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R/PT1H</b>) or cron (<b>0 * * * *</b>) — firing a fresh token each time.";
-            html += timerFieldsHTML(timer, kinds, `The event fires relative to the activity (ADR-0054).
-              <b>Duration</b> fires that long after it starts (<b>PT30S</b>, <b>PT5M</b>); <b>Date &amp; time</b> at a fixed instant.
+              ? tr("pnl.main.bnd.cycleOnce")
+              : tr("pnl.main.bnd.cycle");
+            html += timerFieldsHTML(timer, kinds, `${tr("pnl.main.bnd.timer")}
               ${cycleNote}`);
           } else if (msg) {
-            html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
+            html += messageFieldsHTML(modeler, msg, tr("pnl.main.bnd.msg"));
           } else if (sig) {
-            html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.", true);
+            html += signalFieldsHTML(modeler, sig, tr("pnl.main.bnd.sig"), true);
           } else if (escl) {
-            html += escalationFieldsHTML(modeler, escl, "The event fires when the attached activity raises a matching escalation — an escalation throw/end event inside it, or one propagating up from a called process. Interrupting cancels the activity and routes out this event; non-interrupting runs the handler while the activity keeps going.");
+            html += escalationFieldsHTML(modeler, escl, tr("pnl.main.bnd.esc"));
           } else if (cond) {
-            html += conditionalFieldsHTML(cond, "The event fires while the activity runs, when this boolean condition over the instance's variables becomes true — re-evaluated on every variable change. Interrupting cancels the activity and routes out this event; non-interrupting runs the handler once while the activity keeps going.");
+            html += conditionalFieldsHTML(cond, tr("pnl.main.bnd.cond"));
           } else {
-            html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Error</b>, <b>Escalation</b>, or <b>Conditional</b> boundary event, then configure its trigger here.</p>`;
+            html += `<p class="muted" style="font-size:12px">${tr("pnl.main.bnd.none")}</p>`;
           }
         }
       } else if (bo.$type === "bpmn:StartEvent" && isEventSubStart(element)) {
@@ -9542,35 +9528,34 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (err) {
           // An error event subprocess is always interrupting — no toggle (ADR-0089).
           html += `<h3 data-group="Event subprocess trigger">${esc(tr("bpmn.group.eventSubTrigger"))}</h3>
-            <p class="muted" style="font-size:12px">An <b>error event subprocess</b> is always <b>interrupting</b>: a matching thrown error terminates the enclosing scope's other work, then runs this handler.</p>`;
-          html += errorFieldsHTML(modeler, err, "The event subprocess fires when its enclosing scope throws a matching error, terminating the scope's other work and running this handler.");
+            <p class="muted" style="font-size:12px">${tr("pnl.main.esp.errBehaviour")}</p>`;
+          html += errorFieldsHTML(modeler, err, tr("pnl.main.esp.err"));
         } else {
           const interrupting = bo.isInterrupting !== false;
           html += `<h3 data-group="Event subprocess trigger">${esc(tr("bpmn.group.eventSubTrigger"))}</h3>
-            <label class="field"><span>On trigger</span>
+            <label class="field"><span>${esc(tr("pnl.main.onTrigger"))}</span>
               <select id="f-interrupting">
-                <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the enclosing scope</option>
-                <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
+                <option value="true" ${interrupting ? "selected" : ""}>${esc(tr("pnl.main.esp.interrupting"))}</option>
+                <option value="false" ${interrupting ? "" : "selected"}>${esc(tr("pnl.main.nonInterrupting"))}</option>
               </select></label>
-            <p class="muted" style="font-size:12px">This start event triggers the event subprocess while its enclosing scope (the process or subprocess) runs. <b>Interrupting</b> terminates the scope's other work, then runs this handler; <b>non-interrupting</b> runs it in parallel and can fire again.</p>`;
+            <p class="muted" style="font-size:12px">${tr("pnl.main.esp.behaviourHint")}</p>`;
           if (timer) {
             const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
             const cycleNote = interrupting
-              ? "An interrupting timer fires once, so it has no cycle."
-              : "A non-interrupting timer may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R3/PT1H</b>) or cron (<b>0 * * * *</b>) — firing the handler each time.";
-            html += timerFieldsHTML(timer, kinds, `The event subprocess fires on this schedule while its scope runs (ADR-0082).
-              <b>Duration</b> fires that long after the scope is entered; <b>Date &amp; time</b> at a fixed instant.
+              ? tr("pnl.main.esp.cycleOnce")
+              : tr("pnl.main.esp.cycle");
+            html += timerFieldsHTML(timer, kinds, `${tr("pnl.main.esp.timer")}
               ${cycleNote}`);
           } else if (msg) {
-            html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
+            html += messageFieldsHTML(modeler, msg, tr("pnl.main.esp.msg"));
           } else if (sig) {
-            html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.", true);
+            html += signalFieldsHTML(modeler, sig, tr("pnl.main.esp.sig"), true);
           } else if (escl) {
-            html += escalationFieldsHTML(modeler, escl, "The event subprocess fires when its enclosing scope raises a matching escalation. Interrupting terminates the scope's other work first; non-interrupting runs this handler alongside the still-running scope.");
+            html += escalationFieldsHTML(modeler, escl, tr("pnl.main.esp.esc"));
           } else if (cond) {
-            html += conditionalFieldsHTML(cond, "The event subprocess fires when this boolean condition over the scope's variables becomes true — re-evaluated on every variable change. Interrupting terminates the scope's other work first; non-interrupting runs this handler once alongside the still-running scope.");
+            html += conditionalFieldsHTML(cond, tr("pnl.main.esp.cond"));
           } else {
-            html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Error</b>, <b>Escalation</b>, or <b>Conditional</b> trigger, then configure it here.</p>`;
+            html += `<p class="muted" style="font-size:12px">${tr("pnl.main.esp.none")}</p>`;
           }
         }
       } else if (bo.$type === "bpmn:StartEvent") {
@@ -9578,31 +9563,28 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
         if (timer) {
-          html += timerFieldsHTML(timer, ["duration", "date", "cycle"], `A timer start event fires on this schedule with no incoming token (ADR-0051).
-            <b>Duration</b> and <b>Date &amp; time</b> fire once — that long after deploy, or at that instant;
-            <b>Cycle</b> recurs, either an ISO-8601 repeating interval (<b>R/PT1H</b>, <b>R3/P1D</b>) or a cron expression (<b>0 * * * *</b>).`, { constant: true });
+          html += timerFieldsHTML(timer, ["duration", "date", "cycle"], tr("pnl.main.start.timer"), { constant: true });
         } else if (msg) {
-          html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
+          html += messageFieldsHTML(modeler, msg, tr("pnl.main.start.msg"));
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "A signal start event: broadcasting this signal starts a new instance of this process, matched by signal name. One broadcast starts every deployed process with a matching signal start.", true);
+          html += signalFieldsHTML(modeler, sig, tr("pnl.main.start.sig"), true);
         } else {
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
           html += `<h3 data-group="Start form">${esc(tr("bpmn.group.startForm"))}</h3>
-            <label class="field"><span>Linked form</span>
+            <label class="field"><span>${esc(tr("pnl.main.linkedForm"))}</span>
               <select id="f-form">
-                <option value="">— none —</option>
+                <option value="">${esc(tr("pnl.main.none"))}</option>
                 ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
               </select></label>
             ${formDoorsHTML(newFormHref(bo, false, projectId))}
-            <p class="muted" style="font-size:12px">Shown before the process starts — from the Tasks app's <b>Start</b> view — its data becomes the instance's start variables.
-              <b>＋ New form</b> creates one; coming back to the draft links it to this start event.</p>
-            <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> start event instead.</p>`;
+            <p class="muted" style="font-size:12px">${tr("pnl.main.start.formHint")}</p>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.start.plain")}</p>`;
         }
       } else if (bo.$type === "bpmn:EventBasedGateway") {
         // A deferred choice: no configuration of its own — the branches are the
         // catch events it points at (ADR-0110).
-        html += `<p class="muted" style="font-size:12px">An <b>event-based gateway</b> is a <b>deferred choice</b>: reaching it arms every branch's catch event at once (each outgoing flow must lead to a <b>message</b>, <b>timer</b>, or <b>signal</b> intermediate catch event), and the branch whose event fires <b>first</b> is taken — the others are cancelled. The classic use is a request with a timeout (a message catch raced against a timer catch).</p>`;
+        html += `<p class="muted" style="font-size:12px">${tr("pnl.main.ebg.hint")}</p>`;
       } else if (bo.$type === "bpmn:EndEvent") {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
@@ -9610,33 +9592,33 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const escl = escalationDefOf(bo);
         const cancel = cancelDefOf(bo);
         if (msg) {
-          html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
+          html += messageFieldsHTML(modeler, msg, tr("pnl.main.end.msg"));
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.", false);
+          html += signalFieldsHTML(modeler, sig, tr("pnl.main.end.sig"), false);
         } else if (err) {
-          html += errorFieldsHTML(modeler, err, "On reaching this end event the error is thrown, aborting its scope and propagating up to the nearest matching error boundary or error event subprocess. Uncaught, it raises an incident.");
+          html += errorFieldsHTML(modeler, err, tr("pnl.main.end.err"));
         } else if (escl) {
-          html += escalationFieldsHTML(modeler, escl, "On reaching this end event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, then this path ends. Unlike an error end, a matching catch may be non-interrupting, and an uncaught escalation is harmless (no incident).");
+          html += escalationFieldsHTML(modeler, escl, tr("pnl.main.end.esc"));
         } else if (cancel) {
           // A cancel end event is only meaningful inside a transaction (ADR-0108).
-          html += `<p class="muted" style="font-size:12px">A <b>cancel end event</b> cancels its enclosing <b>transaction</b>: its completed activities are compensated (in reverse order), then the token is routed out the transaction's <b>cancel boundary</b>. Use it only inside a transaction subprocess.</p>`;
+          html += `<p class="muted" style="font-size:12px">${tr("pnl.main.end.cancel")}</p>`;
         } else {
-          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, <b>Error</b>, or <b>Escalation</b> end event.</p>`;
+          html += `<p class="muted" style="font-size:12px">${tr("pnl.main.end.plain")}</p>`;
         }
       }
     } else if (isGatewayFlow && !isDefaultFlow) {
       // Design tab: point to where the executable rule lives.
       const has = bo.conditionExpression && bo.conditionExpression.body;
       html += `<p class="muted" style="font-size:12px">${has
-        ? "A FEEL condition is set on this branch — edit it in the <b>Implement</b> tab."
-        : "Set this branch's FEEL condition in the <b>Implement</b> tab."}</p>`;
+        ? tr("pnl.main.flow.designHas")
+        : tr("pnl.main.flow.designSet")}</p>`;
     }
     // A loop marker on an element that has no Loop section above is one Atlas does not
     // run: the shape would show a ∥/≡/↻ icon the engine ignores. Say so rather than let
     // the diagram claim behavior it doesn't have (ADR-0133).
     if (bo.loopCharacteristics && !html.includes("f-mi-mode")) {
       html += `<h3 data-group="Loop">${esc(tr("bpmn.group.loop"))}</h3>
-        <p class="muted" style="font-size:12px">This element carries a <b>loop marker</b> atlas does not execute here — it will run <b>once</b>, whatever the icon suggests. Loops run on <b>activities</b>: every task kind, call activities and subprocesses (a message-kind send task is a throw, not an activity). Remove the marker (the wrench icon on the shape) or move the work to one of those.</p>`;
+        <p class="muted" style="font-size:12px">${tr("pnl.main.loop.hint")}</p>`;
     }
     body.innerHTML = html;
 
@@ -9667,7 +9649,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (v === bo.id) return;
         if (!v) { show(element); return; } // empty is not a valid id → revert to the current one
         try { modeling.updateProperties(element, { id: v }); }
-        catch { toast("invalid id — must be unique and a valid identifier", "err"); show(element); }
+        catch { toast(tr("pnl.main.invalidId"), "err"); show(element); }
       });
     }
 
@@ -9724,11 +9706,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (vocab.models.length > 1) {
           const { openPickModal } = await import("./pickmodal.js");
           const picked = await openPickModal({
-            title: `Model ${name}`,
-            label: "Information model",
+            title: tr("pnl.main.do.modelTitle", { name }),
+            label: tr("pnl.main.do.modelLabel"),
             options: vocab.models.map((m) => ({ value: m.id, label: m.name })),
-            hint: `${name} is added as a business object with no attributes yet. Open the model to give it its business key.`,
-            okLabel: "Add class",
+            hint: tr("pnl.main.do.modelHint", { name }),
+            okLabel: tr("pnl.main.do.modelOk"),
           });
           if (!picked) return;
           target = vocab.models.find((m) => m.id === picked.option.value);
@@ -9756,10 +9738,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             });
           }
           await loadVocabulary();
-          toast(`${name} added to ${target.name} — open it to give it its business key`, "ok");
+          toast(tr("pnl.main.do.added", { name, model: target.name }), "ok");
         } catch (err) {
           fcreate.disabled = false;
-          toast(err && err.message ? err.message : `could not add ${name}`, "err");
+          toast(err && err.message ? err.message : tr("pnl.main.do.addFailed", { name }), "err");
           return;
         }
         show(element);

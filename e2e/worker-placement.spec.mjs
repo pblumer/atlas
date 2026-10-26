@@ -156,7 +156,7 @@ test("the Evaluation options name the decision, not where it runs", async ({ pag
   // "In-engine (embedded DMN)" was a placement claim the select could not keep: the
   // binding is offloadable, so the badge answers that and the label names the decision.
   await expect(page.locator("#f-brt-mode")).not.toContainText("In-engine");
-  await expect(page.locator("#f-brt-mode")).toContainText("Embedded DMN");
+  await expect(page.locator("#f-brt-mode")).toContainText("Eingebettetes DMN");
   expect(page.__errors).toEqual([]);
 });
 
