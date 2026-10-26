@@ -355,8 +355,13 @@ type Server struct {
 	identity *identity.Service
 	policies *policy.Service
 	governed atomic.Pointer[map[string]governedWorker]
-	// msLink is the Microsoft account-linking configuration, nil when not configured.
-	msLink *microsoftLink
+	// msLink is the Microsoft account-linking flow, nil when linking is off. It is
+	// swapped whole when an administrator sets linking up or removes it in the
+	// Console, so a request reads it once and keeps the flow it read.
+	msLink atomic.Pointer[microsoftLink]
+	// msLinkStart is what the start flags said about linking (WithMicrosoftLinking).
+	// Any of them given, they decide and the Console only shows them.
+	msLinkStart MicrosoftLinkConfig
 	// catalogs serves the self-service portal's product catalogues and the releases
 	// published from them (ADR-0312). Another
 	// area service on the ADR-0147 shape: its own store, the run loop for every
@@ -2163,9 +2168,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.identity = identity.New(s.runLoop, identityStores, s.vault, s.refreshDelegatedToken,
 			s.configuredWorkerExists, time.Now)
 		s.identity.Limits = s.budgets()
-		if s.msLink != nil {
-			s.identity.SetLinkable(identity.LinkOption{Provider: identity.ProviderMicrosoft, Start: linkMicrosoftStartPath})
-		}
+		s.startMicrosoftLinking()
 	}
 	s.refreshGoverned()
 
@@ -3684,11 +3687,11 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	}
 	// Linking a Microsoft account (ADR-0475 §4). Not
 	// public, unlike a login: only a person already signed in links an account, and
-	// the callback must reach the session that started it.
-	if s.msLink != nil {
-		mountFunc(accessAuthenticated, RoleUser, "GET "+linkMicrosoftStartPath, s.handleLinkMicrosoftStart)
-		mountFunc(accessAuthenticated, RoleUser, "GET "+linkMicrosoftCallbackPath, s.handleLinkMicrosoftCallback)
-	}
+	// the callback must reach the session that started it. Mounted whether or not
+	// linking is set up, because an administrator can set it up while the server
+	// runs; until then both answer 404.
+	mountFunc(accessAuthenticated, RoleUser, "GET "+linkMicrosoftStartPath, s.handleLinkMicrosoftStart)
+	mountFunc(accessAuthenticated, RoleUser, "GET "+linkMicrosoftCallbackPath, s.handleLinkMicrosoftCallback)
 
 	// Every /api/v1 route is registered from the single-source-of-truth route
 	// table, the same list openapiDoc describes, so the served surface and its

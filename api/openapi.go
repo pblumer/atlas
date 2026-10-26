@@ -623,6 +623,18 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("The Worker", tObject())}},
 		{"DELETE", "/api/v1/configured-workers/{id}/identity", s.handleClearWorkerIdentity, apiOp{
 			summary: "Return a Worker to legacy behavior: no decision, nothing recorded (admin-only)", tag: "Workers", role: RoleAdmin, status: http.StatusNoContent}},
+		{"GET", linkMicrosoftSetupPath, s.handleGetMicrosoftLinkSetup, apiOp{
+			summary: "How people link Microsoft accounts on this server: whether the start flags or the Console set it up, the tenant, client id and scopes, whether a client secret is held (never the secret), the redirect URI the app registration has to list, and how many connections exist and how many of them cannot act (admin-only)", tag: "Authorization", role: RoleAdmin,
+			resp: jsonBody("Linking setup", tObject())}},
+		{"PUT", linkMicrosoftSetupPath, s.handlePutMicrosoftLinkSetup, apiOp{
+			summary: "Set up, or change, linking Microsoft accounts from the Console: the directory (tenant) id and application (client) id as GUIDs, the delegated scopes, and the client secret, which goes to the vault and is never returned — leave it empty to keep the one held. People can link from the next request on. Refused while start flags set linking, and without the vault (admin-only)", tag: "Authorization", role: RoleAdmin,
+			req: jsonBody("Linking setup", schemaObj(map[string]any{
+				"tenantId": tString(), "clientId": tString(), "scopes": tString(), "clientSecret": tString(),
+			}, "tenantId", "clientId", "scopes")),
+			resp: jsonBody("Linking setup", tObject())}},
+		{"DELETE", linkMicrosoftSetupPath, s.handleDeleteMicrosoftLinkSetup, apiOp{
+			summary: "Remove the Console's linking setup and its client secret. Linking is off from the next request on; existing connections stay and cannot act until linking is set up again for their tenant (admin-only)", tag: "Authorization", role: RoleAdmin,
+			resp: jsonBody("Linking setup", tObject())}},
 		{"GET", "/api/v1/security/readiness", s.handleSecurityReadiness, apiOp{
 			summary: "Every configured Worker, whether its actions are governed and how, and where its credential is (admin-only)", tag: "Authorization", role: RoleAdmin,
 			resp: jsonBody("Workers and the policy set's load state", tObject())}},
