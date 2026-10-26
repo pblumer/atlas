@@ -476,7 +476,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0388](0388-a-call-that-can-only-be-null-is-refused-at-deploy.md) | A call that can only be null is refused at deploy | Accepted (amended) | Landed |
 | [0389](0389-forked-instance-migration.md) | Forked instance migration | Accepted | Landed |
 | [0390](0390-position-progress.md) | The orderer is told where their position stands, from a route of their own | Accepted | Landed |
-| [0391](0391-product-picture.md) | A product is shown, and its picture is not part of what was promised | Accepted | Landed |
+| [0391](0391-product-picture.md) | A product is shown, and its picture is not part of what was promised | Accepted (amended) | Landed |
 | [0392](0392-the-same-refusal-at-every-door-that-already-refuses.md) | The same refusal at every door that already refuses | Accepted | Landed |
 | [0393](0393-a-rule-added-later-is-a-gate-on-deploy.md) | A rule the compiler gains later is a gate on deploy, whatever stage it lives in | Accepted | Landed |
 | [0394](0394-approval-in-the-inbox.md) | An approval is read and decided where the work already is | Accepted | Landed |

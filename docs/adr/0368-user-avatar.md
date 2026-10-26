@@ -150,9 +150,17 @@ unchanged, so the ordinary case, a person picking a photo of themselves, ended i
 
 **The Console now redraws the picture in the browser before the upload**
 (`api/web/picturescale.js`): its shorter side to at most 256 pixels, its longer
-side to at most four times that, never enlarged; a JPEG, or a PNG where the
-original has transparency. 256 covers the largest circle Atlas draws (48 CSS
-pixels) at any device pixel ratio, at a few dozen kilobytes.
+side to at most four times that, never enlarged. A JPEG stays a JPEG; a PNG stays a
+PNG where it has transparency, and otherwise unless it costs more than twice its
+JPEG, so a drawn picture keeps its edges and a photograph saved as a PNG is sent as
+a JPEG. 256 covers the largest circle Atlas draws (48 CSS pixels) at any device
+pixel ratio, at a few dozen kilobytes.
+
+The server's limit is configurable, so the page carries no number of it. Should the
+server still answer 413, the picture is drawn again at three quarters of the size,
+up to four times, and the server's own refusal is shown if none fits. A product's
+picture is scaled by the same module, to its own bounds
+([ADR-0391](0391-product-picture.md), amended the same day).
 
 - **Not a larger budget.** Raising the limit would have made the upload pass and
   stored a camera's full resolution for a 48-pixel circle — the trade-off named
@@ -176,8 +184,10 @@ pixels) at any device pixel ratio, at a few dozen kilobytes.
 
 `e2e/user-picture.spec.mjs` holds the behaviour: a photograph over the limit is
 uploaded at 384×256, an Exif orientation is applied and the Exif data is not
-carried on, a small picture is not enlarged, transparency keeps a PNG, and a file
-the browser cannot read is refused before anything is sent.
+carried on, a small picture is not enlarged, transparency and a logo keep a PNG
+while a photograph saved as one becomes a JPEG, a server that refuses every size
+gets four smaller ones and then its own words are shown, and a file the browser
+cannot read is refused before anything is sent.
 
 ## Pros and cons of the options
 

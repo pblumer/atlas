@@ -2020,9 +2020,10 @@ function infoPanel(rel, item) {
 // the image request learns anyway. The element removes itself when the answer is
 // that 404, so a product with no picture leaves no broken-image icon and no gap.
 //
-// No width or height attribute: the catalogue does not resize what was uploaded
-// (a server that re-encodes somebody's picture decides their product looks near
-// enough), so the page bounds it in CSS instead and the image keeps its own shape.
+// No width or height attribute: the server does not resize what was uploaded, and
+// the Console scales a photograph only to about three times what this draws
+// (ADR-0391, amended), so the page bounds it in CSS and the image keeps its own
+// shape.
 function productPicture(id) {
   return el('img', {
     class: 'picture',

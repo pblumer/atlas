@@ -291,8 +291,19 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   uploaded from Console → Organization, against a mock of the users endpoints. A photograph
   over the server's limit is scaled before the upload, to a shorter side of 256 pixels and
   well under the limit; an Exif orientation is applied and the Exif data is not carried on;
-  a small picture is not enlarged; a picture with transparency stays a PNG and an opaque PNG
-  becomes a JPEG; and a file the browser cannot read is refused with nothing sent.
+  a small picture is not enlarged; a picture with transparency and a logo stay a PNG while a
+  photograph saved as one becomes a JPEG; a server that refuses every size gets four smaller
+  ones and then its own refusal is shown; and a file the browser cannot read is refused with
+  nothing sent. The helpers that draw and measure the pictures are in `pictures.mjs`.
+
+- **`catalog-product-picture.spec.mjs`**
+  ([ADR-0391](../docs/adr/0391-product-picture.md), amended): a product's picture as the
+  catalogue's product editor uploads it, in `catalog-editor-harness.html`. A photograph over
+  the server's limit is sent at 600 pixels on its shorter side; an SVG is sent byte for byte
+  as picked; a logo stays a PNG and a banner is held to 1200 pixels on its longer side; a
+  cut-out with transparency the server still finds too large is sent again at three
+  quarters of the size until it is taken, a PNG each time; and a file the browser cannot read
+  is reported with the product saved and nothing uploaded.
 
 - **`pdf-writer.spec.mjs`** (ADR-0143): the dependency-free **PDF writer** behind the process
   documentation export (`api/web/pdf.js`). A PDF is only valid if its cross-reference table
