@@ -164,7 +164,7 @@ test("an added parameter lands in the XML, and a deleted one leaves", async ({ p
 // pressing Deploy.
 test("an undocumented tool is warned about where it is written", async ({ page }) => {
   await open(page, "historie_lesen");
-  await expect(page.locator(".warn-note")).toContainText("no documentation");
+  await expect(page.locator(".warn-note")).toContainText("keine Dokumentation");
   await expect(page.locator(".warn-note")).toContainText("agent.tool");
 
   // A documented one is not nagged.
@@ -178,7 +178,7 @@ test("an undocumented tool is warned about where it is written", async ({ page }
 // half of the truth: it runs as a later step of the tool that starts its chain.
 test("a chained inner activity is told it is not a tool", async ({ page }) => {
   await open(page, "pruefen");
-  await expect(page.locator("#p-body")).toContainText("not a tool the agent can call");
+  await expect(page.locator("#p-body")).toContainText("kein Werkzeug, das der Agent aufrufen kann");
   await expect(page.locator("[data-agent-param-group]")).toHaveCount(0);
 
   // And an activity outside any agent container gets none of this at all.

@@ -39,7 +39,7 @@ test("a service task reads the repair form its model carries", async ({ page }) 
 
   // And the panel says what the binding is *for* — a repair form is not a work form,
   // and the difference is the whole point.
-  await expect(page.locator('.pgroup[data-group="Repair form"]')).toContainText("parks behind an incident");
+  await expect(page.locator('.pgroup[data-group="Repair form"]')).toContainText("hinter einem Incident wartet");
 
   expect(page.__errors, "page errors").toEqual([]);
 });

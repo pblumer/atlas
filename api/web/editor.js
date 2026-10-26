@@ -5649,7 +5649,7 @@ function fillWorkerDatalist(api, dl, note, kind) {
 function placementBadgeHTML(id) {
   const b = PLACEMENT_BADGE[placementOf(id)];
   if (!b) return "";
-  return `<span class="stkind-where ${b.cls}" title="${esc(b.title)}">${b.label}</span>`;
+  return `<span class="stkind-where ${b.cls}" title="${esc(tr(b.title))}">${tr(b.label)}</span>`;
 }
 
 // stKindRowsHTML renders the searchable kind-picker rows for a list of kinds, highlighting
@@ -5829,26 +5829,24 @@ function placementOf(id) { return (KIND_PLACEMENT && KIND_PLACEMENT[id]) || ""; 
 // like their plain counterparts on purpose — where the work runs is the same fact —
 // and differ in the advice, because a kind with no other form cannot take it.
 const PLACEMENT_BADGE = {
-  "engine": { label: "in&#8209;engine", cls: "stkind-where-engine",
-    title: "This server runs this kind in its own process, so the call's latency and failures are the engine's. It can be moved onto a worker (ADR-0164)." },
-  "engine-only": { label: "in&#8209;engine", cls: "stkind-where-engine",
-    title: "This server runs this kind in its own process. It has no out-of-process form, so there is no worker to move it to." },
-  "worker": { label: "on a worker", cls: "stkind-where-worker",
-    title: "This server does not run this kind itself: its jobs are leased by a worker process, so a slow call cannot stall the engine (ADR-0168)." },
-  "worker-only": { label: "worker only", cls: "stkind-where-worker",
-    title: "This kind has no in-engine form — its work always runs on a worker (ADR-0173)." },
+  "engine": { label: "pnl.task.where.inEngine", cls: "stkind-where-engine",
+    title: "pnl.task.where.engineTitle" },
+  "engine-only": { label: "pnl.task.where.inEngine", cls: "stkind-where-engine",
+    title: "pnl.task.where.engineOnlyTitle" },
+  "worker": { label: "pnl.task.where.onWorker", cls: "stkind-where-worker",
+    title: "pnl.task.where.workerTitle" },
+  "worker-only": { label: "pnl.task.where.workerOnly", cls: "stkind-where-worker",
+    title: "pnl.task.where.workerOnlyTitle" },
 };
 
 // PLACEMENT_LEAD says where the work runs. It is the same sentence wherever it appears,
 // because it is the same fact — a worker call, a script and a decision are all a job
 // this server either runs itself or leaves for a worker.
 const PLACEMENT_LEAD = {
-  "engine": `Atlas runs this <b>in its own process</b> on this server, so its latency and its
-    failures are the engine&rsquo;s.`,
-  "engine-only": `Atlas runs this <b>in its own process</b>, and it has no out-of-process form.`,
-  "worker": `This server does <b>not</b> run this itself: its jobs are leased by a <b>worker</b>,
-    so a slow call cannot stall the engine.`,
-  "worker-only": `This has <b>no in-engine form</b>: its jobs always run on a worker.`,
+  "engine": "pnl.task.place.lead.engine",
+  "engine-only": "pnl.task.place.lead.engineOnly",
+  "worker": "pnl.task.place.lead.worker",
+  "worker-only": "pnl.task.place.lead.workerOnly",
 };
 
 // PLACEMENT_TAIL is what follows from that, which is *not* the same in the three panels.
@@ -5859,39 +5857,22 @@ const PLACEMENT_LEAD = {
 // tail.
 const PLACEMENT_TAIL = {
   workerType: {
-    "engine": `New models should prefer a <b>Job worker</b> and an <code>atlas worker</code> serving
-      that job type; these kinds keep working and are being moved out of the engine.`,
-    "engine-only": `Its work changes this server&rsquo;s own state rather than calling anything out,
-      so there is nothing to move onto a worker.`,
-    "worker": `Its jobs wait for a worker process serving this job type — atlas supervises one for
-      the kinds it offloads by default. That process holds the configured Worker&rsquo;s endpoint and
-      credential, so the credential lives where it is used; <b>Workers</b> in the Console shows which
-      names are served and which are configured nowhere (ADR-0168).`,
-    "worker-only": `The worker process holds the connection and its credential &mdash; the model
-      names the Worker and nothing else (ADR-0168).`,
+    "engine": "pnl.task.place.workerType.engine",
+    "engine-only": "pnl.task.place.workerType.engineOnly",
+    "worker": "pnl.task.place.workerType.worker",
+    "worker-only": "pnl.task.place.workerType.workerOnly",
   },
   script: {
-    "engine": `A script that hangs holds the loop with it. Atlas normally runs script tasks on a
-      worker it starts and supervises itself; <code>--in-process-connectors</code> is what turns
-      that off (ADR-0047).`,
-    "worker": `Atlas supervises a script worker of its own by default. The language&rsquo;s
-      interpreter has to be installed where that worker runs, which need not be this server
-      (ADR-0047).`,
+    "engine": "pnl.task.place.script.engine",
+    "worker": "pnl.task.place.script.worker",
   },
   dmn: {
-    "engine": `The engine&rsquo;s embedded DMN library evaluates it here. A decision table is
-      computation rather than a network call, so what moving it out buys is CPU time, not
-      protection from a slow endpoint.`,
-    "worker": `Its jobs wait for a worker serving the decision job type. <b>Workers</b> in the
-      Console shows whether one is running (ADR-0157).`,
+    "engine": "pnl.task.place.dmn.engine",
+    "worker": "pnl.task.place.dmn.worker",
   },
   temis: {
-    "engine": `A temis evaluation is a network call this server makes itself, so its latency is the
-      engine&rsquo;s — the case ADR-0164 is about. Moving it onto a worker also moves the
-      service&rsquo;s endpoint and credential there (ADR-0168).`,
-    "worker": `Its jobs wait for a worker serving this job type, and that worker holds the temis
-      endpoint and its credential. <b>Workers</b> in the Console shows whether one is running
-      (ADR-0157/0168).`,
+    "engine": "pnl.task.place.temis.engine",
+    "worker": "pnl.task.place.temis.worker",
   },
 };
 
@@ -5907,7 +5888,7 @@ function placementNoticeHTML(id, context) {
   const tail = (PLACEMENT_TAIL[context] || {})[placement] || "";
   // An in-engine kind is being warned about; one already on a worker is being described.
   const cls = placement === "worker" || placement === "worker-only" ? " stkind-notice-worker" : "";
-  return `<p class="stkind-notice${cls}">${lead} ${tail}</p>`;
+  return `<p class="stkind-notice${cls}">${tr(lead)} ${tail ? tr(tail) : ""}</p>`;
 }
 
 // WORKER_TYPE_INFO_GROUP is the title the setup section carries in the panel, and the
@@ -5938,8 +5919,8 @@ function workerTypeInfoHTML(id, namesAWorker, context = "workerType") {
   const open = namesAWorker && !configuredKinds.has(id);
   return `<div class="io-group wt-group" data-group="${esc(WORKER_TYPE_INFO_GROUP)}"
        data-standalone-group="1" data-open-default="${open ? "1" : "0"}">
-    <div class="io-group-head" title="What this Worker Type needs before a task of it runs">
-      <span class="io-group-title">${esc(WORKER_TYPE_INFO_GROUP)}</span>
+    <div class="io-group-head" title="${esc(tr("pnl.task.setupTitle"))}">
+      <span class="io-group-title">${esc(tr("pnl.task.setup"))}</span>
       <span class="io-group-chevron" aria-hidden="true">&#9662;</span>
     </div>
     <div class="io-group-body">${inner}</div>
@@ -6116,7 +6097,7 @@ function shopTaskMode(v) {
 function shopActionKeyProblem(v) {
   const key = (v || "").trim();
   if (key === "" || SHOP_ACTION_KEY.test(key)) return "";
-  return "Not an action key: a key is lower-case letters, digits and dashes, 1 to 64 characters (password-reset), so no product can declare this one.";
+  return tr("pnl.task.shop.keyProblem");
 }
 
 // shopTaskFieldsHTML renders the Shop kind's fields over the task's <atlas:shopTask>: the
@@ -6126,26 +6107,26 @@ function shopTaskFieldsHTML(bo) {
   const shop = findExt(bo, SEND_SHOP_KIND.ext) || {};
   const mode = shopTaskMode(shop.mode);
   const modes = SHOP_TASK_MODES.map((m) =>
-    `<option value="${esc(m.v)}" ${m === mode ? "selected" : ""}>${esc(m.l)}</option>`).join("");
+    `<option value="${esc(m.v)}" ${m === mode ? "selected" : ""}>${esc(kindText(m.l))}</option>`).join("");
   let fields = "";
   for (const f of mode.fields) {
     const value = shop[f.key] || "";
     if (f.type === "select") {
       const opts = f.options.map((o) => {
         const { v, l } = selectOption(o);
-        return `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(l)}</option>`;
+        return `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(kindText(l))}</option>`;
       }).join("");
-      fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-shop-${f.key}">${opts}</select></label>`;
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span><select id="f-shop-${f.key}">${opts}</select></label>`;
     } else if (f.fx) {
       // A one-row textarea, as the Worker Types' fx fields are, so the fx toggle wired
       // after render can host the FEEL editor in place.
-      fields += `<label class="field"><span>${esc(f.label)}</span>
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
         <textarea id="f-shop-${f.key}" rows="1" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(value)}</textarea></label>`;
     } else {
       // The action and the product suggest what the catalogue declares (ADR-0429 §6); the
       // lists are filled once the message sources arrive, and the fields stay free text.
       const suggest = f.key === "action" || f.key === "product" ? ` list="f-shop-${f.key}-keys"` : "";
-      fields += `<label class="field"><span>${esc(f.label)}</span>
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
         <input type="text" id="f-shop-${f.key}" value="${esc(value)}" placeholder="${esc(f.placeholder || "")}" autocomplete="off" spellcheck="false"${suggest}/></label>`;
       if (suggest) fields += `<datalist id="f-shop-${f.key}-keys"></datalist>`;
     }
@@ -6153,12 +6134,12 @@ function shopTaskFieldsHTML(bo) {
       const problem = shopActionKeyProblem(value);
       fields += `<p class="muted" id="f-shop-action-err" style="font-size:12px;color:var(--danger)" ${problem ? "" : "hidden"}>${esc(problem)}</p>`;
     }
-    if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(f.hint)}</p>`;
+    if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(kindText(f.hint))}</p>`;
   }
   return `<h3 data-group="Shop">${esc(tr("bpmn.group.shop"))}</h3>
-    <label class="field"><span>Mode</span><select id="f-shop-mode">${modes}</select></label>
+    <label class="field"><span>${esc(tr("pnl.task.shop.mode"))}</span><select id="f-shop-mode">${modes}</select></label>
     ${fields}
-    <p class="muted" style="font-size:12px">${esc(mode.hint)}</p>`;
+    <p class="muted" style="font-size:12px">${esc(kindText(mode.hint))}</p>`;
 }
 
 // shopActionSuggestions are the action keys and products a shop task may name, from the
@@ -6224,11 +6205,11 @@ function sendTaskKind(bo) {
 function sendTaskKindHTML(modeler, bo) {
   const cur = sendTaskKind(bo);
   const picker = `<h3 data-group="Type">${esc(tr("bpmn.group.type"))}</h3>
-    <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. message, shop, mail)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
+    <input type="text" id="f-stkind-filter" placeholder="${esc(tr("pnl.task.send.search"))}" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SEND_TASK_KINDS, cur.id)}</div>`;
   if (cur.id === "message") {
     return picker + messageFieldsHTML(modeler, bo,
-      "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
+      esc(tr("pnl.task.send.messageHint")));
   }
   if (cur.id === SEND_SHOP_KIND.id) return picker + shopTaskFieldsHTML(bo);
   const ext = findExt(bo, cur.ext) || {};
@@ -6368,8 +6349,8 @@ function applySendTaskKind(modeler, element, kindId) {
 function decisionInputRowHTML(i, source, target) {
   const src = (source || "").replace(/^=\s*/, "");
   return `<div class="dmn-input-row" data-i="${i}" style="display:flex;gap:6px;margin-bottom:6px">
-    <input type="text" class="dmn-in-target" list="dmn-inputs-dl" value="${esc(target || "")}" placeholder="Season" style="flex:0 0 34%" title="Decision input name (from the decision)"/>
-    <input type="text" class="dmn-in-source" list="dmn-vars-dl" value="${esc(src)}" placeholder="order.season" style="flex:1" title="A known variable, or any FEEL expression over the instance's variables"/>
+    <input type="text" class="dmn-in-target" list="dmn-inputs-dl" value="${esc(target || "")}" placeholder="Season" style="flex:0 0 34%" title="${esc(tr("pnl.task.dmnIn.targetTitle"))}"/>
+    <input type="text" class="dmn-in-source" list="dmn-vars-dl" value="${esc(src)}" placeholder="order.season" style="flex:1" title="${esc(tr("pnl.task.dmnIn.sourceTitle"))}"/>
   </div>`;
 }
 
@@ -6420,14 +6401,14 @@ function ioMapDefaultName(kind) {
 // or a placeholder while the name is still blank.
 function ioMapTitle(kind, target) {
   const t = (target || "").trim();
-  return t || (kind === "in" ? "Input mapping" : "Output mapping");
+  return t || (kind === "in" ? tr("pnl.task.io.inputMapping") : tr("pnl.task.io.outputMapping"));
 }
 
 // dataWriteTitle is the collapsed-card label for one write of a data output
 // association: the member it targets, or what an empty target actually means — the
 // whole object, which is a different write and not a missing one.
 function dataWriteTitle(target) {
-  return (target || "").trim() || "the whole object";
+  return (target || "").trim() || tr("pnl.task.io.wholeObject");
 }
 
 // ioTrashIcon is the small trash glyph used to delete a mapping card (styled red by
@@ -6442,23 +6423,23 @@ const ioTrashIcon = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden
 // convention); it is shown stripped and re-prefixed on save.
 function ioMapCardHTML(kind, i, source, target) {
   const src = (source || "").replace(/^=\s*/, "");
-  const nameLabel = kind === "in" ? "Local variable name" : "Process variable name";
+  const nameLabel = kind === "in" ? tr("pnl.task.io.localName") : tr("pnl.task.io.processName");
   const cfg = kind === "in"
-    ? { np: "amount", sp: "order.total", nt: "Local variable the activity sees", st: "FEEL over the enclosing scope" }
-    : { np: "orderStatus", sp: "result.status", nt: "Variable promoted to the process scope", st: "FEEL over the activity's local scope" };
+    ? { np: "amount", sp: "order.total", nt: tr("pnl.task.io.localTitle"), st: tr("pnl.task.io.enclosingTitle") }
+    : { np: "orderStatus", sp: "result.status", nt: tr("pnl.task.io.promotedTitle"), st: tr("pnl.task.io.localScopeTitle") };
   return `<div class="io-map" data-kind="${kind}" data-i="${i}">
     <div class="io-map-head">
       <span class="io-map-chevron" aria-hidden="true">▾</span>
       <span class="io-map-title">${esc(ioMapTitle(kind, target))}</span>
-      <button type="button" class="io-map-del" title="Delete mapping" aria-label="Delete mapping">${ioTrashIcon}</button>
+      <button type="button" class="io-map-del" title="${esc(tr("pnl.task.io.delete"))}" aria-label="${esc(tr("pnl.task.io.delete"))}">${ioTrashIcon}</button>
     </div>
     <div class="io-map-body">
-      <label class="field"><span>${nameLabel}</span>
-        <input type="text" class="io-target" value="${esc(target || "")}" placeholder="${cfg.np}" title="${cfg.nt}"/></label>
-      <label class="field"><span>Variable assignment value <i class="io-fx" title="This value is a FEEL expression">fx</i></span>
+      <label class="field"><span>${esc(nameLabel)}</span>
+        <input type="text" class="io-target" value="${esc(target || "")}" placeholder="${cfg.np}" title="${esc(cfg.nt)}"/></label>
+      <label class="field"><span>${esc(tr("pnl.task.io.assignValue"))} <i class="io-fx" title="${esc(tr("pnl.task.io.fxTitle"))}">fx</i></span>
         <div class="io-assign">
           <span class="io-eq" aria-hidden="true">=</span>
-          <input type="text" class="io-source" value="${esc(src)}" placeholder="${cfg.sp}" spellcheck="false" title="${cfg.st}"/>
+          <input type="text" class="io-source" value="${esc(src)}" placeholder="${cfg.sp}" spellcheck="false" title="${esc(cfg.st)}"/>
         </div></label>
     </div>
   </div>`;
@@ -6470,15 +6451,15 @@ function ioMapCardHTML(kind, i, source, target) {
 // it into the preceding <h3> section. kind is "in" or "out".
 function mappingGroupHTML(kind, params) {
   const meta = kind === "in"
-    ? { title: "Input mapping", wrap: "io-inputs",
-        hint: "Each mapping computes a variable the activity sees (its <b>local scope</b>) from a FEEL expression over the enclosing variables. Locals shadow inherited values and are dropped when the activity completes." }
-    : { title: "Output mapping", wrap: "io-outputs",
-        hint: "Each mapping promotes a value to the <b>process scope</b> from a FEEL expression over the activity's local scope (e.g. its result). With no output mapping the task's result merges into the process scope as-is." };
+    ? { title: "Input mapping", label: tr("pnl.task.io.inputMapping"), wrap: "io-inputs",
+        hint: tr("pnl.task.io.inputHint") }
+    : { title: "Output mapping", label: tr("pnl.task.io.outputMapping"), wrap: "io-outputs",
+        hint: tr("pnl.task.io.outputHint") };
   const cards = params.map((p, i) => ioMapCardHTML(kind, i, p.source, p.target)).join("");
   return `<div class="io-group" data-kind="${kind}" data-group="${meta.title}" data-standalone-group="1">
     <div class="io-group-head">
-      <span class="io-group-title">${meta.title}</span>
-      <button type="button" class="io-group-add" title="Add mapping" aria-label="Add mapping">＋</button>
+      <span class="io-group-title">${esc(meta.label)}</span>
+      <button type="button" class="io-group-add" title="${esc(tr("pnl.task.io.add"))}" aria-label="${esc(tr("pnl.task.io.add"))}">＋</button>
       <span class="io-group-count" title="Mappings">${params.length}</span>
       <span class="io-group-chevron" aria-hidden="true">▾</span>
     </div>
@@ -6590,20 +6571,20 @@ function agentParamCardHTML(i, p) {
   return `<div class="io-map" data-agent-param data-i="${i}">
     <div class="io-map-head">
       <span class="io-map-chevron" aria-hidden="true">▾</span>
-      <span class="io-map-title">${esc((p && p.name) || "parameter")}</span>
-      <button type="button" class="io-map-del" title="Delete parameter" aria-label="Delete parameter">${ioTrashIcon}</button>
+      <span class="io-map-title">${esc((p && p.name) || tr("pnl.task.agent.param"))}</span>
+      <button type="button" class="io-map-del" title="${esc(tr("pnl.task.agent.deleteParam"))}" aria-label="${esc(tr("pnl.task.agent.deleteParam"))}">${ioTrashIcon}</button>
     </div>
     <div class="io-map-body">
       <label class="field"><span>Name</span>
         <input type="text" class="ap-name" value="${esc((p && p.name) || "")}" placeholder="url"
-          title="The variable this argument is written into, in the activity's own scope"/></label>
-      <label class="field"><span>Type</span>
+          title="${esc(tr("pnl.task.agent.nameTitle"))}"/></label>
+      <label class="field"><span>${esc(tr("pnl.task.agent.type"))}</span>
         <select class="ap-type">
           ${AGENT_PARAM_TYPES.map((t) => `<option value="${t}" ${type === t ? "selected" : ""}>${t}</option>`).join("")}
         </select></label>
-      <label class="field"><span>Description</span>
+      <label class="field"><span>${esc(tr("pnl.task.agent.description"))}</span>
         <textarea class="ap-desc" rows="2" placeholder="Vollständige https-URL der Zinsseite">${esc((p && p.description) || "")}</textarea></label>
-      <label class="field checkbox"><input type="checkbox" class="ap-required" ${required ? "checked" : ""}/> <span>Required</span></label>
+      <label class="field checkbox"><input type="checkbox" class="ap-required" ${required ? "checked" : ""}/> <span>${esc(tr("pnl.task.agent.required"))}</span></label>
     </div>
   </div>`;
 }
@@ -6616,16 +6597,14 @@ function agentParamsHTML(bo) {
   const cards = params.map((p, i) => agentParamCardHTML(i, p)).join("");
   return `<div class="io-group" data-agent-param-group="1" data-group="Parameters" data-standalone-group="1">
     <div class="io-group-head">
-      <span class="io-group-title">Parameters</span>
-      <button type="button" class="io-group-add" title="Add parameter" aria-label="Add parameter">＋</button>
-      <span class="io-group-count" title="Parameters">${params.length}</span>
+      <span class="io-group-title">${esc(tr("pnl.task.agent.params"))}</span>
+      <button type="button" class="io-group-add" title="${esc(tr("pnl.task.agent.addParam"))}" aria-label="${esc(tr("pnl.task.agent.addParam"))}">＋</button>
+      <span class="io-group-count" title="${esc(tr("pnl.task.agent.params"))}">${params.length}</span>
       <span class="io-group-chevron" aria-hidden="true">▾</span>
     </div>
     <div class="io-group-body">
       <div class="io-map-list" id="agent-params">${cards}</div>
-      <p class="muted io-group-hint">What the agent has to supply when it calls this tool. Each one is written into this
-        activity's <b>own scope</b> under its name, so the activity reads it like any other variable. Describe each
-        parameter: the description is what stops the model guessing a value.</p>
+      <p class="muted io-group-hint">${tr("pnl.task.agent.paramsHint")}</p>
     </div>
   </div>`;
 }
@@ -6643,19 +6622,12 @@ function agentToolHTML(bo) {
   if (!container) return "";
   if (!isAgentTool(bo)) {
     return `<h3 data-group="Agent tool">${esc(tr("bpmn.group.agentTool"))}</h3>
-      <p class="muted" style="font-size:12px">A sequence flow leads to this activity, so it is a later step of whichever
-        tool starts that chain — not a tool the agent can call. Only the activities no flow leads to are offered to the
-        model. Disconnect it to make it one.</p>`;
+      <p class="muted" style="font-size:12px">${tr("pnl.task.agent.notTool")}</p>`;
   }
   const documented = readDocumentation(bo).trim() !== "";
   return `<h3 data-group="Agent tool">${esc(tr("bpmn.group.agentTool"))}</h3>
-    <p class="muted" style="font-size:12px">The agent driving <b>${esc(container.id || "this subprocess")}</b> may call
-      this activity. It is offered under its own id — <code>${esc(bo.id || "")}</code> — and its <b>Documentation</b>
-      (General) is what the model reads to decide whether this is the tool for the job. Write when to use it, when not
-      to, and what it returns.</p>
-    ${documented ? "" : `<div class="warn-note">This tool has no documentation, so the agent is told that it exists and
-      not what it is for — it will call it on the strength of its id alone. Deploy warns about this
-      (<code>agent.tool</code>); it does not refuse it.</div>`}
+    <p class="muted" style="font-size:12px">${tr("pnl.task.agent.callable", { container: esc(container.id || tr("pnl.task.agent.thisSubprocess")), id: esc(bo.id || "") })}</p>
+    ${documented ? "" : `<div class="warn-note">${tr("pnl.task.agent.undocumented")}</div>`}
     ${agentParamsHTML(bo)}`;
 }
 
@@ -6730,16 +6702,13 @@ function repairFormHTML(bo, projectId) {
   const fd = findExt(bo, "zeebe:FormDefinition") || {};
   const cur = fd.formId || "";
   return `<h3 data-group="Repair form">${esc(tr("bpmn.group.repairForm"))}</h3>
-    <label class="field"><span>Form</span>
+    <label class="field"><span>${esc(tr("pnl.task.repair.form"))}</span>
       <select id="f-form">
-        <option value="">&mdash; none &mdash;</option>
+        <option value="">${esc(tr("pnl.task.repair.none"))}</option>
         ${cur ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : ""}
       </select></label>
     ${formDoorsHTML(newFormBase(projectId))}
-    <p class="muted" style="font-size:12px">Shown to an operator when this task parks behind an incident, so they can correct
-      the values that matter instead of editing the whole variable set as JSON. Only the form's own fields are written, and the
-      change is audited like any other. Leave it unset and the raw editor is the only way — which is fine for a task with
-      nothing specific to say. <b>＋ New form</b> creates one; coming back to the draft links it to this task.</p>`;
+    <p class="muted" style="font-size:12px">${tr("pnl.task.repair.hint")}</p>`;
 }
 
 // multiInstanceHTML renders the Loop section for an activity: the mode — a BPMN
@@ -6773,41 +6742,41 @@ function multiInstanceHTML(bo) {
   const strip = (s) => (s || "").replace(/^=\s*/, "");
 
   let html = `<h3 data-group="Loop">${esc(tr("bpmn.group.loop"))}</h3>
-    <label class="field"><span>Mode</span>
+    <label class="field"><span>${esc(tr("pnl.task.loop.mode"))}</span>
       <select id="f-mi-mode">
-        <option value="none" ${mode === "none" ? "selected" : ""}>None — runs once</option>
-        <option value="loop" ${mode === "loop" ? "selected" : ""}>Loop — repeat while a condition holds</option>
-        <option value="parallel" ${mode === "parallel" ? "selected" : ""}>Multi-instance parallel — all iterations at once</option>
-        <option value="sequential" ${mode === "sequential" ? "selected" : ""}>Multi-instance sequential — one after another</option>
+        <option value="none" ${mode === "none" ? "selected" : ""}>${esc(tr("pnl.task.loop.none"))}</option>
+        <option value="loop" ${mode === "loop" ? "selected" : ""}>${esc(tr("pnl.task.loop.loop"))}</option>
+        <option value="parallel" ${mode === "parallel" ? "selected" : ""}>${esc(tr("pnl.task.loop.parallel"))}</option>
+        <option value="sequential" ${mode === "sequential" ? "selected" : ""}>${esc(tr("pnl.task.loop.sequential"))}</option>
       </select></label>`;
   if (mode === "none") return html;
   if (mode === "loop") return html + standardLoopHTML(mi, strip);
 
-  html += `<label class="field"><span>Iterate over</span>
+  html += `<label class="field"><span>${esc(tr("pnl.task.loop.iterateOver"))}</span>
       <select id="f-mi-src">
-        <option value="collection" ${src === "collection" ? "selected" : ""}>A collection</option>
-        <option value="cardinality" ${src === "cardinality" ? "selected" : ""}>A fixed count</option>
+        <option value="collection" ${src === "collection" ? "selected" : ""}>${esc(tr("pnl.task.loop.collection"))}</option>
+        <option value="cardinality" ${src === "cardinality" ? "selected" : ""}>${esc(tr("pnl.task.loop.fixedCount"))}</option>
       </select></label>`;
   if (src === "collection") {
-    html += `<label class="field"><span>Input collection (FEEL)</span>
+    html += `<label class="field"><span>${esc(tr("pnl.task.loop.inputCollection"))}</span>
         <input type="text" id="f-mi-inputCollection" value="${esc(strip(ic))}" placeholder="orderLines"/></label>
-      <label class="field"><span>Input element</span>
+      <label class="field"><span>${esc(tr("pnl.task.loop.inputElement"))}</span>
         <input type="text" id="f-mi-inputElement" value="${esc(ie)}" placeholder="line"/></label>`;
   } else {
-    html += `<label class="field"><span>Loop cardinality (FEEL or a number)</span>
+    html += `<label class="field"><span>${esc(tr("pnl.task.loop.cardinality"))}</span>
         <input type="text" id="f-mi-cardinality" value="${esc(strip(cardBody))}" placeholder="3"/></label>`;
   }
-  html += `<label class="field"><span>Output collection <span class="muted">(optional)</span></span>
+  html += `<label class="field"><span>${esc(tr("pnl.task.loop.outputCollection"))} <span class="muted">(optional)</span></span>
       <input type="text" id="f-mi-outputCollection" value="${esc(oc)}" placeholder="totals"/></label>
-    <label class="field"><span>Output element (FEEL) <span class="muted">(optional)</span></span>
+    <label class="field"><span>${esc(tr("pnl.task.loop.outputElement"))} <span class="muted">(optional)</span></span>
       <input type="text" id="f-mi-outputElement" value="${esc(strip(oe))}" placeholder="line.qty * line.price"/></label>
-    <label class="field"><span>Completion condition (FEEL) <span class="muted">(optional)</span></span>
+    <label class="field"><span>${esc(tr("pnl.task.loop.completion"))} <span class="muted">(optional)</span></span>
       <input type="text" id="f-mi-completion" value="${esc(strip(compBody))}" placeholder="count(totals) > 2"/></label>
     <p class="muted" style="font-size:12px">${mode === "sequential"
-      ? "Runs one iteration at a time — the next starts only when the previous finishes."
-      : "Starts every iteration at once and waits until all finish."} ${src === "collection"
-      ? "One iteration per element of the <b>input collection</b>; the <b>input element</b> is the variable each iteration binds its item to (plus the built-in <code>loopCounter</code>)."
-      : "Runs <b>loop cardinality</b> times, each with a <code>loopCounter</code>."} An <b>output collection</b> gathers each iteration's <b>output element</b> into a list in order; a <b>completion condition</b> ends the loop early.</p>`;
+      ? tr("pnl.task.loop.hint.sequential")
+      : tr("pnl.task.loop.hint.parallel")} ${src === "collection"
+      ? tr("pnl.task.loop.hint.collection")
+      : tr("pnl.task.loop.hint.cardinality")} ${tr("pnl.task.loop.hint.tail")}</p>`;
   return html;
 }
 
@@ -6820,16 +6789,16 @@ function standardLoopHTML(sl, strip) {
   const cond = sl && sl.loopCondition ? (sl.loopCondition.body || "") : "";
   const max = sl && sl.loopMaximum != null ? String(sl.loopMaximum) : "";
   const before = !!(sl && sl.testBefore);
-  return `<label class="field"><span>Repeat while (FEEL)</span>
+  return `<label class="field"><span>${esc(tr("pnl.task.loop.repeatWhile"))}</span>
       <input type="text" id="f-mi-loopcond" value="${esc(strip(cond))}" placeholder="not(approved)"/></label>
-    <label class="field"><span>Check the condition</span>
+    <label class="field"><span>${esc(tr("pnl.task.loop.check"))}</span>
       <select id="f-mi-testbefore">
-        <option value="after" ${before ? "" : "selected"}>After each run — the activity always runs at least once</option>
-        <option value="before" ${before ? "selected" : ""}>Before each run — the activity may be skipped entirely</option>
+        <option value="after" ${before ? "" : "selected"}>${esc(tr("pnl.task.loop.after"))}</option>
+        <option value="before" ${before ? "selected" : ""}>${esc(tr("pnl.task.loop.before"))}</option>
       </select></label>
-    <label class="field"><span>Max iterations <span class="muted">(optional)</span></span>
-      <input type="number" min="1" id="f-mi-loopmax" value="${esc(max)}" placeholder="no limit"/></label>
-    <p class="muted" style="font-size:12px">Runs the activity again and again while <b>repeat while</b> holds — one run at a time, each with a 1-based <code>loopCounter</code> the condition can read. What a run writes stays visible to the next run and to the rest of the process, so the loop can work towards its own exit. <b>Max iterations</b> is a hard stop; give a condition, a cap, or both. Without a cap the engine stops a loop after <b>1000</b> runs with an incident you can resolve to grant 1000 more — a backstop for a condition that never turns false, not a limit on a cap you set yourself.</p>`;
+    <label class="field"><span>${esc(tr("pnl.task.loop.max"))} <span class="muted">(optional)</span></span>
+      <input type="number" min="1" id="f-mi-loopmax" value="${esc(max)}" placeholder="${esc(tr("pnl.task.loop.noLimit"))}"/></label>
+    <p class="muted" style="font-size:12px">${tr("pnl.task.loop.standardHint")}</p>`;
 }
 
 // saveMultiInstance writes (or clears) an activity's bpmn:MultiInstanceLoopCharacteristics
@@ -6906,19 +6875,19 @@ function messageFieldsHTML(modeler, med, hint) {
     `<option value="${esc(m.id)}"${current && current.id === m.id ? " selected" : ""}>${esc(m.name || m.id)}</option>`
   ).join("");
   const fields = current ? `
-    <label class="field"><span>Message name</span>
+    <label class="field"><span>${esc(tr("pnl.task.msg.name"))}</span>
       <input type="text" id="f-msgname" value="${esc(current.name || "")}" placeholder="payment-received" autocomplete="off"/></label>
     <datalist id="f-msgname-sources"></datalist>
     <p class="muted" style="font-size:12px" id="f-msgsources"></p>
-    <label class="field"><span>Correlation key (FEEL)</span>
+    <label class="field"><span>${esc(tr("pnl.task.msg.corrKey"))}</span>
       <textarea id="f-corrkey" rows="1" placeholder="orderId">${esc(messageCorrelationKey(current))}</textarea></label>
-    <p class="muted" style="font-size:12px">Shared with every event that uses this message — a throw and a catch correlate when they use the same message and their keys evaluate equal.</p>` : "";
+    <p class="muted" style="font-size:12px">${esc(tr("pnl.task.msg.shared"))}</p>` : "";
   return `<h3 data-group="Message">${esc(tr("bpmn.group.message"))}</h3>
-    <label class="field"><span>Message</span>
+    <label class="field"><span>${esc(tr("pnl.task.msg.message"))}</span>
       <select id="f-msgref">
-        <option value="">— none —</option>
+        <option value="">${esc(tr("pnl.task.msg.none"))}</option>
         ${options}
-        <option value="__new__">＋ New message…</option>
+        <option value="__new__">${esc(tr("pnl.task.msg.new"))}</option>
       </select></label>
     ${fields}
     <p class="muted" style="font-size:12px">${hint}</p>`;

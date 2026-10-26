@@ -61,7 +61,7 @@ test("the badge sits beside the name, not inside it", async ({ page }) => {
   // length. Inside the name it would wrap with the text and lose that column.
   const row = page.locator(".stkind-row[data-kind='mail']");
   await expect(row.locator(".stkind-name .stkind-where")).toHaveCount(0);
-  await expect(row.locator("> .stkind-where")).toHaveText("on a worker");
+  await expect(row.locator("> .stkind-where")).toHaveText("auf einem Worker");
   // And it stays on one line: "on a worker" broken in two would cost the row the line it
   // just saved.
   const lines = await row.locator(".stkind-where").evaluate((b) => b.getClientRects().length);
