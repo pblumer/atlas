@@ -12,7 +12,7 @@ import (
 
 // processStatsBPMN waits at a user task and then decides: the default branch is the
 // only one any instance takes, so "low" is the arrow the heatmap must report as never
-// taken (ADR-draft-operations-heatmap).
+// taken (ADR-0496).
 const processStatsBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
   <process id="stats" isExecutable="true">
     <startEvent id="s"/>

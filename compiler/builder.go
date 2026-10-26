@@ -3291,7 +3291,7 @@ func (b *Builder) Connect(source, target int32) int32 {
 
 // SetFlowBpmnId records the source BPMN id of a sequence flow (e.g. "Flow_1"), so a
 // count the engine keeps per compiled flow can be drawn on the arrow it belongs to
-// (ADR-draft-operations-heatmap). Optional, like SetElementBpmnId: a flow without
+// (ADR-0496). Optional, like SetElementBpmnId: a flow without
 // one reports "" from CompiledProcess.FlowBpmnId.
 func (b *Builder) SetFlowBpmnId(flowID int32, bpmnID string) {
 	if flowID >= 0 && int(flowID) < len(b.flowIds) {

@@ -1,4 +1,4 @@
-// The Operations heatmap (ADR-draft-operations-heatmap): the live view's diagram shaded
+// The Operations heatmap (ADR-0496): the live view's diagram shaded
 // by how much each element and sequence flow was used, or by where the time went.
 //
 // The live view (editor.js, mountLive) owns the polling, the instance list and the

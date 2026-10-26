@@ -1,4 +1,4 @@
-// End-to-end coverage for the Operations heatmap (ADR-draft-operations-heatmap): the
+// End-to-end coverage for the Operations heatmap (ADR-0496): the
 // strip over the live view that shades the diagram by how much each element and sequence
 // flow was used, or by where the time went, and the figures behind the colours.
 //

@@ -64,8 +64,8 @@ const (
 	cfActionApproval         columnFamily = 0x33 // apr:<piKey>:<approvalKey>:<pos> → ActionApprovalValue (ADR-0475 §9)
 	cfAuthorization          columnFamily = 0x34 // authz:<piKey>:<jobKey>:<pos> → AuthorizationValue (ADR-0475 §12); 0x32 until it was found to be the event log's
 	cfApprovalExpiry         columnFamily = 0x35 // aprExp:<expiresAt>:<approvalKey> → piKey(8): the open approval requests, soonest first (ADR-0475 §9)
-	cfFlowTakenAgg           columnFamily = 0x36 // flowAgg:<procDefKey>:<flowId> → int64 cumulative traversals (merge, ADR-draft-operations-heatmap)
-	cfJobTake                columnFamily = 0x37 // jobTake:<piKey>:<ts>:<pos> → elementInstanceKey(8) kind(1): a task taken up or handed back (ADR-draft-operations-heatmap)
+	cfFlowTakenAgg           columnFamily = 0x36 // flowAgg:<procDefKey>:<flowId> → int64 cumulative traversals (merge, ADR-0496)
+	cfJobTake                columnFamily = 0x37 // jobTake:<piKey>:<ts>:<pos> → elementInstanceKey(8) kind(1): a task taken up or handed back (ADR-0496)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -146,7 +146,7 @@ func keyElementTerminationAgg(procDefKey uint64, elementId int32) []byte {
 }
 
 // keyFlowTakenAgg keys a definition-flow cumulative-traversal counter: how many tokens
-// arrived at a flow's target over that flow (ADR-draft-operations-heatmap). The same
+// arrived at a flow's target over that flow (ADR-0496). The same
 // shape as the element aggregates — definition first, so one definition's flows are a
 // single prefix scan, the compiled flow index last. Incremented, never decremented.
 func keyFlowTakenAgg(procDefKey uint64, flowId int32) []byte {

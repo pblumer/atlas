@@ -158,7 +158,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				return err
 			}
 			// Count the arrow the token came over, so the heatmap can draw the sequence
-			// flows and not only the shapes (ADR-draft-operations-heatmap). A catch armed
+			// flows and not only the shapes (ADR-0496). A catch armed
 			// by an event-based gateway is not counted here: arming every branch is how
 			// Atlas runs a deferred choice, not a token taking each arrow, so its flow
 			// counts when the race is decided in its favour (the completion arm below).
@@ -196,7 +196,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			}
 			// The armed branch that won its race: the arrow from the gateway is now the
 			// one the token took. A losing branch is terminated, never completed, so it
-			// is never counted (ADR-draft-operations-heatmap).
+			// is never counted (ADR-0496).
 			if h.Intent == model.IntentCompleted && v.element.EventGatewayKey != 0 && v.element.SourceFlowId >= 0 {
 				if err := tx.IncFlowTakenAgg(v.element.ProcessDefKey, v.element.SourceFlowId); err != nil {
 					return err
@@ -264,7 +264,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// Taking a task up and handing it back are kept as facts of their own, in the
 			// order they happened, because the job keeps only who holds it now and goes
 			// when it completes — and waiting and working time are the distance between
-			// them (ADR-draft-operations-heatmap). Creation is neither: a task the model
+			// them (ADR-0496). Creation is neither: a task the model
 			// assigns is in somebody's inbox, not yet in their hands.
 			if kind := jobTakeKind(h.Intent, &v.job); kind != 0 {
 				if err := tx.RecordJobTake(v.job.ProcessInstanceKey, h.Timestamp, h.Position, v.job.ElementInstanceKey, kind); err != nil {

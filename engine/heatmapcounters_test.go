@@ -10,7 +10,7 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// The Operations heatmap (ADR-draft-operations-heatmap) needs two facts the engine did
+// The Operations heatmap (ADR-0496) needs two facts the engine did
 // not keep: which sequence flow a token arrived over, counted per definition, and when a
 // task was taken up and handed back, kept per instance. Both are folded in applyToState,
 // so these tests check them live and after the log is replayed into an empty store

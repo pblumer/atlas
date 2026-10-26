@@ -1688,7 +1688,7 @@ func (p *CompiledProcess) FlowCount() int { return len(p.flows) }
 // arrow under — or "" when the index is out of range or the flow has no arrow: the goto
 // the compiler makes up for a link event (ADR-0133). The engine counts the flows a token
 // takes by index; this is how such a count reaches the diagram
-// (ADR-draft-operations-heatmap).
+// (ADR-0496).
 func (p *CompiledProcess) FlowBpmnId(id int32) string {
 	if id < 0 || int(id) >= len(p.flowIds) {
 		return ""

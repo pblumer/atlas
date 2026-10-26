@@ -9,7 +9,7 @@ import (
 // Elements always kept their BPMN id; sequence flows did not, because nothing at
 // runtime needed it. The Operations heatmap does: the engine counts which flow a token
 // took by its compiled index, and the browser can only colour an arrow it can name
-// (ADR-draft-operations-heatmap). Every authored flow — at the root and inside a
+// (ADR-0496). Every authored flow — at the root and inside a
 // subprocess — must report the id it was written with, and the flow the compiler makes
 // up for a link event (ADR-0133) has no arrow on the diagram, so it reports none.
 func TestFlowBpmnId(t *testing.T) {

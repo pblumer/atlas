@@ -19,7 +19,7 @@ import (
 // maxStatisticsInstances bounds how many instances one statistics read folds. The walk
 // is newest first, so a bound that bites drops the oldest part of the window, and the
 // answer says so (Truncated, Scanned) instead of passing a part off as the whole
-// (ADR-draft-operations-heatmap).
+// (ADR-0496).
 const maxStatisticsInstances = 10000
 
 // statsSummary is one measured time — of an element instance, of a task's waiting or
@@ -88,7 +88,7 @@ type processStatsResp struct {
 }
 
 // handleProcessStatistics answers how one definition's elements and flows were used over
-// a window, and where the time went (ADR-draft-operations-heatmap).
+// a window, and where the time went (ADR-0496).
 //
 // ?from= and ?to= are RFC 3339 moments or positive unix nanoseconds, like the history
 // purge's cut-off; from defaults to the beginning of what is retained, to to now. The

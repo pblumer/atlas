@@ -5853,7 +5853,7 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .pg-heat-key-4 { background: #e8783c; }
 .pg-heat-key-5 { background: #d93025; }
 
-/* ---- The Operations heatmap (ADR-draft-operations-heatmap) ----
+/* ---- The Operations heatmap (ADR-0496) ----
    The live view's strip reuses the Playground's switcher and its five shades, so the two
    heatmaps in the product read alike. The glow style paints its halos in a layer under
    the diagram, so a shape's white fill has to let them through — only the shape's own

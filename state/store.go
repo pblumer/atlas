@@ -108,7 +108,7 @@ func Open(dir string, opts ...Option) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: backfill element terminations: %w", err)
 	}
-	// The per-flow traversal counters (ADR-draft-operations-heatmap) arrive on stores
+	// The per-flow traversal counters (ADR-0496) arrive on stores
 	// that already hold years of element counts; left at zero, every arrow of a busy
 	// process would read "never reached". The trail recorded the flows, so they are
 	// reconstructed once from it.
@@ -488,7 +488,7 @@ func (q queries) ElementTerminationTotals(procDefKey uint64, fn func(elementId i
 // FlowTakenTotals calls fn with each of a definition's sequence flows that a token has
 // arrived over, and how many times — the arrows' half of the retained heatmap, read in
 // O(flows) from a maintained counter like ElementVisitTotals
-// (ADR-draft-operations-heatmap). A flow no token ever took is absent; the caller walks
+// (ADR-0496). A flow no token ever took is absent; the caller walks
 // the compiled process when it needs the zeroes.
 func (q queries) FlowTakenTotals(procDefKey uint64, fn func(flowId int32, count int64) error) error {
 	return q.scanPrefix(runtimeCountPrefix(cfFlowTakenAgg, procDefKey), func(k, raw []byte) error {
@@ -683,7 +683,7 @@ func (s *Store) backfillElementTerminationsIfNeeded() error {
 }
 
 // metaFlowTakenV1 marks that the per-flow traversal counters
-// (ADR-draft-operations-heatmap) have been reconstructed from the lifecycle trail.
+// (ADR-0496) have been reconstructed from the lifecycle trail.
 const metaFlowTakenV1 = "flow_taken_v1"
 
 // backfillFlowTakenIfNeeded reconstructs the per-flow traversal counters from the
@@ -1721,7 +1721,7 @@ type JobTakeValue struct {
 }
 
 // JobTakeHistory calls fn with every take-up and hand-back of one process instance's
-// tasks, in the order they happened (ADR-draft-operations-heatmap). Paired with the
+// tasks, in the order they happened (ADR-0496). Paired with the
 // lifecycle trail's activation and completion of the same element instance, it splits
 // the time a task took into waiting for somebody and being worked on.
 func (q queries) JobTakeHistory(piKey uint64, fn func(ts int64, pos uint64, v JobTakeValue) error) error {

@@ -13,7 +13,7 @@ import (
 // guessed at from where they lead. These tests pin the per-definition sequence-flow
 // counter and the per-instance record of a task being taken up and handed back — the
 // two facts the Operations heatmap needs that the engine did not keep
-// (ADR-draft-operations-heatmap).
+// (ADR-0496).
 
 // TestFlowTakenTotals: traversals accumulate per (definition, flow), are read in
 // O(flows), and never leak between definitions — two versions of a process number

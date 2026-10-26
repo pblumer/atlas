@@ -34,7 +34,7 @@ Bearer` header.
 | `atlas_get_process_xml` | `key` | deployed BPMN XML |
 | `atlas_create_instance` | `key`, `variables?` | starts an instance (optionally seeded with start variables) and returns stats |
 | `atlas_process_runtime` | `key` | per-element token and visit counts |
-| `atlas_process_statistics` | `key`, `from?`, `to?` | over a period: runs per element and per sequence flow (zeroes included), and per element duration, waiting and working time as count, mean, median, p90, max and total (ADR-draft-operations-heatmap) |
+| `atlas_process_statistics` | `key`, `from?`, `to?` | over a period: runs per element and per sequence flow (zeroes included), and per element duration, waiting and working time as count, mean, median, p90, max and total (ADR-0496) |
 | `atlas_call_activities` | none | every call activity across deployed processes, with its called process id, binding, propagation, any per-server target override (redirect/pin/disable, ADR-0105), and how it currently resolves here |
 | `atlas_collaboration_runtime` | `key` | a collaboration's live pools, tokens, and message flows |
 | `atlas_list_instances` | `process?`, `element?`, `state?`, `limit?`, `before?` | a page of instances; `element` narrows to the ones whose token is sitting on that BPMN element right now (ADR-0261) |

@@ -1360,7 +1360,7 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   live view): active elements highlighted with token counts, polled from a
   `/processes/{key}/runtime` endpoint — the differentiator a standalone modeler
   can't offer. Incidents/history overlays still to come.
-- ✅ **Heatmap overlay** ([ADR-draft-operations-heatmap](docs/adr/draft-operations-heatmap.md)):
+- ✅ **Heatmap overlay** ([ADR-0496](docs/adr/0496-operations-heatmap.md)):
   the live view's diagram shaded by how many tokens passed each element *and* sequence
   flow, or by the median waiting, working and total time of each task, as a glow under
   the diagram or as shaded outlines, since deployment or over a period, with the figures

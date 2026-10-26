@@ -377,7 +377,7 @@ type runtimeResp struct {
 	// reader must treat them as a floor.
 	IncidentCountsExact bool `json:"incidentCountsExact"`
 	// Flows is how many tokens arrived over each sequence flow, the arrows' half of the
-	// heatmap (ADR-draft-operations-heatmap): for the whole definition from the
+	// heatmap (ADR-0496): for the whole definition from the
 	// maintained counter, for one isolated instance folded from its own trail. A flow no
 	// token took is absent, as an element no token reached is; the browser draws the
 	// diagram's other arrows at zero.

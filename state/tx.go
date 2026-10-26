@@ -1198,7 +1198,7 @@ func (t *Tx) IncElementTerminationAgg(procDefKey uint64, elementId int32) error 
 }
 
 // IncFlowTakenAgg bumps a definition-flow cumulative-traversal count when a token
-// arrives at the flow's target over it (ADR-draft-operations-heatmap). Never
+// arrives at the flow's target over it (ADR-0496). Never
 // decremented — it is the arrows' half of the retained heatmap, beside the elements'
 // visit aggregate. A write-only merge, so it neither reads nor allocates beyond the key
 // the visit counter beside it builds too (I1), and replay rebuilds it (I4).
@@ -1295,7 +1295,7 @@ func (t *Tx) RecordElementReplay(piKey uint64, ts int64, pos uint64, elementID i
 // (ADR-0007) — and when it is handed back, the instance keeps the fact, keyed in the
 // order it happened. The job itself keeps only who holds it now and is deleted when it
 // completes, so without this nothing could say how long a task waited before somebody
-// started on it and how long the work then took (ADR-draft-operations-heatmap). Written
+// started on it and how long the work then took (ADR-0496). Written
 // only from applyToState, from the event header and the job alone, so replay rebuilds it
 // identically (I4); a plain Set under a unique key, purged with the instance's history.
 

@@ -1,4 +1,4 @@
-# ADR-DRAFT: The Operations heatmap counts arrows and splits a task's time
+# ADR-0496: The Operations heatmap counts arrows and splits a task's time
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
-// The flow counter (ADR-draft-operations-heatmap) arrives on stores that already hold
+// The flow counter (ADR-0496) arrives on stores that already hold
 // years of element counts. Left at zero it would not read as "no data": the heatmap
 // would draw every arrow of a busy process cold — dashed, "never reached" — between
 // shapes glowing with thousands of visits. The lifecycle trail (ADR-0136) recorded the

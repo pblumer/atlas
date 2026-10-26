@@ -67,7 +67,7 @@ import { groupifyPanel, groupController } from "./pgroup.js";
 // Counts on the runtime views are five and six digits on a busy server, so every
 // number a badge or a count pill prints goes through the same grouping (numfmt.js).
 import { fmtCount } from "./numfmt.js";
-// The heatmap over the live view (ADR-draft-operations-heatmap): the strip that
+// The heatmap over the live view (ADR-0496): the strip that
 // chooses what the diagram shows, the shading, and the figures behind it.
 import {
   loadHeatPrefs, saveHeatPrefs, heatValues, heatFormat, heatStatsQuery,
@@ -12623,7 +12623,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   const picked = new Set();
   const TERMINATE_TYPE_THRESHOLD = 50;
 
-  // The heatmap (ADR-draft-operations-heatmap). heat is what the strip chose — remembered
+  // The heatmap (ADR-0496). heat is what the strip chose — remembered
   // in this browser — and the rest is what the last poll read for it. The statistics are
   // a fold over history on the server, so they are re-read when the period changes and
   // otherwise at most every HEAT_STATS_MS, not on every 1.5s tick.

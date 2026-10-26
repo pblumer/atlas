@@ -29,7 +29,7 @@ _Changed_ / _Removed_ for each version.
   The runtime overlay carries `flows`, and `GET /api/v1/processes/{key}/statistics` answers
   a window's runs, durations, waiting and working times as count, mean, median, p90,
   maximum and total, also as the `atlas_process_statistics` MCP tool. Times are kept per
-  task, never per person ([ADR-draft-operations-heatmap](docs/adr/draft-operations-heatmap.md)).
+  task, never per person ([ADR-0496](docs/adr/0496-operations-heatmap.md)).
 - **The architecture sketch shows the layers you choose.** **Architecture** in a
   release's history now offers one checkbox per layer the release records: the
   *application* layer (what the release's content fixes: the messages it receives, the
