@@ -534,6 +534,9 @@ func (s *Service) writeContent(ctx context.Context, p *httpapi.Principal, id, so
 		return contentWrite{status: http.StatusConflict, message: "a page is already bound to product " + other +
 			"; one page describes one service"}
 	}
+	if s.BindingChanged != nil {
+		s.BindingChanged(src.ID)
+	}
 	if lifted != nil {
 		logging.Info(logging.ContentQuarantineLifted, "a refresh passed every rule and ended a product's quarantine",
 			slog.String("item", id), slog.String("source", src.ID), slog.String("reason_was", lifted.Reason))
@@ -756,8 +759,8 @@ func (s *Service) HandleContentUnlink(w http.ResponseWriter, r *http.Request) {
 		attrs = append(attrs, slog.String("actor", p.Username), slog.String("actor_id", p.UserID))
 	}
 	logging.Info(logging.ContentUnlinked, "a product's content binding was removed", attrs...)
-	if s.Unlinked != nil {
-		s.Unlinked(source)
+	if s.BindingChanged != nil {
+		s.BindingChanged(source)
 	}
 	httpapi.JSON(w, http.StatusOK, out)
 }

@@ -96,9 +96,11 @@ type Service struct {
 	// binding then answers that none is configured, and nothing else changes.
 	Content ContentSources
 
-	// Unlinked is told the source of a binding that was removed, so the recheck
-	// stops watching pages nothing holds any more. Nil does nothing.
-	Unlinked func(source string)
+	// BindingChanged is told the source of a binding that was linked, refreshed
+	// or removed, so the recheck watches the pages it now holds — and stops
+	// watching the ones nothing holds any more — at once rather than at its next
+	// sweep. Nil does nothing.
+	BindingChanged func(source string)
 }
 
 // New builds the service. Every dependency is an explicit argument (ADR-0147).

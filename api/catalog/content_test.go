@@ -631,7 +631,7 @@ func TestUnlinkingWithoutQuarantineKeepsTheLastValues(t *testing.T) {
 		t.Fatalf("unlink = %d %+v", rec.Code, got)
 	}
 	unlinked := ""
-	b.s.Unlinked = func(src string) { unlinked = src }
+	b.s.BindingChanged = func(src string) { unlinked = src }
 	b.linkVPN(t)
 	as(t, b.s.HandleContentUnlink, b.owner, "POST", `{"lang":"de","reason":"x"}`, "id", "vpn")
 	as(t, b.s.HandleContentUnlink, b.owner, "POST", `{"lang":"fr","reason":"x"}`, "id", "vpn")

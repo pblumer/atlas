@@ -91,6 +91,7 @@ import (
 	"github.com/pblumer/atlas/tracing"
 
 	"github.com/pblumer/atlas/api/catalog"
+	"github.com/pblumer/atlas/api/contentsource"
 	"github.com/pblumer/atlas/api/decisiondoc"
 	"github.com/pblumer/atlas/api/feelgen"
 	"github.com/pblumer/atlas/api/formgen"
@@ -349,6 +350,15 @@ type Server struct {
 	// already built with (catalogStore.Release below).
 	catalogStore *catalog.Store
 	orderStore   *order.Store
+	// contentSources configures the external sources a product's content may
+	// come from, and contentRunner rechecks what was copied from them
+	// (ADR-draft-service-content-from-an-external-source). With no source
+	// configured the runner follows nothing and nothing else changes.
+	contentSources *contentsource.Service
+	contentRunner  *contentsource.Runner
+	// contentTransport is the HTTP transport content-source adapters use; nil is
+	// the process-wide one, which carries the outbound proxy.
+	contentTransport http.RoundTripper
 	// taskFolders serves the Tasks app's saved filters (ADR-0268).
 	taskFolders *taskfolder.Service
 	// userPrefs serves how one person reads the console — number format, time
@@ -919,6 +929,14 @@ func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
 // the wiring in cmd can make differently (ADR-0196).
 func WithMCP(h http.Handler) Option { return func(s *Server) { s.mcpHandler = h } }
 
+// WithContentTransport sets the HTTP transport the content-source adapters reach
+// their sources with (ADR-draft-service-content-from-an-external-source). The
+// default is the process-wide transport, which carries the outbound proxy; a test
+// passes its TLS test server's.
+func WithContentTransport(rt http.RoundTripper) Option {
+	return func(s *Server) { s.contentTransport = rt }
+}
+
 // mcpTransport is the MCP handler with one thing added: every request entering it
 // is stamped with mcpTransportHeader, which the adapter forwards on the API calls
 // its tools make. That is what lets the boundary tell a tool call apart from a
@@ -1392,6 +1410,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		return nil, err
 	}
 	catalogStore, err := catalog.NewStore(filepath.Join(dataDir, "catalog"))
+	if err != nil {
+		return nil, err
+	}
+	contentSourceStore, err := contentsource.NewStore(filepath.Join(dataDir, "contentsources"))
 	if err != nil {
 		return nil, err
 	}
@@ -1946,6 +1968,16 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogs.Deployer = catalogDeployer{s: s}
 	s.catalogs.Personal = processLookup{s: s}
 	s.catalogs.Remainders = remainderLookup{s: s}
+	// The content sources: the credential is resolved on the loop like every
+	// Worker's, the fetches and the recheck run off it (I3).
+	contentReg := contentsource.NewRegistry(s.runLoop, contentSourceStore, s.resolveConnectorSecret)
+	contentReg.Transport = s.contentTransport
+	s.catalogs.Content = contentReg
+	s.contentSources = contentsource.NewService(contentReg, func() int64 { return s.now() })
+	s.contentSources.InUse = s.catalogs.BoundTo
+	s.contentRunner = contentsource.NewRunner(contentReg, s.catalogs.Rechecks(), func() int64 { return s.now() })
+	contentReg.OnChange(s.contentRunner.Reload)
+	s.catalogs.BindingChanged = s.contentRunner.Kick
 	s.orders.Limits = s.budgets()
 	// An outcome that comes without a right changing hands — a provision that
 	// failed or was refused, a return that failed — is written on its own
@@ -2295,6 +2327,17 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if s.feedPush > 0 {
 		s.wg.Add(1)
 		go s.feedPusher(s.feedPush)
+	}
+	// The content recheck (ADR-draft-service-content-from-an-external-source §
+	// 9): a goroutine per content source, its network I/O off the run loop and
+	// only its findings written through it. Not on a server that serves no
+	// catalogue — there is nothing to show content in.
+	if !s.catalogueOff {
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.contentRunner.Run(quit)
+		}()
 	}
 	// The OpenSearch exporter tails the durable log and bulk-indexes new records
 	// (ADR-0114). Like the timer scheduler and inbound bridge it is a separate

@@ -99,6 +99,18 @@ func (r *Runner) Reload() {
 	}
 }
 
+// Kick rechecks a source now, in the background — after an unlink, so the
+// watches nothing needs any more end without waiting for the next sweep.
+func (r *Runner) Kick(source string) {
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		_ = r.Sweep(ctx, source)
+	}()
+}
+
 // Run keeps one goroutine per source until quit closes, then stops them all and
 // waits for them.
 func (r *Runner) Run(quit <-chan struct{}) {
