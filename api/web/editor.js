@@ -4621,7 +4621,7 @@ const SERVICE_TASK_KINDS = [
             ? "Receives the attachment: content (base64), name, contentType as detected from the content, declaredType as the sender wrote it, size, and inspection. Limited to what fits a process variable (1 MiB); a larger document needs Export attachment."
             : v.operation === "export-attachment"
               ? "Optional. Receives where the document went — bucket, key, etag — with its detected type and the inspection. Mint a link for a user task with an S3 presign-get on that key."
-              : "Receives what the mailbox answered: " + (v.operation === "list" ? "a list of messages, newest first." : "the message.")),
+              : (v.operation === "list" ? tr("pnl.kindB.mail.resultList") : tr("pnl.kindB.mail.resultMessage"))),
       },
     ],
     // Only a get reads a message's HTML body (ADR-0489): a get turned
@@ -5107,9 +5107,7 @@ const SERVICE_TASK_KINDS = [
         // Inline JSON and a variable are mutually exclusive (the compiler refuses both).
         showIf: (v) => googleContactsUses(v.operation || "find-contacts", "contact") && !v.contactVariable,
         placeholder: (v) => googleContactsContactPlaceholder(v.operation || "create-contact"),
-        hint: (v) => "Keys: givenName, familyName, email, emails, phone, phones, organization, jobTitle, department, address, addresses, birthday (1980-05-17, or --05-17 without a year), notes, fields (custom fields by name)" +
-          (v.operation === "create-contact" ? " and groups (labels by name)." : "; labels change through Add to label and Remove from label.") +
-          " A string starting with = is a FEEL expression. A value that is null changes nothing, \"\" clears; email, phone and address change the primary entry and keep the others, emails, phones and addresses replace the list.",
+        hint: (v) => (v.operation === "create-contact" ? tr("pnl.kindB.googlecontacts.contactCreate") : tr("pnl.kindB.googlecontacts.contactUpdate")),
       },
       {
         key: "contactVariable", label: "Contact variable", placeholder: "neukunde",
@@ -5177,9 +5175,7 @@ const SERVICE_TASK_KINDS = [
         // Inline JSON and a variable are mutually exclusive (the compiler refuses both).
         showIf: (v) => cardDAVUses(v.operation || "find-contacts", "contact") && !v.contactVariable,
         placeholder: (v) => cardDAVContactPlaceholder(v.operation || "create-contact"),
-        hint: (v) => "Keys: displayName, givenName, familyName, email, emails, phone, phones, organization, jobTitle, department, address, addresses (streetAddress, extendedAddress, poBox, postalCode, city, region, country, type), birthday (1980-05-17, or --05-17 without a year), notes, fields (custom fields by name)" +
-          (v.operation === "create-contact" ? " and groups (by name)." : "; groups change through Add to group and Remove from group.") +
-          " A string starting with = is a FEEL expression. A value that is null changes nothing, \"\" clears; email, phone and address change the preferred entry and keep the others, emails, phones and addresses replace the list. Every other property of the card — a photo included — is kept.",
+        hint: (v) => (v.operation === "create-contact" ? tr("pnl.kindB.carddav.contactCreate") : tr("pnl.kindB.carddav.contactUpdate")),
       },
       {
         key: "contactVariable", label: "Contact variable", placeholder: "neukunde",

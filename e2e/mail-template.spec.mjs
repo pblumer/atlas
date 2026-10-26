@@ -145,12 +145,12 @@ test("Read message offers the HTML body, and a list takes it back", async ({ pag
   await page.locator("#f-st-operation").selectOption("get");
   await page.locator('.pgroup[data-group*="Mailbox" i] > .pgroup-head').click();
   const text = page.locator("#f-st-includeBody");
-  await expect(text.locator("option")).toHaveText(["Envelope only", "Include the text", "Include the text and the HTML"]);
+  await expect(text.locator("option")).toHaveText(["Nur Umschlag", "Mit Text", "Mit Text und HTML"]);
   await text.selectOption("html");
   await expect.poll(async () => /includeBody="html"/.test(await taskXML(page, "Activity_mail"))).toBe(true);
 
   await page.locator("#f-st-operation").selectOption("list");
   await expect.poll(async () => /includeBody="true"/.test(await taskXML(page, "Activity_mail"))).toBe(true);
-  await expect(page.locator("#f-st-includeBody option")).toHaveText(["Envelope only", "Include the text"]);
+  await expect(page.locator("#f-st-includeBody option")).toHaveText(["Nur Umschlag", "Mit Text"]);
   expect(page.__errors).toEqual([]);
 });
