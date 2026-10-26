@@ -25,7 +25,7 @@ async function mount(page, which) {
 async function openGroup(page, title, probe) {
   await expect(page.locator(probe)).toHaveCount(1);
   if (!(await page.locator(probe).isVisible())) {
-    await page.locator(".pgroup-head .pgroup-title").filter({ hasText: new RegExp(`^${title}$`) }).click();
+    await page.locator(`.pgroup[data-group="${title}"] > .pgroup-head .pgroup-title`).click();
   }
   await expect(page.locator(probe)).toBeVisible();
 }

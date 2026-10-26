@@ -30,7 +30,7 @@ async function open(page, id) {
 
 // expand opens a collapsed property group by its title.
 async function expand(page, title) {
-  await page.locator(".pgroup-head", { hasText: title }).click();
+  await page.locator(`.pgroup[data-group*="${title}" i] > .pgroup-head`).click();
 }
 
 // elementXML returns the exported XML of one element, so an assertion sees the

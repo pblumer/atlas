@@ -60,7 +60,7 @@ test("a type that configures nothing starts folded", async ({ page }) => {
   // User provisioning names no configured Worker: its setup is a one-time read, so it
   // does not take the panel on every selection.
   await page.evaluate(() => window.__select("Activity_login"));
-  await page.locator(".pgroup-head", { hasText: "Worker type" }).click();
+  await page.locator('.pgroup[data-group*="Worker type" i] > .pgroup-head').click();
   await expect(page.locator(".wt-group")).toHaveClass(/collapsed/);
   expect(page.__errors).toEqual([]);
 });
@@ -114,7 +114,7 @@ test("the steps say when they were last checked against the provider", async ({ 
 
 test("a type that needs nothing says that, instead of showing nothing", async ({ page }) => {
   await page.evaluate(() => window.__select("Activity_login"));
-  await page.locator(".pgroup-head", { hasText: "Worker type" }).click();
+  await page.locator('.pgroup[data-group*="Worker type" i] > .pgroup-head').click();
   await openSetup(page);
   // User provisioning acts on this server's own login store: no Worker record, no
   // credential. An empty panel there would read exactly like a type whose setup nobody
@@ -139,13 +139,13 @@ test("switching the Worker Type switches the setup with it", async ({ page }) =>
 
 test("the business rule task's temis binding carries its setup too", async ({ page }) => {
   await page.evaluate(() => window.__select("Activity_rule_temis"));
-  await page.locator(".pgroup-head", { hasText: "Called decision" }).click();
+  await page.locator('.pgroup[data-group*="Called decision" i] > .pgroup-head').click();
   await openSetup(page);
   await expect(page.locator(".wtdoc-link")).toHaveAttribute("href", "/handbuch.html#runbook-temis");
   // The embedded binding configures no worker, so it gets no setup block: there is
   // nothing outside Atlas to do.
   await page.evaluate(() => window.__select("Activity_rule"));
-  await page.locator(".pgroup-head", { hasText: "Called decision" }).click();
+  await page.locator('.pgroup[data-group*="Called decision" i] > .pgroup-head').click();
   await expect(page.locator(".wtdoc")).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });

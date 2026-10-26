@@ -23,7 +23,7 @@ test.beforeEach(async ({ page }) => {
 // picker lives in, then waits for the catalog fetch to have filled it.
 async function openPicker(page) {
   await page.evaluate(() => window.__select("Activity_rule"));
-  await page.locator(".pgroup-head", { hasText: "Called decision" }).click();
+  await page.locator('.pgroup[data-group*="Called decision" i] > .pgroup-head').click();
   await expect(page.locator("#f-decision-pick optgroup").first()).toBeAttached();
 }
 
@@ -134,8 +134,8 @@ test("the task says where its input mapping and the decision's inputs disagree",
   // shut: a panel re-render keeps whichever groups were open, so an unconditional click
   // after one closes the group it was meant to open.
   const openInputs = async () => {
-    const head = page.locator(".pgroup-head", { hasText: "Decision inputs" });
-    const group = page.locator(".pgroup", { has: head });
+    const group = page.locator('.pgroup[data-group="Decision inputs"]');
+    const head = group.locator("> .pgroup-head");
     if (((await group.getAttribute("class")) || "").includes("collapsed")) await head.click();
   };
 

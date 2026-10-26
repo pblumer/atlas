@@ -26,7 +26,7 @@ async function openSignal(page, id) {
   await page.evaluate((el) => window.__select(el), id);
   const picker = page.locator("#f-sigref");
   await expect(picker).toHaveCount(1);
-  if (!(await picker.isVisible())) await page.locator(".pgroup-head", { hasText: "Signal" }).first().click();
+  if (!(await picker.isVisible())) await page.locator('.pgroup[data-group*="Signal" i] > .pgroup-head').first().click();
   await expect(picker).toBeVisible();
 }
 

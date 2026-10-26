@@ -10,6 +10,13 @@
 // It works on already-rendered markup, which is what makes it shareable: a panel emits
 // plain sections and this turns them into groups, so no renderer has to know about
 // grouping at all.
+//
+// A heading may carry its group's identity in data-group (`<h3 data-group="General">`)
+// beside the words it shows. The words follow the console's language (ADR-0267); the
+// identity does not, so which groups start open, which the author folded, and what a
+// test addresses stay the same whichever language the heading is read in.
+
+import { t } from "./i18n.js";
 
 // groupifyPanel turns each <h3> section of the properties panel into a collapsible
 // group (Camunda-style): the heading becomes a toggle with a chevron and a filled
@@ -26,9 +33,10 @@ export function groupifyPanel(body, ctl) {
   const isStop = (n) => n.nodeType === 1 && (n.tagName === "H3" || n.dataset.standaloneGroup === "1");
   for (const h3 of heads) {
     const title = h3.textContent.trim();
+    const id = (h3.dataset.group || title).trim();
     const group = document.createElement("div");
-    group.className = "pgroup" + (ctl.isCollapsed(title) ? " collapsed" : "");
-    group.dataset.group = title;
+    group.className = "pgroup" + (ctl.isCollapsed(id) ? " collapsed" : "");
+    group.dataset.group = id;
     const bodyWrap = document.createElement("div");
     bodyWrap.className = "pgroup-body";
     let n = h3.nextSibling;
@@ -50,10 +58,10 @@ export function groupifyPanel(body, ctl) {
     if (hasVal || hasRows) {
       const dot = document.createElement("span");
       dot.className = "pgroup-dot";
-      dot.title = "has content";
+      dot.title = t("pgroup.hasContent");
       head.appendChild(dot);
     }
-    head.addEventListener("click", () => ctl.onToggle(title, group.classList.toggle("collapsed")));
+    head.addEventListener("click", () => ctl.onToggle(id, group.classList.toggle("collapsed")));
     body.insertBefore(group, h3);
     group.appendChild(head);
     group.appendChild(bodyWrap);
@@ -66,9 +74,9 @@ export function groupifyPanel(body, ctl) {
   if (total >= 2 && !body.querySelector(".pgroup-tools")) {
     const tools = document.createElement("div");
     tools.className = "pgroup-tools";
-    tools.innerHTML = `<button type="button" class="pgroup-all" data-all="expand" title="Expand all groups">Expand all</button>`
+    tools.innerHTML = `<button type="button" class="pgroup-all" data-all="expand" title="${t("pgroup.expandAllTitle")}">${t("pgroup.expandAll")}</button>`
       + `<span class="pgroup-all-sep" aria-hidden="true">·</span>`
-      + `<button type="button" class="pgroup-all" data-all="collapse" title="Collapse all groups">Collapse all</button>`;
+      + `<button type="button" class="pgroup-all" data-all="collapse" title="${t("pgroup.collapseAllTitle")}">${t("pgroup.collapseAll")}</button>`;
     tools.querySelector('[data-all="expand"]').addEventListener("click", () => ctl.setAll(false));
     tools.querySelector('[data-all="collapse"]').addEventListener("click", () => ctl.setAll(true));
     body.insertBefore(tools, body.firstChild);
@@ -79,7 +87,8 @@ export function groupifyPanel(body, ctl) {
 // not markup: which sections start open, which the author has since toggled, and what
 // "expand all" does to both.
 //
-// A group is addressed by its title rather than by an index, so it keeps its state
+// A group is addressed by its identity — its data-group, or else its title — rather
+// than by an index, so it keeps its state
 // across a re-render that emits a different set of sections — selecting another
 // element, or a kind that has literals where the last one had attributes. Explicit
 // toggles win over the default and are remembered for the editing session; they reset

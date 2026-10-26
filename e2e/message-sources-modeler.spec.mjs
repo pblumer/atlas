@@ -31,7 +31,7 @@ async function openMessage(page, id) {
   const picker = page.locator("#f-msgref");
   await expect(picker).toHaveCount(1);
   if (!(await picker.isVisible())) {
-    await page.locator(".pgroup-head .pgroup-title").filter({ hasText: /^Message$/ }).click();
+    await page.locator('.pgroup[data-group="Message"] > .pgroup-head .pgroup-title').click();
   }
   await expect(picker).toBeVisible();
 }

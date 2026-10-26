@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(() => window.__select("Activity_mail"));
   // Property groups start collapsed (all but General), so open the one the message
   // fields live in before touching them.
-  await page.locator(".pgroup-head", { hasText: "Message" }).click();
+  await page.locator('.pgroup[data-group*="Message" i] > .pgroup-head').click();
 });
 
 // mailXML returns the exported XML of the mail task.

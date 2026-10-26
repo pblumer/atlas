@@ -18,7 +18,7 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(() => window.__selectCa());
   // Property groups start collapsed on open except General, so expand "Called process"
   // to reveal its Process ID picker before the tests drive it.
-  await page.locator(".pgroup-head", { hasText: "Called process" }).click();
+  await page.locator('.pgroup[data-group*="Called process" i] > .pgroup-head').click();
 });
 
 test("the Process ID field offers deployed processes and drafts as suggestions", async ({ page }) => {
@@ -78,7 +78,7 @@ async function markerCenter(page, elementId) {
 async function showCalledProcessPanel(page) {
   await page.locator('[data-tab="implement"]').click();
   await page.evaluate(() => window.__selectCa());
-  await page.locator(".pgroup-head", { hasText: "Called process" }).click();
+  await page.locator('.pgroup[data-group*="Called process" i] > .pgroup-head').click();
 }
 
 test("hovering the shape rings the +, and only the + explains itself", async ({ page }) => {

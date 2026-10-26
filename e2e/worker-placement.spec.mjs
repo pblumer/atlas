@@ -25,7 +25,7 @@ test.beforeEach(async ({ page }) => {
 // start collapsed), so the kind rows and their badges are on screen.
 async function openPicker(page, id) {
   await page.evaluate((el) => window.__select(el), id);
-  await page.locator(".pgroup-head", { hasText: "Worker type" }).click();
+  await page.locator('.pgroup[data-group*="Worker type" i] > .pgroup-head').click();
 }
 
 const badge = (page, kind) => page.locator(`.stkind-row[data-kind='${kind}'] .stkind-where`);
@@ -113,7 +113,7 @@ test("a script task says where its language runs, per language", async ({ page }
   await page.evaluate(() => window.__select("Activity_pwsh"));
   // The badge and the notice sit with the field that chooses the language, so they are
   // on screen exactly when the choice is being made.
-  await page.locator(".pgroup-head", { hasText: "Script" }).click();
+  await page.locator('.pgroup[data-group*="Script" i] > .pgroup-head').click();
   await expect(page.locator(".field .stkind-where")).toBeVisible();
   await expect(page.locator(".field .stkind-where")).toHaveText("on a worker");
   await expect(page.locator(".stkind-notice")).toBeVisible();
@@ -139,7 +139,7 @@ test("a FEEL script says nothing about placement, because it creates no job", as
 
 test("a business rule task says where its decision is evaluated, per binding", async ({ page }) => {
   await page.evaluate(() => window.__select("Activity_rule"));
-  await page.locator(".pgroup-head", { hasText: "Called decision" }).click();
+  await page.locator('.pgroup[data-group*="Called decision" i] > .pgroup-head').click();
   await expect(page.locator(".field .stkind-where")).toBeVisible();
   await expect(page.locator(".field .stkind-where")).toHaveText(/in.engine/);
   await expect(page.locator(".stkind-notice")).toBeVisible();

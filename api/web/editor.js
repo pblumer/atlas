@@ -1704,7 +1704,7 @@ function implMarker(bo) {
   if (bo.$type === "bpmn:ServiceTask") {
     const kind = serviceTaskKind(bo);
     if (!kind.glyph) return null; // plain job worker — the default gear is its symbol
-    return { label: kind.name, icon: kind.glyph };
+    return { label: kindText(kind.name), icon: kind.glyph };
   }
   if (bo.$type === "bpmn:SendTask") {
     // The send task's kind badge (ADR-0112): a message throw, a Worker Type, or (plain job
@@ -1713,10 +1713,10 @@ function implMarker(bo) {
     // envelope rather than over it (shopBadgeOf), and it is asked first, as sendTaskKind
     // asks it, so a leftover messageRef cannot cover the envelope with the Message badge.
     if (findExt(bo, SEND_SHOP_KIND.ext)) return null;
-    if (bo.messageRef) return { label: SEND_MESSAGE_KIND.name, icon: SEND_MESSAGE_KIND.glyph };
+    if (bo.messageRef) return { label: kindText(SEND_MESSAGE_KIND.name), icon: SEND_MESSAGE_KIND.glyph };
     const kind = serviceTaskKind(bo);
     if (!kind.glyph) return null;
-    return { label: kind.name, icon: kind.glyph };
+    return { label: kindText(kind.name), icon: kind.glyph };
   }
   return null;
 }
@@ -1802,7 +1802,7 @@ function wizardHTML(bo) {
   const v = bo.wizard || "";
   const opt = (value, label) => `<option value="${value}" ${v === value ? "selected" : ""}>${label}</option>`;
   const unknown = v && !WIZARD_KINDS[v] ? `<option value="${esc(v)}" selected>${esc(v)} — not a kind atlas knows</option>` : "";
-  return `<h3>Wizard</h3>
+  return `<h3 data-group="Wizard">${esc(tr("bpmn.group.wizard"))}</h3>
     <label class="field"><span>One sitting of one person</span>
       <select id="f-wizard">
         ${opt("", "No — an ordinary subprocess")}
@@ -3672,6 +3672,19 @@ function sqlServiceTaskKind(p) {
 // Worker Type is one entry here (plus its moddle type, compiler branch, and
 // worker) — the searchable picker and the field form are both rendered
 // generically from this data, so no bespoke panel code is needed per kind.
+// kindText shows a display text of the Worker Type tables — SERVICE_TASK_KINDS, the send
+// task's kinds and the shop task's modes — in the console's language (ADR-0267). The
+// tables keep their English as data: a kind's group and a field's section are also the
+// identities the picker and the panel's groups are addressed by. So the words are looked
+// up where they are drawn, under "wt." and the English text, the way lib-translate.js
+// looks up a library's words; a text the catalogue does not carry is shown as written.
+function kindText(s) {
+  if (typeof s !== "string" || !s) return s;
+  const key = "wt." + s;
+  const out = tr(key);
+  return out === key ? s : out;
+}
+
 const SERVICE_TASK_KINDS = [
   {
     id: "worker", name: "Job worker", group: "No Worker Type", desc: "Handled by an external job worker", icon: "⚙",
@@ -5587,13 +5600,13 @@ function selectOption(o) {
 // bespoke editor.
 function stMapRowHTML(f, name, value, extra) {
   const extraCell = f.extraKey
-    ? `<input type="text" class="st-map-extra" value="${esc(extra || "")}" placeholder="${esc(f.extraPlaceholder || f.extraKey)}" style="flex:0 0 22%"/>`
+    ? `<input type="text" class="st-map-extra" value="${esc(extra || "")}" placeholder="${esc(kindText(f.extraPlaceholder || f.extraKey))}" style="flex:0 0 22%"/>`
     : "";
   return `<div class="st-map-row" data-field="${esc(f.key)}" style="display:flex;gap:6px;margin-bottom:6px;align-items:start">
-    <input type="text" class="st-map-name" value="${esc(name || "")}" placeholder="${esc(f.namePlaceholder || "name")}" style="flex:0 0 ${f.extraKey ? "26%" : "40%"}"/>
-    <textarea class="st-map-value" rows="1" spellcheck="false" placeholder="${esc(f.valuePlaceholder || "value")}" style="flex:1;resize:none">${esc(value || "")}</textarea>
+    <input type="text" class="st-map-name" value="${esc(name || "")}" placeholder="${esc(kindText(f.namePlaceholder || "name"))}" style="flex:0 0 ${f.extraKey ? "26%" : "40%"}"/>
+    <textarea class="st-map-value" rows="1" spellcheck="false" placeholder="${esc(kindText(f.valuePlaceholder || "value"))}" style="flex:1;resize:none">${esc(value || "")}</textarea>
     ${extraCell}
-    <button type="button" class="st-map-del" title="Remove" style="flex:0 0 auto">✕</button>
+    <button type="button" class="st-map-del" title="${esc(tr("bpmn.kind.remove"))}" style="flex:0 0 auto">✕</button>
   </div>`;
 }
 
@@ -5623,7 +5636,7 @@ function fillWorkerDatalist(api, dl, note, kind) {
     if (note) {
       note.textContent = names.length
         ? ""
-        : "No Worker of this type is configured on this server — an operator adds one under Workers in the Console.";
+        : tr("bpmn.kind.noWorker");
     }
   }).catch(() => { /* no suggestions; the field stays free text */ });
 }
@@ -5657,10 +5670,10 @@ function stKindRow(k, curId) {
   const chosen = k.id === curId;
   return `
     <div class="stkind-row${chosen ? " stkind-row-on" : ""}" data-kind="${k.id}"
-         data-match="${esc((k.name + " " + k.desc + " connector").toLowerCase())}" title="${esc(k.desc)}">
+         data-match="${esc([k.name, k.desc, kindText(k.name), kindText(k.desc), "connector"].join(" ").toLowerCase())}" title="${esc(kindText(k.desc))}">
       <span class="stkind-icon">${k.glyph || esc(k.icon)}</span>
-      <span class="stkind-name"><b>${esc(k.name)}</b>${chosen
-        ? `<span class="stkind-desc">${esc(k.desc)}</span>` : ""}</span>
+      <span class="stkind-name"><b>${esc(kindText(k.name))}</b>${chosen
+        ? `<span class="stkind-desc">${esc(kindText(k.desc))}</span>` : ""}</span>
       ${placementBadgeHTML(k.id)}
     </div>`;
 }
@@ -5681,7 +5694,7 @@ function stKindRowsHTML(kinds, curId) {
   const other = rest.filter((k) => !ST_KIND_GROUPS.includes(k.group));
   if (other.length) groups.push(["Other", other]);
   return groups.map(([name, list]) => `<div class="stkind-group">
-      <div class="stkind-group-h">${esc(name)}</div>
+      <div class="stkind-group-h">${esc(kindText(name))}</div>
       ${list.map((k) => stKindRow(k, curId)).join("")}
     </div>`).join("");
 }
@@ -5708,7 +5721,7 @@ function stKindFieldsHTML(cur, ext) {
   for (const field of cur.fields) {
     if (field.group) {
       if (field.showIf && !field.showIf(ext)) continue;
-      fields += `<h3>${esc(field.group)}</h3>`;
+      fields += `<h3 data-group="${esc(field.group)}">${esc(kindText(field.group))}</h3>`;
       continue;
     }
     if (field.showIf && !field.showIf(ext)) continue;
@@ -5723,55 +5736,55 @@ function stKindFieldsHTML(cur, ext) {
       const list = Array.isArray(ext[f.key]) ? ext[f.key] : [];
       const valueKey = f.valueKey || "value";
       const rowsHTML = list.map((kv) => stMapRowHTML(f, kv.name, kv[valueKey], f.extraKey ? kv[f.extraKey] : "")).join("");
-      fields += `<div class="field"><span>${esc(f.label)}</span>
+      fields += `<div class="field"><span>${esc(kindText(f.label))}</span>
         <div class="st-map" data-field="${esc(f.key)}" data-childtype="${esc(f.childType)}">
           <div class="st-map-rows">${rowsHTML}</div>
-          <button type="button" class="st-map-add" style="margin-top:2px" title="Add a mapping">+ Add</button>
+          <button type="button" class="st-map-add" style="margin-top:2px" title="${esc(tr("bpmn.kind.addTitle"))}">${esc(tr("bpmn.kind.add"))}</button>
         </div></div>`;
     } else if (f.type === "number") {
       // A count, not free text (the retry budget): a spinner with the engine's own
       // lower bound, so the field cannot express a value the compiler refuses.
-      fields += `<label class="field"><span>${esc(f.label)}</span>
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
         <input type="number" id="f-st-${f.key}" ${f.min === undefined ? "" : `min="${esc(String(f.min))}"`} step="1"
-               value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
+               value="${esc(ext[f.key] || "")}" placeholder="${esc(kindText(f.placeholder || ""))}"/></label>`;
     } else if (f.type === "select") {
       const chosen = ext[f.key] || "";
       const opts = f.options.map((o) => {
         const { v, l } = selectOption(o);
-        return `<option value="${esc(v)}" ${v === chosen ? "selected" : ""}>${esc(l)}</option>`;
+        return `<option value="${esc(v)}" ${v === chosen ? "selected" : ""}>${esc(kindText(l))}</option>`;
       }).join("");
-      fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-st-${f.key}">${opts}</select></label>`;
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span><select id="f-st-${f.key}">${opts}</select></label>`;
     } else if (f.type === "html") {
       // A markup field: the same textarea the save wiring reads, upgraded to an HTML
       // code editor below (and F2-able into the Developer View, ADR-0145).
-      fields += `<label class="field"><span>${esc(f.label)}</span>
-        <textarea id="f-st-${f.key}" rows="${f.rows || 4}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
+        <textarea id="f-st-${f.key}" rows="${f.rows || 4}" spellcheck="false" placeholder="${esc(kindText(f.placeholder || ""))}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else if (f.type === "json") {
       // A JSON field: the same textarea the save wiring reads, upgraded to the JSON
       // editor below (highlighting, validation, auto-format). String values with a
       // leading '=' are FEEL, evaluated per field at runtime (compiled to one context).
-      fields += `<label class="field"><span>${esc(f.label)}</span>
-        <textarea id="f-st-${f.key}" rows="${f.rows || 8}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
+        <textarea id="f-st-${f.key}" rows="${f.rows || 8}" spellcheck="false" placeholder="${esc(kindText(f.placeholder || ""))}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else if (f.fx) {
       // A textarea — 1 row by default, taller for prose like an e-mail body — so the
       // fx toggle can host the FEEL editor in place at that size.
-      fields += `<label class="field"><span>${esc(f.label)}</span>
-        <textarea id="f-st-${f.key}" rows="${f.rows || 1}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
+        <textarea id="f-st-${f.key}" rows="${f.rows || 1}" spellcheck="false" placeholder="${esc(kindText(f.placeholder || ""))}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else if (f.datalist) {
       // A combobox: a free-text field that also offers this server's configured Workers
       // of the kind as a dropdown (populated after render, see the field wiring).
-      fields += `<label class="field"><span>${esc(f.label)}</span>
-        <input type="text" id="f-st-${f.key}" list="dl-st-${f.key}" autocomplete="off" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/>
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
+        <input type="text" id="f-st-${f.key}" list="dl-st-${f.key}" autocomplete="off" value="${esc(ext[f.key] || "")}" placeholder="${esc(kindText(f.placeholder || ""))}"/>
         <datalist id="dl-st-${f.key}"></datalist></label>`;
     } else {
-      fields += `<label class="field"><span>${esc(f.label)}</span>
-        <input type="text" id="f-st-${f.key}" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
+        <input type="text" id="f-st-${f.key}" value="${esc(ext[f.key] || "")}" placeholder="${esc(kindText(f.placeholder || ""))}"/></label>`;
     }
     // A hint is usually a static string; an operation-aware field (the Entra result
     // variable, whose shape differs per operation) may give a function of the current
     // extension values instead, so the note can describe what THIS operation returns.
     const hintText = typeof f.hint === "function" ? f.hint(ext) : f.hint;
-    if (hintText) fields += `<p class="muted" style="font-size:12px">${esc(hintText)}</p>`;
+    if (hintText) fields += `<p class="muted" style="font-size:12px">${esc(kindText(hintText))}</p>`;
     // The Worker picker's empty state, filled in once the fetch lands (fillWorkerDatalist).
     if (f.datalist) fields += `<p class="muted" id="nt-st-${f.key}" style="font-size:12px"></p>`;
   }
@@ -5974,10 +5987,10 @@ function stKindHeadingHTML(cur) {
   // true here; only what precedes the first one decides.
   const firstGroup = fields.findIndex((f) => f.group);
   const leading = firstGroup === -1 ? fields.length : firstGroup;
-  if (leading > 0) return `<h3>${esc(cur.name)}</h3>`;
+  if (leading > 0) return `<h3 data-group="${esc(cur.name)}">${esc(kindText(cur.name))}</h3>`;
   return `<div class="pgroup-caption" data-standalone-group="1">
     ${cur.glyph ? `<span class="pgroup-caption-icon">${cur.glyph}</span>` : ""}
-    <span>${esc(cur.name)}</span>
+    <span>${esc(kindText(cur.name))}</span>
   </div>`;
 }
 
@@ -5986,8 +5999,8 @@ function stKindHeadingHTML(cur) {
 function serviceTaskKindHTML(bo) {
   const cur = serviceTaskKind(bo);
   const ext = findExt(bo, cur.ext) || {};
-  return `<h3>Worker type</h3>
-    <input type="text" id="f-stkind-filter" placeholder="Search Worker type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
+  return `<h3 data-group="Worker type">${esc(tr("bpmn.group.workerType"))}</h3>
+    <input type="text" id="f-stkind-filter" placeholder="${esc(tr("bpmn.kind.search"))}" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
     ${stKindHeadingHTML(cur)}${workerTypeInfoHTML(cur.id, kindNamesAWorker(cur))}${stKindFieldsHTML(cur, ext)}`;
 }
@@ -6141,7 +6154,7 @@ function shopTaskFieldsHTML(bo) {
     }
     if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(f.hint)}</p>`;
   }
-  return `<h3>Shop</h3>
+  return `<h3 data-group="Shop">${esc(tr("bpmn.group.shop"))}</h3>
     <label class="field"><span>Mode</span><select id="f-shop-mode">${modes}</select></label>
     ${fields}
     <p class="muted" style="font-size:12px">${esc(mode.hint)}</p>`;
@@ -6209,7 +6222,7 @@ function sendTaskKind(bo) {
 // drives it.
 function sendTaskKindHTML(modeler, bo) {
   const cur = sendTaskKind(bo);
-  const picker = `<h3>Type</h3>
+  const picker = `<h3 data-group="Type">${esc(tr("bpmn.group.type"))}</h3>
     <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. message, shop, mail)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SEND_TASK_KINDS, cur.id)}</div>`;
   if (cur.id === "message") {
@@ -6628,13 +6641,13 @@ function agentToolHTML(bo) {
   const container = agentContainerOf(bo);
   if (!container) return "";
   if (!isAgentTool(bo)) {
-    return `<h3>Agent tool</h3>
+    return `<h3 data-group="Agent tool">${esc(tr("bpmn.group.agentTool"))}</h3>
       <p class="muted" style="font-size:12px">A sequence flow leads to this activity, so it is a later step of whichever
         tool starts that chain — not a tool the agent can call. Only the activities no flow leads to are offered to the
         model. Disconnect it to make it one.</p>`;
   }
   const documented = readDocumentation(bo).trim() !== "";
-  return `<h3>Agent tool</h3>
+  return `<h3 data-group="Agent tool">${esc(tr("bpmn.group.agentTool"))}</h3>
     <p class="muted" style="font-size:12px">The agent driving <b>${esc(container.id || "this subprocess")}</b> may call
       this activity. It is offered under its own id — <code>${esc(bo.id || "")}</code> — and its <b>Documentation</b>
       (General) is what the model reads to decide whether this is the tool for the job. Write when to use it, when not
@@ -6715,7 +6728,7 @@ function repairFormHTML(bo, projectId) {
   if (!REPAIR_FORM_TYPES.has(bo.$type)) return "";
   const fd = findExt(bo, "zeebe:FormDefinition") || {};
   const cur = fd.formId || "";
-  return `<h3>Repair form</h3>
+  return `<h3 data-group="Repair form">${esc(tr("bpmn.group.repairForm"))}</h3>
     <label class="field"><span>Form</span>
       <select id="f-form">
         <option value="">&mdash; none &mdash;</option>
@@ -6758,7 +6771,7 @@ function multiInstanceHTML(bo) {
   const src = cardBody && !ic ? "cardinality" : "collection";
   const strip = (s) => (s || "").replace(/^=\s*/, "");
 
-  let html = `<h3>Loop</h3>
+  let html = `<h3 data-group="Loop">${esc(tr("bpmn.group.loop"))}</h3>
     <label class="field"><span>Mode</span>
       <select id="f-mi-mode">
         <option value="none" ${mode === "none" ? "selected" : ""}>None — runs once</option>
@@ -6899,7 +6912,7 @@ function messageFieldsHTML(modeler, med, hint) {
     <label class="field"><span>Correlation key (FEEL)</span>
       <textarea id="f-corrkey" rows="1" placeholder="orderId">${esc(messageCorrelationKey(current))}</textarea></label>
     <p class="muted" style="font-size:12px">Shared with every event that uses this message — a throw and a catch correlate when they use the same message and their keys evaluate equal.</p>` : "";
-  return `<h3>Message</h3>
+  return `<h3 data-group="Message">${esc(tr("bpmn.group.message"))}</h3>
     <label class="field"><span>Message</span>
       <select id="f-msgref">
         <option value="">— none —</option>
@@ -7249,7 +7262,7 @@ function messagesManagerHTML(modeler) {
           <button type="button" class="btn ghost danger msg-del" title="Delete message">✕</button>
         </div>`).join("")
     : `<p class="muted" style="font-size:12px;margin:0 0 8px">No messages yet — add one, then reference it from a message throw/catch event.</p>`;
-  return `<h3>Messages</h3>
+  return `<h3 data-group="Messages">${esc(tr("bpmn.group.messages"))}</h3>
     <div class="msg-list">${rows}</div>
     <button type="button" class="btn neutral" id="msg-add" style="margin-top:8px" title="Add a message">＋ Add message</button>
     <p class="muted" style="font-size:12px">A message links a <b>throw</b> event to the <b>catch</b> events waiting for it. They correlate when they share a message and their correlation keys evaluate equal.</p>`;
@@ -7329,7 +7342,7 @@ function timerFieldsHTML(timer, kinds, note, { constant = false } = {}) {
   const feel = constant
     ? `Switch on <b>fx</b> for a FEEL expression. A timer start has no instance yet, so the expression may read <b>no variables</b>; the deploy evaluates it once and refuses one that does not yield a valid ${esc(meta.label.toLowerCase())}.`
     : `Switch on <b>fx</b> for a FEEL expression, evaluated when the timer is armed against the instance's variables. It must yield ${meta.feel}. If it yields neither, no timer is set: an incident is raised on the event, and resolving it once the data is fixed arms the timer again.`;
-  return `<h3>Timer</h3>
+  return `<h3 data-group="Timer">${esc(tr("bpmn.group.timer"))}</h3>
     <label class="field"><span>Type</span>
       <select id="f-timerkind">${opts}</select></label>
     <label class="field"><span>${meta.label}</span>
@@ -7532,7 +7545,7 @@ function signalFieldsHTML(modeler, sed, hint, listens) {
   // what the chosen atlas.* name means and what it carries. It is offered the names
   // the deployed models throw too (ADR-0447), and a throwing element is told who
   // receives its name (#f-sigreceivers).
-  return `<h3>Signal</h3>
+  return `<h3 data-group="Signal">${esc(tr("bpmn.group.signal"))}</h3>
     <label class="field"><span>Signal</span>
       <select id="f-sigref" data-listens="${listens ? "1" : ""}">
         <option value="">— none —</option>
@@ -7636,7 +7649,7 @@ function signalsManagerHTML(modeler) {
           <button type="button" class="btn ghost danger sig-del" title="Delete signal">✕</button>
         </div>`).join("")
     : `<p class="muted" style="font-size:12px;margin:0 0 8px">No signals yet — add one, then reference it from a signal throw/catch/boundary/start event.</p>`;
-  return `<h3>Signals</h3>
+  return `<h3 data-group="Signals">${esc(tr("bpmn.group.signals"))}</h3>
     <div class="sig-list">${rows}</div>
     <button type="button" class="btn neutral" id="sig-add" style="margin-top:8px" title="Add a signal">＋ Add signal</button>
     <p class="muted" style="font-size:12px">A signal is a broadcast by name: a <b>throw</b> reaches every <b>catch</b>, boundary, event subprocess, and start event using the same signal — with no correlation key.</p>`;
@@ -7736,7 +7749,7 @@ function errorFieldsHTML(modeler, eed, hint) {
     <label class="field"><span>Error code</span>
       <input type="text" id="f-errcode" value="${esc(current.errorCode || "")}" placeholder="PAYMENT_FAILED"/></label>
     <p class="muted" style="font-size:12px">Shared with every event that uses this error — a thrown code is caught by the nearest enclosing error boundary or error event subprocess with the same code (an empty code is a catch-all).</p>` : "";
-  return `<h3>Error</h3>
+  return `<h3 data-group="Error">${esc(tr("bpmn.group.error"))}</h3>
     <label class="field"><span>Error</span>
       <select id="f-errref">
         <option value="">— none —</option>
@@ -7757,7 +7770,7 @@ function errorsManagerHTML(modeler) {
           <button type="button" class="btn ghost danger err-del" title="Delete error">✕</button>
         </div>`).join("")
     : `<p class="muted" style="font-size:12px;margin:0 0 8px">No errors yet — add one, then reference it from an error end event or error boundary.</p>`;
-  return `<h3>Errors</h3>
+  return `<h3 data-group="Errors">${esc(tr("bpmn.group.errors"))}</h3>
     <div class="err-list">${rows}</div>
     <button type="button" class="btn neutral" id="err-add" style="margin-top:8px" title="Add an error">＋ Add error</button>
     <p class="muted" style="font-size:12px">An error is a scoped failure caught by code: an <b>error end event</b> (or a worker) throws it, and the nearest enclosing <b>error boundary</b> or <b>error event subprocess</b> with the same code catches it — always interrupting.</p>`;
@@ -7801,7 +7814,7 @@ function linkDefOf(bo) {
 // linkFieldsHTML renders the link-name field for a link throw or catch. A throw jumps to the
 // catch of the same name in the same scope; the name is the whole configuration (ADR-0133).
 function linkFieldsHTML(led, hint) {
-  return `<h3>Link</h3>
+  return `<h3 data-group="Link">${esc(tr("bpmn.group.link"))}</h3>
     <label class="field"><span>Link name</span>
       <input type="text" id="f-linkname" value="${esc(led.name || "")}" placeholder="ProceedHere"/></label>
     <p class="muted" style="font-size:12px">${hint}</p>`;
@@ -7819,7 +7832,7 @@ function conditionalDefOf(bo) {
 // the event fires when it becomes true (ADR-0137). ced is the bpmn:ConditionalEventDefinition.
 function conditionalFieldsHTML(ced, hint) {
   const condText = ((ced.condition && ced.condition.body) || "").replace(/^=\s*/, "");
-  return `<h3>Condition (FEEL)</h3>
+  return `<h3 data-group="Condition (FEEL)">${esc(tr("bpmn.group.conditionFeel"))}</h3>
     <label class="field"><span>Expression</span>
       <textarea id="f-condition" rows="2" placeholder="amount > 100">${esc(condText)}</textarea></label>
     <p class="muted" style="font-size:12px">${hint}</p>`;
@@ -7884,7 +7897,7 @@ function escalationFieldsHTML(modeler, eed, hint) {
     <label class="field"><span>Escalation code</span>
       <input type="text" id="f-esccode" value="${esc(current.escalationCode || "")}" placeholder="ESCALATE_TO_MANAGER"/></label>
     <p class="muted" style="font-size:12px">Shared with every event that uses this escalation — a raised code is caught by the nearest enclosing escalation boundary or escalation event subprocess with the same code (an empty code is a catch-all).</p>` : "";
-  return `<h3>Escalation</h3>
+  return `<h3 data-group="Escalation">${esc(tr("bpmn.group.escalation"))}</h3>
     <label class="field"><span>Escalation</span>
       <select id="f-escref">
         <option value="">— none —</option>
@@ -7906,7 +7919,7 @@ function escalationsManagerHTML(modeler) {
           <button type="button" class="btn ghost danger esc-del" title="Delete escalation">✕</button>
         </div>`).join("")
     : `<p class="muted" style="font-size:12px;margin:0 0 8px">No escalations yet — add one, then reference it from an escalation throw/end event or escalation boundary.</p>`;
-  return `<h3>Escalations</h3>
+  return `<h3 data-group="Escalations">${esc(tr("bpmn.group.escalations"))}</h3>
     ${rows}
     <button type="button" class="btn ghost" id="esc-add" title="Add an escalation">＋ Add escalation</button>
     <p class="muted" style="font-size:12px">An escalation is a matter raised up the scope chain: an <b>escalation throw</b> or <b>end event</b> raises it, and the nearest enclosing <b>escalation boundary</b> or <b>escalation event subprocess</b> with the same code catches it. Unlike an error, a catch may be <b>non-interrupting</b> (the activity keeps running) and an uncaught escalation is harmless.</p>`;
@@ -8740,7 +8753,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     nameEl.textContent = bo.name || bo.id || "(pool)";
     const proc = bo.processRef;
     const poolFields = `
-      <h3>Pool</h3>
+      <h3 data-group="Pool">${esc(tr("bpmn.group.pool"))}</h3>
       <label class="field"><span>Name</span><input type="text" id="f-poolname" value="${esc(bo.name || "")}" placeholder="Teilnehmer"/></label>
       <label class="field"><span>Pool ID</span><input type="text" id="f-poolid" value="${esc(bo.id || "")}" spellcheck="false"/></label>
       ${documentationField(bo, "f-doc", "Who this participant is, what they are responsible for…")}`;
@@ -8748,7 +8761,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     if (!proc) {
       body.innerHTML = `${poolFields}
         <p class="muted" style="font-size:12px">A pool is a <b>participant</b> — it doesn't hold the flow itself, it <i>executes a process</i>. This pool has <b>no process</b>, so it can't contain elements or run.</p>
-        <h3>Process</h3>
+        <h3 data-group="Process">${esc(tr("bpmn.group.process"))}</h3>
         <p class="muted" style="font-size:12px">Add the process that sits between the pool and its elements — the participant runs it, and the elements you draw live inside it.</p>
         <button type="button" class="btn" id="f-addproc" style="margin-top:6px" title="Add a process to this collaboration">+ Add a process</button>`;
       body.querySelector("#f-poolname").addEventListener("change", (e) => {
@@ -8764,18 +8777,18 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     if (activeTab(root) === "implement") {
       const declared = readStartVariables(proc);
       startVarsHTML = `
-        <h3>Start variables</h3>
+        <h3 data-group="Start variables">${esc(tr("bpmn.group.startVariables"))}</h3>
         <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
         <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
         <p class="muted" style="font-size:12px">Declared on this pool's process, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks. With a start form, the ones the form does not ask for are asked beneath it. The engine ignores the declaration; it's authoring metadata, so an instance started through the API gets no default. A value nobody enters is a constant, below.</p>
-        <h3>Constants</h3>
+        <h3 data-group="Constants">${esc(tr("bpmn.group.constants"))}</h3>
         <div id="cv-list">${readConstants(proc).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value, source: c.source }, true)).join("")}</div>
         <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
         <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Its name is written in capitals (TENANT_ID). Set its source to <b>application</b> or <b>server</b> and it is read as <code>application.NAME</code> or <code>server.NAME</code>, taking what the application — or the installation, for every application — holds on each installation (the application's Constants tab, Admin → Engine → Server constants), with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
     }
     body.innerHTML = `${poolFields}
       <p class="muted" style="font-size:12px">The pool is a <b>participant</b> that executes the process below. The elements live in that process — the pool only labels who runs it.</p>
-      <h3>Process</h3>
+      <h3 data-group="Process">${esc(tr("bpmn.group.process"))}</h3>
       <label class="field"><span>Process name</span><input type="text" id="f-procname" value="${esc(proc.name || "")}" placeholder="Order fulfillment"/></label>
       <label class="field"><span>Process ID</span><input type="text" id="f-procid" value="${esc(proc.id || "")}" placeholder="order-fulfillment"/></label>
       <p class="muted" style="font-size:12px">Each pool deploys as its own process; the <b>Process ID</b> is that deployment's identity — instances group by it, and renaming it deploys a new process rather than a new version. The <i>first</i> pool's process id is also what this draft is stored under, so renaming that one moves the draft on the next Save.</p>
@@ -8837,17 +8850,17 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (activeTab(root) === "implement") {
           const declared = readStartVariables(rootBo);
           startVarsHTML = `
-            <h3>Start variables</h3>
+            <h3 data-group="Start variables">${esc(tr("bpmn.group.startVariables"))}</h3>
             <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
             <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
             <p class="muted" style="font-size:12px">Declared here, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks — instead of raw JSON. With a start form on the start event, the ones the form does not ask for are asked beneath it, on Deploy &amp; run, Start instance and the Tasks app's Start. The engine ignores the declaration; it's authoring metadata, so an instance started through the API or a public link gets no default. A value nobody enters is a constant, below.</p>
-            <h3>Constants</h3>
+            <h3 data-group="Constants">${esc(tr("bpmn.group.constants"))}</h3>
             <div id="cv-list">${readConstants(rootBo).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value, source: c.source }, true)).join("")}</div>
             <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
             <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Its name is written in capitals (TENANT_ID). Set its source to <b>application</b> or <b>server</b> and it is read as <code>application.NAME</code> or <code>server.NAME</code>, taking what the application — or the installation, for every application — holds on each installation (the application's Constants tab, Admin → Engine → Server constants), with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
         }
         body.innerHTML = `
-          <h3>Process</h3>
+          <h3 data-group="Process">${esc(tr("bpmn.group.process"))}</h3>
           <label class="field"><span>Name</span><input type="text" id="f-pname" value="${esc(rootBo.name || "")}" placeholder="Order fulfillment"/></label>
           <label class="field"><span>Process ID</span><input type="text" id="f-pid" value="${esc(rootBo.id || "")}" placeholder="order-fulfillment"/></label>
           <p class="muted" style="font-size:12px">The Process ID is the identity deployments and instances are grouped by, and it is also what this draft is stored under &mdash; so <b>renaming it moves the draft</b> to the new id on the next Save rather than leaving a copy behind at the old one. An id another draft already holds is refused, never overwritten. Renaming it and deploying creates a new process rather than a new version.</p>
@@ -8961,7 +8974,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         icon.textContent = "CO"; typename.textContent = "Collaboration"; nameEl.textContent = "(collaboration)";
         const collabEl = modeler.get("canvas").getRootElement();
         body.innerHTML = `
-          <h3>Collaboration</h3>
+          <h3 data-group="Collaboration">${esc(tr("bpmn.group.collaboration"))}</h3>
           <p class="muted" style="font-size:12px">This diagram has several <b>pools</b>. A pool is a <b>participant</b> that <i>executes a process</i> — the process holds the flow, the pool just names who runs it, and each deploys as its own process. Select a pool to name it and configure the process it runs, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b>: a throw event in one pool and a catch event in another that reference the <b>same message</b> below.</p>
           ${documentationField(collabEl.businessObject, "f-doc", "What this collaboration is about, who the participants are…")}
           <p class="muted" style="font-size:12px">The <b>Documentation</b> describes the collaboration as a whole; each pool and each element inside it takes its own.</p>
@@ -9023,7 +9036,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // General: the descriptive view shared by both tabs. For a sequence flow the
     // name IS the diagram label (e.g. the branch outcome "Großauftrag").
     let html = `
-      <h3>General</h3>
+      <h3 data-group="General">${esc(tr("bpmn.group.general"))}</h3>
       <label class="field"><span>${isSeqFlow ? "Label" : "Name"}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
       <label class="field"><span>ID</span><input type="text" id="f-id" value="${esc(bo.id || "")}" spellcheck="false"/></label>
       ${documentationField(bo, "f-doc", isUserTask ? "What the assignee has to check, decide or attach…" : isSeqFlow ? "When this path is taken, and why…" : "What this step is for, when it applies, who owns it…")}
@@ -9074,7 +9087,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       // simply nothing behind them, and now the panel says so and says what to do.
       const noApplication = !projectId;
       const nothingModelled = projectId && vocab.loaded && !vocab.classes.length;
-      html += `<h3>Data object</h3>
+      html += `<h3 data-group="Data object">${esc(tr("bpmn.group.dataObject"))}</h3>
         <label class="field"><span>Class <span class="muted">(what this datum is)</span></span>
           ${vocab.classes.length ? classSelectHTML(itemType)
             : `<input type="text" id="f-itemtype" value="${esc(itemType)}" placeholder="Order"/>`}</label>
@@ -9138,7 +9151,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             of them.</p>` : ""}`;
         html += dataWritesGroupHTML(writes, rows, dataRefName(bo.targetRef), hints);
       } else {
-        html += `<h3>Reads data object</h3>
+        html += `<h3 data-group="Reads data object">${esc(tr("bpmn.group.readsDataObject"))}</h3>
           <label class="field"><span>Target variable</span><input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="order"/></label>
           <label class="field"><span>Transform <span class="muted">(optional)</span></span><input type="text" id="f-assoc-from" value="${esc(fromBody)}" placeholder="=order.amount"/></label>
           <p class="muted" style="font-size:12px">At activation this reads <b>${esc(dataRefName(bo.sourceRef))}</b> into the <b>Target variable</b>, so the activity's FEEL can use it. Leave <b>Transform</b> empty to copy the object's value; set it (the object is available under its name) to compute the value written into the variable.</p>`;
@@ -9193,7 +9206,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           // placement to report; every other language is a job the server either runs
           // itself or leaves for a worker — and it is offloaded by default, which this
           // panel never said (ADR-0183).
-          html += `<h3>Script</h3>
+          html += `<h3 data-group="Script">${esc(tr("bpmn.group.script"))}</h3>
             <label class="field"><span>Language${placementBadgeHTML(lang)}</span>
               <select id="f-scriptlang">${opts.join("")}</select></label>
             ${placementNoticeHTML(lang, "script")}`;
@@ -9211,7 +9224,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               <label class="field"><span>Result variable</span>
                 <input type="text" id="f-psresult" value="${esc((js && js.resultVariable) || "")}" placeholder="Greeting"/></label>
               <p class="muted" style="font-size:12px">${meta.hint}</p>
-              <h3>Failure handling</h3>
+              <h3 data-group="Failure handling">${esc(tr("bpmn.group.failureHandling"))}</h3>
               <label class="field"><span>Retries</span>
                 <input type="number" id="f-psretries" min="1" step="1" value="${esc((js && js.retries) || "")}" placeholder="3"/></label>
               <p class="muted" style="font-size:12px">${RETRIES_FIELD.hint}</p>
@@ -9246,7 +9259,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           // select could not keep, since --offload-connectors moves either binding onto a
           // worker. The badge and notice below answer that from the server instead.
           const brtKind = mode === "connector" ? "temis" : "dmn";
-          html += `<h3>Called decision (DMN)</h3>
+          html += `<h3 data-group="Called decision (DMN)">${esc(tr("bpmn.group.calledDecision"))}</h3>
             <label class="field"><span>Evaluation${placementBadgeHTML(brtKind)}</span>
               <select id="f-brt-mode">
                 <option value="local" ${mode === "local" ? "selected" : ""}>Embedded DMN — a decision deployed here</option>
@@ -9297,11 +9310,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             <label class="field"><span>Result variable</span>
               <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>${bindingField}
             <p class="muted" style="font-size:12px">Pick a decision to auto-fill its id, inputs and result variable. <b>Latest</b> evaluates the newest deployed version each time the task runs, so a newly deployed version takes effect without redeploying the process. <b>Version</b> evaluates the version you choose, whatever is deployed after it; it is an atlas setting, and Camunda ignores it and runs the newest. <b>Deployment</b> evaluates the model deployed together with this process.</p>
-            <h3>Failure handling</h3>
+            <h3 data-group="Failure handling">${esc(tr("bpmn.group.failureHandling"))}</h3>
             <label class="field"><span>Retries</span>
               <input type="number" id="f-brt-retries" min="1" step="1" value="${esc(cd.retries || "")}" placeholder="3"/></label>
             <p class="muted" style="font-size:12px">${RETRIES_FIELD.hint}</p>
-            <h3>Decision inputs</h3>
+            <h3 data-group="Decision inputs">${esc(tr("bpmn.group.decisionInputs"))}</h3>
             <p class="muted" style="font-size:12px">Each row feeds one decision input. Pick a variable from the list or type any FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>
             <div id="dmn-inputs-drift" class="dmn-drift" hidden></div>
@@ -9313,7 +9326,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           const sch = findExt(bo, "zeebe:TaskSchedule") || {};
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
-          html += `<h3>Form</h3>
+          html += `<h3 data-group="Form">${esc(tr("bpmn.group.form"))}</h3>
             <label class="field"><span>Linked form</span>
               <select id="f-form">
                 <option value="">— none —</option>
@@ -9322,12 +9335,12 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             ${formDoorsHTML(newFormHref(bo, true, projectId))}
             <p class="muted" style="font-size:12px">The form the Tasks app renders for this task, submitted as its variables.
               <b>＋ New form</b> creates one; coming back to the draft links it to this task.</p>
-            <h3>Assignment</h3>
+            <h3 data-group="Assignment">${esc(tr("bpmn.group.assignment"))}</h3>
             <label class="field"><span>Assignee</span>
               <textarea id="f-assignee" rows="1" spellcheck="false" placeholder="editor">${esc(a.assignee || "")}</textarea></label>
             <label class="field"><span>Candidate groups</span>
               <textarea id="f-groups" rows="1" spellcheck="false" placeholder="reviewers">${esc(a.candidateGroups || "")}</textarea></label>
-            <h3>Schedule</h3>
+            <h3 data-group="Schedule">${esc(tr("bpmn.group.schedule"))}</h3>
             <label class="field"><span>Priority</span>
               <input type="number" id="f-priority" min="0" max="100" value="${esc(pr.priority || "50")}" placeholder="50"/></label>
             <label class="field"><span>Due in</span>
@@ -9382,7 +9395,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // in force — the trade-off the record accepted and asked the Modeler to carry.
         const cancelRemaining = bo.cancelRemainingInstances !== false;
         const ac = agentConnectorOf(bo);
-        html += `<h3>Ad-hoc subprocess</h3>
+        html += `<h3 data-group="Ad-hoc subprocess">${esc(tr("bpmn.group.adHoc"))}</h3>
           <label class="field"><span>What starts its activities${ac ? placementBadgeHTML("agent") : ""}</span>
             <select id="f-adhocmode">
               <option value="all" ${ac ? "" : "selected"}>All at once — every unconnected activity starts on entry</option>
@@ -9392,7 +9405,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           html += `<p class="muted" style="font-size:12px">Its contained activities are <b>not</b> connected by sequence flows: every activity with no incoming flow starts <b>at once</b> when the subprocess is entered, and runs independently. Use it for flexible, case-management work. With no completion condition below, it finishes when all of them are done.</p>`;
         } else {
           html += `<p class="muted" style="font-size:12px">Entry starts <b>nothing</b>. Each round, the agent is offered the contained activities that no sequence flow leads to — those are its <b>tools</b> — and it either calls some of them or answers and finishes. What it may reach is this diagram and nothing else, which is what makes an agent's reach reviewable.</p>
-            <h3>Agent</h3>
+            <h3 data-group="Agent">${esc(tr("bpmn.group.agent"))}</h3>
             <label class="field"><span>Worker</span>
               <input type="text" id="f-agent-connector" list="dl-agent-connector" autocomplete="off" value="${esc(ac.connector || "")}" placeholder="anthropic_pb"/>
               <datalist id="dl-agent-connector"></datalist></label>
@@ -9403,14 +9416,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             <label class="field"><span>May read</span>
               <input type="text" id="f-agent-context" value="${esc(ac.context || "")}" placeholder="dossier, kunde"/></label>
             <p class="muted" style="font-size:12px">The variables this agent is given, by name, comma-separated. What an agent may <b>reach</b> is the diagram; what it may <b>read</b> is this list — so a reviewer sees both on the element. A name the instance does not carry is sent as <code>(not set)</code>, so the agent says so rather than inventing a value. Leave it empty and the agent knows only its goal, its tools, and what its own calls returned — which is a real design when its tools fetch what it needs.</p>
-            <h3>Tool results</h3>
+            <h3 data-group="Tool results">${esc(tr("bpmn.group.toolResults"))}</h3>
             <label class="field"><span>Collect results into</span>
               <input type="text" id="f-agent-resultcoll" value="${esc(ac.resultCollection || "")}" placeholder="toolCallResults"/></label>
             <label class="field"><span>What to collect (FEEL)</span>
               <textarea id="f-agent-resultelem" rows="1" spellcheck="false" placeholder="toolCallResult">${esc((ac.resultElement || "").replace(/^=\s*/, ""))}</textarea></label>
             <p class="muted" style="font-size:12px">After each tool call finishes, this expression is evaluated in that activity's scope and appended to the collection. The next round is given what came back — it is the agent's memory of its own run, and the reason a round can build on the one before it. Leave both empty and the agent sees nothing of what its calls returned.</p>`;
         }
-        html += `<h3>Completion condition (FEEL)</h3>
+        html += `<h3 data-group="Completion condition (FEEL)">${esc(tr("bpmn.group.completionCondition"))}</h3>
           <label class="field"><span>Expression</span>
             <textarea id="f-adhoccond" rows="2" placeholder="approvals >= 2">${esc((bo.completionCondition && bo.completionCondition.body || "").replace(/^=\s*/, ""))}</textarea></label>
           <p class="muted" style="font-size:12px">Re-evaluated each time a contained activity completes. The first time it is true the subprocess finishes. Leave empty to finish only when every contained activity is done.</p>`;
@@ -9431,7 +9444,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const binding = ce.bindingType === "deployment" ? "deployment" : "latest";
         const propParent = ce.propagateAllParentVariables !== false; // default true (Zeebe)
         const propChild = ce.propagateAllChildVariables !== false;   // default true (Zeebe)
-        html += `<h3>Called process</h3>
+        html += `<h3 data-group="Called process">${esc(tr("bpmn.group.calledProcess"))}</h3>
           <label class="field"><span>Process ID</span>
             <input type="text" id="f-call-processid" list="f-call-proc-list" autocomplete="off" value="${esc(ce.processId || "")}" placeholder="pruefe-auftrag"/>
             <datalist id="f-call-proc-list"></datalist></label>
@@ -9445,7 +9458,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               <option value="deployment" ${binding === "deployment" ? "selected" : ""}>Deployment — pinned to this deploy</option>
             </select></label>
           <p class="muted" style="font-size:12px">Starts the process with this <b>id</b> as a child instance and waits for it to finish. <b>Latest</b> calls the newest deployed version; <b>Deployment</b> pins to the version deployed alongside this one.</p>
-          <h3>Variables</h3>
+          <h3 data-group="Variables">${esc(tr("bpmn.group.variables"))}</h3>
           <label class="field checkbox"><input type="checkbox" id="f-call-prop-parent" ${propParent ? "checked" : ""}/> <span>Pass all caller variables in</span></label>
           <label class="field checkbox"><input type="checkbox" id="f-call-prop-child" ${propChild ? "checked" : ""}/> <span>Return all child variables out</span></label>
           <p class="muted" style="font-size:12px">With a box <b>unchecked</b>, only the matching mappings below cross that direction — the child sees only what you map in, or the caller gets back only what you map out (isolation).</p>`;
@@ -9453,11 +9466,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         html += ioMappingsHTML(bo);
         html += multiInstanceHTML(bo); // ADR-0077: call the process once per collection element
       } else if (isDefaultFlow) {
-        html += `<h3>Condition (FEEL)</h3>
+        html += `<h3 data-group="Condition (FEEL)">${esc(tr("bpmn.group.conditionFeel"))}</h3>
           <p class="muted" style="font-size:12px">This is the gateway's <b>default flow</b> — taken when no other branch's condition matches, so it carries no condition of its own.</p>`;
       } else if (isGatewayFlow) {
         const condText = ((bo.conditionExpression && bo.conditionExpression.body) || "").replace(/^=\s*/, "");
-        html += `<h3>Condition (FEEL)</h3>
+        html += `<h3 data-group="Condition (FEEL)">${esc(tr("bpmn.group.conditionFeel"))}</h3>
           <label class="field"><span>Expression</span>
             <textarea id="f-cond" rows="2" placeholder="amount > 100">${esc(condText)}</textarea></label>
           <p class="muted" style="font-size:12px">Evaluated when the token reaches the gateway; the first branch whose condition holds is taken.</p>`;
@@ -9512,17 +9525,17 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const cancel = cancelDefOf(bo);
         if (err) {
           // An error boundary is always interrupting — no cancelActivity toggle (ADR-0089).
-          html += `<h3>Behaviour</h3>
+          html += `<h3 data-group="Behaviour">${esc(tr("bpmn.group.behaviour"))}</h3>
             <p class="muted" style="font-size:12px">An <b>error boundary</b> is always <b>interrupting</b>: a matching thrown error cancels the attached activity (and its job) and routes the token out this event.</p>`;
           html += errorFieldsHTML(modeler, err, "The event fires when the attached activity throws a matching error — an error end event inside it, a worker failing its job to the code, or an error propagating up from a called process.");
         } else if (cancel) {
           // A cancel boundary may attach only to a transaction and is always interrupting — no
           // cancelActivity toggle and no trigger fields (ADR-0108).
-          html += `<h3>Behaviour</h3>
+          html += `<h3 data-group="Behaviour">${esc(tr("bpmn.group.behaviour"))}</h3>
             <p class="muted" style="font-size:12px">A <b>cancel boundary</b> attaches only to a <b>transaction</b> and is always <b>interrupting</b>: when a cancel end event inside the transaction fires, its completed activities are compensated (in reverse order) and the token is then routed out this event. Draw it on a transaction subprocess.</p>`;
         } else {
           const interrupting = bo.cancelActivity !== false;
-          html += `<h3>Behaviour</h3>
+          html += `<h3 data-group="Behaviour">${esc(tr("bpmn.group.behaviour"))}</h3>
             <label class="field"><span>On trigger</span>
               <select id="f-cancelactivity">
                 <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the activity</option>
@@ -9562,12 +9575,12 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const cond = conditionalDefOf(bo);
         if (err) {
           // An error event subprocess is always interrupting — no toggle (ADR-0089).
-          html += `<h3>Event subprocess trigger</h3>
+          html += `<h3 data-group="Event subprocess trigger">${esc(tr("bpmn.group.eventSubTrigger"))}</h3>
             <p class="muted" style="font-size:12px">An <b>error event subprocess</b> is always <b>interrupting</b>: a matching thrown error terminates the enclosing scope's other work, then runs this handler.</p>`;
           html += errorFieldsHTML(modeler, err, "The event subprocess fires when its enclosing scope throws a matching error, terminating the scope's other work and running this handler.");
         } else {
           const interrupting = bo.isInterrupting !== false;
-          html += `<h3>Event subprocess trigger</h3>
+          html += `<h3 data-group="Event subprocess trigger">${esc(tr("bpmn.group.eventSubTrigger"))}</h3>
             <label class="field"><span>On trigger</span>
               <select id="f-interrupting">
                 <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the enclosing scope</option>
@@ -9609,7 +9622,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         } else {
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
-          html += `<h3>Start form</h3>
+          html += `<h3 data-group="Start form">${esc(tr("bpmn.group.startForm"))}</h3>
             <label class="field"><span>Linked form</span>
               <select id="f-form">
                 <option value="">— none —</option>
@@ -9656,7 +9669,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // run: the shape would show a ∥/≡/↻ icon the engine ignores. Say so rather than let
     // the diagram claim behavior it doesn't have (ADR-0133).
     if (bo.loopCharacteristics && !html.includes("f-mi-mode")) {
-      html += `<h3>Loop</h3>
+      html += `<h3 data-group="Loop">${esc(tr("bpmn.group.loop"))}</h3>
         <p class="muted" style="font-size:12px">This element carries a <b>loop marker</b> atlas does not execute here — it will run <b>once</b>, whatever the icon suggests. Loops run on <b>activities</b>: every task kind, call activities and subprocesses (a message-kind send task is a throw, not an activity). Remove the marker (the wrench icon on the shape) or move the work to one of those.</p>`;
     }
     body.innerHTML = html;

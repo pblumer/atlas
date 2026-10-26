@@ -27,7 +27,7 @@ async function openTimer(page, id) {
   await page.evaluate((el) => window.__select(el), id);
   const field = page.locator("#f-timerval");
   await expect(field).toHaveCount(1);
-  if (!(await field.isVisible())) await page.locator(".pgroup-head", { hasText: "Timer" }).first().click();
+  if (!(await field.isVisible())) await page.locator('.pgroup[data-group*="Timer" i] > .pgroup-head').first().click();
   await expect(field).toBeVisible();
 }
 

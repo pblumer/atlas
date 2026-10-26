@@ -32,13 +32,13 @@ async function open(page, id) {
 // collapsed, which is what an author sees — so a test that drives a field has to open
 // its section first, exactly as a person would.
 async function expand(page, title) {
-  await openSection(page, page.locator(".pgroup-head", { hasText: title }).first(), ".pgroup");
+  await openSection(page, page.locator(`.pgroup[data-group*="${title}" i] > .pgroup-head`).first(), ".pgroup");
 }
 
 // expandGroup opens one of the mapping-style groups (Parameters), which carry their own
 // head markup rather than the <h3> one.
 async function expandGroup(page, title) {
-  await openSection(page, page.locator(".io-group-head", { hasText: title }).first(), ".io-group");
+  await openSection(page, page.locator(`.io-group[data-group*="${title}" i] .io-group-head`).first(), ".io-group");
 }
 
 // openSection clicks a section head only when its section is collapsed. The head is a
@@ -125,7 +125,7 @@ test("the result collection and its FEEL element are stored the way the compiler
 
 test("a tool shows what it is to the agent, and its declared parameters", async ({ page }) => {
   await open(page, "zinsen_holen");
-  await expect(page.locator("#p-body")).toContainText("Agent tool");
+  await expect(page.locator('.pgroup[data-group="Agent tool"]')).toHaveCount(1);
   await expect(page.locator("#p-body")).toContainText("agent");
 
   await expandGroup(page, "Parameters");

@@ -135,7 +135,7 @@ test("the badge is derived: it follows the declaration and never reaches the mod
   await page.evaluate(() => window.__select("Send_shop"));
   const list = page.locator("#f-stkind-list");
   await expect(list).toHaveCount(1);
-  if (!(await list.isVisible())) await page.locator(".pgroup-head .pgroup-title").filter({ hasText: /^Type$/ }).click();
+  if (!(await list.isVisible())) await page.locator('.pgroup[data-group="Type"] > .pgroup-head .pgroup-title').click();
   await page.locator(".stkind-row[data-kind='message']").click();
   await expect(shopBadge(page, "Send_shop")).toHaveCount(0);
   expect(page.__errors).toEqual([]);

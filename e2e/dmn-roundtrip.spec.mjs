@@ -22,7 +22,7 @@ test.beforeEach(async ({ page }) => {
 async function openTask(page, id) {
   await page.locator('[data-tab="implement"]').click();
   await page.evaluate((el) => window.__select(el), id);
-  await page.locator(".pgroup-head", { hasText: "Called decision" }).click();
+  await page.locator('.pgroup[data-group*="Called decision" i] > .pgroup-head').click();
 }
 
 test("＋ New decision leaves for the decision editor, carrying the task it was pressed on", async ({ page }) => {
@@ -66,7 +66,7 @@ test("coming back from the decision editor selects the task and wires it", async
   // The task the decision was authored for is selected, without the author hunting for
   // it — otherwise the adoption would sit waiting on a click nobody knows to make.
   await expect.poll(() => page.evaluate(() => window.__selected())).toBe("Activity_rule");
-  await page.locator(".pgroup-head", { hasText: "Called decision" }).click();
+  await page.locator('.pgroup[data-group*="Called decision" i] > .pgroup-head').click();
 
   // And it is wired: the decision id, the result variable taken from the decision's
   // output, and an input mapping per declared input — exactly what the overlay filled
@@ -82,7 +82,7 @@ test("an adoption is applied once, not on every later open of the diagram", asyn
     adopt: { processId: "orders", elementId: "Activity_rule", name: "eligibility", modelRef: "eligibility" },
   }));
   await page.locator('[data-tab="implement"]').click();
-  await page.locator(".pgroup-head", { hasText: "Called decision" }).click();
+  await page.locator('.pgroup[data-group*="Called decision" i] > .pgroup-head').click();
   await expect(page.locator("#f-decisionid")).toHaveValue("eligibility");
 
   // Reopening the same diagram with no adoption pending must not re-apply the last

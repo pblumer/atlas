@@ -24,7 +24,7 @@ test.beforeEach(async ({ page }) => {
 // object and reaching its fields means opening "Data object" first.
 async function selectDataObject(page, id) {
   await page.evaluate((ref) => window.__select(ref), id);
-  const head = page.locator(".pgroup-head", { hasText: "Data object" });
+  const head = page.locator('.pgroup[data-group*="Data object" i] > .pgroup-head');
   await head.waitFor();
   if (!(await page.locator("#f-itemtype").isVisible())) await head.click();
   await page.locator("#f-itemtype").waitFor({ state: "visible" });

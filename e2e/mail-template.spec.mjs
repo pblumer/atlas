@@ -18,7 +18,7 @@ test.beforeEach(async ({ page }) => {
 
 async function openMessage(page, id) {
   await page.evaluate((el) => window.__select(el), id);
-  await page.locator(".pgroup-head", { hasText: "Message" }).click();
+  await page.locator('.pgroup[data-group*="Message" i] > .pgroup-head').click();
 }
 
 async function taskXML(page, id) {
@@ -128,7 +128,7 @@ test("an HTML body without placeholders is its own preview", async ({ page }) =>
 
 test("an operation that sends nothing drops the placeholders switch", async ({ page }) => {
   await openMessage(page, "Activity_tpl");
-  await page.locator(".pgroup-head", { hasText: "Mail worker" }).click();
+  await page.locator('.pgroup[data-group*="Mail worker" i] > .pgroup-head').click();
   await page.locator("#f-st-operation").selectOption("mark-read");
   await expect.poll(async () => /templating=/.test(await taskXML(page, "Activity_tpl"))).toBe(false);
   // A reply writes a text again, and offers the switch again.
@@ -141,9 +141,9 @@ test("an operation that sends nothing drops the placeholders switch", async ({ p
 // panel offers it where it is allowed and takes it back when a get becomes a list.
 test("Read message offers the HTML body, and a list takes it back", async ({ page }) => {
   await openMessage(page, "Activity_mail");
-  await page.locator(".pgroup-head", { hasText: "Mail worker" }).click();
+  await page.locator('.pgroup[data-group*="Mail worker" i] > .pgroup-head').click();
   await page.locator("#f-st-operation").selectOption("get");
-  await page.locator(".pgroup-head", { hasText: "Mailbox" }).click();
+  await page.locator('.pgroup[data-group*="Mailbox" i] > .pgroup-head').click();
   const text = page.locator("#f-st-includeBody");
   await expect(text.locator("option")).toHaveText(["Envelope only", "Include the text", "Include the text and the HTML"]);
   await text.selectOption("html");

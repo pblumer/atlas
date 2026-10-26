@@ -20,7 +20,7 @@ test.beforeEach(async ({ page }) => {
 
 async function openBinding(page, id) {
   await page.evaluate((el) => window.__select(el), id);
-  await page.locator(".pgroup-head", { hasText: "Called decision" }).click();
+  await page.locator('.pgroup[data-group*="Called decision" i] > .pgroup-head').click();
   await expect(page.locator("#f-brt-binding")).toBeVisible();
 }
 
@@ -32,7 +32,7 @@ test("the binding field offers latest, a chosen version and the deployment, and 
     "Version — a deployed version you choose",
     "Deployment — the model deployed with this process",
   ]);
-  await expect(page.locator(".pgroup", { hasText: "Called decision" })).toContainText("each time the task runs");
+  await expect(page.locator('.pgroup[data-group^="Called decision"]')).toContainText("each time the task runs");
   await expect(page.locator("#f-brt-version-wrap")).toBeHidden();
   expect(page.__errors).toEqual([]);
 });

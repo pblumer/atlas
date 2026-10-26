@@ -22,7 +22,7 @@ async function openMessage(page, id) {
   await page.evaluate((el) => window.__select(el), id);
   const picker = page.locator("#f-msgref");
   await expect(picker).toHaveCount(1);
-  if (!(await picker.isVisible())) await page.locator(".pgroup-head", { hasText: "Message" }).first().click();
+  if (!(await picker.isVisible())) await page.locator('.pgroup[data-group*="Message" i] > .pgroup-head').first().click();
   await expect(picker).toBeVisible();
 }
 
