@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-25",
   "plan": "../../planning/capability-driven-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-cda--capability-driven-automation-",
-  "next_action": "Bring digest PR #1360 up to date with main and decide its canonical JSON profile and the implementation digest of built-in Worker Types; configure CODEOWNERS and branch protection before the first evidence record; decide ADR-0480 and ADR-0485 so CDA0/CDA1 can close (three slices are active against the default WIP limit of two).",
+  "next_action": "Bring digest PR #1360 up to date with main and decide its canonical JSON profile and the implementation digest of built-in Worker Types; configure CODEOWNERS and branch protection before the first evidence record; decide ADR-0480 and ADR-0485 so CDA0/CDA1 can close (three slices are active against the default WIP limit of two); review the proposed controlled Worker-rebinding decision for CDA8 (PR #1355).",
   "slices": [
     {
       "id": "CDA0",
@@ -100,7 +100,7 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Approve binding ADR; pin one verified Worker at deployment without changing runtime."
+      "note": "Approve ADR-0482; keep a stable logical binding slot and explicit initially pinned Worker so a later authorized revision need not redeploy BPMN. No runtime rebinding in CDA6."
     },
     {
       "id": "CDA7",
@@ -112,7 +112,22 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Require provider-specific ADR-0475 enforcement, fsync-gated effects and recovery equality; no dynamic fallback."
+      "note": "Prove provider-specific ADR-0475 enforcement, fsync-gated effects and replay equality for the initially pinned binding. No automatic fallback or configured Worker hot-swap in CDA7."
+    },
+    {
+      "id": "CDA8",
+      "title": "Controlled Worker rebinding without redeployment",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA6",
+        "CDA7"
+      ],
+      "issues": [],
+      "prs": [
+        1355
+      ],
+      "note": "Review the proposed controlled-rebinding ADR. Operator-authorized A-to-B binding revisions affect only future jobs; existing queued/leased jobs stay pinned. Per-partition cutover, tenant/policy scope and crash/replay must be proven. No automatic dynamic selection. Review questions deferred until CDA7 has landed; the binding-slot scope is settled when CDA6 starts."
     }
   ]
 }
