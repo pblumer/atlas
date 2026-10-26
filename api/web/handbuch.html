@@ -9548,7 +9548,9 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           Konturen. <b>Period</b> grenzt den Zeitraum ein; <i>Since deployment</i> liest die Zähler der Engine,
           die auch erhalten bleiben, wenn alte Instanzen gelöscht werden. Rechts stehen die Zahlen dazu: die
           Instanzen, die Aufgaben sortiert nach dem, was das Diagramm gerade zeigt, die Aufteilung jedes
-          Gateways und was im Zeitraum nie erreicht wurde. Die Farben richten sich nach dem grössten Wert im
+          Gateways und was im Zeitraum nie erreicht wurde. Diese Zahlen beschreiben die Vergangenheit und werden
+          deshalb nicht laufend neu gelesen, sondern beim Öffnen, beim Wechsel des Zeitraums, alle fünf Minuten
+          und mit <b>Refresh</b>; neben dem Knopf steht, von wann sie sind. Die Farben richten sich nach dem grössten Wert im
           Bild; zwei Zeiträume oder Versionen vergleichst du deshalb über die Zahlen, nicht über die Farben.
           Zeiten werden pro Aufgabe ausgewertet, nie pro Person. Eine Aufgabe, die ohne Übernahme abgeschlossen
           wurde, hat eine Dauer, aber keine Aufteilung in Warten und Arbeiten, und die Übernahmen werden erst
@@ -9564,7 +9566,9 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           coloured outlines. <b>Period</b> narrows the time span; <i>Since deployment</i> reads the engine's
           counters, which are kept when old instances are deleted. On the right are the figures behind it: the
           instances, the tasks ordered by what the diagram shows, how each gateway split, and what the period
-          never reached. The colours are scaled to the largest value in the picture, so you compare two periods
+          never reached. These figures describe the past, so they are not re-read all the time: they are read
+          when you open the heatmap, when you change the period, every five minutes and on <b>Refresh</b>, and
+          the strip says when they are from. The colours are scaled to the largest value in the picture, so you compare two periods
           or versions by their figures, not by their colours. Times are measured per task, never per person.
           A task completed without anybody claiming it has a duration but no split into waiting and working,
           and claims are only recorded from this version on. Choosing a single instance switches back to Live,

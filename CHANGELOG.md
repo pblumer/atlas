@@ -90,6 +90,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The heatmap's figures cost the server once, not once per tab.** The Operations
+  heatmap reads its statistics when it opens, when the period changes, every five minutes
+  while the tab is visible and on **Refresh** — no longer every fifteen seconds — and the
+  strip says when they were folded. `GET /api/v1/processes/{key}/statistics` shares a
+  result for a minute per definition and window, lets requests that arrive while a fold
+  runs wait for it, and keeps each finished instance's contribution, so a fold re-reads
+  only the instances still running and those the window cuts. The runtime overlay folds
+  an isolated instance's sequence flows on a snapshot instead of on the run loop, and the
+  glow is redrawn only when its values change
+  ([ADR-0496](docs/adr/0496-operations-heatmap.md)).
+
 - **The Console's languages are one file each, and none ships incomplete.** The
   message catalogue is split into `api/web/locales/de.js` and `en.js`, listed once by
   `locales/index.js`; the language picker names each language by its own file, and the
