@@ -3,11 +3,11 @@
   "name": "Capability-driven Automation",
   "summary": "Connect business outcomes to verified technical operation semantics and, only after architectural approval, deterministic and policy-authorized Worker execution. Discovery and execution are separate delivery gates.",
   "status": "active",
-  "owner": "unassigned (maintainer assignment required)",
+  "owner": "pblumer",
   "last_reviewed": "2026-10-25",
   "plan": "../../planning/capability-driven-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-cda--capability-driven-automation-",
-  "next_action": "Assign a programme owner; review PR #1351 and PR #1346; decide ADR-0480.",
+  "next_action": "Bring digest PR #1360 up to date with main and decide its canonical JSON profile and the implementation digest of built-in Worker Types; configure CODEOWNERS and branch protection before the first evidence record; decide ADR-0480 and ADR-0485 so CDA0/CDA1 can close (three slices are active against the default WIP limit of two).",
   "slices": [
     {
       "id": "CDA0",
@@ -33,19 +33,24 @@
       "prs": [
         1346
       ],
-      "note": "Draft PR #1346; exact semantics and parser only, not provider conformance."
+      "note": "PR #1346 merged the exact technical-contract envelope on main; ADR-0485 remains Proposed/Partial, so no provider conformance or completed-slice claim."
     },
     {
       "id": "CDA2",
       "title": "Contract governance and conformance",
-      "status": "planned",
+      "status": "active",
       "owner": "unassigned",
       "depends_on": [
         "CDA1"
       ],
-      "issues": [],
-      "prs": [],
-      "note": "Accept governance ADR; offline full JSON Schema checks, independent evidence, publication and revocation."
+      "issues": [
+        1358
+      ],
+      "prs": [
+        1357,
+        1360
+      ],
+      "note": "ADR-0483 Accepted (option 3). CDA2a schema-only validation merged in PR #1357; content digests PR #1360 in review. Independent operation/package-bound evidence, reviewer approval, revocation and publication are not yet implemented; no Worker is verified."
     },
     {
       "id": "CDA3",

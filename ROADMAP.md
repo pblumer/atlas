@@ -2341,16 +2341,19 @@ Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
   routing exists. Keep B11 open until the architecture decision and
   verification gates have been reviewed.
 - 🚧 **CDA1 — Canonical semantic contract envelope (T1a / Milestone 6).**
-  [PR #1346](https://github.com/pblumer/atlas/pull/1346) is a **draft,
-  not merged** at this baseline: exact ID/version/profile, resource kind,
-  identity scope and strict schema envelope. No proof of provider behavior.
-  This slice must be accepted before CDA2.
-- 🔲 **CDA2 — Contract governance and conformance (T1b / Milestone 6).**
-  Decide independent publication, immutable contract digest, offline
-  JSON Schema validation, positive/negative conformance evidence, expiry,
-  reviewer approval and withdrawal in
-  [ADR-0483](docs/adr/0483-technical-capability-conformance-governance.md).
-  A Worker Type cannot certify its own claims.
+  [PR #1346](https://github.com/pblumer/atlas/pull/1346) merged the strict
+  envelope on `main`: exact ID/version/profile, resource kind, identity
+  scope and schema roots. [ADR-0485](docs/adr/0485-technical-capability-semantics.md)
+  is **Proposed / Partial**; no proof of provider behavior.
+- 🚧 **CDA2 — Contract governance and conformance (T1b / Milestone 6).**
+  [ADR-0483](docs/adr/0483-technical-capability-conformance-governance.md)
+  is **Accepted**: immutable source-controlled contracts, independent
+  digest-bound evidence, explicit reviewer approval and withdrawal.
+  [PR #1357](https://github.com/pblumer/atlas/pull/1357) merged offline,
+  schema-only validation; [PR #1360](https://github.com/pblumer/atlas/pull/1360)
+  (content digests) is a draft in review; publication, verified
+  provider evidence and revocation are not yet implemented. No Worker Type
+  can certify its own claims or obtain runtime routing from JSON validation.
 - 🔲 **CDA3 — Verifiable built-in operation mappings (T2 / Milestone 6).**
   Derive from existing provider operation catalogues, first distinguishing
   an Entra account from a Google contact and an LDAP entry. Mark unknown,
