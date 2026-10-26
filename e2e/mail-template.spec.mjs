@@ -52,20 +52,20 @@ test("F2 on a template body opens the template editor with a live preview", asyn
   await expect(page.locator(".dev-modal")).toBeVisible();
   await expect(page.locator(".dev-badge")).toHaveText("Template");
   // The preview is open from the start: reading the result is the point.
-  await expect(page.locator(".dev-test-toggle")).toHaveText("Preview");
+  await expect(page.locator(".dev-test-toggle")).toHaveText("Vorschau");
   await expect(page.locator(".dev-preview")).toBeVisible();
   // The template language's tags lead the reference, FEEL's functions follow.
   await expect(page.locator(".dev-tab[data-tab='fns']")).toBeVisible();
 
   await page.locator(".dev-run-vars").fill('{ "kunde": { "name": "Ada" } }');
   await expect(page.locator(".dev-preview-text")).toHaveText("Hallo Ada");
-  await expect(page.locator(".dev-run-out")).toHaveText("✓ rendered");
+  await expect(page.locator(".dev-run-out")).toHaveText("✓ gerendert");
 
   // Editing the template renders again, and a missing value is pointed out.
   await page.locator(".dev-ta").fill("Hallo {{kunde.name}}, {{kunde.firma}}");
   await expect(page.locator(".dev-preview-text")).toHaveText("Hallo Ada, ");
   await expect(page.locator(".dev-preview-problems")).toContainText("kunde.firma");
-  await expect(page.locator(".dev-run-out")).toContainText("1 placeholder rendered as nothing");
+  await expect(page.locator(".dev-run-out")).toContainText("1 Platzhalter blieb leer");
 
   const last = await page.evaluate(() => window.__templateCalls.at(-1));
   expect(last.html).toBe(false);
@@ -104,13 +104,13 @@ test("a template that does not compile says where, and keeps the last rendering"
   await expect(page.locator(".dev-preview-text")).toHaveText("Hallo Ada");
 
   await page.locator(".dev-ta").fill("{{#if kunde.vip}}Sehr geehrte");
-  await expect(page.locator(".dev-run-out")).toHaveText("✗ line 1, column 1");
+  await expect(page.locator(".dev-run-out")).toHaveText("✗ Zeile 1, Spalte 1");
   await expect(page.locator(".dev-run-detail")).toContainText("never closed with {{/if}}");
   await expect(page.locator(".dev-preview-out")).toHaveClass(/stale/);
   await expect(page.locator(".dev-preview-text")).toHaveText("Hallo Ada");
 
   await page.locator(".dev-run-vars").fill("[1, 2]");
-  await expect(page.locator(".dev-run-out")).toHaveText("Sample variables must be a JSON object.");
+  await expect(page.locator(".dev-run-out")).toHaveText("Die Beispielvariablen müssen ein JSON-Objekt sein.");
   expect(page.__errors).toEqual([]);
 });
 
