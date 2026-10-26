@@ -44,6 +44,7 @@ import { frozenMark } from "./frozen-decisions.js";
 import { t as tr, plural as trPlural, locale as trLocale } from "./i18n.js";
 import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./taskfolders.js";
 import { runImport } from "./infomodel-import.js";
+import { uploadPicture, PERSON } from "./picturescale.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
 import { formRefusalNames, loadFormViewer, scrollToFirstInvalidField } from "./formviewer.js";
@@ -2265,7 +2266,8 @@ function avatarField(u) {
   return `<div class="avatar-field" data-uid="${esc(u.id)}" style="border-top:1px solid var(--border); margin-top:14px; padding-top:12px">
     <b>Picture</b>
     <p class="muted" style="margin:2px 0 8px">Shown beside this person's name wherever atlas names
-      them — a task list, an approval, the shop's recipient picker. PNG or JPEG.
+      them — a task list, an approval, the shop's recipient picker. PNG or JPEG; a large
+      one is scaled down before it is uploaded.
       ${u.avatarSource === "entra"
     ? "This one came from the directory; uploading here replaces it, and the mirror will not put it back."
     : ""}</p>
@@ -2282,9 +2284,9 @@ function avatarField(u) {
 
 // wireAvatarField hangs the two buttons off whichever edit form is open.
 //
-// The upload does not go through api(): that helper sends JSON, and this route
-// takes the bytes themselves under the Content-Type the file already carries —
-// the same shape the catalogue's brand mark uses, and for the same reason.
+// The upload goes through apiBytes and not api(): that helper sends JSON, and this
+// route takes the bytes themselves under their own Content-Type — the same shape
+// the catalogue's brand mark uses, and for the same reason.
 function wireAvatarField(slot, reload) {
   const box = slot.querySelector(".avatar-field");
   if (!box) return;
@@ -2307,19 +2309,12 @@ function wireAvatarField(slot, reload) {
       if (b.dataset.avact === "upload") {
         const file = box.querySelector(".avatar-file").files[0];
         if (!file) { toast("Choose a PNG or JPEG first", "err"); return; }
-        // No size check here. The server carries the limit, it is configurable, and
-        // a number copied into this page would go stale silently — its refusal
-        // names the actual figure.
-        const res = await fetch(`/api/v1/users/${encodeURIComponent(id)}/avatar`, {
-          method: "PUT", body: file,
-          headers: { "Content-Type": file.type || "application/octet-stream" },
-        });
-        if (!res.ok) {
-          const text = await res.text();
-          let data = null;
-          try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
-          throw new Error((data && data.error) || text || `HTTP ${res.status}`);
-        }
+        // Scaled down here, so a photograph straight off a camera is taken rather
+        // than refused for its size; picturescale.js says why here and not on the
+        // server, and why it carries no number of the server's limit.
+        await uploadPicture(file,
+          (picture) => apiBytes("PUT", `/api/v1/users/${encodeURIComponent(id)}/avatar`, picture),
+          PERSON);
         toast("Picture updated", "ok");
       } else {
         await api("DELETE", `/api/v1/users/${encodeURIComponent(id)}/avatar`);

@@ -35,6 +35,21 @@ _Changed_ / _Removed_ for each version.
   record, so the page stays reachable for withdrawing a connection after linking is
   removed.
 
+### Fixed
+
+- **A picture of any size is taken, for a person and for a product.** Console →
+  Organization and the catalogue's product editor passed the chosen file on unchanged, so
+  a photograph straight off a phone was refused with "the picture exceeds the 524288 byte
+  limit". Both now scale a PNG or JPEG in the browser before the upload, never enlarging
+  it: a person's to 256 pixels on its shorter side, a product's to 600, three times the
+  height the shop draws it at. A JPEG stays a JPEG, a PNG stays one where it has
+  transparency or costs at most twice its JPEG, and an SVG is uploaded as it is. A raster
+  picture is redrawn even when it is small enough, so the Exif data a phone writes, its
+  location included, is not stored. Should the server still refuse one as too large, it is
+  sent again at three quarters of the size, up to four times. The routes and their limit
+  are unchanged ([ADR-0368](docs/adr/0368-user-avatar.md),
+  [ADR-0391](docs/adr/0391-product-picture.md), both amended).
+
 ## [0.20.0] — 2026-10-25
 
 **A SharePoint Worker can act as the person who asked, and only for what a policy

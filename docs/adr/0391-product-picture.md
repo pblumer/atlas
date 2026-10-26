@@ -1,6 +1,6 @@
 # ADR-0391: A product is shown, and its picture is not part of what was promised
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-26: the Console scales a raster picture down before it uploads it)
 - **Implementation:** Landed
 - **Date:** 2026-09-17
 - **Deciders:** Atlas maintainers
@@ -58,7 +58,8 @@ DELETE /api/v1/catalog-products/{id}/picture   role: productmanager, gated on it
   served under the sandbox policy `brandimage.Serve` sets.
 - **What was uploaded is what is served.** No resizing and no re-encoding: a server
   that re-encodes somebody's picture decides their product looks near enough. The
-  page bounds it in CSS instead.
+  page bounds it in CSS instead. (The server still serves exactly what it was given;
+  since the amendment below, the Console scales a raster picture before it gives it.)
 
 ### Who may see it
 
@@ -82,6 +83,42 @@ different laptop, and an order showing last month's photograph would be a record
 nobody asked for. An order that must survive the product being withdrawn already
 does: it carries the texts and the price it was placed under, and the picture is
 simply absent once the product is gone.
+
+## Amendment (2026-10-26): the Console scales a raster picture down before it uploads it
+
+The route takes at most the asset budget — 512 KiB by default — and a photograph
+of the product off a phone is five to fifteen megabytes. The editor passed the file
+on unchanged, so the ordinary case ended in "The product was saved, but its picture
+was not: the picture exceeds the 524288 byte limit".
+
+**The product editor now draws a PNG or JPEG again in the browser before the
+upload**, with the module a person's picture already used
+([ADR-0368](0368-user-avatar.md), amended the same day; `api/web/picturescale.js`):
+
+- **To what the shop can show.** The shop draws a picture whole and at most 200 CSS
+  pixels tall. The shorter side is held to 600 pixels — that height at three times
+  the pixel density, the most a phone has — and the longer side to 1200, so a banner
+  does not stay one. Never enlarged. A 4:3 photograph comes out at 800×600 and a
+  few hundred kilobytes at most.
+- **An SVG is uploaded exactly as picked.** A vector has no pixels to scale, and
+  drawing one would turn a vendor's mark into a raster of it.
+- **A PNG stays a PNG** where it has transparency, and otherwise unless it costs
+  more than twice its JPEG: a logo keeps its edges, and a photograph that happened to
+  be saved as a PNG is sent as the JPEG it should have been.
+- **The server's limit is learned, not copied.** When the server still answers 413 —
+  a cut-out with transparency can only be a PNG and does not compress like a
+  photograph — the picture is drawn again at three quarters of the size, up to four
+  times, and the server's own refusal is shown if none fits.
+
+This changes the bullet above in one respect, and the reason it was written still
+holds. It refused **the server** deciding that a product looks near enough. What
+the editor removes now is pixels the shop never draws and a phone's Exif data, which
+includes where the photograph was taken; what it keeps is the shape, the
+orientation, and a lossless PNG where that costs little. An author who needs exact
+bytes served — a picture prepared to the pixel — uploads an SVG, or uses the route
+directly, which is unchanged.
+
+`e2e/catalog-product-picture.spec.mjs` holds the behaviour.
 
 ## Consequences
 

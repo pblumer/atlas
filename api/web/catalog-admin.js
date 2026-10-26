@@ -31,6 +31,9 @@ import { openPickModal } from "./pickmodal.js";
 import { importAsking } from "./importchoices.js";
 import { mappingsCard, wireMappings } from "./packagemappings.js";
 import { fmtDateTime } from "./datefmt.js";
+// A product's picture is scaled in the browser before it is uploaded, exactly as a
+// person's is (ADR-0391, amended).
+import { uploadPicture, PRODUCT } from "./picturescale.js";
 // A product's content from the wiki (ADR-0491):
 // the panel, the catalogue's refresh, and the words the read-only fields use.
 import { mountContentPanel, mountCatalogRefresh } from "./catalog-content.js";
@@ -2017,7 +2020,9 @@ async function savePicture({ api, apiBytes, toast }, pid, f) {
   const path = `/api/v1/catalog-products/${encodeURIComponent(pid)}/picture`;
   try {
     if (file && file.size > 0) {
-      await apiBytes("PUT", path, file);
+      // Scaled down first, so a photograph straight off a camera is taken rather
+      // than refused for its size; an SVG goes as it is (picturescale.js).
+      await uploadPicture(file, (picture) => apiBytes("PUT", path, picture), PRODUCT);
       return;
     }
     if (f.get("dropPicture")) await api("DELETE", path);
@@ -2292,8 +2297,10 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people, apps
         <button type="button" class="btn ghost" data-add-shape>Add a shape</button></div>
       <div class="field wide">Picture
         <span class="muted" style="display:block; margin:2px 0 6px">A photograph of the
-          thing or the vendor's mark, shown to whoever is choosing — PNG, JPEG or SVG,
-          served back exactly as uploaded. It is <b>not frozen into a release</b>: a
+          thing or the vendor's mark, shown to whoever is choosing — PNG, JPEG or SVG.
+          A large photograph is scaled down before it is uploaded, to about three times
+          what the shop draws; an SVG is served back exactly as uploaded. It is
+          <b>not frozen into a release</b>: a
           better photograph of the same laptop is not a different laptop, so a new
           picture appears on old orders too. Most of a catalogue reads as a list of
           names; this is the one thing that makes it read as a shop.</span>
