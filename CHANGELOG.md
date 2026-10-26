@@ -64,6 +64,12 @@ _Changed_ / _Removed_ for each version.
   sent again at three quarters of the size, up to four times. The routes and their limit
   are unchanged ([ADR-0368](docs/adr/0368-user-avatar.md),
   [ADR-0391](docs/adr/0391-product-picture.md), both amended).
+- **The Users list fits its card.** Under Console → Organization each user row carried
+  four buttons side by side, which made the table wider than the content column: the card
+  scrolled it sideways and cut Delete off at its edge, even on a wide screen. Edit stays
+  on the row; Set password, Disable and Delete are in the row's ⋯ menu, as on the
+  Console's other lists, and do what the buttons did
+  ([ADR-0163](docs/adr/0163-deleting-a-referenced-connector.md)).
 
 ## [0.20.0] — 2026-10-25
 
