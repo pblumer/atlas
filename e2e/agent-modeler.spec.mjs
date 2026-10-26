@@ -205,7 +205,7 @@ test("an ai task shows its worker, model, prompt and result variable", async ({ 
 
   // The picker recognised it as an ai task rather than falling back to "Job worker",
   // which is the failure a missing catalog entry produces.
-  await expect(page.locator("#p-body")).toContainText("AI Task");
+  await expect(page.locator("#p-body")).toContainText("KI-Task");
   expect(page.__errors).toEqual([]);
 });
 
