@@ -157,6 +157,16 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.IncElementToken(v.element.ProcessDefKey, v.element.ElementId); err != nil {
 				return err
 			}
+			// Count the arrow the token came over, so the heatmap can draw the sequence
+			// flows and not only the shapes (ADR-draft-operations-heatmap). A catch armed
+			// by an event-based gateway is not counted here: arming every branch is how
+			// Atlas runs a deferred choice, not a token taking each arrow, so its flow
+			// counts when the race is decided in its favour (the completion arm below).
+			if v.element.SourceFlowId >= 0 && v.element.EventGatewayKey == 0 {
+				if err := tx.IncFlowTakenAgg(v.element.ProcessDefKey, v.element.SourceFlowId); err != nil {
+					return err
+				}
+			}
 			return tx.IncElementVisitAgg(v.element.ProcessDefKey, v.element.ElementId)
 		case model.IntentCompleted, model.IntentTerminated:
 			// Completion and termination are distinct token facts, not one "left the
@@ -183,6 +193,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			}
 			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, action); err != nil {
 				return err
+			}
+			// The armed branch that won its race: the arrow from the gateway is now the
+			// one the token took. A losing branch is terminated, never completed, so it
+			// is never counted (ADR-draft-operations-heatmap).
+			if h.Intent == model.IntentCompleted && v.element.EventGatewayKey != 0 && v.element.SourceFlowId >= 0 {
+				if err := tx.IncFlowTakenAgg(v.element.ProcessDefKey, v.element.SourceFlowId); err != nil {
+					return err
+				}
 			}
 			// Terminating an element clears any incident it carried (a stuck job's,
 			// ADR-0061); the delete is idempotent, so it is a no-op for the common
@@ -242,6 +260,16 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			}
 			if err := tx.PutJob(h.Key, &v.job); err != nil {
 				return err
+			}
+			// Taking a task up and handing it back are kept as facts of their own, in the
+			// order they happened, because the job keeps only who holds it now and goes
+			// when it completes — and waiting and working time are the distance between
+			// them (ADR-draft-operations-heatmap). Creation is neither: a task the model
+			// assigns is in somebody's inbox, not yet in their hands.
+			if kind := jobTakeKind(h.Intent, &v.job); kind != 0 {
+				if err := tx.RecordJobTake(v.job.ProcessInstanceKey, h.Timestamp, h.Position, v.job.ElementInstanceKey, kind); err != nil {
+					return err
+				}
 			}
 			// Only creation opens a job. A re-put of one already open moves the
 			// engine-wide count by nothing (ADR-0142).
@@ -640,4 +668,22 @@ func putIncidentFeedRow(tx *state.Tx, h model.RecordHeader, kind state.FeedKind,
 		definition = ei.ProcessDefKey
 	}
 	return tx.PutFeedIncident(h.PartitionId, h.Position, h.Timestamp, kind, definition, inc)
+}
+
+// jobTakeKind says whether a job event took the task up — a claim by a person, a lease
+// by a Worker — or handed it back: an unclaim, a lease that ran out, a failure reported
+// by the Worker that held it. 0 for every other event.
+func jobTakeKind(intent model.Intent, job *model.JobValue) byte {
+	switch intent {
+	case model.IntentJobActivated:
+		return state.JobTaken
+	case model.IntentJobAssigned:
+		if job.Assignee != "" {
+			return state.JobTaken
+		}
+		return state.JobReleased
+	case model.IntentJobFailed, model.IntentJobTimedOut:
+		return state.JobReleased
+	}
+	return 0
 }
