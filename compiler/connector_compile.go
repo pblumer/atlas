@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/pblumer/atlas/expr/feelers"
 )
 
 // connectorCompiler compiles one worker flavor of a job-worker task (service or
@@ -147,6 +149,11 @@ var connectorCompilers = []connectorCompiler{
 		present: func(st xmlServiceTask) bool { return st.GoogleContacts != nil },
 		retries: func(st xmlServiceTask) string { return st.GoogleContacts.Retries },
 		compile: compileGoogleContactsConnectorTask,
+	},
+	{
+		present: func(st xmlServiceTask) bool { return st.CardDAV != nil },
+		retries: func(st xmlServiceTask) string { return st.CardDAV.Retries },
+		compile: compileCardDAVConnectorTask,
 	},
 }
 
@@ -1318,6 +1325,7 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		{"subject", cn.Subject, false, spec.send, "the subject of a message this task sends; a reply and a forward take the original's"},
 		{"body", cn.Body, false, spec.send || spec.reply || spec.forward, "the text of a message, a reply, or the note above a forward"},
 		{"bodyHtml", cn.BodyHtml, false, spec.send || spec.reply || spec.forward, "the HTML of a message, a reply, or the note above a forward"},
+		{"templating", cn.Templating, false, spec.send || spec.reply || spec.forward, "whether the subject and bodies of a message are templates"},
 		{"folder", cn.Folder, false, spec.list, "the folder a list reads"},
 		{"messageId", cn.MessageID, spec.message, spec.message, "the message the operation acts on — the messageId a watch or a list answered"},
 		{"destination", cn.Destination, spec.destination, spec.destination, "the folder a move files the message into"},
@@ -1370,8 +1378,32 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 			return 0, err
 		}
 	}
-	if cfg.IncludeBody, err = mailFlag(st.Id, "includeBody", cn.IncludeBody); err != nil {
+	if cfg.IncludeBody, cfg.IncludeHTML, err = mailBody(st.Id, op, cn.IncludeBody); err != nil {
 		return 0, err
+	}
+	templating, err := mailFlag(st.Id, "templating", cn.Templating)
+	if err != nil {
+		return 0, err
+	}
+	// With templating on, a subject or body that uses the template language is parsed
+	// and its FEEL compiled here, once (I5). A leading '=' still makes the whole value
+	// one FEEL expression, and a value without {{ is still a literal: templating
+	// changes only what a placeholder in a literal means.
+	for _, v := range []struct {
+		what string
+		raw  string
+		into **feelers.Template
+	}{
+		{"subject", cn.Subject, &cfg.SubjectTemplate},
+		{"body", cn.Body, &cfg.BodyTemplate},
+		{"bodyHtml", cn.BodyHtml, &cfg.BodyHTMLTemplate},
+	} {
+		if !templating || strings.HasPrefix(strings.TrimSpace(v.raw), "=") || !feelers.IsTemplate(v.raw) {
+			continue
+		}
+		if *v.into, err = feelers.Compile(v.raw, b.gate().compileFEEL); err != nil {
+			return 0, fmt.Errorf("compiler: mail task %q: %s: %w", st.Id, v.what, err)
+		}
 	}
 	// Each authored value is literal or FEEL (the fx toggle, ADR-0067), compiled once
 	// here and evaluated over the variables the task sees at call time.
@@ -1481,6 +1513,21 @@ func mailMaxResults(taskID, raw string) (int32, error) {
 		return 0, fmt.Errorf("compiler: mail task %q has a maxResults of %d; a list answers between 1 and %d messages", taskID, n, mailMaxResultsCeiling)
 	}
 	return int32(n), nil
+}
+
+// mailBody reads includeBody: false (or blank) for the envelope, true for the text too,
+// and html for the text and the HTML body — on a get only (ADR-0489). A
+// list answers up to a hundred messages into one variable, and a hundred HTML bodies
+// are not something a variable can hold, so a list that wants one reads it with a get.
+func mailBody(taskID, op, raw string) (text, html bool, err error) {
+	if strings.EqualFold(strings.TrimSpace(raw), "html") {
+		if op != "get" {
+			return false, false, fmt.Errorf("compiler: mail task %q has includeBody=%q; only a get reads a message's HTML body — a list answers up to %d messages into one variable, so read the one you need with a get", taskID, raw, mailMaxResultsCeiling)
+		}
+		return true, true, nil
+	}
+	text, err = mailFlag(taskID, "includeBody", raw)
+	return text, false, err
 }
 
 // mailFlag reads a literal true/false attribute. It is not FEEL: whether a body is read

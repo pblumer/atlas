@@ -35,14 +35,16 @@ import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWor
 // already read the handbook.
 import { workerKindDocHTML } from "./workertypedocs.js";
 import { migrateProcessFlow, runningByDefinition } from "./migrationdialog.js";
+import { purgeFinishedFlow } from "./historypurge.js";
 import { openPickModal } from "./pickmodal.js";
 import { openApplicationDeleteDialog, forceReason } from "./deletedialog.js";
 import { refDeleteWarning } from "./dmnref-impact.js";
 import { versionDeleteState, holderNote } from "./decision-cleanup.js";
 import { frozenMark } from "./frozen-decisions.js";
-import { t as tr, plural as trPlural } from "./i18n.js";
+import { t as tr, plural as trPlural, locale as trLocale } from "./i18n.js";
 import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./taskfolders.js";
 import { runImport } from "./infomodel-import.js";
+import { uploadPicture, PERSON } from "./picturescale.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
 import { formRefusalNames, loadFormViewer, scrollToFirstInvalidField } from "./formviewer.js";
@@ -213,6 +215,31 @@ function loadFeatures() {
   return featuresAsked;
 }
 
+// LINKING is whether the account menu offers "Connected accounts". The page earns
+// its place when the server can link an account, or when the person already has an
+// account linked or a connection on record — then it is where they withdraw it, even
+// after an administrator switched linking off. Everybody else would find a page that
+// only says there is nothing to do. Until the server has answered, the entry is
+// offered, the stance FEATURES takes; a server without the vault answers 503 and has
+// nothing to link and nothing linked. It is asked once per signed-in person, and
+// again when an administrator changes the setup (security.js).
+const LINKING = { offered: true, user: null };
+let linkingAsked = null;
+function loadLinking(force) {
+  const who = AUTH.user && AUTH.user.id;
+  if (!who) return Promise.resolve();
+  if (!force && LINKING.user === who && linkingAsked) return linkingAsked;
+  LINKING.user = who;
+  linkingAsked = api("GET", "/api/v1/me/connections").then((m) => {
+    LINKING.offered = !!(m && ((m.linkable || []).length || (m.identities || []).length || (m.connections || []).length));
+  }, (e) => {
+    // Anything but 503 is no answer: keep the entry and ask on the next navigation.
+    if (e && e.status === 503) LINKING.offered = false;
+    else LINKING.user = null;
+  }).then(() => updateAccount());
+  return linkingAsked;
+}
+
 // offered is the one predicate both menus filter by: the person holds the role, and
 // the server serves the part of Atlas the entry opens. One predicate and not a second
 // condition beside each role check, because the next menu would be the one that
@@ -222,7 +249,8 @@ const offered = (entry) => mayUse(entry.role) && !(entry.feature && FEATURES[ent
 // isCatalogueRoute names the Console views of the area the switch removes — the same
 // four the menus mark with feature: "catalogue".
 const isCatalogueRoute = (path) =>
-  path.startsWith("#/catalog") || path === "#/operations/reconciliation" || path === "#/tasks/recertification";
+  path.startsWith("#/catalog") || path === "#/operations/reconciliation" || path === "#/tasks/recertification"
+  || path === "#/console/content-sources";
 
 const initials = (name) => {
   const s = String(name || "").trim();
@@ -243,7 +271,7 @@ function updateAccount() {
     if (menu) menu.innerHTML =
       `<div class="mlabel">Signed in as <b>${esc(AUTH.user.username)}</b></div>` +
       `<a href="#/console/settings" title="Number format, time zone and language — yours, not this server's">Display settings</a>` +
-      `<a href="#/console/connections" title="The external accounts you linked, and which Workers may act as you">Connected accounts</a>` +
+      (LINKING.offered ? `<a href="#/console/connections" title="The external accounts you linked, and which Workers may act as you">Connected accounts</a>` : "") +
       `<a href="#/console/approvals" title="The actions waiting for your approval, and the ones asked on your behalf">Approvals</a>` +
       `<button type="button" data-act="logout" title="Sign out of atlas">Log out</button>`;
   } else {
@@ -672,7 +700,14 @@ async function deployDemo() {
 const APPS = [
   { id: "console", name: "Console", route: "#/console", on: true, role: "any" },
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
+  { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
+  { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
+  { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
+  // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
+  // catalogue means choosing from processes already deployed, never deploying one,
+  // so it is deliberately not the modeller's role — deploy is code execution.
+  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue" },
   // The shop is a page of its own, not a view of this app, so its route
   // is a path and not a hash — written without a leading slash, because a route in
   // this table is what the handbook appends to the site root (href="/" + route),
@@ -685,13 +720,6 @@ const APPS = [
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
   { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue" },
-  // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
-  // catalogue means choosing from processes already deployed, never deploying one,
-  // so it is deliberately not the modeller's role — deploy is code execution.
-  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue" },
-  { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
-  { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
-  { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
 ];
 
 // Secondary (in-app) navigation.
@@ -726,6 +754,11 @@ const TOPNAV = {
       // and the recorded decisions (ADR-0475).
       { name: "Security", route: "#/console/security", role: "admin" },
       { name: "Audit log", route: "#/console/audit", role: "admin" },
+      // Where a product's description may come from outside Atlas
+      // (ADR-0491 § 3): installation
+      // configuration naming a vault secret, so it is the administrator's, beside the
+      // other installation settings. The catalogue's, so it goes with the switch.
+      { name: "Content sources", route: "#/console/content-sources", role: "admin", feature: "catalogue" },
     ] },
   ],
   modeler: [
@@ -922,6 +955,11 @@ const WORKER_TYPES = [
     id: "googlecontacts", name: "Google Contacts", kind: "Contacts",
     desc: "Uses a Google address book from a process: finds a contact by e-mail address, phone number or a custom field such as a customer number, reads, lists, creates, updates and deletes contacts, puts a label such as Kunden on one or takes it off, and searches the organization\u0027s Workspace directory for a colleague. A contact arrives as one flat object (email, phone, organization, address, fields, groups) rather than as Google\u0027s lists of entries. Find reads the address book itself, exact and current, so a process asking whether a customer is known does not get the stale answer Google\u0027s search cache can give. Configure each address book below: a service account acting as a Workspace user, or a person\u0027s refresh token, lives in the vault and never enters a model. Worker-only, and atlas supervises the worker for it.",
     refs: "ADR-0476", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "carddav", name: "CardDAV contacts", kind: "Contacts",
+    desc: "Uses a CardDAV address book from a process \u2014 iCloud, Nextcloud, ownCloud, mailbox.org, Posteo, Infomaniak, Fastmail, Synology, Radicale and most mail providers\u0027 \u2014 with the operations and the contact of Google Contacts: finds a contact by e-mail address, phone number or a custom field, reads, searches, lists, creates, updates and deletes contacts, and puts a group such as Kunden on one or takes it off. An update keeps every property it does not change, a photo included, and a repeated create finds the contact the first round made instead of making a second. Configure each address book below: its URL, and the account\u0027s username and app-specific password in the vault, which never enter a model. Worker-only, and atlas supervises the worker for it.",
+    refs: "ADR-0490", status: "active", statusLabel: "configured below",
   },
   {
     id: "mssql", name: "Microsoft SQL Server", kind: "Database",
@@ -1143,6 +1181,7 @@ function handbookHelp(path) {
   // modelling products and designing their processes. shop() points into it, and the
   // help-context spec holds its anchors to that page as it holds H()'s to the handbook.
   const shop = (anchor, label) => ({ anchor, label, page: "shop-handbuch.html" });
+  if (path === "#/console/content-sources") return shop("wiki-inhalt", "Content from the wiki");
   if (path.startsWith("#/catalog")) return shop("katalog-aufbauen", "Building a catalogue");
   if (/^#\/modeler\/dmn\//.test(path)) return H("dmn", "Learn DMN");
   if (/^#\/modeler\/form\b/.test(path)) return H("formulare", "Forms & workers");
@@ -2227,7 +2266,8 @@ function avatarField(u) {
   return `<div class="avatar-field" data-uid="${esc(u.id)}" style="border-top:1px solid var(--border); margin-top:14px; padding-top:12px">
     <b>Picture</b>
     <p class="muted" style="margin:2px 0 8px">Shown beside this person's name wherever atlas names
-      them — a task list, an approval, the shop's recipient picker. PNG or JPEG.
+      them — a task list, an approval, the shop's recipient picker. PNG or JPEG; a large
+      one is scaled down before it is uploaded.
       ${u.avatarSource === "entra"
     ? "This one came from the directory; uploading here replaces it, and the mirror will not put it back."
     : ""}</p>
@@ -2244,9 +2284,9 @@ function avatarField(u) {
 
 // wireAvatarField hangs the two buttons off whichever edit form is open.
 //
-// The upload does not go through api(): that helper sends JSON, and this route
-// takes the bytes themselves under the Content-Type the file already carries —
-// the same shape the catalogue's brand mark uses, and for the same reason.
+// The upload goes through apiBytes and not api(): that helper sends JSON, and this
+// route takes the bytes themselves under their own Content-Type — the same shape
+// the catalogue's brand mark uses, and for the same reason.
 function wireAvatarField(slot, reload) {
   const box = slot.querySelector(".avatar-field");
   if (!box) return;
@@ -2269,19 +2309,12 @@ function wireAvatarField(slot, reload) {
       if (b.dataset.avact === "upload") {
         const file = box.querySelector(".avatar-file").files[0];
         if (!file) { toast("Choose a PNG or JPEG first", "err"); return; }
-        // No size check here. The server carries the limit, it is configurable, and
-        // a number copied into this page would go stale silently — its refusal
-        // names the actual figure.
-        const res = await fetch(`/api/v1/users/${encodeURIComponent(id)}/avatar`, {
-          method: "PUT", body: file,
-          headers: { "Content-Type": file.type || "application/octet-stream" },
-        });
-        if (!res.ok) {
-          const text = await res.text();
-          let data = null;
-          try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
-          throw new Error((data && data.error) || text || `HTTP ${res.status}`);
-        }
+        // Scaled down here, so a photograph straight off a camera is taken rather
+        // than refused for its size; picturescale.js says why here and not on the
+        // server, and why it carries no number of the server's limit.
+        await uploadPicture(file,
+          (picture) => apiBytes("PUT", `/api/v1/users/${encodeURIComponent(id)}/avatar`, picture),
+          PERSON);
         toast("Picture updated", "ok");
       } else {
         await api("DELETE", `/api/v1/users/${encodeURIComponent(id)}/avatar`);
@@ -4947,7 +4980,7 @@ function wireWorkerManagement(workers) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="teamsphone">Microsoft Teams Phone</option><option value="googlecontacts">Google Contacts</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="teamsphone">Microsoft Teams Phone</option><option value="googlecontacts">Google Contacts</option><option value="carddav">CardDAV contacts</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field provider-field" style="margin:0"><span class="provider-label">Provider</span><select name="provider"></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -6449,6 +6482,16 @@ async function viewInstances() {
           { label: "Terminate all running", icon: "⛔", act: "term", data: { proc: g.processId }, danger: true },
         );
       }
+      // Deleting finished instances for good is an administrator's, and offered only
+      // where there are some (ADR-0486). The
+      // dialog reads its own counts: the Finished column counts every instance that
+      // ever finished, including the ones already deleted.
+      if (s.finished && mayUse("admin")) {
+        menuItems.push(
+          { sep: true },
+          { label: tr("purge.menu"), icon: "✕", act: "purge", data: { proc: g.processId }, danger: true },
+        );
+      }
       // A running count says nothing about a token being *stuck*: an instance parked
       // behind an incident is counted as running like any other (ADR-0151).
       const inc = incidentCell(g);
@@ -6487,6 +6530,20 @@ async function viewInstances() {
         // How many instances a version holds: the per-version running counts the
         // overview already read, so the picker says which one is worth draining.
         runningOf: (v) => runningByDef.get(String(v.key)) || 0,
+        onDone: load,
+      });
+      return;
+    }
+    // Delete a process's finished instances for good, a version or all of them, up to
+    // a cut-off (ADR-0486).
+    if (act === "purge") {
+      const g = allGroups.find((x) => x.processId === b.dataset.proc);
+      if (!g) return;
+      await purgeFinishedFlow({
+        api, toast,
+        processId: g.processId,
+        processName: g.latest.name || g.processId,
+        versions: g.versions,
         onDone: load,
       });
       return;
@@ -9385,7 +9442,9 @@ async function viewTasks(preselectKey) {
       // themselves; a directory field saved as a textfield has it attached below. A form
       // without one asks nothing.
       const lookups = { transport: taskTransport(t.key), data: data || {} };
-      const form = new Form({ container: host, atlasRemote: remoteAdapter(lookups) });
+      // atlasLocale: the e-mail view speaks the language the Tasks app does
+      // (ADR-0489).
+      const form = new Form({ container: host, atlasRemote: remoteAdapter(lookups), atlasLocale: trLocale() });
       await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
@@ -11458,6 +11517,7 @@ function routeTitle(path) {
     [/^#\/console\/org$/, "Organization · Console"],
     [/^#\/console\/workers$/, "Workers · Console"],
     [/^#\/console\/events$/, "Events · Console"],
+    [/^#\/console\/content-sources$/, "Content sources · Console"],
     [/^#\/operations\/event-log$/, "Event log · Operations"],
     [/^#\/console\/api-tokens$/, "API tokens · Console"],
     [/^#\/console\/connections/, "Connected accounts · Console"],
@@ -11543,6 +11603,7 @@ async function route() {
 
   startPresence(); // signed in, so this tab is somebody being here (presence.go)
   if (!FEATURES.loaded) await loadFeatures(); // before the menus are painted from it
+  if (AUTH.user) loadLinking(); // not awaited: it only decides one entry of a closed menu
   setChrome(appId, path);
   setTitle(routeTitle(path));
   // A mark and a visit belong to an account, so both wait for somebody signed in.
@@ -11571,7 +11632,7 @@ async function route() {
     if (path === "#/console/connections") {
       const gen = navGen;
       const { viewConnections } = await import("./connections.js");
-      return await viewConnections({ api, toast, view, isSuperseded: () => superseded(gen) });
+      return await viewConnections({ api, toast, view, isSuperseded: () => superseded(gen), canConfigure: mayUse("admin") });
     }
     if (path === "#/console/approvals") {
       const gen = navGen;
@@ -11582,9 +11643,15 @@ async function route() {
     if (path === "#/console/security") {
       const gen = navGen;
       const { viewSecurity } = await import("./security.js");
-      return await viewSecurity({ api, toast, view, isSuperseded: () => superseded(gen) });
+      return await viewSecurity({ api, toast, view, isSuperseded: () => superseded(gen),
+        onLinkingChanged: () => loadLinking(true) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
+    if (path === "#/console/content-sources") {
+      const gen = navGen;
+      const { viewContentSources } = await import("./content-sources.js");
+      return await viewContentSources({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
     if (path === "#/console/settings") return await renderDisplaySettings(view, { api, toast });
     if (path === "#/console/events") {
       const gen = navGen;

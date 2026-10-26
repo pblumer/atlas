@@ -61,6 +61,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   change event, keeping an fx field's `=`; a focused dmn-js output cell gets a spark and Apply types
   into it, while an input cell (a unary test) is not written to; and without an AI Worker the chat
   is absent and the rest still works.
+- **`history-purge.spec.mjs`** ([ADR-0486](../docs/adr/0486-operator-history-purge-and-compaction.md)):
+  deleting a process's finished instances and the storage card's reclaim section against a
+  stubbed API — the preview counts every version with one cut-off and writes nothing, and says
+  that deleting frees no disk until the WAL is compacted and that the Finished column does not go
+  down; only the process id typed exactly arms the delete; the batches run newest version first,
+  each repeating the cut-off and passing the cursor, until nothing remains; a server that switched
+  the purge off keeps it disarmed; a failure part-way says how many already went; a purge can be
+  stopped between two batches and cannot be closed while one runs; and the card reads the
+  checkpoints without verifying them, says when compaction is off, asks before compacting once,
+  and reports what the pass removed.
 - **`instance-samples.spec.mjs`** ([ADR-0145](../docs/adr/0145-developer-view-for-code-fields.md),
   amended): the **live values** the Developer View and the Variables panel show, against a
   mock API — the picker lists the newest instances of every version of the process, running
@@ -73,6 +83,27 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   `dev-view.spec.mjs` drives the search field itself: Enter searches, a pick stays inside the
   search, a search that finds nothing or fails keeps the instance on screen, and emptying the
   field returns to the recent instances.
+- **`mail-view.spec.mjs`** ([ADR-0489](../docs/adr/0489-mail-html-view.md)):
+  the **E-mail view** form component, on the real vendored viewer (`mail-view-harness.html`)
+  and in the form editor — the envelope is text, never markup; the HTML is in an
+  `<iframe sandbox="allow-popups allow-popups-to-escape-sandbox">` whose own policy blocks
+  remote images (no request reaches the image host) until *Bilder laden*, which loads them;
+  a script the server might have missed does not run; the text version is a tab away;
+  submitting the form never carries the mail; a mail without HTML, without content or
+  without a value says so; the view speaks the page's `atlasLocale` and reads a group's
+  path; and in the editor the view is in the palette, and its Label and Variable entries
+  edit what is saved. `mail-template.spec.mjs` covers the Modeler's *Include the text and
+  the HTML* on Read message and its removal when a get becomes a list.
+- **`mail-template.spec.mjs`** ([ADR-0487](../docs/adr/0487-mail-templates.md)):
+  **mail templates** in the Modeler, on `mail-html-harness.html` with a mock renderer behind
+  `POST /api/v1/feel/template` — the **Placeholders** select writes `templating="true"` and turns
+  the subject and bodies into template fields that colour their `{{ }}` tags; F2 opens a body
+  with a **Preview** that renders it with the sample variables, again on every edit, points out
+  a placeholder that rendered as nothing and sends `html: false`; an HTML template is previewed
+  in an `<iframe sandbox="">` with its values escaped and `html: true`; a template that does not
+  compile shows its line and column and dims the last rendering; an HTML body without
+  placeholders previews itself without a request; and an operation that sends no text drops
+  the switch from the XML.
 - **`token-simulation.spec.mjs`** — message semantics across two pools (ADR-0101): a thrown
   message **delivers to a waiting catch** (both pools complete), a message with **nothing
   waiting is not buffered** (the later catch still parks), and a parked catch **still fires
@@ -202,6 +233,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   drops what only a find takes; a delete offers and writes no result variable; and a
   contact given by a variable hides the inline values and keeps the variable across an
   unrelated edit. Assertions are on the exported XML, which is what the compiler checks.
+- **`carddav-modeler.spec.mjs`** (ADR-0490): the **CardDAV Worker Type
+  in the Implement panel**, held to the same four checks as Google Contacts — choosing it
+  starts on Find contacts and shows the query, custom field, group and bound a find takes;
+  switching a find to an update drops what only a find takes; a delete offers and writes
+  no result variable; and a contact given by a variable hides the inline values and keeps
+  the variable across an unrelated edit. Assertions are on the exported XML.
 - **`documentation-modeler.spec.mjs`** (ADR-0025): the **Documentation** property — every
   element (task, gateway, event, sequence flow, data object) shows the `<bpmn:documentation>`
   its model carries and writes an edit back onto that element, blanking it drops the child
@@ -248,6 +285,25 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   chosen. A save sends `managerId` only when it changed, and an empty id to clear it. A
   manager the directory reports is shown disabled with a note naming the directory, and is
   left out of the save.
+
+- **`user-picture.spec.mjs`**
+  ([ADR-0368](../docs/adr/0368-user-avatar.md), amended): a person's picture as it is
+  uploaded from Console → Organization, against a mock of the users endpoints. A photograph
+  over the server's limit is scaled before the upload, to a shorter side of 256 pixels and
+  well under the limit; an Exif orientation is applied and the Exif data is not carried on;
+  a small picture is not enlarged; a picture with transparency and a logo stay a PNG while a
+  photograph saved as one becomes a JPEG; a server that refuses every size gets four smaller
+  ones and then its own refusal is shown; and a file the browser cannot read is refused with
+  nothing sent. The helpers that draw and measure the pictures are in `pictures.mjs`.
+
+- **`catalog-product-picture.spec.mjs`**
+  ([ADR-0391](../docs/adr/0391-product-picture.md), amended): a product's picture as the
+  catalogue's product editor uploads it, in `catalog-editor-harness.html`. A photograph over
+  the server's limit is sent at 600 pixels on its shorter side; an SVG is sent byte for byte
+  as picked; a logo stays a PNG and a banner is held to 1200 pixels on its longer side; a
+  cut-out with transparency the server still finds too large is sent again at three
+  quarters of the size until it is taken, a PNG each time; and a file the browser cannot read
+  is reported with the product saved and nothing uploaded.
 
 - **`pdf-writer.spec.mjs`** (ADR-0143): the dependency-free **PDF writer** behind the process
   documentation export (`api/web/pdf.js`). A PDF is only valid if its cross-reference table
@@ -629,6 +685,15 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   publish that warns says the release stands and lists which order-form answers reach a process in
   the clear; the warnings survive the reload every publish does, and a publish without warnings
   shows none.
+- **`catalog-wiki-content.spec.mjs`**
+  ([ADR-draft](../docs/adr/0491-service-content-from-an-external-source.md)): a catalogue
+  without a content source looks as it did; a wiki page's title and text arrive as text even when
+  they look like markup; a preview and a refused link show every refusal, dropped passage and
+  `boundTo`; a bound product shows its pages, quarantine and read-only fields, its wiki link opens
+  a new tab without an opener and only over https, and an unlink asks for its audited reason; the
+  catalogue's refresh lists every product's outcome; the administrator's check lists every
+  problem and a refused delete names the bound products; the shop links to the wiki only when the
+  release carries the binding.
 - **`shown-version.spec.mjs`** ([ADR-0452](../docs/adr/0452-modeler-shows-its-version.md)):
   the editor bar's chip names what is open and how it stands against the other record — a draft
   missing a newer deployed change is a warning (`Draft ≠ v2`) whose panel names who created the

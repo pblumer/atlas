@@ -3,29 +3,33 @@
   "name": "Capability-driven Automation",
   "summary": "Connect business outcomes to verified technical operation semantics and, only after architectural approval, deterministic and policy-authorized Worker execution. Discovery and execution are separate delivery gates.",
   "status": "active",
-  "owner": "unassigned (maintainer assignment required)",
-  "last_reviewed": "2026-10-25",
+  "owner": "pblumer",
+  "last_reviewed": "2026-10-26",
   "plan": "../../planning/capability-driven-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-cda--capability-driven-automation-",
-  "next_action": "Assign a programme owner; review PR #1351 and PR #1346; decide ADR-0480.",
+  "next_action": "Rework digest PR #1360 to SHA-256 over the exact LF file bytes and add the dependency digest of built-in Worker Types (ADR-0483); configure branch protection on main with code-owner review before the first evidence record, whose PR adds CODEOWNERS for the evidence path; then evidence records with same-PR renewal enforced in CI.",
   "slices": [
     {
       "id": "CDA0",
       "title": "Declarative operation claims",
-      "status": "active",
-      "owner": "unassigned",
+      "status": "complete",
+      "owner": "pblumer",
       "depends_on": [],
       "issues": [],
       "prs": [
         1343
       ],
-      "note": "PR #1343 merged; ADR-0480 remains Proposed/Partial. Review architecture approval and completion evidence before closing."
+      "note": "Complete: PR #1343 merged; ADR-0480 Accepted (2026-10-26). Claims stay descriptive and never authorize; one claim per contract id@version per operation, deliberately.",
+      "evidence": [
+        "../../../workertype/capability_test.go",
+        "../../adr/0480-technical-capability-contract.md"
+      ]
     },
     {
       "id": "CDA1",
       "title": "Semantic contract envelope",
-      "status": "active",
-      "owner": "unassigned",
+      "status": "complete",
+      "owner": "pblumer",
       "depends_on": [
         "CDA0"
       ],
@@ -33,19 +37,28 @@
       "prs": [
         1346
       ],
-      "note": "Draft PR #1346; exact semantics and parser only, not provider conformance."
+      "note": "Complete: PR #1346 merged; ADR-0485 Accepted (2026-10-26) with a reservation: contract identity (id, version, profile) and immutability are binding, the v1alpha1 fields may change until the first published contract (CDA3). No provider conformance claim.",
+      "evidence": [
+        "../../../workertype/contract_test.go",
+        "../../adr/0485-technical-capability-semantics.md"
+      ]
     },
     {
       "id": "CDA2",
       "title": "Contract governance and conformance",
-      "status": "planned",
-      "owner": "unassigned",
+      "status": "active",
+      "owner": "pblumer",
       "depends_on": [
         "CDA1"
       ],
-      "issues": [],
-      "prs": [],
-      "note": "Accept governance ADR; offline full JSON Schema checks, independent evidence, publication and revocation."
+      "issues": [
+        1358
+      ],
+      "prs": [
+        1357,
+        1360
+      ],
+      "note": "ADR-0483 Accepted (option 3), with approval by repository provenance (maintainer as sole reviewer), raw-byte contract digests and dependency digests for built-in Worker Types. CDA2a schema-only validation merged in PR #1357; digest PR #1360 in review and to be reworked to raw bytes. Evidence records, renewal, withdrawal and publication are not yet implemented; no Worker is verified."
     },
     {
       "id": "CDA3",
@@ -95,7 +108,7 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Approve binding ADR; pin one verified Worker at deployment without changing runtime."
+      "note": "Approve ADR-0482; keep a stable logical binding slot and explicit initially pinned Worker so a later authorized revision need not redeploy BPMN. No runtime rebinding in CDA6."
     },
     {
       "id": "CDA7",
@@ -107,7 +120,22 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Require provider-specific ADR-0475 enforcement, fsync-gated effects and recovery equality; no dynamic fallback."
+      "note": "Prove provider-specific ADR-0475 enforcement, fsync-gated effects and replay equality for the initially pinned binding. No automatic fallback or configured Worker hot-swap in CDA7."
+    },
+    {
+      "id": "CDA8",
+      "title": "Controlled Worker rebinding without redeployment",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA6",
+        "CDA7"
+      ],
+      "issues": [],
+      "prs": [
+        1355
+      ],
+      "note": "Review the proposed controlled-rebinding ADR. Operator-authorized A-to-B binding revisions affect only future jobs; existing queued/leased jobs stay pinned. Per-partition cutover, tenant/policy scope and crash/replay must be proven. No automatic dynamic selection. Review questions deferred until CDA7 has landed; the binding-slot scope is settled when CDA6 starts."
     }
   ]
 }

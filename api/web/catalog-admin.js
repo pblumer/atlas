@@ -31,6 +31,13 @@ import { openPickModal } from "./pickmodal.js";
 import { importAsking } from "./importchoices.js";
 import { mappingsCard, wireMappings } from "./packagemappings.js";
 import { fmtDateTime } from "./datefmt.js";
+// A product's picture is scaled in the browser before it is uploaded, exactly as a
+// person's is (ADR-0391, amended).
+import { uploadPicture, PRODUCT } from "./picturescale.js";
+// A product's content from the wiki (ADR-0491):
+// the panel, the catalogue's refresh, and the words the read-only fields use.
+import { mountContentPanel, mountCatalogRefresh } from "./catalog-content.js";
+import { t } from "./i18n.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -89,11 +96,17 @@ function publishRefusal(err) {
       esc(err.message || `HTTP ${err.status || "?"}`)}</pre>`;
   }
   const where = (p) => (p.item ? `item ${p.item}` : p.catalog ? `catalogue ${p.catalog}` : "");
+  // Most messages are a predicate about what they name — "is quarantined — …",
+  // "has no passed recheck …", "holds content copied before …" — and read as a
+  // sentence after the name. A dash between the two made "item laptop — is
+  // quarantined — the page …" read as three fragments; only a message that is not a
+  // predicate keeps it.
+  const predicate = (m) => /^(is|has|holds|names|binds|carries)\b/.test(String(m || ""));
   return `<p style="margin:8px 0 0">${problems.length} ${
     problems.length === 1 ? "problem" : "problems"} to fix:</p>
     <ul style="margin:6px 0 0">${problems.map((p) => {
     const w = where(p);
-    return `<li>${w ? `<b>${esc(w)}</b> — ` : ""}${esc(p.message)}</li>`;
+    return `<li>${w ? `<b>${esc(w)}</b>${predicate(p.message) ? " " : " — "}` : ""}${esc(p.message)}</li>`;
   }).join("")}</ul>`;
 }
 
@@ -1065,9 +1078,16 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
   // The two headings, each read back from its own row of per-language boxes.
   const cg = headingFrom(f, "cat", langs, was.categoryTexts);
   const pg = headingFrom(f, "grp", langs, was.productGroupTexts);
+  // A product bound to a content source takes its descriptions and keywords from
+  // there (ADR-0491 § 1): the form draws
+  // them read-only and without a name, so they are sent back exactly as stored —
+  // which is what the server's save accepts for a bound product, and the only
+  // thing it accepts.
+  const bound = !!was.contentSource;
   return {
     ...was,
-    id: productID, homeCatalog, state: f.get("state"), texts, descriptions,
+    id: productID, homeCatalog, state: f.get("state"), texts,
+    descriptions: bound ? was.descriptions : descriptions,
     approval: approvalFrom(f),
     category: cg.key, categoryTexts: cg.texts,
     productGroup: pg.key, productGroupTexts: pg.texts,
@@ -1086,7 +1106,7 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     lifecycleForm: f.get("lifecycleProcess") ? (f.get("lifecycleForm") || "") : "",
     multipleAllowed: !!f.get("multipleAllowed"),
     targets: parseTargets(f.get("targets")),
-    keywords: list(f.get("keywords")),
+    keywords: bound ? was.keywords : list(f.get("keywords")),
     eligible: eligibleFrom(f),
     maxDays: maxDaysFrom(f),
     lifecycle: lifecycleFrom(f),
@@ -1229,6 +1249,8 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
       </div>
     </div>
 
+    <div class="content-catalog"></div>
+
     ${transferCard(cat)}
 
     <h3 style="margin-top:26px">How the products relate</h3>
@@ -1266,6 +1288,11 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
   wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList,
     mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people, apps);
   wireTransfer({ api, toast, view }, cat);
+  // Refreshing every bound product is offered only where there is one: a catalogue
+  // without a bound product has nothing to refresh, and an installation without a
+  // content source cannot have one, so its screen is the one it always had.
+  mountCatalogRefresh(view.querySelector(".content-catalog"), { api, toast, reload: redraw }, cat.id,
+    offered.filter((iid) => byID[iid] && byID[iid].contentSource).length);
   wirePurge({ api, toast, view }, cat);
 }
 
@@ -1661,7 +1688,8 @@ function productRow(it, iid, langs, canAssemble) {
   return `<tr>
     <td><input type="checkbox" class="export-pick" value="${esc(it.id)}"
       aria-label="Export ${esc(textOf(it.texts, langs, it.id))}"></td>
-    <td>${esc(textOf(it.texts, langs, it.id))}<div class="muted">${esc(it.id)}</div></td>
+    <td>${esc(textOf(it.texts, langs, it.id))}${it.contentSource
+    ? ` <span class="pill" title="${esc(t("content.pillTitle"))}">${esc(t("content.pill"))}</span>` : ""}<div class="muted">${esc(it.id)}</div></td>
     <td>${esc((STATES.find((s) => s.id === it.state) || {}).name || it.state || "—")}</td>
     <td>${esc(kind.name)}${ap.ref ? ` <span class="muted">(${esc(ap.ref)})</span>` : ""}</td>
     <td>${esc(it.lifecycleProcess || it.provisionProcess || "—")}</td>
@@ -1992,13 +2020,27 @@ async function savePicture({ api, apiBytes, toast }, pid, f) {
   const path = `/api/v1/catalog-products/${encodeURIComponent(pid)}/picture`;
   try {
     if (file && file.size > 0) {
-      await apiBytes("PUT", path, file);
+      // Scaled down first, so a photograph straight off a camera is taken rather
+      // than refused for its size; an SVG goes as it is (picturescale.js).
+      await uploadPicture(file, (picture) => apiBytes("PUT", path, picture), PRODUCT);
       return;
     }
     if (f.get("dropPicture")) await api("DELETE", path);
   } catch (err) {
     toast(`The product was saved, but its picture was not: ${err.message}`, "err");
   }
+}
+
+// fillBoundFields puts a bound product's source-supplied description and keywords
+// into the read-only places productForm drew for them. As text, never as markup:
+// they are a wiki page's words.
+function fillBoundFields(editor, it) {
+  if (!it || !it.contentSource) return;
+  for (const pre of editor.querySelectorAll("[data-bound-desc]")) {
+    pre.textContent = ((it.descriptions || {})[pre.dataset.boundDesc]) || "—";
+  }
+  const kw = editor.querySelector("[data-bound-keywords]");
+  if (kw) kw.textContent = (it.keywords || []).join(", ") || "—";
 }
 
 // partOfNote says which products in THIS catalogue carry this one, because that is
@@ -2121,6 +2163,12 @@ function rememberSection(key, open) {
 function productForm(it, cat, langs, procIDs, formList, items, dir, people, apps) {
   const v = it || { state: "draft", approval: { kind: "none" }, texts: {} };
   const ap = v.approval || {};
+  // Bound to a content source, the description, the keywords and the picture are the
+  // source's: drawn read-only, filled in as text after the form is in the page
+  // (fillBoundFields), and changed by refreshing or unlinking in the panel above.
+  const bound = v.contentSource || null;
+  const boundNote = (key) => bound
+    ? `<p class="bound-note">${esc(t(key, { source: bound.source }))}</p>` : "";
   const opt = (id, sel, label) =>
     `<option value="${esc(id)}"${id === sel ? " selected" : ""}>${esc(label)}</option>`;
   const procSelect = (name, sel) => `<select name="${name}">
@@ -2145,6 +2193,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people, apps
       <h3 style="margin:0">${it ? "Edit product" : "New product"}</h3>
       <button class="btn ghost" type="button" data-act="fold-sections">Collapse all</button>
     </div>
+    ${it ? `<div class="content-panel" data-product="${esc(it.id)}"></div>` : ""}
     <form class="product-form" data-editing="${esc(it ? it.id : "")}">
       <div class="publish-needs" aria-live="polite"></div>
       ${group("shows", "What the catalogue shows",
@@ -2164,7 +2213,10 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people, apps
           most products do not need one. Written in one language and not another it
           still publishes, and the reader of the other language is shown the one that
           exists rather than an empty panel.</span>
-        ${langFields("d", langs, v.descriptions, { rows: 3 })}</label>
+        ${bound ? `<div class="bound-fields">${langs.map((l) => `<div class="langbox"><span
+          class="langtag">${esc(l)}</span><pre class="bound-text" data-bound-desc="${esc(l)}"></pre></div>`).join("")}</div>
+          ${boundNote("content.readonly")}`
+    : langFields("d", langs, v.descriptions, { rows: 3 })}</label>
       `)}
       ${group("filing", "Where the shop files it",
     "The heading and group it is listed under, and the words it is found by.", `
@@ -2210,8 +2262,9 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people, apps
           list and <b>not one per language</b>: a synonym list is for finding, and a
           searcher's language is not the catalogue's &mdash; somebody reading a German
           catalogue types <code>laptop</code> as readily as <code>Notebook</code>.</span>
-        <input name="keywords" value="${esc((v.keywords || []).join(", "))}"
-          autocomplete="off" placeholder="Notebook, mobiles Gerät, M365"></label>
+        ${bound ? `<p class="bound-text" data-bound-keywords></p>${boundNote("content.readonly")}`
+    : `<input name="keywords" value="${esc((v.keywords || []).join(", "))}"
+          autocomplete="off" placeholder="Notebook, mobiles Gerät, M365">`}</label>
       `)}
       ${group("offer", "What is offered",
     "Its cost, its shapes and its picture: what somebody choosing it compares.", `
@@ -2244,17 +2297,20 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people, apps
         <button type="button" class="btn ghost" data-add-shape>Add a shape</button></div>
       <div class="field wide">Picture
         <span class="muted" style="display:block; margin:2px 0 6px">A photograph of the
-          thing or the vendor's mark, shown to whoever is choosing — PNG, JPEG or SVG,
-          served back exactly as uploaded. It is <b>not frozen into a release</b>: a
+          thing or the vendor's mark, shown to whoever is choosing — PNG, JPEG or SVG.
+          A large photograph is scaled down before it is uploaded, to about three times
+          what the shop draws; an SVG is served back exactly as uploaded. It is
+          <b>not frozen into a release</b>: a
           better photograph of the same laptop is not a different laptop, so a new
           picture appears on old orders too. Most of a catalogue reads as a list of
           names; this is the one thing that makes it read as a shop.</span>
         ${it ? `<img class="product-picture" alt=""
           src="/api/v1/catalog-products/${encodeURIComponent(v.id)}/picture?t=${Date.now()}"
           onerror="this.remove()">` : ""}
-        <input type="file" name="picture" accept="image/png,image/jpeg,image/svg+xml">
-        ${it ? `<label class="field inline"><input type="checkbox" name="dropPicture">
-          Remove the picture this product has</label>` : ""}</div>
+        <input type="file" name="picture" accept="image/png,image/jpeg,image/svg+xml"${bound ? " disabled" : ""}>
+        ${it ? `<label class="field inline"><input type="checkbox" name="dropPicture"${bound ? " disabled" : ""}>
+          Remove the picture this product has</label>` : ""}
+        ${boundNote("content.readonlyPicture")}</div>
       `)}
       ${group("order", "How an order is handled",
     "What happens after somebody puts it in the basket. None of it is shown in the catalogue, " +
@@ -2797,8 +2853,12 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
       return;
     }
     if (act === "edit") {
-      openEditor(productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items, dir, people, apps),
+      const it = byID[b.dataset.id];
+      openEditor(productForm(it, cat, langs, procIDs, formList, items, dir, people, apps),
         b.closest("tr"));
+      fillBoundFields(editor, it);
+      // The wiki panel draws itself, or nothing where no content source exists.
+      mountContentPanel(editor.querySelector(".content-panel"), { api, toast, reload }, it);
       return;
     }
     if (act === "cancel-product") { closePanel(); return; }
@@ -3140,7 +3200,10 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
         // line, lands in the outer catch, and takes every step after it. Keeping
         // the step last means the only thing a throw here can still cost is the
         // picture — one upload, and visibly missing.
-        await savePicture({ api, apiBytes, toast }, pid, f);
+        // A bound product's picture is the content source's, and the picture routes
+        // refuse to set or remove it; the form disables both controls, and this says
+        // the same for whatever a browser still hands over.
+        if (!was.contentSource) await savePicture({ api, apiBytes, toast }, pid, f);
         // Save & Publish freezes the catalogue straight after the product is stored,
         // so a change reaches the shop in one act rather than two screens. The save
         // stands either way: a refused publish is reported with every problem, on the

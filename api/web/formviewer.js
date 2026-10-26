@@ -143,6 +143,11 @@ export function scrollToFirstInvalidField(hostId) {
 // real one: a checkbox writes a boolean whatever it is labelled, a taglist writes an
 // array. Components not listed here write a string — every text-shaped input does, and
 // so does a select or a radio, whose value is one of its option keys.
+// MAIL_VIEW_TYPE is the e-mail view (ADR-0489): it names a variable
+// by its key to show it, and the form never submits it, so it is no variable the form
+// writes.
+const MAIL_VIEW_TYPE = "mailview";
+
 const FORM_FIELD_TYPES = {
   number: "number",
   checkbox: "boolean",
@@ -162,6 +167,7 @@ export function formFieldTypes(schema) {
     for (const c of comps || []) {
       if (!c || typeof c !== "object") continue;
       if (c.path) { if (!(c.path in types)) types[c.path] = "array"; continue; }
+      if (c.type === MAIL_VIEW_TYPE) continue; // shows a variable, writes none
       if (typeof c.key === "string" && c.key.trim() && !(c.key.trim() in types)) {
         types[c.key.trim()] = FORM_FIELD_TYPES[c.type] || "string";
       }
@@ -183,6 +189,7 @@ export function formFieldKeys(schema) {
     for (const c of comps || []) {
       if (!c || typeof c !== "object") continue;
       if (c.path) { add(c.path); continue; } // repeatable scope: its path is the variable
+      if (c.type === MAIL_VIEW_TYPE) continue; // shows a variable, writes none
       if (typeof c.key === "string") add(c.key);
       if (Array.isArray(c.components)) walk(c.components); // layout group: keys are in-scope
     }

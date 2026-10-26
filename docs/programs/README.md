@@ -6,28 +6,48 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**1 programme** · active: 1 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
+**2 programmes** · active: 2 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
-| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 0/8 | unassigned (maintainer assignment required) | Assign a programme owner; review PR #1351 and PR #1346; decide ADR-0480. |
+| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Rework digest PR #1360 to SHA-256 over the exact LF file bytes and add the dependency digest of built-in Worker Types (ADR-0483); configure branch protection on main with code-owner review before the first evidence record, whose PR adds CODEOWNERS for the evidence path; then evidence records with same-PR renewal enforced in CI. |
+| [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
 
 ## Capability-driven Automation (CDA)
 
 Connect business outcomes to verified technical operation semantics and, only after architectural approval, deterministic and policy-authorized Worker execution. Discovery and execution are separate delivery gates.
 
-**[Programme plan](../planning/capability-driven-automation-program.md) · [Roadmap track](../../ROADMAP.md#milestone-cda--capability-driven-automation-) · [Manifest](cda/program.json) · Reviewed: 2026-10-25**
+**[Programme plan](../planning/capability-driven-automation-program.md) · [Roadmap track](../../ROADMAP.md#milestone-cda--capability-driven-automation-) · [Manifest](cda/program.json) · Reviewed: 2026-10-26**
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
-| **CDA0** — Declarative operation claims | active | unassigned | — | [PR #1343](https://github.com/pblumer/atlas/pull/1343) | PR #1343 merged; ADR-0480 remains Proposed/Partial. Review architecture approval and completion evidence before closing. |
-| **CDA1** — Semantic contract envelope | active | unassigned | CDA0 | [PR #1346](https://github.com/pblumer/atlas/pull/1346) | Draft PR #1346; exact semantics and parser only, not provider conformance. |
-| **CDA2** — Contract governance and conformance | planned | unassigned | CDA1 | — | Accept governance ADR; offline full JSON Schema checks, independent evidence, publication and revocation. |
+| **CDA0** — Declarative operation claims | complete | pblumer | — | [PR #1343](https://github.com/pblumer/atlas/pull/1343) | Complete: PR #1343 merged; ADR-0480 Accepted (2026-10-26). Claims stay descriptive and never authorize; one claim per contract id@version per operation, deliberately.; [Evidence 1](../../workertype/capability_test.go), [Evidence 2](../adr/0480-technical-capability-contract.md) |
+| **CDA1** — Semantic contract envelope | complete | pblumer | CDA0 | [PR #1346](https://github.com/pblumer/atlas/pull/1346) | Complete: PR #1346 merged; ADR-0485 Accepted (2026-10-26) with a reservation: contract identity (id, version, profile) and immutability are binding, the v1alpha1 fields may change until the first published contract (CDA3). No provider conformance claim.; [Evidence 1](../../workertype/contract_test.go), [Evidence 2](../adr/0485-technical-capability-semantics.md) |
+| **CDA2** — Contract governance and conformance | active | pblumer | CDA1 | [PR #1357](https://github.com/pblumer/atlas/pull/1357), [PR #1360](https://github.com/pblumer/atlas/pull/1360), [Issue #1358](https://github.com/pblumer/atlas/issues/1358) | ADR-0483 Accepted (option 3), with approval by repository provenance (maintainer as sole reviewer), raw-byte contract digests and dependency digests for built-in Worker Types. CDA2a schema-only validation merged in PR #1357; digest PR #1360 in review and to be reworked to raw bytes. Evidence records, renewal, withdrawal and publication are not yet implemented; no Worker is verified. |
 | **CDA3** — Verified Worker Type mappings | planned | unassigned | CDA2 | — | Prove account versus contact distinction; source-derived provider mappings with no drift. |
 | **CDA4** — Cross-layer architecture graph | planned | unassigned | CDA2, CDA3 | — | Accept/extend ADR-0420; stable identities, provenance, bounded traversals and visibility. |
 | **CDA5** — Panorama and API/MCP discovery | planned | unassigned | CDA4 | — | Read-only impact, coverage and gap queries; no unsupported runtime claims. |
-| **CDA6** — Capability-aware BPMN binding | planned | unassigned | CDA2, CDA3 | — | Approve binding ADR; pin one verified Worker at deployment without changing runtime. |
-| **CDA7** — Policy-gated governed execution | planned | unassigned | CDA6 | — | Require provider-specific ADR-0475 enforcement, fsync-gated effects and recovery equality; no dynamic fallback. |
+| **CDA6** — Capability-aware BPMN binding | planned | unassigned | CDA2, CDA3 | — | Approve ADR-0482; keep a stable logical binding slot and explicit initially pinned Worker so a later authorized revision need not redeploy BPMN. No runtime rebinding in CDA6. |
+| **CDA7** — Policy-gated governed execution | planned | unassigned | CDA6 | — | Prove provider-specific ADR-0475 enforcement, fsync-gated effects and replay equality for the initially pinned binding. No automatic fallback or configured Worker hot-swap in CDA7. |
+| **CDA8** — Controlled Worker rebinding without redeployment | planned | unassigned | CDA6, CDA7 | [PR #1355](https://github.com/pblumer/atlas/pull/1355) | Review the proposed controlled-rebinding ADR. Operator-authorized A-to-B binding revisions affect only future jobs; existing queued/leased jobs stay pinned. Per-partition cutover, tenant/policy scope and crash/replay must be proven. No automatic dynamic selection. Review questions deferred until CDA7 has landed; the binding-slot scope is settled when CDA6 starts. |
+
+## Identity-aware Execution (IAE)
+
+Govern external Worker actions through explicit identities, managed Connections, versioned authorization policies, obligations, durable pre-effect decisions and attributable audit evidence; provider enforcement is verified per execution mode, never assumed.
+
+**[Programme plan](../planning/identity-aware-execution-program.md) · [Roadmap track](../../ROADMAP.md#milestone-iae--identity-aware-execution-) · [Manifest](iae/program.json) · Reviewed: 2026-10-26**
+
+| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
+| --- | --- | --- | --- | --- | --- |
+| **IAE0** — Architecture, ADR and threat model | active | unassigned | — | [PR #1354](https://github.com/pblumer/atlas/pull/1354) | PR #1354 merged the initial plan; ADR-0475 remains Proposed/Partial. Review and accept trust boundaries, revocation, audit and migration gates. |
+| **IAE1** — External identities and Connections | active | unassigned | IAE0 | — | Partial foundation; verify multiple external identity linking, connection ownership and binding, encrypted credentials, revocation and restart behavior. |
+| **IAE2** — Provider authentication and token lifecycle | active | unassigned | IAE1 | — | Partial Microsoft supervised path; verify PKCE, token rotation, consent, restart safety and compatibility with app-only credentials. |
+| **IAE3** — Policy administration and deterministic decisions | active | unassigned | IAE0 | — | Partial policy seam; define immutable revisions, trusted attributes, non-overridable guards, fail-closed combining and FEEL/DMN tests. |
+| **IAE4** — Authorization enforcement before external effects | active | unassigned | IAE1, IAE2, IAE3 | — | Narrow supervised SharePoint example only. Prove fenced action binding, fsync-gated decisions, retries and recovery; remote Worker enforcement remains unresolved. |
+| **IAE5** — Approval obligations and separation of duties | planned | unassigned | IAE3, IAE4 | — | Bind independent verified approvals to exact action parameters and expiry; no process-variable authorization shortcuts. |
+| **IAE6** — Console, Operations and audit | planned | unassigned | IAE1, IAE3, IAE4, IAE5 | — | Deliver user identity linking, Connection and policy management, simulator, Worker bindings and accessible audited decision history. |
+| **IAE7** — Additional Worker Type enforcement | planned | unassigned | IAE4, IAE6 | — | Provider-by-provider proof for Microsoft Mail, selected Entra, Google, Jira/REST; no general security claim before verified PEP. |
+| **IAE8** — Controlled SharePoint PoC and readiness | planned | unassigned | IAE4, IAE5, IAE6 | — | Test against an explicitly consented tenant/site with denied and approved operations; separate mocked evidence from real BIT validation. |
 
 ## Updating the register
 

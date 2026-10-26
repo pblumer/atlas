@@ -36,6 +36,12 @@ type Store struct {
 	// directory holding both would make "which is this file" a question about a
 	// name nobody chose to be unique.
 	pictures string
+	// contents is what the recheck found about each bound product
+	// (contentstate.go): its quarantine and when it last passed. Beside the
+	// items rather than in them, because it is consulted when a *release* is
+	// read — the one thing that may change what an already published release
+	// shows (§ 9 of ADR-0491).
+	contents *sidecar.Store[ContentState]
 }
 
 // NewStore opens (creating if needed) the directories backing a catalogue.
@@ -73,8 +79,14 @@ func NewStore(dir string) (*Store, error) {
 	if err := os.MkdirAll(pictures, 0o755); err != nil {
 		return nil, fmt.Errorf("catalogstore: create picture dir: %w", err)
 	}
+	contents, err := sidecar.NewStore(filepath.Join(dir, "contentstate"), "catalogcontentstore",
+		func(c ContentState) string { return c.ItemID },
+		sidecar.Order(func(a, b ContentState) bool { return a.ItemID < b.ItemID }))
+	if err != nil {
+		return nil, err
+	}
 	return &Store{catalogs: catalogs, items: items, releases: releases,
-		logos: logos, pictures: pictures}, nil
+		logos: logos, pictures: pictures, contents: contents}, nil
 }
 
 // SaveCatalog writes a catalogue, replacing any record with the same id.

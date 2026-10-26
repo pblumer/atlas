@@ -38,6 +38,11 @@ var wantAdminRoutes = []string{
 	"POST /api/v1/security/policies/{id}/enabled",
 	"POST /api/v1/security/policies/simulate",
 	"GET /api/v1/security/readiness",
+	// How people link their accounts: the app registration every delegated
+	// connection is authorized through, and the secret that redeems its codes.
+	"GET /api/v1/security/linking/microsoft",
+	"PUT /api/v1/security/linking/microsoft",
+	"DELETE /api/v1/security/linking/microsoft",
 	"PUT /api/v1/configured-workers/{id}/identity",
 	"DELETE /api/v1/configured-workers/{id}/identity",
 	"GET /api/v1/users/{id}/connections",
@@ -132,6 +137,17 @@ var wantAdminRoutes = []string{
 	"GET /api/v1/secrets",
 	"PUT /api/v1/secrets/{name}",
 	"DELETE /api/v1/secrets/{name}",
+	// Which wiki a product's content may come from, and with which credential
+	// reference (ADR-0491 § 3): installation
+	// configuration naming a secret, like a Worker. A product manager chooses among
+	// the configured sources through the product's own content route, which shows
+	// no credential.
+	"GET /api/v1/content-sources",
+	"POST /api/v1/content-sources",
+	"GET /api/v1/content-sources/{id}",
+	"PUT /api/v1/content-sources/{id}",
+	"DELETE /api/v1/content-sources/{id}",
+	"POST /api/v1/content-sources/{id}/check",
 	// Erasing a data subject destroys the key their personal data was enciphered
 	// under, which makes every copy of it — live store, checkpoints, exports, backups
 	// — permanently unreadable in one act (ADR-0314). It is the most irreversible
@@ -163,6 +179,12 @@ var wantAdminRoutes = []string{
 	"DELETE /api/v1/catalogs/{id}",
 	"GET /api/v1/catalog-products/{id}/deletion",
 	"DELETE /api/v1/catalog-products/{id}",
+	// Deleting a version's finished instances for good
+	// (ADR-0486): history is evidence, the
+	// purge cannot be undone, and a production server switches it off altogether.
+	// The preview is the administrator's too, because it is how the purge is decided.
+	"GET /api/v1/processes/{key}/history-purge",
+	"POST /api/v1/processes/{key}/history-purge",
 	"DELETE /api/v1/settings/theme",
 	"PUT /api/v1/settings/logo",
 	"DELETE /api/v1/settings/logo",

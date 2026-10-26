@@ -427,6 +427,21 @@ var (
 	ExporterTickFailed = newEvent("exporter.tick_failed")
 )
 
+// Deleting finished instances and compacting the WAL on an administrator's request
+// (ADR-0486).
+var (
+	// HistoryPurged is one batch of finished instances an administrator deleted for
+	// good, with who asked, the version and how many went.
+	HistoryPurged = newEvent("history.purged")
+	// ServerInstancePurgeEnabled is a server on which an administrator may delete
+	// finished instances for good: said at every start, like the catalogue purge,
+	// because the switch is an opt-out a production installation has to set.
+	ServerInstancePurgeEnabled = newEvent("server.instance_purge_enabled")
+	// WALCompactionRequested is a compaction pass an administrator asked for on a
+	// server not started with --compact-wal.
+	WALCompactionRequested = newEvent("wal_compaction.requested")
+)
+
 // Identity, secrets, and provisioning (ADR-0044/0070/0123).
 var (
 	VaultKeyGenerated = newEvent("vault.key_generated")
@@ -544,6 +559,17 @@ var (
 	// ConnectionCredentialRefused is an attempt to reach a connection's credential
 	// through an operator surface.
 	ConnectionCredentialRefused = newEvent("identity.connection_credential_refused")
+	// LinkingSetUp is an administrator setting up, or changing, in the Console the app
+	// registration people link accounts through: the tenant, the client id, and
+	// whether the client secret was replaced — never the secret.
+	LinkingSetUp = newEvent("identity.linking_set_up")
+	// LinkingRemoved is an administrator removing the Console's linking setup;
+	// linking is off until somebody sets it up again.
+	LinkingRemoved = newEvent("identity.linking_removed")
+	// LinkingSetupUnreadable is a stored linking setup the server could not read at
+	// start. Linking stays off rather than half on, until an administrator sets it up
+	// again.
+	LinkingSetupUnreadable = newEvent("identity.linking_setup_unreadable")
 	// PolicyPublished is an administrator publishing a new version of a policy, or
 	// switching one on or off.
 	PolicyPublished = newEvent("authz.policy_published")
@@ -568,4 +594,35 @@ var (
 	// literal they typed. The categories are enough to tell a prompt that teaches the
 	// dialect from one that does not.
 	FeelAssistantAnswered = newEvent("feel_assistant.answered")
+)
+
+// Content from an external source
+// (ADR-0491).
+var (
+	// ContentUnlinked: a product manager removed a product's page binding, or one
+	// language page of it, with the reason they had to give (§ 6). It is the audit
+	// record of that decision: the product owner has no Atlas account to be told.
+	ContentUnlinked = newEvent("content.unlinked")
+	// ContentQuarantined: a recheck found a bound page protected, unreadable or
+	// gone, the account's standing wrong, or the source unreachable, and the
+	// product's source content is withheld from every surface outside the
+	// catalogue screen until a refresh passes (§ 9). A WARN, said once when the
+	// quarantine begins.
+	ContentQuarantined = newEvent("content.quarantined")
+	// ContentQuarantineLifted: a refresh passed every rule and ended a quarantine.
+	ContentQuarantineLifted = newEvent("content.quarantine_lifted")
+	// ContentSourceUnreachable: the recheck could not talk to a source — its
+	// change feed failed or it could not be opened. Said once when the failures
+	// begin; every bound item of the source is quarantined by the same recheck.
+	ContentSourceUnreachable = newEvent("content.source_unreachable")
+	// ContentSourceRecovered: a source the recheck could not reach answers again.
+	// It lifts no quarantine: only a refresh does.
+	ContentSourceRecovered = newEvent("content.source_recovered")
+	// ContentWatchFailed: the source refused to watch a bound page or ancestor.
+	// The fifteen-minute sweep still rechecks it; what is lost is "at once".
+	ContentWatchFailed = newEvent("content.watch_failed")
+	// ContentSourceChanged: an administrator created, changed or removed a content
+	// source — which wiki the shop's descriptions come from and with which
+	// credential reference.
+	ContentSourceChanged = newEvent("content.source_changed")
 )

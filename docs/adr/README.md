@@ -453,7 +453,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0365](0365-a-number-is-a-counter-or-a-walk.md) | A number an operations view states is a counter or a walk, never the length of a page | Accepted | Landed |
 | [0366](0366-the-live-diagram-counts-every-parked-token.md) | The live diagram counts every parked token, not the ones a bounded scan reached | Accepted | Landed |
 | [0367](0367-directory-photo.md) | A directory photo arrives the way every other directory fact does | Accepted | Landed |
-| [0368](0368-user-avatar.md) | A picture of a person belongs to the account, in two provenances and one place | Accepted | Landed |
+| [0368](0368-user-avatar.md) | A picture of a person belongs to the account, in two provenances and one place | Accepted (amended) | Landed |
 | [0369](0369-cross-instance-message-addressing.md) | Addressing and the envelope for a message that leaves the node | Accepted | Not started |
 | [0370](0370-durable-message-buffer.md) | A published message waits for its subscriber | Accepted (amended) | Partial |
 | [0371](0371-participant-binds-a-published-interface.md) | A participant names an interface; the server says which node | Proposed | Not started |
@@ -476,7 +476,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0388](0388-a-call-that-can-only-be-null-is-refused-at-deploy.md) | A call that can only be null is refused at deploy | Accepted (amended) | Landed |
 | [0389](0389-forked-instance-migration.md) | Forked instance migration | Accepted | Landed |
 | [0390](0390-position-progress.md) | The orderer is told where their position stands, from a route of their own | Accepted | Landed |
-| [0391](0391-product-picture.md) | A product is shown, and its picture is not part of what was promised | Accepted | Landed |
+| [0391](0391-product-picture.md) | A product is shown, and its picture is not part of what was promised | Accepted (amended) | Landed |
 | [0392](0392-the-same-refusal-at-every-door-that-already-refuses.md) | The same refusal at every door that already refuses | Accepted | Landed |
 | [0393](0393-a-rule-added-later-is-a-gate-on-deploy.md) | A rule the compiler gains later is a gate on deploy, whatever stage it lives in | Accepted | Landed |
 | [0394](0394-approval-in-the-inbox.md) | An approval is read and decided where the work already is | Accepted | Landed |
@@ -565,12 +565,20 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0477](0477-last-login-day.md) | The roster says on which day an account last signed in | Accepted | Landed |
 | [0478](0478-mail-documents-leave-the-mailbox.md) | A mail's documents leave the mailbox — forward, get-attachment, export-attachment, and what inspects them first | Accepted | Landed |
 | [0479](0479-paperless-ngx-worker.md) | Paperless-ngx Worker with reference-only document handling | Proposed | Not started |
-| [0480](0480-technical-capability-contract.md) | Technical capability claims on Worker Type operations | Proposed | Partial |
+| [0480](0480-technical-capability-contract.md) | Technical capability claims on Worker Type operations | Accepted | Partial |
 | [0481](0481-storage-guard.md) | A storage reserve, and an engine that halts on a failed write | Accepted | Landed |
 | [0482](0482-capability-aware-binding-and-routing.md) | Capability-aware BPMN binding and deterministic authorized Worker selection | Proposed | Not started |
-| [0483](0483-technical-capability-conformance-governance.md) | Technical capability contract publication and conformance governance | Proposed | Not started |
+| [0483](0483-technical-capability-conformance-governance.md) | Technical capability contract publication and conformance governance | Accepted | Partial |
 | [0484](0484-sharepoint-mock-mode.md) | A mockup provider for the SharePoint Worker Type | Accepted | Landed |
-| [0485](0485-technical-capability-semantics.md) | Versioned semantic contracts for technical capabilities | Proposed | Partial |
+| [0485](0485-technical-capability-semantics.md) | Versioned semantic contracts for technical capabilities | Accepted | Partial |
+| [0486](0486-operator-history-purge-and-compaction.md) | Deleting finished instances and compacting the WAL on an operator's request | Accepted | Landed |
+| [0487](0487-mail-templates.md) | A mail text is a template in the language form text views already speak | Accepted | Landed |
+| [0488](0488-checkpoint-verdicts-are-remembered.md) | A checkpoint's verdict is remembered, not re-read on every scrape | Accepted | Landed |
+| [0489](0489-mail-html-view.md) | A received mail's HTML body, read on request and shown in a task form | Accepted | Landed |
+| [0490](0490-carddav-worker.md) | A CardDAV Worker Type — a process finds, keeps and labels contacts in any CardDAV address book | Accepted | Landed |
+| [0491](0491-service-content-from-an-external-source.md) | A service's content may come from an external source, copied into the draft and frozen with the release | Accepted | Partial |
+| [0492](0492-controlled-worker-rebinding.md) | Controlled configured-Worker rebinding without process redeployment | Proposed | Not started |
+| [0493](0493-diagrams-scope.md) | A diagrams scope for systems that show processes elsewhere | Proposed (amended) | Partial |
 
 ## The two states of a record
 

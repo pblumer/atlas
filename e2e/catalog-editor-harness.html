@@ -125,8 +125,20 @@
         api, toast, view, isSuperseded: () => false,
       });
 
+      // A product's picture is bytes on a route of its own (ADR-0391). Every upload is
+      // kept, and a spec that sets __bytesLimit makes a larger one refused the way the
+      // server refuses it, with 413 and the figure.
+      window.__bytes = [];
+      window.__bytesLimit = Infinity;
+      const apiBytes = async (method, url, body) => {
+        window.__bytes.push({ method, url, body });
+        if (body.size > window.__bytesLimit) {
+          throw Object.assign(new Error(`the picture exceeds the ${window.__bytesLimit} byte limit`), { status: 413 });
+        }
+      };
+
       window.__mount = () => viewCatalogDetail({
-        api, apiBytes: async () => new Uint8Array(), toast, view,
+        api, apiBytes, toast, view,
         isSuperseded: () => false, me: { id: "u1", roles: ["admin"] }, enforced: false,
       }, "c1");
       window.__ready = true;

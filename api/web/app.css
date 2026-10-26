@@ -355,6 +355,43 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 }
 @media (max-width: 760px) { .product-form, .form-group-body { grid-template-columns: 1fr; } }
 
+/* ---------- A product's content from the wiki ----------
+   (catalog-content.js; ADR-0491). The panel
+   sits above the product form; its text is somebody else's and is drawn as text, so
+   the converted description keeps its line breaks through pre-wrap rather than
+   through markup. */
+.content-panel-card { margin: 0 0 14px; }
+.content-title { margin: 0 0 4px; }
+.content-intro { margin: 0 0 10px; font-size: 12px; max-width: 72ch; }
+.content-slot { border-top: 1px solid var(--border); padding: 10px 0; }
+.content-slot-head { display: flex; align-items: center; gap: 12px; margin: 0 0 6px; }
+.content-slot .row input[type="text"] { flex: 1 1 260px; min-width: 0; }
+.content-primary { font-size: 12px; color: var(--muted); }
+.content-hit-list { margin: 6px 0; padding-left: 18px; }
+.content-hit-list li { margin: 2px 0; }
+.content-preview { margin: 8px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.content-preview.refused { border-color: var(--danger); }
+.content-preview-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin: 0 0 6px; }
+.content-refusals, .content-failure, .content-err { color: var(--danger); }
+.content-refusals ul, .content-dropped ul, .content-problems { margin: 4px 0 6px; padding-left: 18px; }
+.content-passes { color: var(--ok); margin: 4px 0; }
+.content-warn { color: var(--warn); }
+.content-dropped { color: var(--warn); margin: 4px 0; }
+.content-text-label { font-size: 12px; margin: 8px 0 2px; }
+.content-text, .bound-text {
+  white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 0;
+  max-height: 240px; overflow: auto; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
+}
+.content-pages { margin: 8px 0; }
+.content-pages .pill { margin-left: 6px; }
+.content-recheck ul { margin: 4px 0 10px; padding-left: 18px; }
+.content-report:empty, .content-catalog-result:empty { display: none; }
+.content-report, .content-catalog-result { margin-top: 10px; }
+.bound-note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.bound-fields { display: grid; gap: 8px; }
+.content-reason-missing { color: var(--danger); margin: 4px 0 0; }
+
 /* ---------- One box per language, side by side ----------
    Every text a product carries is a map keyed by the catalogue's declared language
    tags, so the form draws the list rather than a fixed pair: --langs is set inline
@@ -787,6 +824,18 @@ textarea::placeholder {
 .storage-nums { font-size: 12px; }
 .storage-forecast { margin: 4px 0 8px; }
 .storage-error { color: var(--danger); }
+/* How the card gives disk back, and the dialog that deletes finished instances
+   (ADR-0486). */
+.storage-reclaim { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; }
+.storage-reclaim-title { font-size: 14px; margin: 0 0 6px; }
+.storage-reclaim-actions { gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; }
+.storage-reclaim-result:empty { display: none; }
+.confirm-modal.purge-modal { width: min(560px, 94vw); }
+.purge-preview { margin: 10px 0 4px; min-height: 1.4em; }
+.purge-preview p, .purge-progress p { margin: 4px 0; }
+.purge-versions, .purge-notes { margin: 4px 0 8px 18px; padding: 0; font-size: 12.5px; }
+.purge-off { color: var(--danger); }
+.purge-progress { margin-top: 10px; }
 #api-tokens #tok-soon ul { margin: 6px 0; padding-left: 18px; }
 /* The variable editor inside the incident's fix dialog (ADR-0158). */
 .inc-vars-modal { max-width: 620px; width: 92vw; }
@@ -1466,6 +1515,8 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .tok-html-tag    { color: #116329; }
 .tok-html-attr   { color: #8250df; }
 .tok-html-entity { color: #953800; }
+/* Template tags — {{ }}, {{#if }}, {{/loop}} — around the FEEL they hold (dev-lang.js). */
+.tok-tpl-tag     { color: #0550ae; font-weight: 700; }
 
 /* Completion popup. */
 .feel-pop {
@@ -4146,6 +4197,30 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
   border: 1px solid var(--border); border-radius: 6px; padding: 8px;
 }
 .dev-run-detail.err { color: var(--danger); border-color: #f3c9c4; background: var(--danger-soft); }
+
+/* Preview panel — a mail template rendered with the sample variables
+   (ADR-0487). It takes a fair share of the column, since reading the
+   result is the point; the code keeps the rest. An HTML body is shown as a sandboxed page (no
+   scripts, no same-origin), the posture the outbox already gives a rendered mail. */
+.dev-run.dev-preview { flex: 0 0 48%; min-height: 220px; display: flex; flex-direction: column; }
+.dev-run.dev-preview[hidden] { display: none; }
+.dev-run.dev-preview .dev-run-vars { max-height: 18vh; flex: 0 0 auto; }
+.dev-preview-out { flex: 1 1 auto; min-height: 0; display: flex; }
+.dev-preview-out.stale { opacity: .45; }
+.dev-preview-text {
+  flex: 1 1 auto; margin: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+  font: 13px/1.55 system-ui, sans-serif; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px;
+}
+.dev-preview-html {
+  flex: 1 1 auto; width: 100%; min-height: 120px; border: 1px solid var(--border);
+  border-radius: 6px; background: #fff;
+}
+.dev-preview-problems {
+  margin: 0; padding: 6px 8px 6px 24px; font-size: 12px; color: var(--warn);
+  background: var(--surface); border: 1px dashed var(--border); border-radius: 6px;
+  max-height: 80px; overflow: auto;
+}
 
 /* Side panel: tabs + one filter + the active pane. */
 .dev-side {

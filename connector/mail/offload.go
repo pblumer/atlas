@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/url"
 	"slices"
 	"strconv"
@@ -64,12 +65,16 @@ type Job struct {
 	// The mailbox half (ADR-0438). Operation is empty for a send.
 	// Target is the message an operation addresses — the messageId a watch or a list
 	// answered — named apart from MessageID above, which is this job's own key.
-	Operation      string `json:"operation,omitempty"`
-	Folder         string `json:"folder,omitempty"`
-	Target         string `json:"target,omitempty"`
-	Destination    string `json:"destination,omitempty"`
-	MaxResults     int    `json:"maxResults,omitempty"`
-	IncludeBody    bool   `json:"includeBody,omitempty"`
+	Operation   string `json:"operation,omitempty"`
+	Folder      string `json:"folder,omitempty"`
+	Target      string `json:"target,omitempty"`
+	Destination string `json:"destination,omitempty"`
+	MaxResults  int    `json:"maxResults,omitempty"`
+	IncludeBody bool   `json:"includeBody,omitempty"`
+	// IncludeHTML asks a get for the HTML body as well, cleaned
+	// (ADR-0489). A Worker Instance older than the field ignores it
+	// and answers the text alone, which is what the task asked for before.
+	IncludeHTML    bool   `json:"includeHtml,omitempty"`
 	UnreadOnly     bool   `json:"unreadOnly,omitempty"`
 	ResultVariable string `json:"resultVariable,omitempty"`
 	// The documents half (ADR-0478). Attachment is the
@@ -144,9 +149,10 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 			Destination: resolveValue(detail.MailDestination, piKey, scopeVars),
 			MaxResults:  int(detail.MailMaxResults),
 			IncludeBody: detail.MailIncludeBody,
+			IncludeHTML: detail.MailIncludeHTML,
 			UnreadOnly:  detail.MailUnreadOnly,
-			Body:        resolveValue(detail.Body, piKey, scopeVars),
-			HTML:        resolveValue(detail.BodyHTML, piKey, scopeVars),
+			Body:        mailText(detail.BodyTmpl, detail.Body, piKey, scopeVars, nil),
+			HTML:        mailText(detail.BodyHTMLTmpl, detail.BodyHTML, piKey, scopeVars, html.EscapeString),
 			MessageID:   strconv.FormatUint(jobKey, 10),
 		}
 		if detail.ResultVar >= 0 {
@@ -200,9 +206,9 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		To:        to,
 		Cc:        cc,
 		Bcc:       bcc,
-		Subject:   resolveValue(detail.MailSubject, piKey, scopeVars),
-		Body:      resolveValue(detail.Body, piKey, scopeVars),
-		HTML:      resolveValue(detail.BodyHTML, piKey, scopeVars),
+		Subject:   mailSubject(detail, piKey, scopeVars),
+		Body:      mailText(detail.BodyTmpl, detail.Body, piKey, scopeVars, nil),
+		HTML:      mailText(detail.BodyHTMLTmpl, detail.BodyHTML, piKey, scopeVars, html.EscapeString),
 		MessageID: strconv.FormatUint(jobKey, 10),
 	}, nil
 }
@@ -285,6 +291,17 @@ func runMailbox(ctx context.Context, mb Mailbox, j Job) (any, error) {
 		}
 		return out, nil
 	case OpGet:
+		if j.IncludeHTML {
+			hm, ok := mb.(HTMLMailbox)
+			if !ok {
+				return nil, fmt.Errorf("mail: get: this Worker's mailbox cannot read a message's HTML body")
+			}
+			e, err := hm.GetHTML(ctx, j.Target)
+			if err != nil {
+				return nil, err
+			}
+			return fitHTML(e, limits.Default().Variable-limits.Default().ErrorBody), nil
+		}
 		e, err := mb.Get(ctx, j.Target, j.IncludeBody)
 		if err != nil {
 			return nil, err
@@ -353,6 +370,49 @@ func runDocuments(ctx context.Context, mb Mailbox, j Job, in inspector, docs Doc
 		return exportAttachment(ctx, j, d, v, docs)
 	}
 	return nil, fmt.Errorf("mail: unknown operation %q", j.Operation)
+}
+
+// fitHTML is a get's answer with its HTML body: cleaned (htmlclean.go), cut at
+// MaxHTMLBytes, and held to what one process variable may weigh. It is the one place
+// every HTML body passes, whichever mailbox read it, so it is where the cleaning is.
+// The HTML is the one part that can be large, and the variable is stored as JSON, where
+// every < and > grows to six bytes; so the answer is measured as stored, and the HTML
+// is cut further — before a tag, and marked as cut — until it fits. The text is capped
+// already and is never what gives way.
+func fitHTML(e Envelope, budget int64) map[string]any {
+	e.withHTML = true
+	if strings.TrimSpace(e.HTML) == "" {
+		e.HTML = ""
+	} else {
+		var cut bool
+		e.HTML, cut = capHTML(cleanHTML(e.HTML), MaxHTMLBytes)
+		e.HTMLTruncated = e.HTMLTruncated || cut
+	}
+	for range 12 {
+		fields := e.Fields(true)
+		size := encodedSize(fields)
+		if size <= budget || e.HTML == "" {
+			return fields
+		}
+		markup := encodedSize(e.HTML)
+		room := budget - (size - markup)
+		next := 0
+		if room > 0 {
+			next = int(int64(len(e.HTML)) * room / markup)
+		}
+		e.HTML, _ = capHTML(e.HTML, next)
+		e.HTMLTruncated = true
+	}
+	e.HTML = ""
+	return e.Fields(true)
+}
+
+// encodedSize is how many bytes a value takes in the JSON a variable is stored as. An
+// envelope's fields are strings, booleans, numbers and lists of them, which always
+// encode.
+func encodedSize(v any) int64 {
+	b, _ := json.Marshal(v)
+	return int64(len(b))
 }
 
 // attachmentContent is get-attachment's answer: the document base64-encoded, with what

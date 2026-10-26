@@ -61,9 +61,9 @@ way: `/healthz` and `/readyz` answer whoever can reach the port. See
 If you only want to see it run, and will throw the directory away afterwards:
 
 ```bash
-curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.19.0/atlas_0.19.0_linux_amd64.tar.gz
-tar -xzf atlas_0.19.0_linux_amd64.tar.gz
-./atlas_0.19.0_linux_amd64/atlas serve
+curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.20.0/atlas_0.20.0_linux_amd64.tar.gz
+tar -xzf atlas_0.20.0_linux_amd64.tar.gz
+./atlas_0.20.0_linux_amd64/atlas serve
 ```
 
 Then open <http://127.0.0.1:8080/>. Authentication is off, so there is no login —
@@ -85,7 +85,7 @@ the transfer. Substitute the version and architecture you want — `linux_amd64`
 `linux_arm64`, or `linux_arm` (ARMv6, for a 32-bit Raspberry Pi OS).
 
 ```bash
-VERSION=0.19.0
+VERSION=0.20.0
 ARCH=linux_amd64
 BASE=https://github.com/pblumer/atlas/releases/download/v${VERSION}
 
@@ -94,7 +94,7 @@ curl -fsSLO ${BASE}/SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-`sha256sum` must print `atlas_0.19.0_linux_amd64.tar.gz: OK`. If it prints
+`sha256sum` must print `atlas_0.20.0_linux_amd64.tar.gz: OK`. If it prints
 anything else, stop — do not unpack the archive.
 
 ### 2. Put the binary on the system
@@ -706,7 +706,7 @@ Windows — Windows *containers* are not supported.
 In an elevated PowerShell:
 
 ```powershell
-$Version = '0.19.0'
+$Version = '0.20.0'
 $Base = "https://github.com/pblumer/atlas/releases/download/v$Version"
 Invoke-WebRequest "$Base/atlas_${Version}_windows_amd64.zip" -OutFile atlas.zip
 Invoke-WebRequest "$Base/SHA256SUMS" -OutFile SHA256SUMS
@@ -722,7 +722,7 @@ New-Item -ItemType Directory -Force -Path C:\Atlas\data | Out-Null
 ### 2. Try it in the foreground
 
 ```powershell
-C:\Atlas\atlas_0.19.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
+C:\Atlas\atlas_0.20.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
 ```
 
 ### 3. Run it as a Windows service
@@ -738,7 +738,7 @@ next to the wrapper executable:
   <id>atlas</id>
   <name>Atlas BPMN workflow engine</name>
   <description>Durable BPMN 2.x workflow engine.</description>
-  <executable>C:\Atlas\atlas_0.19.0_windows_amd64\atlas.exe</executable>
+  <executable>C:\Atlas\atlas_0.20.0_windows_amd64\atlas.exe</executable>
   <arguments>serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data --auth</arguments>
   <workingdirectory>C:\Atlas</workingdirectory>
   <onfailure action="restart" delay="5 sec"/>
@@ -834,7 +834,8 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--script-sandbox` | `off` | `off` preserves existing filesystem/network access. `strict` (also `ATLAS_SCRIPT_SANDBOX=strict`) requires Linux Landlock ABI 3+, exposes only the installed runtime, the process metadata a runtime reads to start, and private per-run scratch; denies socket creation; and fails closed when unavailable. It starts each enabled interpreter once at boot and refuses to start if one cannot run inside the profile ([ADR-0303](adr/0303-script-sandbox-isolation.md)) |
 | `--checkpoint-interval` | `5m` | How often to snapshot applied state so restarts replay less log; `0` disables |
 | `--checkpoint-keep` | `3` | How many checkpoints to retain |
-| `--compact-wal` | `false` | Delete WAL segments already covered by a checkpoint and every consumer watermark. Irreversible, so opt-in; requires checkpointing |
+| `--compact-wal` | `false` | Delete WAL segments already covered by a checkpoint and every consumer watermark. Irreversible, so opt-in; requires checkpointing. Also `ATLAS_COMPACT_WAL=true`, read as strictly as the other switches. Without it an administrator can still compact once — from the storage card on the Console's dashboard, or with `POST /api/v1/checkpoints?compact=true` — under the same gates, which is also how a server frozen below its reserve gives WAL space back without a restart ([ADR-0486](adr/0486-operator-history-purge-and-compaction.md)) |
+| `--instance-purge` | `true` | Let an administrator delete a process version's finished instances for good — those that finished before a cut-off — from Operations or with `POST /api/v1/processes/{key}/history-purge`, in batches. Running instances are never touched, and with the OpenSearch exporter on nothing is deleted before the exporter has it. On by default (opt-out), meant for development and test installations. **Set `--instance-purge=false` on a production installation**, where the history is evidence; the route then answers 403 and `GET …/history-purge` still says what a purge would consider. The purge does not free disk by itself: it adds one event per instance to the WAL until compaction removes the prefix. While it is on, every start logs one WARN, `event=server.instance_purge_enabled`. Also `ATLAS_INSTANCE_PURGE=false` ([ADR-0486](adr/0486-operator-history-purge-and-compaction.md)) |
 | `--storage-reserve-mb` | `1024` | Disk space, in MiB, the server keeps free under the data directory. Below it the server refuses new writes with HTTP 507 and starts no work of its own — timers wait, the retention sweep and the inbound bridge pause, in-process workers lease nothing — while reads, sign-ins, checkpoints and the reports of jobs already leased go on; it resumes by itself once the reserve and a quarter of it are free. The Console's dashboard shows the disk, the reserve and a forecast to an administrator, `GET /api/v1/storage` answers the same, and `/metrics` carries `atlas_storage_*`. `0` keeps the monitoring and turns the freeze off ([ADR-0481](adr/0481-storage-guard.md)). Also `ATLAS_STORAGE_RESERVE_MB` |
 | `--metrics` | `true` | Serve the Prometheus exposition at `/metrics`. Gated by `--auth` like every other route — give the scraper an API token scoped `metrics` (see [Credentials for machines](#credentials-for-machines)) |
 | `--log-format` | `text` | `text` for a terminal, `json` for a log shipper — see [Logs](#logs) |
@@ -1033,6 +1034,9 @@ Event names an operator is most likely to alert on:
 | `wal_compaction.inert` | WARN | `--compact-wal` without `--checkpoint-interval` — it is doing nothing |
 | `exporter.tick_failed` | WARN | An OpenSearch export tick failed; lag grows until it recovers |
 | `retention.purged` | INFO | Finished instances were hard-deleted, with how many |
+| `history.purged` | INFO | An administrator deleted a batch of a version's finished instances, with `by`, `process`, `version`, `instances` and `held` |
+| `server.instance_purge_enabled` | WARN | Said at every start while an administrator may delete finished instances for good; set `--instance-purge=false` on production |
+| `wal_compaction.requested` | INFO | An administrator asked for one compaction pass on a server not started with `--compact-wal`, with `by` |
 | `order.instance_unrecorded` | WARN | An instance working an order position started but could not be noted on the order; the shop shows no tasks for that position |
 | `script_worker.binary_missing` | WARN | A script language is enabled but its interpreter is absent; those tasks park |
 | `feed.push_failing` | WARN | A push subscription's endpoint refused a batch or did not answer, said once when the failures begin; delivery holds and retries on a widening interval, and nothing is skipped |
@@ -1058,6 +1062,12 @@ of them carries a password, a hash or a token. Ship them with `--log-format=json
 | `auth.denied` | WARN | A signed-in caller was refused for lacking the admin role, with the `method` and `path`. Anonymous `401`s are deliberately *not* logged — they would bury this under every probe that finds the port |
 | `auth.user_created`, `auth.user_updated`, `auth.user_deleted` | INFO | The account lifecycle, naming both the actor and the subject; the update line carries the `roles` and `disabled` state that resulted |
 | `auth.password_set` | INFO | An administrator replaced a user's password (that it happened and for whom — never the password) |
+| `content.source_changed` | INFO | An administrator created, changed or removed a content source, by `source`, naming its `base_url` and `credentials_ref` — never the token |
+| `content.unlinked` | INFO | A product manager removed a product's content binding or one language page of it, with the `item`, the `pages`, the `lang` and the `reason` they had to give |
+| `content.quarantined` | WARN | A recheck found a bound page protected, unreadable or gone, the account's standing wrong or the source unreachable; the product's source content is withheld until a refresh passes. Names the `item`, the `source` and the `reason` |
+| `content.quarantine_lifted` | INFO | A refresh passed every rule and ended a product's quarantine |
+| `content.source_unreachable`, `content.source_recovered` | WARN / INFO | The recheck could not reach a content source, said once when the failures begin, and that it answers again — which lifts no quarantine |
+| `content.watch_failed` | WARN | The source refused to watch a bound page; the fifteen-minute sweep still rechecks it |
 | `feed.subscription_changed` | INFO | An administrator created, changed or deleted a push subscription of the event feed, by `subscription_id`; a create names the `worker_id` and every change the `reach` |
 | `auth.token_minted`, `auth.token_revoked` | INFO | A machine credential — an API token or a deploy token — was issued or revoked, by `token_id` and `token_name`; a mint also records its `scope` and `expires_at`, and `vault_secret` — the name, never the value — when the token was sealed in the vault |
 | `auth.worker_token_unknown` | WARN | `ATLAS_TOKEN` is set to a value this server does not accept. Supervised workers are handed it instead of the server's own token and will be refused at every poll — mint an API token with scope `worker`, or unset the variable |
@@ -1124,6 +1134,7 @@ curl -sS -X POST http://127.0.0.1:8080/api/v1/api-tokens \
 | `worker` | Only what `atlas worker` does: lease a batch of jobs, settle each one, and post a preview mail back to the outbox. Nothing else — the right scope for a worker running in another network zone |
 | `metrics` | Only `GET /metrics`. The narrowest scope there is, for a Prometheus scraper |
 | `status` | Only `GET /api/v1/node`, this server's descriptor — for another Atlas asking who this server is |
+| `diagrams` | Only `GET /api/v1/processes`, `GET /api/v1/processes/{key}/xml` and `GET /api/v1/processes/{key}/runtime/counts`: the deployed processes, a definition's model and the counts of its runtime overlay — for a system that shows the processes elsewhere, such as a wiki that draws a process's newest version. It cannot deploy, start or read instances, and it never reads an incident's message: the whole overlay, `/runtime`, is refused (ADR-0493) |
 | `events` | Only `GET /api/v1/events`, the event feed of action outcomes and granted and revoked rights. The token carries the `feedreader` role and no other, so it reads the feed and nothing else — the right scope for a CMDB or a billing system that follows the feed. Without a `reach` it reads the whole feed; with `"reach":["<catalogue id>", …]` it reads only the events about products those catalogues maintain (each event names that catalogue as `homeCatalog`). Name only catalogues you maintain |
 | `landscape` | Only the derived landscape — `GET /api/v1/panorama/mesh`, its ArchiMate projection, and the descriptor — for another Atlas asking for its picture. It **must** state `"reach":["<application id>", …]`, the applications it may see, and you can name only applications you can see yourself |
 | `directory` | Only `GET` and `POST /api/v1/directory-sync`, for the scheduled process that mirrors accounts from a directory. It cannot deploy |

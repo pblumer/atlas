@@ -1,13 +1,14 @@
 # Capability-driven Automation: delivery programme
 
 **Programme:** CDA (Capability-driven Automation)  
-**Baseline checked:** 2026-10-25, `main` plus the open [PR #1346](https://github.com/pblumer/atlas/pull/1346).  
+**Baseline checked:** 2026-10-25, `main` including merged [PR #1346](https://github.com/pblumer/atlas/pull/1346). ADR-0483 accepted; CDA2a [PR #1357](https://github.com/pblumer/atlas/pull/1357) (schema-only) merged; draft [PR #1360](https://github.com/pblumer/atlas/pull/1360) (content digests) is open.  
+**Programme owner:** pblumer (accepted 2026-10-25). Slice coordinator for CDA0–CDA2: pblumer; later slices are assigned when they start.  
 **Roadmap owner:** [Milestone CDA](../../ROADMAP.md#milestone-cda--capability-driven-automation-) in `ROADMAP.md`.  
 **Detailed historical slices:** [T0–T5 technical plan](technical-capability-contract.md); this programme is the **status and dependency authority** for cross-milestone delivery.
 
 ## Programme boundary: policy authority
 
-[Identity-aware Execution (IAE)](identity-aware-execution-program.md) is the separate programme authority for linked external identities, managed Connections, delegated OAuth, versioned PDP/PEP policy, approval obligations, separation of duties and durable action evidence, governed by proposed/partial ADR-0475. CDA does **not** implement a second authorization system. CDA6/7 use the supported IAE provider-specific authorization seam after exact semantic contract binding; IAE4 is a hard acceptance gate for CDA7's chosen Worker. The independently reviewed technical claim/conformance programme remains CDA-owned. Do not treat the draft [PR #1346](https://github.com/pblumer/atlas/pull/1346) as a policy-enforcement PR.
+[Identity-aware Execution (IAE)](identity-aware-execution-program.md) is the separate programme authority for linked external identities, managed Connections, delegated OAuth, versioned PDP/PEP policy, approval obligations, separation of duties and durable action evidence, governed by proposed/partial ADR-0475. CDA does **not** implement a second authorization system. CDA6/7 use the supported IAE provider-specific authorization seam after exact semantic contract binding; IAE4 is a hard acceptance gate for CDA7's chosen Worker. The independently reviewed technical claim/conformance programme remains CDA-owned. Do not treat merged [PR #1346](https://github.com/pblumer/atlas/pull/1346) as a policy-enforcement PR.
 
 ## Outcome, not a synonym for job dispatch
 
@@ -40,9 +41,9 @@ database is introduced.
 |---|---|---|
 | Business capabilities, Value Streams, realizations and Panorama binding | [ADR-0305](../adr/0305-business-capabilities-and-value-streams.md) (Accepted/Partial), [ADR-0308](../adr/0308-panorama-binds-the-capability-register.md) (Accepted/Landed), `api/capability`, `api/panorama` | Implemented for the earlier business architecture scope; not a technical capability graph |
 | Worker Type / configured Worker / Worker Instance identity | [ADR-0203](../adr/0203-worker-execution-model.md), [ADR-0208](../adr/0208-worker-type-packages.md) (Accepted/Partial) | Existing model and catalog; third-party package provenance, installation and pinned versions still partial |
-| Technical claims in manifests (T0) | [PR #1343](https://github.com/pblumer/atlas/pull/1343) merged; [ADR-0480](../adr/0480-technical-capability-contract.md) (Proposed/Partial); `workertype/capability.go`, `workertype/manifest.go` | **Code landed; architecture approval and B11 completion not claimed** |
-| Semantic contract envelope (T1a) | [PR #1346](https://github.com/pblumer/atlas/pull/1346), draft; separate proposed ADR there | In review, **not on main** |
-| Canonical conformance and publication | [Conformance governance draft](../adr/0483-technical-capability-conformance-governance.md) | Proposed decision, no code |
+| Technical claims in manifests (T0) | [PR #1343](https://github.com/pblumer/atlas/pull/1343) merged; [ADR-0480](../adr/0480-technical-capability-contract.md) (Accepted/Partial); `workertype/capability.go`, `workertype/manifest.go` | **CDA0 complete** (ADR-0480 accepted 2026-10-26); claims stay descriptive |
+| Semantic contract envelope (T1a) | [PR #1346](https://github.com/pblumer/atlas/pull/1346) merged; [ADR-0485](../adr/0485-technical-capability-semantics.md) Accepted/Partial | **CDA1 complete** (accepted 2026-10-26 with a reservation: `v1alpha1` fields may change until the first published contract); **not conformance** |
+| Canonical conformance and publication | [ADR-0483](../adr/0483-technical-capability-conformance-governance.md) (Accepted/Partial); [PR #1357](https://github.com/pblumer/atlas/pull/1357) merged, draft [PR #1360](https://github.com/pblumer/atlas/pull/1360) | Offline schema validation on main (schema-only); digests in review; no publication, evidence or withdrawal code |
 | Single cross-layer query model | [ADR-0420](../adr/0420-one-graph-model-several-projections.md) (Proposed/Not started) | Not implemented. Previous **Milestone P is complete only for its original scope**, not this follow-on |
 | Governed external action execution | [ADR-0475](../adr/0475-identity-aware-worker-execution.md) (Proposed/Partial) | Supervised delegated SharePoint example exists; do **not** assume equivalent enforcement for all Worker Types |
 | Capability-based BPMN routing | [Binding and routing draft](../adr/0482-capability-aware-binding-and-routing.md) | Proposed decision; **no runtime feature yet** |
@@ -50,18 +51,21 @@ database is introduced.
 ## Delivery slices, dependencies and gates
 
 The source plan used T0–T5. For tracking, the combined T1 and T5 steps
-are split where their validation/trust boundaries differ:
+are split where their validation/trust boundaries differ. CDA8 is a new,
+explicit follow-up for controlled replacement of a configured Worker
+without redeploying an existing opt-in BPMN process version:
 
 | Slice | Status | Previously | Ownership / placement | Depends on | Deliverable and acceptance gate |
 |---|---|---|---|---|---|
-| **CDA0 — Claims** | 🚧 Code merged, ADR-0480 Proposed | T0 / B11 | Worker Type contract; Milestone B11 | ADR-0203/0208 | Optional version/profile claims with valid/invalid and legacy manifest tests; do not call it landed until ADR approved and verification evidence is reviewed |
-| **CDA1 — Semantic envelope** | 🚧 Draft PR #1346 | T1a | `workertype`; Milestone 6 | CDA0 design review | Exact contract identity, resource semantics, schema root and strict parser; separate contact/account fixtures, no conformance claim |
-| **CDA2 — Governance and conformance** | 🔲 Not started | T1b | Contract maintainers and reviewers; Milestone 6 | CDA1, acceptance of governance ADR, ADR-0208 trust boundaries | Normative artifact/digest, full offline JSON Schema validation, positive/negative mock fixtures, evidence/withdrawal lifecycle and independent review; provider claims cannot self-certify |
+| **CDA0 — Claims** | ✅ Complete: PR #1343, ADR-0480 Accepted | T0 / B11 | Worker Type contract; Milestone B11 | ADR-0203/0208 | Optional version/profile claims with valid/invalid and legacy manifest tests; do not call it landed until ADR approved and verification evidence is reviewed |
+| **CDA1 — Semantic envelope** | ✅ Complete: PR #1346, ADR-0485 Accepted with reservation | T1a | `workertype`; Milestone 6 | CDA0 design review | Exact contract identity, resource semantics, schema root and strict parser on main; architecture acceptance pending, no provider conformance claim |
+| **CDA2 — Governance and conformance** | 🚧 ADR-0483 Accepted; PR #1357 (schema-only) merged; draft PR #1360 (digests) in review | T1b | Contract maintainers and reviewers; Milestone 6 | CDA1, ADR-0208 trust boundaries | Immutable contract/digest, offline full JSON Schema validation, positive/negative fixtures, and independently reviewed evidence/withdrawal lifecycle. PR #1357 covers **only** JSON Schema/fixtures and PR #1360 **only** content digests; provider verification remains unimplemented |
 | **CDA3 — Source-derived Worker claims** | 🔲 Not started | T2 | Provider catalogue owners; Milestone 6 | CDA2 | Entra or Google Contacts first, LDAP afterwards; correct per-operation contract/profile, no duplicate operation source, drift and negative-equivalence tests; label unknown/candidate/verified precisely |
 | **CDA4 — Technical-to-business graph** | 🔲 Not started | T3 | Graph/Panorama architecture, **new CDA track** | CDA2/CDA3, ADR-0420 acceptance or explicit extension | Provenance-bearing, stable-ID graph edges from Value Stream and authored realization to operation/contract and configured Worker; server-side bounded traversal and no unauthorized leakage |
 | **CDA5 — Impact and discovery** | 🔲 Not started | T4 | API/MCP/Panorama, **new CDA track** | CDA4 | Read-only contract/coverage/gap/impact queries with precise evidence and visibility; UI distinguishes authored/derived/observed; no runtime support implied |
-| **CDA6 — BPMN binding validation** | 🔲 Not started | First half of T5 | BPMN/compiler/modeler, **new CDA track** | CDA2/CDA3, accepted binding ADR, Worker package pinning prerequisites | Opt-in exact contract and explicit Worker binding, immutable deployment resolution, fail closed on missing/ambiguous/unverified candidates, legacy BPMN compatible. **Design-time only** |
-| **CDA7 — Governed execution** | 🔲 Not started | Second half of T5 | Engine/jobs/authz, **new CDA track** | CDA6, relevant ADR-0475 provider enforcement, accepted routing ADR | One opt-in executable vertical slice; durable authorized action decision, lease fencing, no fallback, post-fsync effects, deterministic live/replay equivalence and no hot-path allocations |
+| **CDA6 — BPMN binding validation** | 🔲 Not started | First half of T5 | BPMN/compiler/modeler, **new CDA track** | CDA2/CDA3, accepted binding ADR, Worker package pinning prerequisites | Opt-in exact contract and explicit initial Worker binding, immutable semantic deployment; require a stable logical binding-slot identity **at design time** so a later explicitly authorized revision can be added without rewriting BPMN. Fail closed on missing/ambiguous/unverified candidates; legacy BPMN compatible. **Design-time only; no rebinding yet** |
+| **CDA7 — Governed execution** | 🔲 Not started | Second half of T5 | Engine/jobs/authz, **new CDA track** | CDA6, relevant ADR-0475 provider enforcement, accepted routing ADR | One opt-in executable vertical slice with an initially **pinned** binding revision; durable authorized action decision, lease fencing, no fallback, post-fsync effects, deterministic live/replay equivalence and no hot-path allocations. No configured Worker hot-swap in this slice | 
+| **CDA8 — Controlled configured-Worker rebinding** | 🔲 Not started | New follow-up (T5c) | Engine/jobs/Operations/identity, **CDA track** | CDA6/CDA7, accepted [rebinding ADR draft](../adr/0492-controlled-worker-rebinding.md), ADR-0208 and provider-specific ADR-0475 enforcement | Replace Worker A with verified and authorized Worker B **for future jobs of an existing opt-in deployment, without redeploying BPMN**. Versioned binding slot/revisions, explicit operator preview/approval, fsync-gated cutover, pre-existing jobs pinned, per-partition rollout visibility, audited rollback, live/replay equivalence and zero new hot-path allocations. **Not automatic per-job selection** |
 
 **Ownership** names the subsystem requiring maintainers' review, not a claim
 that a specific individual or team has accepted the assignment.
@@ -75,7 +79,7 @@ the **account** contract, nor vice versa.
 ```text
 ADR-0203/0208 -> CDA0 (code merged; ADR-0480 still Proposed)
                         |
-                     CDA1 (#1346)
+                     CDA1 (#1346 merged; ADR-0485 Proposed)
                         |
       Governance ADR -> CDA2 conformance -> CDA3 provider evidence
                                              |
@@ -88,6 +92,8 @@ ADR-0203/0208 -> CDA0 (code merged; ADR-0480 still Proposed)
                   CDA5 discovery                         ADR-0475 provider enforcement
                                                                  |
                                                         CDA7 governed execution
+                                                                 |
+                                         Rebinding ADR accepted -> CDA8 controlled cutover
 ```
 
 CDA6 can prototype deployment validation once CDA2/CDA3 are available;
@@ -101,12 +107,13 @@ discovery and authorization.
 
 | Decision | Status | Required before |
 |---|---|---|
-| [ADR-0480 — Operation-level descriptive claims](../adr/0480-technical-capability-contract.md) | Proposed, code Partial | Declare CDA0 architecturally done |
-| PR #1346 semantic envelope draft | Draft, not merged; future number at merge | CDA1 accepted |
-| [ADR-0483](../adr/0483-technical-capability-conformance-governance.md) | Proposed / Not started | CDA2, then trusted CDA3 |
+| [ADR-0480 — Operation-level descriptive claims](../adr/0480-technical-capability-contract.md) | **Accepted** (2026-10-26) / Partial | CDA0 (done) |
+| [ADR-0485 — Semantic envelope](../adr/0485-technical-capability-semantics.md) | **Accepted** (2026-10-26, `v1alpha1` fields provisional) / Partial | CDA1 (done) |
+| [ADR-0483](../adr/0483-technical-capability-conformance-governance.md) | **Accepted** / Partial: PR #1357 merged, draft PR #1360 open | CDA2, then trusted CDA3 |
 | [ADR-0420 — One graph](../adr/0420-one-graph-model-several-projections.md) | Proposed / Not started | CDA4. Must explicitly cover technical capability nodes, operation edges, visibility and provenance before acceptance |
 | [ADR-0475 — Identity-aware Worker authorization](../adr/0475-identity-aware-worker-execution.md) | Proposed / Partial | CDA7 provider-specific governed action |
 | [ADR-0482](../adr/0482-capability-aware-binding-and-routing.md) | Proposed / Not started | CDA6 validation and CDA7 execution |
+| [ADR-0492](../adr/0492-controlled-worker-rebinding.md) | Proposed / Not started | Design compatibility in CDA6; CDA8 implementation only after acceptance, reviewed event/recovery design and CDA7 |
 | [ADR-0208 — Worker Type packages](../adr/0208-worker-type-packages.md) | Accepted / Partial | Verified package version/digest and safe configuration pinning |
 
 The existing **Milestone P** stays marked complete for its *defined*
@@ -116,13 +123,17 @@ implemented merely because Panorama already has a starmap.
 
 ### Open decisions that cannot be treated as implementation details
 
-1. **Contract identity and profiles.** CDA1's `(id, version, profile)`
-   contracts versus CDA0's within-operation `id@version` duplicate
-   rejection: agree whether one operation may later claim multiple
-   profiles, and test any manifest change explicitly.
-2. **Evidence authority and expiry.** Confirm the canonical artifact
-   encoding, review authority, conformance runner, revalidation triggers
-   and withdrawal semantics; no third-party trust without ADR-0208.
+1. **Contract identity and profiles.** Decided 2026-10-26: an operation
+   keeps at most one claim per contract `id@version`, whatever the profile
+   (ADR-0480). Relaxing it is a separately tested manifest change.
+2. **Evidence authority and expiry.** Review authority is decided in
+   ADR-0483: repository provenance (`CODEOWNERS`, protected `main`) with the
+   maintainer as sole reviewer for now. Decided 2026-10-26 in ADR-0483: the
+   contract digest is SHA-256 over the exact LF file bytes, a built-in Worker
+   Type's implementation is identified by its dependency digest, and evidence
+   is renewed in the same pull request that changes that digest. Still open:
+   the conformance runner, revalidation of opt-in live tests and withdrawal
+   semantics; no third-party trust without ADR-0208.
 3. **Graph provenance.** Update proposed ADR-0420 before accepting it:
    namespaced `technical-capability` and `worker-type-operation`
    nodes, `declares` vs `verified-by` distinctions, and how a BPMN
@@ -136,7 +147,14 @@ implemented merely because Panorama already has a starmap.
    governed action. Selection from multiple Workers at execution
    needs a *later separately approved* durable event/policy decision,
    not an optimization hidden in a service-task implementation.
-6. **Privacy and operations.** Review exposure of contract metadata,
+6. **Controlled Worker replacement.** Distinguish restarting Worker Instances
+   from changing a configured Worker's identity or endpoint. Plan stable
+   per-task binding slots before locking CDA6 into permanent Worker IDs.
+   CDA8 proposes explicitly authorized, revisioned replacement only for
+   future jobs of an opt-in deployment; existing queued/leased jobs keep
+   their durable target. Resolve multi-partition rollout, authorization,
+   rollback and migration semantics in the rebinding ADR before code.
+7. **Privacy and operations.** Review exposure of contract metadata,
    graph visibility, delegated tokens, authorization event contents,
    retention, upgrades, rollback and incident behavior.
 
@@ -166,6 +184,18 @@ with live state equal to replayed WAL state and no external effects
 during replay. Use one already-supported governed provider path
 first; do not assume Entra/LDAP/Contacts have action authorization
 until separately proven.
+
+**Controlled replacement proof (CDA8, separate from automatic routing).**
+While an existing, opted-in onboarding deployment continues running, an
+operator previews a validated switch from configured Worker A to Worker B
+with the **same exact verified technical contract** and acceptable target
+scope/identity. After explicit approval, only new jobs created after each
+partition's durable cutover use B. Queued/leased old jobs remain with A or
+are visibly parked for reconciliation; denied or incompatible targets are
+rejected. Restart and WAL replay reproduce both binding revisions and job
+routing without provider discovery or duplicate external effects. No BPMN
+re-deployment is necessary. A fully automatic per-job selector remains a
+separate, not-yet-approved architectural decision.
 
 ## Definition of done and delivery discipline
 
@@ -200,9 +230,10 @@ the `ROADMAP.md` CDA track. "Merged" is not synonymous with
 - T3 = CDA4
 - T4 = CDA5
 - T5 = CDA6 **plus** CDA7
+- T5c (new follow-up) = CDA8 — controlled Worker replacement without process redeployment
 
 The detailed [T0–T5 plan](technical-capability-contract.md) remains
-useful for technical task lists. In PR #1346 it is also being updated
-for T1a/T1b. This new programme deliberately lives in its **own file**
-to avoid rewriting that active PR's work or misrepresenting its draft
-changes as already on `main`.
+useful for technical task lists. PR #1346 delivered the T1a envelope;
+CDA2 continues after the merged schema-only PR #1357 with digest PR #1360, followed by independent evidence,
+publication and withdrawal. Neither acceptance of ADR-0483 nor completion
+of the schema-only slice alone certifies a Worker.

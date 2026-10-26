@@ -1,15 +1,16 @@
 # ADR-0483: Technical capability contract publication and conformance governance
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-10-25
 - **Deciders:** atlas maintainers
-- **Open question:** Which external publisher trust roots and signed attestations may be accepted once ADR-0208 package provenance and signature verification are implemented? This proposal initially recognizes only maintainer-reviewed, source-controlled definitions and evidence.
+- **Open question:** Which externally issued signature trust roots, third-party attestations and installation trust controls can be admitted once ADR-0208 signature verification is implemented? This accepted first-party decision explicitly excludes them; until a new accepted decision, external claims remain unverified candidates.
 - **Question checked:** 2026-10
+- **Decision recorded:** 2026-10-25; option 3 approved for the CDA programme, with approval authenticated by repository provenance and the maintainer as sole reviewer for now (see *Approval authority in the initial phase*). This acceptance is an architecture decision, not proof that a provider conforms or that code is integrated.
 
 ## Context and problem statement
 
-[ADR-0480](0480-technical-capability-contract.md) introduced optional `CapabilityClaim` descriptors on Worker Type operations. The draft semantic-envelope design in [PR #1346](https://github.com/pblumer/atlas/pull/1346) describes a contract independently of a provider. Neither a syntactically valid manifest claim nor a well-formed JSON Schema establishes that the operation really behaves as the contract promises.
+[ADR-0480](0480-technical-capability-contract.md) introduced optional `CapabilityClaim` descriptors on Worker Type operations. The versioned semantic-envelope implementation in merged [PR #1346](https://github.com/pblumer/atlas/pull/1346) describes a contract independently of a provider ([ADR-0485](0485-technical-capability-semantics.md), Proposed/Partial). Neither a syntactically valid manifest claim nor a well-formed JSON Schema establishes that the operation really behaves as the contract promises.
 
 Entra users are tenant-scoped authentication accounts, LDAP entries obey a configured directory schema, and Google Contacts are address-book records. Common verbs do not establish substitutability. If claims were trusted automatically, the graph would report false coverage and a future router could execute an authorized *different* action from the one a process requested.
 
@@ -37,12 +38,107 @@ ADR-0208 specifies the Worker Type package trust model but its package-provenanc
 
 ## Decision outcome
 
-Proposed choice: **option 3**, initially restricted to maintainer-reviewed definitions and tests committed alongside atlas. This record proposes the governance model; it does **not** certify existing providers or make a runtime selection decision.
+**Decision: option 3 — accepted.** Initially only maintainer-reviewed definitions and independently reviewed evidence committed alongside atlas can be trusted. This decision establishes the publication and conformance governance model; it does **not** certify existing providers or make a runtime selection decision. Do not derive `verified` from schema-only fixture success, a self-declared reviewer string or a submitted report.
+
+**Implementation status:** Step 1's validator is on `main`: [PR #1357](https://github.com/pblumer/atlas/pull/1357) added offline Draft 2020-12 schema validation with remote loading disabled and schema-only fixtures. Content digests in [PR #1360](https://github.com/pblumer/atlas/pull/1360) are under review. The publication, approval and revocation workflow is not implemented, and nothing on `main` is independently verified evidence.
+
+### Initial publication and trust boundary (accepted)
+
+- A repository-reviewed publication comprises the exact canonical contract,
+  its content digest, the exact Worker Type package/code digest and operation/job
+  type, reproducible conformance results (including meaningful negative cases),
+  and an **independent approval in the repository review history**. A string
+  such as `reviewer: alice` inside a JSON file is **not** proof of approval.
+- Recalculate digests from immutable bytes when verifying publication or
+  evidence; never rely on a claim-supplied hash alone. A changed contract,
+  package/operation, fixture or material test assumption invalidates the old
+  approval rather than silently updating it.
+- Maintain publication/withdrawal history as reviewable, append-only source
+  artifacts. A withdrawal or reapproval references the previous immutable
+  publication and includes a reason. It does not overwrite the original
+  contract or past evidence.
+- Statuses exposed outside build/review tooling are **candidate** until an
+  implementation securely binds the evidence and authenticates the approval
+  from trusted repository/installation provenance. This ADR authorizes no
+  direct `verified` property on an arbitrary manifest or API payload.
+- Package signing and external publisher onboarding are **not approved** by
+  this decision and cannot be added as an implementation shortcut; revisit
+  their trust anchors separately under ADR-0208.
+
+### Approval authority in the initial phase (accepted)
+
+Three ways to authenticate the independent approval were weighed for CDA2:
+repository provenance, reviewer signatures checked against a key list in the
+repository, and a CI job that reads pull-request reviews through the GitHub
+API. The maintainer chose **repository provenance**:
+
+- Evidence, publication and withdrawal records live in a source path owned
+  through `CODEOWNERS`. A record counts as approved only once it reached the
+  protected `main` branch through a pull request that the code owner approved
+  or personally merged. Build tooling verifies offline everything a file can
+  prove (recomputed digests, the binding to the contract identity and to the
+  exact Worker Type operation, staleness, append-only withdrawal) and takes
+  the protected-branch history as the approval itself.
+- The code cannot authenticate a person on its own. Branch protection and the
+  code-owner rule are therefore part of the trust boundary: they must be in
+  force before the first record is published, because other collaborators
+  with write access could otherwise merge evidence without the code owner.
+- **Single reviewer for now.** The maintainer (pblumer) is the only code owner
+  and reviewer. Changes prepared by coding agents are pushed under the
+  maintainer's account, so GitHub cannot record a separate approving review
+  for them. For those the approval is either the maintainer's own merge or a
+  pull-request comment by the maintainer that approves the merge and names
+  the exact head commit. A coding agent may merge only after such a comment
+  and only while the pull request's head is still that commit; any later push
+  needs a new comment. A merge by a coding agent without one is **not** an
+  approval.
+- This is a convention, not an enforced control. Agents act through the
+  maintainer's account, so GitHub attributes an agent's comment to the
+  maintainer exactly as it attributes the maintainer's own; the rule holds
+  only while no agent writes an approval comment itself. A separate account
+  or GitHub App identity for agents would make the two distinguishable and
+  let the maintainer approve agent pull requests with a real review; adopting
+  one amends this record.
+- Independence in this phase means separation between whoever authored the
+  evidence (a contributor or a coding agent) and the maintainer's acceptance,
+  not two independent people. Evidence approved this way records that a
+  single maintainer approved it, so a later, stricter rule can tell such
+  approvals apart instead of silently inheriting them.
+- Reviewer signatures and API-verified reviews are not adopted. Adding a
+  second reviewer or a stricter rule amends this record.
+
+### Digests and implementation identity (accepted)
+
+Decided by the maintainer on 2026-10-26:
+
+- **Contract digest.** `sha256:<hex>` over the exact bytes of the contract
+  file. The file must be valid UTF-8 without a byte-order mark, and
+  `.gitattributes` pins it to LF line endings, so a checkout on any platform
+  yields the same bytes. The file is never re-serialized. Any byte change,
+  formatting included, is a new artifact, and a published artifact must not
+  change at all. RFC 8785 canonicalization was weighed and not adopted; it can
+  be added as a second identifier if contracts ever travel through a channel
+  that re-serializes them.
+- **Implementation identity of a built-in Worker Type.** The fixed version
+  `1.0.0` of built-in Worker Types is not an implementation identity. Evidence
+  binds to a dependency digest instead: SHA-256 over every non-test Go source
+  file of the module's packages in the Worker Type's dependency closure
+  (`go list -deps` for one fixed reference platform), together with `go.mod`,
+  `go.sum` and the Go toolchain version. A Worker Type installed as a package
+  binds to its ADR-0208 package digest once that exists. A build commit was
+  rejected: evidence kept in the repository cannot name the commit that
+  contains it.
+- **Renewal in the same change.** A pull request that changes the dependency
+  digest of an operation with evidence must refresh that evidence (re-run the
+  approved conformance cases and record the new digest) in the same pull
+  request; CI fails otherwise. The maintainer's merge of that pull request is
+  the renewed approval under *Approval authority in the initial phase*. `main`
+  therefore never carries evidence for code it no longer contains.
 
 ### Normative identity and artifact ownership
 
 - A canonical technical capability is identified by `id`, exact SemVer `version`, and an explicit `profile` (which may be empty). The meaning, accepted inputs, outputs, errors, side effects and consistency requirements are immutable under that identity.
-- A canonical document is source-controlled, canonicalized for content hashing and distributed as a read-only artifact with atlas. A new meaning requires a new identity/version/profile; a corrected *publication record* may withdraw a bad artifact, but must not silently redefine it.
+- A canonical document is source-controlled and distributed as a read-only artifact with atlas. Its content digest is SHA-256 over the exact file bytes (see *Digests and implementation identity*). A new meaning requires a new identity/version/profile; a corrected *publication record* may withdraw a bad artifact, but must not silently redefine it.
 - The canonical document is not a new `api/capability` record or a second runtime store. A future external distribution channel can reuse ADR-0208's package envelope after its trust model is operational.
 - A `CapabilityClaim` in a Worker Type manifest remains **advisory** until evidence binds that *particular* implementation to the canonical contract. The package's own version is not the contract version.
 - The initial ADR-0480 manifest admission rule rejects multiple claims with the same `id@version` within one operation even when profiles differ. This is an intentional current limitation to be reviewed during T1b: the semantic contract catalogue may define multiple profiles, but a single operation cannot declare two simultaneously without a separately tested manifest change.
@@ -84,7 +180,7 @@ No backwards-compatibility or substitutability inference is made merely because 
 
 ### Implementation boundaries and gates
 
-The proposed slices are CDA2 and CDA3 in [the CDA programme](../planning/capability-driven-automation-program.md):
+The delivery slices are CDA2 and CDA3 in [the CDA programme](../planning/capability-driven-automation-program.md):
 
 1. Specify the immutable artifact encoding and digest; choose a maintained JSON Schema Draft 2020-12 validator with remote resolution disabled.
 2. Create positive **and** adversarial conformance fixtures with meaningful assertions; test provider error mappings and idempotency.
@@ -111,7 +207,7 @@ No HTTP/MCP endpoint, new sidecar store, credential broker, routing action or WA
 - Good: Easy installation-specific edits.
 - Bad: Duplicated sources of truth, drift, and no immutable definition for deployed processes.
 
-### Option 3 — Immutable artifacts plus evidence (proposed)
+### Option 3 — Immutable artifacts plus evidence (accepted)
 - Good: Reviewable, auditable, reproducible and consistent with ADR-0208.
 - Bad: Requires a publication pipeline and withdrawal discipline.
 

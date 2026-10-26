@@ -12,6 +12,54 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **Account linking is set up in the Console.** An administrator sets up the Microsoft
+  app registration people link their accounts through under **Administration →
+  Security**: the directory (tenant) id, the application (client) id, the delegated
+  scopes and the client secret, with the steps to take in Entra and the redirect URI to
+  register, ready to copy. It applies from the next request, without a restart. The
+  secret is kept in the vault under a reserved name no Worker, API token or secrets route
+  reaches, and is never shown again. The `--link-microsoft-*` flags still work and win:
+  with any of them given, the Console only shows them. Changing the tenant or the client
+  id, or removing the setup, revokes nothing; the page counts the connections that cannot
+  act and asks first. `GET`, `PUT` and `DELETE /api/v1/security/linking/microsoft`,
+  admin-only ([ADR-0475](docs/adr/0475-identity-aware-worker-execution.md), amended).
+- **A diagrams scope for systems that show processes elsewhere.** An API token of the
+  scope `diagrams` reads the deployed processes, a definition's BPMN model and the
+  counts of its runtime overlay and nothing else, so a wiki can draw a process's newest
+  version, with its live counts, without holding a `full` token. The counts come from
+  the new `GET /api/v1/processes/{key}/runtime/counts`: the overlay's numbers for the
+  whole definition, without its incident details. The token never reads an incident's
+  message or an instance, and the full overlay, `/runtime`, is refused to it
+  ([ADR-0493](docs/adr/0493-diagrams-scope.md), proposed).
+
+### Changed
+
+- **Connected accounts no longer tells people to run a command.** Where linking is not
+  set up, a person is told so and that an administrator changes it; an administrator is
+  sent to the Security page. The account menu offers *Connected accounts* only when the
+  server can link an account or the person already has one linked or a connection on
+  record, so the page stays reachable for withdrawing a connection after linking is
+  removed.
+
+### Fixed
+
+- **A picture of any size is taken, for a person and for a product.** Console →
+  Organization and the catalogue's product editor passed the chosen file on unchanged, so
+  a photograph straight off a phone was refused with "the picture exceeds the 524288 byte
+  limit". Both now scale a PNG or JPEG in the browser before the upload, never enlarging
+  it: a person's to 256 pixels on its shorter side, a product's to 600, three times the
+  height the shop draws it at. A JPEG stays a JPEG, a PNG stays one where it has
+  transparency or costs at most twice its JPEG, and an SVG is uploaded as it is. A raster
+  picture is redrawn even when it is small enough, so the Exif data a phone writes, its
+  location included, is not stored. Should the server still refuse one as too large, it is
+  sent again at three quarters of the size, up to four times. The routes and their limit
+  are unchanged ([ADR-0368](docs/adr/0368-user-avatar.md),
+  [ADR-0391](docs/adr/0391-product-picture.md), both amended).
+
+## [0.20.0] — 2026-10-25
+
 **A SharePoint Worker can act as the person who asked, and only for what a policy
 permits.** A person links their Microsoft account and chooses which Workers may act as
 them; an administrator publishes versioned authorization policies; and a governed Worker
@@ -21,8 +69,85 @@ a delegated Worker — releases a short-lived token for that one action
 proposed). This build governs the SharePoint Worker Type only, and releases a person's
 token only to a Worker Instance Atlas supervises.
 
-**Read this before upgrading from 0.19.0.** Nothing changes until an administrator
-governs a Worker:
+**The server keeps a reserve free on its disk, and an administrator can give space
+back.** Below `--storage-reserve-mb` (1 GiB by default) the server refuses new writes with
+507, keeps answering reads and resumes by itself; an administrator sees the disk, the
+reserve and a forecast on the dashboard. A write the log could not make durable now halts
+the engine instead of being run a second time, and a server that ran its disk full starts
+again ([ADR-0481](docs/adr/0481-storage-guard.md)). An administrator deletes a process's
+finished instances from Operations and compacts the WAL once from the dashboard, which
+also works on a server below its reserve
+([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)), and a metrics
+scrape no longer re-reads every checkpoint
+([ADR-0488](docs/adr/0488-checkpoint-verdicts-are-remembered.md)).
+
+**A release records how it meets its environment, and a mail task writes from templates.**
+Publishing an application saves a sketch of the release — the messages, workers, decisions
+and calls of its processes, and where its connections go — offered as an SVG and as an
+ArchiMate document ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)). The event
+log shows every signal and message sent and where it arrived
+([ADR-0472](docs/adr/0472-event-log.md)), and the Events page lists the names the
+deployed models throw, send and receive, with what is wrong with each. A mail task writes
+its subject and bodies from templates with a live preview
+([ADR-0487](docs/adr/0487-mail-templates.md)), forwards a message and reads or exports an
+attachment, each inspected before it leaves the mailbox
+([ADR-0478](docs/adr/0478-mail-documents-leave-the-mailbox.md)), and a task form shows a
+received mail's HTML with its remote images blocked
+([ADR-0489](docs/adr/0489-mail-html-view.md)). A task form searches a directory instead
+of listing it ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)). Google Contacts and
+CardDAV Worker Types find, keep and label contacts
+([ADR-0476](docs/adr/0476-google-contacts-worker.md),
+[ADR-0490](docs/adr/0490-carddav-worker.md)); a SharePoint Worker can be a mockup that
+needs no tenant ([ADR-0484](docs/adr/0484-sharepoint-mock-mode.md)); and an experimental
+Paperless-ngx Worker reads document metadata
+([ADR-0479](docs/adr/0479-paperless-ngx-worker.md), first slice). The user list shows the
+day each account last signed in, a named BPMN element's id follows its name, and a
+PowerShell script installs atlas as a Windows service.
+
+**Read this before upgrading from 0.19.0.** These act on an existing installation as soon
+as it runs 0.20.0:
+
+- The server refuses writes once less than 1 GiB is available under the data directory —
+  507 with `Retry-After` — where 0.19.0 took them until the disk failed. Check the free
+  space before the upgrade: a smaller volume needs `--storage-reserve-mb` sized to it, or
+  `0`, which keeps the dashboard's readings and warnings and turns the freeze off. The
+  Helm chart's default volume (8 GiB) leaves 7 GiB to use.
+- A failed WAL sync, or a state commit that fails after the log has the batch, halts the
+  engine: every later write answers 503 until the server is restarted, reads go on, and
+  the log says `event=engine.halted` once. Alert on it — `/metrics` carries
+  `atlas_engine_halted`. The restart recovers exactly what was acknowledged.
+- An administrator can delete finished instances for good — from Operations,
+  `POST /api/v1/processes/{key}/history-purge` or the MCP tool
+  `atlas_delete_finished_instances` — and this is on by default. Where the history is
+  evidence, start with `--instance-purge=false` (`ATLAS_INSTANCE_PURGE=false`, Helm
+  `atlas.instancePurge: false`); while it is on, every start logs a WARN,
+  `event=server.instance_purge_enabled`. On a server that takes checkpoints, an
+  administrator can also compact the WAL once (*Compact once*,
+  `POST /api/v1/checkpoints?compact=true`) without `--compact-wal`, which deletes WAL
+  segments irreversibly.
+- A mail watch hands the mail to the process as one variable, `mail`. A model that reads
+  `from`, `to`, `subject`, `messageId` or another envelope field directly must read
+  `mail.from`, `mail.messageId` and so on: change and deploy such models with the
+  upgrade. This holds for instances already running, too — a reply that reaches one after
+  the upgrade arrives as `mail` alone. A watch's correlation key is unchanged.
+- Creating a mail watch on a Worker that cannot read a mailbox is refused with 400.
+  Watches stored before are kept, report the reason as their `lastError`, and show as
+  *not reading* in the Console.
+- `GET /api/v1/message-sources` lists every deployed version rather than the newest
+  alone, and a fourth kind of row, `process-throw`. A client that read the process rows
+  as the newest versions filters on `newest`; one that assumed three kinds skips the
+  fourth.
+- A Worker that runs apart from the server needs 0.20.0 for what is new: the mail
+  operations `forward`, `get-attachment` and `export-attachment` (a 0.19.0 mail worker
+  fails such a task with «unknown operation»), a mail read with `includeBody="html"` (a
+  0.19.0 mail worker answers the text alone), the Google Contacts and CardDAV Worker
+  Types, the Paperless-ngx Worker, a task form's directory search, which a Worker
+  Instance answers through `POST /api/v1/worker-queries/activate`, and asking before a
+  governed action. Mail templates are filled in by the server, so a 0.19.0 mail worker
+  sends them as filled in. The new `endpoints` field of `POST /api/v1/jobs/activate` is
+  optional.
+
+Identity-aware execution changes nothing until an administrator governs a Worker:
 
 - Every existing Worker is *legacy* — no decision, nothing recorded, unchanged behavior —
   and **Administration → Security** lists it as not governed.
@@ -31,9 +156,6 @@ governs a Worker:
   Worker built against an earlier `worker` package does not, and its completions are then
   refused with 409. Start with `shadow`, which records and never blocks.
 - With no policy published, every enforced action is refused (default deny).
-- The data directory gains two stores, `identity` and `policies`; both are in the backup.
-  The log gains two record types. 0.19.0 does not know them, and a downgrade after a
-  governed Worker has recorded a decision has not been tested.
 - A delegated SharePoint Worker started by Atlas receives no credential in its
   environment, only `ATLAS_SHAREPOINT_<NAME>_BROKERED=1` and a per-start
   `ATLAS_BROKER_KEY` it presents when it asks.
@@ -44,10 +166,141 @@ governs a Worker:
 - A Worker's `credentialsRef` may not name a reserved vault entry
   (`atlas:connection-credential:…`, `atlas:personal-data-key:…`).
 
+What changes on disk, and going back:
+
+- 0.20.0 reads the data directory 0.19.0 wrote. The directory gains three stores, each
+  classified in the backup's store registry: `policies` and `last-logins` with the
+  accounts, `identity` as a credential, like API tokens. The state store gains the event
+  log, the recorded authorization decisions, and the action approvals with an index of
+  the open ones. The log gains three record types — a send, an authorization decision and
+  an action approval — and two intents on types it had: a broadcast that started an
+  instance, and the event log's pruning. Two records it had carry appended fields: an
+  instance's activation event names who started it, and a subscription's correlation
+  names its sender and whether it was stale. Deleting finished instances writes the purge
+  event history retention already writes. No system process changed, so the first start
+  deploys nothing new.
+- New settings, all optional: `--storage-reserve-mb` (`ATLAS_STORAGE_RESERVE_MB`, 1024),
+  `--event-log-ttl` (`ATLAS_EVENT_LOG_TTL`, 720h), `--instance-purge`
+  (`ATLAS_INSTANCE_PURGE`, on), the four `--link-microsoft-*` flags, `ATLAS_COMPACT_WAL`
+  for `--compact-wal`, and the budget `ATLAS_LIMIT_DOCUMENT` (35 MiB). The MCP tools grow
+  from 149 to 157 (`atlas_delete_finished_instances`, `atlas_event_log`,
+  `atlas_finished_instances_deletion`, `atlas_instance_authorizations`,
+  `atlas_message_names`, `atlas_release_architecture`, `atlas_signals`, `atlas_storage`),
+  and `/metrics` gains `atlas_storage_*` and `atlas_engine_halted`. The Helm chart gains
+  one value, `atlas.instancePurge` (`true`).
+- Going back to 0.19.0 has not been tested end to end. By its code, 0.19.0 skips the
+  three new record types and the two new intents when it replays the log, reads the
+  appended fields as if they were absent, and does not open the new stores, so the event
+  log, the recorded decisions and approvals, the linked accounts, the policies and the
+  last-login days are lost to it. A deployed process with a Google Contacts or CardDAV
+  task, a mail task naming `forward`, `get-attachment` or `export-attachment`, or a mail
+  read with `includeBody="html"` does not compile under 0.19.0, which then refuses to
+  start: remove every deployed version of such a process before going back, once nothing
+  runs under it. A mail task with `templating="true"` does compile under 0.19.0, which
+  ignores the switch and sends the placeholders as written — `{{kunde.name}}` included —
+  so take such a process out as well.
+
 ### Added
 
-- **Technical capability contracts have stable, offline content digests.** Canonical JSON encoding and SHA-256 identify immutable semantic contract bytes for future CDA2 conformance evidence. Duplicate JSON members, invalid documents and excess nesting are rejected, including inside nested schema objects. A digest does not certify a Worker, grant routing permission or imply independent approval (ADR-0483).
+- **A product's description, keywords and picture can come from a wiki page.** An
+  administrator configures a content source (`/api/v1/content-sources`, admin-only): a
+  wikiwikibangbang base URL, https only, and a `credentialsRef` naming the vault secret that
+  holds a read-scope token of a technical account that is nothing but `viewer`. A product
+  manager then binds a product to one page per language its catalogue declares — searched,
+  pasted as an address or a key, and previewed with everything the rules drop — and linking
+  writes the binding and the fetched content in one draft save
+  (`/api/v1/catalog-products/{id}/content`). A page restricted for reading, or below a
+  restricted ancestor, held for a data protection review, not live, or in a space the account
+  does not hold exactly `viewer` in is refused; protected passages are removed by their mark
+  before the text is converted, child pages are taken depth first and a restricted one is
+  dropped with everything below it. While bound, those fields are read-only through the
+  ordinary save. A recheck follows the wiki's change feed and sweeps every fifteen minutes; a
+  page that becomes protected, unreadable or gone, a wrong account standing or an unreachable
+  wiki quarantines the product, which withholds its description, keywords and picture from the
+  shop, the approval page, the order views, the exports, the API and MCP at once, without a
+  publish. Only a refresh that passes every rule lifts it, and publishing refuses a quarantined
+  product or one without a passed recheck in the last fifteen minutes. Unlinking needs a reason
+  and is audited. Without a configured source nothing changes
+  ([ADR-draft](docs/adr/0491-service-content-from-an-external-source.md)). In the Console,
+  administrators configure and check sources under **Console › Administration › Content sources**; the
+  catalogue screen's product editor gains a **Content from the wiki** panel — search, preview
+  with every refusal and dropped passage, link, refresh, unlink with a reason, the recheck and
+  quarantine state — draws a bound product's description, keywords and picture read-only, and
+  offers **Refresh all wiki content** for a catalogue with bound products. The shop shows
+  **More in the wiki** under a description where the source allows it and only while the content
+  is shown.
+- **Technical capability contracts can be checked against complete JSON Schema Draft 2020-12 offline.** Design-time input and output validation now checks schema keywords with no remote schema loading, bounded payloads and positive/negative account/contact fixtures. Reports are deliberately schema-only: they do not certify a Worker Type, publish conformance evidence, authorize a job or change runtime routing (CDA2a, governed by ADR-0483).
 
+- **A process finds, keeps and labels the people in any CardDAV address book.** A new
+  CardDAV Worker Type reaches the address book that comes with most mail accounts outside
+  Google and Microsoft — iCloud, Nextcloud, ownCloud, mailbox.org, Posteo, Infomaniak,
+  Fastmail, Synology, Radicale, Baïkal — with the operations and the flat contact of the
+  Google Contacts Worker: find a contact by e-mail address, phone number or a custom field,
+  read, search, list, create, update and delete contacts, and put a group such as *Kunden*
+  on one or take it off. A Worker names its endpoint — the address book's URL or the
+  server's, from which the address book is found — and a vault bundle with the account's
+  username, its app-specific password and whether the server keeps groups in `CATEGORIES`
+  or, as iCloud and Fastmail do, as group cards of their own. An update keeps every
+  property of the card it does not change, a photo and Apple's labels included, and a
+  repeated `create-contact` finds the contact the first round made instead of making a
+  second; a missing contact can be caught as `CARDDAV_CONTACT_NOT_FOUND`
+  ([ADR-0490](docs/adr/0490-carddav-worker.md)).
+- **A received mail's HTML can be shown to a person in a task form.** A mail task's
+  **Read message** reads the HTML body as well with `includeBody="html"` (*Include the text
+  and the HTML*), for IMAP, Gmail and Microsoft Graph; a list does not, and the compiler
+  says so. The HTML is cleaned before it becomes a variable — scripts, frames, forms, meta
+  refreshes, event handlers and addresses that run code are removed, links open in a new
+  tab — and cut to fit the variable budget, with `htmlTruncated` saying so. The new form
+  component **E-mail view** (`mailview`) shows that variable: the envelope, then the HTML
+  in a sandboxed frame that runs no script, or the text. **Remote images stay blocked**
+  until the reader presses **Load images**, so the sender does not learn when and from
+  where the task was opened, and the page's address is never sent along. The view only
+  reads: completing the task does not send the mail back, the task's holder may read the
+  variable it shows, and a public start form does not let a caller set it
+  ([ADR-0489](docs/adr/0489-mail-html-view.md)).
+
+- **Mail texts are templates, with a live preview.** With **Placeholders** switched on, a
+  mail task's subject, text body and HTML body are written in the template language
+  form text views already use: `{{kunde.name}}` inserts a value, `{{#if …}}…{{/if}}` writes
+  a section only when its condition holds and `{{#loop …}}…{{/loop}}` once per element of
+  a list, with FEEL between the braces (`templating="true"` on `<atlas:mailConnector>`,
+  also for a reply and the note above a forward). A malformed template is refused at
+  deploy with its line and column, and what a placeholder inserts into the HTML body is
+  escaped. F2 opens each field in the Developer View with a **Preview** that renders it
+  with sample variables — prefilled from a live instance — through the new
+  `POST /api/v1/feel/template`, the HTML body as a sandboxed page without scripts; an HTML
+  body without placeholders is previewed too. A task without the switch is unchanged, a
+  `{{` in its text included
+  ([ADR-0487](docs/adr/0487-mail-templates.md)).
+
+- **Finished instances can be deleted from Operations.** An administrator deletes the
+  finished instances of one version or of all versions that finished before a chosen moment,
+  from the ⋯ menu of a process row (*Delete finished instances…*), or with
+  `GET`/`POST /api/v1/processes/{key}/history-purge` and the MCP tools
+  `atlas_finished_instances_deletion` and `atlas_delete_finished_instances`. The dialog counts
+  first, deletes only once the process id is typed, runs in batches of at most 1000, newest
+  first, and can be stopped between two. Running instances are never touched, and with the
+  OpenSearch exporter on nothing is deleted before the exporter has it. Each delete is the
+  purge event history retention already uses, so recovery replays it. It reaches the history
+  no `atlas:historyTtl` covers — everything that finished before a process declared one — in
+  minutes rather than in the days the server-wide age needs per pass. It frees no disk by
+  itself: every deleted instance adds an event to the WAL until compaction removes it, and the
+  overview's Finished column, which counts every instance that ever finished, does not go
+  down. On by default; a production installation, whose history is evidence, starts with
+  `--instance-purge=false` (`ATLAS_INSTANCE_PURGE=false`, Helm `atlas.instancePurge`), and
+  while it is on every start logs a WARN, `event=server.instance_purge_enabled`
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)).
+- **The WAL can be compacted once from the Console.** The storage card on the dashboard now
+  says whether the WAL is compacted on every checkpoint and what the last pass did, and offers
+  *Checkpoint now* and, on a server started without `--compact-wal`, *Compact once* after a
+  confirmation. `POST /api/v1/checkpoints?compact=true` does the same: one pass with every gate
+  a scheduled one has — a verified checkpoint, the exporter and retention watermarks, no backup
+  streaming — and its answer says whether it compacted. Because that route is allowed on a
+  frozen server, a server below its storage reserve can give WAL space back without a restart.
+  `--compact-wal` also reads `ATLAS_COMPACT_WAL=true`, and `GET /api/v1/checkpoints?verify=false`
+  describes the checkpoints from their manifests instead of re-reading every state file, which
+  is what the card asks for
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)).
 - **A SharePoint Worker can be a mockup.** A SharePoint Worker with the provider **Mockup**
   needs no tenant, no app registration and no credential: every operation runs against a
   site this server keeps in its memory, in the engine and in a supervised worker alike,
@@ -317,6 +570,29 @@ governs a Worker:
   Both run end to end in `connector/sharepoint/example_test.go` against a site kept in
   memory, with the real compiler, engine and Graph client. The handbook's examples
   chapter has its card.
+- **A PowerShell script installs atlas as a Windows service, upgrades it and removes it.**
+  `deploy/windows/install-atlas-service.ps1` does in one run what the install guide's
+  Windows Server section does by hand: it wraps `atlas.exe` in WinSW, runs the service as
+  the virtual account `NT SERVICE\atlas`, sets the access lists, tries the binary in the
+  foreground with a throw-away data directory, prepares the bootstrap administrator and
+  the vault key, and takes the bootstrap password out of the configuration once the
+  service is ready. Run again where the service exists, it stops it, backs the data
+  directory up, replaces the binary and starts it again; `-Uninstall` removes it. It runs
+  under Windows PowerShell 5.1 and PowerShell 7, and `Get-Help
+  .\install-atlas-service.ps1 -Full` lists its parameters.
+- **An experimental Paperless-ngx Worker reads document metadata.** `atlas worker
+  --connector paperless` serves the job type `paperless.v1` for a plain service task: it
+  searches documents (at most 25 per page), reads one document's metadata, returns the
+  address of a document in Paperless's own interface — which grants nobody access — lists
+  correspondents, and adds one by name without rewriting one that exists. The task names
+  its Worker and operation in a variable `paperless`, which holds metadata only, and the
+  answer reaches the process only under the `resultVariable` it names; no document
+  content, OCR text or file leaves Paperless. A Worker Instance is configured from its
+  environment (`ATLAS_PAPERLESS_CONNECTORS`, `ATLAS_PAPERLESS_<NAME>_URL` and `…_TOKEN`),
+  and plain HTTP needs `…_ALLOW_HTTP=true`. It has no Modeler entry, no Worker record in
+  the Console and no reserved job type yet, and it has been tested against a fake
+  Paperless server only (`docs/planning/paperless-worker-v1.md`,
+  [ADR-0479](docs/adr/0479-paperless-ngx-worker.md)).
 
 ### Changed
 
@@ -409,6 +685,22 @@ governs a Worker:
 
 ### Fixed
 
+- **A metrics scrape no longer re-reads every checkpoint.** The checkpoint gauges on
+  `/metrics` verified every published checkpoint on every scrape, which re-hashes all of
+  its state files: on a store of 23 GiB with three checkpoints kept, up to 70 GiB of reading
+  per scrape, long past any scrape timeout. A verdict is now remembered per checkpoint,
+  keyed by its files' names, sizes and modification times, and renewed at least daily; a
+  checkpoint the server publishes counts as verified, because publishing hashed it. A
+  replaced or rewritten file is still reported at the next scrape, rot that changes no
+  metadata within a day. `GET /api/v1/checkpoints` still verifies afresh
+  ([ADR-0488](docs/adr/0488-checkpoint-verdicts-are-remembered.md)).
+- **The storage card appears again on a large store.** `GET /api/v1/checkpoints?verify=false`
+  verified every checkpoint before answering from the manifests, so each dashboard load
+  re-read the state files of every checkpoint — tens of GiB on a store of 23 GiB — and the
+  storage card, which waited for that answer, did not appear. The listing now reads the
+  manifests only, and the card shows the disk at once and adds *Giving space back* when the
+  checkpoint status arrives
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)).
 - **A server that ran its disk full restarts again.** A WAL write cut short by a full
   disk left its torn bytes in the segment, and the next batch was written behind them;
   the restart then found damage with data after it and refused to start until the log was
@@ -16369,7 +16661,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/pblumer/atlas/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/pblumer/atlas/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/pblumer/atlas/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/pblumer/atlas/compare/v0.16.0...v0.17.0

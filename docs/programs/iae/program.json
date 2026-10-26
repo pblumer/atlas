@@ -1,0 +1,130 @@
+{
+  "id": "iae",
+  "name": "Identity-aware Execution",
+  "summary": "Govern external Worker actions through explicit identities, managed Connections, versioned authorization policies, obligations, durable pre-effect decisions and attributable audit evidence; provider enforcement is verified per execution mode, never assumed.",
+  "status": "active",
+  "owner": "pblumer",
+  "last_reviewed": "2026-10-26",
+  "plan": "../../planning/identity-aware-execution-program.md",
+  "milestone": "../../../ROADMAP.md#milestone-iae--identity-aware-execution-",
+  "next_action": "Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice.",
+  "slices": [
+    {
+      "id": "IAE0",
+      "title": "Architecture, ADR and threat model",
+      "status": "active",
+      "owner": "unassigned",
+      "depends_on": [],
+      "issues": [],
+      "prs": [
+        1354
+      ],
+      "note": "PR #1354 merged the initial plan; ADR-0475 remains Proposed/Partial. Review and accept trust boundaries, revocation, audit and migration gates."
+    },
+    {
+      "id": "IAE1",
+      "title": "External identities and Connections",
+      "status": "active",
+      "owner": "unassigned",
+      "depends_on": [
+        "IAE0"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Partial foundation; verify multiple external identity linking, connection ownership and binding, encrypted credentials, revocation and restart behavior."
+    },
+    {
+      "id": "IAE2",
+      "title": "Provider authentication and token lifecycle",
+      "status": "active",
+      "owner": "unassigned",
+      "depends_on": [
+        "IAE1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Partial Microsoft supervised path; verify PKCE, token rotation, consent, restart safety and compatibility with app-only credentials."
+    },
+    {
+      "id": "IAE3",
+      "title": "Policy administration and deterministic decisions",
+      "status": "active",
+      "owner": "unassigned",
+      "depends_on": [
+        "IAE0"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Partial policy seam; define immutable revisions, trusted attributes, non-overridable guards, fail-closed combining and FEEL/DMN tests."
+    },
+    {
+      "id": "IAE4",
+      "title": "Authorization enforcement before external effects",
+      "status": "active",
+      "owner": "unassigned",
+      "depends_on": [
+        "IAE1",
+        "IAE2",
+        "IAE3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Narrow supervised SharePoint example only. Prove fenced action binding, fsync-gated decisions, retries and recovery; remote Worker enforcement remains unresolved."
+    },
+    {
+      "id": "IAE5",
+      "title": "Approval obligations and separation of duties",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "IAE3",
+        "IAE4"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Bind independent verified approvals to exact action parameters and expiry; no process-variable authorization shortcuts."
+    },
+    {
+      "id": "IAE6",
+      "title": "Console, Operations and audit",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "IAE1",
+        "IAE3",
+        "IAE4",
+        "IAE5"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Deliver user identity linking, Connection and policy management, simulator, Worker bindings and accessible audited decision history."
+    },
+    {
+      "id": "IAE7",
+      "title": "Additional Worker Type enforcement",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "IAE4",
+        "IAE6"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Provider-by-provider proof for Microsoft Mail, selected Entra, Google, Jira/REST; no general security claim before verified PEP."
+    },
+    {
+      "id": "IAE8",
+      "title": "Controlled SharePoint PoC and readiness",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "IAE4",
+        "IAE5",
+        "IAE6"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Test against an explicitly consented tenant/site with denied and approved operations; separate mocked evidence from real BIT validation."
+    }
+  ]
+}

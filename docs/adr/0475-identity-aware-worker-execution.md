@@ -870,3 +870,62 @@ engine only appends the decided event, so invariant I1 is untouched.
   [ADR-0044](0044-user-management-and-authentication-boundary.md), [ADR-0209](0209-roles-per-endpoint-group.md),
   [ADR-0281](0281-session-role-revocation.md)
 - honors invariants I1–I6 ([invariants](../architecture/invariants.md))
+
+## Amendment (2026-10-26): linking is set up in the Console
+
+§4 configured the app registration people link through with four start flags
+(`--link-microsoft-*`). The people who meet linking are the ones in the account menu,
+and the page they reached told them to run a command line they do not have. Linking is
+now set up under **Administration → Security** as well, and the people who cannot set it
+up are no longer shown how.
+
+- **Where it lives.** The tenant, the client id and the scopes are kept in
+  `identity/link-microsoft.json`, beside the identities and connections they are for: a
+  restore that carries the connections carries the tenant they belong to, and a portable
+  backup carries neither. The client secret is a vault secret under the reserved name
+  `atlas:link-client-secret:microsoft`. Like a connection's credential, no Worker
+  reference, API token or secrets route reaches it, and the vault listing hides it,
+  because with it and a connection's refresh token anyone can act as that person.
+- **The flags win.** With any of the four flags given, they decide and the Console only
+  shows them (`PUT` and `DELETE` answer 409). An incomplete set leaves linking off, as
+  before, rather than handing the decision to the Console: an installation its
+  deployment configures is not reconfigured from a browser.
+- **What is checked.** The tenant and client ids must be GUIDs, because every token is
+  checked against one tenant by its id and a domain name or `organizations` would refuse
+  every link for a reason only the audit log knows. At least one resource scope is
+  required (`openid`, `profile` and `offline_access` are added anyway), and a client
+  secret on the first setup, because a web app registration redeems its code with one.
+  The flags are not held to these rules; they keep the meaning they had.
+- **It applies at once.** The flow is swapped whole: a request reads it once, a link in
+  flight under the previous setup cannot be finished, and the start and callback routes
+  are mounted whether or not linking is set up, answering 404 until it is. The broker's
+  cached access tokens are dropped with every change, so none obtained under the
+  previous setup is handed out after it. Whatever the disk holds after a write — all of
+  it, or after a failure the previous setup or part of it — is what runs.
+- **Changing it strands connections, visibly.** A connection is bound to its tenant
+  (§3), and a refresh token to the client that obtained it. Another tenant leaves the
+  existing connections unable to act; another client id makes their owners sign in
+  again; removing the setup leaves all of them unable to act. None is revoked or
+  deleted: switching back restores them. The setup view counts the unrevoked
+  connections and those that cannot act, and the Console asks before a change that
+  strands any.
+- **What the Console cannot do** is the half at Microsoft: the registration, its redirect
+  URI and whatever consent the tenant requires. The card lists those steps and shows the
+  redirect URI this server sends, built as the link flow builds it, to be copied.
+- **Who sees what.** A person who cannot set linking up is told it is not set up and
+  that changing that is an administrator's; an administrator is pointed to the Security
+  page. The account menu offers *Connected accounts* when the server can link an account,
+  or when the person already has one linked or a connection on record — then it is where
+  they withdraw it, even after linking was removed.
+
+Routes: `GET`, `PUT`, `DELETE /api/v1/security/linking/microsoft`, admin-only and not MCP
+tools. Audit: `identity.linking_set_up`, `identity.linking_removed`, and
+`identity.linking_setup_unreadable` for a stored setup the server could not read at
+start, which leaves linking off. Tests: `api/linkmicrosoftsetup_internal_test.go`,
+`e2e/console-identity.spec.mjs`.
+
+**Not changed:** linking is still a confidential client of one Entra tenant. A shared,
+multi-tenant registration operated by the Atlas project — which would let linking work
+without any registration of one's own, and reach personal Microsoft accounts — needs a
+public client, a solution for per-installation redirect URIs and publisher verification,
+and is a decision of its own, not taken here.

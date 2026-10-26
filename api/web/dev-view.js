@@ -176,6 +176,7 @@ function insertText(ta, text, caretOffset) {
 // varInsert renders a variable reference the way the language reads it: PowerShell
 // takes the instance's variables as `$name`, every other language by bare name.
 function varInsert(lang, name) {
+  if (lang === "template" || lang === "html-template") return "{{" + name + "}}";
   return lang === "powershell" ? "$" + name : name;
 }
 
@@ -244,6 +245,10 @@ const matches = (q, ...fields) => !q || fields.some((f) => String(f || "").toLow
 //              caller's cache, `query` searches the instances instead of listing the
 //              recent ones (a hit may name what it `match`ed). null: the process has
 //              no instance; a query that finds none answers with `instance: null`.
+//   preview    (src, vars) -> Promise<{ ok, result, problems, error, line, column }>
+//              the Preview panel (a mail template, ADR-0487): the
+//              text rendered with the sample variables, re-rendered as either changes
+//   previewKind "text" shows the rendered result as text, "html" as a sandboxed page
 //   lockPrefix (value) -> protected leading length (the fx '=' marker)
 //   onApply    (value) -> void, after the field has been written
 // Returns a handle { close, apply, el } or null when the field isn't a code field.
@@ -255,7 +260,11 @@ export function openDevView(field, opts = {}) {
 
   const snippets = snippetsFor(lang.id);
   const groups = typeof lang.reference === "function" ? lang.reference() : [];
-  const canTest = !!(opts.evaluate || opts.run);
+  // A preview is the Test panel's sibling: the same sample variables, but the answer is
+  // the rendered text, kept current as the template and the sample change.
+  const canPreview = typeof opts.preview === "function";
+  const previewHTML = opts.previewKind === "html";
+  const canTest = !!(opts.evaluate || opts.run || canPreview);
   const original = field.value;
   const restoreFocus = document.activeElement;
 
@@ -268,7 +277,9 @@ export function openDevView(field, opts = {}) {
         <strong class="dev-title">${esc(opts.title || fieldTitle(field))}</strong>
         <span class="dev-dirty" hidden title="Unsaved changes">●</span>
         <span class="dev-head-sp"></span>
-        ${canTest ? `<button type="button" class="btn ghost small dev-test-toggle" aria-pressed="false" title="Show a panel to run this expression against sample variables">Test</button>` : ""}
+        ${canTest ? (canPreview
+          ? `<button type="button" class="btn ghost small dev-test-toggle active" aria-pressed="true" title="Show or hide the rendered text and the sample variables it is rendered with">Preview</button>`
+          : `<button type="button" class="btn ghost small dev-test-toggle" aria-pressed="false" title="Show a panel to run this expression against sample variables">Test</button>`) : ""}
         ${lang.format ? `<button type="button" class="btn ghost small dev-fmt" title="Reformat the code">{ } Format</button>` : ""}
         <button type="button" class="btn ghost small dev-cancel" title="Close without applying">Cancel</button>
         <button type="button" class="btn small dev-apply" title="Apply the edited code to the field">Apply</button>
@@ -277,15 +288,24 @@ export function openDevView(field, opts = {}) {
         <div class="dev-main">
           <div class="dev-editor"><textarea class="dev-ta" spellcheck="false"></textarea></div>
           ${canTest ? `
-          <div class="dev-run" hidden>
+          <div class="dev-run${canPreview ? " dev-preview" : ""}"${canPreview ? "" : " hidden"}>
             <label class="dev-run-label" for="dev-run-vars">Sample variables (JSON)</label>
-            <textarea id="dev-run-vars" class="dev-run-vars" rows="4" spellcheck="false" placeholder='{ "amount": 100 }'></textarea>
+            <textarea id="dev-run-vars" class="dev-run-vars" rows="${canPreview ? 3 : 4}" spellcheck="false" placeholder='${canPreview ? '{ "kunde": { "name": "Ada" } }' : '{ "amount": 100 }'}'></textarea>
             <div class="dev-run-row">
-              <button type="button" class="btn neutral small dev-run-btn" title="Evaluate the expression against the sample variables">Run</button>
+              ${canPreview
+                ? `<button type="button" class="btn neutral small dev-run-btn" title="Render the template with the sample variables">Render</button>`
+                : `<button type="button" class="btn neutral small dev-run-btn" title="Evaluate the expression against the sample variables">Run</button>`}
               <button type="button" class="btn ghost small dev-run-fill" hidden title="Fill the sample variables from a live instance">From instance</button>
               <span class="dev-run-out" aria-live="polite"></span>
             </div>
             <pre class="dev-run-detail" hidden></pre>
+            ${canPreview ? `
+            <div class="dev-preview-out">
+              ${previewHTML
+                ? `<iframe class="dev-preview-html" sandbox="" title="The HTML body as a mail client renders it, without scripts"></iframe>`
+                : `<pre class="dev-preview-text" aria-label="The rendered text"></pre>`}
+            </div>
+            <ul class="dev-preview-problems" hidden></ul>` : ""}
           </div>` : ""}
         </div>
         <div class="dev-split" role="separator" aria-orientation="vertical"
@@ -368,6 +388,9 @@ export function openDevView(field, opts = {}) {
   // search whose hits the picker offers ("" for the recent instances), `note` what
   // the last search came to.
   let lastFilled = null; // the Test sample we put in the box, so we know it is ours
+  // The Preview panel's two entry points, set once it is built (a no-op without one).
+  let renderPreview = () => {};
+  let schedulePreview = () => {};
   let samples = { state: opts.samples ? "loading" : "idle", instance: null, values: {}, instances: [], query: "", truncated: false, note: "" };
 
   // loadSamples asks for the values again. A request without `query` keeps the
@@ -420,6 +443,7 @@ export function openDevView(field, opts = {}) {
       if (box && (!box.value.trim() || box.value === lastFilled)) {
         lastFilled = JSON.stringify(sampleJSON(samples.values), null, 2);
         box.value = lastFilled;
+        if (canPreview) schedulePreview(0);
       }
     }
   }
@@ -916,8 +940,68 @@ export function openDevView(field, opts = {}) {
       setOut("", `Filled from instance ${key} · ${n} variable${n === 1 ? "" : "s"}.`);
       // A result shown now would belong to the sample just replaced.
       setDetail("", "");
+      if (canPreview) schedulePreview(0);
     });
+    if (canPreview) {
+      // The preview follows the work: every edit of the template or of the sample
+      // renders again once typing pauses. Only the newest answer is shown, so a slow
+      // response cannot overwrite a faster one that came after it.
+      const textOut = q(".dev-preview-text");
+      const htmlOut = q(".dev-preview-html");
+      const problemsEl = q(".dev-preview-problems");
+      let seq = 0;
+      let timer = null;
+      renderPreview = async () => {
+        const mine = ++seq;
+        let vars = {};
+        const raw = (q(".dev-run-vars").value || "").trim();
+        if (raw) {
+          try { vars = JSON.parse(raw); } catch { vars = null; }
+          if (!vars || typeof vars !== "object" || Array.isArray(vars)) {
+            setOut("err", "Sample variables must be a JSON object.");
+            return;
+          }
+        }
+        setOut("", "Rendering…");
+        let r;
+        try { r = await opts.preview(ta.value, vars); }
+        catch (err) {
+          if (mine !== seq || !document.contains(overlay)) return;
+          setOut("err", "✗");
+          setDetail("err", (err && err.message) || String(err));
+          return;
+        }
+        if (mine !== seq || !document.contains(overlay)) return;
+        if (!r || !r.ok) {
+          // The last good rendering stays on screen, dimmed: what the template said a
+          // keystroke ago is more use than an empty frame while it is being fixed.
+          q(".dev-preview-out").classList.add("stale");
+          setOut("err", r && r.line ? `✗ line ${r.line}, column ${r.column}` : "✗ does not render");
+          setDetail("err", (r && r.error) || "the template could not be rendered");
+          try { editor.setMarkers(r && r.line ? [{ line: r.line, message: r.error }] : []); } catch { /* no markers */ }
+          return;
+        }
+        try { editor.setMarkers([]); } catch { /* no markers */ }
+        setDetail("", "");
+        q(".dev-preview-out").classList.remove("stale");
+        if (htmlOut) htmlOut.srcdoc = r.result || "";
+        if (textOut) textOut.textContent = r.result || "";
+        const problems = r.problems || [];
+        problemsEl.hidden = !problems.length;
+        problemsEl.innerHTML = problems.map((p) => `<li><code>${esc(p.expression)}</code> ${esc(p.message)}</li>`).join("");
+        setOut("ok", problems.length
+          ? `✓ rendered · ${problems.length} placeholder${problems.length === 1 ? "" : "s"} rendered as nothing`
+          : "✓ rendered");
+      };
+      schedulePreview = (ms = 400) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => { timer = null; renderPreview(); }, ms);
+      };
+      ta.addEventListener("input", () => schedulePreview());
+      q(".dev-run-vars").addEventListener("input", () => schedulePreview());
+    }
     q(".dev-run-btn").addEventListener("click", async () => {
+      if (canPreview) { renderPreview(); return; }
       let vars = {};
       const raw = (q(".dev-run-vars").value || "").trim();
       if (raw) {
@@ -1053,6 +1137,7 @@ export function openDevView(field, opts = {}) {
   showTab("vars");
   setSide(startCollapsed, false);
   loadSamples({}); // lazy and best-effort: the modal is already usable
+  if (canPreview) schedulePreview(0); // with the sample as it is; a prefill renders again
   renderHelp();
   refreshStatus();
   ta.focus();

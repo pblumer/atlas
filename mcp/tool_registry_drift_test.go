@@ -61,6 +61,16 @@ var mcpToolRoutes = map[string]string{
 	"atlas_delete_catalog":            "DELETE /api/v1/catalogs/{id}",
 	"atlas_catalog_product_deletion":  "GET /api/v1/catalog-products/{id}/deletion",
 	"atlas_delete_catalog_product":    "DELETE /api/v1/catalog-products/{id}",
+	// A product's content from an external source
+	// (ADR-0491), maintained like the
+	// rest of the product.
+	"atlas_catalog_product_content":         "GET /api/v1/catalog-products/{id}/content",
+	"atlas_search_content_source":           "GET /api/v1/catalog-products/{id}/content/search",
+	"atlas_preview_content_page":            "GET /api/v1/catalog-products/{id}/content/preview",
+	"atlas_link_catalog_product_content":    "POST /api/v1/catalog-products/{id}/content",
+	"atlas_refresh_catalog_product_content": "POST /api/v1/catalog-products/{id}/content/refresh",
+	"atlas_unlink_catalog_product_content":  "POST /api/v1/catalog-products/{id}/content/unlink",
+	"atlas_refresh_catalog_content":         "POST /api/v1/catalogs/{id}/content/refresh",
 	// What a held position offers and whether it takes it now (ADR-0429). Reading it
 	// changes nothing; asking for an action is omitted below.
 	"atlas_order_line_actions": "GET /api/v1/orders/{id}/lines/{item}/actions",
@@ -158,47 +168,51 @@ var mcpToolRoutes = map[string]string{
 	"atlas_search_instances":             "GET /api/v1/instances/search",
 	"atlas_instance_data_objects":        "GET /api/v1/instances/{key}/data-objects",
 	"atlas_terminate_instances":          "POST /api/v1/instances/terminate",
-	"atlas_instance_decisions":           "GET /api/v1/instances/{key}/decisions",
-	"atlas_deployed_decisions":           "GET /api/v1/decisions/deployed",
-	"atlas_decision_deployments":         "GET /api/v1/decision-deployments",
-	"atlas_deployed_decision_model":      "GET /api/v1/decision-deployments/{key}/xml",
-	"atlas_dmnref_graph":                 "GET /api/v1/dmnrefs/{id}/graph",
-	"atlas_get_decision_model":           "GET /api/v1/dmn-models/{ref}/xml",
-	"atlas_collaboration_runtime":        "GET /api/v1/collaborations/{key}/runtime",
-	"atlas_list_drafts":                  "GET /api/v1/drafts",
-	"atlas_get_draft_xml":                "GET /api/v1/drafts/{id}/xml",
-	"atlas_compare_draft":                "GET /api/v1/drafts/{id}/comparison",
-	"atlas_delete_draft":                 "DELETE /api/v1/drafts/{id}",
-	"atlas_join_session":                 "POST /api/v1/drafts/{id}/session/join",
-	"atlas_session_poll":                 "POST /api/v1/drafts/{id}/session/poll",
-	"atlas_session_lock":                 "POST /api/v1/drafts/{id}/session/lock",
-	"atlas_session_change":               "POST /api/v1/drafts/{id}/session/change",
-	"atlas_session_presence":             "POST /api/v1/drafts/{id}/session/presence",
-	"atlas_leave_session":                "POST /api/v1/drafts/{id}/session/leave",
-	"atlas_list_forms":                   "GET /api/v1/forms",
-	"atlas_get_form":                     "GET /api/v1/forms/{id}",
-	"atlas_list_decision_refs":           "GET /api/v1/dmnrefs",
-	"atlas_list_decisions":               "GET /api/v1/decisions",
-	"atlas_decision_evaluations":         "GET /api/v1/decisions/{id}/evaluations",
-	"atlas_variable_audit":               "GET /api/v1/instances/{key}/variable-audit",
-	"atlas_instance_authorizations":      "GET /api/v1/instances/{key}/authorizations",
-	"atlas_assignable_users":             "GET /api/v1/users/assignable",
-	"atlas_infomodel_subset":             "GET /api/v1/infomodel/subset",
-	"atlas_list_information_models":      "GET /api/v1/infomodel/models",
-	"atlas_get_information_model":        "GET /api/v1/infomodel/models/{id}",
-	"atlas_create_information_model":     "POST /api/v1/infomodel/models",
-	"atlas_import_information_model":     "POST /api/v1/infomodel/import",
-	"atlas_save_information_model":       "PUT /api/v1/infomodel/models/{id}",
-	"atlas_delete_information_model":     "DELETE /api/v1/infomodel/models/{id}",
-	"atlas_information_model_schema":     "GET /api/v1/infomodel/models/{id}/schema",
-	"atlas_data_objects":                 "GET /api/v1/data-objects",
-	"atlas_instance_object_graph":        "GET /api/v1/instances/{key}/object-graph",
-	"atlas_instance_lifecycle":           "GET /api/v1/instances/{key}/lifecycle",
-	"atlas_derived_information_model":    "GET /api/v1/infomodel/derived",
-	"atlas_model_difference":             "GET /api/v1/infomodel/difference",
-	"atlas_validate_information_model":   "POST /api/v1/infomodel/validate",
-	"atlas_class_catalog":                "GET /api/v1/infomodel/classes",
-	"atlas_class_usage":                  "GET /api/v1/infomodel/models/{id}/usage",
+	// Clearing a test's runs (ADR-0486): the
+	// preview, and the administrator's delete a production server switches off.
+	"atlas_finished_instances_deletion": "GET /api/v1/processes/{key}/history-purge",
+	"atlas_delete_finished_instances":   "POST /api/v1/processes/{key}/history-purge",
+	"atlas_instance_decisions":          "GET /api/v1/instances/{key}/decisions",
+	"atlas_deployed_decisions":          "GET /api/v1/decisions/deployed",
+	"atlas_decision_deployments":        "GET /api/v1/decision-deployments",
+	"atlas_deployed_decision_model":     "GET /api/v1/decision-deployments/{key}/xml",
+	"atlas_dmnref_graph":                "GET /api/v1/dmnrefs/{id}/graph",
+	"atlas_get_decision_model":          "GET /api/v1/dmn-models/{ref}/xml",
+	"atlas_collaboration_runtime":       "GET /api/v1/collaborations/{key}/runtime",
+	"atlas_list_drafts":                 "GET /api/v1/drafts",
+	"atlas_get_draft_xml":               "GET /api/v1/drafts/{id}/xml",
+	"atlas_compare_draft":               "GET /api/v1/drafts/{id}/comparison",
+	"atlas_delete_draft":                "DELETE /api/v1/drafts/{id}",
+	"atlas_join_session":                "POST /api/v1/drafts/{id}/session/join",
+	"atlas_session_poll":                "POST /api/v1/drafts/{id}/session/poll",
+	"atlas_session_lock":                "POST /api/v1/drafts/{id}/session/lock",
+	"atlas_session_change":              "POST /api/v1/drafts/{id}/session/change",
+	"atlas_session_presence":            "POST /api/v1/drafts/{id}/session/presence",
+	"atlas_leave_session":               "POST /api/v1/drafts/{id}/session/leave",
+	"atlas_list_forms":                  "GET /api/v1/forms",
+	"atlas_get_form":                    "GET /api/v1/forms/{id}",
+	"atlas_list_decision_refs":          "GET /api/v1/dmnrefs",
+	"atlas_list_decisions":              "GET /api/v1/decisions",
+	"atlas_decision_evaluations":        "GET /api/v1/decisions/{id}/evaluations",
+	"atlas_variable_audit":              "GET /api/v1/instances/{key}/variable-audit",
+	"atlas_instance_authorizations":     "GET /api/v1/instances/{key}/authorizations",
+	"atlas_assignable_users":            "GET /api/v1/users/assignable",
+	"atlas_infomodel_subset":            "GET /api/v1/infomodel/subset",
+	"atlas_list_information_models":     "GET /api/v1/infomodel/models",
+	"atlas_get_information_model":       "GET /api/v1/infomodel/models/{id}",
+	"atlas_create_information_model":    "POST /api/v1/infomodel/models",
+	"atlas_import_information_model":    "POST /api/v1/infomodel/import",
+	"atlas_save_information_model":      "PUT /api/v1/infomodel/models/{id}",
+	"atlas_delete_information_model":    "DELETE /api/v1/infomodel/models/{id}",
+	"atlas_information_model_schema":    "GET /api/v1/infomodel/models/{id}/schema",
+	"atlas_data_objects":                "GET /api/v1/data-objects",
+	"atlas_instance_object_graph":       "GET /api/v1/instances/{key}/object-graph",
+	"atlas_instance_lifecycle":          "GET /api/v1/instances/{key}/lifecycle",
+	"atlas_derived_information_model":   "GET /api/v1/infomodel/derived",
+	"atlas_model_difference":            "GET /api/v1/infomodel/difference",
+	"atlas_validate_information_model":  "POST /api/v1/infomodel/validate",
+	"atlas_class_catalog":               "GET /api/v1/infomodel/classes",
+	"atlas_class_usage":                 "GET /api/v1/infomodel/models/{id}/usage",
 }
 
 // mcpOmittedRoutes lists HTTP operations intentionally not exposed as MCP tools,
@@ -218,6 +232,9 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/configured-workers/{id}/identity":                    "decides as whom a Worker acts: an administrator's act, not an agent's",
 	"DELETE /api/v1/configured-workers/{id}/identity":                 "decides as whom a Worker acts: an administrator's act, not an agent's",
 	"GET /api/v1/security/readiness":                                  "the security administrator's migration inventory, read in the Console",
+	"GET /api/v1/security/linking/microsoft":                          "security administration: the app registration people link their accounts through",
+	"PUT /api/v1/security/linking/microsoft":                          "security administration: setting up how people link accounts, with a client secret an agent must never handle",
+	"DELETE /api/v1/security/linking/microsoft":                       "security administration: switching account linking off is an administrator's act",
 	"GET /api/v1/security/policies":                                   "security administration: the policies decide what every Worker may do as anybody",
 	"GET /api/v1/security/policies/{id}":                              "security administration: the policies decide what every Worker may do as anybody",
 	"PUT /api/v1/security/policies/{id}/draft":                        "security administration: writing a policy is an administrator's act",
@@ -290,6 +307,11 @@ var mcpOmittedRoutes = map[string]string{
 	// the one it was pointed at, and the write half is an operator naming the
 	// instance for other operators to recognise.
 	"GET /api/v1/node": "runtime identity for cross-server correlation, not an agent action",
+	// The overlay's counts without its incident details (ADR-0493): the route exists
+	// so that a confined credential held by another system — a wiki's diagrams token —
+	// reaches the numbers and not the messages. An agent holds no such credential and
+	// reads the whole overlay through atlas_process_runtime, whose numbers these are.
+	"GET /api/v1/processes/{key}/runtime/counts": "the counts of atlas_process_runtime, for a system that shows a process elsewhere and must not read its incidents; an agent reads the whole overlay",
 	// The Console's release notes: prose for a person opening the landing page,
 	// read from the CHANGELOG the binary embeds. atlas_info already says which
 	// version an agent is talking to, and the same text is CHANGELOG.md in the
@@ -564,6 +586,7 @@ var mcpOmittedRoutes = map[string]string{
 	// Expression/script sandboxes: authored inside BPMN, not called standalone.
 	"POST /api/v1/feel/validate": "modeler-time expression check, not a scenario action",
 	"POST /api/v1/feel/evaluate": "modeler-time expression check, not a scenario action",
+	"POST /api/v1/feel/template": "modeler-time preview of a mail template, not a scenario action",
 	"POST /api/v1/scripts/run":   "modeler-time script check, not a scenario action",
 
 	// CSV batch start: driven from a user task inside the process (ADR-0084).
@@ -949,9 +972,15 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/dmn-drafts/{id}":  "discards Modeler work in progress an agent never wrote",
 
 	// Secrets: credential storage; an agent must never read or write it.
-	"GET /api/v1/secrets":           "credential storage is not an agent capability",
-	"PUT /api/v1/secrets/{name}":    "credential storage is not an agent capability",
-	"DELETE /api/v1/secrets/{name}": "credential storage is not an agent capability",
+	"GET /api/v1/content-sources":             "content-source configuration names a credential and is admin config",
+	"POST /api/v1/content-sources":            "content-source configuration names a credential and is admin config",
+	"GET /api/v1/content-sources/{id}":        "content-source configuration names a credential and is admin config",
+	"PUT /api/v1/content-sources/{id}":        "content-source configuration names a credential and is admin config",
+	"DELETE /api/v1/content-sources/{id}":     "content-source configuration names a credential and is admin config",
+	"POST /api/v1/content-sources/{id}/check": "content-source configuration names a credential and is admin config",
+	"GET /api/v1/secrets":                     "credential storage is not an agent capability",
+	"PUT /api/v1/secrets/{name}":              "credential storage is not an agent capability",
+	"DELETE /api/v1/secrets/{name}":           "credential storage is not an agent capability",
 
 	// Personal-data erasure (ADR-0314): the most irreversible operation the API has, and
 	// the one furthest from an agent's business. Destroying a data subject's key makes

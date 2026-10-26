@@ -44,6 +44,7 @@ var connectorJobTypes = map[string][]string{
 	"mail":         {compiler.MailJobType},
 	"mariadb":      {compiler.MariaDBJobType},
 	"mssql":        {compiler.MsSqlJobType},
+	"paperless":    {paperlessJobType},
 	"postgres":     {compiler.PostgresJobType},
 	"remedy":       {compiler.RemedyJobType},
 	"rest":         {compiler.RestJobType},
@@ -53,6 +54,7 @@ var connectorJobTypes = map[string][]string{
 	// A key longer than the column above, in a block of its own so the table keeps its
 	// alignment.
 	"googlecontacts": {compiler.GoogleContactsJobType},
+	"carddav":        {compiler.CardDAVJobType},
 	// Two job types, one kind: create-item keeps the one it always had, and every other
 	// operation rides its own so an older worker is never handed one (ADR-0141, amended).
 	"sharepoint": {compiler.SharePointJobType, compiler.SharePointOpsJobType},
@@ -112,6 +114,12 @@ func configuredEnvFor(t *testing.T, kind string) map[string]string {
 			"ATLAS_GOOGLECONTACTS_CONNECTORS":          "verkauf",
 			"ATLAS_GOOGLECONTACTS_VERKAUF_CREDENTIALS": `{"method":"refreshToken","clientId":"id","clientSecret":"s","refreshToken":"r"}`,
 		}
+	case "carddav":
+		return map[string]string{
+			"ATLAS_CARDDAV_CONNECTORS":          "verkauf",
+			"ATLAS_CARDDAV_VERKAUF_URL":         "https://dav.example.ch/",
+			"ATLAS_CARDDAV_VERKAUF_CREDENTIALS": `{"username":"u","password":"p"}`,
+		}
 	case "teamsphone":
 		return map[string]string{
 			"ATLAS_TEAMSPHONE_CONNECTORS":                     "contoso",
@@ -153,6 +161,12 @@ func configuredEnvFor(t *testing.T, kind string) map[string]string {
 		return map[string]string{
 			"ATLAS_POSTGRES_CONNECTORS": "hr-db",
 			"ATLAS_POSTGRES_HR_DB_DSN":  "postgres://u:p@127.0.0.1:1/hr",
+		}
+	case "paperless":
+		return map[string]string{
+			"ATLAS_PAPERLESS_CONNECTORS":   "archiv",
+			"ATLAS_PAPERLESS_ARCHIV_URL":   "https://paperless.example.com",
+			"ATLAS_PAPERLESS_ARCHIV_TOKEN": "test-token",
 		}
 	case "remedy":
 		return map[string]string{

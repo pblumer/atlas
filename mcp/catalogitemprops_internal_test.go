@@ -34,6 +34,8 @@ import (
 // really does reset and which the schema therefore names.
 var itemFieldsAbsentFromTheSchema = map[string]string{
 	"updatedAt": "the server stamps it on every write; a caller cannot set it",
+	"contentSource": "written by the content tools alone (link, refresh, unlink); a save carries " +
+		"the stored binding whatever it is sent, so leaving it out clears nothing",
 }
 
 // TestTheProductSchemaNamesEveryFieldTheRecordCarries.

@@ -18,6 +18,7 @@ var catalogueMenuEntries = []string{
 	`id: "catalog"`,                        // catalogue maintenance
 	`route: "#/operations/reconciliation"`, // where Atlas and the target systems disagree
 	`route: "#/tasks/recertification"`,     // access review of held rights
+	`route: "#/console/content-sources"`,   // where a product's wiki content comes from
 }
 
 // menuLine returns the one line of app.js that declares the entry carrying marker.

@@ -155,7 +155,7 @@ var catalogSources = []catalogSource{
 	// button: its first screen is a supervisor's, so a bare start would only park it.
 	{ID: "arbeitsplatz", App: "Beispiel: Arbeitsplatz-Ausstattung", Dir: "arbeitsplatz"},
 	{ID: "bewerbermanagement", App: "Bewerbermanagement", Dir: "bewerbermanagement", Main: "bewerbermanagement/bewerbung.bpmn"},
-	// The course's guiding case (docs/planning/lehrgang-prozessentwicklung.md, phase 3):
+	// The course's guiding case (docs/training/lehrgang-prozessentwicklung.md, phase 3):
 	// one onboarding process the six reference modules all hang on. No Start button — the
 	// konto-anlegen job parks for a worker, which a bare start would leave hanging.
 	{ID: "lehrgang", App: "Lehrgang: Mitarbeitereintritt", Dir: "lehrgang", Main: "lehrgang/eintritt.bpmn"},

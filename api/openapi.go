@@ -224,16 +224,16 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		{"GET", "/api/v1/checkpoints", s.handleCheckpointStatus, apiOp{
-			summary: "Recovery-checkpoint and WAL-compaction status: what is configured, every published checkpoint and whether it still verifies, the last pass's outcome, and the WAL's current footprint (admin-only when auth is on) (ADR-0131)", tag: "System", role: RoleAdmin,
+			summary: "Recovery-checkpoint and WAL-compaction status: what is configured, every published checkpoint and whether it still verifies, the last pass's outcome, and the WAL's current footprint (admin-only when auth is on) (ADR-0131). Verifying re-reads every checkpoint's state files; `?verify=false` describes them from their manifests and leaves `verified` out, which is what the dashboard asks for", tag: "System", role: RoleAdmin,
 			resp: jsonBody("Checkpoint status", schemaObj(map[string]any{
 				"enabled": tBool(), "intervalSeconds": tInteger(), "keep": tInteger(),
 				"compaction": tBool(), "root": tString(), "checkpoints": tArray(),
 				"lastPass": tObject(), "walSegments": tInteger(), "walBytes": tInteger(),
 			}))}},
 		{"POST", "/api/v1/checkpoints", s.handleCheckpointNow, apiOp{
-			summary: "Take a recovery checkpoint now — and compact the WAL if compaction is enabled — instead of waiting for the next scheduled pass; 409 when checkpointing is disabled (admin-only when auth is on) (ADR-0131)", tag: "System", role: RoleAdmin,
+			summary: "Take a recovery checkpoint now — and compact the WAL if compaction is enabled — instead of waiting for the next scheduled pass; 409 when checkpointing is disabled (admin-only when auth is on) (ADR-0131). `?compact=true` compacts on this one pass on a server started without --compact-wal, with the same gates as a scheduled pass (a verified checkpoint, the exporter and retention watermarks, no backup streaming); it deletes WAL segments irreversibly, and `compaction` in the answer says whether the pass compacted", tag: "System", role: RoleAdmin,
 			resp: jsonBody("What the pass did", schemaObj(map[string]any{
-				"at": tInteger(), "position": tInteger(), "checkpointError": tString(),
+				"at": tInteger(), "position": tInteger(), "checkpointError": tString(), "compaction": tBool(),
 				"segmentsRemoved": tInteger(), "compactionError": tString(), "note": tString(),
 			}))}},
 
@@ -268,6 +268,15 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "expression")),
 			resp: jsonBody("Evaluation result", schemaObj(map[string]any{
 				"ok": tBool(), "result": tObject(), "kind": tString(), "error": tString(),
+			}))}},
+		{"POST", "/api/v1/feel/template", s.handleRenderTemplate, apiOp{
+			summary: "Render a mail text against sample variables as a mail task with templating on would (ADR-0487): a leading '=' makes it one FEEL expression, otherwise its {{ }} placeholders, {{#if}} and {{#loop}} sections are compiled by the deploy's rules and rendered; with html, what a placeholder inserts is escaped. Answers the text, every placeholder that rendered as nothing, or the compile error with its line and column. Nothing is stored",
+			tag:     "FEEL", role: RoleModeler,
+			req: jsonBody("Template, variables and whether it is an HTML body", schemaObj(map[string]any{
+				"template": tString(), "variables": tObject(), "html": tBool(),
+			}, "template")),
+			resp: jsonBody("Rendered text", schemaObj(map[string]any{
+				"ok": tBool(), "result": tString(), "problems": tArray(), "error": tString(), "line": tInteger(), "column": tInteger(),
 			}))}},
 		// The FEEL assistant (ADR-0445): a conversation that writes an
 		// expression, asked of the agent Worker an operator configured (ADR-0255), and
@@ -341,6 +350,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/processes/{key}/runtime", s.handleProcessRuntime, apiOp{
 			summary: "Read a process's live runtime state", tag: "Processes", role: roleAny, resp: jsonBody("Runtime state", tObject())}},
+		{"GET", "/api/v1/processes/{key}/runtime/counts", s.handleProcessRuntimeCounts, apiOp{
+			summary: "Read the counts of a process's live runtime state and nothing else: instances live and finished, and tokens live, passed, cancelled and parked behind an incident on each element — the same numbers as the runtime state, without its incident details and for the whole definition only (?instance= is refused). It is what a system that shows the process elsewhere reads, and all the diagrams scope reaches (ADR-0493)", tag: "Processes", role: roleAny,
+			resp: jsonBody("Runtime counts", schemaObj(map[string]any{
+				"instances": tInteger(), "finished": tInteger(), "tokens": tInteger(), "elements": tArray(),
+				"incidentTotal": tInteger(), "incidentCountsExact": tBool(),
+			}))}},
 		{"PUT", "/api/v1/processes/{key}/active", s.handleSetProcessActive, apiOp{
 			summary: "Activate or deactivate a deployed process (a deactivated process stays deployed but does not auto-start new instances from its timer/message/signal start events)", tag: "Processes", role: RoleOperator,
 			req:  jsonBody("Active flag", schemaObj(map[string]any{"active": tBool()})),
@@ -492,6 +507,15 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/processes/{key}/cancel-instances", s.handleCancelInstancesOfProcess, apiOp{
 			summary: "Cancel a bounded batch of a definition's running instances (?limit=, default 5000, max 50000); repeat while the response reports remaining=true", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Bulk cancellation result", tObject())}},
+		// Deleting a version's finished instances for good, on an administrator's request
+		// (ADR-0486): the preview, then the delete in
+		// bounded batches. Refused on a server started with --instance-purge=false.
+		{"GET", "/api/v1/processes/{key}/history-purge", s.handleHistoryPurgePreview, apiOp{
+			summary: "What deleting this version's finished instances for good would consider: how many finished before the cut-off `?before=` (RFC 3339 or unix nanoseconds, default now; the answer repeats the moment it used), how many are running and stay, the gate a purge waits on (`exporter`: only what OpenSearch already holds; `durable`: no exporter runs), what the version declares as atlas:historyTtl and the server-wide retention age, whether this server allows the purge (`enabled`) and what `confirm` must repeat. Counts index keys and changes nothing. The purge does not free disk by itself: the WAL keeps every event until compaction removes it (POST /api/v1/checkpoints?compact=true)", tag: "Instances", role: RoleAdmin,
+			resp: jsonBody("The purge plan", tObject())}},
+		{"POST", "/api/v1/processes/{key}/history-purge", s.handleHistoryPurge, apiOp{
+			summary: "Delete one bounded batch of this version's finished instances for good — those that finished before `?before=` (default now), newest first, at most `?limit=` (default 1000, max 5000). Each is the durable purge event history retention uses, so recovery replays it; an instance whose events are not yet exported is passed over and counted in `held`. Repeat while `remaining` is true, passing `nextCursor` as `?after=`. Running instances are never touched. Permanent and meant for a development or test installation: refused with 403 on a server started with --instance-purge=false (ATLAS_INSTANCE_PURGE=false), and with 400 unless `?confirm=` repeats the process id", tag: "Instances", role: RoleAdmin,
+			resp: jsonBody("The batch carried out", tObject())}},
 		{"POST", "/api/v1/instances/terminate", s.handleTerminateInstances, apiOp{
 			summary: "Terminate a selected set of running instances — body {keys:[…]} for an explicit selection, or {processDefKey, q?, limit?} to terminate a definition's matching instances (repeat while remaining=true)", tag: "Instances", role: RoleOperator,
 			req:  jsonBody("Selection", schemaObj(map[string]any{"keys": tArray(), "processDefKey": tInteger(), "q": tString(), "limit": tInteger()})),
@@ -605,6 +629,18 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("The Worker", tObject())}},
 		{"DELETE", "/api/v1/configured-workers/{id}/identity", s.handleClearWorkerIdentity, apiOp{
 			summary: "Return a Worker to legacy behavior: no decision, nothing recorded (admin-only)", tag: "Workers", role: RoleAdmin, status: http.StatusNoContent}},
+		{"GET", linkMicrosoftSetupPath, s.handleGetMicrosoftLinkSetup, apiOp{
+			summary: "How people link Microsoft accounts on this server: whether the start flags or the Console set it up, the tenant, client id and scopes, whether a client secret is held (never the secret), the redirect URI the app registration has to list, and how many connections exist and how many of them cannot act (admin-only)", tag: "Authorization", role: RoleAdmin,
+			resp: jsonBody("Linking setup", tObject())}},
+		{"PUT", linkMicrosoftSetupPath, s.handlePutMicrosoftLinkSetup, apiOp{
+			summary: "Set up, or change, linking Microsoft accounts from the Console: the directory (tenant) id and application (client) id as GUIDs, the delegated scopes, and the client secret, which goes to the vault and is never returned — leave it empty to keep the one held. People can link from the next request on. Refused while start flags set linking, and without the vault (admin-only)", tag: "Authorization", role: RoleAdmin,
+			req: jsonBody("Linking setup", schemaObj(map[string]any{
+				"tenantId": tString(), "clientId": tString(), "scopes": tString(), "clientSecret": tString(),
+			}, "tenantId", "clientId", "scopes")),
+			resp: jsonBody("Linking setup", tObject())}},
+		{"DELETE", linkMicrosoftSetupPath, s.handleDeleteMicrosoftLinkSetup, apiOp{
+			summary: "Remove the Console's linking setup and its client secret. Linking is off from the next request on; existing connections stay and cannot act until linking is set up again for their tenant (admin-only)", tag: "Authorization", role: RoleAdmin,
+			resp: jsonBody("Linking setup", tObject())}},
 		{"GET", "/api/v1/security/readiness", s.handleSecurityReadiness, apiOp{
 			summary: "Every configured Worker, whether its actions are governed and how, and where its credential is (admin-only)", tag: "Authorization", role: RoleAdmin,
 			resp: jsonBody("Workers and the policy set's load state", tObject())}},
@@ -1308,6 +1344,60 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: &bodySpec{mediaType: "image/png", desc: "The picture (PNG, JPEG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
 		{"DELETE", "/api/v1/catalog-products/{id}/picture", s.catalogs.HandleDeletePicture, apiOp{
 			summary: "Remove a product's picture, so the shop falls back to showing none. Same gate as setting one", tag: "Catalogue", role: RoleProductManager, status: http.StatusNoContent}},
+		// A product's content from an external source
+		// (ADR-0491). Every route is gated on
+		// the product's home catalogue before it asks whether a source is configured;
+		// with none, each answers 404 and nothing else changes.
+		{"GET", "/api/v1/catalog-products/{id}/content", s.catalogs.HandleContentStatus, apiOp{
+			summary: "What a product's content is bound to: the configured content sources to choose from (id, name, kind — never a credential), the binding (source, primary language, one page per language with its stable id, version, when it was copied, its child pages and the protected passages removed), the recheck record (quarantine with since and reason, last passed and last checked recheck) and whether the shop shows the content now. `sources` empty means no source is configured and the binding does not exist on this installation. Needs edit on the product's home catalogue", tag: "Catalogue", role: RoleProductManager,
+			resp: jsonBody("Sources, binding, recheck state", tObject())}},
+		{"GET", "/api/v1/catalog-products/{id}/content/search", s.catalogs.HandleContentSearch, apiOp{
+			summary: "Search a content source (?source=, ?q=) for pages to bind: id, key, title, space, state and address of each hit, as the source's technical account reads them. Nothing is written", tag: "Catalogue", role: RoleProductManager,
+			resp: jsonBody("Hits", tArray())}},
+		{"GET", "/api/v1/catalog-products/{id}/content/preview", s.catalogs.HandleContentPreview, apiOp{
+			summary: "Read one page (?source=, ?page= an address on the source's host, a key or an id) as linking would take it: the resolved stable id, title, state and version, the plain text it would supply — its body followed by every readable child page depth first — the keywords its labels give, every protected passage, block and child page the rules drop, every reason the page is refused (a read restriction on it or any ancestor, a hold, not live, a space not released for the shop, the account's standing), and `boundTo` when another product is bound to it. Nothing is written", tag: "Catalogue", role: RoleProductManager,
+			resp: jsonBody("The page as it would be taken", tObject())}},
+		{"POST", "/api/v1/catalog-products/{id}/content", s.catalogs.HandleContentLink, apiOp{
+			summary: "Bind a product to one page per language the home catalogue declares and write the binding and the fetched content — descriptions, keywords, the first picture the primary page names — in one draft save. All or nothing: a page the account cannot read, a page failing any security rule, the same page in two slots and a page bound to another product (named) are refused with every problem at once (422 or 409), and nothing is written. Optionally states the product's `revision` (409 when it moved). While bound, the supplied fields are read-only through the ordinary save", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("The binding", schemaObj(map[string]any{
+				"source": tString(), "primary": tString(), "pages": tObject(), "revision": tInteger()}, "source", "pages")),
+			resp: jsonBody("The product", tObject())}},
+		{"POST", "/api/v1/catalog-products/{id}/content/refresh", s.catalogs.HandleContentRefresh, apiOp{
+			summary: "Recheck, then fetch every bound page of a product again and write the result into the draft, all or nothing: a refresh that cannot read a page names it and the reason and leaves the product as it was. It is the only act that ends a quarantine. Optionally states the product's `revision`", tag: "Catalogue", role: RoleProductManager,
+			req:  jsonBody("The precondition", schemaObj(map[string]any{"revision": tInteger()})),
+			resp: jsonBody("The product", tObject())}},
+		{"POST", "/api/v1/catalog-products/{id}/content/unlink", s.catalogs.HandleContentUnlink, apiOp{
+			summary: "Remove one language page (`lang`) of a product's binding, or the whole binding (no `lang`), with a `reason` that is required and recorded in the audit log with who and when. The fields become editable again and keep the last fetched values — unless the product is quarantined, when the content in question is dropped. A slot takes its description and the keywords only it gave with it; the primary page goes only with the whole binding", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("What to unlink and why", schemaObj(map[string]any{
+				"lang": tString(), "reason": tString(), "revision": tInteger()}, "reason")),
+			resp: jsonBody("The product", tObject())}},
+		{"POST", "/api/v1/catalogs/{id}/content/refresh", s.catalogs.HandleCatalogContentRefresh, apiOp{
+			summary: "Refresh every bound product a catalogue offers, each all or nothing on its own; one homed in a catalogue you do not maintain is skipped. Answers one line per product: refreshed, refused (with the problems) or skipped", tag: "Catalogue", role: RoleProductManager,
+			resp: jsonBody("One line per bound product", tArray())}},
+		{"GET", "/api/v1/content-sources", s.contentSources.HandleList, apiOp{
+			summary: "The configured content sources: id, name, kind (wikiwikibangbang), https base URL, the credentialsRef naming the vault secret that holds the technical account's read token (never the token), the picture field, the excluded labels and whether the shop links to a page. Admin-only", tag: "Catalogue", role: RoleAdmin,
+			resp: jsonBody("Sources", tArray())}},
+		{"POST", "/api/v1/content-sources", s.contentSources.HandleCreate, apiOp{
+			summary: "Configure a content source. The base URL must be https and carry no credentials, query or fragment; the token is named by credentialsRef and lives in the vault. 409 when the id is taken. Admin-only", tag: "Catalogue", role: RoleAdmin, status: http.StatusCreated,
+			req: jsonBody("The source", schemaObj(map[string]any{
+				"id": tString(), "name": tString(), "kind": tString(), "baseURL": tString(),
+				"credentialsRef": tString(), "pictureField": tString(), "excludedLabels": tArray(),
+				"linkInShop": tBool()}, "id", "name", "kind", "baseURL", "credentialsRef")),
+			resp: jsonBody("The source", tObject())}},
+		{"GET", "/api/v1/content-sources/{id}", s.contentSources.HandleGet, apiOp{
+			summary: "One content source. Admin-only", tag: "Catalogue", role: RoleAdmin,
+			resp: jsonBody("The source", tObject())}},
+		{"PUT", "/api/v1/content-sources/{id}", s.contentSources.HandleUpdate, apiOp{
+			summary: "Replace a content source's configuration; its id stays, because bindings name it. Admin-only", tag: "Catalogue", role: RoleAdmin,
+			req: jsonBody("The source", schemaObj(map[string]any{
+				"name": tString(), "kind": tString(), "baseURL": tString(), "credentialsRef": tString(),
+				"pictureField": tString(), "excludedLabels": tArray(), "linkInShop": tBool()}, "name", "kind", "baseURL", "credentialsRef")),
+			resp: jsonBody("The source", tObject())}},
+		{"DELETE", "/api/v1/content-sources/{id}", s.contentSources.HandleDelete, apiOp{
+			summary: "Remove a content source. Refused (409, naming them) while products are bound to it, because their content could no longer be rechecked. Admin-only", tag: "Catalogue", role: RoleAdmin, status: http.StatusNoContent}},
+		{"POST", "/api/v1/content-sources/{id}/check", s.contentSources.HandleCheck, apiOp{
+			summary: "Ask the source for its technical account's standing: whether it is reachable with its credential, the token's scope, the spaces it holds viewer in, and every problem — a scope other than read, any system role, any space role other than viewer. Answers 200 either way. Admin-only", tag: "Catalogue", role: RoleAdmin,
+			resp: jsonBody("Reachability and standing", tObject())}},
 		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
 			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it — or `lifecycleProcess` with its `actions` (ADR-0429), each {key, message, effect, triggers, labels, form, outcomes}, in place of the two and of the legacy `operations` map — the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. `commandedBy` lists the keys of the applications whose processes may issue the product's operator and system actions with a shop command task (ADR-0429 §10); it is read from the newest release when a task commands, so taking an application off it stops it for every right already held. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the shop groups it under and `productGroup` the group one level below it — headings and nothing else, with no ordering and no entity behind them. Both are **keys**: the shop groups by them and renders `categoryTexts` and `productGroupTexts`, each a heading per language tag, where the catalogue has them. Leave the texts out and the key renders in every language. They are optional as a whole and all-or-nothing once present: publishing refuses a heading translated into one declared language and not another. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Product", schemaObj(map[string]any{
