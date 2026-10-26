@@ -56,6 +56,10 @@ type Source struct {
 	// CredentialsRef names the vault secret (or ATLAS_CONNECTOR_<REF>_TOKEN)
 	// holding the technical account's read token.
 	CredentialsRef string `json:"credentialsRef"`
+	// CredentialsRefRedacted is set only on a source as an API answer shows it
+	// (see [Source.Shown]): the stored credentialsRef looked like a credential
+	// itself, so it is not shown, and the administrator must name a secret.
+	CredentialsRefRedacted bool `json:"credentialsRefRedacted,omitempty"`
 	// PictureField is the property of the primary page that names the
 	// attachments to use as pictures. Empty means the source supplies none.
 	PictureField string `json:"pictureField,omitempty"`
@@ -92,6 +96,10 @@ func (s Source) Problem() string {
 			s.Kind, strings.Join(Kinds, ", "))
 	case strings.TrimSpace(s.CredentialsRef) == "":
 		return "a content source needs a credentialsRef naming the secret that holds its read token"
+	case LooksLikeCredential(s.CredentialsRef):
+		// Said without the value: the value is the thing that must not travel.
+		return "credentialsRef looks like a token itself, not the name of a vault secret: " +
+			"put the token into the vault (Console › Workers) and enter the secret's name here"
 	}
 	if why := baseURLProblem(s.BaseURL); why != "" {
 		return why
@@ -102,6 +110,48 @@ func (s Source) Problem() string {
 		}
 	}
 	return ""
+}
+
+// credentialPrefixes are the prefixes of tokens a source issues. A reference
+// starting with one is the token pasted where its name belongs.
+var credentialPrefixes = []string{"wwbb_"}
+
+// keyMaterial is a run no secret name has but most tokens do: 32 or more hex
+// digits in a row, or the three dot-separated parts of a signed token (JWT).
+var keyMaterial = regexp.MustCompile(`[0-9A-Fa-f]{32,}|^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.`)
+
+// LooksLikeCredential reports whether a credentialsRef is a credential rather
+// than the name of one. The field names a vault secret; a token typed into it
+// is stored in clear beside the configuration, shown on the console, written to
+// the audit trail and quoted in error messages product managers read. So such a
+// value is refused when a source is saved, and never shown or logged when one
+// that predates the refusal is read.
+func LooksLikeCredential(ref string) bool {
+	ref = strings.TrimSpace(ref)
+	for _, p := range credentialPrefixes {
+		if len(ref) > len(p) && strings.EqualFold(ref[:len(p)], p) {
+			return true
+		}
+	}
+	return keyMaterial.MatchString(ref)
+}
+
+// Shown is the source as an API answer carries it: a credentialsRef that looks
+// like a credential is left out and flagged, so the administrator sees that it
+// must be replaced without the value reaching the screen.
+func (s Source) Shown() Source {
+	if LooksLikeCredential(s.CredentialsRef) {
+		s.CredentialsRef, s.CredentialsRefRedacted = "", true
+	}
+	return s
+}
+
+// SafeRef is a credentialsRef as a log line or a message may name it.
+func SafeRef(ref string) string {
+	if LooksLikeCredential(ref) {
+		return "[redacted: looked like a credential]"
+	}
+	return ref
 }
 
 // baseURLProblem holds a base URL to https and to an address with nothing in it

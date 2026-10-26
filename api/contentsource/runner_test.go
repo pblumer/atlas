@@ -435,7 +435,7 @@ func TestTheConfigurationRoutesSayWhatIsWrong(t *testing.T) {
 		t.Fatalf("create = %d %s", rec.Code, rec.Body)
 	}
 	rec := do(svc.HandleCheck, "POST", "", "orphan")
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `resolves to no secret`) || strings.Contains(rec.Body.String(), `"reachable":true`) {
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `the vault holds no secret under its credentialsRef`) || strings.Contains(rec.Body.String(), `"reachable":true`) {
 		t.Errorf("check of an unresolvable credential = %d %s", rec.Code, rec.Body)
 	}
 	// Nothing left configured: the list is an empty array.

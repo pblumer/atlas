@@ -89,8 +89,15 @@ func (r *Registry) Open(id string) (Source, Adapter, error) {
 		return Source{}, nil, err
 	case !found:
 		return Source{}, nil, fmt.Errorf("%w: %s", ErrNoSource, id)
+	case LooksLikeCredential(src.CredentialsRef):
+		// Refused whether or not a secret happens to carry that name, and said
+		// without the reference: this message reaches product managers, and a
+		// reference that is a pasted token would be shown to every one of them.
+		return src, nil, fmt.Errorf("content source %s: its credentialsRef holds what looks like a token, "+
+			"not the name of a vault secret; an administrator must put the token into the vault and name the secret", id)
 	case token == "":
-		return src, nil, fmt.Errorf("content source %s: its credentialsRef %q resolves to no secret", id, src.CredentialsRef)
+		return src, nil, fmt.Errorf("content source %s: the vault holds no secret under its credentialsRef; "+
+			"an administrator must add it (Console › Workers)", id)
 	}
 	dial := r.Dial
 	if dial == nil {
