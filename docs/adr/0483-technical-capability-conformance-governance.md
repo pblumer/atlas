@@ -112,9 +112,9 @@ API. The maintainer chose **repository provenance**:
 Decided by the maintainer on 2026-10-26:
 
 - **Contract digest.** `sha256:<hex>` over the exact bytes of the contract
-  file. The file must be valid UTF-8 without a byte-order mark, and
-  `.gitattributes` pins it to LF line endings, so a checkout on any platform
-  yields the same bytes. The file is never re-serialized. Any byte change,
+  file. The file must be valid UTF-8 without a byte-order mark and with LF line
+  endings only; the repository's `.gitattributes` (`* -text`) keeps every checkout
+  byte-for-byte what is committed, and a file with a carriage return gets no digest. The file is never re-serialized. Any byte change,
   formatting included, is a new artifact, and a published artifact must not
   change at all. RFC 8785 canonicalization was weighed and not adopted; it can
   be added as a second identifier if contracts ever travel through a channel

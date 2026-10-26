@@ -136,10 +136,16 @@ func TestTechnicalContractDigestRejectsInvalidOrMultipleDocuments(t *testing.T) 
 		append(bytes.Clone(raw), []byte(` {}`)...),
 		[]byte(`{"apiVersion":false}`),
 		bytes.Repeat([]byte("x"), maxTechnicalContractBytes+1),
+		raw[:len(raw)/2],
+		[]byte(`{"a":` + strings.Repeat("[", maxTechnicalDigestJSONDepth+2) + strings.Repeat("]", maxTechnicalDigestJSONDepth+2) + `}`),
 	} {
 		if _, err := DigestTechnicalContractJSON(bad); err == nil {
 			t.Fatalf("invalid artifact (length %d) was accepted", len(bad))
 		}
+	}
+	deep := []byte(`{"a":` + strings.Repeat("[", maxTechnicalDigestJSONDepth+2) + strings.Repeat("]", maxTechnicalDigestJSONDepth+2) + `}`)
+	if _, err := DigestTechnicalContractJSON(deep); err == nil || !strings.Contains(err.Error(), "nesting") {
+		t.Fatalf("deep nesting: err %v, want the nesting bound named", err)
 	}
 }
 

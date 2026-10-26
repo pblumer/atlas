@@ -13,52 +13,37 @@ import (
 
 const maxTechnicalDigestJSONDepth = maxTechnicalSchemaDepth + 8
 
-// CanonicalTechnicalContractJSON returns a stable JSON encoding for the
-// exact semantic contract document. It rejects duplicate keys (including
-// nested keys), malformed/extra JSON, invalid UTF-8 and invalid contracts.
-// Object members are ordered by encoding/json and whitespace is discarded;
-// numeric spelling remains significant (for example 1 and 1.0 differ).
-// This Go serialization profile is not a claim of RFC 8785 equivalence.
+// DigestTechnicalContractJSON names a technical contract file by the SHA-256 of
+// its exact bytes, as sha256:<hex> (ADR-0483). Nothing is re-serialized, so any
+// tool can recompute the digest, and a reformatted file is a different artifact.
+// The bytes must be one valid contract: within the size bound, valid UTF-8
+// without a byte-order mark, LF line endings only, and no duplicate JSON member at
+// any depth. A mark or a carriage return would let the same contract hash
+// differently on another machine or editor, so such a file gets no digest.
 //
-// Canonicalization is an offline publication step, never a processor operation.
-// It is NOT evidence that a Worker implements this contract.
-func CanonicalTechnicalContractJSON(raw []byte) ([]byte, error) {
+// Digesting is an offline publication step, never a processor operation. A
+// digest binds bytes only: it does not certify a Worker, grant routing or record
+// an approval.
+func DigestTechnicalContractJSON(raw []byte) (string, error) {
 	if len(raw) == 0 || len(raw) > maxTechnicalContractBytes {
-		return nil, fmt.Errorf("technical capability contract must contain 1..%d bytes", maxTechnicalContractBytes)
+		return "", fmt.Errorf("technical capability contract must contain 1..%d bytes", maxTechnicalContractBytes)
 	}
 	if !utf8.Valid(raw) {
-		return nil, errors.New("technical capability contract must contain valid UTF-8")
+		return "", errors.New("technical capability contract must contain valid UTF-8")
+	}
+	if bytes.HasPrefix(raw, []byte("\xef\xbb\xbf")) {
+		return "", errors.New("technical capability contract must not start with a byte-order mark")
+	}
+	if bytes.IndexByte(raw, '\r') >= 0 {
+		return "", errors.New("technical capability contract must use LF line endings, without carriage returns")
 	}
 	if err := rejectDuplicateTechnicalJSONKeys(raw); err != nil {
-		return nil, err
-	}
-	if _, err := ParseTechnicalContractJSON(raw); err != nil {
-		return nil, err
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	var document any
-	if err := decoder.Decode(&document); err != nil {
-		return nil, fmt.Errorf("decode contract for canonicalization: %w", err)
-	}
-	if err := ensureTechnicalContractEOF(decoder); err != nil {
-		return nil, err
-	}
-	encoded, err := json.Marshal(document)
-	if err != nil {
-		return nil, fmt.Errorf("encode canonical contract: %w", err)
-	}
-	return encoded, nil
-}
-
-// DigestTechnicalContractJSON computes the immutable sha256:<hex> identifier
-// of the canonical document. It does not validate any claim or approval.
-func DigestTechnicalContractJSON(raw []byte) (string, error) {
-	encoded, err := CanonicalTechnicalContractJSON(raw)
-	if err != nil {
 		return "", err
 	}
-	sum := sha256.Sum256(encoded)
+	if _, err := ParseTechnicalContractJSON(raw); err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(raw)
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
