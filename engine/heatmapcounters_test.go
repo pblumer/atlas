@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/state"
 )
@@ -43,6 +44,45 @@ func TestFlowCountersFollowTheTokens(t *testing.T) {
 	}
 	if got, want := engineFlowTotals(t, h.store, cp.Key), map[int32]int64{0: 2, 1: 1}; !reflect.DeepEqual(got, want) {
 		t.Errorf("flows after one instance finished = %v, want %v", got, want)
+	}
+}
+
+// TestFlowCountersCountEveryArrivalAtAJoin: a parallel join is reached over each of its
+// incoming arrows, one token per branch, and every one of those arrows was taken — the
+// join consuming them into one continuation must not leave all but one uncounted.
+func TestFlowCountersCountEveryArrivalAtAJoin(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	b := compiler.NewBuilder(defKey, "fork-join", 1)
+	start := b.AddStartEvent()
+	fork := b.AddParallelGateway()
+	left := b.AddTask()
+	right := b.AddTask()
+	join := b.AddParallelGateway()
+	end := b.AddEndEvent()
+	b.Connect(start, fork) // 0
+	b.Connect(fork, left)  // 1
+	b.Connect(fork, right) // 2
+	b.Connect(left, join)  // 3
+	b.Connect(right, join) // 4
+	b.Connect(join, end)   // 5
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	want := map[int32]int64{0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 5: 1}
+	if got := engineFlowTotals(t, h.store, cp.Key); !reflect.DeepEqual(got, want) {
+		t.Errorf("flows through a fork and join = %v, want every arrow once %v", got, want)
 	}
 }
 
