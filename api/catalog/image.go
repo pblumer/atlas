@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -147,6 +148,13 @@ func (s *Service) HandleGetPicture(w http.ResponseWriter, r *http.Request) {
 		if found = s.maySeePicture(it.ID, it.HomeCatalog, p); !found {
 			return
 		}
+		// A quarantined product's picture is withheld like its description
+		// (ADR-0491, § 9), and answers
+		// exactly as a product without one does.
+		st, stFound, e := s.store.ContentState(id)
+		if opErr = e; opErr != nil || !pictureShown(it, st, stFound, s.now()) {
+			return
+		}
 		data, ct, has, opErr = s.store.Picture(id)
 	})
 
@@ -201,6 +209,9 @@ func (s *Service) HandleSetPicture(w http.ResponseWriter, r *http.Request) {
 	}
 
 	found, allowed, opErr := s.withItemHome(id, p, func(it Item) error {
+		if it.ContentSource != nil {
+			return errSuppliedPicture
+		}
 		return s.store.SavePicture(it.ID, data, ct)
 	})
 	s.answerPictureWrite(w, id, found, allowed, opErr, "save picture: ")
@@ -213,6 +224,9 @@ func (s *Service) HandleDeletePicture(w http.ResponseWriter, r *http.Request) {
 	p := httpapi.PrincipalFrom(r.Context())
 
 	found, allowed, opErr := s.withItemHome(id, p, func(it Item) error {
+		if it.ContentSource != nil {
+			return errSuppliedPicture
+		}
 		return s.store.ClearPicture(it.ID)
 	})
 	s.answerPictureWrite(w, id, found, allowed, opErr, "remove picture: ")
@@ -252,6 +266,9 @@ func (s *Service) withItemHome(id string, p *httpapi.Principal, write func(Item)
 func (s *Service) answerPictureWrite(w http.ResponseWriter, id string,
 	found, allowed bool, opErr error, what string) {
 	switch {
+	case errors.Is(opErr, errSuppliedPicture):
+		httpapi.Error(w, http.StatusConflict, "product "+id+" takes its picture from its content source; "+
+			"refresh it, or unlink it first")
 	case opErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, what+opErr.Error())
 	case !found:
@@ -263,3 +280,7 @@ func (s *Service) answerPictureWrite(w http.ResponseWriter, id string,
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
+
+// errSuppliedPicture is a picture write on a bound product: its picture is the
+// source's while it is bound (§ 1).
+var errSuppliedPicture = errors.New("the picture is supplied by the content source")

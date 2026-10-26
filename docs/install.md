@@ -1062,6 +1062,12 @@ of them carries a password, a hash or a token. Ship them with `--log-format=json
 | `auth.denied` | WARN | A signed-in caller was refused for lacking the admin role, with the `method` and `path`. Anonymous `401`s are deliberately *not* logged — they would bury this under every probe that finds the port |
 | `auth.user_created`, `auth.user_updated`, `auth.user_deleted` | INFO | The account lifecycle, naming both the actor and the subject; the update line carries the `roles` and `disabled` state that resulted |
 | `auth.password_set` | INFO | An administrator replaced a user's password (that it happened and for whom — never the password) |
+| `content.source_changed` | INFO | An administrator created, changed or removed a content source, by `source`, naming its `base_url` and `credentials_ref` — never the token |
+| `content.unlinked` | INFO | A product manager removed a product's content binding or one language page of it, with the `item`, the `pages`, the `lang` and the `reason` they had to give |
+| `content.quarantined` | WARN | A recheck found a bound page protected, unreadable or gone, the account's standing wrong or the source unreachable; the product's source content is withheld until a refresh passes. Names the `item`, the `source` and the `reason` |
+| `content.quarantine_lifted` | INFO | A refresh passed every rule and ended a product's quarantine |
+| `content.source_unreachable`, `content.source_recovered` | WARN / INFO | The recheck could not reach a content source, said once when the failures begin, and that it answers again — which lifts no quarantine |
+| `content.watch_failed` | WARN | The source refused to watch a bound page; the fifteen-minute sweep still rechecks it |
 | `feed.subscription_changed` | INFO | An administrator created, changed or deleted a push subscription of the event feed, by `subscription_id`; a create names the `worker_id` and every change the `reach` |
 | `auth.token_minted`, `auth.token_revoked` | INFO | A machine credential — an API token or a deploy token — was issued or revoked, by `token_id` and `token_name`; a mint also records its `scope` and `expires_at`, and `vault_secret` — the name, never the value — when the token was sealed in the vault |
 | `auth.worker_token_unknown` | WARN | `ATLAS_TOKEN` is set to a value this server does not accept. Supervised workers are handed it instead of the server's own token and will be refused at every poll — mint an API token with scope `worker`, or unset the variable |

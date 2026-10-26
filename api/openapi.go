@@ -1338,6 +1338,60 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: &bodySpec{mediaType: "image/png", desc: "The picture (PNG, JPEG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
 		{"DELETE", "/api/v1/catalog-products/{id}/picture", s.catalogs.HandleDeletePicture, apiOp{
 			summary: "Remove a product's picture, so the shop falls back to showing none. Same gate as setting one", tag: "Catalogue", role: RoleProductManager, status: http.StatusNoContent}},
+		// A product's content from an external source
+		// (ADR-0491). Every route is gated on
+		// the product's home catalogue before it asks whether a source is configured;
+		// with none, each answers 404 and nothing else changes.
+		{"GET", "/api/v1/catalog-products/{id}/content", s.catalogs.HandleContentStatus, apiOp{
+			summary: "What a product's content is bound to: the configured content sources to choose from (id, name, kind — never a credential), the binding (source, primary language, one page per language with its stable id, version, when it was copied, its child pages and the protected passages removed), the recheck record (quarantine with since and reason, last passed and last checked recheck) and whether the shop shows the content now. `sources` empty means no source is configured and the binding does not exist on this installation. Needs edit on the product's home catalogue", tag: "Catalogue", role: RoleProductManager,
+			resp: jsonBody("Sources, binding, recheck state", tObject())}},
+		{"GET", "/api/v1/catalog-products/{id}/content/search", s.catalogs.HandleContentSearch, apiOp{
+			summary: "Search a content source (?source=, ?q=) for pages to bind: id, key, title, space, state and address of each hit, as the source's technical account reads them. Nothing is written", tag: "Catalogue", role: RoleProductManager,
+			resp: jsonBody("Hits", tArray())}},
+		{"GET", "/api/v1/catalog-products/{id}/content/preview", s.catalogs.HandleContentPreview, apiOp{
+			summary: "Read one page (?source=, ?page= an address on the source's host, a key or an id) as linking would take it: the resolved stable id, title, state and version, the plain text it would supply — its body followed by every readable child page depth first — the keywords its labels give, every protected passage, block and child page the rules drop, every reason the page is refused (a read restriction on it or any ancestor, a hold, not live, a space not released for the shop, the account's standing), and `boundTo` when another product is bound to it. Nothing is written", tag: "Catalogue", role: RoleProductManager,
+			resp: jsonBody("The page as it would be taken", tObject())}},
+		{"POST", "/api/v1/catalog-products/{id}/content", s.catalogs.HandleContentLink, apiOp{
+			summary: "Bind a product to one page per language the home catalogue declares and write the binding and the fetched content — descriptions, keywords, the first picture the primary page names — in one draft save. All or nothing: a page the account cannot read, a page failing any security rule, the same page in two slots and a page bound to another product (named) are refused with every problem at once (422 or 409), and nothing is written. Optionally states the product's `revision` (409 when it moved). While bound, the supplied fields are read-only through the ordinary save", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("The binding", schemaObj(map[string]any{
+				"source": tString(), "primary": tString(), "pages": tObject(), "revision": tInteger()}, "source", "pages")),
+			resp: jsonBody("The product", tObject())}},
+		{"POST", "/api/v1/catalog-products/{id}/content/refresh", s.catalogs.HandleContentRefresh, apiOp{
+			summary: "Recheck, then fetch every bound page of a product again and write the result into the draft, all or nothing: a refresh that cannot read a page names it and the reason and leaves the product as it was. It is the only act that ends a quarantine. Optionally states the product's `revision`", tag: "Catalogue", role: RoleProductManager,
+			req:  jsonBody("The precondition", schemaObj(map[string]any{"revision": tInteger()})),
+			resp: jsonBody("The product", tObject())}},
+		{"POST", "/api/v1/catalog-products/{id}/content/unlink", s.catalogs.HandleContentUnlink, apiOp{
+			summary: "Remove one language page (`lang`) of a product's binding, or the whole binding (no `lang`), with a `reason` that is required and recorded in the audit log with who and when. The fields become editable again and keep the last fetched values — unless the product is quarantined, when the content in question is dropped. A slot takes its description and the keywords only it gave with it; the primary page goes only with the whole binding", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("What to unlink and why", schemaObj(map[string]any{
+				"lang": tString(), "reason": tString(), "revision": tInteger()}, "reason")),
+			resp: jsonBody("The product", tObject())}},
+		{"POST", "/api/v1/catalogs/{id}/content/refresh", s.catalogs.HandleCatalogContentRefresh, apiOp{
+			summary: "Refresh every bound product a catalogue offers, each all or nothing on its own; one homed in a catalogue you do not maintain is skipped. Answers one line per product: refreshed, refused (with the problems) or skipped", tag: "Catalogue", role: RoleProductManager,
+			resp: jsonBody("One line per bound product", tArray())}},
+		{"GET", "/api/v1/content-sources", s.contentSources.HandleList, apiOp{
+			summary: "The configured content sources: id, name, kind (wikiwikibangbang), https base URL, the credentialsRef naming the vault secret that holds the technical account's read token (never the token), the picture field, the excluded labels and whether the shop links to a page. Admin-only", tag: "Catalogue", role: RoleAdmin,
+			resp: jsonBody("Sources", tArray())}},
+		{"POST", "/api/v1/content-sources", s.contentSources.HandleCreate, apiOp{
+			summary: "Configure a content source. The base URL must be https and carry no credentials, query or fragment; the token is named by credentialsRef and lives in the vault. 409 when the id is taken. Admin-only", tag: "Catalogue", role: RoleAdmin, status: http.StatusCreated,
+			req: jsonBody("The source", schemaObj(map[string]any{
+				"id": tString(), "name": tString(), "kind": tString(), "baseURL": tString(),
+				"credentialsRef": tString(), "pictureField": tString(), "excludedLabels": tArray(),
+				"linkInShop": tBool()}, "id", "name", "kind", "baseURL", "credentialsRef")),
+			resp: jsonBody("The source", tObject())}},
+		{"GET", "/api/v1/content-sources/{id}", s.contentSources.HandleGet, apiOp{
+			summary: "One content source. Admin-only", tag: "Catalogue", role: RoleAdmin,
+			resp: jsonBody("The source", tObject())}},
+		{"PUT", "/api/v1/content-sources/{id}", s.contentSources.HandleUpdate, apiOp{
+			summary: "Replace a content source's configuration; its id stays, because bindings name it. Admin-only", tag: "Catalogue", role: RoleAdmin,
+			req: jsonBody("The source", schemaObj(map[string]any{
+				"name": tString(), "kind": tString(), "baseURL": tString(), "credentialsRef": tString(),
+				"pictureField": tString(), "excludedLabels": tArray(), "linkInShop": tBool()}, "name", "kind", "baseURL", "credentialsRef")),
+			resp: jsonBody("The source", tObject())}},
+		{"DELETE", "/api/v1/content-sources/{id}", s.contentSources.HandleDelete, apiOp{
+			summary: "Remove a content source. Refused (409, naming them) while products are bound to it, because their content could no longer be rechecked. Admin-only", tag: "Catalogue", role: RoleAdmin, status: http.StatusNoContent}},
+		{"POST", "/api/v1/content-sources/{id}/check", s.contentSources.HandleCheck, apiOp{
+			summary: "Ask the source for its technical account's standing: whether it is reachable with its credential, the token's scope, the spaces it holds viewer in, and every problem — a scope other than read, any system role, any space role other than viewer. Answers 200 either way. Admin-only", tag: "Catalogue", role: RoleAdmin,
+			resp: jsonBody("Reachability and standing", tObject())}},
 		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
 			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it — or `lifecycleProcess` with its `actions` (ADR-0429), each {key, message, effect, triggers, labels, form, outcomes}, in place of the two and of the legacy `operations` map — the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. `commandedBy` lists the keys of the applications whose processes may issue the product's operator and system actions with a shop command task (ADR-0429 §10); it is read from the newest release when a task commands, so taking an application off it stops it for every right already held. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the shop groups it under and `productGroup` the group one level below it — headings and nothing else, with no ordering and no entity behind them. Both are **keys**: the shop groups by them and renders `categoryTexts` and `productGroupTexts`, each a heading per language tag, where the catalogue has them. Leave the texts out and the key renders in every language. They are optional as a whole and all-or-nothing once present: publishing refuses a heading translated into one declared language and not another. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Product", schemaObj(map[string]any{
