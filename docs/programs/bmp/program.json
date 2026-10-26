@@ -16,8 +16,10 @@
       "owner": "unassigned",
       "depends_on": [],
       "issues": [],
-      "prs": [],
-      "note": "Approve identities, immutable version/digest, registry schema, trust and collision decisions before implementation."
+      "prs": [
+        1395
+      ],
+      "note": "Architecture and programme proposal in draft PR #1395; BMP0 is not started. Review identity, trust, package contract and tests before acceptance."
     },
     {
       "id": "BMP1",
