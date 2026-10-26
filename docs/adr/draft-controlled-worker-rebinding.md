@@ -6,6 +6,7 @@
 - **Deciders:** atlas maintainers
 - **Open question:** What coordination and effective-revision acknowledgement across partitions is sufficient for a controlled rebinding rollout without pretending that a multi-partition change is atomic? This proposal uses per-partition durable cutovers and a visible rollout state; a global atomic switch is explicitly out of scope pending proof.
 - **Question checked:** 2026-10
+- **Review deferred:** The maintainer deferred this record's review questions (binding-slot scope, future jobs only, partial partition cutover, CDA6 slot reservation) until CDA7 has landed. Only the binding-slot scope may be settled earlier, when CDA6 starts; until then this record guides CDA6's compatibility and authorizes no implementation.
 
 ## Context and problem statement
 
