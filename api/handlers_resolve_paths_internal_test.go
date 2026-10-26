@@ -146,6 +146,8 @@ func TestHandlersErasedSubjectsJobIsWithheldForEveryWorkerType(t *testing.T) {
 			compiler.GoogleContactsJobType, "googlecontacts", nil},
 		{"carddav", handlersServiceTask(`<atlas:carddavConnector connector="verkauf" operation="find-contacts" query="=anfrage.absender" resultVariable="kunden"/>`),
 			compiler.CardDAVJobType, "carddav", nil},
+		{"wikiwikibangbang", handlersServiceTask(`<atlas:wikiwikibangbangConnector connector="wiki" operation="query-items" query="type = task" resultVariable="aufgaben"/>`),
+			compiler.WikiwikibangbangJobType, "wikiwikibangbang", nil},
 		{"clio", handlersServiceTask(`<atlas:clioConnector connector="events" operation="write" subject="/kunden/42" eventType="kunde.angelegt"/>`),
 			compiler.ClioWriteJobType, "clio", nil},
 		{"webscrape", handlersServiceTask(`<atlas:webscrapeConnector url="https://example.com" selector=".price" resultVariable="hits"/>`),

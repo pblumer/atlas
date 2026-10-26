@@ -1177,6 +1177,32 @@ type ConnectorTaskDetail struct {
 	CardDAVContact    RestExpr
 	CardDAVContactVar int32
 	CardDAVMaxResults int32
+	// wikiwikibangbang fields (JobType == WikiwikibangbangJobType,
+	// ADR-draft-wikiwikibangbang-worker). Connector (above) names the configured wiki,
+	// and WikiConnector carries it as literal-or-FEEL. WikiOp is the interned operation —
+	// a row of connector/wikiwikibangbang/catalog. WikiProperties is the authored
+	// properties object compiled to one FEEL context at deploy (I5), and
+	// WikiPropertiesVar names the variable holding it instead. A literal WikiBlocks is
+	// the JSON array the compiler checked. WikiMaxResults bounds a query, with its
+	// default applied, and is zero on every other operation. All are the zero value for a
+	// task of another kind.
+	WikiConnector     RestExpr
+	WikiOp            int32
+	WikiItem          RestExpr
+	WikiSpace         RestExpr
+	WikiItemType      RestExpr
+	WikiParent        RestExpr
+	WikiTitle         RestExpr
+	WikiProperties    RestExpr
+	WikiPropertiesVar int32
+	WikiMatchField    RestExpr
+	WikiLabels        RestExpr
+	WikiText          RestExpr
+	WikiBlocks        RestExpr
+	WikiTransition    RestExpr
+	WikiComment       RestExpr
+	WikiQuery         RestExpr
+	WikiMaxResults    int32
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

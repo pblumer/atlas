@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A process opens and moves tasks, and writes and reads pages, in a wikiwikibangbang wiki.** A new
+  wikiwikibangbang Worker Type has eight operations, spelled like the Jira Worker's where
+  the two mean the same thing: create, read, update and move an item through its workflow,
+  comment on it, query items in the wiki's own query language, read a page as Markdown and
+  append to a page. A Worker names the wiki's base URL and a vault bundle with the API token
+  of a technical account of its own — an editor in the spaces processes write to, never the
+  read-only account the catalogue reads the wiki with; an account with a system role is
+  refused. A body is plain text or the wiki's own blocks, and an append carries every block
+  of the page back unchanged. With a matching field such as `source-id` a repeated create
+  answers with the item an earlier round made, a transition whose target state the item
+  already stands in succeeds, and an append or comment delivered again does not write
+  twice; a missing item and a refused value can be caught as
+  `WIKIWIKIBANGBANG_ITEM_NOT_FOUND` and `WIKIWIKIBANGBANG_VALIDATION_FAILED`. No capability
+  claim is made: the record lists where the wiki and Jira differ
+  ([ADR-draft-wikiwikibangbang-worker](docs/adr/draft-wikiwikibangbang-worker.md)).
 - **Technical capability contracts have a content digest.** `workertype.DigestTechnicalContractJSON` names a contract file by
   the SHA-256 of its exact bytes, `sha256:<hex>`, so any tool can recompute it and a
   reformatted file is a different artifact. It refuses a file that is not exactly one

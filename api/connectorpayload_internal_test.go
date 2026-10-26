@@ -34,6 +34,7 @@ import (
 	"github.com/pblumer/atlas/connector/teamsphone"
 	"github.com/pblumer/atlas/connector/temis"
 	"github.com/pblumer/atlas/connector/webscrape"
+	"github.com/pblumer/atlas/connector/wikiwikibangbang"
 )
 
 // The engine→worker payload contract (ADR-0168): when a worker leases a worker
@@ -657,6 +658,7 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 		{"compiler.TeamsPhoneJobTypeIndex", teamsphone.Job{}},
 		{"compiler.GoogleContactsJobTypeIndex", googlecontacts.Job{}},
 		{"compiler.CardDAVJobTypeIndex", carddav.Job{}},
+		{"compiler.WikiwikibangbangJobTypeIndex", wikiwikibangbang.Job{}},
 	} {
 		t.Run(tc.arm, func(t *testing.T) {
 			sent, ok := arms[tc.arm]
@@ -853,6 +855,8 @@ func payloadArmCases(t *testing.T) map[int32]bool {
 
 		"GoogleContactsJobTypeIndex": compiler.GoogleContactsJobTypeIndex,
 		"CardDAVJobTypeIndex":        compiler.CardDAVJobTypeIndex,
+
+		"WikiwikibangbangJobTypeIndex": compiler.WikiwikibangbangJobTypeIndex,
 	}
 	if len(indexByConstName) != int(compiler.ReservedJobTypeCount()) {
 		t.Fatalf("this table names %d job-type constants but the compiler reserves %d; "+

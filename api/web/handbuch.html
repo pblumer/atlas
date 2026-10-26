@@ -6872,6 +6872,88 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked October 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
       </div>
 
+      <div class="card" id="runbook-wikiwikibangbang">
+        <h4>wikiwikibangbang</h4>
+        <p data-l="de">Ein wikiwikibangbang-Worker steht für <b>ein Wiki und ein Konto</b> darin. Ein Prozess legt damit
+          eine Aufgabe für eine Person an, liest sie, ändert Titel, Felder und Labels, führt sie durch ihren Workflow,
+          kommentiert sie und findet Aufgaben mit einer Abfrage. Er legt eine Seite an, liest sie als Markdown und
+          ergänzt sie am Ende. <i>Die Schritte sind mit wikiwikibangbang (Commit 928fec0, lokal betrieben)
+          durchgegangen worden.</i></p>
+        <p data-l="en">A wikiwikibangbang worker stands for <b>one wiki and one account</b> in it. A process uses it
+          to open a task for a person, read it, change its title, properties and labels, move it through its workflow,
+          comment on it and find tasks with a query. It creates a page, reads it as Markdown and appends to it at the
+          end. <i>These steps have been walked with wikiwikibangbang at commit 928fec0, run locally.</i></p>
+        <ol>
+          <li data-l="de">Im Wiki legt eine Administratorin oder ein Administrator ein <b>technisches Konto</b> für
+            atlas an, z.&nbsp;B. <code>atlas-bot</code>, und gibt ihm in jedem Space, in den Prozesse schreiben, die
+            Rolle <b>editor</b> – sonst nichts. Ein Konto mit der Systemrolle <b>admin</b> oder <b>erasure</b> lehnt
+            der Worker ab. Es ist nicht das Konto, mit dem der Katalog das Wiki nur liest.</li>
+          <li data-l="en">In the wiki, an administrator creates a <b>technical account</b> for atlas, e.g.
+            <code>atlas-bot</code>, and grants it the role <b>editor</b> in each space processes write to – and nothing
+            else. The worker refuses an account with the system role <b>admin</b> or <b>erasure</b>. It is not the
+            account the catalogue reads the wiki with.</li>
+          <li data-l="de">Als dieses Konto angemeldet unter <i>Konto → API-Token</i> ein Token mit dem Umfang
+            <b>full</b> erstellen (höchstens 366 Tage) und das Ablaufdatum notieren: Danach funktioniert das Token
+            nicht mehr und der Worker auch nicht. Ein Worker, der nur liest, kommt mit dem Umfang <b>read</b> aus.</li>
+          <li data-l="en">Signed in as that account, create a token of scope <b>full</b> under <i>Account → API
+            tokens</i> (at most 366 days) and note its expiry: the token stops working then, and the worker with it.
+            A worker that only reads does with scope <b>read</b>.</li>
+          <li data-l="de">Secret anlegen, z.&nbsp;B. <code>wiki_bot</code>: <code>{"token": "wwbb_…"}</code>.</li>
+          <li data-l="en">Create a secret, e.g. <code>wiki_bot</code>: <code>{"token": "wwbb_…"}</code>.</li>
+          <li data-l="de">Worker anlegen: Typ <b>wikiwikibangbang</b>, ein Name (den ein Task nennt), die Basis-URL des
+            Wikis als Endpoint (<code>https://wiki.example.ch</code>) und die Credential-Referenz
+            <code>wiki_bot</code>. Pro Wiki und Konto ein Worker. Speichern genügt; atlas startet den beaufsichtigten
+            Worker mit der neuen Umgebung selbst neu.</li>
+          <li data-l="en">Create the worker: type <b>wikiwikibangbang</b>, a name (which a task states), the wiki's
+            base URL as endpoint (<code>https://wiki.example.ch</code>) and the credential reference
+            <code>wiki_bot</code>. One worker per wiki and account. Saving is enough; atlas restarts the supervised
+            worker with the new environment by itself.</li>
+        </ol>
+        <div class="note warn">
+          <span class="lbl" data-l="de">Alles erscheint als das Konto des Workers</span><span class="lbl" data-l="en">Everything appears as the worker's account</span>
+          <p data-l="de" style="margin:.3em 0 0">Was der Worker schreibt, schreibt er als <i>atlas-bot</i>: Verlauf und
+            Kommentare im Wiki nennen dieses Konto, nicht die Person, die den Prozess gestartet hat. Ein Prozess kann
+            überall schreiben, wo das Konto darf – gib ihm deshalb nur die Spaces, die Prozesse wirklich brauchen.
+            Das Wiki prüft zudem nicht, ob ein Benutzerfeld wie <code>assignee</code> ein bestehendes Konto nennt: Ein
+            falsch geschriebener Benutzername weist die Aufgabe niemandem zu, ohne dass jemand es merkt.</p>
+          <p data-l="en" style="margin:.3em 0 0">What the worker writes, it writes as <i>atlas-bot</i>: the wiki's
+            history and comments name that account, not the person who started the process. A process can write
+            wherever the account may – so give it only the spaces processes really need. The wiki also does not check
+            that a user field such as <code>assignee</code> names an existing account: a misspelt username assigns
+            the task to nobody, and nobody notices.</p>
+        </div>
+        <p data-l="de"><b>Keine doppelten Aufgaben:</b> Nennt der Task ein <i>Abgleichfeld</i> (z.&nbsp;B.
+          <code>source-id</code>), sucht der Worker vor dem Anlegen ein Item dieses Typs im Space mit diesem Wert und
+          gibt es zurück, statt ein zweites anzulegen. Ist das Feld im Typ als eindeutig markiert, können auch zwei
+          gleichzeitige Versuche kein Duplikat erzeugen. Ohne Abgleichfeld kann eine Wiederholung ein zweites Item
+          anlegen.</p>
+        <p data-l="en"><b>No duplicate tasks:</b> when the task names a <i>matching field</i> (e.g.
+          <code>source-id</code>), the worker looks for an item of that type in the space with that value before it
+          creates one, and answers with it instead of creating a second. Where the type marks the field unique, not
+          even two attempts at once can create a duplicate. Without a matching field a repetition can create a second
+          item.</p>
+        <p data-l="de"><b>Seiten ergänzen:</b> Der Worker liest die Seite und schreibt sie mit den neuen Blöcken am
+          Ende zurück; jeder bestehende Block bleibt, wie er war. Ändert jemand die Seite genau zwischen diesem Lesen
+          und Schreiben, überschreibt der Worker diese Änderung. Sie bleibt im Verlauf der Seite und lässt sich von
+          dort wiederherstellen. Während jemand die Seite live bearbeitet, wartet der Worker und versucht es
+          erneut.</p>
+        <p data-l="en"><b>Extending pages:</b> the worker reads the page and writes it back with the new blocks at the
+          end; every existing block stays as it was. If somebody changes the page exactly between that read and that
+          write, the worker overwrites the change. It stays in the page's history and can be restored from there.
+          While somebody edits the page live, the worker waits and tries again.</p>
+        <p data-l="de"><b>Fehler abfangen:</b> Existiert ein Item nicht oder darf das Konto es nicht lesen, endet der
+          Task mit dem Fehlercode <code>WIKIWIKIBANGBANG_ITEM_NOT_FOUND</code>; lehnt das Wiki einen Wert ab – ein
+          Pflichtfeld fehlt, eine Transition ist aus dem aktuellen Zustand nicht erlaubt, eine Abfrage ist fehlerhaft
+          –, mit <code>WIKIWIKIBANGBANG_VALIDATION_FAILED</code>. Beides wird zum BPMN-Fehler, wenn der Prozess den Code
+          mit einem Fehler-Grenzereignis abfängt; sonst entsteht ein Vorfall.</p>
+        <p data-l="en"><b>Catching errors:</b> if an item does not exist or the account may not read it, the task ends
+          with the error code <code>WIKIWIKIBANGBANG_ITEM_NOT_FOUND</code>; if the wiki refuses a value – a required
+          field is missing, a transition is not allowed from the current state, a query is malformed – with
+          <code>WIKIWIKIBANGBANG_VALIDATION_FAILED</code>. Either becomes a BPMN error when the process catches the
+          code with an error boundary event; otherwise an incident is raised.</p>
+        <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked October 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
+      </div>
+
       <div class="card" id="runbook-entra">
         <h4>Microsoft Entra ID</h4>
         <p data-l="de">Das wertvollste Geheimnis, das ein atlas-Worker hält: Eine Anwendungsberechtigung wie
