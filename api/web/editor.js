@@ -4218,8 +4218,10 @@ const SERVICE_TASK_KINDS = [
       { group: "Output" },
       {
         key: "resultVariable", label: "Result variable", resultType: (v) => exchangeResultType(v.operation || "get-mailbox"), placeholder: "postfach",
-        hint: (v) => exchangeResultShape(v.operation || "get-mailbox") + " Objects carry the cmdlet's properties under their own names, complex values as text, e.g. =" +
-          (v.resultVariable ? v.resultVariable : "postfach") + ".PrimarySmtpAddress.",
+        hint: (v) => tr("pnl.kindA.exchange.resultHint", {
+          shape: exchangeResultShape(v.operation || "get-mailbox"),
+          name: v.resultVariable ? v.resultVariable : "postfach",
+        }),
       },
     ],
   },
