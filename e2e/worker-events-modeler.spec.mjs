@@ -30,7 +30,7 @@ const workerGroup = (page) => page.locator("#f-msgref optgroup[data-worker-event
 
 test("a message start is offered the Worker events, one per name, naming who publishes it", async ({ page }) => {
   await openMessage(page, "Start_msg");
-  await expect(workerGroup(page)).toHaveAttribute("label", "Events from Workers");
+  await expect(workerGroup(page)).toHaveAttribute("label", "Ereignisse von Workern");
 
   const offered = await workerGroup(page).locator("option").evaluateAll((os) =>
     os.map((o) => ({ value: o.value, text: o.textContent })));
@@ -42,7 +42,7 @@ test("a message start is offered the Worker events, one per name, naming who pub
   // Two watches publish one name: one choice, both workers named.
   expect(offered[1].text).toBe("jira.ticket.created — ServiceDesk (jira), Projects (jira)");
   // Only disabled watches publish this one: kept, and marked.
-  expect(offered[0].text).toBe("employee.created — HR (googlesheets) — off");
+  expect(offered[0].text).toBe("employee.created — HR (googlesheets) — aus");
   expect(page.__errors).toEqual([]);
 });
 
@@ -52,7 +52,7 @@ test("picking a Worker event declares a message of that name and links it", asyn
   await page.locator("#f-msgref").selectOption("__source__:jira.ticket.created");
 
   await expect(page.locator("#f-msgname")).toHaveValue("jira.ticket.created");
-  await expect(page.locator("#f-msgsources")).toContainText("Published by 2 inbound event watches");
+  await expect(page.locator("#f-msgsources")).toContainText("Veröffentlicht von 2 Inbound-Watches");
 
   const xml = await page.evaluate(() => window.__xml());
   const msg = /<bpmn:message id="([^"]+)" name="jira\.ticket\.created"/.exec(xml);
@@ -90,7 +90,7 @@ test("one render asks the server once for the listing", async ({ page }) => {
   // A rename re-reads the line under the field from the same listing.
   await page.locator("#f-msgname").fill("jira.ticket.created");
   await page.locator("#f-msgname").blur();
-  await expect(page.locator("#f-msgsources")).toContainText("Published by 2 inbound event watches");
+  await expect(page.locator("#f-msgsources")).toContainText("Veröffentlicht von 2 Inbound-Watches");
   expect(await page.evaluate(() => window.__sourceCalls)).toBe(before);
   expect(page.__errors).toEqual([]);
 });

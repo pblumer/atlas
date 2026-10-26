@@ -6956,16 +6956,14 @@ function newestRow(s) {
 function watchSourcesHTML(want, watches, ownedByProduct, sentByModel) {
   if (!watches.length) {
     if (ownedByProduct || sentByModel) return "";
-    return `<span class="muted">No inbound event watch on this server publishes <b>${esc(want)}</b>. `
-      + `That is fine when the message is thrown inside a model or posted to <code>/api/v1/messages</code> — `
-      + `for a Jira or clio event, add a watch under <b>Workers → Events</b> in the Console.</span>`;
+    return `<span class="muted">${tr("pnl.event.watch.none", { name: esc(want) })}</span>`;
   }
   const parts = watches.map((s) => {
     const what = s.description ? ` — ${esc(s.description)}` : "";
-    const off = s.enabled ? "" : ' <span class="pill warn">off</span>';
+    const off = s.enabled ? "" : ` <span class="pill warn">${esc(tr("pnl.event.off"))}</span>`;
     return `<li>${esc(s.kind)} <b>${esc(s.connectorName)}</b>${what}${off}</li>`;
   }).join("");
-  return `Published by ${watches.length} inbound event watch${watches.length > 1 ? "es" : ""}:`
+  return esc(trPlural("pnl.event.watch.publishedBy", watches.length))
     + `<ul style="margin:4px 0 0 16px;padding:0">${parts}</ul>`;
 }
 
@@ -6977,13 +6975,12 @@ function watchSourcesHTML(want, watches, ownedByProduct, sentByModel) {
 function productOwnersHTML(actions, alsoWatched) {
   if (!actions.length) return "";
   const owners = [...new Set(actions.map((s) =>
-    `<b>${esc(s.action || "?")}</b> of <b>${esc(s.productName || s.productId || "?")}</b>`
+    tr("pnl.event.owner.actionOf", { action: esc(s.action || "?"), product: esc(s.productName || s.productId || "?") })
       + (s.effect ? ` (${esc(s.effect)})` : "")))];
   const clash = alsoWatched
-    ? ' <span class="pill warn">watched</span> Publishing the catalogue refuses an action whose message an inbound watch publishes.'
+    ? ` <span class="pill warn">${esc(tr("pnl.event.watched"))}</span> ${esc(tr("pnl.event.owner.clash"))}`
     : "";
-  return `<div style="margin-top:4px">Owned by product action${owners.length > 1 ? "s" : ""} ${owners.join(", ")}`
-    + ` — the order sends it.${clash}</div>`;
+  return `<div style="margin-top:4px">${trPlural("pnl.event.owner.ownedBy", owners.length, { owners: owners.join(", ") })}${clash}</div>`;
 }
 
 // sendingProcessesHTML names the deployed processes whose newest version sends a message
@@ -6991,7 +6988,7 @@ function productOwnersHTML(actions, alsoWatched) {
 function sendingProcessesHTML(senders) {
   if (!senders.length) return "";
   const named = [...new Set(senders.map((s) => s.processId || "?"))].sort().map((pid) => `<code>${esc(pid)}</code>`);
-  return `<div style="margin-top:4px">Sent by deployed process${named.length > 1 ? "es" : ""} ${named.join(", ")}.</div>`;
+  return `<div style="margin-top:4px">${trPlural("pnl.event.sentBy", named.length, { processes: named.join(", ") })}</div>`;
 }
 
 // messageReceiversHTML is a sending element's line (ADR-0446 §5): the deployed processes
@@ -7001,7 +6998,7 @@ function sendingProcessesHTML(senders) {
 function messageReceiversHTML(want, waiting) {
   const active = waiting.filter((s) => s.enabled !== false);
   if (!active.length) {
-    return `<div style="margin-top:4px">No deployed process waits for <b>${esc(want)}</b>: what this element sends is lost. ${eventsPageLink(want, "message")}</div>`;
+    return `<div style="margin-top:4px">${tr("pnl.event.msg.noReceiver", { name: esc(want) })} ${eventsPageLink(want, "message")}</div>`;
   }
   return waitingProcessesHTML(active).replace(/<\/div>$/, ` ${eventsPageLink(want, "message")}</div>`);
 }
@@ -7018,7 +7015,7 @@ function waitingProcessesHTML(waiting) {
   }
   const named = [...where.keys()].sort().map((k) => where.get(k));
   const n = new Set(waiting.map((s) => s.processId)).size;
-  return `<div style="margin-top:4px">Waited for by deployed process${n > 1 ? "es" : ""} ${named.join(", ")}.</div>`;
+  return `<div style="margin-top:4px">${trPlural("pnl.event.waitedBy", n, { processes: named.join(", ") })}</div>`;
 }
 
 // messageSourceKind says which kind of source a GET /api/v1/message-sources row is
@@ -7049,8 +7046,8 @@ const MESSAGE_SOURCE_PREFIX = "__source__:";
 // warning and not a lock: such a process may wait for a watch's event for a reason of its
 // own, beside its actions.
 const NOT_FOR_AN_ACTION = {
-  text: " — not for a product action",
-  title: "A catalogue product binds this process, and publishing the catalogue refuses an action whose message an inbound watch publishes.",
+  text: "pnl.event.notForAction",
+  title: "pnl.event.notForActionTitle",
 };
 
 // receivesMessages reports whether a message-bearing element waits for its message rather
@@ -7097,7 +7094,7 @@ function workerEventChoices(sources, declared) {
   }
   return [...byName.values()]
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-    .map((c) => ({ name: c.name, workers: c.workers.join(", ") + (c.enabled ? "" : " — off") }));
+    .map((c) => ({ name: c.name, workers: c.workers.join(", ") + (c.enabled ? "" : ` — ${tr("pnl.event.off")}`) }));
 }
 
 // sourceChoices folds one kind of the listing's rows into one choice per message name,
@@ -7118,7 +7115,7 @@ function sourceChoices(rows, declared, describe) {
   }
   return [...byName.values()]
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-    .map((c) => ({ name: c.name, label: c.parts.sort().join(", ") + (c.enabled ? "" : " — off") }));
+    .map((c) => ({ name: c.name, label: c.parts.sort().join(", ") + (c.enabled ? "" : ` — ${tr("pnl.event.off")}`) }));
 }
 
 // productActionChoices offers each product action's message, labelled with the product,
@@ -7162,8 +7159,8 @@ function addSourceGroup(select, data, label, choices, mark) {
   for (const c of choices) {
     const opt = document.createElement("option");
     opt.value = MESSAGE_SOURCE_PREFIX + c.name;
-    opt.textContent = (c.label ? `${c.name} — ${c.label}` : c.name) + (mark ? mark.text : "");
-    if (mark) opt.title = mark.title;
+    opt.textContent = (c.label ? `${c.name} — ${c.label}` : c.name) + (mark ? ` — ${tr(mark.text)}` : "");
+    if (mark) opt.title = tr(mark.title);
     group.appendChild(opt);
   }
   select.insertBefore(group, select.querySelector('option[value="__new__"]'));
@@ -7174,7 +7171,7 @@ function addSourceGroup(select, data, label, choices, mark) {
 // product action (NOT_FOR_AN_ACTION).
 function offerWorkerEvents(select, sources, declared, productBound) {
   const choices = workerEventChoices(sources, declared).map((c) => ({ name: c.name, label: c.workers }));
-  addSourceGroup(select, "worker-events", "Events from Workers", choices, productBound ? NOT_FOR_AN_ACTION : null);
+  addSourceGroup(select, "worker-events", tr("pnl.event.src.workerEvents"), choices, productBound ? NOT_FOR_AN_ACTION : null);
 }
 
 // offerMessageSources puts the names the server knows in front of the author who would
@@ -7192,15 +7189,15 @@ function offerMessageSources(select, fname, datalist, sources, modeler, bo) {
   let suggested;
   if (receivesMessages(bo)) {
     offerWorkerEvents(select, sources, declared, productBindsProcess(sources, owningProcessId(bo)));
-    addSourceGroup(select, "product-actions", "Product actions", productActionChoices(sources, declared));
-    addSourceGroup(select, "sending-processes", "Messages deployed models send", sendingProcessChoices(sources, declared));
+    addSourceGroup(select, "product-actions", tr("pnl.event.src.productActions"), productActionChoices(sources, declared));
+    addSourceGroup(select, "sending-processes", tr("pnl.event.src.modelsSend"), sendingProcessChoices(sources, declared));
     suggested = [
       ...workerEventChoices(sources, null).map((c) => ({ name: c.name, label: c.workers })),
       ...productActionChoices(sources, null),
       ...sendingProcessChoices(sources, null),
     ];
   } else if (throwsMessages(bo)) {
-    addSourceGroup(select, "waiting-processes", "Processes waiting for it", waitingProcessChoices(sources, declared));
+    addSourceGroup(select, "waiting-processes", tr("pnl.event.src.waiting"), waitingProcessChoices(sources, declared));
     suggested = waitingProcessChoices(sources, null);
   } else {
     return;
@@ -7227,15 +7224,15 @@ function messagesManagerHTML(modeler) {
   const rows = msgs.length
     ? msgs.map((m) => `
         <div class="msg-row" data-id="${esc(m.id)}">
-          <input class="msg-name" value="${esc(m.name || "")}" placeholder="message name"/>
-          <input class="msg-key" value="${esc(messageCorrelationKey(m))}" placeholder="correlationKey (FEEL)"/>
-          <button type="button" class="btn ghost danger msg-del" title="Delete message">✕</button>
+          <input class="msg-name" value="${esc(m.name || "")}" placeholder="${esc(tr("pnl.event.msg.namePh"))}"/>
+          <input class="msg-key" value="${esc(messageCorrelationKey(m))}" placeholder="${esc(tr("pnl.event.msg.keyPh"))}"/>
+          <button type="button" class="btn ghost danger msg-del" title="${esc(tr("pnl.event.msg.delete"))}">✕</button>
         </div>`).join("")
-    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No messages yet — add one, then reference it from a message throw/catch event.</p>`;
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">${esc(tr("pnl.event.msg.empty"))}</p>`;
   return `<h3 data-group="Messages">${esc(tr("bpmn.group.messages"))}</h3>
     <div class="msg-list">${rows}</div>
-    <button type="button" class="btn neutral" id="msg-add" style="margin-top:8px" title="Add a message">＋ Add message</button>
-    <p class="muted" style="font-size:12px">A message links a <b>throw</b> event to the <b>catch</b> events waiting for it. They correlate when they share a message and their correlation keys evaluate equal.</p>`;
+    <button type="button" class="btn neutral" id="msg-add" style="margin-top:8px" title="${esc(tr("pnl.event.msg.addTitle"))}">${esc(tr("pnl.event.msg.add"))}</button>
+    <p class="muted" style="font-size:12px">${tr("pnl.event.msg.about")}</p>`;
 }
 
 // wireMessagesManager binds the Messages management section's inputs and buttons.
@@ -7273,16 +7270,16 @@ function timerDefOf(bo) {
 // the literal parser would take (ADR-0057).
 const TIMER_KINDS = {
   duration: {
-    prop: "timeDuration", label: "Duration", placeholder: "PT30M",
-    feel: `a <b>duration</b> in days and time (not months or years, whose length depends on the calendar) or its ISO-8601 text — e.g. <b>= wartezeit</b> or <b>= duration("P" + string(tage) + "D")</b>`,
+    prop: "timeDuration", label: "pnl.event.timer.duration", noun: "pnl.event.timer.durationNoun", placeholder: "PT30M",
+    feel: "pnl.event.timer.durationFeel",
   },
   date: {
-    prop: "timeDate", label: "Date & time", placeholder: "2026-08-01T09:00:00Z",
-    feel: `a <b>date and time</b> (or a date, read as its midnight) or its RFC 3339 text — e.g. <b>= frist</b> or <b>= date and time(termin)</b>`,
+    prop: "timeDate", label: "pnl.event.timer.date", noun: "pnl.event.timer.dateNoun", placeholder: "2026-08-01T09:00:00Z",
+    feel: "pnl.event.timer.dateFeel",
   },
   cycle: {
-    prop: "timeCycle", label: "Cycle", placeholder: "R/PT1H  ·  0 * * * *",
-    feel: `the text of a repeating interval or a cron expression — e.g. <b>= "R/PT" + string(stunden) + "H"</b>`,
+    prop: "timeCycle", label: "pnl.event.timer.cycle", noun: "pnl.event.timer.cycleNoun", placeholder: "R/PT1H  ·  0 * * * *",
+    feel: "pnl.event.timer.cycleFeel",
   },
 };
 
@@ -7307,15 +7304,15 @@ function timerFieldsHTML(timer, kinds, note, { constant = false } = {}) {
   const meta = TIMER_KINDS[kind];
   const body = (timer && timer[meta.prop] && timer[meta.prop].body) || "";
   const opts = kinds
-    .map((k) => `<option value="${k}" ${k === kind ? "selected" : ""}>${TIMER_KINDS[k].label}</option>`)
+    .map((k) => `<option value="${k}" ${k === kind ? "selected" : ""}>${esc(tr(TIMER_KINDS[k].label))}</option>`)
     .join("");
   const feel = constant
-    ? `Switch on <b>fx</b> for a FEEL expression. A timer start has no instance yet, so the expression may read <b>no variables</b>; the deploy evaluates it once and refuses one that does not yield a valid ${esc(meta.label.toLowerCase())}.`
-    : `Switch on <b>fx</b> for a FEEL expression, evaluated when the timer is armed against the instance's variables. It must yield ${meta.feel}. If it yields neither, no timer is set: an incident is raised on the event, and resolving it once the data is fixed arms the timer again.`;
+    ? tr("pnl.event.timer.feelConstant", { what: esc(tr(meta.noun)) })
+    : tr("pnl.event.timer.feelInstance", { feel: tr(meta.feel) });
   return `<h3 data-group="Timer">${esc(tr("bpmn.group.timer"))}</h3>
-    <label class="field"><span>Type</span>
+    <label class="field"><span>${esc(tr("pnl.event.timer.type"))}</span>
       <select id="f-timerkind">${opts}</select></label>
-    <label class="field"><span>${meta.label}</span>
+    <label class="field"><span>${esc(tr(meta.label))}</span>
       <textarea id="f-timerval" rows="1" spellcheck="false" placeholder="${esc(meta.placeholder)}">${esc(body)}</textarea></label>
     <p class="muted" style="font-size:12px">${note} ${feel}</p>`;
 }
@@ -7507,22 +7504,22 @@ function signalFieldsHTML(modeler, sed, hint, listens) {
     `<option value="${esc(s.id)}"${current && current.id === s.id ? " selected" : ""}>${esc(s.name || s.id)}</option>`
   ).join("");
   const fields = current ? `
-    <label class="field"><span>Signal name</span>
+    <label class="field"><span>${esc(tr("pnl.event.sig.name"))}</span>
       <input type="text" id="f-signame" value="${esc(current.name || "")}" placeholder="order-cancelled"/></label>
-    <p class="muted" style="font-size:12px">Shared with every event that uses this signal — a broadcast reaches every catch, boundary, event subprocess, and start event of the same name.</p>` : "";
+    <p class="muted" style="font-size:12px">${esc(tr("pnl.event.sig.shared"))}</p>` : "";
   // A receiving element is offered the events atlas emits as signals (ADR-0435); the
   // group is filled from the event catalogue once it answers, and #f-sigevent says
   // what the chosen atlas.* name means and what it carries. It is offered the names
   // the deployed models throw too (ADR-0447), and a throwing element is told who
   // receives its name (#f-sigreceivers).
   return `<h3 data-group="Signal">${esc(tr("bpmn.group.signal"))}</h3>
-    <label class="field"><span>Signal</span>
+    <label class="field"><span>${esc(tr("pnl.event.sig.label"))}</span>
       <select id="f-sigref" data-listens="${listens ? "1" : ""}">
-        <option value="">— none —</option>
+        <option value="">${esc(tr("pnl.event.sig.none"))}</option>
         ${options}
-        ${listens ? `<optgroup label="Events atlas emits" id="f-sig-events"></optgroup>` : ""}
-        ${listens ? `<optgroup label="Signals deployed models throw" id="f-sig-deployed"></optgroup>` : ""}
-        <option value="__new__">＋ New signal…</option>
+        ${listens ? `<optgroup label="${esc(tr("pnl.event.sig.atlasEvents"))}" id="f-sig-events"></optgroup>` : ""}
+        ${listens ? `<optgroup label="${esc(tr("pnl.event.sig.deployed"))}" id="f-sig-deployed"></optgroup>` : ""}
+        <option value="__new__">${esc(tr("pnl.event.sig.new"))}</option>
       </select></label>
     ${fields}
     <div id="f-sigevent"></div>
@@ -7561,7 +7558,7 @@ function deployedSignalChoices(signals) {
 // eventsPageLink links a name to its row on the Console's Events page.
 function eventsPageLink(name, channel) {
   const href = `/#/console/events?name=${encodeURIComponent(name)}&channel=${channel}`;
-  return `<a href="${esc(href)}" target="_blank" rel="noopener">Events ↗</a>`;
+  return `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(tr("pnl.event.eventsLink"))}</a>`;
 }
 
 // signalReceiversHTML is a throwing element's one line (ADR-0447 §6): how many deployed
@@ -7575,9 +7572,9 @@ function signalReceiversHTML(signals, name) {
   const by = [...new Set(((g && g.points) || [])
     .filter((p) => p.role !== "throw" && p.newest && !p.inactive).map((p) => p.processId))].sort();
   if (!by.length) {
-    return `No deployed process receives it: a signal is not buffered, so every throw is lost until one is deployed. ${eventsPageLink(n, "signal")}`;
+    return `${esc(tr("pnl.event.sig.noReceiver"))} ${eventsPageLink(n, "signal")}`;
   }
-  return `Received by ${by.length} deployed process${by.length > 1 ? "es" : ""}: ${by.map(esc).join(", ")}. ${eventsPageLink(n, "signal")}`;
+  return `${trPlural("pnl.event.sig.receivedBy", by.length, { processes: by.map(esc).join(", ") })} ${eventsPageLink(n, "signal")}`;
 }
 
 // eventCatalog is the event catalogue, asked for once per page (ADR-0435). A modeler
@@ -7598,14 +7595,13 @@ function signalEventNote(entries, name, listens) {
   if (!n.startsWith("atlas.")) return "";
   const e = entries.find((x) => !x.shaped && x.type === n);
   if (!listens) {
-    return `<p class="hint warn">${esc(n)} is a name atlas emits${e ? "" : " (or reserves)"}: a model that throws it speaks for atlas. Use a name of your own.</p>`;
+    return `<p class="hint warn">${esc(e ? tr("pnl.event.sig.atlasOwn", { name: n }) : tr("pnl.event.sig.atlasReserved", { name: n }))}</p>`;
   }
-  if (!e) return `<p class="hint warn">atlas emits no event named ${esc(n)}; this element would wait for something that never comes.</p>`;
+  if (!e) return `<p class="hint warn">${esc(tr("pnl.event.sig.noSuchEvent", { name: n }))}</p>`;
   const personal = (e.payload || []).filter((f) => f.data === "personal").map((f) => f.name);
   return `<p class="hint" data-event="${esc(e.type)}">${esc((e.meaning || {}).en || "")}${
-    personal.length ? ` The listener receives personal data: ${personal.map(esc).join(", ")}. ` +
-      "Only an administrator may deploy a model that listens to it." : ""
-  } <a href="/#/console/events" target="_blank" rel="noopener">Events ↗</a></p>`;
+    personal.length ? ` ${esc(tr("pnl.event.sig.personal", { fields: personal.join(", ") }))}` : ""
+  } <a href="/#/console/events" target="_blank" rel="noopener">${esc(tr("pnl.event.eventsLink"))}</a></p>`;
 }
 
 // signalsManagerHTML lists the model's signals for central management (add, rename,
@@ -7615,14 +7611,14 @@ function signalsManagerHTML(modeler) {
   const rows = sigs.length
     ? sigs.map((s) => `
         <div class="sig-row" data-id="${esc(s.id)}">
-          <input class="sig-name" value="${esc(s.name || "")}" placeholder="signal name"/>
-          <button type="button" class="btn ghost danger sig-del" title="Delete signal">✕</button>
+          <input class="sig-name" value="${esc(s.name || "")}" placeholder="${esc(tr("pnl.event.sig.namePh"))}"/>
+          <button type="button" class="btn ghost danger sig-del" title="${esc(tr("pnl.event.sig.delete"))}">✕</button>
         </div>`).join("")
-    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No signals yet — add one, then reference it from a signal throw/catch/boundary/start event.</p>`;
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">${esc(tr("pnl.event.sig.empty"))}</p>`;
   return `<h3 data-group="Signals">${esc(tr("bpmn.group.signals"))}</h3>
     <div class="sig-list">${rows}</div>
-    <button type="button" class="btn neutral" id="sig-add" style="margin-top:8px" title="Add a signal">＋ Add signal</button>
-    <p class="muted" style="font-size:12px">A signal is a broadcast by name: a <b>throw</b> reaches every <b>catch</b>, boundary, event subprocess, and start event using the same signal — with no correlation key.</p>`;
+    <button type="button" class="btn neutral" id="sig-add" style="margin-top:8px" title="${esc(tr("pnl.event.sig.addTitle"))}">${esc(tr("pnl.event.sig.add"))}</button>
+    <p class="muted" style="font-size:12px">${tr("pnl.event.sig.about")}</p>`;
 }
 
 // wireSignalsManager binds the Signals management section's inputs and buttons.
@@ -7716,15 +7712,15 @@ function errorFieldsHTML(modeler, eed, hint) {
     `<option value="${esc(e.id)}"${current && current.id === e.id ? " selected" : ""}>${esc(e.errorCode || e.id)}</option>`
   ).join("");
   const fields = current ? `
-    <label class="field"><span>Error code</span>
+    <label class="field"><span>${esc(tr("pnl.event.err.code"))}</span>
       <input type="text" id="f-errcode" value="${esc(current.errorCode || "")}" placeholder="PAYMENT_FAILED"/></label>
-    <p class="muted" style="font-size:12px">Shared with every event that uses this error — a thrown code is caught by the nearest enclosing error boundary or error event subprocess with the same code (an empty code is a catch-all).</p>` : "";
+    <p class="muted" style="font-size:12px">${esc(tr("pnl.event.err.shared"))}</p>` : "";
   return `<h3 data-group="Error">${esc(tr("bpmn.group.error"))}</h3>
-    <label class="field"><span>Error</span>
+    <label class="field"><span>${esc(tr("pnl.event.err.label"))}</span>
       <select id="f-errref">
-        <option value="">— none —</option>
+        <option value="">${esc(tr("pnl.event.err.none"))}</option>
         ${options}
-        <option value="__new__">＋ New error…</option>
+        <option value="__new__">${esc(tr("pnl.event.err.new"))}</option>
       </select></label>
     ${fields}
     <p class="muted" style="font-size:12px">${hint}</p>`;
@@ -7736,14 +7732,14 @@ function errorsManagerHTML(modeler) {
   const rows = errs.length
     ? errs.map((e) => `
         <div class="err-row" data-id="${esc(e.id)}">
-          <input class="err-code" value="${esc(e.errorCode || "")}" placeholder="error code"/>
-          <button type="button" class="btn ghost danger err-del" title="Delete error">✕</button>
+          <input class="err-code" value="${esc(e.errorCode || "")}" placeholder="${esc(tr("pnl.event.err.codePh"))}"/>
+          <button type="button" class="btn ghost danger err-del" title="${esc(tr("pnl.event.err.delete"))}">✕</button>
         </div>`).join("")
-    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No errors yet — add one, then reference it from an error end event or error boundary.</p>`;
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">${esc(tr("pnl.event.err.empty"))}</p>`;
   return `<h3 data-group="Errors">${esc(tr("bpmn.group.errors"))}</h3>
     <div class="err-list">${rows}</div>
-    <button type="button" class="btn neutral" id="err-add" style="margin-top:8px" title="Add an error">＋ Add error</button>
-    <p class="muted" style="font-size:12px">An error is a scoped failure caught by code: an <b>error end event</b> (or a worker) throws it, and the nearest enclosing <b>error boundary</b> or <b>error event subprocess</b> with the same code catches it — always interrupting.</p>`;
+    <button type="button" class="btn neutral" id="err-add" style="margin-top:8px" title="${esc(tr("pnl.event.err.addTitle"))}">${esc(tr("pnl.event.err.add"))}</button>
+    <p class="muted" style="font-size:12px">${tr("pnl.event.err.about")}</p>`;
 }
 
 // wireErrorsManager binds the Errors management section's inputs and buttons.
@@ -7785,7 +7781,7 @@ function linkDefOf(bo) {
 // catch of the same name in the same scope; the name is the whole configuration (ADR-0133).
 function linkFieldsHTML(led, hint) {
   return `<h3 data-group="Link">${esc(tr("bpmn.group.link"))}</h3>
-    <label class="field"><span>Link name</span>
+    <label class="field"><span>${esc(tr("pnl.event.link.name"))}</span>
       <input type="text" id="f-linkname" value="${esc(led.name || "")}" placeholder="ProceedHere"/></label>
     <p class="muted" style="font-size:12px">${hint}</p>`;
 }
@@ -7803,7 +7799,7 @@ function conditionalDefOf(bo) {
 function conditionalFieldsHTML(ced, hint) {
   const condText = ((ced.condition && ced.condition.body) || "").replace(/^=\s*/, "");
   return `<h3 data-group="Condition (FEEL)">${esc(tr("bpmn.group.conditionFeel"))}</h3>
-    <label class="field"><span>Expression</span>
+    <label class="field"><span>${esc(tr("pnl.event.cond.expression"))}</span>
       <textarea id="f-condition" rows="2" placeholder="amount > 100">${esc(condText)}</textarea></label>
     <p class="muted" style="font-size:12px">${hint}</p>`;
 }
@@ -7864,15 +7860,15 @@ function escalationFieldsHTML(modeler, eed, hint) {
     `<option value="${esc(e.id)}"${current && current.id === e.id ? " selected" : ""}>${esc(e.escalationCode || e.id)}</option>`
   ).join("");
   const fields = current ? `
-    <label class="field"><span>Escalation code</span>
+    <label class="field"><span>${esc(tr("pnl.event.esc.code"))}</span>
       <input type="text" id="f-esccode" value="${esc(current.escalationCode || "")}" placeholder="ESCALATE_TO_MANAGER"/></label>
-    <p class="muted" style="font-size:12px">Shared with every event that uses this escalation — a raised code is caught by the nearest enclosing escalation boundary or escalation event subprocess with the same code (an empty code is a catch-all).</p>` : "";
+    <p class="muted" style="font-size:12px">${esc(tr("pnl.event.esc.shared"))}</p>` : "";
   return `<h3 data-group="Escalation">${esc(tr("bpmn.group.escalation"))}</h3>
-    <label class="field"><span>Escalation</span>
+    <label class="field"><span>${esc(tr("pnl.event.esc.label"))}</span>
       <select id="f-escref">
-        <option value="">— none —</option>
+        <option value="">${esc(tr("pnl.event.esc.none"))}</option>
         ${options}
-        <option value="__new__">＋ New escalation…</option>
+        <option value="__new__">${esc(tr("pnl.event.esc.new"))}</option>
       </select></label>
     ${fields}
     <p class="muted" style="font-size:12px">${hint}</p>`;
@@ -7885,14 +7881,14 @@ function escalationsManagerHTML(modeler) {
   const rows = escs.length
     ? escs.map((e) => `
         <div class="esc-row" data-id="${esc(e.id)}">
-          <input class="esc-code" value="${esc(e.escalationCode || "")}" placeholder="escalation code"/>
-          <button type="button" class="btn ghost danger esc-del" title="Delete escalation">✕</button>
+          <input class="esc-code" value="${esc(e.escalationCode || "")}" placeholder="${esc(tr("pnl.event.esc.codePh"))}"/>
+          <button type="button" class="btn ghost danger esc-del" title="${esc(tr("pnl.event.esc.delete"))}">✕</button>
         </div>`).join("")
-    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No escalations yet — add one, then reference it from an escalation throw/end event or escalation boundary.</p>`;
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">${esc(tr("pnl.event.esc.empty"))}</p>`;
   return `<h3 data-group="Escalations">${esc(tr("bpmn.group.escalations"))}</h3>
     ${rows}
-    <button type="button" class="btn ghost" id="esc-add" title="Add an escalation">＋ Add escalation</button>
-    <p class="muted" style="font-size:12px">An escalation is a matter raised up the scope chain: an <b>escalation throw</b> or <b>end event</b> raises it, and the nearest enclosing <b>escalation boundary</b> or <b>escalation event subprocess</b> with the same code catches it. Unlike an error, a catch may be <b>non-interrupting</b> (the activity keeps running) and an uncaught escalation is harmless.</p>`;
+    <button type="button" class="btn ghost" id="esc-add" title="${esc(tr("pnl.event.esc.addTitle"))}">${esc(tr("pnl.event.esc.add"))}</button>
+    <p class="muted" style="font-size:12px">${tr("pnl.event.esc.about")}</p>`;
 }
 
 // wireEscalationsManager binds the Escalations management section's inputs and buttons.
@@ -8230,36 +8226,36 @@ function startVarRowHTML(v, constant = false) {
   // A fact a namespace carries (server.environment) is named by Atlas, not the author: its
   // name, type and source are fixed, and only a fallback can be given.
   const info = bound && isNamespaceInfo(v.source, v.name);
-  const what = bound ? "Fallback value" : constant ? "Value" : "Default value";
+  const what = bound ? tr("pnl.event.sv.fallbackValue") : constant ? tr("pnl.event.sv.value") : tr("pnl.event.sv.defaultValue");
   // A start variable's default is what an instance starts with when its start does not
   // supply the variable, on every start path (ADR-0455) — not
   // only what the start forms prefill. Said where it is typed.
   const tip = constant ? ""
-    : ' title="What an instance starts with when its start does not supply this variable (API, timer, message, signal, call activity); the start forms prefill it"';
+    : ` title="${esc(tr("pnl.event.sv.defaultTip"))}"`;
   const defaultField = v.type === "json"
-    ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='${bound ? "fallback (optional)" : '{"key": "value"}'}' aria-label="${what} (JSON)"${tip}>${esc(v.default)}</textarea>`
-    : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="${bound ? "fallback (optional)" : constant ? "value" : "default"}" aria-label="${what}"${tip}/>`;
+    ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='${bound ? esc(tr("pnl.event.sv.fallbackPh")) : '{"key": "value"}'}' aria-label="${esc(what)} (JSON)"${tip}>${esc(v.default)}</textarea>`
+    : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="${esc(bound ? tr("pnl.event.sv.fallbackPh") : constant ? tr("pnl.event.sv.valuePh") : tr("pnl.event.sv.defaultPh"))}" aria-label="${esc(what)}"${tip}/>`;
   // A constant takes its value from the process model, or from what the installation
   // holds — for the application, or for every application — read as application.NAME or
   // server.NAME (ADR-0456).
   const src = constant ? (v.source || "") : "";
   const source = constant
-    ? `<select class="sv-source" aria-label="Source"${info ? " disabled" : ""} title="Where the value comes from: the process model, the application's constant on each installation (application.NAME), or the installation's own (server.NAME)">
-        <option value=""${src === "" ? " selected" : ""}>process</option>
-        <option value="application"${src === "application" ? " selected" : ""}>application</option>
-        <option value="server"${src === "server" ? " selected" : ""}>server</option>
+    ? `<select class="sv-source" aria-label="${esc(tr("pnl.event.sv.source"))}"${info ? " disabled" : ""} title="${esc(tr("pnl.event.sv.sourceTitle"))}">
+        <option value=""${src === "" ? " selected" : ""}>${esc(tr("pnl.event.sv.src.process"))}</option>
+        <option value="application"${src === "application" ? " selected" : ""}>${esc(tr("pnl.event.sv.src.application"))}</option>
+        <option value="server"${src === "server" ? " selected" : ""}>${esc(tr("pnl.event.sv.src.server"))}</option>
       </select>`
     : "";
   // A constant is never asked for, so "required" has nothing to mean on it.
   const required = constant ? ""
-    : `<label class="sv-req" title="Required"><input type="checkbox" class="sv-required"${v.required ? " checked" : ""}/> req</label>`;
+    : `<label class="sv-req" title="${esc(tr("pnl.event.sv.required"))}"><input type="checkbox" class="sv-required"${v.required ? " checked" : ""}/> ${esc(tr("pnl.event.sv.req"))}</label>`;
   return `<div class="sv-row${v.type === "json" ? " sv-row-json" : ""}">
-    <input type="text" class="sv-name${constant && !info ? " sv-const-name" : ""}" value="${esc(v.name)}" placeholder="${constant ? "TENANT_ID" : "customer"}" aria-label="${constant ? "Constant name" : "Variable name"}"${info ? ` readonly title="${esc(v.source)}.${esc(v.name)} is filled by Atlas"` : ""}/>
-    <select class="sv-type" aria-label="Type"${info ? " disabled" : ""}>${opts}</select>
+    <input type="text" class="sv-name${constant && !info ? " sv-const-name" : ""}" value="${esc(v.name)}" placeholder="${constant ? "TENANT_ID" : "customer"}" aria-label="${esc(constant ? tr("pnl.event.sv.constName") : tr("pnl.event.sv.varName"))}"${info ? ` readonly title="${esc(tr("pnl.event.sv.filledByAtlas", { path: `${v.source}.${v.name}` }))}"` : ""}/>
+    <select class="sv-type" aria-label="${esc(tr("pnl.event.sv.type"))}"${info ? " disabled" : ""}>${opts}</select>
     ${source}
     ${defaultField}
     ${required}
-    <button type="button" class="sv-del icon-btn" title="Remove" aria-label="${constant ? "Remove constant" : "Remove variable"}">✕</button>
+    <button type="button" class="sv-del icon-btn" title="${esc(tr("pnl.event.sv.remove"))}" aria-label="${esc(constant ? tr("pnl.event.sv.removeConst") : tr("pnl.event.sv.removeVar"))}">✕</button>
   </div>`;
 }
 
