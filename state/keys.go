@@ -64,6 +64,8 @@ const (
 	cfActionApproval         columnFamily = 0x33 // apr:<piKey>:<approvalKey>:<pos> → ActionApprovalValue (ADR-0475 §9)
 	cfAuthorization          columnFamily = 0x34 // authz:<piKey>:<jobKey>:<pos> → AuthorizationValue (ADR-0475 §12); 0x32 until it was found to be the event log's
 	cfApprovalExpiry         columnFamily = 0x35 // aprExp:<expiresAt>:<approvalKey> → piKey(8): the open approval requests, soonest first (ADR-0475 §9)
+	cfFlowTakenAgg           columnFamily = 0x36 // flowAgg:<procDefKey>:<flowId> → int64 cumulative traversals (merge, ADR-draft-operations-heatmap)
+	cfJobTake                columnFamily = 0x37 // jobTake:<piKey>:<ts>:<pos> → elementInstanceKey(8) kind(1): a task taken up or handed back (ADR-draft-operations-heatmap)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -143,8 +145,17 @@ func keyElementTerminationAgg(procDefKey uint64, elementId int32) []byte {
 	return appendBE32(runtimeCountPrefix(cfElementTerminationAgg, procDefKey), uint32(elementId))
 }
 
+// keyFlowTakenAgg keys a definition-flow cumulative-traversal counter: how many tokens
+// arrived at a flow's target over that flow (ADR-draft-operations-heatmap). The same
+// shape as the element aggregates — definition first, so one definition's flows are a
+// single prefix scan, the compiled flow index last. Incremented, never decremented.
+func keyFlowTakenAgg(procDefKey uint64, flowId int32) []byte {
+	return appendBE32(runtimeCountPrefix(cfFlowTakenAgg, procDefKey), uint32(flowId))
+}
+
 // elementIdFromCountKey extracts the trailing element index from a per-element
-// runtime counter key (token, visit, or termination).
+// runtime counter key (token, visit, or termination) — or the flow index from a
+// per-flow one, which ends the same way.
 func elementIdFromCountKey(k []byte) int32 {
 	return int32(binary.BigEndian.Uint32(k[len(k)-4:]))
 }
@@ -420,6 +431,19 @@ func keyElementReplay(piKey uint64, ts int64, pos uint64) []byte {
 
 func elementReplayInstancePrefix(piKey uint64) []byte {
 	return appendBE64([]byte{byte(cfElementReplay)}, piKey)
+}
+
+// keyJobTake keys one take-up or hand-back of a task under its process instance, in
+// the order it happened: the element-step key's shape, so one instance's facts are a
+// prefix scan in time order and the timestamp reads back with timestampFromStepKey.
+func keyJobTake(piKey uint64, ts int64, pos uint64) []byte {
+	k := appendBE64([]byte{byte(cfJobTake)}, piKey)
+	k = appendOrderedInt64(k, ts)
+	return appendBE64(k, pos)
+}
+
+func jobTakeInstancePrefix(piKey uint64) []byte {
+	return appendBE64([]byte{byte(cfJobTake)}, piKey)
 }
 
 // timestampFromStepKey extracts the event timestamp from an element-step key,

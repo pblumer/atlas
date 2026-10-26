@@ -521,6 +521,7 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 		keyProcessInstanceHistory(piKey),
 		elementStepInstancePrefix(piKey),
 		elementReplayInstancePrefix(piKey),
+		jobTakeInstancePrefix(piKey),
 		elementVisitInstancePrefix(procDefKey, piKey),
 		elementTerminationInstancePrefix(procDefKey, piKey),
 		variableSnapshotScopePrefix(piKey),
@@ -1196,6 +1197,15 @@ func (t *Tx) IncElementTerminationAgg(procDefKey uint64, elementId int32) error 
 	return t.mergeCounter(keyElementTerminationAgg(procDefKey, elementId), 1)
 }
 
+// IncFlowTakenAgg bumps a definition-flow cumulative-traversal count when a token
+// arrives at the flow's target over it (ADR-draft-operations-heatmap). Never
+// decremented — it is the arrows' half of the retained heatmap, beside the elements'
+// visit aggregate. A write-only merge, so it neither reads nor allocates beyond the key
+// the visit counter beside it builds too (I1), and replay rebuilds it (I4).
+func (t *Tx) IncFlowTakenAgg(procDefKey uint64, flowId int32) error {
+	return t.mergeCounter(keyFlowTakenAgg(procDefKey, flowId), 1)
+}
+
 // --- Element-visit history ---
 //
 // Every time a token activates an element, its per-(definition, instance,
@@ -1277,6 +1287,30 @@ func (t *Tx) RecordElementReplay(piKey uint64, ts int64, pos uint64, elementID i
 	t.scratch = appendBE32(t.scratch, uint32(sourceFlowID))
 	t.scratch = append(t.scratch, action)
 	return t.b.Set(keyElementReplay(piKey, ts, pos), t.scratch, nil)
+}
+
+// --- Task take-up history ---
+//
+// When a task is taken up — claimed by a person (ADR-0042), leased by a Worker
+// (ADR-0007) — and when it is handed back, the instance keeps the fact, keyed in the
+// order it happened. The job itself keeps only who holds it now and is deleted when it
+// completes, so without this nothing could say how long a task waited before somebody
+// started on it and how long the work then took (ADR-draft-operations-heatmap). Written
+// only from applyToState, from the event header and the job alone, so replay rebuilds it
+// identically (I4); a plain Set under a unique key, purged with the instance's history.
+
+// The kinds of a take fact. Persisted, so their values must not be reused.
+const (
+	JobTaken    byte = 1 // claimed by a person, or leased by a Worker
+	JobReleased byte = 2 // unclaimed, its lease ran out, or handed back failed
+)
+
+// RecordJobTake retains one take-up or hand-back of the job that elementKey's element
+// instance is waiting on. ts and pos come from the event header.
+func (t *Tx) RecordJobTake(piKey uint64, ts int64, pos uint64, elementKey uint64, kind byte) error {
+	t.scratch = appendBE64(t.scratch[:0], elementKey)
+	t.scratch = append(t.scratch, kind)
+	return t.b.Set(keyJobTake(piKey, ts, pos), t.scratch, nil)
 }
 
 // --- Variable-snapshot history ---

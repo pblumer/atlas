@@ -108,6 +108,14 @@ func Open(dir string, opts ...Option) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: backfill element terminations: %w", err)
 	}
+	// The per-flow traversal counters (ADR-draft-operations-heatmap) arrive on stores
+	// that already hold years of element counts; left at zero, every arrow of a busy
+	// process would read "never reached". The trail recorded the flows, so they are
+	// reconstructed once from it.
+	if err := s.backfillFlowTakenIfNeeded(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: backfill flow counters: %w", err)
+	}
 	// The reverse call-activity link index is a later addition still. Children that
 	// already exist recorded their parent on their own record but never wrote the
 	// index, and without it a cancel of their caller would leave them running — so
@@ -477,6 +485,17 @@ func (q queries) ElementTerminationTotals(procDefKey uint64, fn func(elementId i
 	})
 }
 
+// FlowTakenTotals calls fn with each of a definition's sequence flows that a token has
+// arrived over, and how many times — the arrows' half of the retained heatmap, read in
+// O(flows) from a maintained counter like ElementVisitTotals
+// (ADR-draft-operations-heatmap). A flow no token ever took is absent; the caller walks
+// the compiled process when it needs the zeroes.
+func (q queries) FlowTakenTotals(procDefKey uint64, fn func(flowId int32, count int64) error) error {
+	return q.scanPrefix(runtimeCountPrefix(cfFlowTakenAgg, procDefKey), func(k, raw []byte) error {
+		return fn(elementIdFromCountKey(k), decodeCounter(raw))
+	})
+}
+
 // metaRuntimeCountersV1 marks that the ADR-0080 runtime counters have been seeded
 // from pre-existing state. Its presence makes the backfill a one-time migration.
 const metaRuntimeCountersV1 = "runtime_counters_v1"
@@ -658,6 +677,137 @@ func (s *Store) backfillElementTerminationsIfNeeded() error {
 		}
 	}
 	if err := b.Set(keyMeta(metaElementTerminationsV1), []byte{1}, nil); err != nil {
+		return err
+	}
+	return b.Commit(pebble.Sync)
+}
+
+// metaFlowTakenV1 marks that the per-flow traversal counters
+// (ADR-draft-operations-heatmap) have been reconstructed from the lifecycle trail.
+const metaFlowTakenV1 = "flow_taken_v1"
+
+// backfillFlowTakenIfNeeded reconstructs the per-flow traversal counters from the
+// lifecycle trail (ADR-0136) the first time a store gains them.
+//
+// Without it a store upgraded into the counter would draw every arrow of a long-running
+// process cold — dashed, "never reached" — between shapes whose visit counts go back
+// years. The trail has recorded the flow every activation came over all along
+// (SourceFlowID), so the facts are there.
+//
+// The counting rule is the live one in applyToState: an activation over a flow counts
+// for it, except a catch armed by an event-based gateway, which counts only once its
+// race is decided in its favour. The trail does not say which activations were armed,
+// so that part is read off what is left: a branch still waiting is a live element
+// instance carrying its race group (EventGatewayKey) and is skipped; a branch that was
+// cancelled is skipped when another activation armed by the same token completed —
+// the race's winner. A parallel branch torn down while its sibling finished looks the
+// same and goes uncounted too; that imprecision is accepted, once, for history.
+//
+// Like the termination backfill, an instance whose record is gone (purged, ADR-0146) is
+// skipped, and a migrated instance (ADR-0162) is attributed to the definition it runs
+// under now. Unlike it, there is no per-instance counter to top up, so the marker alone
+// makes it one-time: it is written in the same synced batch as the counts.
+func (s *Store) backfillFlowTakenIfNeeded() error {
+	if _, ok, err := getCopy(s.db, keyMeta(metaFlowTakenV1)); err != nil || ok {
+		return err
+	}
+
+	defOf := map[uint64]uint64{}
+	for _, cf := range []columnFamily{cfProcessInstance, cfProcessInstanceHistory} {
+		if err := s.scanPrefix([]byte{byte(cf)}, func(k, raw []byte) error {
+			v, err := model.DecodeValue(model.VTProcessInstance, raw)
+			if err != nil {
+				return err
+			}
+			defOf[trailingKey(k)] = v.(*model.ProcessInstanceValue).ProcessDefKey
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+
+	type defFlow struct {
+		def  uint64
+		flow int32
+	}
+	counts := map[defFlow]int64{}
+
+	// The trail is grouped by instance, so one instance's activations are gathered and
+	// judged together when the scan moves past it.
+	type arrival struct {
+		flow   int32
+		parent uint64
+		end    byte // 0 while the element instance has not ended
+	}
+	var (
+		current  uint64
+		arrivals = map[uint64]*arrival{} // element instance key → its arrival over a flow
+		won      = map[uint64]bool{}     // parent token ids that armed a branch which completed
+	)
+	flush := func() error {
+		def, ok := defOf[current]
+		if !ok {
+			return nil
+		}
+		for elKey, a := range arrivals {
+			switch a.end {
+			case 0:
+				ei, live, err := s.GetElementInstance(elKey)
+				if err != nil {
+					return err
+				}
+				if live && ei.EventGatewayKey != 0 {
+					continue // an armed branch whose race is still open
+				}
+			case ReplayTerminated:
+				if a.parent != 0 && won[a.parent] {
+					continue // the losing branch of a decided race
+				}
+			}
+			counts[defFlow{def, a.flow}]++
+		}
+		return nil
+	}
+	if err := s.AllElementReplay(func(piKey uint64, _ int64, _ uint64, v ElementReplayValue) error {
+		if piKey != current {
+			if err := flush(); err != nil {
+				return err
+			}
+			current = piKey
+			clear(arrivals)
+			clear(won)
+		}
+		switch v.Action {
+		case ReplayActivated:
+			if v.SourceFlowID >= 0 {
+				arrivals[v.ElementInstanceKey] = &arrival{flow: v.SourceFlowID, parent: v.ParentTokenID}
+			}
+		case ReplayCompleted, ReplayTerminated:
+			a := arrivals[v.ElementInstanceKey]
+			if a == nil {
+				return nil
+			}
+			a.end = v.Action
+			if v.Action == ReplayCompleted && a.parent != 0 {
+				won[a.parent] = true
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if err := flush(); err != nil {
+		return err
+	}
+
+	b := s.db.NewBatch()
+	defer b.Close()
+	for df, n := range counts {
+		if err := b.Merge(keyFlowTakenAgg(df.def, df.flow), encodeCounter(n), nil); err != nil {
+			return err
+		}
+	}
+	if err := b.Set(keyMeta(metaFlowTakenV1), []byte{1}, nil); err != nil {
 		return err
 	}
 	return b.Commit(pebble.Sync)
@@ -1561,6 +1711,27 @@ func decodeElementReplay(raw []byte) (ElementReplayValue, error) {
 		TokenID: binary.BigEndian.Uint64(raw[12:]), ParentTokenID: binary.BigEndian.Uint64(raw[20:]),
 		SourceFlowID: int32(binary.BigEndian.Uint32(raw[28:])), Action: raw[32],
 	}, nil
+}
+
+// JobTakeValue is one retained take-up or hand-back of a task: the element instance
+// whose job it was, and whether it was taken (JobTaken) or handed back (JobReleased).
+type JobTakeValue struct {
+	ElementInstanceKey uint64
+	Kind               byte
+}
+
+// JobTakeHistory calls fn with every take-up and hand-back of one process instance's
+// tasks, in the order they happened (ADR-draft-operations-heatmap). Paired with the
+// lifecycle trail's activation and completion of the same element instance, it splits
+// the time a task took into waiting for somebody and being worked on.
+func (q queries) JobTakeHistory(piKey uint64, fn func(ts int64, pos uint64, v JobTakeValue) error) error {
+	return q.scanPrefix(jobTakeInstancePrefix(piKey), func(k, raw []byte) error {
+		if len(raw) != 9 {
+			return fmt.Errorf("state: corrupt job take value (%d bytes)", len(raw))
+		}
+		return fn(timestampFromStepKey(k), positionFromStepKey(k),
+			JobTakeValue{ElementInstanceKey: binary.BigEndian.Uint64(raw), Kind: raw[8]})
+	})
 }
 
 // VariableSnapshotHistory folds the retained variable changes of one scope (a

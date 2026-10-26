@@ -67,6 +67,12 @@ import { groupifyPanel, groupController } from "./pgroup.js";
 // Counts on the runtime views are five and six digits on a busy server, so every
 // number a badge or a count pill prints goes through the same grouping (numfmt.js).
 import { fmtCount } from "./numfmt.js";
+// The heatmap over the live view (ADR-draft-operations-heatmap): the strip that
+// chooses what the diagram shows, the shading, and the figures behind it.
+import {
+  loadHeatPrefs, saveHeatPrefs, heatValues, heatFormat, heatStatsQuery,
+  drawHeat, clearHeat, heatStripHTML, heatPanelHTML,
+} from "./heatoverlay.js";
 // What a Worker Type needs before a task of it can run — the provider-side steps, the
 // shape of its vault secret, and the handbook card that says it at length. The panel is
 // where that question is asked (ADR-0289), so the answer
@@ -12433,6 +12439,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
           <span class="err" id="start-err"></span>
         </div>
       </div>
+      <div class="pg-overlay heat-strip" id="heat-strip" role="toolbar" aria-label="Heatmap"></div>
       <div class="editor-body">
         <div id="canvas"></div>
         <div class="props-resizer" id="var-resizer" title="Drag to resize the variables panel"></div>
@@ -12615,6 +12622,17 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   let scopeAllActive = false; // "All active" chose the whole version (filter mode), not a hand-picked set
   const picked = new Set();
   const TERMINATE_TYPE_THRESHOLD = 50;
+
+  // The heatmap (ADR-draft-operations-heatmap). heat is what the strip chose — remembered
+  // in this browser — and the rest is what the last poll read for it. The statistics are
+  // a fold over history on the server, so they are re-read when the period changes and
+  // otherwise at most every HEAT_STATS_MS, not on every 1.5s tick.
+  let heat = loadHeatPrefs();
+  let heatStats = null, heatStatsPeriod = "", heatStatsAt = 0, heatStatsErr = "";
+  let heatView = null;   // { values, flows, max } the diagram is shaded with, or null in Live
+  let heatRT = null;     // the runtime overlay the counts since deployment come from
+  const HEAT_STATS_MS = 15000;
+  const heatOn = () => heat.mode !== "live";
 
   // refreshInstances pulls this version's instances and, only when the set of
   // instances (or their state) actually changed, rebuilds the picker — so the
@@ -13121,7 +13139,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
           <div class="vars">${renderVarsBody(inst.variables, jsonCollapsed)}</div>`;
       }
     }
-    html = livePanelHTML() + html;
+    html = heatPanel() + livePanelHTML() + html;
     if (html === varsHTML) { updateElapsed(); return; } // unchanged — keep DOM, just tick the age
     varsHTML = html;
     // A rebuild replaces the search input, and the poll rebuilds every 1.5 seconds —
@@ -13154,10 +13172,85 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   }
 
 
+  // heatPanel is the heatmap's figures at the head of the side panel, "" in Live.
+  function heatPanel() {
+    if (!heatOn() || !heatView) return "";
+    return heatPanelHTML(registry, {
+      mode: heat.mode, period: heat.period, values: heatView.values, flows: heatView.flows,
+      rt: heatRT, stats: heatStats, error: heatStatsErr,
+    });
+  }
+
+  // refreshHeatStats re-reads the statistics the heatmap needs: on a new period at once,
+  // otherwise every HEAT_STATS_MS. Best-effort like the other polled reads — a failure
+  // is shown in the panel and the next tick tries again.
+  async function refreshHeatStats() {
+    if (!heatOn()) return;
+    if (heatStats && heatStatsPeriod === heat.period && Date.now() - heatStatsAt < HEAT_STATS_MS) return;
+    const period = heat.period;
+    try {
+      const st = await api("GET", `/api/v1/processes/${key}/statistics${heatStatsQuery(period)}`);
+      if (period !== heat.period) return; // the period changed while this was in flight
+      heatStats = st;
+      heatStatsErr = "";
+    } catch (e) {
+      heatStatsErr = `Could not read the statistics: ${e.message}`;
+    }
+    heatStatsPeriod = period;
+    heatStatsAt = Date.now();
+  }
+
+  // renderHeatStrip redraws the strip over the diagram from the current choice and the
+  // scale the last poll shaded with.
+  const heatStrip = root.querySelector("#heat-strip");
+  const liveLegend = root.querySelector(".problems");
+  let heatStripShown = "";
+  function renderHeatStrip() {
+    // The legend under the diagram explains Live's colours; with a heatmap on, the strip
+    // carries the scale, and a key to colours that are not on screen only misleads.
+    liveLegend.hidden = heatOn();
+    const note = heatOn() && heatStats && heatStats.truncated ? "newest instances only" : "";
+    const html = heatStripHTML(heat, {
+      max: heatView ? heatView.max : 0, format: heatFormat(heat.mode), note,
+    });
+    // Only a change is drawn: the poll calls this every 1.5 seconds, and replacing the
+    // strip would close the period list under the pointer of somebody choosing from it.
+    if (html === heatStripShown) return;
+    heatStripShown = html;
+    heatStrip.innerHTML = html;
+  }
+  renderHeatStrip();
+
+  // A choice on the strip redraws at once. The heatmap is about the version, not about
+  // one case, so choosing it puts the instance picker back on "All instances"; picking
+  // an instance goes back to Live (below).
+  function setHeat(next) {
+    heat = { ...heat, ...next };
+    saveHeatPrefs(heat);
+    if (heatOn() && selected !== "all") {
+      selected = "all";
+      instSel.value = "all";
+      updateCancelBtn();
+    }
+    if (heatOn() && varsPanelCtl) varsPanelCtl.reveal();
+    renderHeatStrip();
+    poll();
+  }
+  heatStrip.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-heat-mode], button[data-heat-style]");
+    if (!b) return;
+    if (b.dataset.heatMode) setHeat({ mode: b.dataset.heatMode });
+    else setHeat({ style: b.dataset.heatStyle });
+  });
+  heatStrip.addEventListener("change", (e) => {
+    if (e.target.id === "heat-period") setHeat({ period: e.target.value });
+  });
+
   async function poll() {
     await refreshInstances();
     await refreshTasks();
     await refreshDecisions();
+    await refreshHeatStats();
     updateCancelBtn();
     const q = selected === "all" ? "" : `?instance=${encodeURIComponent(selected)}`;
     let rt;
@@ -13235,7 +13328,22 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // right now, gray if tokens have only passed through it (history). Together
     // they show the flow distribution even once every instance has finished — a
     // gray trail with green where tokens are still alive.
-    for (const e of rt.elements) {
+    //
+    // With a heatmap chosen the diagram shows that instead, and only that: two
+    // pictures over one diagram are two answers to a question nobody asked.
+    heatRT = rt;
+    if (heatOn()) {
+      heatView = heatValues(registry, heat.mode, heat.period, rt, heatStats);
+      marked.push(...drawHeat(viewer, {
+        ...heatView, mode: heat.mode, style: heat.style, format: heatFormat(heat.mode),
+        badgePosition: (shape) => badgeSpot(shape, "tr"),
+      }));
+    } else {
+      heatView = null;
+      clearHeat(viewer);
+    }
+    renderHeatStrip();
+    for (const e of (heatOn() ? [] : rt.elements)) {
       const shape = registry.get(e.elementId);
       if (!shape) continue;
       // The gateway carries its race's tokens even though the engine parked them on the
@@ -13407,7 +13515,18 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
 
   // Selecting an instance isolates it on the diagram; re-poll right away so the
   // overlay and variables switch without waiting for the next tick.
-  instSel.addEventListener("change", () => { selected = instSel.value; updateCancelBtn(); poll(); });
+  instSel.addEventListener("change", () => {
+    selected = instSel.value;
+    updateCancelBtn();
+    // One case is what Live shows; the heatmap is the version's. Picking an instance
+    // therefore goes back to Live rather than quietly shading the version beside it.
+    if (selected !== "all" && heatOn()) {
+      heat = { ...heat, mode: "live" };
+      saveHeatPrefs(heat);
+      renderHeatStrip();
+    }
+    poll();
+  });
 
   cancelBtn.addEventListener("click", async () => {
     if (selected === "all") return;

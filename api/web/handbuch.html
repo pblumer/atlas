@@ -9455,6 +9455,38 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           the element says <i>how many</i> are waiting; a click says <i>which ones</i>. It works for every
           element a token can rest on, not only user tasks, and it costs the page you are shown – at hundreds
           of thousands of instances too.</li>
+        <li data-l="de"><b>Welche Wege werden genommen, wo geht die Zeit hin?</b> – über dem Diagramm der
+          Live-Ansicht wählst du unter <b>Overlay</b>, was es zeigt. <b>Live</b> ist die gewohnte Ansicht.
+          <b>Runs</b> färbt Elemente <i>und</i> Sequenzflüsse danach, wie viele Tokens sie durchlaufen haben:
+          häufig rot, selten blau, nie gestrichelt und mit einer Null. <b>Waiting</b>, <b>Working</b> und
+          <b>Duration</b> färben die Aufgaben nach dem Median ihrer Zeiten. Waiting ist die Zeit von der
+          Aktivierung, bis jemand die Aufgabe übernommen oder ein Worker sie abgeholt hat, Working die Zeit von
+          dort bis zum Abschluss, Duration beides zusammen. Unter <b>Style</b> wählst du <b>Glow</b> – Lichthöfe
+          unter dem Diagramm, die dort kräftiger werden, wo viel durchläuft – oder <b>Outline</b> mit farbigen
+          Konturen. <b>Period</b> grenzt den Zeitraum ein; <i>Since deployment</i> liest die Zähler der Engine,
+          die auch erhalten bleiben, wenn alte Instanzen gelöscht werden. Rechts stehen die Zahlen dazu: die
+          Instanzen, die Aufgaben sortiert nach dem, was das Diagramm gerade zeigt, die Aufteilung jedes
+          Gateways und was im Zeitraum nie erreicht wurde. Die Farben richten sich nach dem grössten Wert im
+          Bild; zwei Zeiträume oder Versionen vergleichst du deshalb über die Zahlen, nicht über die Farben.
+          Zeiten werden pro Aufgabe ausgewertet, nie pro Person. Eine Aufgabe, die ohne Übernahme abgeschlossen
+          wurde, hat eine Dauer, aber keine Aufteilung in Warten und Arbeiten, und die Übernahmen werden erst
+          seit dieser Version aufgezeichnet. Wählst du eine einzelne Instanz, springt die Ansicht zurück auf
+          Live, denn die Heatmap gilt immer für die ganze Version.</li>
+        <li data-l="en"><b>Which paths are taken, where does the time go?</b> – above the live view's diagram,
+          <b>Overlay</b> chooses what it shows. <b>Live</b> is the view as you know it. <b>Runs</b> shades
+          elements <i>and</i> sequence flows by how many tokens passed them: often in red, rarely in blue, never
+          dashed and with a zero. <b>Waiting</b>, <b>Working</b> and <b>Duration</b> shade the tasks by the
+          median of their times. Waiting runs from activation until somebody claimed the task or a Worker
+          picked it up, working from then until completion, and duration is both together. <b>Style</b> picks
+          <b>Glow</b> – halos under the diagram that grow stronger where much passes – or <b>Outline</b>, with
+          coloured outlines. <b>Period</b> narrows the time span; <i>Since deployment</i> reads the engine's
+          counters, which are kept when old instances are deleted. On the right are the figures behind it: the
+          instances, the tasks ordered by what the diagram shows, how each gateway split, and what the period
+          never reached. The colours are scaled to the largest value in the picture, so you compare two periods
+          or versions by their figures, not by their colours. Times are measured per task, never per person.
+          A task completed without anybody claiming it has a duration but no split into waiting and working,
+          and claims are only recorded from this version on. Choosing a single instance switches back to Live,
+          because the heatmap always covers the whole version.</li>
         <li data-l="de"><b>Wofür steht diese ID?</b> – im <b>Replay</b> einer Instanz zeigt der Reiter
           <b>Variables</b> neben einer ID, was sie bezeichnet: bei <code>usr_…</code> den Namen der Person, bei
           <code>grp_…</code> die Gruppe, bei einer Prozess-ID den Prozess und bei einer Produkt- oder Positions-ID

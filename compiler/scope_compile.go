@@ -1033,6 +1033,7 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 			return fmt.Errorf("compiler: flow %q references unknown targetRef %q", f.Id, f.TargetRef)
 		}
 		fid := b.Connect(src, tgt)
+		b.SetFlowBpmnId(fid, f.Id)
 		flowIdx[f.Id] = fid
 		if cond := strings.TrimSpace(f.Condition); cond != "" {
 			cond = strings.TrimSpace(strings.TrimPrefix(cond, "=")) // FEEL condition, '=' prefix per Zeebe
