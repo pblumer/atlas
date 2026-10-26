@@ -122,6 +122,7 @@ func applicationGraph(s Snapshot, m Meta) ([]archElement, []archRelationship) {
 	relate("Composition", node, api)
 	relate("Serving", api, app)
 
+	entryIDs := map[string]string{}
 	for i, e := range s.EntryPoints {
 		effect := "Continues a running instance"
 		if e.Starts {
@@ -134,6 +135,7 @@ func applicationGraph(s Snapshot, m Meta) ([]archElement, []archRelationship) {
 				"atlas.messageName": e.Name,
 			}})
 		relate("Composition", app, id)
+		entryIDs[e.Name] = id
 	}
 	if p := s.Physical; p != nil {
 		for i, l := range p.PublicStartLinks {
@@ -148,6 +150,7 @@ func applicationGraph(s Snapshot, m Meta) ([]archElement, []archRelationship) {
 		}
 	}
 
+	initiators := map[int][2]string{}
 	for i, d := range s.Outbound() {
 		var e archElement
 		switch d.Kind {
@@ -159,6 +162,9 @@ func applicationGraph(s Snapshot, m Meta) ([]archElement, []archRelationship) {
 					"atlas.workerName":  d.Name,
 					"atlas.workerType":  d.WorkerType,
 				}}
+			if site := s.Physical.worker(d.Name, d.WorkerType); site != nil {
+				workerDetailProps(e.props, *site)
+			}
 		case DependencyRuntimeWorker:
 			e = archElement{typ: "ApplicationService", name: "Worker decided at run time",
 				doc: "A worker of type " + workerTypeName(d.WorkerType) + " whose name the model computes per instance (" + d.Name + "). Used at " + usesText(d.UsedBy) + ".",
@@ -221,6 +227,7 @@ func applicationGraph(s Snapshot, m Meta) ([]archElement, []archRelationship) {
 			relate("Association", lease, initiator)
 			relate("Association", lease, node)
 		}
+		initiators[i] = [2]string{initiator, initiatorKind}
 		if site.Endpoint == nil || site.Endpoint.Withheld || site.Endpoint.Unparseable {
 			if site.Endpoint != nil {
 				elements[len(elements)-1].doc += " Its target endpoint is not in this document: " + site.Endpoint.String() + "."
@@ -243,6 +250,23 @@ func applicationGraph(s Snapshot, m Meta) ([]archElement, []archRelationship) {
 		relate("Association", path, target)
 	}
 
+	// From mapping version 4: the further systems a worker reaches — its mailbox and
+	// its malware scanner — and the inbound subscriptions that feed a way in.
+	if s.MappingVersion >= 4 {
+		for i, d := range s.Outbound() {
+			site, ends := s.Physical.worker(d.Name, d.WorkerType), initiators[i]
+			if d.Kind != DependencyWorker || site == nil || ends[0] == "" {
+				continue
+			}
+			further(add, relate, fmt.Sprintf("%d", i+1), d.Name, *site, ends[0], ends[1])
+		}
+		for j, in := range s.Physical.inboundSubscriptions() {
+			path := inboundPath(add, relate, j+1, in, node)
+			if entry := entryIDs[in.MessageName]; entry != "" {
+				relate("Association", path, entry)
+			}
+		}
+	}
 	return elements, relationships
 }
 
@@ -288,14 +312,16 @@ func technologyGraph(s Snapshot, m Meta) ([]archElement, []archRelationship) {
 		initiator, initiatorKind := node, "atlas"
 		if w.Placement == PlacementWorker {
 			initiatorKind = "worker"
+			props := map[string]string{
+				"atlas.derivedKind": "workerProcess",
+				"atlas.workerName":  w.Name,
+				"atlas.workerType":  w.WorkerType,
+				"atlas.observedBy":  strings.Join(w.ObservedBy, ", "),
+			}
+			workerDetailProps(props, w)
 			initiator = add(archElement{id: fmt.Sprintf("id-worker-%d", i+1), typ: "SystemSoftware", name: "Worker for " + w.Name,
-				doc: "The worker process that serves " + w.Name + " (" + workerTypeName(w.WorkerType) + "): it leases the work from the Atlas API and connects to the target system. On the recording installation: " + w.Observers.text() + ".",
-				props: map[string]string{
-					"atlas.derivedKind": "workerProcess",
-					"atlas.workerName":  w.Name,
-					"atlas.workerType":  w.WorkerType,
-					"atlas.observedBy":  strings.Join(w.ObservedBy, ", "),
-				}})
+				doc:   "The worker process that serves " + w.Name + " (" + workerTypeName(w.WorkerType) + "): it leases the work from the Atlas API and connects to the target system. On the recording installation: " + w.Observers.text() + ".",
+				props: props})
 			lease := add(archElement{id: fmt.Sprintf("id-lease-%d", i+1), typ: "Path", name: "Lease of " + w.Name,
 				doc: "The worker opens this connection to the Atlas API to lease its jobs.",
 				props: map[string]string{
@@ -304,6 +330,9 @@ func technologyGraph(s Snapshot, m Meta) ([]archElement, []archRelationship) {
 				}})
 			relate("Association", lease, initiator)
 			relate("Association", lease, node)
+		}
+		if s.MappingVersion >= 4 {
+			further(add, relate, fmt.Sprintf("%d", i+1), w.Name, w, initiator, initiatorKind)
 		}
 		if w.Endpoint == nil || w.Endpoint.Withheld || w.Endpoint.Unparseable {
 			if w.Endpoint != nil {
@@ -321,6 +350,9 @@ func technologyGraph(s Snapshot, m Meta) ([]archElement, []archRelationship) {
 			doc: "The system worker " + w.Name + " connects to, " + source + ".", props: targetProps})
 		pathProps := map[string]string{"atlas.derivedKind": "connection", "atlas.connection.initiator": initiatorKind}
 		endpointProps(pathProps, *w.Endpoint)
+		if w.Placement != PlacementWorker {
+			workerDetailProps(pathProps, w)
+		}
 		path := add(archElement{id: fmt.Sprintf("id-connection-%d", i+1), typ: "Path", name: w.Endpoint.String(),
 			doc: "Opened by the " + map[string]string{"atlas": "Atlas server", "worker": "worker process"}[initiatorKind] + ".", props: pathProps})
 		relate("Association", path, initiator)
@@ -343,7 +375,85 @@ func technologyGraph(s Snapshot, m Meta) ([]archElement, []archRelationship) {
 		relate("Association", lease, workers)
 		relate("Association", lease, node)
 	}
+	for j, in := range p.inboundSubscriptions() {
+		inboundPath(add, relate, j+1, in, node)
+	}
 	return elements, relationships
+}
+
+// workerDetailProps writes what else a Worker's configuration says as properties
+// (mapping version 4). An empty value is not written, so a snapshot from before
+// version 4 produces the document it always did.
+func workerDetailProps(props map[string]string, w WorkerSite) {
+	if w.Identity != nil {
+		props["atlas.identity.mode"] = w.Identity.Mode
+		props["atlas.identity.enforcement"] = w.Identity.Enforcement
+	}
+	if w.Credential {
+		props["atlas.credential.configured"] = "true"
+	}
+	props["atlas.agent.model"] = w.Model
+	props["atlas.mail.provider"] = w.Provider
+	if w.DetailWithheld {
+		props["atlas.configuration.withheld"] = "true"
+	}
+}
+
+// further adds the systems a worker reaches beyond its target — its mailbox and its
+// malware scanner — each a Node joined by a Path to whichever side opens the
+// connection. Withheld and unreadable endpoints are left out: there is no system to
+// name.
+func further(add func(archElement) string, relate func(typ, source, target string), suffix, name string, w WorkerSite, initiator, initiatorKind string) {
+	for _, f := range []struct {
+		kind, what string
+		e          *Endpoint
+	}{
+		{"mailbox", "the mailbox it reads", w.MailboxEndpoint},
+		{"scanner", "the malware scanner it hands messages to", w.ScannerEndpoint},
+	} {
+		if f.e == nil || f.e.Withheld || f.e.Unparseable {
+			continue
+		}
+		props := map[string]string{"atlas.derivedKind": f.kind}
+		endpointProps(props, *f.e)
+		target := add(archElement{id: "id-" + f.kind + "-" + suffix, typ: "Node", name: f.e.Host,
+			doc: "The system " + name + " reaches as " + f.what + ".", props: props})
+		pathProps := map[string]string{"atlas.derivedKind": "connection", "atlas.connection.initiator": initiatorKind}
+		endpointProps(pathProps, *f.e)
+		path := add(archElement{id: "id-" + f.kind + "-connection-" + suffix, typ: "Path", name: f.e.String(),
+			doc: "Opened by the " + map[string]string{"atlas": "Atlas server", "worker": "worker process"}[initiatorKind] + ".", props: pathProps})
+		relate("Association", path, initiator)
+		relate("Association", path, target)
+	}
+}
+
+// inboundPath adds one inbound subscription: the Path Atlas opens to watch a subject,
+// and the system it watches when this reader may know it.
+func inboundPath(add func(archElement) string, relate func(typ, source, target string), n int, in InboundSite, node string) string {
+	props := map[string]string{
+		"atlas.derivedKind":          "inboundSubscription",
+		"atlas.messageName":          in.MessageName,
+		"atlas.workerName":           in.Worker,
+		"atlas.workerType":           in.WorkerType,
+		"atlas.inbound.subject":      in.Subject,
+		"atlas.connection.initiator": "atlas",
+	}
+	if in.Withheld {
+		props["atlas.configuration.withheld"] = "true"
+	}
+	doc := "Atlas watches " + in.sourceText() + " and publishes each new event as message " + in.MessageName + "."
+	reachable := in.Endpoint != nil && !in.Endpoint.Withheld && !in.Endpoint.Unparseable
+	if reachable {
+		endpointProps(props, *in.Endpoint)
+	}
+	path := add(archElement{id: fmt.Sprintf("id-inbound-%d", n), typ: "Path", name: "Inbound subscription " + in.sourceText(), doc: doc, props: props})
+	relate("Association", path, node)
+	if reachable {
+		source := add(archElement{id: fmt.Sprintf("id-inbound-source-%d", n), typ: "Node", name: in.Endpoint.Host,
+			doc: "The system whose events become message " + in.MessageName + ".", props: map[string]string{"atlas.derivedKind": "inboundSource"}})
+		relate("Association", path, source)
+	}
+	return path
 }
 
 // exchangeDocument writes elements and relationships as the Model Exchange document,

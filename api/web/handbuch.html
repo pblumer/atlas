@@ -9297,6 +9297,29 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
         <code>technology</code>). Without it, Application and Technology apply, so a link or an embedded picture
         without <code>layers</code> shows exactly what it showed before. No release records the strategy, business
         or data layer yet; asking for those alone gets an answer that says which layers the release records.</p>
+      <p data-l="de">Ein Release hält ausserdem fest, was die Konfiguration eines Workers sonst noch sagt, soweit es
+        kein Geheimnis ist: den Mail-Provider, die Adresse des Malware-Scanners, das Modell, das ein Agent-Worker
+        fragt, die Identitätsregel (Modus und ob sie durchgesetzt wird) und ob ein Credential hinterlegt ist – nie
+        welches. Die Skizze schreibt das in eine vierte Zeile des Worker-Kastens; im ArchiMate-Dokument werden
+        Postfach und Scanner zu weiteren Zielsystemen. Bei einer Nachricht, die der Release empfängt, nennt die Skizze
+        das Inbound-Abonnement, das sie veröffentlicht: welcher Worker was beobachtet (ein clio-Subject, eine
+        Jira-Abfrage, einen Tabellenbereich, einen Ordner, einen Kanal oder einen Mail-Ordner) und das System, aus dem
+        er liest. Die Installation allein zeigt jedes Abonnement als Verbindung, die atlas selbst öffnet. Wer den
+        Worker nicht sehen darf, erfährt, dass mehr konfiguriert ist und dass ein Abonnement die Nachricht speist,
+        aber nicht was und wo. Der Eigentümer eines Workers wird nicht aufgezeichnet, ebenso wenig das Zeitbudget
+        für ausgehende Aufrufe, das für alle Worker dasselbe ist. Ein früher aufgezeichneter Release wird genau wie
+        bisher gezeichnet.</p>
+      <p data-l="en">A release also records what else a Worker's configuration says, as far as it is not a secret: the
+        mail provider, the malware scanner's address, the model an agent Worker asks, the identity policy (its mode
+        and whether it is enforced) and whether a credential is configured – never which one. The sketch writes this
+        on a fourth line of the Worker's box; in the ArchiMate document the mailbox and the scanner become further
+        target systems. For a message the release receives, the sketch names the inbound subscription that publishes
+        it: which Worker watches what (a clio subject, a Jira query, a spreadsheet range, a folder, a channel or a
+        mail folder) and the system it reads from. The installation alone draws each subscription as a connection
+        atlas opens itself. A reader who may not see the Worker learns that more is configured and that a
+        subscription feeds the message, not what or where. A Worker's owner is not recorded, nor the budget for
+        outbound calls, which is the same for every Worker. A release recorded earlier is drawn exactly as
+        before.</p>
 
       <h3 data-l="de">Ein Ziel und sein Token</h3><h3 data-l="en">A target and its token</h3>
       <p data-l="de">Ein <b>Deployment-Ziel</b> ist ein anderer atlas-Server, an den dieser hier promotet. Es ist

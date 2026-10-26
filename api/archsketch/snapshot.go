@@ -28,20 +28,23 @@ import (
 // expected to carry. A snapshot is never rewritten when this changes.
 //
 // Version 2 added the physical part and job-type dependencies; version 3 the
-// endpoints worker instances report for the names they serve.
-const FormatVersion = 3
+// endpoints worker instances report for the names they serve; version 4 the rest of a
+// configured Worker and the inbound subscriptions (ADR-0495 slice B).
+const FormatVersion = 4
 
 // MappingVersion versions how a snapshot is drawn and written as ArchiMate: which
 // facts become which elements and relationships. It is a small public contract — a
 // document generated under one version stays what it was — and every rendering
 // states it. Version 2 draws the physical part: connections from the side that opens
 // them, target systems, and job types. Version 3 draws a reported endpoint as
-// reported.
+// reported. Version 4 draws what else a Worker's configuration says, its mailbox and
+// scanner as further target systems, and the inbound subscriptions that feed a
+// message.
 //
 // A snapshot keeps the version it was taken under, and a snapshot without a physical
 // part is drawn exactly as version 1 drew it, so the version a rendering states is
 // the snapshot's own.
-const MappingVersion = 3
+const MappingVersion = 4
 
 // Snapshot is the logical part of one release's architecture.
 type Snapshot struct {

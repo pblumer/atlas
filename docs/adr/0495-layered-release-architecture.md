@@ -1,7 +1,9 @@
 # ADR-0495: A release's architecture is drawn in layers, from what Atlas already holds
 
 - **Status:** Accepted (2026-10-26; amended 2026-10-26 — the banded layout lands with the
-  first slice that has a band to draw, slice C; see the note below)
+  first slice that has a band to draw, slice C; amended again with slice B — a Worker's
+  owner and call budget are not recorded, versions rise with each slice, and list bounds
+  are set in slice C; see the notes below)
 - **Implementation:** Partial
 - **Date:** 2026-10-26
 - **Deciders:** Atlas maintainers
@@ -31,6 +33,42 @@
 > and technology layers holding anything, there is no band to draw, and a layout with
 > nothing in it would be code no test can exercise. It lands with slice C, the first
 > slice that records a new layer (data); §7 is read with that move.
+
+> **Implementation status and amendment (2026-10-26): slice B has landed.** A snapshot
+> records, per configured Worker the release names, the rest of its configuration that is
+> not a secret: the mail provider, the malware scanner's endpoint, the model an agent
+> Worker asks, the identity mode and enforcement (ADR-0475), and whether a credential
+> reference is set, never its name. It also records the enabled inbound subscriptions
+> (ADR-0205) that publish a message the release receives: the Worker and its Worker Type,
+> what the subscription watches in that kind's terms (a clio subject, a JQL query, a
+> spreadsheet and range, a folder, a channel, a mail folder), and the Worker's endpoint as
+> scheme, host and port. The SVG writes the configuration on a fourth line of the Worker's
+> box and the subscription under the message it feeds; the installation alone draws each
+> subscription as a Path Atlas opens. The ArchiMate document adds the mailbox and the
+> scanner as further target Nodes, and each subscription as a Path from the Atlas node to
+> the system it reads from, associated with the application interface of its message.
+> A reader who may not view the Worker's configuration sees the Worker named and the
+> detail marked withheld (§5).
+>
+> **Amendment:**
+>
+> - **A Worker's owner is not recorded.** The owner is an Atlas account. §5 already keeps
+>   Atlas usernames out of the record for capability owners, and the same reason holds
+>   here: a release record is never rewritten, so an account written into it could not be
+>   taken out again when the person leaves or ownership moves.
+> - **The outbound-call budget is not recorded.** §1 assumed a budget per Worker kind.
+>   ADR-0149 set one budget for every Worker (`nettimeout.Default`, 10 seconds), so
+>   recording it per Worker would repeat one installation constant on every box. It is
+>   recorded once a per-kind budget exists.
+> - **Versions rise with each slice that records something new.** §6 named version 4 for
+>   the whole record. Slice B takes 4; slice C takes 5, slice D 6. A snapshot of an
+>   earlier version renders byte for byte as before; this includes a version-3 mailbox
+>   endpoint, which stays on the third line and does not become a target system.
+> - **List bounds are set in slice C.** Slice B's only new list, the inbound
+>   subscriptions, is limited by the messages the release receives and the subscriptions
+>   configured for them. The first lists that grow with the size of the models (data
+>   objects, information-model classes) arrive in slice C, and §6's bounds are measured
+>   and set there.
 
 ## Context and problem statement
 

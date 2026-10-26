@@ -2,6 +2,7 @@ package archsketch
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -44,12 +45,15 @@ const (
 	boxHeight = 56
 	// physicalBoxHeight is a box with a third line: where a worker's work goes.
 	physicalBoxHeight = 72
-	boxGap            = 12
-	headerH           = 92
-	nodeHeadH         = 30
-	lineHeight        = 17
-	labelChars        = 36
-	fontStack         = "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+	// detailBoxHeight is a box with a fourth line: what else a Worker's configuration
+	// says (mapping version 4).
+	detailBoxHeight = 88
+	boxGap          = 12
+	headerH         = 92
+	nodeHeadH       = 30
+	lineHeight      = 17
+	labelChars      = 36
+	fontStack       = "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
 	// ArchiMate's own layer colours (ADR-0189 §6: the layer fills are never
 	// recoloured), with a neutral ink and a white sheet, because the file is pasted
@@ -101,6 +105,9 @@ func drawSketch(s Snapshot, m Meta, parts sketchParts) []byte {
 	bh := boxHeight
 	if s.Physical != nil {
 		bh = physicalBoxHeight
+		if slices.ContainsFunc(slices.Concat(left, right), func(b box) bool { return b.extra != "" }) {
+			bh = detailBoxHeight
+		}
 	}
 
 	rows := max(len(left), len(right), 3)
@@ -195,7 +202,7 @@ func technologyParts(s Snapshot, m Meta) sketchParts {
 	p := *s.Physical
 	return sketchParts{
 		left:       []box{apiBox(s)},
-		right:      technologyBoxes(p),
+		right:      technologyBoxes(p, s.MappingVersion),
 		rightTitle: "Worker processes and the systems reached",
 		noRight:    "No worker served this release here.",
 		center: centerBox{fill: colorTechnology, tooltip: "Atlas — the system software the release runs in", kind: "System software",
@@ -211,6 +218,7 @@ type box struct {
 	label   string
 	detail  string
 	site    string // the third line, drawn only on a sketch with a physical part
+	extra   string // the fourth line, drawn only where some box in the picture has one
 	tooltip string
 	kind    string // the ArchiMate element type, written small in the corner
 	arrow   arrow
@@ -233,6 +241,9 @@ func drawBox(b *strings.Builder, x, y, height int, bx box) {
 	fmt.Fprintf(b, `<text x="%d" y="%d" font-size="12" fill="%s">%s</text>`, x+12, y+48, colorMuted, esc(cut(bx.detail, labelChars+10)))
 	if bx.site != "" && height > boxHeight {
 		fmt.Fprintf(b, `<text x="%d" y="%d" font-size="12" fill="%s">%s</text>`, x+12, y+64, colorInk, esc(cut(bx.site, labelChars+10)))
+	}
+	if bx.extra != "" && height >= detailBoxHeight {
+		fmt.Fprintf(b, `<text x="%d" y="%d" font-size="11" fill="%s">%s</text>`, x+12, y+80, colorMuted, esc(cut(bx.extra, labelChars+14)))
 	}
 	b.WriteString("</g>\n")
 }
@@ -268,13 +279,29 @@ func inboundBoxes(s Snapshot) []box {
 		if e.Starts {
 			effect = "starts an instance"
 		}
-		out = append(out, box{
+		bx := box{
 			fill:    colorApplication,
 			label:   "Message " + e.Name,
 			detail:  effect + " · " + elementCount(len(e.UsedBy)),
 			tooltip: "Message " + e.Name + " — " + effect + "; received at " + usesText(e.UsedBy),
 			kind:    "Application interface",
-		})
+		}
+		// Where the message comes from, when an inbound subscription brings it in
+		// (mapping version 4): the one way in whose sender the installation knows.
+		switch ins := s.Physical.inboundFor(e.Name); len(ins) {
+		case 0:
+		case 1:
+			bx.site = "← " + ins[0].sourceText()
+			bx.tooltip += "; published by the inbound subscription of " + ins[0].sourceText()
+		default:
+			bx.site = "← " + plural(len(ins), "inbound subscription", "inbound subscriptions")
+			sources := make([]string, len(ins))
+			for i, in := range ins {
+				sources[i] = in.sourceText()
+			}
+			bx.tooltip += "; published by the inbound subscriptions of " + strings.Join(sources, ", ")
+		}
+		out = append(out, bx)
 	}
 	if p := s.Physical; p != nil {
 		for _, l := range p.PublicStartLinks {
@@ -310,6 +337,11 @@ func outboundBoxes(s Snapshot) []box {
 					bx.arrow = arrowIn
 				}
 				bx.tooltip += "; " + bx.detail + "; " + bx.site
+				if s.MappingVersion >= 4 {
+					if bx.extra = site.detailText(); bx.extra != "" {
+						bx.tooltip += "; " + bx.extra
+					}
+				}
 			}
 		case DependencyJobType:
 			bx.label = "Job type " + d.Name
@@ -343,8 +375,9 @@ func outboundBoxes(s Snapshot) []box {
 
 // technologyBoxes is the right column of a picture of the installation alone: each
 // worker process with the system it reaches, each connection Atlas opens itself, and
-// the job types worker processes lease.
-func technologyBoxes(p Physical) []box {
+// the job types worker processes lease. What else a Worker's configuration says is drawn
+// from mapping version 4, as in the picture with both layers.
+func technologyBoxes(p Physical, mapping int) []box {
 	var out []box
 	for _, w := range p.Workers {
 		bx := box{fill: colorTechnology, label: w.Name, site: w.siteText()}
@@ -359,6 +392,21 @@ func technologyBoxes(p Physical) []box {
 			bx.tooltip = "Worker process serving " + w.Name + " (" + workerTypeText(w.WorkerType) + "), leasing its work from Atlas; " +
 				w.Observers.text() + "; " + bx.site
 			bx.arrow = arrowIn
+		}
+		if mapping >= 4 {
+			if bx.extra = w.detailText(); bx.extra != "" {
+				bx.tooltip += "; " + bx.extra
+			}
+		}
+		out = append(out, bx)
+	}
+	for _, in := range p.Inbound {
+		bx := box{fill: colorTechnology, kind: "Path", label: "Inbound " + in.MessageName,
+			detail: "watches " + in.sourceText(), arrow: arrowOut,
+			tooltip: "Atlas watches " + in.sourceText() + " and publishes each new event as message " + in.MessageName}
+		if in.Endpoint != nil {
+			bx.site = "→ " + in.Endpoint.String()
+			bx.tooltip += "; " + bx.site
 		}
 		out = append(out, bx)
 	}

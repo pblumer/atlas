@@ -14,6 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The architecture sketch says more about each Worker and where a message comes from.** A
+  release now records what else each configured Worker's configuration says, as far as it is
+  not a secret: the mail provider, the malware scanner's address, the model an agent Worker
+  asks, its identity policy (mode, and whether it is enforced) and whether a credential is
+  configured — never which one. The sketch writes it on a fourth line of the Worker's box, and
+  the ArchiMate document adds the mailbox and the scanner as further target systems. A message
+  the release receives names the inbound subscription that publishes it: the Worker, what it
+  watches (a clio subject, a Jira query, a spreadsheet range, a folder, a channel or a mail
+  folder) and the system it reads from; the installation alone draws each subscription as a
+  connection Atlas opens. A reader who may not see the Worker learns that more is configured
+  and that a subscription feeds the message, not what or where. A Worker's owner is not
+  recorded, nor the outbound-call budget, which is one setting for every Worker. Snapshots are
+  now format and mapping version 4; a release recorded earlier is drawn byte for byte as before
+  ([ADR-0495](docs/adr/0495-layered-release-architecture.md)).
 - **A process opens and moves tasks, and writes and reads pages, in a wikiwikibangbang wiki.** A new
   wikiwikibangbang Worker Type has eight operations, spelled like the Jira Worker's where
   the two mean the same thing: create, read, update and move an item through its workflow,
