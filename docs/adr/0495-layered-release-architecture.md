@@ -1,4 +1,4 @@
-# ADR-DRAFT: A release's architecture is drawn in layers, from what Atlas already holds
+# ADR-0495: A release's architecture is drawn in layers, from what Atlas already holds
 
 - **Status:** Proposed
 - **Implementation:** Not started

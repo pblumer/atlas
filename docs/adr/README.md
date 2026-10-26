@@ -580,6 +580,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0492](0492-controlled-worker-rebinding.md) | Controlled configured-Worker rebinding without process redeployment | Proposed | Not started |
 | [0493](0493-diagrams-scope.md) | A diagrams scope for systems that show processes elsewhere | Proposed (amended) | Partial |
 | [0494](0494-delegated-form-lookups.md) | A form looks up the asking person's own address book through their linked account | Proposed | Not started |
+| [0495](0495-layered-release-architecture.md) | A release's architecture is drawn in layers, from what Atlas already holds | Proposed | Not started |
 
 ## The two states of a record
 
