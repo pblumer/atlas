@@ -576,7 +576,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0488](0488-checkpoint-verdicts-are-remembered.md) | A checkpoint's verdict is remembered, not re-read on every scrape | Accepted | Landed |
 | [0489](0489-mail-html-view.md) | A received mail's HTML body, read on request and shown in a task form | Accepted | Landed |
 | [0490](0490-carddav-worker.md) | A CardDAV Worker Type — a process finds, keeps and labels contacts in any CardDAV address book | Accepted | Landed |
-| [0491](0491-service-content-from-an-external-source.md) | A service's content may come from an external source, copied into the draft and frozen with the release | Accepted | Partial |
+| [0491](0491-service-content-from-an-external-source.md) | A service's content may come from an external source, copied into the draft and frozen with the release | Accepted (amended) | Partial |
 | [0492](0492-controlled-worker-rebinding.md) | Controlled configured-Worker rebinding without process redeployment | Proposed | Not started |
 | [0493](0493-diagrams-scope.md) | A diagrams scope for systems that show processes elsewhere | Proposed | Partial |
 

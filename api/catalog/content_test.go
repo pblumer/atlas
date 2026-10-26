@@ -623,13 +623,83 @@ func TestUnlinkingIsRecordedAndDropsQuarantinedContent(t *testing.T) {
 	}
 }
 
-func TestUnlinkingWithoutQuarantineKeepsTheLastValues(t *testing.T) {
+// TestUnlinkingRestoresTheProductsOwnContent: the first link sets the product's
+// own description, keywords and picture aside; a refresh keeps them aside; a
+// language unlinked alone gets its own description back while the rest stays
+// bound; the whole unlink puts everything back, quarantined or not (§ 6, amended).
+func TestUnlinkingRestoresTheProductsOwnContent(t *testing.T) {
+	b := newBoundFixture(t)
+	ownPicture := "\xff\xd8\xff own picture"
+	rec := as(t, b.s.HandleSaveItem, b.owner, "POST", `{"id":"vpn","homeCatalog":"`+b.cat.ID+`","state":"active",`+
+		`"texts":{"de":"VPN","fr":"VPN"},"approval":{"kind":"none"},"provisionProcess":"p","deprovisionProcess":"d",`+
+		`"descriptions":{"de":"Eigene Beschreibung","fr":"Description propre"},"keywords":["eigen","fernzugang"]}`)
+	if rec.Code != 200 {
+		t.Fatalf("own content = %d %s", rec.Code, rec.Body)
+	}
+	b.s.loop.Do(func() { _ = b.s.store.SavePicture("vpn", []byte(ownPicture), "image/jpeg") })
+	picture := func() string {
+		var data []byte
+		b.s.loop.Do(func() { data, _, _, _ = b.s.store.Picture("vpn") })
+		return string(data)
+	}
+
+	linked := b.linkVPN(t)
+	if linked.Descriptions["de"] == "Eigene Beschreibung" || picture() == ownPicture {
+		t.Fatalf("the link did not replace the own content: %+v", linked.Descriptions)
+	}
+	own := b.state(t, "vpn").Own
+	if own == nil || own.Descriptions["de"] != "Eigene Beschreibung" || strings.Join(own.Keywords, ",") != "eigen,fernzugang" || !own.Picture {
+		t.Fatalf("own content set aside = %+v", own)
+	}
+	// A refresh replaces the copy, never what the first link set aside.
+	if rec := as(t, b.s.HandleContentRefresh, b.owner, "POST", `{}`, "id", "vpn"); rec.Code != 200 {
+		t.Fatalf("refresh = %d %s", rec.Code, rec.Body)
+	}
+	if own := b.state(t, "vpn").Own; own == nil || own.Descriptions["fr"] != "Description propre" {
+		t.Fatalf("the refresh lost the own content: %+v", own)
+	}
+
+	// One language: its own description comes back, the rest stays bound.
+	rec = as(t, b.s.HandleContentUnlink, b.owner, "POST", `{"lang":"fr","reason":"Französisch schreiben wir selbst"}`, "id", "vpn")
+	got := decode[Item](t, rec)
+	if rec.Code != 200 || got.Descriptions["fr"] != "Description propre" || got.Descriptions["de"] == "Eigene Beschreibung" ||
+		got.ContentSource == nil {
+		t.Fatalf("after the fr unlink = %d %+v", rec.Code, got)
+	}
+
+	// Quarantined, then unlinked whole: the own content comes back all the same.
+	b.wiki.Edit("it_de", func(p *wikifake.Page) { p.Held = true })
+	b.sweep(t)
+	rec = as(t, b.s.HandleContentUnlink, b.owner, "POST", `{"reason":"zurück zur eigenen Beschreibung"}`, "id", "vpn")
+	got = decode[Item](t, rec)
+	if rec.Code != 200 || got.ContentSource != nil || got.Descriptions["de"] != "Eigene Beschreibung" ||
+		got.Descriptions["fr"] != "Description propre" || strings.Join(got.Keywords, ",") != "eigen,fernzugang" {
+		t.Fatalf("after the whole unlink = %d %+v", rec.Code, got)
+	}
+	if picture() != ownPicture {
+		t.Fatalf("the own picture did not come back: %q", picture())
+	}
+	if b.state(t, "vpn").Own != nil {
+		t.Fatal("the own content stayed set aside after it was put back")
+	}
+	if stored := b.item(t, "vpn"); stored.Descriptions["de"] != "Eigene Beschreibung" {
+		t.Fatalf("the restored content was not saved: %+v", stored.Descriptions)
+	}
+}
+
+// TestAProductWithoutOwnContentIsUnlinkedBare: a product that had no description,
+// keywords or picture of its own has none after the unlink either — the wiki's
+// copy does not stay behind as if the product manager had written it.
+func TestAProductWithoutOwnContentIsUnlinkedBare(t *testing.T) {
 	b := newBoundFixture(t)
 	b.linkVPN(t)
 	rec := as(t, b.s.HandleContentUnlink, b.owner, "POST", `{"reason":"we write it ourselves"}`, "id", "vpn")
 	got := decode[Item](t, rec)
-	if rec.Code != 200 || got.ContentSource != nil || got.Descriptions["fr"] != "Accès sécurisé." || len(got.Keywords) != 2 {
+	if rec.Code != 200 || got.ContentSource != nil || got.Descriptions != nil || got.Keywords != nil {
 		t.Fatalf("unlink = %d %+v", rec.Code, got)
+	}
+	if b.picture(t, "vpn") != http.StatusNotFound {
+		t.Fatal("the wiki's picture stayed behind")
 	}
 	unlinked := ""
 	b.s.BindingChanged = func(src string) { unlinked = src }
@@ -643,6 +713,24 @@ func TestUnlinkingWithoutQuarantineKeepsTheLastValues(t *testing.T) {
 	rec = as(t, b.s.HandleContentUnlink, b.owner, "POST", `{"lang":"de","reason":"x"}`, "id", "vpn")
 	if got := decode[Item](t, rec); got.ContentSource != nil || unlinked != "wiki" {
 		t.Fatalf("after the last slot = %+v %q", got.ContentSource, unlinked)
+	}
+}
+
+// TestABindingFromBeforeTheOwnContentWasKeptKeepsTheLastValues: a binding made
+// before the link set anything aside has nothing to restore, and its unlink
+// behaves as § 6 first said — the last copy stays, unless it was quarantined.
+func TestABindingFromBeforeTheOwnContentWasKeptKeepsTheLastValues(t *testing.T) {
+	b := newBoundFixture(t)
+	b.linkVPN(t)
+	b.s.loop.Do(func() {
+		st, _, _ := b.s.store.ContentState("vpn")
+		st.Own = nil
+		_ = b.s.store.SaveContentState(st)
+	})
+	rec := as(t, b.s.HandleContentUnlink, b.owner, "POST", `{"reason":"x"}`, "id", "vpn")
+	got := decode[Item](t, rec)
+	if rec.Code != 200 || got.ContentSource != nil || got.Descriptions["fr"] != "Accès sécurisé." || len(got.Keywords) != 2 {
+		t.Fatalf("legacy unlink = %d %+v", rec.Code, got)
 	}
 }
 
