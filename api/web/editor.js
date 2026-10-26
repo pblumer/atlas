@@ -3234,8 +3234,8 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
 
   const hint = document.createElement("p");
   hint.className = "feel-hint";
-  hint.innerHTML = "FEEL — <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions · <kbd>F2</kbd> developer view";
-  if (evaluate) hint.innerHTML += ' &middot; <button type="button" class="linklike" data-feel-test title="Test this expression against sample variables">Test</button>';
+  hint.innerHTML = tr("pnl.feel.hint");
+  if (evaluate) hint.innerHTML += ` &middot; <button type="button" class="linklike" data-feel-test title="${esc(tr("pnl.feel.test.buttonTitle"))}">${esc(tr("pnl.feel.test.button"))}</button>`;
   wrap.after(hint);
   if (!evaluate) return;
 
@@ -3245,9 +3245,9 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
   panel.className = "feel-test";
   panel.hidden = true;
   panel.innerHTML = `
-    <textarea class="feel-test-vars" rows="2" spellcheck="false" placeholder='sample variables, e.g. { "amount": 100 }'></textarea>
+    <textarea class="feel-test-vars" rows="2" spellcheck="false" placeholder="${esc(tr("pnl.feel.test.varsPlaceholder"))}"></textarea>
     <div class="feel-test-row">
-      <button type="button" class="btn neutral feel-test-run" title="Evaluate the expression">Run</button>
+      <button type="button" class="btn neutral feel-test-run" title="${esc(tr("pnl.feel.test.runTitle"))}">${esc(tr("pnl.feel.test.run"))}</button>
       <span class="feel-test-out" aria-live="polite"></span>
     </div>`;
   hint.after(panel);
@@ -3267,7 +3267,7 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
     try {
       const res = await evaluate(ta.value, variables);
       if (res && res.ok) setOut("ok", `= ${res.result} (${res.kind})`);
-      else setOut("err", (res && res.error) || "could not evaluate");
+      else setOut("err", (res && res.error) || tr("pnl.feel.test.failed"));
     } catch (e) {
       setOut("err", e.message);
     }
@@ -3331,8 +3331,8 @@ function enhanceScript(body, modeler, api, variables) {
   markDevField(ta, language);
 
   const shortcut = language === "powershell"
-    ? "<code>$name</code> / <code>$env:</code> &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent, <kbd>F2</kbd> developer view"
-    : "instance variables by name &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent, <kbd>F2</kbd> developer view";
+    ? tr("pnl.feel.script.hintPowershell")
+    : tr("pnl.feel.script.hint");
   const hint = document.createElement("p");
   hint.className = "feel-hint";
   hint.innerHTML = shortcut;
@@ -3357,9 +3357,9 @@ function enhanceScript(body, modeler, api, variables) {
     const raw = (runVars.value || "").trim();
     if (raw) {
       try { variables = JSON.parse(raw); }
-      catch { setOut("err", "Sample variables must be valid JSON."); setDetail("", ""); return; }
+      catch { setOut("err", tr("pnl.feel.script.varsInvalid")); setDetail("", ""); return; }
     }
-    setOut("", "Running…"); setDetail("", "");
+    setOut("", tr("pnl.feel.script.running")); setDetail("", "");
     const t0 = performance.now();
     try {
       const r = await api("POST", "/api/v1/scripts/run", { language, source: ta.value || "", variables });
@@ -3369,11 +3369,11 @@ function enhanceScript(body, modeler, api, variables) {
         setDetail("ok", "→ " + prettyResult(r.result));
       } else {
         setOut("err", `✗ ${ms} ms`);
-        const msg = cleanScriptError((r && r.error) || "run failed");
+        const msg = cleanScriptError((r && r.error) || tr("pnl.feel.script.runFailed"));
         // Which code the script raised, since a test run cannot know whether the process
         // catches it (ADR-0461).
         const coded = r && r.errorCode
-          ? `Error code ${r.errorCode} — in a running instance, an error boundary or error event subprocess catching ${r.errorCode} takes over; without one this fails the task.\n\n`
+          ? tr("pnl.feel.script.errorCode", { code: r.errorCode }) + "\n\n"
           : "";
         setDetail("err", coded + msg);
         const line = scriptErrorLine(language, msg);
@@ -3405,7 +3405,7 @@ export function attachExpressionToggle(el, opts = {}) {
   btn.type = "button";
   btn.className = "fx-toggle";
   btn.textContent = "fx";
-  btn.title = "Toggle between a literal value and a FEEL expression (=)";
+  btn.title = tr("pnl.feel.fx.title");
   // Prefer the field label (a labelled row); fall back to sitting inline before the
   // input for fields without a .field/span wrapper (e.g. a map value cell).
   if (span) span.appendChild(btn);
@@ -3568,8 +3568,8 @@ function writeDocumentation(modeler, element, bo, text) {
 // documentationField renders the documentation editor for one business object. `id`
 // keeps the field unique when a panel documents two things at once (a pool and the
 // process it executes); `placeholder` names what is worth writing there.
-function documentationField(bo, id = "f-doc", placeholder = "What this step is for, when it applies, who owns it…") {
-  return `<label class="field doc-field"><span>Documentation</span>
+function documentationField(bo, id = "f-doc", placeholder = tr("pnl.feel.doc.placeholder")) {
+  return `<label class="field doc-field"><span>${esc(tr("pnl.feel.doc.label"))}</span>
       <textarea id="${id}" rows="3" placeholder="${esc(placeholder)}">${esc(readDocumentation(bo))}</textarea></label>`;
 }
 
@@ -3581,7 +3581,7 @@ function wireDocumentation(body, modeler, element, bo, id = "f-doc") {
   if (!f) return;
   // Documentation is prose that ends up in the task view, the replay and the
   // exported process document (ADR-0143) — Markdown, and worth a real editor.
-  markDevField(f, "markdown", { title: "Documentation" });
+  markDevField(f, "markdown", { title: tr("pnl.feel.doc.label") });
   f.addEventListener("change", (e) => {
     try { writeDocumentation(modeler, element, bo, e.target.value); } catch { /* stale */ }
   });
@@ -3618,12 +3618,9 @@ function withRetries(kind) {
 // picker's `datalist` is the kind's own id for the same reason — derived, so it cannot
 // be typed wrong for one product and right for the others.
 function sqlServiceTaskKind(p) {
-  const binding = p.named
-    ? `a JSON array binds in order, a JSON object binds by name (${p.name} supports named binding)`
-    : `as a JSON array, in order. ${p.name} has no named parameters, so an object is refused rather than silently reordered`;
   return {
     id: p.id, name: p.name, group: "Database",
-    desc: `Run one query or statement against a ${p.name} database on a worker`,
+    desc: { toString: () => tr("pnl.feel.sql.desc", { name: p.name }) },
     icon: p.icon,
     // A database cylinder on the product's own colour, so the three read as one family
     // at a glance and are still told apart. The drawImplBadges/stkind-icon CSS adds the
@@ -3634,7 +3631,7 @@ function sqlServiceTaskKind(p) {
       { group: "Database" },
       {
         key: "connector", label: "Worker", datalist: p.id, placeholder: "hr-db",
-        hint: `The configured ${p.name} Worker this statement runs on, by the name it has under Workers in the Console. Its connection string is sealed into the vault there, or read by a worker you run yourself from its own environment (ATLAS_${p.envPrefix}_<NAME>_DSN) — either way the engine never holds a database credential (ADR-0173). With the Databases mockup switched on (Console \u203a Workers, or ATLAS_${p.envPrefix}_MOCK on a worker you run yourself) the same task is answered from prepared answers in that worker's memory instead, so the model can be tried without a database (ADR-0221).`,
+        hint: () => tr("pnl.feel.sql.connectorHint", { name: p.name, env: p.envPrefix }),
       },
       { group: "Statement" },
       {
@@ -3647,11 +3644,13 @@ function sqlServiceTaskKind(p) {
       },
       {
         key: "statement", label: "SQL statement", rows: 6, placeholder: `SELECT id, mail FROM personen WHERE abteilung = ${p.placeholder}`,
-        hint: `Literal SQL — this field has no fx toggle on purpose. A statement built from process data would be an injection, so values reach it only as bound parameters below. ${p.name} uses ${p.placeholder}-style placeholders.`,
+        hint: () => tr("pnl.feel.sql.statementHint", { name: p.name, placeholder: p.placeholder }),
       },
       {
         key: "parametersVariable", label: "Parameters variable", placeholder: "params",
-        hint: `A process variable bound to the statement's placeholders: ${binding}. Leave empty for a statement with no placeholders.`,
+        hint: () => (p.named
+          ? tr("pnl.feel.sql.paramsHintNamed", { name: p.name })
+          : tr("pnl.feel.sql.paramsHintOrdered", { name: p.name })),
       },
       { group: "Output" },
       {
