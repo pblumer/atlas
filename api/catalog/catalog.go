@@ -446,6 +446,17 @@ type Item struct {
 	// texts that render, same all-or-nothing rule at publication, same reason. See
 	// the paragraphs there.
 	ProductGroupTexts map[string]string `json:"productGroupTexts,omitempty"`
+	// ContentSource binds this product's description, keywords and picture to
+	// one page per language of an external source
+	// (ADR-draft-service-content-from-an-external-source). Nil — the ordinary
+	// state, and the only one on an installation with no source configured — means
+	// the product manager writes them, exactly as before.
+	//
+	// While it is set, the fields it supplies are the source's: a save may not
+	// change them, and only the link, refresh and unlink routes write it. It is
+	// frozen into a release like every other field, so a release says which pages
+	// its content was copied from and when.
+	ContentSource *ContentSource `json:"contentSource,omitempty"`
 	// Revision is optimistic concurrency, the same field and the same rule the
 	// capability map uses: a write that states a revision is refused when the
 	// stored record has moved past it, rather than silently overwriting somebody
@@ -600,4 +611,83 @@ type Catalog struct {
 	Revision  int64 `json:"revision"`
 	CreatedAt int64 `json:"createdAt"`
 	UpdatedAt int64 `json:"updatedAt"`
+}
+
+// ContentSource is a product's binding to its pages in an external source (§ 4,
+// § 5 of the record).
+type ContentSource struct {
+	// Source is the configured source's id.
+	Source string `json:"source"`
+	// Primary is the language whose page names the pictures.
+	Primary string `json:"primary"`
+	// Pages are the bound pages by language tag.
+	Pages map[string]PageRef `json:"pages"`
+}
+
+// PageRef is one bound language page and what was copied from it.
+type PageRef struct {
+	// Ref is the page's stable id — never what was typed. A key changes when a
+	// page moves between spaces; an id does not.
+	Ref string `json:"ref"`
+	// Version is the page's version when it was copied, and FetchedAt when, in
+	// the server's Unix nanoseconds.
+	Version   int    `json:"version"`
+	FetchedAt int64  `json:"fetchedAt"`
+	URL       string `json:"url,omitempty"`
+	Title     string `json:"title,omitempty"`
+	// Passages are the protected passages removed from the copy, so a recheck
+	// can tell a passage protected after the copy was taken.
+	Passages []string `json:"passages,omitempty"`
+	// Labels are the page's labels the keywords were taken from, after the
+	// source's exclusions — what lets an unlinked slot take its keywords with it
+	// without asking the source.
+	Labels []string `json:"labels,omitempty"`
+	// Children are the child pages whose text the description holds, depth
+	// first in sibling order; they are rechecked like the page.
+	Children []ChildRef `json:"children,omitempty"`
+}
+
+// ChildRef is one child page whose text a description holds.
+type ChildRef struct {
+	Ref      string   `json:"ref"`
+	Version  int      `json:"version"`
+	Title    string   `json:"title,omitempty"`
+	Passages []string `json:"passages,omitempty"`
+}
+
+// Copy is a binding sharing no memory with this one, for a release.
+func (c *ContentSource) Copy() *ContentSource {
+	if c == nil {
+		return nil
+	}
+	out := &ContentSource{Source: c.Source, Primary: c.Primary}
+	if c.Pages != nil {
+		out.Pages = make(map[string]PageRef, len(c.Pages))
+		for lang, p := range c.Pages {
+			p.Passages = append([]string(nil), p.Passages...)
+			p.Labels = append([]string(nil), p.Labels...)
+			if len(p.Children) > 0 {
+				kids := make([]ChildRef, len(p.Children))
+				for i, ch := range p.Children {
+					ch.Passages = append([]string(nil), ch.Passages...)
+					kids[i] = ch
+				}
+				p.Children = kids
+			}
+			out.Pages[lang] = p
+		}
+	}
+	return out
+}
+
+// Oldest is the earliest moment any page of the binding was copied: what a
+// lifted quarantine compares against (contentstate.go).
+func (c *ContentSource) Oldest() int64 {
+	var oldest int64
+	for _, p := range c.Pages {
+		if oldest == 0 || p.FetchedAt < oldest {
+			oldest = p.FetchedAt
+		}
+	}
+	return oldest
 }

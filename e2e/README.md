@@ -666,6 +666,15 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   publish that warns says the release stands and lists which order-form answers reach a process in
   the clear; the warnings survive the reload every publish does, and a publish without warnings
   shows none.
+- **`catalog-wiki-content.spec.mjs`**
+  ([ADR-draft](../docs/adr/draft-service-content-from-an-external-source.md)): a catalogue
+  without a content source looks as it did; a wiki page's title and text arrive as text even when
+  they look like markup; a preview and a refused link show every refusal, dropped passage and
+  `boundTo`; a bound product shows its pages, quarantine and read-only fields, its wiki link opens
+  a new tab without an opener and only over https, and an unlink asks for its audited reason; the
+  catalogue's refresh lists every product's outcome; the administrator's check lists every
+  problem and a refused delete names the bound products; the shop links to the wiki only when the
+  release carries the binding.
 - **`shown-version.spec.mjs`** ([ADR-0452](../docs/adr/0452-modeler-shows-its-version.md)):
   the editor bar's chip names what is open and how it stands against the other record — a draft
   missing a newer deployed change is a warning (`Draft ≠ v2`) whose panel names who created the

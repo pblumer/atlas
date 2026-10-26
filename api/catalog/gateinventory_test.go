@@ -115,6 +115,19 @@ var catalogGates = []handlerGate{
 		contentType: "image/png", body: "\x89PNG\r\n\x1a\n" + "body", id: true, product: true},
 	{name: "HandleDeletePicture", kind: gated, want: http.StatusNotFound, method: "DELETE",
 		id: true, product: true},
+	// The content binding (ADR-draft-service-content-from-an-external-source):
+	// every route is gated on the product's home catalogue — or, for the
+	// catalogue's refresh, on the catalogue — before it asks whether any source is
+	// configured, so an outsider learns nothing from the answer.
+	{name: "HandleContentStatus", kind: gated, want: http.StatusNotFound, method: "GET", id: true, product: true},
+	{name: "HandleContentSearch", kind: gated, want: http.StatusNotFound, method: "GET", id: true, product: true},
+	{name: "HandleContentPreview", kind: gated, want: http.StatusNotFound, method: "GET", id: true, product: true},
+	{name: "HandleContentLink", kind: gated, want: http.StatusNotFound, method: "POST",
+		body: `{"source":"wiki","pages":{"de":"SVC-1"}}`, id: true, product: true},
+	{name: "HandleContentRefresh", kind: gated, want: http.StatusNotFound, method: "POST", id: true, product: true},
+	{name: "HandleContentUnlink", kind: gated, want: http.StatusNotFound, method: "POST",
+		body: `{"reason":"because"}`, id: true, product: true},
+	{name: "HandleCatalogContentRefresh", kind: gated, want: http.StatusNotFound, method: "POST", id: true},
 	{name: "HandleMyCatalog", kind: ungated, method: "GET",
 		why: "is the visibility resolution itself: it answers from the caller's own groups and returns 404 when they reach none"},
 }

@@ -895,6 +895,10 @@ func freeze(items []Item) []Item {
 		if len(it.CommandedBy) > 0 {
 			it.CommandedBy = append([]string(nil), it.CommandedBy...)
 		}
+		// The binding travels too: the release says which pages its content was
+		// copied from, and the recheck reads it to decide whether it may still be
+		// shown.
+		it.ContentSource = it.ContentSource.Copy()
 		out[i] = it
 	}
 	sort.Slice(out, func(a, b int) bool { return out[a].ID < out[b].ID })

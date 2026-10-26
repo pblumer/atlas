@@ -33,6 +33,9 @@ var classified = map[string]string{
 		"client's own ceiling, not this installation's",
 	"connector/rest/openapimock/server.go:maxRecordedBody": "a mock server that exists for tests",
 	"connector/remedy/mock/server.go:1 << 20":              "a mock server that exists for tests",
+	"api/contentsource/wikiwikibangbang.go:maxResponse + 1": "the content-source adapter reading one JSON answer " +
+		"from the wiki it was configured with — a client's own ceiling on somebody else's server, like the " +
+		"CLI's; the attachments it copies are bounded by the installation's Asset budget",
 }
 
 // TestNoCeilingWithoutAName is what makes this package more than a file of constants.

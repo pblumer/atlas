@@ -59,7 +59,8 @@ func defaultTools() []Tool {
 	tools = append(tools, collabTools()...)
 	tools = append(tools, infomodelTools()...)
 	tools = append(tools, capabilityTools()...)
-	return append(tools, catalogTools()...)
+	tools = append(tools, catalogTools()...)
+	return append(tools, contentTools()...)
 }
 
 // runtimeTools are the deploy/instance/inspect tools.

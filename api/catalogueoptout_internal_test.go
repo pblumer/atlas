@@ -28,16 +28,19 @@ import (
 var catalogueSegments = map[string]bool{
 	"catalogs":         true,
 	"catalog-products": true,
-	"shop":             true,
-	"orders":           true,
-	"approvals":        true,
-	"inventory":        true,
-	"inventory-load":   true,
-	"entitlements":     true,
-	"conflicts":        true,
-	"reconciliation":   true,
-	"recertification":  true,
-	"pending-work":     true,
+	// Where a product's content may come from: configuration of the catalogue's,
+	// served only with it (ADR-draft-service-content-from-an-external-source).
+	"content-sources": true,
+	"shop":            true,
+	"orders":          true,
+	"approvals":       true,
+	"inventory":       true,
+	"inventory-load":  true,
+	"entitlements":    true,
+	"conflicts":       true,
+	"reconciliation":  true,
+	"recertification": true,
+	"pending-work":    true,
 	// Not "events" nor "feed-subscriptions": the event feed carries the engine's facts
 	// too, and a platform fact must not fall silent because the shop is off
 	// (ADR-0435 §6). With the area off the feed passes over the catalogue's rows.

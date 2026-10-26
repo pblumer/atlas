@@ -132,6 +132,17 @@ var wantAdminRoutes = []string{
 	"GET /api/v1/secrets",
 	"PUT /api/v1/secrets/{name}",
 	"DELETE /api/v1/secrets/{name}",
+	// Which wiki a product's content may come from, and with which credential
+	// reference (ADR-draft-service-content-from-an-external-source § 3): installation
+	// configuration naming a secret, like a Worker. A product manager chooses among
+	// the configured sources through the product's own content route, which shows
+	// no credential.
+	"GET /api/v1/content-sources",
+	"POST /api/v1/content-sources",
+	"GET /api/v1/content-sources/{id}",
+	"PUT /api/v1/content-sources/{id}",
+	"DELETE /api/v1/content-sources/{id}",
+	"POST /api/v1/content-sources/{id}/check",
 	// Erasing a data subject destroys the key their personal data was enciphered
 	// under, which makes every copy of it — live store, checkpoints, exports, backups
 	// — permanently unreadable in one act (ADR-0314). It is the most irreversible

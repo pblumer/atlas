@@ -49,7 +49,7 @@ test("a modeller who also operates is offered both", async ({ page }) => {
   stubAPI(page, { username: "mona", roles: ["modeler", "operator", "user"] });
   await boot(page);
 
-  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Tasks", "Shop", "Operations", "Panorama", "Data"]);
+  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Data", "Operations", "Tasks", "Panorama", "Shop"]);
 });
 
 test("an administrator is offered everything, Organization included", async ({ page }) => {
@@ -58,7 +58,7 @@ test("an administrator is offered everything, Organization included", async ({ p
 
   // Catalogue rides productmanager, which mona above does not hold — admin does,
   // because admin is the one superset.
-  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Tasks", "Shop", "Catalogue", "Operations", "Panorama", "Data"]);
+  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Data", "Operations", "Tasks", "Panorama", "Catalogue", "Shop"]);
   expect(await topnav(page).allTextContents()).toContain("Organization");
 });
 
