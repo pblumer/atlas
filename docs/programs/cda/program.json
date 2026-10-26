@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-26",
   "plan": "../../planning/capability-driven-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-cda--capability-driven-automation-",
-  "next_action": "Merge the implementation digest (internal/impldigest); decide which root packages serve each built-in Worker Type, since all of them run through the shared worker package whose closure reaches every connector; configure branch protection on main with code-owner review; then the first evidence record, with CODEOWNERS for its path and the CI check that renews evidence in the PR that changes the code.",
+  "next_action": "Merge the implementation digest (PR #1388); decide which root packages serve each built-in Worker Type, since all of them run through the shared worker package whose closure reaches every connector; configure branch protection on main with code-owner review; then the first evidence record, with CODEOWNERS for its path and the CI check that renews evidence in the PR that changes the code.",
   "slices": [
     {
       "id": "CDA0",
@@ -56,9 +56,10 @@
       ],
       "prs": [
         1357,
-        1360
+        1360,
+        1388
       ],
-      "note": "ADR-0483 Accepted (option 3), with approval by repository provenance (maintainer as sole reviewer), raw-byte contract digests and dependency digests for built-in Worker Types. Merged: schema-only validation (PR #1357) and contract digests over the file's bytes (PR #1360). In review: the implementation digest. Evidence records, renewal, withdrawal and publication are not yet implemented; no Worker is verified."
+      "note": "ADR-0483 Accepted (option 3), with approval by repository provenance (maintainer as sole reviewer), raw-byte contract digests and dependency digests for built-in Worker Types. Merged: schema-only validation (PR #1357) and contract digests over the file's bytes (PR #1360). In review: the implementation digest (PR #1388). Evidence records, renewal, withdrawal and publication are not yet implemented; no Worker is verified."
     },
     {
       "id": "CDA3",
