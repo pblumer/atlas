@@ -627,7 +627,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <b data-l="en">Get a runnable example</b>
           <p data-l="de">Am schnellsten über den <a href="#rundgang">Rundgang</a> oder das
             <a href="#tutorial">End-to-End-Tutorial</a>: ein Klick deployt dort ein fertiges Modell in diese
-            Instanz. Im <a href="/#/modeler">Modeler</a> öffnest du es danach mit <b>Open</b>. Ganz von vorn
+            Instanz. Im <a href="/#/modeler">Modeler</a> öffnest du es danach mit <b>Öffnen</b>. Ganz von vorn
             beginnst du mit <a href="/#/modeler/new">Neues Diagramm</a>.</p>
           <p data-l="en">Fastest through the <a href="#rundgang">interactive tour</a> or the
             <a href="#tutorial">end-to-end tutorial</a>: one click there deploys a finished model into this
@@ -1014,7 +1014,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <p data-l="de">Welche Variablen trägt die Instanz? Woher kommen sie (Start-Formular, Task, Worker)?</p>
           <p data-l="en">Which variables does the instance carry? Where do they come from (start form, task, worker)?</p></li>
         <li><b data-l="de">Dokumentieren</b><b data-l="en">Document it</b>
-          <p data-l="de">Jedes Element hat im Details-Panel eine <b>Documentation</b> — direkt unter Name und ID.
+          <p data-l="de">Jedes Element hat im Details-Panel eine <b>Dokumentation</b> — direkt unter Name und ID.
             Schreib dort hinein, <i>warum</i> es den Schritt gibt, welche Regel dahintersteht und wer zuständig
             ist; für den Prozess selbst (nichts ausgewählt) die Zusammenfassung, die man vor dem Diagramm lesen
             möchte. Der Text gehört zum Modell: die Engine führt ihn nie aus, aber er überlebt Deploy, Export und
@@ -1154,7 +1154,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 &lt;/definitions&gt;</code></pre>
         </details>
         <p class="rz-how"><span data-l="de">Der Token parkt als <b>Job</b> vom Typ <code>payment</code>, bis ein Worker ihn abschliesst; scheitert er, wird bis <code>retries</code>-mal erneut versucht, danach entsteht ein Incident. Für REST, E-Mail, SharePoint &amp; Co. musst du keinen Worker selbst schreiben: nimm die fertigen Vorlagen der eingebauten <a href="#formulare">Worker-Typen</a> aus dem <a href="/#/modeler/repository">Repository</a>.</span><span data-l="en">The token parks as a <b>job</b> of type <code>payment</code> until a worker completes it; on failure it retries up to <code>retries</code> times, then raises an incident. For REST, e-mail, SharePoint &amp; co. you need not write a worker at all: use the ready-made templates of the built-in <a href="#formulare">worker types</a> in the <a href="/#/modeler/repository">Repository</a>.</span></p>
-        <p class="rz-how"><span data-l="de"><b>Retries</b> hat jede Aufgabe, die als Job läuft — Service- und Send-Task, jede <a href="#formulare">Worker-Aufgabe</a> (Mail, REST, Jira …), Skript-Task (PowerShell &amp; Co.) und Business-Rule-Task. Im Modeler steht das Feld unter <i>Failure handling</i>; leer bedeutet den Standard <code>3</code>, <code>1</code> heisst „ein Versuch, kein Retry“. Weniger als 1 lehnt der Deploy ab — ein Job ohne Versuch würde nie ausgeliefert.</span><span data-l="en"><b>Retries</b> is a property of every task that runs as a job — service and send tasks, every <a href="#formulare">worker task</a> (mail, REST, Jira …), script tasks (PowerShell &amp; co.) and business rule tasks. The Modeler shows the field under <i>Failure handling</i>; empty means the default of <code>3</code>, and <code>1</code> means "one attempt, no retry". Below 1 the deploy is refused — a job with no attempt would never be handed out.</span></p>
+        <p class="rz-how"><span data-l="de"><b>Retries</b> hat jede Aufgabe, die als Job läuft — Service- und Send-Task, jede <a href="#formulare">Worker-Aufgabe</a> (Mail, REST, Jira …), Skript-Task (PowerShell &amp; Co.) und Business-Rule-Task. Im Modeler steht das Feld unter <i>Fehlerbehandlung</i>; leer bedeutet den Standard <code>3</code>, <code>1</code> heisst „ein Versuch, kein Retry“. Weniger als 1 lehnt der Deploy ab — ein Job ohne Versuch würde nie ausgeliefert.</span><span data-l="en"><b>Retries</b> is a property of every task that runs as a job — service and send tasks, every <a href="#formulare">worker task</a> (mail, REST, Jira …), script tasks (PowerShell &amp; co.) and business rule tasks. The Modeler shows the field under <i>Failure handling</i>; empty means the default of <code>3</code>, and <code>1</code> means "one attempt, no retry". Below 1 the deploy is refused — a job with no attempt would never be handed out.</span></p>
       </div>
       <div class="recipe" id="rz-dmn" data-proc="recipe-dmn">
         <h4><span class="rz-emoji" aria-hidden="true">📐</span>
@@ -4094,7 +4094,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <li data-l="de"><b>Der Message name ist die ganze Kopplung.</b> Weicht er zwischen Überwachung und
               Startereignis um ein Zeichen ab, laufen beide Hälften fehlerfrei und treffen sich nie. Der Modeler
               schreibt deshalb unter den Nachrichtennamen, welche Überwachungen ihn veröffentlichen – steht dort
-              „No inbound event watch … publishes", ist genau das passiert.</li>
+              „Keine Inbound-Watch auf diesem Server veröffentlicht …", ist genau das passiert.</li>
             <li data-l="en"><b>The message name is the entire coupling.</b> One character apart between watch and
               start event and both halves run flawlessly and never meet. That is why the Modeler notes under the
               message name which watches publish it – if it says "No inbound event watch … publishes", that is what
@@ -5849,8 +5849,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <p data-l="en"><b>A mail that was read, in a form.</b> The component <b>E-mail view</b> shows a mail a mail task
         read – envelope, text and HTML version, remote images only on request. It only shows and submits nothing.
         How to read the HTML version is under <a href="#runbook-mail">Mail</a>.</p>
-      <p data-l="de"><b>Vom Schritt ins Formular und zurück.</b> Unter der Auswahl <i>Linked form</i> am
-        Start-Ereignis, am User-Task und beim <i>Repair form</i> eines Service-Tasks stehen zwei Knöpfe:
+      <p data-l="de"><b>Vom Schritt ins Formular und zurück.</b> Unter der Auswahl <i>Verknüpftes Formular</i> am
+        Start-Ereignis, am User-Task und beim <i>Reparaturformular</i> eines Service-Tasks stehen zwei Knöpfe:
         <b>Open form</b> öffnet das verknüpfte Formular im Formular-Editor, <b>＋ New form</b> legt ein neues an;
         gehört der Prozess zu einer Applikation, wird das neue Formular dort abgelegt.
         Der Modeler speichert vorher den Entwurf (bei einer deployten Version fragt er, bevor Änderungen verloren
@@ -5879,7 +5879,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <i>Umsetzen</i> zeigen Start-Ereignisse und User-Tasks mit Formular ausserdem ein kleines Formular-Symbol;
         ein Klick darauf öffnet das Formular. Beides funktioniert wie der Knopf im Panel, und mit Strg- oder
         Mittelklick öffnet sich das Formular in einem neuen Tab. Gibt es das Formular auf dem Server nicht,
-        erscheint eine Meldung, und das Diagramm wird weder gespeichert noch verlassen. Ein <i>Repair form</i>
+        erscheint eine Meldung, und das Diagramm wird weder gespeichert noch verlassen. Ein <i>Reparaturformular</i>
         bekommt auf der Zeichenfläche kein Symbol, ist aber über Kontextpad und Panel erreichbar.</p>
       <p data-l="en"><b>The same on the canvas.</b> When an element links a form, its context pad has
         <b>Open form</b> (the form symbol beside the wrench and the bin). In the <i>Implement</i> view, start events
@@ -5888,7 +5888,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         form, a message appears, and the diagram is neither saved nor left. A <i>Repair form</i> gets no symbol on
         the canvas, but the context pad and the panel reach it.</p>
       <p data-l="de"><b>Start-Formular und Startvariablen gemeinsam.</b> Deklariert der Prozess zusätzlich
-        Startvariablen (Prozess-Panel, Tab <i>Umsetzen</i>, <i>Start variables</i>), fragen <i>Deployen &amp; starten</i>,
+        Startvariablen (Prozess-Panel, Tab <i>Umsetzen</i>, <i>Startvariablen</i>), fragen <i>Deployen &amp; starten</i>,
         <i>Start instance</i> und der Start in der Tasks-App unter dem Formular nach denjenigen, die das Formular
         nicht selbst abfragt – mit Typ, Default und Pflichtmarkierung. Die Instanz startet mit beiden Teilen.</p>
       <p data-l="en"><b>Start form and start variables together.</b> When the process also declares start variables
@@ -5912,7 +5912,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         variable, is not set; the deploy reports it as a warning.</p>
       <p data-l="de"><b>Konstanten statt Startvariablen, die niemand eingibt.</b> Ein Wert, den jede Instanz braucht
         und nach dem niemand gefragt werden soll – ein Domain-Suffix, eine Sprache, eine App-ID –, gehört unter
-        <i>Constants</i> im selben Panel. Atlas schreibt Konstanten beim Erzeugen jeder Instanz als gewöhnliche
+        <i>Konstanten</i> im selben Panel. Atlas schreibt Konstanten beim Erzeugen jeder Instanz als gewöhnliche
         Variablen, auf jedem Startweg: Modeler, Tasks-App, API, öffentlicher Link, Timer, Message, Signal und Call
         Activity. Ausdrücke, Skripte und Worker lesen sie wie jede Variable; abgefragt werden sie nie. Nichts im Ablauf
         kann eine Konstante ersetzen – ein gleichnamiger Startwert, ein Worker-Ergebnis oder eine Message wird
@@ -5933,7 +5933,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         you type, and a constant reads as one in every expression at a glance.</p>
       <p data-l="de"><b>Konstanten pro Umgebung: <code>application.</code> und <code>server.</code></b> Unterscheidet
         sich ein Wert zwischen DEV, INT und PROD – ein Tenant, eine App-ID –, steht er nicht im Modell. Die Konstante
-        erhält im Panel die Quelle <i>application</i> oder <i>server</i> und wird dann unter diesem Namensraum
+        erhält im Panel die Quelle <i>Anwendung</i> oder <i>Server</i> und wird dann unter diesem Namensraum
         gelesen: <code>application.TENANT_ID</code> ist die Konstante, die ihre Applikation auf der jeweiligen
         Installation hält (gesetzt im Tab <i>Konstanten</i> der Applikation), <code>server.TENANT_ID</code> die, die die
         Installation für alle Applikationen hält (gesetzt unter Admin → Engine → <i>Server-Konstanten</i>). In FEEL
@@ -6108,7 +6108,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           unchanged</i>: <code>source="=iban"</code>, <code>target="iban"</code>. The engine then copies the sealed
           value without opening it; the copy reads and erases exactly like the original (ADR-0314). Renaming it or
           computing from it is not possible, because the engine holds no key; that is a worker's job.</li>
-        <li data-l="de"><b>Ein öffentlicher Wizard</b> (im Modeler die Option <i>Yes — for the anonymous visitor of a public start link</i>)
+        <li data-l="de"><b>Ein öffentlicher Wizard</b> (im Modeler die Option <i>Ja — für die anonyme Person hinter einem öffentlichen Startlink</i>)
           gehört der Person, die ihn über den öffentlichen Link begonnen hat. Die öffentliche Seite führt sie ohne
           Konto von Maske zu Maske; ein Pass, den nur dieser Browser-Tab kennt, öffnet genau ihre Masken. Nach einem
           Neuladen geht es an derselben Stelle weiter. Die Masken stehen in keinem Posteingang; sehen und
@@ -7089,7 +7089,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             save.</li>
           <li data-l="de">Ohne Tenant üben: <code>ATLAS_TEAMSPHONE_MOCK=1</code> bedient dieselben Tasks aus einem
             Tenant im Speicher des Workers, mit denselben Regeln; <code>ATLAS_TEAMSPHONE_MOCK_USERS</code> nennt die
-            Personen, die <i>Resolve users</i> findet, <code>ATLAS_TEAMSPHONE_MOCK_NUMBERS</code> die Calling-Plan- und
+            Personen, die <i>Benutzer auflösen</i> findet, <code>ATLAS_TEAMSPHONE_MOCK_NUMBERS</code> die Calling-Plan- und
             Operator-Connect-Nummern des Tenants.</li>
           <li data-l="de"><b>Für Rufnummern:</b> Die Person braucht eine Teams-Phone-Lizenz, ein Ressourcenkonto die
             Lizenz <i>Microsoft Teams Phone Resource Account</i>, beide einen Nutzungsstandort. Calling-Plan- und
@@ -7151,74 +7151,75 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             <th data-l="de">Ergebnis (<code>resultVariable</code>)</th><th data-l="en">Result (<code>resultVariable</code>)</th>
           </tr></thead>
           <tbody>
-            <tr><td><code>resolve-users</code><br><i>Resolve users</i></td>
+            <tr><td><code>resolve-users</code><br><i data-l="de">Benutzer auflösen</i><i data-l="en">Resolve users</i></td>
               <td><code>users</code></td><td>–</td>
               <td data-l="de"><code>ids</code> – die Teams-IDs der gefundenen Personen, in der Form, die <code>agents</code> und <code>authorizedUsers</code> nehmen; <code>notFound</code> – die Einträge, die nicht gefunden wurden, aus welchem Grund auch immer. Eine leere Liste antwortet sofort, ohne Anmeldung.</td>
               <td data-l="en"><code>ids</code> – the Teams ids of the people found, in the form <code>agents</code> and <code>authorizedUsers</code> take; <code>notFound</code> – the entries not found, for whatever reason. An empty list answers at once, without signing in.</td></tr>
-            <tr><td><code>ensure-resource-account</code><br><i>Ensure resource account</i></td>
+            <tr><td><code>ensure-resource-account</code><br><i data-l="de">Ressourcenkonto sicherstellen</i><i data-l="en">Ensure resource account</i></td>
               <td><code>userPrincipalName</code>, <code>displayName</code>, <code>accountType</code> (<code>call-queue</code> | <code>auto-attendant</code>)</td><td>–</td>
               <td data-l="de"><code>objectId</code>, <code>userPrincipalName</code>, <code>created</code>, <code>source</code> (<code>created</code>, <code>entra</code> oder <code>teams</code> – wo das Konto gefunden wurde).</td>
               <td data-l="en"><code>objectId</code>, <code>userPrincipalName</code>, <code>created</code>, <code>source</code> (<code>created</code>, <code>entra</code> or <code>teams</code> – where the account was found).</td></tr>
-            <tr><td><code>ensure-call-queue</code><br><i>Ensure call queue</i></td>
+            <tr><td><code>ensure-call-queue</code><br><i data-l="de">Anrufwarteschlange sicherstellen</i><i data-l="en">Ensure call queue</i></td>
               <td><code>name</code>, <code>resourceAccountId</code></td>
               <td data-l="de"><code>agents</code> (höchstens 20), <code>authorizedUsers</code>, <code>languageId</code>; <code>routingMethod</code> (<code>attendant</code> | <code>serial</code> | <code>round-robin</code> | <code>longest-idle</code>), <code>presenceBasedRouting</code>, <code>conferenceMode</code>, <code>allowOptOut</code> (<code>true</code> | <code>false</code>). Für eine neue Warteschlange gelten <code>attendant</code> und dreimal <code>true</code>.</td>
               <td data-l="en"><code>agents</code> (at most 20), <code>authorizedUsers</code>, <code>languageId</code>; <code>routingMethod</code> (<code>attendant</code> | <code>serial</code> | <code>round-robin</code> | <code>longest-idle</code>), <code>presenceBasedRouting</code>, <code>conferenceMode</code>, <code>allowOptOut</code> (<code>true</code> | <code>false</code>). A new queue gets <code>attendant</code> and <code>true</code> three times.</td>
               <td data-l="de"><code>id</code>, <code>name</code>, <code>created</code>, <code>changed</code> – was dieser Lauf an einer bestehenden Warteschlange gesetzt hat, z.&nbsp;B. <code>["agents"]</code>; leer, wenn nichts abwich. <code>agentsChanged</code> sagt, ob die Agenten dabei waren.</td>
               <td data-l="en"><code>id</code>, <code>name</code>, <code>created</code>, <code>changed</code> – what this run set on an existing queue, e.g. <code>["agents"]</code>; empty when nothing differed. <code>agentsChanged</code> says whether the agents were among them.</td></tr>
-            <tr><td><code>ensure-auto-attendant</code><br><i>Ensure auto attendant</i></td>
+            <tr><td><code>ensure-auto-attendant</code><br><i data-l="de">Automatische Telefonzentrale sicherstellen</i><i data-l="en">Ensure auto attendant</i></td>
               <td data-l="de"><code>name</code>, <code>resourceAccountId</code>, <code>transferTarget</code> (das Ressourcenkonto der Warteschlange), <code>languageId</code>, <code>timeZone</code> (Windows-Zeitzone)</td>
               <td data-l="en"><code>name</code>, <code>resourceAccountId</code>, <code>transferTarget</code> (the queue's resource account), <code>languageId</code>, <code>timeZone</code> (a Windows time zone)</td>
               <td data-l="de"><code>authorizedUsers</code>, <code>holidays</code> – eine Liste von <code>{name, start, end}</code> mit Datum <code>JJJJ-MM-TT</code>, an denen Anrufe getrennt werden; <code>end</code> ist der Tag nach dem letzten Feiertag und darf für einen einzelnen Tag fehlen.</td>
               <td data-l="en"><code>authorizedUsers</code>, <code>holidays</code> – a list of <code>{name, start, end}</code> with dates as <code>YYYY-MM-DD</code> on which calls are disconnected; <code>end</code> is the day after the last holiday and may be left out for a single day.</td>
               <td><code>id</code>, <code>name</code>, <code>created</code></td></tr>
-            <tr><td><code>remove-auto-attendant</code>, <code>remove-call-queue</code><br><i>Remove …</i></td>
+            <tr><td><code>remove-auto-attendant</code>, <code>remove-call-queue</code><br><i data-l="de">… entfernen</i><i data-l="en">Remove …</i></td>
               <td><code>resourceAccountId</code></td>
               <td data-l="de"><code>name</code> – findet die Voice-App wieder, wenn ein früherer Lauf die Zuordnung schon gelöst hatte und dann scheiterte.</td>
               <td data-l="en"><code>name</code> – finds the voice app again when an earlier run had already removed the association and then failed.</td>
               <td data-l="de"><code>removed</code>, <code>id</code>. Die Ergebnisvariable ist hier freiwillig.</td>
               <td data-l="en"><code>removed</code>, <code>id</code>. The result variable is optional here.</td></tr>
-            <tr><td><code>list-free-phone-numbers</code><br><i>List free phone numbers</i></td>
+            <tr><td><code>list-free-phone-numbers</code><br><i data-l="de">Freie Telefonnummern auflisten</i><i data-l="en">List free phone numbers</i></td>
               <td data-l="de"><code>numberType</code> (<code>direct-routing</code> | <code>calling-plan</code> | <code>operator-connect</code>), <code>assignableTo</code> (<code>user</code> | <code>resource-account</code>)</td>
               <td data-l="en"><code>numberType</code> (<code>direct-routing</code> | <code>calling-plan</code> | <code>operator-connect</code>), <code>assignableTo</code> (<code>user</code> | <code>resource-account</code>)</td>
               <td data-l="de"><code>numberPrefix</code> – nur Nummern, die so beginnen; <code>max</code> – höchstens so viele, 1 bis 500, sonst 100.</td>
               <td data-l="en"><code>numberPrefix</code> – only numbers that start with this; <code>max</code> – at most this many, 1 to 500, otherwise 100.</td>
               <td data-l="de"><code>numbers</code> – die freien Nummern, sortiert; <code>entries</code> – dieselben mit <code>numberType</code>, <code>city</code> und <code>isoCountryCode</code>; <code>count</code>; <code>truncated</code> – ob es mehr gab.</td>
               <td data-l="en"><code>numbers</code> – the free numbers, sorted; <code>entries</code> – the same with <code>numberType</code>, <code>city</code> and <code>isoCountryCode</code>; <code>count</code>; <code>truncated</code> – whether there were more.</td></tr>
-            <tr><td><code>ensure-phone-number</code><br><i>Ensure phone number</i></td>
+            <tr><td><code>ensure-phone-number</code><br><i data-l="de">Telefonnummer sicherstellen</i><i data-l="en">Ensure phone number</i></td>
               <td data-l="de"><code>identity</code> (UPN oder Objekt-ID einer Person oder eines Ressourcenkontos), <code>phoneNumber</code>, <code>numberType</code> (<code>direct-routing</code> | <code>calling-plan</code> | <code>operator-connect</code>)</td>
               <td data-l="en"><code>identity</code> (a person's or a resource account's UPN or object id), <code>phoneNumber</code>, <code>numberType</code> (<code>direct-routing</code> | <code>calling-plan</code> | <code>operator-connect</code>)</td>
               <td data-l="de"><code>locationId</code> – die Notfalladresse der Nummer (<code>Get-CsOnlineLisLocation</code>).</td>
               <td data-l="en"><code>locationId</code> – the number's emergency address (<code>Get-CsOnlineLisLocation</code>).</td>
               <td data-l="de"><code>phoneNumber</code>, <code>identity</code>, <code>assigned</code> – ob dieser Lauf die Nummer vergeben hat; <code>previousNumber</code> – die ersetzte Nummer, leer, wenn keine.</td>
               <td data-l="en"><code>phoneNumber</code>, <code>identity</code>, <code>assigned</code> – whether this run gave the number out; <code>previousNumber</code> – the number it replaced, empty when none.</td></tr>
-            <tr><td><code>remove-phone-number</code><br><i>Remove phone number</i></td>
+            <tr><td><code>remove-phone-number</code><br><i data-l="de">Telefonnummer entfernen</i><i data-l="en">Remove phone number</i></td>
               <td><code>identity</code></td>
               <td data-l="de"><code>phoneNumber</code> – ohne sie werden alle Nummern der Person oder des Kontos entfernt.</td>
               <td data-l="en"><code>phoneNumber</code> – without it, every number of the person or account is removed.</td>
               <td data-l="de"><code>removed</code>, <code>phoneNumbers</code> – was entfernt wurde. Die Ergebnisvariable ist freiwillig.</td>
               <td data-l="en"><code>removed</code>, <code>phoneNumbers</code> – what was removed. The result variable is optional.</td></tr>
-            <tr><td><code>remove-hotline</code><br><i>Remove hotline (everything)</i></td>
+            <tr><td><code>remove-hotline</code><br><i data-l="de">Hotline entfernen (alles)</i><i data-l="en">Remove hotline (everything)</i></td>
               <td data-l="de"><code>resourceAccountIds</code> – die Ressourcenkonten der Hotline, meist das der Telefonzentrale und das der Warteschlange</td>
               <td data-l="en"><code>resourceAccountIds</code> – the hotline's resource accounts, usually the auto attendant's and the queue's</td>
               <td data-l="de"><code>names</code> – die Namen der Voice-Apps; finden eine wieder, die ein früherer Lauf ohne Konto zurückliess.</td>
               <td data-l="en"><code>names</code> – the voice apps' names; they find one again that an earlier run left without its account.</td>
               <td data-l="de"><code>removed</code>, <code>attendants</code>, <code>queues</code>, <code>accounts</code>, <code>phoneNumbers</code> – was entfernt wurde. Die Ergebnisvariable ist freiwillig.</td>
               <td data-l="en"><code>removed</code>, <code>attendants</code>, <code>queues</code>, <code>accounts</code>, <code>phoneNumbers</code> – what was removed. The result variable is optional.</td></tr>
-            <tr><td><code>remove-resource-account</code><br><i>Remove resource account</i></td>
+            <tr><td><code>remove-resource-account</code><br><i data-l="de">Ressourcenkonto entfernen</i><i data-l="en">Remove resource account</i></td>
               <td><code>resourceAccountId</code></td><td>–</td>
               <td data-l="de"><code>removed</code>, <code>objectId</code>, <code>phoneNumbers</code> – die Rufnummern, die mit dem Konto freigegeben wurden. Die Ergebnisvariable ist freiwillig.</td>
               <td data-l="en"><code>removed</code>, <code>objectId</code>, <code>phoneNumbers</code> – the phone numbers released with the account. The result variable is optional.</td></tr>
           </tbody>
         </table>
-        <p data-l="de"><b>Wiederholen ist sicher.</b> Jede <i>Ensure</i>-Operation sucht, bevor sie anlegt, und eine
-          <i>Remove</i>-Operation antwortet mit <code>removed: false</code>, wenn nichts mehr da ist. Ein wiederholter
+        <p data-l="de"><b>Wiederholen ist sicher.</b> Jede <i>…&nbsp;sicherstellen</i>-Operation sucht, bevor sie anlegt, und eine
+          <i>…&nbsp;entfernen</i>-Operation antwortet mit <code>removed: false</code>, wenn nichts mehr da ist. Ein wiederholter
           Job legt deshalb keine zweite Warteschlange an und scheitert nicht am Erfolg seines ersten Laufs. Die übliche
-          Reihenfolge beim Einrichten: <i>Resolve users</i>, zweimal <i>Ensure resource account</i>, <i>Ensure call
-          queue</i>, <i>Ensure auto attendant</i>. Abgebaut wird eine ganze Hotline mit einem Task, <i>Remove hotline</i>:
+          Reihenfolge beim Einrichten: <i>Benutzer auflösen</i>, zweimal <i>Ressourcenkonto sicherstellen</i>,
+          <i>Anrufwarteschlange sicherstellen</i>, <i>Automatische Telefonzentrale sicherstellen</i>. Abgebaut wird eine
+          ganze Hotline mit einem Task, <i>Hotline entfernen</i>:
           zuerst die Telefonzentralen, damit kein Anruf mehr an eine Warteschlange geht, die es gleich nicht mehr gibt,
           dann die Warteschlangen, zuletzt je Konto die Rufnummern und das Konto. Antwortet eine der Voice-Apps auch für
           ein Konto, das nicht genannt ist, wird der Abbau abgelehnt (<code>TEAMSPHONE_ACCOUNT_IN_USE</code>), bevor sich
-          etwas ändert – sie gehört dann auch zu einer anderen Hotline. Die einzelnen <i>Remove</i>-Operationen bleiben
+          etwas ändert – sie gehört dann auch zu einer anderen Hotline. Die einzelnen <i>…&nbsp;entfernen</i>-Operationen bleiben
           für einen Teilabbau.</p>
         <p data-l="en"><b>Repeating is safe.</b> Every <i>Ensure</i> operation looks before it creates, and a
           <i>Remove</i> operation answers <code>removed: false</code> when nothing is left. A repeated job therefore
@@ -7229,20 +7230,20 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           account. When one of the voice apps also answers for an account not named, the request is refused
           (<code>TEAMSPHONE_ACCOUNT_IN_USE</code>) before anything changes – the voice app then belongs to another hotline
           too. The single <i>Remove</i> operations remain for taking down part of one.</p>
-        <p data-l="de"><b>Rufnummern.</b> <i>Ensure phone number</i> gibt einer Person oder einem Ressourcenkonto die
+        <p data-l="de"><b>Rufnummern.</b> <i>Telefonnummer sicherstellen</i> gibt einer Person oder einem Ressourcenkonto die
           genannte Nummer – die Hotline einer Warteschlange und die Durchwahl einer Mitarbeiterin sind für Teams
           dieselbe Zuweisung. Hat das Ziel die Nummer schon, geschieht nichts (<code>assigned: false</code>); hat es eine
           andere Hauptnummer, wird diese zuerst entfernt und als <code>previousNumber</code> gemeldet. Eine Nummer, die
           jemand anderes hält, wird nicht weggenommen (<code>TEAMSPHONE_NUMBER_IN_USE</code>), und eine Calling-Plan- oder
           Operator-Connect-Nummer, die der Tenant nicht hat, wird abgelehnt (<code>TEAMSPHONE_NUMBER_NOT_FOUND</code>).
           Fehlt die Lizenz noch, scheitert die Zuweisung wie jeder andere Fehler; warte darauf im Modell, etwa mit einer
-          Timer-Schleife um eine Entra-Abfrage von <code>assignedLicenses</code>. <i>Remove resource account</i> gibt die
+          Timer-Schleife um eine Entra-Abfrage von <code>assignedLicenses</code>. <i>Ressourcenkonto entfernen</i> gibt die
           Nummern eines Ressourcenkontos selbst frei, bevor es die Zuordnung löst und das Konto löscht; die Nummer einer Person
-          entfernst du beim Austritt mit <i>Remove phone number</i>.</p>
-        <p data-l="de"><b>Freie Rufnummern.</b> <i>List free phone numbers</i> liest aus dem Nummernbestand des Tenants
+          entfernst du beim Austritt mit <i>Telefonnummer entfernen</i>.</p>
+        <p data-l="de"><b>Freie Rufnummern.</b> <i>Freie Telefonnummern auflisten</i> liest aus dem Nummernbestand des Tenants
           die Nummern, die niemand hält, die aktiviert und nicht gesperrt sind und die Teams der genannten Art von Inhaber
           gibt (<code>assignableTo</code>): einer Person oder dem Ressourcenkonto einer Voice-App. Die Antwort ist eine
-          Auswahl für eine Person oder einen späteren Schritt; zugewiesen wird erst mit <i>Ensure phone number</i>, und
+          Auswahl für eine Person oder einen späteren Schritt; zugewiesen wird erst mit <i>Telefonnummer sicherstellen</i>, und
           eine Nummer, die inzwischen jemand anderes erhalten hat, lehnt diese mit <code>TEAMSPHONE_NUMBER_IN_USE</code>
           ab. Eine Direct-Routing-Nummer steht erst im Bestand, wenn sie hochgeladen ist
           (<code>New-CsOnlineDirectRoutingTelephoneNumberUploadOrder</code>); vorher listet die Operation sie nicht.</p>
@@ -7263,7 +7264,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           <code>assignedLicenses</code>, say. <i>Remove resource account</i> releases a resource account's numbers itself
           before it detaches and deletes the account; a person's number you remove with <i>Remove phone number</i> when
           they leave.</p>
-        <p data-l="de"><b>Eine bestehende Warteschlange abgleichen.</b> <i>Ensure call queue</i> bringt eine
+        <p data-l="de"><b>Eine bestehende Warteschlange abgleichen.</b> <i>Anrufwarteschlange sicherstellen</i> bringt eine
           Warteschlange, die es schon gibt, auf das, was das Modell nennt – bei einem Personalwechsel lässt du denselben
           Task einfach erneut laufen.</p>
         <ul data-l="de">
@@ -7278,12 +7279,12 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             unberührt.</li>
           <li>Eine Liste wird <b>nie geleert</b>: Eine leere Liste für eine Warteschlange, die Agenten oder berechtigte
             Benutzer hat, wird abgelehnt (<code>TEAMSPHONE_WOULD_EMPTY_LIST</code>), bevor sich etwas ändert. Ein
-            <i>Resolve users</i>, das während einer Störung niemanden fand, sähe genau so aus. Prüfe
+            <i>Benutzer auflösen</i>, das während einer Störung niemanden fand, sähe genau so aus. Prüfe
             <code>notFound</code> deshalb vor dem Abgleich – auch eine einzelne Person, die nur vorübergehend nicht
             gefunden wurde, fiele sonst heraus.</li>
           <li>Ein Wert, der zu nichts ausgewertet wird – eine Variable, die niemand gesetzt hat –, wird abgelehnt, statt
             als «niemand» gelesen zu werden.</li>
-          <li>Nicht abgeglichen werden <code>languageId</code> und alles an <i>Ensure auto attendant</i>; diese Werte
+          <li>Nicht abgeglichen werden <code>languageId</code> und alles an <i>Automatische Telefonzentrale sicherstellen</i>; diese Werte
             gelten nur beim Anlegen.</li>
         </ul>
         <p data-l="en"><b>Reconciling an existing queue.</b> <i>Ensure call queue</i> brings a queue that already
@@ -7477,7 +7478,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p data-l="en"><b>Before the first real send:</b> check that the sender address is actually allowed to send
           (SPF/DKIM), and send the first batch to yourself. An automation sending two hundred wrong emails is faster
           than any correction.</p>
-        <p data-l="de"><b>Texte mit Platzhaltern.</b> Stellst du beim Mail-Task <b>Placeholders</b> auf <i>On</i>,
+        <p data-l="de"><b>Texte mit Platzhaltern.</b> Stellst du beim Mail-Task <b>Platzhalter</b> auf <i>Ein</i>,
           sind Betreff, Text und HTML-Text Vorlagen in derselben Sprache wie die Textansichten der Formulare:
           <code>{{kunde.vorname}}</code> setzt einen Wert ein, <code>{{#if betrag &gt; 1000}}…{{/if}}</code> schreibt
           einen Abschnitt nur, wenn die Bedingung zutrifft, und <code>{{#loop positionen}}…{{/loop}}</code> einmal pro
@@ -7485,7 +7486,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           verfügbar, und <code>this</code> ist das Element selbst; die Prozessvariablen erreichst du dort über
           <code>parent</code>, etwa <code>{{parent.waehrung}}</code>. Was ein Platzhalter in den HTML-Text einsetzt,
           wird maskiert – ein Wert kann also kein Markup hinzufügen. Mit <kbd>F2</kbd> öffnest du ein Feld im Editor
-          mit <b>Preview</b>: Er zeigt die Mail mit Beispielwerten, vorbefüllt aus einer laufenden Instanz, und
+          mit <b>Vorschau</b>: Er zeigt die Mail mit Beispielwerten, vorbefüllt aus einer laufenden Instanz, und
           rendert sie neu, sobald du etwas änderst. Eine fehlerhafte Vorlage, etwa ein <code>{{#if}}</code> ohne
           <code>{{/if}}</code>, lehnt bereits das Deployment ab, mit Zeile und Spalte. Ohne diese Einstellung bleibt
           alles wie bisher: Ein Wert ist wörtlicher Text, mit <code>=</code> davor ein FEEL-Ausdruck.</p>
@@ -7534,13 +7535,13 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           A watch on a worker with no mailbox – SMTP without an IMAP endpoint, or Preview – is refused. A watch that
           cannot read, say because the login is refused or a permission is missing, shows <b>not reading</b> in its row
           under <i>Events…</i> from its first poll on, with since when and why.</p>
-        <p data-l="de"><b>Eine HTML-Mail jemandem zeigen.</b> Wähle bei <i>Read message</i> unter
-          <i>Text</i> die Option <b>Include the text and the HTML</b> (<code>includeBody="html"</code>). Dann liest der
+        <p data-l="de"><b>Eine HTML-Mail jemandem zeigen.</b> Wähle bei <i>Nachricht lesen</i> unter
+          <i>Text</i> die Option <b>Mit Text und HTML</b> (<code>includeBody="html"</code>). Dann liest der
           Task neben dem Text auch die HTML-Fassung. Bevor sie in der Variable landet, entfernt Atlas alles, was
           ausgeführt würde: Skripte, eingebettete Seiten, Formulare, automatische Weiterleitungen, Event-Handler und
           Adressen wie <code>javascript:</code>. Links öffnen sich in einem neuen Tab. Ist die Mail zu gross für eine
           Variable, wird sie gekürzt, und <code>mail.htmlTruncated</code> sagt das. Eine Liste liest kein HTML: Lies
-          die eine Mail, die du brauchst, mit <i>Read message</i> über ihre <code>messageId</code>. Im Formular des
+          die eine Mail, die du brauchst, mit <i>Nachricht lesen</i> über ihre <code>messageId</code>. Im Formular des
           User-Tasks zeigt die Komponente <b>E-mail view</b> (Gruppe <i>Presentation</i>) die Mail an. Unter
           <i>Variable</i> trägst du die Ergebnisvariable ein, etwa <code>mail</code>. Die Ansicht zeigt Absender,
           Empfänger, Datum und Anhänge und darunter die HTML-Fassung in einem abgeschotteten Rahmen ohne Skripte; die
@@ -7615,7 +7616,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           Makros, verschlüsselte Archive und Archive mit Programmen darin, PDFs mit JavaScript oder einer
           Launch-Aktion, ein Dokument, dessen Name etwas anderes behauptet als sein Inhalt (eine
           <code>rechnung.pdf</code>, die kein PDF ist), und Namen mit Steuerzeichen, die <code>exe.pdf</code> als
-          <code>fdp.exe</code> erscheinen lassen. Mit <i>Accepted types</i> schränkst du einen Task zusätzlich auf
+          <code>fdp.exe</code> erscheinen lassen. Mit <i>Zulässige Typen</i> schränkst du einen Task zusätzlich auf
           bestimmte Typen ein, etwa <code>application/pdf, image/*</code>. Schadsoftware findet diese Prüfung nicht;
           dafür trägst du beim Worker einen Virenscanner ein (Feld <b>Malware scanner</b>): einen ClamAV-Daemon,
           <code>clamd://clamav.intern:3310</code> oder <code>clamd:///run/clamav/clamd.ctl</code>. Dann wird jedes
@@ -7801,7 +7802,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p data-l="en">The rights belong to the app registration, not to the certificate: if the SharePoint worker
           signs in as the Entra&nbsp;ID worker's app, it may also create and disable accounts. An app of its own,
           holding only the SharePoint permissions, keeps the two apart.</p>
-        <p data-l="de">Im Task nennst du die <b>Site</b> so, wie der Browser sie zeigt
+        <p data-l="de">Im Task nennst du die <b>Website</b> so, wie der Browser sie zeigt
           (<code>https://contoso.sharepoint.com/sites/hr</code>), als <code>contoso.sharepoint.com:/sites/hr</code>
           oder mit der Site-ID von Graph (<code>contoso.sharepoint.com,&lt;siteId&gt;,&lt;webId&gt;</code>). Gemeint
           ist die Site selbst, nicht eine Seite oder Liste darin. Listen und Bibliotheken nennst du mit ihrem Titel,
@@ -8004,7 +8005,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             <code>s3_archiv</code>. <b>Leave the endpoint empty for AWS</b>; for any other store enter its base URL
             (<code>https://minio.example:9000</code>) – which is also what tells atlas to address buckets in the path
             rather than in the hostname.</li>
-          <li data-l="de">Ausprobieren mit einer <b>Check object</b>-Aufgabe auf einem bekannten Key:
+          <li data-l="de">Ausprobieren mit einer <b>Objekt prüfen</b>-Aufgabe auf einem bekannten Key:
             <code>=datei.exists</code> antwortet, ohne das Objekt lesen zu müssen, also zeigt sich ein falsches Recht
             als Fehler und nicht als leeres Ergebnis.</li>
           <li data-l="en">Try it with a <b>Check object</b> task on a key you know: <code>=datei.exists</code> answers
@@ -8012,7 +8013,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             result.</li>
         </ol>
         <p data-l="de"><b>Die Falle:</b> Ein Dokument über <b>1 MiB</b> passt in keine Prozessvariable – das ist die
-          Obergrenze der Variablen selbst, und nur dort lässt sie sich überhaupt ändern. <b>Link to download</b> erzeugt stattdessen eine signierte URL,
+          Obergrenze der Variablen selbst, und nur dort lässt sie sich überhaupt ändern. <b>Link zum Herunterladen</b> erzeugt stattdessen eine signierte URL,
           und die Bytes gehen direkt vom Speicher zu dem, der sie öffnet. Halte die Gültigkeit kurz: Diese URL öffnet
           genau dieses Objekt für jeden, der sie hat, und sie steht wie jeder andere Wert in den Variablen der
           Instanz.</p>
@@ -8047,7 +8048,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             (<i>Messages</i> is Anthropic's, <i>Chat Completions</i> is OpenAI's and that of anything calling itself
             OpenAI-compatible), the key reference and the <b>default model</b>. Leave the endpoint empty unless you
             go through a gateway, a proxy or a self-hosted deployment.</li>
-          <li data-l="de">Im Task <b>Model</b> leer lassen für das Standardmodell des Workers – oder pro Task eines
+          <li data-l="de">Im Task <b>Modell</b> leer lassen für das Standardmodell des Workers – oder pro Task eines
             nennen: ein günstiges für eine Klassifikation, ein starkes für eine Empfehlung, über denselben Worker und
             denselben Schlüssel.</li>
           <li data-l="en">In the task leave <b>Model</b> empty for the worker's default – or name one per task: a
@@ -8157,7 +8158,7 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           <p class="lead" data-l="de">Legt Benutzer und Gruppen bei einem Identity-Provider über SCIM&nbsp;2.0 an,
             liest und ändert sie. Basis-URL und Ressource stehen im Task; das Provisioning-Token des Providers legst
             du unter <a href="/#/console/secrets">Console → Secrets</a> ab und nennst es als Secret-Referenz
-            (Authentifizierung <i>Bearer token</i>). Beginne mit einer <b>Suche</b> statt mit einem Anlegen: Ein
+            (Authentifizierung <i>Bearer-Token</i>). Beginne mit einer <b>Suche</b> statt mit einem Anlegen: Ein
             Filter wie <code>userName eq "arno"</code> beweist Token und Basis-URL, ohne etwas zu schreiben – aber
             beachte, dass eine unberechtigte Suche „keine Ressourcen" antwortet und nicht scheitert.</p>
           <p class="lead" data-l="en">Creates, reads and updates users and groups at an identity provider over
@@ -9411,8 +9412,8 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           ein einzelner Lesezugriff, egal wie viele Instanzen es gibt) oder <code>name=wert</code> für eine
           Suche über die Prozessvariablen dieser Version. Damit die Wertsuche ebenfalls ein einzelner
           Zugriff wird, sagt das Modell, wonach gesucht werden soll: im Modeller trägst du die Namen
-          in den Prozess-Eigenschaften unter <b>Searchable variables</b> ein — nichts auswählen, Gruppe
-          <b>Process</b> — und das Modell erhält
+          in den Prozess-Eigenschaften unter <b>Durchsuchbare Variablen</b> ein — nichts auswählen, Gruppe
+          <b>Prozess</b> — und das Modell erhält
           <code>&lt;bpmn:process atlas:searchable="identityId,item"&gt;</code>. Für eine so deklarierte
           Variable beantwortet der Index die Suche; alles andere liest die Instanzen der Version durch. Was
           du eingibst, wird dabei <b>vollständig</b> verglichen: <code>kdnr=MT-100</code> findet
@@ -10602,7 +10603,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         Version trotzdem; dafür brauchst du zusätzlich <code>operator</code>, sobald Instanzen laufen. Ein
         Katalogprodukt, das den Prozess bindet, lässt sich danach nicht mehr bestellen, und die Rückgabe einer
         bestehenden Position schlägt fehl, bis der Prozess wieder deployt ist. Ein geschützter Systemprozess lässt
-        sich nie löschen. Im Modeler zeigt <i>Delete</i> den Grund der Ablehnung und bietet das erzwungene Löschen an.</p>
+        sich nie löschen. Im Modeler zeigt <i>Löschen</i> den Grund der Ablehnung und bietet das erzwungene Löschen an.</p>
       <p data-l="en">You delete a deployed version with <code>DELETE /api/v1/processes/{key}</code> (role
         <code>modeler</code>). Atlas refuses while instances of the version are running, while an order line can
         still start the process, or while the current catalogue release binds it – and says which of these applies.
@@ -11582,7 +11583,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
           <p data-l="en">In <a href="/#/data">Data → Model</a>, create a class, give it attributes and mark its
             business key.</p></li>
         <li><b data-l="de">Datenobjekt darauf zeigen lassen</b><b data-l="en">Point a data object at it</b>
-          <p data-l="de">Im Modeler das Feld <b>Type</b> des Datenobjekts. Es bietet die Klassen an, die diese
+          <p data-l="de">Im Modeler das Feld <b>Typ</b> des Datenobjekts. Es bietet die Klassen an, die diese
             Applikation modelliert &ndash; gruppiert nach Modell und je mit ihrem Business Key, weil ein Name allein
             nicht verrät, ob es die richtige Klasse ist. Darunter wird die Klasse selbst gezeigt.</p>
           <p data-l="en">The data object's <b>Type</b> field in the Modeler. It offers the classes this application
@@ -12386,7 +12387,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
         <code>rolle</code> (entwicklung, vertrieb, produktion, verwaltung, ein Unbekannter); Stubs beantworten den Job
         und die Aufgaben, damit jeder Fall zu Ende läuft. Eine Regel je Fall –
         <code>when rolle = "vertrieb" then ausstattung.laptop = "ThinkPad X1"</code> – und die Erwartungen
-        <i>no incidents</i> und <i>every case finishes</i>. Schreib die Regel einmal absichtlich falsch, damit du siehst, wie der
+        <i>keine Incidents</i> und <i>jeder Fall endet</i>. Schreib die Regel einmal absichtlich falsch, damit du siehst, wie der
         Auffangfall <b>rot</b> wird, also fehlschlägt. Mehr unter <a href="#szenarien">Testen als Code</a>.</p>
       <p data-l="en"><b>Starting point:</b> the deployed model in the Playground. <b>Scenario:</b> a dataset over
         <code>rolle</code> (entwicklung, vertrieb, produktion, verwaltung, and an unknown one); stubs answer the job
