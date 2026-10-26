@@ -6,12 +6,26 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**2 programmes** · active: 2 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
+**3 programmes** · active: 2 · blocked: 0 · paused: 0 · planned: 1 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
+| [Blueprint Marketplace](../planning/blueprint-marketplace-program.md) | planned | 0/4 | unassigned | Assign human programme owner and review proposed Blueprint registry ADR; only then begin BMP0 contract and trust tests. |
 | [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Rework digest PR #1360 to SHA-256 over the exact LF file bytes and add the dependency digest of built-in Worker Types (ADR-0483); configure branch protection on main with code-owner review before the first evidence record, whose PR adds CODEOWNERS for the evidence path; then evidence records with same-PR renewal enforced in CI. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
+
+## Blueprint Marketplace (BMP)
+
+Distribute versioned Process Application Blueprints from independently operated registries, safely import/update packages while retaining local edits, and keep commercial entitlements separate from execution.
+
+**[Programme plan](../planning/blueprint-marketplace-program.md) · [Roadmap track](../../ROADMAP.md#milestone-6--ecosystem-) · [Manifest](bmp/program.json) · Reviewed: 2026-10-26**
+
+| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
+| --- | --- | --- | --- | --- | --- |
+| **BMP0** — Registry and trust contract | planned | unassigned | — | — | Approve identities, immutable version/digest, registry schema, trust and collision decisions before implementation. |
+| **BMP1** — Free registry to installed application | planned | unassigned | BMP0 | — | Prove static public catalog, verified package install, existing import plan, explicit publish, safe failures and restart. |
+| **BMP2** — Provenance and managed updates | planned | unassigned | BMP1 | — | Pin version and digest, preserve local edits, test conflict/rollback/failure behavior and provenance recovery. |
+| **BMP3** — Private and federated registries | planned | unassigned | BMP1 | — | Mock authenticated/private sources and provider-neutral entitlements; no payments or runtime licensing in core. |
 
 ## Capability-driven Automation (CDA)
 
