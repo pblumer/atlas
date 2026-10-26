@@ -412,12 +412,12 @@ test("the document sets the rule table behind the business rule task", async ({ 
   // Where the rules came from, and then the rules themselves — the same table the
   // decision's own document sets, drawn by the same renderer.
   expect(raw).toContain("Rules read from: Model anspruch.dmn");
-  expect(raw).toContain("hit policy UNIQUE");
+  expect(raw).toContain("Hit Policy UNIQUE");
   expect(raw).toContain("Betrag");
   expect(raw).toContain("approve");
   expect(raw).toContain("reject");
-  expect(raw).toContain("Rule 1: Ab 100 immer");
-  expect(raw).toContain("Writes: eligibility");
+  expect(raw).toContain("Regel 1: Ab 100 immer");
+  expect(raw).toContain("Schreibt: eligibility");
 
   // The worker-backed task says where its rules live instead of pretending to none.
   expect(raw).toContain("risk-service");

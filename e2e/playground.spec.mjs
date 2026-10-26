@@ -173,7 +173,7 @@ test("a refused source puts the diagram back without claiming it changed", async
   // BPMN with nothing to draw: bpmn-js clears the canvas before refusing it, and the
   // editor imports the diagram back — an import, but of what the sandbox is running.
   await applySource(page, () => '<?xml version="1.0"?>\n<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Empty" targetNamespace="http://atlas/bpmn"></bpmn:definitions>');
-  await expect(page.locator(".xml-modal .xml-status")).toContainText("unchanged");
+  await expect(page.locator(".xml-modal .xml-status")).toContainText("unverändert");
   await expect(page.locator('.djs-element[data-element-id="review"].atlas-active')).toHaveCount(1);
   await expect(page.locator(".token-badge")).toHaveCount(2);
   await page.waitForTimeout(300);
