@@ -642,8 +642,8 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		// While bound, the fields a source supplies are the source's (ADR-draft-
-		// service-content-from-an-external-source, § 1).
+		// While bound, the fields a source supplies are the source's
+		// (ADR-draft-service-content-from-an-external-source, § 1).
 		if in, bound = boundSave(prev, prevOK, in); bound != "" {
 			return
 		}

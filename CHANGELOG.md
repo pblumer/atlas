@@ -14,6 +14,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A product's description, keywords and picture can come from a wiki page.** An
+  administrator configures a content source (`/api/v1/content-sources`, admin-only): a
+  wikiwikibangbang base URL, https only, and a `credentialsRef` naming the vault secret that
+  holds a read-scope token of a technical account that is nothing but `viewer`. A product
+  manager then binds a product to one page per language its catalogue declares — searched,
+  pasted as an address or a key, and previewed with everything the rules drop — and linking
+  writes the binding and the fetched content in one draft save
+  (`/api/v1/catalog-products/{id}/content`). A page restricted for reading, or below a
+  restricted ancestor, held for a data protection review, not live, or in a space the account
+  does not hold exactly `viewer` in is refused; protected passages are removed by their mark
+  before the text is converted, child pages are taken depth first and a restricted one is
+  dropped with everything below it. While bound, those fields are read-only through the
+  ordinary save. A recheck follows the wiki's change feed and sweeps every fifteen minutes; a
+  page that becomes protected, unreadable or gone, a wrong account standing or an unreachable
+  wiki quarantines the product, which withholds its description, keywords and picture from the
+  shop, the approval page, the order views, the exports, the API and MCP at once, without a
+  publish. Only a refresh that passes every rule lifts it, and publishing refuses a quarantined
+  product or one without a passed recheck in the last fifteen minutes. Unlinking needs a reason
+  and is audited. Without a configured source nothing changes
+  ([ADR-draft](docs/adr/draft-service-content-from-an-external-source.md)).
 - **The Start view groups its processes by application, filters them and keeps favourites.**
   The Tasks app's Start list was one alphabetical column of every process with a start form.
   It now sits under one heading per application the process was deployed under, sorted by

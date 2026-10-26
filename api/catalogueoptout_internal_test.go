@@ -28,8 +28,8 @@ import (
 var catalogueSegments = map[string]bool{
 	"catalogs":         true,
 	"catalog-products": true,
-	// Where a product's content may come from (ADR-draft-service-content-from-
-	// an-external-source): configuration of the catalogue's, served only with it.
+	// Where a product's content may come from: configuration of the catalogue's,
+	// served only with it (ADR-draft-service-content-from-an-external-source).
 	"content-sources": true,
 	"shop":            true,
 	"orders":          true,

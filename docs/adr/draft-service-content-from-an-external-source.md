@@ -347,6 +347,61 @@ prerequisites, not follow-ups:
 They are designed in wikiwikibangbang's own record, which must keep its invariant
 that an unreadable item is non-existent (its D10).
 
+### As built
+
+The backend is built; the catalogue screen's part of it is not, and neither are the
+finance-system cost (§ 2), more than one picture, an administrator's purge of
+quarantined content, or telling the product owner about an unlink (the open question).
+
+- **Where it lives.** `api/contentsource` holds the source configuration and its store
+  (`contentsources`, an instance store), the adapter contract (`Adapter`, with every
+  security fact a three-valued `Fact` whose zero value is *unknown*, so a fact an adapter
+  did not establish refuses), the wikiwikibangbang adapter, the rules of § 8 and § 4 as
+  pure functions, the conversion, the recheck and its runner; `api/contentsource/wikifake`
+  is a wikiwikibangbang implementing the source's contract for tests. The binding is
+  `catalog.Item.ContentSource` (omitted when absent, frozen into a release), the routes of
+  § 5–§ 7 are the catalogue's (`/api/v1/catalog-products/{id}/content…`,
+  `/api/v1/catalogs/{id}/content/refresh`, role `productmanager` on the home catalogue,
+  carrying the product's `revision`), and the configuration routes are admin-only
+  (`/api/v1/content-sources…`, with a `check` that reads the account's standing). The
+  wikiwikibangbang side is its ADR-0120: `GET /api/me/roles`, `GET /api/changes` and
+  item watches with a read token.
+- **What a recheck covers, and what is shown.** The recheck covers the draft's binding and
+  the binding in the newest release of each catalogue — what the shop reads. Every older
+  release's source content is withheld for good, because nothing rechecks it. It watches
+  every bound page, every child page whose text was taken and every ancestor walked, by
+  item watch only (a space watch never reports a page that became unreadable), and ends
+  the watches nothing needs any more by id. The feed's position is read before the sweep
+  that follows it, so a change in between is not lost.
+- **A lifted quarantine.** A refresh that lifts a quarantine records when the quarantine
+  began, and content copied before that moment stays withheld wherever a copy of it is
+  left — the releases published before the refresh — while the refreshed copy is shown
+  after the next publish. Otherwise a refresh would show again the very content that was
+  in question.
+- **A recheck that stopped.** Content whose last passed recheck is older than twice the
+  interval (30 minutes) is withheld at read time without a quarantine, so a recheck that
+  stopped running — the server down, the goroutine gone — fails closed; the next recheck
+  that passes shows it again. Publishing refuses after one interval, as § 9 says.
+- **A passage protected after the copy.** A binding keeps the ids of the passages it was
+  copied without (and of each child page's), and a recheck that finds a passage in a
+  taken block that the copy did not remove quarantines: Atlas holds its text.
+- **Conversion.** Paragraphs, headings, bullet and task items and ordered items are text;
+  quotes, panels, tables, code, embeds, pictures and every computed block are dropped and
+  named in the preview. A child page contributes its title and its body. Mark offsets are
+  Unicode code points, as wikiwikibangbang counts them.
+- **Unlinking one slot** takes that language's description and the keywords only its
+  labels gave with it (each slot keeps the labels it contributed), because content no
+  binding names is content no recheck covers; the primary slot goes only with the whole
+  binding, since the picture is its. The audit record is the log event `content.unlinked`.
+- **Withholding** is the release listing (the shop's listing, detail and keyword search,
+  and MCP's `atlas_catalog_releases`), the picture route — for every reader, the
+  catalogue screen included, which shows the quarantine instead — and the exports, which
+  also leave the binding behind. The approval page, the order views and the shop's task
+  list carry no description, keyword or picture of their own, and tests hold them to it.
+  A picture on a bound product is the source's: the picture routes refuse to set or
+  remove one.
+- **Removing a source** is refused while a product is bound to it.
+
 ### Consequences
 
 - **Positive:** the product owner maintains one description, in the wiki, and the
