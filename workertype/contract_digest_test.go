@@ -10,31 +10,33 @@ import (
 	"testing"
 )
 
-func TestCanonicalTechnicalContractIgnoresWhitespaceAndMemberOrder(t *testing.T) {
+func readAccountContract(t *testing.T) []byte {
+	t.Helper()
 	raw, err := os.ReadFile("testdata/technical-account-create.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	original, err := CanonicalTechnicalContractJSON(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	return raw
+}
+
+// TestTheDigestIsTheSHA256OfTheFilesExactBytes: ADR-0483 names a contract by its
+// file's bytes, never by a re-serialization, so any tool in any language can
+// recompute it, and a reformatted file is a different artifact.
+func TestTheDigestIsTheSHA256OfTheFilesExactBytes(t *testing.T) {
+	raw := readAccountContract(t)
 	digest, err := DigestTechnicalContractJSON(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
+	hash := sha256.Sum256(raw)
+	if want := "sha256:" + hex.EncodeToString(hash[:]); digest != want {
+		t.Fatalf("digest = %s, want the SHA-256 of the file's bytes %s", digest, want)
+	}
+
 	var compact bytes.Buffer
 	if err := json.Compact(&compact, raw); err != nil {
 		t.Fatal(err)
 	}
-	compactDigest, err := DigestTechnicalContractJSON(compact.Bytes())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if digest != compactDigest {
-		t.Fatalf("whitespace changed contract digest: %s != %s", digest, compactDigest)
-	}
-	// Reordering the top-level properties is a presentation change.
 	var object map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &object); err != nil {
 		t.Fatal(err)
@@ -47,31 +49,19 @@ func TestCanonicalTechnicalContractIgnoresWhitespaceAndMemberOrder(t *testing.T)
 	reordered = append(reordered, []byte(`,"apiVersion":`)...)
 	reordered = append(reordered, object["apiVersion"]...)
 	reordered = append(reordered, '}')
-	reorderedDigest, err := DigestTechnicalContractJSON(reordered)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if digest != reorderedDigest {
-		t.Fatalf("property order changed contract digest: %s != %s", digest, reorderedDigest)
-	}
-	repeat, err := CanonicalTechnicalContractJSON(original)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(original, repeat) {
-		t.Fatalf("canonical encoding is not idempotent: %s != %s", original, repeat)
-	}
-	hash := sha256.Sum256(original)
-	if digest != "sha256:"+hex.EncodeToString(hash[:]) {
-		t.Fatalf("digest must hash the canonical artifact: %q", digest)
+	for name, other := range map[string][]byte{"compacted": compact.Bytes(), "reordered": reordered} {
+		got, err := DigestTechnicalContractJSON(other)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got == digest {
+			t.Errorf("%s file kept the digest of the original; a reformatted file is a different artifact", name)
+		}
 	}
 }
 
 func TestTechnicalContractDigestChangesWithMeaning(t *testing.T) {
-	raw, err := os.ReadFile("testdata/technical-account-create.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := readAccountContract(t)
 	base, err := DigestTechnicalContractJSON(raw)
 	if err != nil {
 		t.Fatal(err)
@@ -108,11 +98,25 @@ func TestTechnicalContractDigestChangesWithMeaning(t *testing.T) {
 	}
 }
 
-func TestTechnicalContractDigestRejectsDuplicateMembersAtAnyDepth(t *testing.T) {
-	raw, err := os.ReadFile("testdata/technical-account-create.json")
-	if err != nil {
-		t.Fatal(err)
+// TestTheDigestRefusesBytesACheckoutCouldChange: a byte-order mark, a carriage
+// return or invalid UTF-8 would make the same contract hash differently on
+// another machine or editor, so such a file gets no digest at all.
+func TestTheDigestRefusesBytesACheckoutCouldChange(t *testing.T) {
+	raw := readAccountContract(t)
+	for name, bad := range map[string][]byte{
+		"byte-order mark":   append([]byte("\xef\xbb\xbf"), raw...),
+		"CRLF line endings": bytes.ReplaceAll(raw, []byte("\n"), []byte("\r\n")),
+		"a lone CR":         bytes.Replace(raw, []byte("\n"), []byte("\r"), 1),
+		"invalid UTF-8":     bytes.Replace(raw, []byte(`"kind"`), []byte("\"kind\xff\""), 1),
+	} {
+		if _, err := DigestTechnicalContractJSON(bad); err == nil {
+			t.Errorf("%s: a digest was computed", name)
+		}
 	}
+}
+
+func TestTechnicalContractDigestRejectsDuplicateMembersAtAnyDepth(t *testing.T) {
+	raw := readAccountContract(t)
 	for _, bad := range []string{
 		strings.Replace(string(raw), `"kind":`, `"kind":"TechnicalCapabilityContract","kind":`, 1),
 		strings.Replace(string(raw), `"type": "object"`, `"type":"object","type": "object"`, 1),
@@ -125,10 +129,7 @@ func TestTechnicalContractDigestRejectsDuplicateMembersAtAnyDepth(t *testing.T) 
 }
 
 func TestTechnicalContractDigestRejectsInvalidOrMultipleDocuments(t *testing.T) {
-	raw, err := os.ReadFile("testdata/technical-account-create.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := readAccountContract(t)
 	for _, bad := range [][]byte{
 		nil,
 		[]byte(`{}`),
@@ -136,18 +137,14 @@ func TestTechnicalContractDigestRejectsInvalidOrMultipleDocuments(t *testing.T) 
 		[]byte(`{"apiVersion":false}`),
 		bytes.Repeat([]byte("x"), maxTechnicalContractBytes+1),
 	} {
-		if _, err := CanonicalTechnicalContractJSON(bad); err == nil {
+		if _, err := DigestTechnicalContractJSON(bad); err == nil {
 			t.Fatalf("invalid artifact (length %d) was accepted", len(bad))
 		}
 	}
 }
 
 func TestTechnicalContractDigestDoesNotCertifyWorkerClaims(t *testing.T) {
-	raw, err := os.ReadFile("testdata/technical-account-create.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	digest, err := DigestTechnicalContractJSON(raw)
+	digest, err := DigestTechnicalContractJSON(readAccountContract(t))
 	if err != nil {
 		t.Fatal(err)
 	}
