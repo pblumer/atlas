@@ -22,7 +22,7 @@ Distribute versioned Process Application Blueprints from independently operated 
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
-| **BMP0** — Registry and trust contract | planned | unassigned | — | — | Approve identities, immutable version/digest, registry schema, trust and collision decisions before implementation. |
+| **BMP0** — Registry and trust contract | planned | unassigned | — | [PR #1395](https://github.com/pblumer/atlas/pull/1395) | Architecture and programme proposal in draft PR #1395; BMP0 is not started. Review identity, trust, package contract and tests before acceptance. |
 | **BMP1** — Free registry to installed application | planned | unassigned | BMP0 | — | Prove static public catalog, verified package install, existing import plan, explicit publish, safe failures and restart. |
 | **BMP2** — Provenance and managed updates | planned | unassigned | BMP1 | — | Pin version and digest, preserve local edits, test conflict/rollback/failure behavior and provenance recovery. |
 | **BMP3** — Private and federated registries | planned | unassigned | BMP1 | — | Mock authenticated/private sources and provider-neutral entitlements; no payments or runtime licensing in core. |
