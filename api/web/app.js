@@ -3409,15 +3409,15 @@ async function viewModelerHome() {
     <div class="between">
       <h1>Applications</h1>
       ${dropdown("Create new", "btn", [
-        { label: "New application", icon: "📦", act: "new-project" },
+        { label: tr("create.newApplication"), icon: "📦", act: "new-project" },
         { sep: true },
-        { header: "Blank resources" },
-        { label: "BPMN diagram", icon: "⚙", href: "#/modeler/new" },
-        { label: "Form", icon: "▤", href: "#/modeler/form/new" },
+        { header: tr("create.blank") },
+        { label: tr("create.bpmn"), icon: "⚙", href: "#/modeler/new" },
+        { label: tr("create.form"), icon: "▤", href: "#/modeler/form/new" },
         { sep: true },
-        { label: "Import file…", icon: "📥", act: "import" },
-        { label: "Import MIM workflow (XOML)…", icon: "🔁", act: "import-mim" },
-        { label: "Import application…", icon: "🗂", act: "import-source" },
+        { label: tr("create.importFile"), icon: "📥", act: "import" },
+        { label: tr("create.importMim"), icon: "🔁", act: "import-mim" },
+        { label: tr("create.importApplication"), icon: "🗂", act: "import-source" },
       ])}
     </div>
     <div class="card" style="padding:0; margin-top:14px">
@@ -3761,14 +3761,14 @@ async function viewProjectDetail(id) {
     const newDiagramHref = ungrouped ? "#/modeler/new" : `#/modeler/new/p/${encodeURIComponent(id)}`;
     const newFormHref = ungrouped ? "#/modeler/form/new" : `#/modeler/form/new/p/${encodeURIComponent(id)}`;
     const createItems = [
-      { header: "Blank resources" },
-      { label: "BPMN diagram", icon: "⚙", href: newDiagramHref },
-      { label: "Decision (DMN)", icon: "▦", act: "newdec" },
-      { label: "DMN model (upload .dmn)", icon: "▦", act: "newref" },
-      { label: "Form", icon: "▤", href: newFormHref },
+      { header: tr("create.blank") },
+      { label: tr("create.bpmn"), icon: "⚙", href: newDiagramHref },
+      { label: tr("create.dmn"), icon: "▦", act: "newdec" },
+      { label: tr("create.dmnUpload"), icon: "▦", act: "newref" },
+      { label: tr("create.form"), icon: "▤", href: newFormHref },
       { sep: true },
-      { label: "Import file…", icon: "📥", act: "import" },
-      { label: "Import MIM workflow (XOML)…", icon: "🔁", act: "import-mim" },
+      { label: tr("create.importFile"), icon: "📥", act: "import" },
+      { label: tr("create.importMim"), icon: "🔁", act: "import-mim" },
     ];
 
     const projItems = ungrouped ? [] : [
@@ -4629,8 +4629,8 @@ function pickFile(accept) {
 }
 
 // createDecision opens the decision editor on a seed model, filing what it saves
-// under the application. It is the decision counterpart of "BPMN diagram" in the
-// same menu — an application can be built out of decisions with no diagram in it at
+// under the application. It is the decision counterpart of the BPMN diagram entry in
+// the same menu — an application can be built out of decisions with no diagram in it at
 // all, and publishing it deploys them as runtime artifacts (ADR-0319).
 //
 // It navigates rather than opening a window over this one: a decision is edited on a

@@ -12,6 +12,14 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+
+- **The Modeler's "Create new" menu speaks German.** Both menus — on the application
+  landscape and inside an application — now read from the message catalogue
+  ([ADR-0267](docs/adr/0267-console-speaks-german-first.md)): "Prozessdiagramm (BPMN)",
+  "Entscheidungsdiagramm (DMN)", "Entscheidungsmodell hochladen (.dmn)", "Formular", and
+  the import entries. `?lang=en` keeps the English labels.
+
 ## [0.20.0] — 2026-10-25
 
 **A SharePoint Worker can act as the person who asked, and only for what a policy

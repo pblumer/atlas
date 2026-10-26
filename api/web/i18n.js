@@ -185,6 +185,19 @@ const CATALOGS = {
     "form.invalidMore.one": "und ein weiteres Feld.",
     "form.invalidMore.other": "und {n} weitere Felder.",
 
+    // The Modeler's "Create new" menu, on the application landscape and inside an
+    // application (app.js). modeler_create_i18n_test.go holds both menus to these
+    // keys in both languages.
+    "create.newApplication": "Neue Anwendung",
+    "create.blank": "Leere Ressourcen",
+    "create.bpmn": "Prozessdiagramm (BPMN)",
+    "create.dmn": "Entscheidungsdiagramm (DMN)",
+    "create.dmnUpload": "Entscheidungsmodell hochladen (.dmn)",
+    "create.form": "Formular",
+    "create.importFile": "Datei importieren…",
+    "create.importMim": "MIM-Workflow importieren (XOML)…",
+    "create.importApplication": "Anwendung importieren…",
+
     "tasks.folders.mine": "Meine Ordner",
     "tasks.folders.shared": "Geteilt",
     "tasks.folders.new": "Neuer Ordner",
@@ -1291,6 +1304,16 @@ const CATALOGS = {
     "form.invalidFields": "Still to check: {fields}",
     "form.invalidMore.one": "and one more field.",
     "form.invalidMore.other": "and {n} more fields.",
+
+    "create.newApplication": "New application",
+    "create.blank": "Blank resources",
+    "create.bpmn": "BPMN diagram",
+    "create.dmn": "Decision (DMN)",
+    "create.dmnUpload": "DMN model (upload .dmn)",
+    "create.form": "Form",
+    "create.importFile": "Import file…",
+    "create.importMim": "Import MIM workflow (XOML)…",
+    "create.importApplication": "Import application…",
 
     "tasks.folders.mine": "My folders",
     "tasks.folders.shared": "Shared",
