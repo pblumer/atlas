@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-26",
   "plan": "../../planning/capability-driven-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-cda--capability-driven-automation-",
-  "next_action": "Rework digest PR #1360 to SHA-256 over the exact LF file bytes and add the dependency digest of built-in Worker Types (ADR-0483); configure branch protection on main with code-owner review before the first evidence record, whose PR adds CODEOWNERS for the evidence path; then evidence records with same-PR renewal enforced in CI.",
+  "next_action": "Merge the implementation digest (internal/impldigest); decide which root packages serve each built-in Worker Type, since all of them run through the shared worker package whose closure reaches every connector; configure branch protection on main with code-owner review; then the first evidence record, with CODEOWNERS for its path and the CI check that renews evidence in the PR that changes the code.",
   "slices": [
     {
       "id": "CDA0",
@@ -58,7 +58,7 @@
         1357,
         1360
       ],
-      "note": "ADR-0483 Accepted (option 3), with approval by repository provenance (maintainer as sole reviewer), raw-byte contract digests and dependency digests for built-in Worker Types. CDA2a schema-only validation merged in PR #1357; digest PR #1360 in review and to be reworked to raw bytes. Evidence records, renewal, withdrawal and publication are not yet implemented; no Worker is verified."
+      "note": "ADR-0483 Accepted (option 3), with approval by repository provenance (maintainer as sole reviewer), raw-byte contract digests and dependency digests for built-in Worker Types. Merged: schema-only validation (PR #1357) and contract digests over the file's bytes (PR #1360). In review: the implementation digest. Evidence records, renewal, withdrawal and publication are not yet implemented; no Worker is verified."
     },
     {
       "id": "CDA3",
