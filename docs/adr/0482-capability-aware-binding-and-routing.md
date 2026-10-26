@@ -89,7 +89,7 @@ Persisting the target does not solve the at-least-once side-effect problem: prov
 
 CDA6 first delivers authoring and **deployment validation**, without executable capability routing: reject ambiguous/unverified claims and show the frozen binding plan. CDA7 then enables the first *narrow* governed executable path only after:
 
-1. Contract evidence is current under the [conformance-governance proposal](0483-technical-capability-conformance-governance.md).
+1. Contract evidence is current under [ADR-0483](0483-technical-capability-conformance-governance.md).
 2. ADR-0475's relevant provider enforcement and identity boundary are in place, with fail-closed negative tests.
 3. Tests prove no allocation or string/schema resolution was introduced into processor commands.
 4. At least one live/WAL-replay equivalence test verifies deployments, worker replacement/revocation, denied/approved action, restart, retry and lease fencing, plus that side effects are never repeated by replay.

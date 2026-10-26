@@ -107,10 +107,38 @@ API. The maintainer chose **repository provenance**:
 - Reviewer signatures and API-verified reviews are not adopted. Adding a
   second reviewer or a stricter rule amends this record.
 
+### Digests and implementation identity (accepted)
+
+Decided by the maintainer on 2026-10-26:
+
+- **Contract digest.** `sha256:<hex>` over the exact bytes of the contract
+  file. The file must be valid UTF-8 without a byte-order mark, and
+  `.gitattributes` pins it to LF line endings, so a checkout on any platform
+  yields the same bytes. The file is never re-serialized. Any byte change,
+  formatting included, is a new artifact, and a published artifact must not
+  change at all. RFC 8785 canonicalization was weighed and not adopted; it can
+  be added as a second identifier if contracts ever travel through a channel
+  that re-serializes them.
+- **Implementation identity of a built-in Worker Type.** The fixed version
+  `1.0.0` of built-in Worker Types is not an implementation identity. Evidence
+  binds to a dependency digest instead: SHA-256 over every non-test Go source
+  file of the module's packages in the Worker Type's dependency closure
+  (`go list -deps` for one fixed reference platform), together with `go.mod`,
+  `go.sum` and the Go toolchain version. A Worker Type installed as a package
+  binds to its ADR-0208 package digest once that exists. A build commit was
+  rejected: evidence kept in the repository cannot name the commit that
+  contains it.
+- **Renewal in the same change.** A pull request that changes the dependency
+  digest of an operation with evidence must refresh that evidence (re-run the
+  approved conformance cases and record the new digest) in the same pull
+  request; CI fails otherwise. The maintainer's merge of that pull request is
+  the renewed approval under *Approval authority in the initial phase*. `main`
+  therefore never carries evidence for code it no longer contains.
+
 ### Normative identity and artifact ownership
 
 - A canonical technical capability is identified by `id`, exact SemVer `version`, and an explicit `profile` (which may be empty). The meaning, accepted inputs, outputs, errors, side effects and consistency requirements are immutable under that identity.
-- A canonical document is source-controlled, canonicalized for content hashing and distributed as a read-only artifact with atlas. A new meaning requires a new identity/version/profile; a corrected *publication record* may withdraw a bad artifact, but must not silently redefine it.
+- A canonical document is source-controlled and distributed as a read-only artifact with atlas. Its content digest is SHA-256 over the exact file bytes (see *Digests and implementation identity*). A new meaning requires a new identity/version/profile; a corrected *publication record* may withdraw a bad artifact, but must not silently redefine it.
 - The canonical document is not a new `api/capability` record or a second runtime store. A future external distribution channel can reuse ADR-0208's package envelope after its trust model is operational.
 - A `CapabilityClaim` in a Worker Type manifest remains **advisory** until evidence binds that *particular* implementation to the canonical contract. The package's own version is not the contract version.
 - The initial ADR-0480 manifest admission rule rejects multiple claims with the same `id@version` within one operation even when profiles differ. This is an intentional current limitation to be reviewed during T1b: the semantic contract catalogue may define multiple profiles, but a single operation cannot declare two simultaneously without a separately tested manifest change.

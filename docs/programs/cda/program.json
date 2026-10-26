@@ -4,28 +4,32 @@
   "summary": "Connect business outcomes to verified technical operation semantics and, only after architectural approval, deterministic and policy-authorized Worker execution. Discovery and execution are separate delivery gates.",
   "status": "active",
   "owner": "pblumer",
-  "last_reviewed": "2026-10-25",
+  "last_reviewed": "2026-10-26",
   "plan": "../../planning/capability-driven-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-cda--capability-driven-automation-",
-  "next_action": "Bring digest PR #1360 up to date with main and decide its canonical JSON profile and the implementation digest of built-in Worker Types; configure CODEOWNERS and branch protection before the first evidence record; decide ADR-0480 and ADR-0485 so CDA0/CDA1 can close (three slices are active against the default WIP limit of two); review the proposed controlled Worker-rebinding decision for CDA8 (PR #1355).",
+  "next_action": "Rework digest PR #1360 to SHA-256 over the exact LF file bytes and add the dependency digest of built-in Worker Types (ADR-0483); configure branch protection on main with code-owner review before the first evidence record, whose PR adds CODEOWNERS for the evidence path; then evidence records with same-PR renewal enforced in CI.",
   "slices": [
     {
       "id": "CDA0",
       "title": "Declarative operation claims",
-      "status": "active",
-      "owner": "unassigned",
+      "status": "complete",
+      "owner": "pblumer",
       "depends_on": [],
       "issues": [],
       "prs": [
         1343
       ],
-      "note": "PR #1343 merged; ADR-0480 remains Proposed/Partial. Review architecture approval and completion evidence before closing."
+      "note": "Complete: PR #1343 merged; ADR-0480 Accepted (2026-10-26). Claims stay descriptive and never authorize; one claim per contract id@version per operation, deliberately.",
+      "evidence": [
+        "../../../workertype/capability_test.go",
+        "../../adr/0480-technical-capability-contract.md"
+      ]
     },
     {
       "id": "CDA1",
       "title": "Semantic contract envelope",
-      "status": "active",
-      "owner": "unassigned",
+      "status": "complete",
+      "owner": "pblumer",
       "depends_on": [
         "CDA0"
       ],
@@ -33,13 +37,17 @@
       "prs": [
         1346
       ],
-      "note": "PR #1346 merged the exact technical-contract envelope on main; ADR-0485 remains Proposed/Partial, so no provider conformance or completed-slice claim."
+      "note": "Complete: PR #1346 merged; ADR-0485 Accepted (2026-10-26) with a reservation: contract identity (id, version, profile) and immutability are binding, the v1alpha1 fields may change until the first published contract (CDA3). No provider conformance claim.",
+      "evidence": [
+        "../../../workertype/contract_test.go",
+        "../../adr/0485-technical-capability-semantics.md"
+      ]
     },
     {
       "id": "CDA2",
       "title": "Contract governance and conformance",
       "status": "active",
-      "owner": "unassigned",
+      "owner": "pblumer",
       "depends_on": [
         "CDA1"
       ],
@@ -50,7 +58,7 @@
         1357,
         1360
       ],
-      "note": "ADR-0483 Accepted (option 3). CDA2a schema-only validation merged in PR #1357; content digests PR #1360 in review. Independent operation/package-bound evidence, reviewer approval, revocation and publication are not yet implemented; no Worker is verified."
+      "note": "ADR-0483 Accepted (option 3), with approval by repository provenance (maintainer as sole reviewer), raw-byte contract digests and dependency digests for built-in Worker Types. CDA2a schema-only validation merged in PR #1357; digest PR #1360 in review and to be reworked to raw bytes. Evidence records, renewal, withdrawal and publication are not yet implemented; no Worker is verified."
     },
     {
       "id": "CDA3",

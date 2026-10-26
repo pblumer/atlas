@@ -565,12 +565,12 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0477](0477-last-login-day.md) | The roster says on which day an account last signed in | Accepted | Landed |
 | [0478](0478-mail-documents-leave-the-mailbox.md) | A mail's documents leave the mailbox — forward, get-attachment, export-attachment, and what inspects them first | Accepted | Landed |
 | [0479](0479-paperless-ngx-worker.md) | Paperless-ngx Worker with reference-only document handling | Proposed | Not started |
-| [0480](0480-technical-capability-contract.md) | Technical capability claims on Worker Type operations | Proposed | Partial |
+| [0480](0480-technical-capability-contract.md) | Technical capability claims on Worker Type operations | Accepted | Partial |
 | [0481](0481-storage-guard.md) | A storage reserve, and an engine that halts on a failed write | Accepted | Landed |
 | [0482](0482-capability-aware-binding-and-routing.md) | Capability-aware BPMN binding and deterministic authorized Worker selection | Proposed | Not started |
 | [0483](0483-technical-capability-conformance-governance.md) | Technical capability contract publication and conformance governance | Accepted | Partial |
 | [0484](0484-sharepoint-mock-mode.md) | A mockup provider for the SharePoint Worker Type | Accepted | Landed |
-| [0485](0485-technical-capability-semantics.md) | Versioned semantic contracts for technical capabilities | Proposed | Partial |
+| [0485](0485-technical-capability-semantics.md) | Versioned semantic contracts for technical capabilities | Accepted | Partial |
 | [0486](0486-operator-history-purge-and-compaction.md) | Deleting finished instances and compacting the WAL on an operator's request | Accepted | Landed |
 | [0487](0487-mail-templates.md) | A mail text is a template in the language form text views already speak | Accepted | Landed |
 | [0488](0488-checkpoint-verdicts-are-remembered.md) | A checkpoint's verdict is remembered, not re-read on every scrape | Accepted | Landed |
