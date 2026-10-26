@@ -216,7 +216,8 @@ const offered = (entry) => mayUse(entry.role) && !(entry.feature && FEATURES[ent
 // isCatalogueRoute names the Console views of the area the switch removes — the same
 // four the menus mark with feature: "catalogue".
 const isCatalogueRoute = (path) =>
-  path.startsWith("#/catalog") || path === "#/operations/reconciliation" || path === "#/tasks/recertification";
+  path.startsWith("#/catalog") || path === "#/operations/reconciliation" || path === "#/tasks/recertification"
+  || path === "#/console/content-sources";
 
 const initials = (name) => {
   const s = String(name || "").trim();
@@ -700,6 +701,11 @@ const TOPNAV = {
     { name: "Events", route: "#/console/events", role: "modeler" },
     { name: "AI access", route: "#/console/ai-access", role: "any" },
     { name: "Audit log", route: "#/console/audit", role: "admin" },
+    // Where a product's description may come from outside Atlas
+    // (ADR-draft-service-content-from-an-external-source § 3): installation
+    // configuration naming a vault secret, so it sits beside the Workers and the
+    // vault and is the administrator's. The catalogue's, so it goes with the switch.
+    { name: "Content sources", route: "#/console/content-sources", role: "admin", feature: "catalogue" },
     // How this person reads: number format, time zone, language. Role "any",
     // because it configures the reader rather than the server
     // (ADR-0459).
@@ -1100,6 +1106,7 @@ function handbookHelp(path) {
   // modelling products and designing their processes. shop() points into it, and the
   // help-context spec holds its anchors to that page as it holds H()'s to the handbook.
   const shop = (anchor, label) => ({ anchor, label, page: "shop-handbuch.html" });
+  if (path === "#/console/content-sources") return shop("wiki-inhalt", "Content from the wiki");
   if (path.startsWith("#/catalog")) return shop("katalog-aufbauen", "Building a catalogue");
   if (/^#\/modeler\/dmn\//.test(path)) return H("dmn", "Learn DMN");
   if (/^#\/modeler\/form\b/.test(path)) return H("formulare", "Forms & workers");
@@ -11095,6 +11102,7 @@ function routeTitle(path) {
     [/^#\/console\/org$/, "Organization · Console"],
     [/^#\/console\/workers$/, "Workers · Console"],
     [/^#\/console\/events$/, "Events · Console"],
+    [/^#\/console\/content-sources$/, "Content sources · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
     [/^#\/modeler\/form\//, "Form · Modeler"],
@@ -11196,6 +11204,11 @@ async function route() {
       return await viewAIAccess({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
+    if (path === "#/console/content-sources") {
+      const gen = navGen;
+      const { viewContentSources } = await import("./content-sources.js");
+      return await viewContentSources({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
     if (path === "#/console/settings") return await renderDisplaySettings(view, { api, toast });
     if (path === "#/console/events") {
       const gen = navGen;
