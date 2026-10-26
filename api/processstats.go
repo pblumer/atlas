@@ -107,7 +107,8 @@ func (s *Server) handleProcessStatistics(w http.ResponseWriter, r *http.Request)
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	to, err := statsInstant("to", q.Get("to"), s.now())
+	now := s.now()
+	to, err := statsInstant("to", q.Get("to"), now)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -116,19 +117,29 @@ func (s *Server) handleProcessStatistics(w http.ResponseWriter, r *http.Request)
 		httpapi.Error(w, http.StatusBadRequest, "to must be after from")
 		return
 	}
-	var (
-		found bool
-		resp  processStatsResp
-	)
-	err = s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
-		d, ok := defs[key]
-		if !ok || d.cp == nil {
-			return nil
-		}
-		found = true
-		var err error
-		resp, err = foldProcessStatistics(rv, key, d.cp, from, to, maxStatisticsInstances)
-		return err
+	// A window that ends now is one window for as long as its result is kept, whatever
+	// second each request named it in; one that names its end is its own.
+	cacheKey := statsResultKey{def: key, from: from, to: to}
+	if strings.TrimSpace(q.Get("to")) == "" {
+		cacheKey.to = 0
+	}
+	caches := s.statsCachesFor()
+	resp, found, err := caches.results.get(cacheKey, now, func() (processStatsResp, bool, error) {
+		var (
+			found bool
+			resp  processStatsResp
+		)
+		err := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
+			d, ok := defs[key]
+			if !ok || d.cp == nil {
+				return nil
+			}
+			found = true
+			var err error
+			resp, err = foldProcessStatistics(rv, key, d.cp, from, to, maxStatisticsInstances, caches.instances)
+			return err
+		})
+		return resp, found, err
 	})
 	switch {
 	case err != nil:
@@ -172,11 +183,6 @@ type instanceHistoryReader interface {
 
 // statsFold accumulates one definition's window, instance by instance.
 type statsFold struct {
-	rv       instanceHistoryReader
-	key      uint64
-	cp       *compiler.CompiledProcess
-	from, to int64
-
 	elements []statsAcc // by node index
 	flows    []int      // by flow index
 	started  int
@@ -189,6 +195,46 @@ type statsAcc struct {
 	duration, waiting, working  []int64
 }
 
+// instanceContribution is what one instance adds to a window: for each element it
+// touched, the tokens that arrived, completed and were cancelled and the times measured,
+// and for each flow the tokens that took it. first and last are the earliest and latest
+// fact the fold read — what says whether a contribution folded over the whole trail is
+// also the contribution to a window: it is when the window holds both.
+type instanceContribution struct {
+	elements    []elementContribution
+	flows       []flowContribution
+	first, last int64
+}
+
+type elementContribution struct {
+	idx int32
+	statsAcc
+}
+
+type flowContribution struct {
+	idx  int32
+	runs int
+}
+
+// add folds one instance's contribution into the window. The times are copied, never
+// shared: summarize sorts what it is handed, and a cached contribution is read by every
+// fold after this one.
+func (f *statsFold) add(c *instanceContribution) {
+	for i := range c.elements {
+		e := &c.elements[i]
+		a := &f.elements[e.idx]
+		a.runs += e.runs
+		a.completed += e.completed
+		a.terminated += e.terminated
+		a.duration = append(a.duration, e.duration...)
+		a.waiting = append(a.waiting, e.waiting...)
+		a.working = append(a.working, e.working...)
+	}
+	for _, fl := range c.flows {
+		f.flows[fl.idx] += fl.runs
+	}
+}
+
 // takeAt is one take-up or hand-back of a task, read back for the split.
 type takeAt struct {
 	ts   int64
@@ -196,10 +242,10 @@ type takeAt struct {
 }
 
 // foldProcessStatistics folds the instances of one definition that were running or
-// finished within [from, to), newest first and at most limit of them.
-func foldProcessStatistics(rv *state.ReadView, key uint64, cp *compiler.CompiledProcess, from, to int64, limit int) (processStatsResp, error) {
+// finished within [from, to), newest first and at most limit of them. cache, when not
+// nil, supplies and keeps the contributions of finished instances.
+func foldProcessStatistics(rv *state.ReadView, key uint64, cp *compiler.CompiledProcess, from, to int64, limit int, cache *instanceStatsCache) (processStatsResp, error) {
 	f := &statsFold{
-		rv: rv, key: key, cp: cp, from: from, to: to,
 		elements: make([]statsAcc, cp.NodeCount()),
 		flows:    make([]int, cp.FlowCount()),
 	}
@@ -223,7 +269,12 @@ func foldProcessStatistics(rv *state.ReadView, key uint64, cp *compiler.Compiled
 				f.lifetime = append(f.lifetime, v.CompletedAt-v.CreatedAt)
 			}
 		}
-		return f.instance(piKey)
+		c, err := contributionOf(rv, cache, piKey, key, cp, v, from, to)
+		if err != nil {
+			return err
+		}
+		f.add(c)
+		return nil
 	}
 	err := rv.ActiveInstancesOfDefDesc(key, 0, visit)
 	if err == nil {
@@ -265,27 +316,66 @@ func foldProcessStatistics(rv *state.ReadView, key uint64, cp *compiler.Compiled
 	return resp, nil
 }
 
-// instance folds one instance's trail and take-up history into the window.
-func (f *statsFold) instance(piKey uint64) error {
+// contributionOf is one instance's contribution to [from, to).
+//
+// A finished instance's history no longer changes, so its contribution over the whole
+// trail is folded once and kept; it is the contribution to every window that holds the
+// whole trail, which is nearly every finished instance a recent window reads. Only an
+// instance still running, or one the window cuts, is folded for this window alone — the
+// difference between re-reading ten thousand histories on every request and re-reading
+// the handful that can have changed.
+func contributionOf(rv instanceHistoryReader, cache *instanceStatsCache, piKey, key uint64, cp *compiler.CompiledProcess, v *model.ProcessInstanceValue, from, to int64) (*instanceContribution, error) {
+	if cache != nil && v.CompletedAt != 0 && v.CreatedAt >= from && v.CompletedAt < to {
+		k := instanceStatsKey{def: key, pi: piKey}
+		c, ok := cache.get(k)
+		if !ok {
+			var err error
+			if c, err = foldInstance(rv, piKey, key, cp, math.MinInt64, math.MaxInt64); err != nil {
+				return nil, err
+			}
+			cache.put(k, c)
+		}
+		if c.first >= from && c.last < to {
+			return c, nil
+		}
+	}
+	return foldInstance(rv, piKey, key, cp, from, to)
+}
+
+// foldInstance reads one instance's trail and take-up history into its contribution to
+// [from, to).
+func foldInstance(rv instanceHistoryReader, piKey, key uint64, cp *compiler.CompiledProcess, from, to int64) (*instanceContribution, error) {
 	takes := map[uint64][]takeAt{}
-	if err := f.rv.JobTakeHistory(piKey, func(ts int64, _ uint64, v state.JobTakeValue) error {
+	if err := rv.JobTakeHistory(piKey, func(ts int64, _ uint64, v state.JobTakeValue) error {
 		takes[v.ElementInstanceKey] = append(takes[v.ElementInstanceKey], takeAt{ts, v.Kind})
 		return nil
 	}); err != nil {
-		return err
+		return nil, err
+	}
+	c := &instanceContribution{first: math.MaxInt64, last: math.MinInt64}
+	at := map[int32]int{}    // element index → its place in c.elements
+	flows := map[int32]int{} // flow index → tokens that took it
+	element := func(idx int32) *statsAcc {
+		i, ok := at[idx]
+		if !ok {
+			i = len(c.elements)
+			at[idx] = i
+			c.elements = append(c.elements, elementContribution{idx: idx})
+		}
+		return &c.elements[i].statsAcc
 	}
 	activated := map[uint64]int64{} // element instance key → when it activated
-	return foldInstanceTrail(f.rv, piKey, f.key, f.cp, func(ts int64, v state.ElementReplayValue, flow int32) {
-		in := ts >= f.from && ts < f.to
+	err := foldInstanceTrail(rv, piKey, key, cp, func(ts int64, v state.ElementReplayValue, flow int32) {
+		c.first, c.last = min(c.first, ts), max(c.last, ts)
+		in := ts >= from && ts < to
 		if in && flow >= 0 {
-			f.flows[flow]++
+			flows[flow]++
 		}
-		a := &f.elements[v.ElementID]
 		switch v.Action {
 		case state.ReplayActivated:
 			activated[v.ElementInstanceKey] = ts
 			if in {
-				a.runs++
+				element(v.ElementID).runs++
 			}
 		case state.ReplayCompleted, state.ReplayTerminated:
 			start, ok := activated[v.ElementInstanceKey]
@@ -293,6 +383,7 @@ func (f *statsFold) instance(piKey uint64) error {
 			if !in {
 				return
 			}
+			a := element(v.ElementID)
 			if v.Action == state.ReplayTerminated {
 				a.terminated++
 				return
@@ -308,6 +399,13 @@ func (f *statsFold) instance(piKey uint64) error {
 			}
 		}
 	})
+	if err != nil {
+		return nil, err
+	}
+	for idx, n := range flows {
+		c.flows = append(c.flows, flowContribution{idx: idx, runs: n})
+	}
+	return c, nil
 }
 
 // lastTake is when the task was last taken up at or before it completed, and false when
@@ -371,6 +469,28 @@ func foldInstanceTrail(rv instanceHistoryReader, piKey, key uint64, cp *compiler
 		fn(ts, v, flow)
 		return nil
 	})
+}
+
+// instanceFlowVisits is one instance's arrows for the runtime overlay, folded from its own
+// trail under the counter's rule. It runs on a snapshot, off the loop: the trail is
+// bounded by the instance, but an instance that loops has a long one, and the overlay
+// asks for it every 1.5 seconds for as long as somebody has it selected.
+func instanceFlowVisits(rv instanceHistoryReader, piKey, key uint64, cp *compiler.CompiledProcess) ([]runtimeFlow, error) {
+	visits := make([]int, cp.FlowCount())
+	if err := foldInstanceTrail(rv, piKey, key, cp, func(_ int64, _ state.ElementReplayValue, flow int32) {
+		if flow >= 0 {
+			visits[flow]++
+		}
+	}); err != nil {
+		return nil, err
+	}
+	out := []runtimeFlow{}
+	for i, n := range visits {
+		if id := cp.FlowBpmnId(int32(i)); id != "" && n > 0 {
+			out = append(out, runtimeFlow{FlowID: id, Visits: n})
+		}
+	}
+	return out, nil
 }
 
 // summarize reduces measured nanoseconds to a statsSummary in milliseconds, or nil when
