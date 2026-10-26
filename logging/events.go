@@ -488,3 +488,34 @@ var (
 	// dialect from one that does not.
 	FeelAssistantAnswered = newEvent("feel_assistant.answered")
 )
+
+// Content from an external source
+// (ADR-draft-service-content-from-an-external-source).
+var (
+	// ContentUnlinked: a product manager removed a product's page binding, or one
+	// language page of it, with the reason they had to give (§ 6). It is the audit
+	// record of that decision: the product owner has no Atlas account to be told.
+	ContentUnlinked = newEvent("content.unlinked")
+	// ContentQuarantined: a recheck found a bound page protected, unreadable or
+	// gone, the account's standing wrong, or the source unreachable, and the
+	// product's source content is withheld from every surface outside the
+	// catalogue screen until a refresh passes (§ 9). A WARN, said once when the
+	// quarantine begins.
+	ContentQuarantined = newEvent("content.quarantined")
+	// ContentQuarantineLifted: a refresh passed every rule and ended a quarantine.
+	ContentQuarantineLifted = newEvent("content.quarantine_lifted")
+	// ContentSourceUnreachable: the recheck could not talk to a source — its
+	// change feed failed or it could not be opened. Said once when the failures
+	// begin; every bound item of the source is quarantined by the same recheck.
+	ContentSourceUnreachable = newEvent("content.source_unreachable")
+	// ContentSourceRecovered: a source the recheck could not reach answers again.
+	// It lifts no quarantine: only a refresh does.
+	ContentSourceRecovered = newEvent("content.source_recovered")
+	// ContentWatchFailed: the source refused to watch a bound page or ancestor.
+	// The fifteen-minute sweep still rechecks it; what is lost is "at once".
+	ContentWatchFailed = newEvent("content.watch_failed")
+	// ContentSourceChanged: an administrator created, changed or removed a content
+	// source — which wiki the shop's descriptions come from and with which
+	// credential reference.
+	ContentSourceChanged = newEvent("content.source_changed")
+)
