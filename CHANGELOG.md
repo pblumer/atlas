@@ -14,6 +14,13 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Technical capability contracts have a content digest.** `workertype.DigestTechnicalContractJSON` names a contract file by
+  the SHA-256 of its exact bytes, `sha256:<hex>`, so any tool can recompute it and a
+  reformatted file is a different artifact. It refuses a file that is not exactly one
+  valid contract: oversized, invalid UTF-8, a byte-order mark, a carriage return, a
+  duplicate JSON member at any depth or excess nesting. A digest binds bytes only; it
+  does not certify a Worker, grant routing or record an approval (CDA2b,
+  [ADR-0483](docs/adr/0483-technical-capability-conformance-governance.md)).
 - **Account linking is set up in the Console.** An administrator sets up the Microsoft
   app registration people link their accounts through under **Administration →
   Security**: the directory (tenant) id, the application (client) id, the delegated
