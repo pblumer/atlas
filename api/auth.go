@@ -34,11 +34,22 @@ import (
 // trajectory, not the MVP.
 const minPasswordLen = 8
 
+// productionPasswordCost is the bcrypt cost every password is hashed at on a
+// running server. It is a constant so that nothing outside a test binary can lower
+// it.
+const productionPasswordCost = bcrypt.DefaultCost
+
+// passwordCost is the cost hashPassword uses. Only the package's TestMain changes
+// it: under the race detector one hash at productionPasswordCost takes over a
+// second, and a test run hashes and checks some 1,800 passwords that protect
+// nothing. A digest carries its own cost, so checking one is unaffected either way.
+var passwordCost = productionPasswordCost
+
 // hashPassword returns a bcrypt hash of a plaintext password. bcrypt embeds its
 // cost and salt in the digest, so a future cost bump or algorithm swap is a
 // verify-time detail, not a schema change.
 func hashPassword(plain string) (string, error) {
-	b, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
+	b, err := bcrypt.GenerateFromPassword([]byte(plain), passwordCost)
 	if err != nil {
 		return "", fmt.Errorf("auth: hash password: %w", err)
 	}
