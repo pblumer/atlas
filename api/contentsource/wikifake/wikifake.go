@@ -424,7 +424,8 @@ func (s *Server) tree(w http.ResponseWriter, r *http.Request, space string) {
 	if start+limit < len(all) {
 		res["next"] = page[len(page)-1]["id"]
 	}
-	if res["items"] == nil {
+	// A nil page slice is a non-nil interface value, so test the slice itself.
+	if len(page) == 0 {
 		res["items"] = []any{}
 	}
 	writeJSON(w, 200, res)

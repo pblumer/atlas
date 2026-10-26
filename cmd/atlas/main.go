@@ -250,8 +250,10 @@ func runServe(args []string) error {
 	// Linking Microsoft accounts for delegated Worker execution
 	// (ADR-0475 §4): an app registration of one tenant,
 	// separate from the sign-in provider above, because what it asks for — delegated
-	// Graph scopes and offline access — is not what a login needs.
-	linkTenant := fs.String("link-microsoft-tenant", os.Getenv("ATLAS_LINK_MICROSOFT_TENANT"), "Microsoft Entra tenant id whose users may link their accounts for delegated Worker execution; empty turns linking off (or ATLAS_LINK_MICROSOFT_TENANT)")
+	// Graph scopes and offline access — is not what a login needs. An administrator
+	// can set the same up in the Console instead (ADR-0475, amended); any of these
+	// flags given, they decide and the Console only shows them.
+	linkTenant := fs.String("link-microsoft-tenant", os.Getenv("ATLAS_LINK_MICROSOFT_TENANT"), "Microsoft Entra tenant id whose users may link their accounts for delegated Worker execution. Optional: without any --link-microsoft-* flag an administrator sets linking up in the Console (Administration → Security); with any of them the flags decide, and an incomplete set leaves linking off (or ATLAS_LINK_MICROSOFT_TENANT)")
 	linkClientID := fs.String("link-microsoft-client-id", os.Getenv("ATLAS_LINK_MICROSOFT_CLIENT_ID"), "client id of the app registration accounts are linked through (or ATLAS_LINK_MICROSOFT_CLIENT_ID)")
 	linkClientSecret := fs.String("link-microsoft-client-secret", os.Getenv("ATLAS_LINK_MICROSOFT_CLIENT_SECRET"), "client secret of that app registration (or ATLAS_LINK_MICROSOFT_CLIENT_SECRET)")
 	linkScopes := fs.String("link-microsoft-scopes", os.Getenv("ATLAS_LINK_MICROSOFT_SCOPES"), "space-separated delegated scopes a linked connection is for, e.g. https://graph.microsoft.com/Sites.ReadWrite.All; openid, profile and offline_access are always added (or ATLAS_LINK_MICROSOFT_SCOPES)")

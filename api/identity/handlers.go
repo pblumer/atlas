@@ -38,16 +38,24 @@ func (s *Service) HandleMine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ids, conns := s.ForOwner(p.UserID)
-	linkable := s.linkable
-	if linkable == nil {
-		linkable = []LinkOption{}
-	}
-	httpapi.JSON(w, http.StatusOK, view{Identities: ids, Connections: conns, Linkable: linkable})
+	httpapi.JSON(w, http.StatusOK, view{Identities: ids, Connections: conns, Linkable: s.Linkable()})
 }
 
-// SetLinkable says which providers this server links accounts with. Set once, while
-// the server is built.
-func (s *Service) SetLinkable(options ...LinkOption) { s.linkable = options }
+// SetLinkable says which providers this server links accounts with. The server sets
+// it while it is built and again whenever an administrator sets up or removes
+// linking; none clears it.
+func (s *Service) SetLinkable(options ...LinkOption) {
+	held := append([]LinkOption{}, options...)
+	s.linkable.Store(&held)
+}
+
+// Linkable is what SetLinkable last said, never nil.
+func (s *Service) Linkable() []LinkOption {
+	if p := s.linkable.Load(); p != nil {
+		return *p
+	}
+	return []LinkOption{}
+}
 
 // HandleOfUser lists one user's identities and connections, for an administrator
 // answering "what can act as this person".

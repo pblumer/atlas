@@ -2,6 +2,7 @@ package contentsource
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -324,5 +325,63 @@ func TestTheConfigurationRoutes(t *testing.T) {
 	ok, err := reg.Configured()
 	if err != nil || !ok {
 		t.Fatal("Configured")
+	}
+}
+
+// TestKickRechecksASourceInTheBackground: an unlink kicks a sweep that records
+// the products without waiting for the interval, and repeated reloads coalesce
+// into one wake-up instead of blocking the caller.
+func TestKickRechecksASourceInTheBackground(t *testing.T) {
+	f := wiki(t)
+	b := bound(map[string][]Check{"mail": {{ID: "it_fr"}}})
+	r := NewRunner(registry(t, f), b, func() int64 { return 9 })
+	r.Kick("wiki")
+	r.wg.Wait()
+	if res, rounds := b.result("mail"); !res.Passed || res.At != 9 || rounds != 1 {
+		t.Fatalf("after a kick: %+v in %d rounds", res, rounds)
+	}
+	r.Reload()
+	r.Reload()
+	if len(r.wake) != 1 {
+		t.Fatalf("two reloads left %d wake-ups, want one", len(r.wake))
+	}
+}
+
+// TestTheConfigurationRoutesRefuseWhatTheyCannotUse: an empty configuration is an
+// empty list, a body that is not JSON or not a usable source is a 400, and a
+// delete whose bindings cannot be read is refused rather than guessed.
+func TestTheConfigurationRoutesRefuseWhatTheyCannotUse(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+	svc := NewService(NewRegistry(loop, store, func(string) string { return "" }), func() int64 { return 1 })
+	svc.InUse = func(string) ([]string, error) { return nil, errors.New("bindings unreadable") }
+	call := func(h http.HandlerFunc, method, body, id string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/x", strings.NewReader(body))
+		req = req.WithContext(httpapi.WithPrincipal(req.Context(), &httpapi.Principal{UserID: "u1", Username: "root"}))
+		if id != "" {
+			req.SetPathValue("id", id)
+		}
+		rec := httptest.NewRecorder()
+		h(rec, req)
+		return rec
+	}
+	if rec := call(svc.HandleList, "GET", "", ""); rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Fatalf("empty list = %d %q, want []", rec.Code, rec.Body)
+	}
+	if rec := call(svc.HandleUpdate, "PUT", `{`, "wiki"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("broken body = %d", rec.Code)
+	}
+	if rec := call(svc.HandleUpdate, "PUT", `{"name":"x","kind":"wikiwikibangbang","baseURL":"http://x","credentialsRef":"r"}`, "wiki"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("http base = %d", rec.Code)
+	}
+	if rec := call(svc.HandleDelete, "DELETE", "", "wiki"); rec.Code != http.StatusInternalServerError ||
+		!strings.Contains(rec.Body.String(), "bindings unreadable") {
+		t.Fatalf("delete with unreadable bindings = %d %s", rec.Code, rec.Body)
 	}
 }

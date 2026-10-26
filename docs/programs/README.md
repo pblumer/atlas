@@ -10,7 +10,7 @@ See [delivery protocol](../development/program-delivery.md) and
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
-| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 0/8 | pblumer | Bring digest PR #1360 up to date with main and decide its canonical JSON profile and the implementation digest of built-in Worker Types; configure CODEOWNERS and branch protection before the first evidence record; decide ADR-0480 and ADR-0485 so CDA0/CDA1 can close (three slices are active against the default WIP limit of two). |
+| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 0/9 | pblumer | Bring digest PR #1360 up to date with main and decide its canonical JSON profile and the implementation digest of built-in Worker Types; configure CODEOWNERS and branch protection before the first evidence record; decide ADR-0480 and ADR-0485 so CDA0/CDA1 can close (three slices are active against the default WIP limit of two); review the proposed controlled Worker-rebinding decision for CDA8 (PR #1355). |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | unassigned (maintainer assignment required) | Assign a human programme owner; review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
 
 ## Capability-driven Automation (CDA)
@@ -27,8 +27,9 @@ Connect business outcomes to verified technical operation semantics and, only af
 | **CDA3** — Verified Worker Type mappings | planned | unassigned | CDA2 | — | Prove account versus contact distinction; source-derived provider mappings with no drift. |
 | **CDA4** — Cross-layer architecture graph | planned | unassigned | CDA2, CDA3 | — | Accept/extend ADR-0420; stable identities, provenance, bounded traversals and visibility. |
 | **CDA5** — Panorama and API/MCP discovery | planned | unassigned | CDA4 | — | Read-only impact, coverage and gap queries; no unsupported runtime claims. |
-| **CDA6** — Capability-aware BPMN binding | planned | unassigned | CDA2, CDA3 | — | Approve binding ADR; pin one verified Worker at deployment without changing runtime. |
-| **CDA7** — Policy-gated governed execution | planned | unassigned | CDA6 | — | Require provider-specific ADR-0475 enforcement, fsync-gated effects and recovery equality; no dynamic fallback. |
+| **CDA6** — Capability-aware BPMN binding | planned | unassigned | CDA2, CDA3 | — | Approve ADR-0482; keep a stable logical binding slot and explicit initially pinned Worker so a later authorized revision need not redeploy BPMN. No runtime rebinding in CDA6. |
+| **CDA7** — Policy-gated governed execution | planned | unassigned | CDA6 | — | Prove provider-specific ADR-0475 enforcement, fsync-gated effects and replay equality for the initially pinned binding. No automatic fallback or configured Worker hot-swap in CDA7. |
+| **CDA8** — Controlled Worker rebinding without redeployment | planned | unassigned | CDA6, CDA7 | [PR #1355](https://github.com/pblumer/atlas/pull/1355) | Review the proposed controlled-rebinding ADR. Operator-authorized A-to-B binding revisions affect only future jobs; existing queued/leased jobs stay pinned. Per-partition cutover, tenant/policy scope and crash/replay must be proven. No automatic dynamic selection. Review questions deferred until CDA7 has landed; the binding-slot scope is settled when CDA6 starts. |
 
 ## Identity-aware Execution (IAE)
 

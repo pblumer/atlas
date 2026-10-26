@@ -86,13 +86,27 @@ func ConnectionCredentialName(connectionID string) string {
 	return connectionCredentialPrefix + connectionID
 }
 
+// linkClientSecretPrefix names the client secret of the app registration people link
+// their accounts through, when an administrator set linking up in the Console
+// (ADR-0475, amended). It is reserved for the same reason a connection's credential
+// is: with it and a connection's refresh token, anyone can act as that person, so no
+// Worker may name it and the secrets API neither reads nor writes it.
+const linkClientSecretPrefix = "atlas:link-client-secret:"
+
+// LinkClientSecretName is the vault name of a provider's linking client secret.
+func LinkClientSecretName(provider string) string { return linkClientSecretPrefix + provider }
+
+// IsLinkClientSecretName reports whether a vault name holds a linking client secret.
+func IsLinkClientSecretName(name string) bool { return strings.HasPrefix(name, linkClientSecretPrefix) }
+
 // IsReservedName reports whether a name belongs to a region the vault keeps for Atlas
-// itself — a data subject's key or a connection's credential. The operator surfaces —
-// the secrets API, a Worker's credential reference, an API token sealed into the vault
-// — refuse such a name, because reaching one through them would hand a person's
-// credential, or the key to their data, to whatever that surface feeds.
+// itself — a data subject's key, a connection's credential, or the client secret
+// accounts are linked through. The operator surfaces — the secrets API, a Worker's
+// credential reference, an API token sealed into the vault — refuse such a name,
+// because reaching one through them would hand a person's credential, or the key to
+// their data, to whatever that surface feeds.
 func IsReservedName(name string) bool {
-	return IsDataKeyName(name) || strings.HasPrefix(name, connectionCredentialPrefix)
+	return IsDataKeyName(name) || strings.HasPrefix(name, connectionCredentialPrefix) || IsLinkClientSecretName(name)
 }
 
 // IsDataKeyName reports whether a vault name belongs to the data-key region.

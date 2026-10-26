@@ -453,7 +453,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0365](0365-a-number-is-a-counter-or-a-walk.md) | A number an operations view states is a counter or a walk, never the length of a page | Accepted | Landed |
 | [0366](0366-the-live-diagram-counts-every-parked-token.md) | The live diagram counts every parked token, not the ones a bounded scan reached | Accepted | Landed |
 | [0367](0367-directory-photo.md) | A directory photo arrives the way every other directory fact does | Accepted | Landed |
-| [0368](0368-user-avatar.md) | A picture of a person belongs to the account, in two provenances and one place | Accepted | Landed |
+| [0368](0368-user-avatar.md) | A picture of a person belongs to the account, in two provenances and one place | Accepted (amended) | Landed |
 | [0369](0369-cross-instance-message-addressing.md) | Addressing and the envelope for a message that leaves the node | Accepted | Not started |
 | [0370](0370-durable-message-buffer.md) | A published message waits for its subscriber | Accepted (amended) | Partial |
 | [0371](0371-participant-binds-a-published-interface.md) | A participant names an interface; the server says which node | Proposed | Not started |
@@ -476,7 +476,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0388](0388-a-call-that-can-only-be-null-is-refused-at-deploy.md) | A call that can only be null is refused at deploy | Accepted (amended) | Landed |
 | [0389](0389-forked-instance-migration.md) | Forked instance migration | Accepted | Landed |
 | [0390](0390-position-progress.md) | The orderer is told where their position stands, from a route of their own | Accepted | Landed |
-| [0391](0391-product-picture.md) | A product is shown, and its picture is not part of what was promised | Accepted | Landed |
+| [0391](0391-product-picture.md) | A product is shown, and its picture is not part of what was promised | Accepted (amended) | Landed |
 | [0392](0392-the-same-refusal-at-every-door-that-already-refuses.md) | The same refusal at every door that already refuses | Accepted | Landed |
 | [0393](0393-a-rule-added-later-is-a-gate-on-deploy.md) | A rule the compiler gains later is a gate on deploy, whatever stage it lives in | Accepted | Landed |
 | [0394](0394-approval-in-the-inbox.md) | An approval is read and decided where the work already is | Accepted | Landed |
@@ -577,6 +577,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0489](0489-mail-html-view.md) | A received mail's HTML body, read on request and shown in a task form | Accepted | Landed |
 | [0490](0490-carddav-worker.md) | A CardDAV Worker Type — a process finds, keeps and labels contacts in any CardDAV address book | Accepted | Landed |
 | [0491](0491-service-content-from-an-external-source.md) | A service's content may come from an external source, copied into the draft and frozen with the release | Accepted | Partial |
+| [0492](0492-controlled-worker-rebinding.md) | Controlled configured-Worker rebinding without process redeployment | Proposed | Not started |
+| [0493](0493-diagrams-scope.md) | A diagrams scope for systems that show processes elsewhere | Proposed | Partial |
 
 ## The two states of a record
 

@@ -3,6 +3,7 @@ package contentsource
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"reflect"
 	"strings"
@@ -524,5 +525,57 @@ func TestDialKind(t *testing.T) {
 	ad, err := DialKind(Source{Kind: KindWikiWikiBangBang, BaseURL: "https://wiki.example.org"}, "t", http.DefaultTransport)
 	if err != nil || ad == nil {
 		t.Fatal(err)
+	}
+}
+
+func TestASourceThatFailsDuringAPreviewIsAnError(t *testing.T) {
+	f := wiki(t)
+	ad := adapter(t, f)
+	st, _ := ad.Standing(ctx(t))
+	f.Set(func(s *wikifake.Server) { s.Down = true })
+	if _, err := Preview(ctx(t), ad, st, "SVC-12"); err == nil {
+		t.Fatal("a preview against a source in an outage succeeded")
+	}
+}
+
+func TestAChildWhoseTitleHoldsThePlaceholderIsDropped(t *testing.T) {
+	f := wiki(t)
+	f.Edit("it_c1", func(p *wikifake.Page) { p.Title = "Details " + wikifake.Placeholder })
+	ad := adapter(t, f)
+	st, _ := ad.Standing(ctx(t))
+	l, err := Preview(ctx(t), ad, st, "SVC-12")
+	if err != nil || len(l.Refusals) != 0 {
+		t.Fatalf("preview: %v %v", err, l.Refusals)
+	}
+	for _, c := range l.Children {
+		if c.ID == "it_c1" {
+			t.Fatalf("the child with a placeholder title was taken: %+v", c)
+		}
+	}
+	dropped := false
+	for _, d := range l.Dropped {
+		if d.Page == "SVC-20" && strings.Contains(strings.Join(d.Reasons, "|"), "placeholder") {
+			dropped = true
+		}
+	}
+	if !dropped {
+		t.Fatalf("dropped = %+v, want SVC-20 named with the placeholder", l.Dropped)
+	}
+}
+
+func TestMoreThanFiveHundredPagesBelowRefuseThePreview(t *testing.T) {
+	f := wiki(t)
+	for i := range maxBelow + 1 {
+		f.Put(wikifake.Page{ID: fmt.Sprintf("it_m%03d", i), Key: fmt.Sprintf("SVC-%d", 1000+i), Space: "SVC",
+			Parent: "it_fr", Title: fmt.Sprintf("Teil %d", i)})
+	}
+	ad := adapter(t, f)
+	st, _ := ad.Standing(ctx(t))
+	l, err := Preview(ctx(t), ad, st, "SVC-13")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(l.Refusals, "|"), fmt.Sprintf("more than %d pages lie below", maxBelow)) {
+		t.Fatalf("refusals = %v", l.Refusals)
 	}
 }

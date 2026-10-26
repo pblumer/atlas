@@ -48,6 +48,10 @@ const (
 // through. It is a confidential client of one tenant: the issuer of every token is
 // that tenant's, so a token from another tenant fails the issuer check before its tid
 // is read.
+//
+// It comes from the start flags or, when none of them is given, from what an
+// administrator set up in the Console (linkmicrosoftsetup.go). The flags win, so an
+// installation configured by its deployment cannot be changed from a browser.
 type MicrosoftLinkConfig struct {
 	TenantID     string
 	ClientID     string
@@ -63,6 +67,15 @@ type MicrosoftLinkConfig struct {
 
 func (c MicrosoftLinkConfig) configured() bool {
 	return strings.TrimSpace(c.TenantID) != "" && strings.TrimSpace(c.ClientID) != "" && strings.TrimSpace(c.Scopes) != ""
+}
+
+// given reports whether the start flags said anything about linking. One flag is
+// enough: an operator who set some of them meant the flags to decide, and an
+// incomplete set leaves linking off rather than handing the decision to the Console.
+// Authority is not a flag, so it does not count.
+func (c MicrosoftLinkConfig) given() bool {
+	return strings.TrimSpace(c.TenantID) != "" || strings.TrimSpace(c.ClientID) != "" ||
+		strings.TrimSpace(c.ClientSecret) != "" || strings.TrimSpace(c.Scopes) != ""
 }
 
 func (c MicrosoftLinkConfig) issuer() string {
@@ -95,19 +108,44 @@ type linkPending struct {
 }
 
 // WithMicrosoftLinking lets signed-in users link Microsoft accounts and authorize
-// delegated connections through cfg's app registration. Off unless it is given.
+// delegated connections through cfg's app registration — the start flags. Without
+// any of them, what an administrator sets up in the Console decides; without that
+// either, linking is off.
 func WithMicrosoftLinking(cfg MicrosoftLinkConfig) Option {
-	return func(s *Server) {
-		if !cfg.configured() {
-			return
-		}
-		s.msLink = &microsoftLink{
-			cfg: cfg,
-			provider: newOIDCProvider(OIDCConfig{Issuer: cfg.issuer(), ClientID: strings.TrimSpace(cfg.ClientID),
-				ClientSecret: cfg.ClientSecret, Scopes: cfg.scopes()}, s.budgets()),
-			pending: map[string]linkPending{},
-		}
+	return func(s *Server) { s.msLinkStart = cfg }
+}
+
+// newMicrosoftLink builds the flow for a complete configuration, nil for any other.
+func (s *Server) newMicrosoftLink(cfg MicrosoftLinkConfig) *microsoftLink {
+	if !cfg.configured() {
+		return nil
 	}
+	return &microsoftLink{
+		cfg: cfg,
+		provider: newOIDCProvider(OIDCConfig{Issuer: cfg.issuer(), ClientID: strings.TrimSpace(cfg.ClientID),
+			ClientSecret: cfg.ClientSecret, Scopes: cfg.scopes()}, s.budgets()),
+		pending: map[string]linkPending{},
+	}
+}
+
+// installMicrosoftLink makes cfg the flow people link through from the next request
+// on, or switches linking off when cfg is not complete. Links in flight under the
+// previous configuration cannot be finished: their state is held by the flow they
+// started in, which is gone, so their callback is refused like any unknown state. And
+// no access token obtained under it is handed out again: the next release refreshes
+// under cfg, or is refused without one.
+func (s *Server) installMicrosoftLink(cfg MicrosoftLinkConfig) {
+	l := s.newMicrosoftLink(cfg)
+	s.msLink.Store(l)
+	if s.identity == nil {
+		return
+	}
+	s.identity.ForgetAccessTokens()
+	if l == nil {
+		s.identity.SetLinkable()
+		return
+	}
+	s.identity.SetLinkable(identity.LinkOption{Provider: identity.ProviderMicrosoft, Start: linkMicrosoftStartPath})
 }
 
 func (l *microsoftLink) begin(state string, p linkPending, now time.Time) {
@@ -144,7 +182,8 @@ func (l *microsoftLink) spend(state string, now time.Time) (linkPending, bool) {
 // handleLinkMicrosoftStart sends a signed-in person to Microsoft to link an account.
 func (s *Server) handleLinkMicrosoftStart(w http.ResponseWriter, r *http.Request) {
 	p := httpapi.PrincipalFrom(r.Context())
-	if s.msLink == nil || s.identity == nil {
+	l := s.msLink.Load()
+	if l == nil || s.identity == nil {
 		httpapi.Error(w, http.StatusNotFound, "linking a Microsoft account is not configured on this server")
 		return
 	}
@@ -153,7 +192,7 @@ func (s *Server) handleLinkMicrosoftStart(w http.ResponseWriter, r *http.Request
 		return
 	}
 	now := time.Now()
-	d, err := s.msLink.provider.endpoints(r.Context(), now)
+	d, err := l.provider.endpoints(r.Context(), now)
 	if err != nil {
 		s.linkRefuse(w, r, "provider discovery failed", err)
 		return
@@ -167,14 +206,14 @@ func (s *Server) handleLinkMicrosoftStart(w http.ResponseWriter, r *http.Request
 		return
 	}
 	redirectURI := base + linkMicrosoftCallbackPath
-	s.msLink.begin(state, linkPending{userID: p.UserID, nonce: nonce, verifier: verifier,
+	l.begin(state, linkPending{userID: p.UserID, nonce: nonce, verifier: verifier,
 		redirectURI: redirectURI, expires: now.Add(linkWindow)}, now)
 	sum := sha256.Sum256([]byte(verifier))
 	q := url.Values{
 		"response_type":         {"code"},
-		"client_id":             {s.msLink.provider.cfg.ClientID},
+		"client_id":             {l.provider.cfg.ClientID},
 		"redirect_uri":          {redirectURI},
-		"scope":                 {s.msLink.cfg.scopes()},
+		"scope":                 {l.cfg.scopes()},
 		"state":                 {state},
 		"nonce":                 {nonce},
 		"code_challenge":        {base64.RawURLEncoding.EncodeToString(sum[:])},
@@ -198,7 +237,8 @@ func (s *Server) handleLinkMicrosoftCallback(w http.ResponseWriter, r *http.Requ
 	now := time.Now()
 	http.SetCookie(w, &http.Cookie{Name: linkStateCookie, Value: "", Path: linkMicrosoftCallbackPath,
 		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil, MaxAge: -1})
-	if s.msLink == nil || s.identity == nil {
+	l := s.msLink.Load()
+	if l == nil || s.identity == nil {
 		httpapi.Error(w, http.StatusNotFound, "linking a Microsoft account is not configured on this server")
 		return
 	}
@@ -212,7 +252,7 @@ func (s *Server) handleLinkMicrosoftCallback(w http.ResponseWriter, r *http.Requ
 		s.linkRefuse(w, r, "state does not match this browser", nil)
 		return
 	}
-	pending, ok := s.msLink.spend(state, now)
+	pending, ok := l.spend(state, now)
 	if !ok {
 		s.linkRefuse(w, r, "no link in flight for this state", nil)
 		return
@@ -230,7 +270,7 @@ func (s *Server) handleLinkMicrosoftCallback(w http.ResponseWriter, r *http.Requ
 		s.linkRefuse(w, r, "the provider returned no code", nil)
 		return
 	}
-	tokens, err := s.msLink.provider.tokenRequest(r.Context(), url.Values{
+	tokens, err := l.provider.tokenRequest(r.Context(), url.Values{
 		"grant_type": {"authorization_code"}, "code": {code},
 		"redirect_uri": {pending.redirectURI}, "code_verifier": {pending.verifier},
 	}, now)
@@ -238,19 +278,19 @@ func (s *Server) handleLinkMicrosoftCallback(w http.ResponseWriter, r *http.Requ
 		s.linkRefuse(w, r, "code exchange failed", err)
 		return
 	}
-	claims, err := s.verifyLinkToken(r.Context(), tokens.IDToken, pending.nonce, now)
+	claims, err := l.verifyLinkToken(r.Context(), tokens.IDToken, pending.nonce, now)
 	if err != nil {
 		s.linkRefuse(w, r, "the ID token did not verify", err)
 		return
 	}
 	tid, _ := claims.Raw["tid"].(string)
 	oid, _ := claims.Raw["oid"].(string)
-	if tid != strings.TrimSpace(s.msLink.cfg.TenantID) || oid == "" {
+	if tid != strings.TrimSpace(l.cfg.TenantID) || oid == "" {
 		s.linkRefuse(w, r, "the ID token names no object id in the configured tenant", nil)
 		return
 	}
 	conn, err := s.identity.Link(identity.LinkRequest{
-		UserID: pending.userID, Provider: identity.ProviderMicrosoft, Issuer: s.msLink.cfg.issuer(),
+		UserID: pending.userID, Provider: identity.ProviderMicrosoft, Issuer: l.cfg.issuer(),
 		TenantID: tid, Subject: oid, Username: claims.PreferredUsername, DisplayName: claims.Name,
 		Scopes: strings.Fields(tokens.Scope), RefreshToken: tokens.RefreshToken,
 	})
@@ -265,15 +305,15 @@ func (s *Server) handleLinkMicrosoftCallback(w http.ResponseWriter, r *http.Requ
 
 // verifyLinkToken verifies an ID token against the tenant's keys, refetching them once
 // when the token names a key that is not held — the same retry the login makes.
-func (s *Server) verifyLinkToken(ctx context.Context, raw, nonce string, now time.Time) (oidcClaims, error) {
-	want := oidcExpect{issuer: s.msLink.cfg.issuer(), clientID: s.msLink.provider.cfg.ClientID, nonce: nonce, now: now}
-	keys, err := s.msLink.provider.keySet(ctx, now, false)
+func (l *microsoftLink) verifyLinkToken(ctx context.Context, raw, nonce string, now time.Time) (oidcClaims, error) {
+	want := oidcExpect{issuer: l.cfg.issuer(), clientID: l.provider.cfg.ClientID, nonce: nonce, now: now}
+	keys, err := l.provider.keySet(ctx, now, false)
 	if err != nil {
 		return oidcClaims{}, err
 	}
 	claims, err := verifyIDToken(raw, keys, want)
 	if err != nil && strings.Contains(err.Error(), "signing key") {
-		if keys, kerr := s.msLink.provider.keySet(ctx, now, true); kerr == nil {
+		if keys, kerr := l.provider.keySet(ctx, now, true); kerr == nil {
 			claims, err = verifyIDToken(raw, keys, want)
 		}
 	}
@@ -293,14 +333,15 @@ func (s *Server) linkRefuse(w http.ResponseWriter, r *http.Request, what string,
 // connections: a refresh-token grant at the tenant's token endpoint, for the scopes the
 // connection was authorized for.
 func (s *Server) refreshDelegatedToken(ctx context.Context, c identity.Connection, refreshToken string) (identity.Tokens, error) {
-	if s.msLink == nil {
+	l := s.msLink.Load()
+	if l == nil {
 		return identity.Tokens{}, errors.New("linking a Microsoft account is no longer configured on this server")
 	}
-	if c.Provider != identity.ProviderMicrosoft || c.TenantID != strings.TrimSpace(s.msLink.cfg.TenantID) {
+	if c.Provider != identity.ProviderMicrosoft || c.TenantID != strings.TrimSpace(l.cfg.TenantID) {
 		return identity.Tokens{}, fmt.Errorf("connection %s belongs to a tenant this server is not configured for", c.ID)
 	}
-	tokens, err := s.msLink.provider.tokenRequest(ctx, url.Values{
-		"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}, "scope": {s.msLink.cfg.scopes()},
+	tokens, err := l.provider.tokenRequest(ctx, url.Values{
+		"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}, "scope": {l.cfg.scopes()},
 	}, time.Now())
 	if errors.Is(err, errProviderInvalidGrant) {
 		return identity.Tokens{}, fmt.Errorf("%w: %v", identity.ErrInvalidGrant, err)

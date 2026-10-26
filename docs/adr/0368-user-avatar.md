@@ -1,6 +1,6 @@
 # ADR-0368: A picture of a person belongs to the account, in two provenances and one place
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-26: the Console scales a picture down before it uploads it)
 - **Implementation:** Landed
 - **Date:** 2026-09-16
 - **Open question:** Whether a picture should ever be **derived** where none was
@@ -133,11 +133,61 @@ less than the principals directory the same caller already reads (ADR-0073).
 - **Negative / trade-offs accepted:** the directory half is a second change; there
   is no derived picture, so most accounts show a circle until somebody uploads;
   nothing resizes or re-encodes, so an account can carry a picture at the full
-  asset budget and every page naming that person downloads it.
+  asset budget and every page naming that person downloads it. (The Console now
+  scales a picture down before uploading it; see the amendment below. The route
+  itself still stores what it is given.)
 - **Follow-ups / risks to watch:** the roster carries `avatarSource` so a list of
   people asks only for the pictures that exist. A page that stopped reading it and
   asked per row would turn one listing into a request per account, most of them
   404 — which works, and looks fine, and is why the field is held by a test.
+
+## Amendment (2026-10-26): the Console scales a picture down before it uploads it
+
+The route takes at most the asset budget — 512 KiB by default — and a photograph
+straight off a phone is five to fifteen megabytes. The Console passed the file on
+unchanged, so the ordinary case, a person picking a photo of themselves, ended in
+"the picture exceeds the 524288 byte limit" and a trip to an image editor.
+
+**The Console now redraws the picture in the browser before the upload**
+(`api/web/picturescale.js`): its shorter side to at most 256 pixels, its longer
+side to at most four times that, never enlarged. A JPEG stays a JPEG; a PNG stays a
+PNG where it has transparency, and otherwise unless it costs more than twice its
+JPEG, so a drawn picture keeps its edges and a photograph saved as a PNG is sent as
+a JPEG. 256 covers the largest circle Atlas draws (48 CSS pixels) at any device
+pixel ratio, at a few dozen kilobytes.
+
+The server's limit is configurable, so the page carries no number of it. Should the
+server still answer 413, the picture is drawn again at three quarters of the size,
+up to four times, and the server's own refusal is shown if none fits. A product's
+picture is scaled by the same module, to its own bounds
+([ADR-0391](0391-product-picture.md), amended the same day).
+
+- **Not a larger budget.** Raising the limit would have made the upload pass and
+  stored a camera's full resolution for a 48-pixel circle — the trade-off named
+  above, made worse: every page naming that person would download megabytes. The
+  limit is right for what is stored; what was wrong was sending the original.
+- **In the browser, not on the server.** The browser already holds a decoder for
+  what a person can pick and runs it in its own sandbox. The server decoding an
+  arbitrary upload would be new attack surface on the process that also runs the
+  engine: a few hundred kilobytes of PNG can declare a gigapixel canvas, and
+  bounding that safely is work the browser has already done. The cost is that a
+  client of the API, rather than of the Console, still sends a picture within the
+  budget itself — the route and its refusal are unchanged, and the MCP server
+  deliberately does not offer it.
+- **Always redrawn, even when already small.** A phone writes where a photo was
+  taken into its Exif data, and the stored picture is served to every colleague
+  signed in. A redrawn picture carries only its pixels. The browser applies the
+  file's orientation when it draws it, so a portrait stays upright once the tag
+  that said so is gone.
+- **The directory path is unaffected.** Graph's photos arrive through the Entra
+  Worker, under its own byte limit, and are stored as delivered.
+
+`e2e/user-picture.spec.mjs` holds the behaviour: a photograph over the limit is
+uploaded at 384×256, an Exif orientation is applied and the Exif data is not
+carried on, a small picture is not enlarged, transparency and a logo keep a PNG
+while a photograph saved as one becomes a JPEG, a server that refuses every size
+gets four smaller ones and then its own words are shown, and a file the browser
+cannot read is refused before anything is sent.
 
 ## Pros and cons of the options
 

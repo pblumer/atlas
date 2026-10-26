@@ -2375,8 +2375,10 @@ Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
 - 🔲 **CDA6 — Capability-aware BPMN deployment binding (T5a).**
   An opt-in service task declares one exact verified contract and freezes
   one explicitly chosen Worker at deployment; reject missing, ambiguous,
-  withdrawn or mismatched bindings. Preserve existing BPMN and job types.
-  Governed by [ADR-0482](docs/adr/0482-capability-aware-binding-and-routing.md);
+  withdrawn or mismatched bindings. Reserve a **stable logical binding slot**
+  for future explicitly approved revisions without changing BPMN models;
+  this design constraint does **not** enable runtime rebinding in CDA6.
+  Preserve existing BPMN and job types. Governed by [ADR-0482](docs/adr/0482-capability-aware-binding-and-routing.md);
   depends on CDA2/CDA3 and the accepted binding decision. **No new
   execution behavior in this slice.**
 - 🔲 **CDA7 — Governed execution and recovery (T5b).**
@@ -2388,11 +2390,25 @@ Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
   routing decision. **Dynamic choice among multiple Workers is not
   authorized by this milestone**; it needs its own approved event/policy
   and recovery design.
+- 🔲 **CDA8 — Controlled Worker replacement without BPMN redeployment (T5c).**
+  For a capability-bound, opted-in deployed Service Task, enable an operator
+  to replace the configured Worker **for future jobs** without redeploying the
+  BPMN process. A versioned logical binding slot keeps the exact semantic
+  contract stable while a new binding revision records the explicitly
+  reviewed, policy-authorized Worker target. Existing queued/leased jobs are
+  never silently reassigned. The cutover is durable before visibility and
+  independently acknowledged per partition; incomplete rollouts, old-target
+  incidents and rollback revisions must remain observable. See
+  [ADR-0492](docs/adr/0492-controlled-worker-rebinding.md).
+  **Depends on CDA6/CDA7**, acceptance of this ADR and reviewed event/recovery,
+  policy/identity, package and target compatibility semantics. This is not
+  autonomous failover or selecting a different Worker on every job.
 
 **Milestone gates:** CDA2 requires independent semantic conformance, CDA4
 requires accepted provenance/visibility semantics, CDA6 requires an approved
-BPMN binding, and CDA7 requires an approved replay-safe execution policy
-with provider enforcement. The full [ADR decision matrix and acceptance
+BPMN binding, CDA7 requires an approved replay-safe execution policy
+with provider enforcement, and CDA8 additionally requires an accepted
+controlled-rebinding event/rollout design and tested no-redeploy cutover. The full [ADR decision matrix and acceptance
 tests](docs/planning/capability-driven-automation-program.md) are the
 review checklist. Treat `Proposed`, `Partial`, `Merged`, and `Landed`
 as distinct states.
