@@ -133,12 +133,12 @@ func (c *Client) call(ctx context.Context, name, method, path string, q url.Valu
 		return fmt.Errorf("wikiwikibangbang: %s: the wiki could not be reached: %s", name, c.scrub(err.Error()))
 	}
 	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, c.maxAnswer+1))
+	raw, err := readAnswer(resp.Body, c.maxAnswer)
+	if errors.Is(err, errAnswerTooLarge) {
+		return fmt.Errorf("wikiwikibangbang: %s: %w", name, err)
+	}
 	if err != nil {
 		return fmt.Errorf("wikiwikibangbang: %s: the answer broke off: %s", name, c.scrub(err.Error()))
-	}
-	if int64(len(raw)) > c.maxAnswer {
-		return fmt.Errorf("wikiwikibangbang: %s: %w", name, errAnswerTooLarge)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		msg := c.wikiMessage(raw)
@@ -163,6 +163,20 @@ func (c *Client) call(ctx context.Context, name, method, path string, q url.Valu
 		return fmt.Errorf("wikiwikibangbang: %s: the wiki's answer is not what this Worker expects: %v", name, err)
 	}
 	return nil
+}
+
+// readAnswer reads one answer up to budget bytes and refuses one above it. The budget is
+// the installation's payload budget (limits.Payload), resolved where the client was
+// built ([NewClient]), so the ceiling has a name one frame up.
+func readAnswer(r io.Reader, budget int64) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(r, budget+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(raw)) > budget {
+		return nil, errAnswerTooLarge
+	}
+	return raw, nil
 }
 
 // wikiMessage is the sentence of the wiki's {"error": …} envelope, without the token and
