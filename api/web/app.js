@@ -2872,6 +2872,17 @@ async function viewConsoleOrg() {
     ? `<img src="/api/v1/users/${encodeURIComponent(u.id)}/avatar" alt=""
          style="width:22px; height:22px; border-radius:50%; object-fit:cover; vertical-align:middle; margin-right:6px">`
     : "");
+  // Edit stays a button on the row; the other actions are in its ⋯ menu, as on the
+  // Console's other lists (td.row-actions, ADR-0163). Four buttons side by side were
+  // 342px of the table's minimum width, which then no longer fitted the content column:
+  // the card scrolled it, Delete was cut off at the card's edge, and the roles beside
+  // them were squeezed to one per line.
+  const userMenu = (u) => [
+    { label: "Set password…", icon: "🔑", act: "password" },
+    { label: u.disabled ? "Enable account" : "Disable account", icon: u.disabled ? "▶" : "⊘", act: "toggle" },
+    { sep: true },
+    { label: "Delete…", icon: "🗑", act: "delete", danger: true },
+  ];
   const userRow = (u) => `<tr data-id="${esc(u.id)}">
       <td>${userFace(u)}<span class="chip">${esc(u.username)}</span>${
         me && u.id === me.id ? ' <span class="muted" style="font-size:12px">(you)</span>' : ""}
@@ -2881,12 +2892,8 @@ async function viewConsoleOrg() {
       <td>${statusPill(u)}</td>
       ${showLastLogin ? lastLoginCell(u) : ""}
       ${showPresence ? `<td class="presence-cell">${presencePill(u.presence)}</td>` : ""}
-      <td style="text-align:right; white-space:nowrap">
-        <button class="btn ghost" data-act="edit" title="Edit this user’s details and roles">Edit</button>
-        <button class="btn ghost" data-act="password" title="Set a new password for this user">Password</button>
-        <button class="btn ghost" data-act="toggle" title="${u.disabled ? "Re-enable this account" : "Disable this account (blocks sign-in)"}">${u.disabled ? "Enable" : "Disable"}</button>
-        <button class="btn ghost danger" data-act="delete" title="Delete this user account">Delete</button>
-      </td></tr>`;
+      <td class="row-actions"><button class="btn ghost" data-act="edit" title="Edit this user’s details and roles">Edit</button>${
+        dropdown("⋯", "icon-btn", userMenu(u))}</td></tr>`;
 
   const usersCard = denied
     ? `<div class="card"><h2>Users</h2><p class="muted">Managing users requires the admin role.</p></div>`

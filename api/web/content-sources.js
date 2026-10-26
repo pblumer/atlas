@@ -100,7 +100,11 @@ export async function viewContentSources({ api, toast, view, isSuperseded }) {
       el("td", {}, el("b", {}, s.name || s.id), el("div", { class: "muted" }, s.id)),
       el("td", {}, s.kind || ""),
       el("td", {}, el("code", {}, s.baseURL || "")),
-      el("td", {}, el("code", {}, s.credentialsRef || "")),
+      // A reference that looked like a token is never sent back (ADR-0491 § 3):
+      // the row says it must be replaced instead of showing it.
+      el("td", {}, s.credentialsRefRedacted
+        ? el("span", { class: "pill err" }, t("contentSources.credentialsRedacted"))
+        : el("code", {}, s.credentialsRef || "")),
       el("td", {}, s.pictureField || "—"),
       el("td", {}, (s.excludedLabels || []).join(", ") || "—"),
       el("td", {}, s.linkInShop ? t("contentSources.yes") : t("contentSources.no")),
@@ -153,7 +157,8 @@ function sourceForm(src, secretNames, save, cancel) {
     field(t("contentSources.field.name"), nameIn),
     field(t("contentSources.field.kind"), kindSel),
     field(t("contentSources.field.baseURL"), baseIn, t("contentSources.field.baseURLHint")),
-    field(t("contentSources.field.credentialsRef"), credIn, t("contentSources.field.credentialsHint")),
+    field(t("contentSources.field.credentialsRef"), credIn,
+      v.credentialsRefRedacted ? t("contentSources.field.credentialsRedactedHint") : t("contentSources.field.credentialsHint")),
     el("datalist", { id: listID }, secretNames.map((n) => el("option", { value: n }))),
     field(t("contentSources.field.pictureField"), picIn, t("contentSources.field.pictureHint")),
     field(t("contentSources.field.excludedLabels"), labelsIn, t("contentSources.field.excludedHint")),

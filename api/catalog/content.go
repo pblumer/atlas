@@ -480,6 +480,20 @@ func (s *Service) writeContent(ctx context.Context, p *httpapi.Principal, id, so
 		if other, saveErr = s.boundElsewhere(src.ID, refs, id); saveErr != nil || other != "" {
 			return
 		}
+		st, _, e := s.store.ContentState(id)
+		if saveErr = e; saveErr != nil {
+			return
+		}
+		// The first link sets the product's own content aside, for an unlink to
+		// put back (§ 6, amended). A refresh keeps what the first link set aside:
+		// what it replaces is the copy, not the product manager's own.
+		if cur.ContentSource == nil {
+			own := &OwnContent{Descriptions: maps.Clone(cur.Descriptions), Keywords: slices.Clone(cur.Keywords)}
+			if own.Picture, saveErr = s.store.StashPicture(id); saveErr != nil {
+				return
+			}
+			st.Own = own
+		}
 		if content.Picture != nil {
 			saveErr = s.store.SavePicture(id, content.Picture.Data, content.Picture.Type)
 		} else {
@@ -505,10 +519,6 @@ func (s *Service) writeContent(ctx context.Context, p *httpapi.Principal, id, so
 		// A link or refresh that passes every rule is a passed recheck, and the
 		// one act that lifts a quarantine. What was quarantined stays withheld
 		// wherever a copy of it remains — the releases before this one.
-		st, _, e := s.store.ContentState(id)
-		if saveErr = e; saveErr != nil {
-			return
-		}
 		if st.Quarantine != nil {
 			lifted = st.Quarantine
 			st.Distrusted = max(st.Distrusted, st.Quarantine.Since)
@@ -668,6 +678,7 @@ func (s *Service) HandleContentUnlink(w http.ResponseWriter, r *http.Request) {
 		removed        []string
 		source         string
 		quarantined    bool
+		restored       bool
 		err            error
 	)
 	s.loop.Do(func() {
@@ -706,7 +717,19 @@ func (s *Service) HandleContentUnlink(w http.ResponseWriter, r *http.Request) {
 				whole = true
 			} else {
 				delete(b.Pages, in.Lang)
+				// The language returns to the product manager with the text it had
+				// before the link, if it had one; the rest stays bound.
 				delete(it.Descriptions, in.Lang)
+				if st.Own != nil {
+					if own, ok := st.Own.Descriptions[in.Lang]; ok {
+						if it.Descriptions == nil {
+							it.Descriptions = map[string]string{}
+						}
+						it.Descriptions[in.Lang] = own
+					}
+					delete(st.Own.Descriptions, in.Lang)
+					restored = true
+				}
 				var labels [][]string
 				for _, rest := range b.Pages {
 					labels = append(labels, rest.Labels)
@@ -725,13 +748,50 @@ func (s *Service) HandleContentUnlink(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			it.ContentSource = nil
-			if quarantined {
-				// The content in question is dropped rather than handed to the
-				// product manager as theirs (§ 6).
+			switch {
+			case st.Own != nil:
+				// What the product carried before the link comes back (§ 6,
+				// amended): the product is described again as its product
+				// manager described it, quarantined or not — the own content was
+				// never in question.
+				// Only the languages still bound take their own text back: one
+				// unlinked earlier got it then, and may have been edited since.
+				descriptions := map[string]string{}
+				for lang, text := range it.Descriptions {
+					if _, bound := b.Pages[lang]; !bound {
+						descriptions[lang] = text
+					}
+				}
+				for lang := range b.Pages {
+					if own, ok := st.Own.Descriptions[lang]; ok {
+						descriptions[lang] = own
+					}
+				}
+				it.Descriptions = descriptions
+				it.Keywords = slices.Clone(st.Own.Keywords)
+				if st.Own.Picture {
+					err = s.store.RestorePicture(id)
+				} else {
+					err = s.store.ClearPicture(id)
+				}
+				if err != nil {
+					return
+				}
+				st.Own = nil
+				restored = true
+			case quarantined:
+				// A binding from before the own content was kept: the content in
+				// question is dropped rather than handed to the product manager as
+				// theirs (§ 6).
 				it.Descriptions, it.Keywords = nil, nil
 				if err = s.store.ClearPicture(id); err != nil {
 					return
 				}
+			}
+		}
+		if restored {
+			if err = s.store.SaveContentState(st); err != nil {
+				return
 			}
 		}
 		if len(it.Descriptions) == 0 {

@@ -2286,7 +2286,7 @@ the method and how to work it with Atlas as it stands are in
   the automation one), and on the coverage read — and it never withholds a stale
   record, which would make the map least useful exactly when it needs attention.
 
-- 🚧 **B11 — Technical capability contract, first slice.** Optional, versioned
+- ✅ **B11 — Technical capability contract, first slice.** Optional, versioned
   operation-level capability claims in the existing Worker Type manifest
   ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
   This is metadata validated at admission, **not** a new integration-capability
@@ -2295,7 +2295,8 @@ the method and how to work it with Atlas as it stands are in
   projections, canonical semantic contracts, conformance tests and graph
   relationships are subsequent slices described in
   [the implementation plan](docs/planning/technical-capability-contract.md).
-  **Do not mark this completed before full Go checks and CI are green.**
+  Completed 2026-10-26 as CDA0: [PR #1343](https://github.com/pblumer/atlas/pull/1343)
+  merged, ADR-0480 accepted, and the full Go checks pass on a tree that contains it.
 
 Deliberately out of scope: business areas (Level 1) and integration capabilities
 (Level 5) as record kinds of their own — the first is a tag, and the second is what a
@@ -2334,17 +2335,18 @@ retains the technical task detail. This track **does not reopen completed
 Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
 **A descriptive claim is not proof of conformance, and conformance is not authorization.**
 
-- 🚧 **CDA0 — Declarative Worker Type operation claims (T0 / B11).**
+- ✅ **CDA0 — Declarative Worker Type operation claims (T0 / B11).**
   [PR #1343](https://github.com/pblumer/atlas/pull/1343) merged the
   manifest fields and validation on `main`. [ADR-0480](docs/adr/0480-technical-capability-contract.md)
-  is **Proposed / Partial**; the claims remain advisory and no capability
-  routing exists. Keep B11 open until the architecture decision and
-  verification gates have been reviewed.
-- 🚧 **CDA1 — Canonical semantic contract envelope (T1a / Milestone 6).**
+  is **Accepted / Partial**; the claims remain advisory and no capability
+  routing exists.
+- ✅ **CDA1 — Canonical semantic contract envelope (T1a / Milestone 6).**
   [PR #1346](https://github.com/pblumer/atlas/pull/1346) merged the strict
   envelope on `main`: exact ID/version/profile, resource kind, identity
   scope and schema roots. [ADR-0485](docs/adr/0485-technical-capability-semantics.md)
-  is **Proposed / Partial**; no proof of provider behavior.
+  is **Accepted / Partial**: the contract identity is binding, the `v1alpha1`
+  fields may change until the first published contract. No proof of
+  provider behavior.
 - 🚧 **CDA2 — Contract governance and conformance (T1b / Milestone 6).**
   [ADR-0483](docs/adr/0483-technical-capability-conformance-governance.md)
   is **Accepted**: immutable source-controlled contracts, independent

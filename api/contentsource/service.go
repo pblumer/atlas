@@ -25,7 +25,7 @@ func audited(r *http.Request, change string, src Source) {
 		attrs = append(attrs, slog.String("actor", p.Username), slog.String("actor_id", p.UserID))
 	}
 	if change != "deleted" {
-		attrs = append(attrs, slog.String("base_url", src.BaseURL), slog.String("credentials_ref", src.CredentialsRef))
+		attrs = append(attrs, slog.String("base_url", src.BaseURL), slog.String("credentials_ref", SafeRef(src.CredentialsRef)))
 	}
 	logging.Info(logging.ContentSourceChanged, "a content source was "+change, attrs...)
 }
@@ -59,10 +59,11 @@ func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "list content sources: "+err.Error())
 		return
 	}
-	if all == nil {
-		all = []Source{}
+	shown := make([]Source, 0, len(all))
+	for _, src := range all {
+		shown = append(shown, src.Shown())
 	}
-	httpapi.JSON(w, http.StatusOK, all)
+	httpapi.JSON(w, http.StatusOK, shown)
 }
 
 // HandleGet reads one.
@@ -80,7 +81,7 @@ func (s *Service) HandleGet(w http.ResponseWriter, r *http.Request) {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no content source "+id)
 	default:
-		httpapi.JSON(w, http.StatusOK, src)
+		httpapi.JSON(w, http.StatusOK, src.Shown())
 	}
 }
 
@@ -110,7 +111,7 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	default:
 		audited(r, "created", in)
 		s.reg.notify()
-		httpapi.JSON(w, http.StatusCreated, in)
+		httpapi.JSON(w, http.StatusCreated, in.Shown())
 	}
 }
 
@@ -141,7 +142,7 @@ func (s *Service) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	default:
 		audited(r, "changed", in)
 		s.reg.notify()
-		httpapi.JSON(w, http.StatusOK, in)
+		httpapi.JSON(w, http.StatusOK, in.Shown())
 	}
 }
 

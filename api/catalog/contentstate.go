@@ -30,6 +30,25 @@ type ContentState struct {
 	// withheld wherever it still is — in the releases published before the
 	// refresh — while the refreshed copy, taken after, is shown.
 	Distrusted int64 `json:"distrusted,omitempty"`
+	// Own is what the product carried before it was first bound: the product
+	// manager's own description, keywords and picture, which the bound content
+	// replaced. An unlink puts it back (§ 6, amended), so unbinding a product
+	// returns it to how it was rather than leaving it described by pages that no
+	// longer supply it. Nil for a binding made before this was kept, which an
+	// unlink then treats as before: the last copy stays.
+	//
+	// Kept here and not on the item, because it is no part of what the shop is
+	// offered: a release never carries it, and a quarantine never withholds it.
+	Own *OwnContent `json:"own,omitempty"`
+}
+
+// OwnContent is a product's own content set aside while a source supplies it.
+type OwnContent struct {
+	Descriptions map[string]string `json:"descriptions,omitempty"`
+	Keywords     []string          `json:"keywords,omitempty"`
+	// Picture says whether a picture was set aside beside the product's picture
+	// (the store's own-picture file), to be put back on unlink.
+	Picture bool `json:"picture,omitempty"`
 }
 
 // Quarantine is why and since when a product's source content is withheld.

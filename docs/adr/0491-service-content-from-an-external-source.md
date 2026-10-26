@@ -1,6 +1,6 @@
 # ADR-0491: A service's content may come from an external source, copied into the draft and frozen with the release
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-26 — an unlink restores the product's own content; see the amendment below)
 - **Implementation:** Partial
 - **Date:** 2026-10-26
 - **Deciders:** Atlas maintainers
@@ -229,8 +229,8 @@ shows one slot per language the catalogue declares, and the primary slot is mark
 ### 6. Unlinking is allowed and recorded
 
 The product manager may remove a slot's page or the whole binding. The fields become
-editable again and keep the last fetched values, unless the item is quarantined, in
-which case the quarantined content is dropped (§ 9). Every unlink is recorded in the
+editable again and take back the product's own content from before the link — see the
+amendment below, which replaced "keep the last fetched values" here. Every unlink is recorded in the
 audit log with who, when and a reason the product manager must give. Notifying the
 product owner is the open question above.
 
@@ -439,6 +439,25 @@ about an unlink (the open question) are not.
   - A check in Atlas whether a page's content is newer than the copy, once the change
     feed exists.
   - The Confluence adapter and its proof of the facts of § 10.
+
+## Amendment (2026-10-26): an unlink restores the product's own content
+
+§ 6 first said that an unlinked product keeps the last fetched values, and drops them
+when it is quarantined. In use that was the wrong way round: a product manager who
+unbinds a product expects it to be described as it was before, and instead found the
+wiki's text left behind as if it were theirs — or, after a quarantine, no description
+at all. Worse, the link itself destroyed what it replaced: the product's own
+description and keywords were overwritten, and its picture was deleted when the
+source supplied none.
+
+So the **first link sets the product's own content aside** — its descriptions, its
+keywords and its picture — in the product's content state, which no release carries
+and no quarantine withholds; the picture moves beside the product's picture in the
+picture store. A refresh keeps what the first link set aside. The **whole unlink puts
+it back**, quarantined or not, since the own content was never in question; a product
+that had no picture is left with none. **Unlinking one language** puts that language's
+own description back and leaves the rest bound. A binding made before this amendment
+has nothing set aside, and its unlink behaves as § 6 first said.
 
 ## Pros and cons of the options
 
