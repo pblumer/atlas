@@ -1,4 +1,4 @@
-# ADR-DRAFT: A diagrams scope for systems that show processes elsewhere
+# ADR-0493: A diagrams scope for systems that show processes elsewhere
 
 - **Status:** Proposed
 - **Implementation:** Partial

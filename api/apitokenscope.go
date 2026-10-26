@@ -129,7 +129,7 @@ const (
 	apiScopeEvents = "events"
 
 	// apiScopeDiagrams reaches the deployed processes, a definition's model and its
-	// runtime overlay, all read-only (ADR-draft-diagrams-scope). It is what a system
+	// runtime overlay, all read-only (ADR-0493). It is what a system
 	// that shows this server's processes elsewhere holds: a wiki that draws the newest
 	// version of a process in a page and, where its administrator allows it, the counts
 	// of where its instances are. A leak of it reads models and counts; it cannot

@@ -296,7 +296,7 @@ func TestStatusScopeReachesOnlyTheNodeDescriptor(t *testing.T) {
 	}
 }
 
-// TestDiagramsScopeReachesOnlyTheModelsAndTheirCounts is ADR-draft-diagrams-scope: a
+// TestDiagramsScopeReachesOnlyTheModelsAndTheirCounts is ADR-0493: a
 // system that shows this server's processes elsewhere — a wiki page that draws the
 // newest version of a process, with its live counts when its administrator allows
 // them — reads the list of deployed processes, a definition's model and its runtime

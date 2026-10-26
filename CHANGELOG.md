@@ -18,7 +18,7 @@ _Changed_ / _Removed_ for each version.
   scope `diagrams` reads the deployed processes, a definition's BPMN model and its
   runtime overlay and nothing else, so a wiki can draw a process's newest version, with
   its live counts, without holding a `full` token
-  ([ADR-draft-diagrams-scope](docs/adr/draft-diagrams-scope.md), proposed).
+  ([ADR-0493](docs/adr/0493-diagrams-scope.md), proposed).
 
 ### Fixed
 
