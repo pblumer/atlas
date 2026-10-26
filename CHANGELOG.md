@@ -117,8 +117,22 @@ _Changed_ / _Removed_ for each version.
   the chip that says which record is shown, the marks on the canvas, the Playground tab
   and the process documentation PDF read from the message catalogue. bpmn-js's palette,
   context pad and replace menu take their words from the same catalogue through
-  `lib-translate.js`. The properties panel follows area by area; messages the server
-  composes — the compiler's problems, a verdict's checks — stay in its English.
+  `lib-translate.js`. Messages the server composes — the compiler's problems, a
+  verdict's checks — stay in its English.
+- **The BPMN editor's properties panel speaks German too.** Every group, field, hint,
+  option and button of the details panel reads from the message catalogue: the process,
+  pool and collaboration settings, the events with their messages, timers, signals,
+  errors and escalations, the start variables and constants, the script, decision, form
+  and call activity wiring, the mappings and loops, and the Worker Type picker with each
+  Worker Type's operations, fields and hints. So do the modules the panel draws from: the
+  FEEL fields and variable references, the operation tables of the Exchange, Google
+  Contacts and CardDAV Worker Types, the Entra attribute mask, the PowerShell editor, the
+  Worker Type setup docs, the Developer View and the decision graph. The Worker Type tables
+  keep their English, because a text there is also data — a field's group is its section's
+  identity — and are translated where they are drawn, by `wt.` messages that a test holds
+  to the texts the tables still carry. A collapsible group keeps its English name as its
+  identity, so what an author folded stays folded in either language. Example values in
+  placeholders, product and protocol names, and what the server sends stay as they are.
 - **Connected accounts no longer tells people to run a command.** Where linking is not
   set up, a person is told so and that an administrator changes it; an administrator is
   sent to the Security page. The account menu offers *Connected accounts* only when the
@@ -128,6 +142,10 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Every declared start variable shows as a start variable in the Modeler.** The
+  process and pool panels handed each row its position in the list as the flag that marks
+  a constant, so from the second declared variable on, a row came with a source picker
+  and without its *required* box, and saving read a box that was not there.
 - **A picture of any size is taken, for a person and for a product.** Console →
   Organization and the catalogue's product editor passed the chosen file on unchanged, so
   a photograph straight off a phone was refused with "the picture exceeds the 524288 byte

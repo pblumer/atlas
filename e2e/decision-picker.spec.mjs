@@ -57,7 +57,7 @@ test("a file offers its decision service first and its workings last", async ({ 
   // in: the published interface, then the decisions that are somebody's to call, then
   // the ones a service only evaluates on the way to its answer.
   expect(kredit.options).toEqual([
-    "Kreditfreigabe — Entscheidungsdienst",
+    "Kreditfreigabe — Entscheidungsservice",
     "Bonität",
     "Kreditentscheid — veröffentlicht von Kreditfreigabe",
     "Tragbarkeit — intern in Kreditfreigabe — umgeht den Dienst",

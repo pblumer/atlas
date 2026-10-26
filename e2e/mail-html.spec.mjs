@@ -62,7 +62,7 @@ test("F2 opens the HTML body in the Developer View", async ({ page }) => {
 
   await expect(page.locator(".dev-modal")).toBeVisible();
   await expect(page.locator(".dev-badge")).toHaveText("HTML");
-  await expect(page.locator(".dev-title")).toHaveText("HTML body");
+  await expect(page.locator(".dev-title")).toHaveText("HTML-Text");
   // The markup language brings its own examples, and no FEEL function reference.
   await expect(page.locator(".dev-tab[data-tab='snips']")).toBeVisible();
   await expect(page.locator(".dev-tab[data-tab='fns']")).toBeHidden();
