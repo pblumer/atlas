@@ -291,12 +291,20 @@ func (s *Server) redactedArchitecture(r *http.Request, snap *archsketch.Snapshot
 // releaseArchitectureResp is the JSON answer: the release's names beside the snapshot,
 // because the snapshot is the release's content and these are what a reader calls it.
 type releaseArchitectureResp struct {
-	ApplicationID string               `json:"applicationId"`
-	Application   string               `json:"application"`
-	ReleaseID     string               `json:"releaseId"`
-	Version       int32                `json:"version"`
-	PublishedAt   int64                `json:"publishedAt"`
-	Architecture  *archsketch.Snapshot `json:"architecture"`
+	ApplicationID string `json:"applicationId"`
+	Application   string `json:"application"`
+	ReleaseID     string `json:"releaseId"`
+	Version       int32  `json:"version"`
+	PublishedAt   int64  `json:"publishedAt"`
+	// Layers says which layers the snapshot records and which this answer shows, so a
+	// reader can offer the rest without guessing what an older release holds.
+	Layers       releaseArchitectureLayers `json:"layers"`
+	Architecture *archsketch.Snapshot      `json:"architecture"`
+}
+
+type releaseArchitectureLayers struct {
+	Recorded []archsketch.Layer `json:"recorded"`
+	Shown    []archsketch.Layer `json:"shown"`
 }
 
 func (s *Server) handleReleaseArchitecture(w http.ResponseWriter, r *http.Request) {
@@ -322,6 +330,11 @@ func (s *Server) serveReleaseArchitecture(w http.ResponseWriter, r *http.Request
 		return
 	}
 	version := int32(version64)
+	selection, err := archsketch.ParseSelection(r.URL.Query().Get("layers"))
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	proj, code, msg := s.authorizeProject(r, appID, ScopeRoleViewer)
 	if code != 0 {
 		httpapi.Error(w, code, msg)
@@ -363,16 +376,28 @@ func (s *Server) serveReleaseArchitecture(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	recorded := rel.Architecture.Recorded()
+	if selection&recorded == 0 {
+		// Refused in words rather than drawn empty: an empty picture reads as a release
+		// that offers and needs nothing, which is not what this one says.
+		httpapi.Error(w, http.StatusNotFound, "release v"+strconv.Itoa(int(version))+
+			" records none of the layers asked for ("+selection.String()+"); it records "+recorded.String())
+		return
+	}
+	view := rel.Architecture.Select(selection)
+
 	m := archsketch.Meta{ApplicationID: appID, Application: proj.Name, ReleaseID: rel.ID, Version: rel.Version}
 	switch format {
 	case "svg":
-		serveSketch(w, "image/svg+xml; charset=utf-8", archsketch.SVG(*rel.Architecture, m))
+		serveSketch(w, "image/svg+xml; charset=utf-8", archsketch.SVG(view, m))
 	case "xml":
-		serveSketch(w, "application/xml; charset=utf-8", archsketch.ArchiMate(*rel.Architecture, m))
+		serveSketch(w, "application/xml; charset=utf-8", archsketch.ArchiMate(view, m))
 	default:
 		httpapi.JSON(w, http.StatusOK, releaseArchitectureResp{
 			ApplicationID: appID, Application: proj.Name, ReleaseID: rel.ID,
-			Version: rel.Version, PublishedAt: rel.PublishedAt, Architecture: rel.Architecture,
+			Version: rel.Version, PublishedAt: rel.PublishedAt,
+			Layers:       releaseArchitectureLayers{Recorded: recorded.Layers(), Shown: (selection & recorded).Layers()},
+			Architecture: &view,
 		})
 	}
 }

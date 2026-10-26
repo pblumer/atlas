@@ -58,6 +58,12 @@ type Snapshot struct {
 	// Physical is the recording installation's half, absent on a snapshot taken
 	// before format version 2.
 	Physical *Physical `json:"physical,omitempty"`
+
+	// shown is the layer selection a rendering of this value draws, and recorded the
+	// layers the stored snapshot held before the selection narrowed it; both are set
+	// by [Snapshot.Select], and zero means unset. Neither is stored: a selection
+	// belongs to one read, never to the release.
+	shown, recorded Selection
 }
 
 // Process is one process the release shipped.
