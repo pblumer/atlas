@@ -299,19 +299,22 @@ func TestStatusScopeReachesOnlyTheNodeDescriptor(t *testing.T) {
 // TestDiagramsScopeReachesOnlyTheModelsAndTheirCounts is ADR-0493: a
 // system that shows this server's processes elsewhere — a wiki page that draws the
 // newest version of a process, with its live counts when its administrator allows
-// them — reads the list of deployed processes, a definition's model and its runtime
-// overlay, and nothing it could change or that lies behind an instance.
+// them — reads the list of deployed processes, a definition's model and the counts of
+// its runtime overlay, and nothing it could change or that lies behind an instance.
+// The whole overlay is refused: its incident details name instances and carry
+// messages.
 func TestDiagramsScopeReachesOnlyTheModelsAndTheirCounts(t *testing.T) {
 	ts, admin := apiTokenServer(t)
 	key := deployIntoProject(t, admin, ts, idBPMN("shown"), "")
 	secret, _ := mint(t, admin, ts, `{"name":"wiki","scope":"diagrams","expiresInDays":365}`)
 
-	for _, path := range []string{"/api/v1/processes", fmt.Sprintf("/api/v1/processes/%d/xml", key), fmt.Sprintf("/api/v1/processes/%d/runtime", key)} {
+	for _, path := range []string{"/api/v1/processes", fmt.Sprintf("/api/v1/processes/%d/xml", key), fmt.Sprintf("/api/v1/processes/%d/runtime/counts", key)} {
 		if code, body := bearerReq(t, ts, http.MethodGet, path, "", secret); code != http.StatusOK {
 			t.Errorf("diagrams token on GET %s = %d, want 200; body = %.160s", path, code, body)
 		}
 	}
 	for _, path := range []string{"/api/v1/instances", "/api/v1/node", "/api/v1/info", "/api/v1/drafts", "/api/v1/call-activities",
+		fmt.Sprintf("/api/v1/processes/%d/runtime", key), fmt.Sprintf("/api/v1/processes/%d/runtime?instance=1", key),
 		fmt.Sprintf("/api/v1/processes/%d/history-purge", key), "/api/v1/panorama/mesh"} {
 		if code, _ := bearerReq(t, ts, http.MethodGet, path, "", secret); code != http.StatusForbidden {
 			t.Errorf("diagrams token on GET %s = %d, want 403", path, code)

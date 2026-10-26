@@ -304,6 +304,11 @@ var mcpOmittedRoutes = map[string]string{
 	// the one it was pointed at, and the write half is an operator naming the
 	// instance for other operators to recognise.
 	"GET /api/v1/node": "runtime identity for cross-server correlation, not an agent action",
+	// The overlay's counts without its incident details (ADR-0493): the route exists
+	// so that a confined credential held by another system — a wiki's diagrams token —
+	// reaches the numbers and not the messages. An agent holds no such credential and
+	// reads the whole overlay through atlas_process_runtime, whose numbers these are.
+	"GET /api/v1/processes/{key}/runtime/counts": "the counts of atlas_process_runtime, for a system that shows a process elsewhere and must not read its incidents; an agent reads the whole overlay",
 	// The Console's release notes: prose for a person opening the landing page,
 	// read from the CHANGELOG the binary embeds. atlas_info already says which
 	// version an agent is talking to, and the same text is CHANGELOG.md in the

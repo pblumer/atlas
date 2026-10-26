@@ -578,7 +578,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0490](0490-carddav-worker.md) | A CardDAV Worker Type — a process finds, keeps and labels contacts in any CardDAV address book | Accepted | Landed |
 | [0491](0491-service-content-from-an-external-source.md) | A service's content may come from an external source, copied into the draft and frozen with the release | Accepted | Partial |
 | [0492](0492-controlled-worker-rebinding.md) | Controlled configured-Worker rebinding without process redeployment | Proposed | Not started |
-| [0493](0493-diagrams-scope.md) | A diagrams scope for systems that show processes elsewhere | Proposed | Partial |
+| [0493](0493-diagrams-scope.md) | A diagrams scope for systems that show processes elsewhere | Proposed (amended) | Partial |
 
 ## The two states of a record
 

@@ -15,9 +15,12 @@ _Changed_ / _Removed_ for each version.
 ### Added
 
 - **A diagrams scope for systems that show processes elsewhere.** An API token of the
-  scope `diagrams` reads the deployed processes, a definition's BPMN model and its
-  runtime overlay and nothing else, so a wiki can draw a process's newest version, with
-  its live counts, without holding a `full` token
+  scope `diagrams` reads the deployed processes, a definition's BPMN model and the
+  counts of its runtime overlay and nothing else, so a wiki can draw a process's newest
+  version, with its live counts, without holding a `full` token. The counts come from
+  the new `GET /api/v1/processes/{key}/runtime/counts`: the overlay's numbers for the
+  whole definition, without its incident details. The token never reads an incident's
+  message or an instance, and the full overlay, `/runtime`, is refused to it
   ([ADR-0493](docs/adr/0493-diagrams-scope.md), proposed).
 
 ### Fixed
