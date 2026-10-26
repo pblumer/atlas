@@ -9184,7 +9184,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               <h3 data-group="Failure handling">${esc(tr("bpmn.group.failureHandling"))}</h3>
               <label class="field"><span>${esc(tr("pnl.main.retries"))}</span>
                 <input type="number" id="f-psretries" min="1" step="1" value="${esc((js && js.retries) || "")}" placeholder="3"/></label>
-              <p class="muted" style="font-size:12px">${RETRIES_FIELD.hint}</p>
+              <p class="muted" style="font-size:12px">${esc(kindText(RETRIES_FIELD.hint))}</p>
               <div class="feel-test" data-run-lang="${lang}">
                 <label class="field"><span>${esc(tr("pnl.main.script.testVars"))}</span>
                   <textarea class="ps-run-vars" rows="2" spellcheck="false" placeholder='{ "Vorname": "Anna" }'></textarea></label>
@@ -9270,7 +9270,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             <h3 data-group="Failure handling">${esc(tr("bpmn.group.failureHandling"))}</h3>
             <label class="field"><span>${esc(tr("pnl.main.retries"))}</span>
               <input type="number" id="f-brt-retries" min="1" step="1" value="${esc(cd.retries || "")}" placeholder="3"/></label>
-            <p class="muted" style="font-size:12px">${RETRIES_FIELD.hint}</p>
+            <p class="muted" style="font-size:12px">${esc(kindText(RETRIES_FIELD.hint))}</p>
             <h3 data-group="Decision inputs">${esc(tr("bpmn.group.decisionInputs"))}</h3>
             <p class="muted" style="font-size:12px">${tr("pnl.main.brt.inputsHint")}</p>
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>
