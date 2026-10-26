@@ -164,10 +164,18 @@ export function drawHeat(viewer, { values, flows, max, mode, style, format, badg
   const cold = mode === "runs";
   const glow = style !== "outline";
   const layer = canvas.getLayer("atlas-heat", -1);
-  while (layer.firstChild) layer.removeChild(layer.firstChild);
   canvas.getContainer().classList.toggle("heat-glow", glow);
+  // The poll calls this every 1.5 seconds, and the values change far less often. A
+  // blurred layer is the costly part of the picture to build and to paint, so it is
+  // rebuilt only when what it shows has changed.
+  const sig = glow ? JSON.stringify([max, [...values], [...flows]]) : "";
+  const rebuild = layer.dataset.heatSig !== sig;
+  if (rebuild) {
+    while (layer.firstChild) layer.removeChild(layer.firstChild);
+    layer.dataset.heatSig = sig;
+  }
 
-  if (glow) {
+  if (glow && rebuild) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const el of registry.getAll()) {
       if (el.waypoints) {
@@ -280,12 +288,13 @@ export function clearHeat(viewer) {
   const canvas = viewer.get("canvas");
   const layer = canvas.getLayer("atlas-heat", -1);
   while (layer.firstChild) layer.removeChild(layer.firstChild);
+  delete layer.dataset.heatSig;
   canvas.getContainer().classList.remove("heat-glow");
 }
 
 // heatStripHTML is the strip over the diagram: what it shows, how, over which period,
 // and the scale — a colour means nothing until it says what its darkest end is worth.
-export function heatStripHTML(prefs, { max, format, note }) {
+export function heatStripHTML(prefs, { max, format, note, asOf }) {
   const mode = HEAT_MODES.find((m) => m.key === prefs.mode) || HEAT_MODES[0];
   const live = mode.key === "live";
   const btn = (attr, key, label, title, on) =>
@@ -307,7 +316,9 @@ export function heatStripHTML(prefs, { max, format, note }) {
       ${HEAT_STYLES.map((s) => btn("heat-style", s.key, s.label, s.title, s.key === prefs.style)).join("")}
       <label class="heat-period"><span class="muted">Period</span>
         <select id="heat-period">${HEAT_PERIODS.map((p) =>
-          `<option value="${p.key}"${p.key === prefs.period ? " selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>`}
+          `<option value="${p.key}"${p.key === prefs.period ? " selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>
+      <button type="button" data-heat-refresh title="Read the figures again now; otherwise they are read every five minutes">Refresh</button>
+      ${asOf ? `<span class="muted heat-asof">as of ${esc(asOf)}</span>` : ""}`}
     <span style="flex:1"></span>
     ${note ? `<span class="heat-note-inline">${esc(note)}</span>` : ""}
     ${scale}`;
@@ -426,7 +437,12 @@ export function saveHeatPrefs(prefs) {
 
 // heatStatsQuery is the statistics request for a period: since deployment reads all
 // that is retained, a window starts that long before now.
+//
+// The start is rounded down to the minute, so the tabs that ask within one minute ask
+// for the same window and the server answers them all from one fold (ADR-0496).
 export function heatStatsQuery(period, now = Date.now()) {
   const p = HEAT_PERIODS.find((x) => x.key === period);
-  return p && p.ms ? `?from=${encodeURIComponent(new Date(now - p.ms).toISOString())}` : "";
+  if (!p || !p.ms) return "";
+  const from = Math.floor((now - p.ms) / 60000) * 60000;
+  return `?from=${encodeURIComponent(new Date(from).toISOString())}`;
 }

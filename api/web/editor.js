@@ -12772,14 +12772,17 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   const TERMINATE_TYPE_THRESHOLD = 50;
 
   // The heatmap (ADR-0496). heat is what the strip chose — remembered
-  // in this browser — and the rest is what the last poll read for it. The statistics are
-  // a fold over history on the server, so they are re-read when the period changes and
-  // otherwise at most every HEAT_STATS_MS, not on every 1.5s tick.
+  // in this browser — and the rest is what the last poll read for it. The statistics
+  // describe history, not the moment: a median over thirty days does not move in fifteen
+  // seconds. So they are read when the heatmap opens and when the period changes, then
+  // every HEAT_STATS_MS while the tab is visible, or when somebody presses Refresh — never
+  // on the live view's 1.5s tick, which is what made each open tab a steady load.
   let heat = loadHeatPrefs();
   let heatStats = null, heatStatsPeriod = "", heatStatsAt = 0, heatStatsErr = "";
+  let heatStatsBusy = false; // a read in flight, so overlapping polls do not ask twice
   let heatView = null;   // { values, flows, max } the diagram is shaded with, or null in Live
   let heatRT = null;     // the runtime overlay the counts since deployment come from
-  const HEAT_STATS_MS = 15000;
+  const HEAT_STATS_MS = 5 * 60 * 1000;
   const heatOn = () => heat.mode !== "live";
 
   // refreshInstances pulls this version's instances and, only when the set of
@@ -13330,12 +13333,15 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   }
 
   // refreshHeatStats re-reads the statistics the heatmap needs: on a new period at once,
-  // otherwise every HEAT_STATS_MS. Best-effort like the other polled reads — a failure
+  // otherwise every HEAT_STATS_MS, and not at all while the tab is hidden — a tab nobody
+  // looks at has nothing to show them. Best-effort like the other polled reads: a failure
   // is shown in the panel and the next tick tries again.
   async function refreshHeatStats() {
-    if (!heatOn()) return;
+    if (!heatOn() || heatStatsBusy) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
     if (heatStats && heatStatsPeriod === heat.period && Date.now() - heatStatsAt < HEAT_STATS_MS) return;
     const period = heat.period;
+    heatStatsBusy = true;
     try {
       const st = await api("GET", `/api/v1/processes/${key}/statistics${heatStatsQuery(period)}`);
       if (period !== heat.period) return; // the period changed while this was in flight
@@ -13343,6 +13349,8 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       heatStatsErr = "";
     } catch (e) {
       heatStatsErr = `Could not read the statistics: ${e.message}`;
+    } finally {
+      heatStatsBusy = false;
     }
     heatStatsPeriod = period;
     heatStatsAt = Date.now();
@@ -13358,8 +13366,11 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // carries the scale, and a key to colours that are not on screen only misleads.
     liveLegend.hidden = heatOn();
     const note = heatOn() && heatStats && heatStats.truncated ? "newest instances only" : "";
+    // "as of" is when the server folded the figures — `to`, in unix nanoseconds — which
+    // can be up to a minute before they were fetched, since the server shares a result.
+    const asOf = heatOn() && heatStats && heatStats.to ? fmtTime(heatStats.to / 1e6) : "";
     const html = heatStripHTML(heat, {
-      max: heatView ? heatView.max : 0, format: heatFormat(heat.mode), note,
+      max: heatView ? heatView.max : 0, format: heatFormat(heat.mode), note, asOf,
     });
     // Only a change is drawn: the poll calls this every 1.5 seconds, and replacing the
     // strip would close the period list under the pointer of somebody choosing from it.
@@ -13385,6 +13396,11 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     poll();
   }
   heatStrip.addEventListener("click", (e) => {
+    if (e.target.closest("button[data-heat-refresh]")) {
+      heatStatsAt = 0; // stale now: the poll below reads them again
+      poll();
+      return;
+    }
     const b = e.target.closest("button[data-heat-mode], button[data-heat-style]");
     if (!b) return;
     if (b.dataset.heatMode) setHeat({ mode: b.dataset.heatMode });
