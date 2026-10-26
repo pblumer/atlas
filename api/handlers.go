@@ -1795,6 +1795,13 @@ func (s *Server) handleSetProcessActive(w http.ResponseWriter, r *http.Request) 
 // filter narrows the result to a single process instance, so the live view can
 // isolate one instance on the diagram instead of aggregating all of them.
 func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
+	s.serveProcessRuntime(w, r, func(resp runtimeResp) any { return resp })
+}
+
+// serveProcessRuntime reads the overlay a request asks for and answers what answer
+// makes of it: the whole overlay, or its counts (handleProcessRuntimeCounts). One
+// reading behind both is what keeps the counts the overlay's own.
+func (s *Server) serveProcessRuntime(w http.ResponseWriter, r *http.Request, answer func(runtimeResp) any) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
@@ -2041,7 +2048,7 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read runtime: "+scanErr.Error())
 	default:
-		httpapi.JSON(w, http.StatusOK, resp)
+		httpapi.JSON(w, http.StatusOK, answer(resp))
 	}
 }
 

@@ -128,13 +128,13 @@ const (
 	// the same single door.
 	apiScopeEvents = "events"
 
-	// apiScopeDiagrams reaches the deployed processes, a definition's model and its
-	// runtime overlay, all read-only (ADR-0493). It is what a system
+	// apiScopeDiagrams reaches the deployed processes, a definition's model and the
+	// counts of its runtime overlay, all read-only (ADR-0493). It is what a system
 	// that shows this server's processes elsewhere holds: a wiki that draws the newest
 	// version of a process in a page and, where its administrator allows it, the counts
 	// of where its instances are. A leak of it reads models and counts; it cannot
-	// deploy, start, move or redraw a process, nor read an instance, a variable or a
-	// person.
+	// deploy, start, move or redraw a process, nor read an instance, an incident's
+	// message, a variable or a person.
 	//
 	// It carries its minter's roles, as status and landscape do: every route it
 	// reaches asks for none, so the roles cannot widen what the allowlist admits.
@@ -203,12 +203,14 @@ var apiScopeAllowed = map[string][]string{
 		"GET /metrics",
 	},
 	// The list, to find a process's newest version by its id; the model of that
-	// version; and its runtime overlay. Nothing about instances beyond what the
-	// overlay counts, and none of the writes on the same paths.
+	// version; and the counts of its runtime overlay. Not the overlay itself: its
+	// incident details carry messages and name instances, and the counts route
+	// answers the same numbers without them. Nothing about instances beyond what is
+	// counted, and none of the writes on the same paths.
 	apiScopeDiagrams: {
 		"GET /api/v1/processes",
 		"GET /api/v1/processes/{key}/xml",
-		"GET /api/v1/processes/{key}/runtime",
+		"GET /api/v1/processes/{key}/runtime/counts",
 	},
 	// One read. The feed is paged by a cursor its reader keeps, so there is nothing
 	// else a follower of it needs to ask.

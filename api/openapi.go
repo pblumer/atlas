@@ -350,6 +350,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/processes/{key}/runtime", s.handleProcessRuntime, apiOp{
 			summary: "Read a process's live runtime state", tag: "Processes", role: roleAny, resp: jsonBody("Runtime state", tObject())}},
+		{"GET", "/api/v1/processes/{key}/runtime/counts", s.handleProcessRuntimeCounts, apiOp{
+			summary: "Read the counts of a process's live runtime state and nothing else: instances live and finished, and tokens live, passed, cancelled and parked behind an incident on each element — the same numbers as the runtime state, without its incident details and for the whole definition only (?instance= is refused). It is what a system that shows the process elsewhere reads, and all the diagrams scope reaches (ADR-0493)", tag: "Processes", role: roleAny,
+			resp: jsonBody("Runtime counts", schemaObj(map[string]any{
+				"instances": tInteger(), "finished": tInteger(), "tokens": tInteger(), "elements": tArray(),
+				"incidentTotal": tInteger(), "incidentCountsExact": tBool(),
+			}))}},
 		{"PUT", "/api/v1/processes/{key}/active", s.handleSetProcessActive, apiOp{
 			summary: "Activate or deactivate a deployed process (a deactivated process stays deployed but does not auto-start new instances from its timer/message/signal start events)", tag: "Processes", role: RoleOperator,
 			req:  jsonBody("Active flag", schemaObj(map[string]any{"active": tBool()})),
