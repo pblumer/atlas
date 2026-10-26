@@ -12,6 +12,14 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A diagrams scope for systems that show processes elsewhere.** An API token of the
+  scope `diagrams` reads the deployed processes, a definition's BPMN model and its
+  runtime overlay and nothing else, so a wiki can draw a process's newest version, with
+  its live counts, without holding a `full` token
+  ([ADR-draft-diagrams-scope](docs/adr/draft-diagrams-scope.md), proposed).
+
 ## [0.20.0] — 2026-10-25
 
 **A SharePoint Worker can act as the person who asked, and only for what a policy

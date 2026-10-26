@@ -127,6 +127,18 @@ const (
 	// (scopeRoles), so the role the route asks for and the reach the scope allows name
 	// the same single door.
 	apiScopeEvents = "events"
+
+	// apiScopeDiagrams reaches the deployed processes, a definition's model and its
+	// runtime overlay, all read-only (ADR-draft-diagrams-scope). It is what a system
+	// that shows this server's processes elsewhere holds: a wiki that draws the newest
+	// version of a process in a page and, where its administrator allows it, the counts
+	// of where its instances are. A leak of it reads models and counts; it cannot
+	// deploy, start, move or redraw a process, nor read an instance, a variable or a
+	// person.
+	//
+	// It carries its minter's roles, as status and landscape do: every route it
+	// reaches asks for none, so the roles cannot widen what the allowlist admits.
+	apiScopeDiagrams = "diagrams"
 )
 
 // apiScopeAllowed is the complete reach of each confined scope. A scope absent
@@ -189,6 +201,14 @@ var apiScopeAllowed = map[string][]string{
 	// what makes it able to cover this at all.
 	apiScopeMetrics: {
 		"GET /metrics",
+	},
+	// The list, to find a process's newest version by its id; the model of that
+	// version; and its runtime overlay. Nothing about instances beyond what the
+	// overlay counts, and none of the writes on the same paths.
+	apiScopeDiagrams: {
+		"GET /api/v1/processes",
+		"GET /api/v1/processes/{key}/xml",
+		"GET /api/v1/processes/{key}/runtime",
 	},
 	// One read. The feed is paged by a cursor its reader keeps, so there is nothing
 	// else a follower of it needs to ask.
@@ -264,7 +284,7 @@ const mcpTransportHeader = "X-Atlas-Via-MCP"
 // apiMintableScopes lists the scopes an API token may be minted with. It is not
 // every scope: apiScopeDeploy belongs to a credential with its own store, so
 // nothing here can ask for it.
-var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus, apiScopeDirectory, apiScopeInventory, apiScopeLandscape, apiScopeEvents}
+var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus, apiScopeDirectory, apiScopeInventory, apiScopeLandscape, apiScopeEvents, apiScopeDiagrams}
 
 // apiScopes returns the mintable scopes, sorted, for the error message that names
 // them when a request asks for something else.
