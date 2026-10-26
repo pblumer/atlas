@@ -96,6 +96,22 @@ func TestApplicationToolsPublishLoop(t *testing.T) {
 	if arch.Version != 1 || len(arch.Architecture.Processes) != 1 || arch.Architecture.Processes[0].ProcessID != "mcp-app-proc" {
 		t.Fatalf("architecture = %s, want v1 with its one process", architecture)
 	}
+	// The layers argument narrows the answer the way the route's ?layers= does.
+	logical := callOne(t, atlas, "atlas_release_architecture", map[string]any{"id": app.ID, "version": 1, "layers": "application"})
+	var narrowed struct {
+		Layers struct {
+			Shown []string `json:"shown"`
+		} `json:"layers"`
+		Architecture struct {
+			Physical json.RawMessage `json:"physical"`
+		} `json:"architecture"`
+	}
+	if err := json.Unmarshal([]byte(logical), &narrowed); err != nil {
+		t.Fatalf("decode narrowed architecture = %q: %v", logical, err)
+	}
+	if len(narrowed.Layers.Shown) != 1 || narrowed.Layers.Shown[0] != "application" || narrowed.Architecture.Physical != nil {
+		t.Fatalf("architecture with layers=application = %s, want the application layer alone", logical)
+	}
 
 	deployments := callOne(t, atlas, "atlas_application_deployments", map[string]any{"id": app.ID})
 	var view struct {
