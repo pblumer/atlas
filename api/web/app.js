@@ -1801,7 +1801,7 @@ async function viewConsoleEngine() {
   // a process can read as server.name and server.environment.
   view.innerHTML += `
     <div class="card" id="server-constants-card" style="margin-top:14px">
-      <h2>Server constants</h2>
+      <h2>${esc(tr("constants.server.title"))}</h2>
       <div id="server-constants"><p class="muted">loading…</p></div>
     </div>`;
   view.innerHTML += `
@@ -3434,28 +3434,28 @@ function toggleSection(id, btn) {
 async function viewModelerHome() {
   view.innerHTML = `
     <div class="between">
-      <h1>Applications</h1>
-      ${dropdown("Create new", "btn", [
-        { label: "New application", icon: "📦", act: "new-project" },
+      <h1>${esc(tr("home.title"))}</h1>
+      ${dropdown(tr("create.button"), "btn", [
+        { label: tr("create.newApplication"), icon: "📦", act: "new-project" },
         { sep: true },
-        { header: "Blank resources" },
-        { label: "BPMN diagram", icon: "⚙", href: "#/modeler/new" },
-        { label: "Form", icon: "▤", href: "#/modeler/form/new" },
+        { header: tr("create.blank") },
+        { label: tr("create.bpmn"), icon: "⚙", href: "#/modeler/new" },
+        { label: tr("create.form"), icon: "▤", href: "#/modeler/form/new" },
         { sep: true },
-        { label: "Import file…", icon: "📥", act: "import" },
-        { label: "Import MIM workflow (XOML)…", icon: "🔁", act: "import-mim" },
-        { label: "Import application…", icon: "🗂", act: "import-source" },
+        { label: tr("create.importFile"), icon: "📥", act: "import" },
+        { label: tr("create.importMim"), icon: "🔁", act: "import-mim" },
+        { label: tr("create.importApplication"), icon: "🗂", act: "import-source" },
       ])}
     </div>
     <div class="card" style="padding:0; margin-top:14px">
       <table data-dt-key="projects">
-        <thead><tr><th>Name</th><th>Artifacts</th><th>Last changed</th><th></th></tr></thead>
-        <tbody id="proj-rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th>${esc(tr("application.th.name"))}</th><th>${esc(tr("home.th.artifacts"))}</th><th>${esc(tr("application.th.changed"))}</th><th></th></tr></thead>
+        <tbody id="proj-rows"><tr><td colspan="4" class="empty">${esc(tr("application.loading"))}</td></tr></tbody>
       </table>
     </div>
-    <h2 style="margin:22px 0 10px"><button class="section-toggle" aria-expanded="${sectionState("deployed")}" data-section="deployed" title="Show or hide the deployed processes">Deployed</button></h2>
+    <h2 style="margin:22px 0 10px"><button class="section-toggle" aria-expanded="${sectionState("deployed")}" data-section="deployed" title="${esc(tr("home.deployedTitle"))}">${esc(tr("home.deployed"))}</button></h2>
     <div class="section-body" id="sec-deployed"${sectionState("deployed") ? "" : ' hidden'}>
-      <div id="rows"><p class="muted" style="padding:14px 2px">Loading…</p></div>
+      <div id="rows"><p class="muted" style="padding:14px 2px">${esc(tr("application.loading"))}</p></div>
     </div>`;
   for (const t of view.querySelectorAll(".section-toggle"))
     t.addEventListener("click", () => toggleSection(t.dataset.section, t));
@@ -3486,12 +3486,12 @@ async function viewModelerHome() {
       const n = countIn(p.id);
       const href = `#/modeler/p/${encodeURIComponent(p.id)}`;
       const owner = p.myRole === "owner";
-      const items = [{ label: "Open", icon: "→", href }];
-      if (AUTH.enabled && owner) items.push({ label: "Share…", icon: "👤", act: "share", data: { id: p.id } });
+      const items = [{ label: tr("application.row.open"), icon: "→", href }];
+      if (AUTH.enabled && owner) items.push({ label: tr("application.menu.share"), icon: "👤", act: "share", data: { id: p.id } });
       if (owner) items.push(
-        { label: "Rename", icon: "✎", act: "rename", data: { id: p.id, name: p.name } },
+        { label: tr("home.rename"), icon: "✎", act: "rename", data: { id: p.id, name: p.name } },
         { sep: true },
-        { label: "Delete", icon: "🗑", act: "del", data: { id: p.id, name: p.name }, danger: true },
+        { label: tr("common.delete"), icon: "🗑", act: "del", data: { id: p.id, name: p.name }, danger: true },
       );
       return `<tr>
         <td data-filter="${esc(p.name)}"><div class="artifact-name"><span class="mi-icon">📦</span><a href="${href}"><b>${esc(p.name)}</b></a>${visBadge(p)}</div></td>
@@ -3501,13 +3501,13 @@ async function viewModelerHome() {
       </tr>`;
     };
     const ungroupedRow = ungrouped.length ? `<tr>
-        <td><div class="artifact-name"><span class="mi-icon">🗂</span><a href="#/modeler/p/ungrouped">Not assigned</a>
-          <span class="muted" style="font-size:12px">· not in an application</span></div></td>
+        <td><div class="artifact-name"><span class="mi-icon">🗂</span><a href="#/modeler/p/ungrouped">${esc(tr("application.notAssigned"))}</a>
+          <span class="muted" style="font-size:12px">· ${esc(tr("home.notInApplication"))}</span></div></td>
         <td class="muted">${ungrouped.length}</td><td class="muted">—</td><td></td>
       </tr>` : "";
 
     projRows.innerHTML = (projects.map(projectRow).join("") + ungroupedRow) ||
-      `<tr><td colspan="4" class="empty">No applications yet. Use <b>Create new</b> to add one.</td></tr>`;
+      `<tr><td colspan="4" class="empty">${tr("home.empty", { create: esc(tr("create.button")) })}</td></tr>`;
     onMenuAction(projRows, (act, b) => {
       if (act === "rename") renameProject(b.dataset.id, b.dataset.name, renderProjects);
       if (act === "del") deleteProject(b.dataset.id, b.dataset.name, renderProjects);
@@ -3525,7 +3525,7 @@ async function viewModelerHome() {
   // groupByProcess collapsed them, so the row shows the latest and a version count.
   const deployRow = (g) => {
     const older = g.versions.length > 1
-      ? ` <span class="muted">· ${g.versions.length} versions</span>` : "";
+      ? ` <span class="muted">· ${esc(trPlural("home.versions", g.versions.length))}</span>` : "";
     const label = g.latest.name || g.processId;
     const sub = g.latest.name
       ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
@@ -3535,7 +3535,7 @@ async function viewModelerHome() {
     const inactive = g.latest.active === false;
     const frozen = frozenMark(g.latest);
     const badge = (inactive
-      ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
+      ? ` <span class="pill warn" title="${esc(tr("home.inactiveTitle"))}">${esc(tr("home.inactive"))}</span>`
       : "") +
       // A definition whose latest-bound decisions were frozen at its deploy does not
       // do what its binding reads (ADR-0423), and this row is where its owner would
@@ -3543,24 +3543,22 @@ async function viewModelerHome() {
       (frozen
         ? ` <span class="pill${frozen.behind ? " warn" : ""} frozen-mark" title="${esc(frozen.title)}">${esc(frozen.label)}</span>`
         : "");
-    const toggleLabel = inactive ? "Activate" : "Deactivate";
-    const toggleTitle = inactive
-      ? "Resume automatic starts (timer/message/signal start events)"
-      : "Pause automatic starts: keep it deployed but stop new instances from starting on their own";
+    const toggleLabel = tr(inactive ? "home.activate" : "home.deactivate");
+    const toggleTitle = tr(inactive ? "home.activateTitle" : "home.deactivateTitle");
     return `<tr>
       <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(label)}</b></a>${starButton("process", g.processId)}${badge}${sub}</td>
       <td>v${g.latest.version}${older}</td>
       <td class="muted">${esc(fmtTime(g.latest.deployedAt))}</td>
       <td style="text-align:right; white-space:nowrap">
-        <button class="btn ghost" data-toggle="${g.latest.key}" data-active="${inactive ? "1" : "0"}" title="${toggleTitle}">${toggleLabel}</button>
-        <a class="btn ghost" href="#/modeler/d/${g.latest.key}">Open</a>
-        <button class="btn ghost danger" data-del="${esc(g.processId)}" title="Delete this deployed process and all its versions">Delete</button>
+        <button class="btn ghost" data-toggle="${g.latest.key}" data-active="${inactive ? "1" : "0"}" title="${esc(toggleTitle)}">${esc(toggleLabel)}</button>
+        <a class="btn ghost" href="#/modeler/d/${g.latest.key}">${esc(tr("application.row.open"))}</a>
+        <button class="btn ghost danger" data-del="${esc(g.processId)}" title="${esc(tr("home.deleteTitle"))}">${esc(tr("common.delete"))}</button>
       </td>
     </tr>`;
   };
   const deployTable = (gs) => `<div class="card" style="padding:0">
       <table class="no-enhance">
-        <thead><tr><th>Process</th><th>Latest</th><th>Deployed</th><th></th></tr></thead>
+        <thead><tr><th>${esc(tr("home.th.process"))}</th><th>${esc(tr("home.th.latest"))}</th><th>${esc(tr("deployments.th.deployed"))}</th><th></th></tr></thead>
         <tbody>${gs.map(deployRow).join("")}</tbody>
       </table>
     </div>`;
@@ -3574,7 +3572,7 @@ async function viewModelerHome() {
       const groups = groupByProcess(procs);
       if (!groups.length) {
         rows.innerHTML = `<p class="empty" style="padding:14px">
-          Nothing deployed yet. <a href="#/modeler/new">Create a diagram</a>, save it as a draft, then Deploy &amp; run.</p>`;
+          ${tr("home.nothingDeployed", { link: `<a href="#/modeler/new">${esc(tr("home.createDiagram"))}</a>` })}</p>`;
         return;
       }
       // Group deployed definitions into the same project folders as design-time
@@ -3593,7 +3591,7 @@ async function viewModelerHome() {
       for (const p of projects) {
         if (byProject.has(p.id)) buckets.push({ id: p.id, name: p.name, icon: "📦", groups: byProject.get(p.id) });
       }
-      if (byProject.has("")) buckets.push({ id: "ungrouped", name: "Not assigned", icon: "🗂", groups: byProject.get("") });
+      if (byProject.has("")) buckets.push({ id: "ungrouped", name: tr("application.notAssigned"), icon: "🗂", groups: byProject.get("") });
 
       if (buckets.length === 1 && buckets[0].id === "ungrouped") {
         rows.innerHTML = deployTable(buckets[0].groups);
@@ -3635,7 +3633,7 @@ async function viewModelerHome() {
 // project actions). This is the tidy, Camunda-style per-project view (ADR-0034).
 async function viewProjectDetail(id) {
   const ungrouped = id === "ungrouped";
-  view.innerHTML = `<div id="pd"><p class="muted">Loading…</p></div>`;
+  view.innerHTML = `<div id="pd"><p class="muted">${esc(tr("application.loading"))}</p></div>`;
   const root = document.getElementById("pd");
 
   const render = async () => {
@@ -3661,12 +3659,12 @@ async function viewProjectDetail(id) {
     }
 
     const known = new Set(projects.map((p) => p.id));
-    const proj = ungrouped ? { id: "ungrouped", name: "Not assigned" } : projects.find((p) => p.id === id);
+    const proj = ungrouped ? { id: "ungrouped", name: tr("application.notAssigned") } : projects.find((p) => p.id === id);
     if (!proj) {
-      root.innerHTML = `<div class="card empty">This application no longer exists. <a href="#/modeler">Back to Modeler</a></div>`;
+      root.innerHTML = `<div class="card empty">${esc(tr("application.gone"))} <a href="#/modeler">${esc(tr("application.backToModeler"))}</a></div>`;
       return;
     }
-    setTitle(`${proj.name || "Application"} · Modeler`);
+    setTitle(`${proj.name || tr("application.fallbackName")} · Modeler`);
     const mine = (a) => ungrouped ? (!a.projectId || !known.has(a.projectId)) : a.projectId === id;
     const dl = drafts.filter(mine), rl = refs.filter(mine), fl = forms.filter(mine);
     // A decision draft is work that has not been written to the model
@@ -3686,9 +3684,9 @@ async function viewProjectDetail(id) {
     // "Move to" items for a row's action menu: Ungrouped plus every project, with
     // the current one marked. Forms have no move endpoint, so only drafts/refs get it.
     const moveItems = (currentPid, act, key) => [{
-      label: "Move to", icon: "&#128450;",
+      label: tr("application.row.moveTo"), icon: "&#128450;",
       items: [
-        { label: "Not assigned", icon: currentPid ? "" : "•", act, data: { pid: "", key } },
+        { label: tr("application.notAssigned"), icon: currentPid ? "" : "•", act, data: { pid: "", key } },
         ...projects.map((p) => ({ label: p.name, icon: p.id === currentPid ? "•" : "", act, data: { pid: p.id, key } })),
       ],
     }];
@@ -3703,34 +3701,34 @@ async function viewProjectDetail(id) {
 
     const draftRow = (d) => {
       const href = `#/modeler/draft/${encodeURIComponent(d.processId)}`;
-      const items = [{ label: "Open", icon: "→", href }];
+      const items = [{ label: tr("application.row.open"), icon: "→", href }];
       if (canWrite) items.push(
         ...moveItems(d.projectId, "movedraft", d.processId),
         { sep: true },
-        { label: "Delete", icon: "🗑", act: "deldraft", data: { key: d.processId }, danger: true },
+        { label: tr("common.delete"), icon: "🗑", act: "deldraft", data: { key: d.processId }, danger: true },
       );
       return `<tr>
         ${nameCell("BPMN", d.name || d.processId, esc(d.processId), href, starButton("process", d.processId))}
-        <td class="muted">Diagram</td>
+        <td class="muted">${esc(tr("application.type.diagram"))}</td>
         <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
     const refRow = (r) => {
       const href = `#/modeler/dmn/${encodeURIComponent(r.id)}`;
-      const items = [{ label: "View", icon: "▦", href }, { label: "Validate", icon: "✔", act: "valref", data: { id: r.id } }];
+      const items = [{ label: tr("application.row.view"), icon: "▦", href }, { label: tr("application.row.validate"), icon: "✔", act: "valref", data: { id: r.id } }];
       if (canWrite) items.unshift(
-        { label: "Edit", icon: "✎", act: "editref", data: { id: r.id, ref: r.modelRef, pid: r.projectId || "", name: r.name } });
+        { label: tr("common.edit"), icon: "✎", act: "editref", data: { id: r.id, ref: r.modelRef, pid: r.projectId || "", name: r.name } });
       if (canWrite) items.push(
         ...moveItems(r.projectId, "moveref", r.id),
         { sep: true },
-        { label: "Delete", icon: "🗑", act: "delref", data: { id: r.id }, danger: true },
+        { label: tr("common.delete"), icon: "🗑", act: "delref", data: { id: r.id }, danger: true },
       );
       // A decision carrying a draft says so where the author looks for it, because
       // what a publish would ship is the model, not that work.
-      const mark = draftFor.has(r.id) ? `<span class="chip draft-chip">Draft</span> ` : "";
+      const mark = draftFor.has(r.id) ? `<span class="chip draft-chip">${esc(tr("application.chip.draft"))}</span> ` : "";
       return `<tr>
-        ${nameCell("DMN", r.name, `${mark}temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href, starButton("decision", r.id))}
-        <td class="muted">Decision ref</td>
+        ${nameCell("DMN", r.name, `${mark}${esc(tr("application.ref.model", { model: r.modelRef }))} · <span data-refstatus="${esc(r.id)}">${esc(tr("application.ref.notValidated"))}</span>`, href, starButton("decision", r.id))}
+        <td class="muted">${esc(tr("application.type.decisionRef"))}</td>
         <td class="muted" data-sort="${r.createdAt || 0}">${esc(fmtTime(r.createdAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
@@ -3739,14 +3737,14 @@ async function viewProjectDetail(id) {
     // it (ADR-0321).
     const decDraftRow = (d) => {
       const href = `#/modeler/dmn/d/${encodeURIComponent(d.id)}`;
-      const items = [{ label: "Open", icon: "→", href }];
+      const items = [{ label: tr("application.row.open"), icon: "→", href }];
       if (canWrite) items.push(
         { sep: true },
-        { label: "Delete", icon: "🗑", act: "deldecdraft", data: { id: d.id }, danger: true },
+        { label: tr("common.delete"), icon: "🗑", act: "deldecdraft", data: { id: d.id }, danger: true },
       );
       return `<tr>
-        ${nameCell("DMN", d.name || "Decision", `<span class="chip draft-chip">Draft</span> not in the model yet — a publish does not carry it`, href, starButton("decision", d.id))}
-        <td class="muted">Decision</td>
+        ${nameCell("DMN", d.name || tr("application.type.decision"), `<span class="chip draft-chip">${esc(tr("application.chip.draft"))}</span> ${esc(tr("application.decisionDraft.sub"))}`, href, starButton("decision", d.id))}
+        <td class="muted">${esc(tr("application.type.decision"))}</td>
         <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
@@ -3755,29 +3753,29 @@ async function viewProjectDetail(id) {
     // the whole reason it is drawn (ADR-0330).
     const orphanModelRow = (m) => {
       const items = canWrite ? [
-        { label: "Add reference", icon: "+", act: "refmodel", data: { handle: m.handle, name: m.modelName || m.handle } },
+        { label: tr("application.row.addReference"), icon: "+", act: "refmodel", data: { handle: m.handle, name: m.modelName || m.handle } },
         { sep: true },
-        { label: "Delete model", icon: "🗑", act: "delmodel", data: { handle: m.handle }, danger: true },
+        { label: tr("application.row.deleteModel"), icon: "🗑", act: "delmodel", data: { handle: m.handle }, danger: true },
       ] : [];
-      const what = m.valid
-        ? `${m.decisions.length} decision${m.decisions.length === 1 ? "" : "s"}: ${esc(m.decisions.join(", "))}`
-        : "does not compile";
+      const what = esc(m.valid
+        ? trPlural("application.model.decisions", m.decisions.length, { names: m.decisions.join(", ") })
+        : tr("application.model.noCompile"));
       return `<tr>
-        ${nameCell("DMN", m.modelName || m.handle, `<span class="chip draft-chip">No reference</span> ${esc(m.handle)}.dmn · ${what}`, "")}
-        <td class="muted">Decision model</td>
+        ${nameCell("DMN", m.modelName || m.handle, `<span class="chip draft-chip">${esc(tr("application.chip.noReference"))}</span> ${esc(m.handle)}.dmn · ${what}`, "")}
+        <td class="muted">${esc(tr("application.type.decisionModel"))}</td>
         <td class="muted" data-sort="0">—</td>
         <td class="row-actions">${items.length ? dropdown("⋯", "icon-btn", items) : ""}</td></tr>`;
     };
     const formRow = (f) => {
       const href = `#/modeler/form/e/${encodeURIComponent(f.id)}`;
-      const items = [{ label: "Open", icon: "→", href }];
+      const items = [{ label: tr("application.row.open"), icon: "→", href }];
       if (canWrite) items.push(
         { sep: true },
-        { label: "Delete", icon: "🗑", act: "delform", data: { id: f.id }, danger: true },
+        { label: tr("common.delete"), icon: "🗑", act: "delform", data: { id: f.id }, danger: true },
       );
       return `<tr>
         ${nameCell("FORM", f.name || f.id, esc(f.id), href)}
-        <td class="muted">Form</td>
+        <td class="muted">${esc(tr("application.type.form"))}</td>
         <td class="muted" data-sort="${f.savedAt || 0}">${esc(fmtTime(f.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
@@ -3788,55 +3786,55 @@ async function viewProjectDetail(id) {
     const newDiagramHref = ungrouped ? "#/modeler/new" : `#/modeler/new/p/${encodeURIComponent(id)}`;
     const newFormHref = ungrouped ? "#/modeler/form/new" : `#/modeler/form/new/p/${encodeURIComponent(id)}`;
     const createItems = [
-      { header: "Blank resources" },
-      { label: "BPMN diagram", icon: "⚙", href: newDiagramHref },
-      { label: "Decision (DMN)", icon: "▦", act: "newdec" },
-      { label: "DMN model (upload .dmn)", icon: "▦", act: "newref" },
-      { label: "Form", icon: "▤", href: newFormHref },
+      { header: tr("create.blank") },
+      { label: tr("create.bpmn"), icon: "⚙", href: newDiagramHref },
+      { label: tr("create.dmn"), icon: "▦", act: "newdec" },
+      { label: tr("create.dmnUpload"), icon: "▦", act: "newref" },
+      { label: tr("create.form"), icon: "▤", href: newFormHref },
       { sep: true },
-      { label: "Import file…", icon: "📥", act: "import" },
-      { label: "Import MIM workflow (XOML)…", icon: "🔁", act: "import-mim" },
+      { label: tr("create.importFile"), icon: "📥", act: "import" },
+      { label: tr("create.importMim"), icon: "🔁", act: "import-mim" },
     ];
 
     const projItems = ungrouped ? [] : [
-      { label: "Export application…", icon: "🗂", act: "srcexport" },
-      ...(rl.length ? [{ label: "Validate DMN", icon: "✔", act: "valproj" }] : []),
-      ...(AUTH.enabled && isOwner ? [{ label: "Share…", icon: "👤", act: "shareproj" }] : []),
-      ...(isOwner ? [{ label: "Rename application", icon: "✎", act: "renproj" }] : []),
-      ...(isOwner ? [{ sep: true }, { label: "Delete application", icon: "🗑", act: "delproj", danger: true }] : []),
+      { label: tr("application.menu.export"), icon: "🗂", act: "srcexport" },
+      ...(rl.length ? [{ label: tr("application.menu.validate"), icon: "✔", act: "valproj" }] : []),
+      ...(AUTH.enabled && isOwner ? [{ label: tr("application.menu.share"), icon: "👤", act: "shareproj" }] : []),
+      ...(isOwner ? [{ label: tr("application.menu.rename"), icon: "✎", act: "renproj" }] : []),
+      ...(isOwner ? [{ sep: true }, { label: tr("application.menu.delete"), icon: "🗑", act: "delproj", danger: true }] : []),
     ];
     root.innerHTML = `
-      <div class="crumb"><a href="#/modeler">Home</a> › ${esc(proj.name)}</div>
+      <div class="crumb"><a href="#/modeler">${esc(tr("application.crumbHome"))}</a> › ${esc(proj.name)}</div>
       <div class="between">
         <h1>${esc(proj.name)}${ungrouped ? "" : " " + visBadge(proj)}</h1>
         <div class="row">
-          ${(!ungrouped && canWrite) ? `<button class="btn" id="pd-deploy" title="Publish this application as a new release and deploy it">Publish</button>` : ""}
-          ${canWrite ? dropdown("Create new", "btn neutral", createItems) : ""}
+          ${(!ungrouped && canWrite) ? `<button class="btn" id="pd-deploy" title="${esc(tr("application.publishTitle"))}">${esc(tr("application.publish"))}</button>` : ""}
+          ${canWrite ? dropdown(tr("create.button"), "btn neutral", createItems) : ""}
           ${projItems.length ? dropdown("⋯", "icon-btn", projItems) : ""}
         </div>
       </div>
       ${ungrouped ? "" : `<div class="tabs" id="pd-tabs">
-        <button data-pane="artifacts" class="active" title="Show this application’s design-time artifacts">Artifacts</button>
-        <button data-pane="deployments" title="Show what this application currently has deployed">Deployments</button>
-        <button data-pane="constants" title="The constants this application holds on this installation, which its processes read as application.NAME">Constants</button>
+        <button data-pane="artifacts" class="active" title="${esc(tr("application.tab.artifactsTitle"))}">${esc(tr("application.tab.artifacts"))}</button>
+        <button data-pane="deployments" title="${esc(tr("application.tab.deploymentsTitle"))}">${esc(tr("application.tab.deployments"))}</button>
+        <button data-pane="constants" title="${esc(tr("application.tab.constantsTitle"))}">${esc(tr("application.tab.constants"))}</button>
       </div>`}
       <div id="pane-artifacts">
         <div class="card" style="padding:0">
           <table data-dt-key="project-artifacts">
-            <thead><tr><th>Name</th><th>Type</th><th>Last changed</th><th></th></tr></thead>
+            <thead><tr><th>${esc(tr("application.th.name"))}</th><th>${esc(tr("application.th.type"))}</th><th>${esc(tr("application.th.changed"))}</th><th></th></tr></thead>
             <tbody id="pd-rows">${bodyRows ||
               `<tr><td colspan="4" class="empty">${canWrite
-                ? "No artifacts yet — use <b>Create new</b> to add one."
-                : "No artifacts in this application yet."}</td></tr>`}</tbody>
+                ? tr("application.empty.canWrite", { create: esc(tr("create.button")) })
+                : esc(tr("application.empty.readOnly"))}</td></tr>`}</tbody>
           </table>
         </div>
       </div>
       ${ungrouped ? "" : `<div id="pane-deployments" hidden>
-        <p class="muted" style="padding:2px 2px 12px">What this application currently has deployed on this server.</p>
-        <div id="pd-deployments"><p class="muted" style="padding:14px 2px">Loading…</p></div>
+        <p class="muted" style="padding:2px 2px 12px">${esc(tr("deployments.intro"))}</p>
+        <div id="pd-deployments"><p class="muted" style="padding:14px 2px">${esc(tr("application.loading"))}</p></div>
       </div>
       <div id="pane-constants" hidden>
-        <div id="pd-constants"><p class="muted" style="padding:14px 2px">Loading…</p></div>
+        <div id="pd-constants"><p class="muted" style="padding:14px 2px">${esc(tr("application.loading"))}</p></div>
       </div>`}`;
 
     // Tabs: Artifacts (design-time) and Deployments (what's live for this
@@ -3904,10 +3902,9 @@ function renderAppConstants(id) {
     url: `/api/v1/applications/${encodeURIComponent(id)}/constants`,
     prefix: "ac",
     ns: "application",
-    intro: `The constants this application holds on <b>this installation</b>, which its processes read as
-      <code>application.NAME</code>. DEV, INT and PROD each hold their own: an instance takes the one held here
-      when it starts, and a running instance keeps the one it started with.`,
-    none: "No deployed process of this application reads a constant from it.",
+    intro: tr("constants.app.intro"),
+    none: tr("constants.app.none"),
+    held: tr("constants.app.held"),
   });
 }
 
@@ -3919,10 +3916,9 @@ function renderServerConstants(host) {
     url: "/api/v1/server/constants",
     prefix: "sc",
     ns: "server",
-    intro: `The constants this installation holds for <b>every application</b>, which a process reads as
-      <code>server.NAME</code> — a tenant, an endpoint, anything that differs between DEV, INT and PROD and not
-      between applications. An instance takes the one held here when it starts.`,
-    none: "No deployed process reads a server constant.",
+    intro: tr("constants.server.intro"),
+    none: tr("constants.server.none"),
+    held: tr("constants.server.held"),
   });
 }
 
@@ -3949,10 +3945,10 @@ async function renderHeldConstants(host, o) {
   const canEdit = mayUse("admin");
   const dis = canEdit ? "" : " disabled";
   const states = {
-    set: `<span class="pill ok" title="This installation holds it">set</span>`,
-    missing: `<span class="pill err" title="Instances start without it, and a start from the Modeler, the Tasks app, a public link or the API is refused">missing</span>`,
-    fallback: `<span class="pill warn" title="Not held here; every process that reads it declares a fallback, which instances get">fallback</span>`,
-    "type-mismatch": `<span class="pill warn" title="Held here with another type than a process declares; instances get the type held here">type differs</span>`,
+    set: `<span class="pill ok" title="${esc(tr("constants.state.setTitle"))}">${esc(tr("constants.state.set"))}</span>`,
+    missing: `<span class="pill err" title="${esc(tr("constants.state.missingTitle"))}">${esc(tr("constants.state.missing"))}</span>`,
+    fallback: `<span class="pill warn" title="${esc(tr("constants.state.fallbackTitle"))}">${esc(tr("constants.state.fallback"))}</span>`,
+    "type-mismatch": `<span class="pill warn" title="${esc(tr("constants.state.typeMismatchTitle"))}">${esc(tr("constants.state.typeMismatch"))}</span>`,
   };
   const reqRows = view.required.map((r) => `<tr data-req="${esc(r.name)}">
       <td><b>${esc(r.name)}</b><div class="muted mono" style="font-size:12px">${esc(o.ns)}.${esc(r.name)}</div></td>
@@ -3968,31 +3964,32 @@ async function renderHeldConstants(host, o) {
   const typeOpts = (t) => HELD_CONSTANT_TYPES
     .map((x) => `<option value="${x}"${x === t ? " selected" : ""}>${x}</option>`).join("");
   const rowHTML = (v) => `<tr class="hc-row">
-      <td><input type="text" class="hc-name" value="${esc(v.name)}" placeholder="TENANT_ID" aria-label="Name"${dis}/></td>
-      <td><select class="hc-type" aria-label="Type"${dis}>${typeOpts(v.type || "string")}</select></td>
-      <td><input type="text" class="hc-value" value="${esc(v.value)}" placeholder="not set" aria-label="Value"${dis}/></td>
-      <td>${canEdit ? `<button type="button" class="icon-btn hc-del" title="Remove this constant" aria-label="Remove">✕</button>` : ""}</td>
+      <td><input type="text" class="hc-name" value="${esc(v.name)}" placeholder="TENANT_ID" aria-label="${esc(tr("constants.th.name"))}"${dis}/></td>
+      <td><select class="hc-type" aria-label="${esc(tr("constants.th.type"))}"${dis}>${typeOpts(v.type || "string")}</select></td>
+      <td><input type="text" class="hc-value" value="${esc(v.value)}" placeholder="${esc(tr("constants.notSet"))}" aria-label="${esc(tr("constants.th.value"))}"${dis}/></td>
+      <td>${canEdit ? `<button type="button" class="icon-btn hc-del" title="${esc(tr("constants.removeTitle"))}" aria-label="${esc(tr("constants.remove"))}">✕</button>` : ""}</td>
     </tr>`;
 
   host.innerHTML = `
     <p class="muted" style="padding:2px 2px 12px">${o.intro}</p>
-    <h3 style="margin:6px 0">Required by the deployed processes</h3>
+    <h3 style="margin:6px 0">${esc(tr("constants.required"))}</h3>
     ${view.required.length ? `<div class="card" style="padding:0"><table id="${p}-required">
-        <thead><tr><th>Name</th><th>Type</th><th>Processes</th><th>Here</th></tr></thead>
+        <thead><tr><th>${esc(tr("constants.th.name"))}</th><th>${esc(tr("constants.th.type"))}</th><th>${esc(tr("constants.th.processes"))}</th><th>${esc(tr("constants.th.here"))}</th></tr></thead>
         <tbody>${reqRows}</tbody></table></div>`
       : `<p class="muted">${esc(o.none)}</p>`}
-    <h3 style="margin:16px 0 6px">${o.ns === "server" ? "Server" : "Application"} constants on this installation</h3>
+    <h3 style="margin:16px 0 6px">${esc(o.held)}</h3>
     <div class="card" style="padding:0"><table id="${p}-table">
-      <thead><tr><th>Name</th><th>Type</th><th>Value</th><th></th></tr></thead>
+      <thead><tr><th>${esc(tr("constants.th.name"))}</th><th>${esc(tr("constants.th.type"))}</th><th>${esc(tr("constants.th.value"))}</th><th></th></tr></thead>
       <tbody id="${p}-rows">${rows.map(rowHTML).join("")}</tbody></table></div>
     ${canEdit
       ? `<div class="row" style="margin-top:10px">
-          <button type="button" class="btn neutral" id="${p}-add" title="Add a constant">+ Add constant</button>
-          <button type="button" class="btn" id="${p}-save" title="Save the constants on this installation">Save</button>
+          <button type="button" class="btn neutral" id="${p}-add" title="${esc(tr("constants.addTitle"))}">${esc(tr("constants.add"))}</button>
+          <button type="button" class="btn" id="${p}-save" title="${esc(tr("constants.saveTitle"))}">${esc(tr("common.save"))}</button>
           <span class="err" id="${p}-err"></span></div>`
-      : `<p class="muted" style="margin-top:8px">Only an administrator can change them.</p>`}
-    ${view.updatedAt ? `<p class="muted" style="font-size:12px">Last changed ${esc(fmtTime(view.updatedAt))}${
-      view.updatedBy ? ` by ${esc(view.updatedByName || view.updatedBy)}` : ""}</p>` : ""}`;
+      : `<p class="muted" style="margin-top:8px">${esc(tr("constants.adminOnly"))}</p>`}
+    ${view.updatedAt ? `<p class="muted" style="font-size:12px">${esc(view.updatedBy
+      ? tr("constants.lastChangedBy", { at: fmtTime(view.updatedAt), who: view.updatedByName || view.updatedBy })
+      : tr("constants.lastChanged", { at: fmtTime(view.updatedAt) }))}</p>` : ""}`;
   if (!canEdit) return;
 
   const tbody = host.querySelector(`#${p}-rows`);
@@ -4017,7 +4014,7 @@ async function renderHeldConstants(host, o) {
     btn.disabled = true;
     try {
       await api("PUT", o.url, { constants });
-      toast("Constants saved for this installation", "ok");
+      toast(tr("constants.saved"), "ok");
       await renderHeldConstants(host, o);
     } catch (err) {
       const errEl = host.querySelector(`#${p}-err`);
@@ -4049,10 +4046,10 @@ async function renderAppDeployments(id) {
   // deliberately, e.g. by a pinned call activity (ADR-0105).
   const stateCell = (d) => {
     const life = d.current
-      ? `<span class="pill ok" title="Newest version — starts new instances">current</span>`
-      : `<span class="pill" title="A newer version has taken over; running instances continue, this one no longer starts any by itself">superseded</span>`;
+      ? `<span class="pill ok" title="${esc(tr("deployments.currentTitle"))}">${esc(tr("deployments.current"))}</span>`
+      : `<span class="pill" title="${esc(tr("deployments.supersededTitle"))}">${esc(tr("deployments.superseded"))}</span>`;
     const paused = d.active ? "" :
-      ` <span class="pill warn" title="An operator paused this definition (ADR-0119)">paused</span>`;
+      ` <span class="pill warn" title="${esc(tr("deployments.pausedTitle"))}">${esc(tr("deployments.paused"))}</span>`;
     return `<td>${life}${paused}</td>`;
   };
 
@@ -4087,14 +4084,14 @@ async function renderAppDeployments(id) {
     // never shipped there, shipped and answering, shipped and not answering.
     let state, detail;
     if (!t.bound) {
-      state = `<span class="pill">not deployed</span>`;
+      state = `<span class="pill">${esc(tr("deployments.target.notDeployed"))}</span>`;
       detail = `<span class="muted">—</span>`;
     } else if (t.reachable) {
-      state = `<span class="pill ok">live</span>`;
+      state = `<span class="pill ok">${esc(tr("deployments.target.live"))}</span>`;
       detail = `<span class="chip">v${t.version || "?"}</span>`;
     } else {
-      state = `<span class="pill err">unreachable</span>`;
-      detail = `<span class="muted" title="${esc(t.error || "")}">${esc(t.error || "no answer")}</span>`;
+      state = `<span class="pill err">${esc(tr("deployments.target.unreachable"))}</span>`;
+      detail = `<span class="muted" title="${esc(t.error || "")}">${esc(t.error || tr("deployments.target.noAnswer"))}</span>`;
     }
     return `<tr${t.bound ? "" : ' class="muted-row"'}>
       <td><div class="artifact-name"><span class="mi-icon">🛰</span><b>${esc(t.targetName)}</b></div>
@@ -4107,10 +4104,10 @@ async function renderAppDeployments(id) {
   };
 
   const targetsSection = targets.length ? `
-    <h2 style="margin:22px 0 10px; font-size:15px">Deployment targets</h2>
+    <h2 style="margin:22px 0 10px; font-size:15px">${esc(tr("deployments.targets"))}</h2>
     <div class="card" style="padding:0">
       <table>
-        <thead><tr><th>Target</th><th>State</th><th>Version</th><th>Running</th><th>Finished</th></tr></thead>
+        <thead><tr><th>${esc(tr("deployments.th.target"))}</th><th>${esc(tr("deployments.th.state"))}</th><th>${esc(tr("deployments.th.version"))}</th><th>${esc(tr("deployments.th.running"))}</th><th>${esc(tr("deployments.th.finished"))}</th></tr></thead>
         <tbody>${targets.map(targetRow).join("")}</tbody>
       </table>
     </div>` : "";
@@ -4120,34 +4117,34 @@ async function renderAppDeployments(id) {
     <td class="muted" data-sort="${r.publishedAt || 0}">${esc(fmtTime(r.publishedAt))}</td>
     <td class="muted">${(r.members || []).length}</td>
     <td class="muted">${esc(r.note || "—")}</td>
-    <td class="row-actions"><button class="btn ghost sm" data-architecture="${r.version}" title="How this release reaches and is reached by its environment">Architecture</button>${targets.length
-      ? ` <button class="btn ghost sm" data-promote="${r.version}" title="Ship this release to a deployment target">Promote…</button>`
+    <td class="row-actions"><button class="btn ghost sm" data-architecture="${r.version}" title="${esc(tr("deployments.architectureTitle"))}">${esc(tr("deployments.architecture"))}</button>${targets.length
+      ? ` <button class="btn ghost sm" data-promote="${r.version}" title="${esc(tr("deployments.promoteTitle"))}">${esc(tr("deployments.promote"))}</button>`
       : ""}</td>
   </tr>`;
 
   host.innerHTML = `
     <div class="card" style="margin-bottom:16px">
       <div class="stats">
-        <div class="stat"><b>${view.version ? "v" + view.version : "—"}</b><span>Published version</span></div>
-        <div class="stat"><b>${view.processes}</b><span>Process${view.processes === 1 ? "" : "es"}</span></div>
-        <div class="stat"><b>${view.running}</b><span>Running instances</span></div>
-        <div class="stat"><b>${view.finished}</b><span>Finished instances</span></div>
+        <div class="stat"><b>${view.version ? "v" + view.version : "—"}</b><span>${esc(tr("deployments.stat.published"))}</span></div>
+        <div class="stat"><b>${view.processes}</b><span>${esc(trPlural("deployments.stat.processes", view.processes))}</span></div>
+        <div class="stat"><b>${view.running}</b><span>${esc(tr("deployments.stat.running"))}</span></div>
+        <div class="stat"><b>${view.finished}</b><span>${esc(tr("deployments.stat.finished"))}</span></div>
       </div>
     </div>
     <div class="card" style="padding:0">
       <table>
-        <thead><tr><th>Definition</th><th>Version</th><th>State</th><th>Running</th><th>Finished</th><th>Deployed</th></tr></thead>
+        <thead><tr><th>${esc(tr("deployments.th.definition"))}</th><th>${esc(tr("deployments.th.version"))}</th><th>${esc(tr("deployments.th.state"))}</th><th>${esc(tr("deployments.th.running"))}</th><th>${esc(tr("deployments.th.finished"))}</th><th>${esc(tr("deployments.th.deployed"))}</th></tr></thead>
         <tbody>${orderedDefs.map(defRow).join("") ||
-          `<tr><td colspan="6" class="empty">Nothing deployed yet — use <b>Publish</b> to ship this application.</td></tr>`}</tbody>
+          `<tr><td colspan="6" class="empty">${tr("deployments.empty", { publish: esc(tr("application.publish")) })}</td></tr>`}</tbody>
       </table>
     </div>
     ${targetsSection}
-    <h2 style="margin:22px 0 10px; font-size:15px">Release history</h2>
+    <h2 style="margin:22px 0 10px; font-size:15px">${esc(tr("deployments.releases"))}</h2>
     <div class="card" style="padding:0" id="pd-releases">
       <table>
-        <thead><tr><th>Version</th><th>Published</th><th>Artifacts</th><th>Note</th><th></th></tr></thead>
+        <thead><tr><th>${esc(tr("deployments.th.version"))}</th><th>${esc(tr("deployments.th.published"))}</th><th>${esc(tr("deployments.th.artifacts"))}</th><th>${esc(tr("deployments.th.note"))}</th><th></th></tr></thead>
         <tbody>${releases.map(relRow).join("") ||
-          `<tr><td colspan="5" class="empty">No releases yet.</td></tr>`}</tbody>
+          `<tr><td colspan="5" class="empty">${esc(tr("deployments.releasesEmpty"))}</td></tr>`}</tbody>
       </table>
     </div>`;
 
@@ -4175,28 +4172,34 @@ async function openReleaseArchitecture(appID, appName, version) {
   // §3); the answer's own default is what is ticked first.
   const recorded = (info.layers && info.layers.recorded) || ["application"];
   let shown = (info.layers && info.layers.shown) || recorded;
-  const layerNames = { strategy: "Strategy", business: "Business", application: "Application", data: "Data", technology: "Technology" };
+  const layerNames = {
+    strategy: tr("deployments.architecture.layer.strategy"),
+    business: tr("deployments.architecture.layer.business"),
+    application: tr("deployments.architecture.layer.application"),
+    data: tr("deployments.architecture.layer.data"),
+    technology: tr("deployments.architecture.layer.technology"),
+  };
   const file = `architecture-${(appName || "application").replace(/[^A-Za-z0-9._-]+/g, "-")}-v${version}`;
 
   const ov = document.createElement("div");
   ov.className = "modal-ov";
   ov.innerHTML = `
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Architecture of v${version}" style="width:min(1180px, 96vw)">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="${esc(tr("deployments.architecture.title", { version }))}" style="width:min(1180px, 96vw)">
       <div class="modal-head">
-        <h2>Architecture of v${version}</h2>
-        <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
+        <h2>${esc(tr("deployments.architecture.title", { version }))}</h2>
+        <button type="button" class="icon-btn" data-x aria-label="${esc(tr("common.close"))}" title="${esc(tr("common.close"))}">✕</button>
       </div>
       ${recorded.length > 1 ? `<div class="row" data-layers style="gap:16px; padding:8px 16px 0">
-        <span class="muted small">Layers</span>
+        <span class="muted small">${esc(tr("deployments.architecture.layers"))}</span>
         ${recorded.map((l) => `<label class="field inline" style="margin:0"><input type="checkbox" value="${esc(l)}"${shown.includes(l) ? " checked" : ""}> ${esc(layerNames[l] || l)}</label>`).join("")}
       </div>` : ""}
       <div class="modal-body" style="overflow:auto; background:#fff">
-        <img alt="Architecture sketch of release v${version}" style="display:block; max-width:100%; height:auto">
+        <img alt="${esc(tr("deployments.architecture.alt", { version }))}" style="display:block; max-width:100%; height:auto">
       </div>
       <div class="modal-foot">
-        <span class="muted small">Taken when the release was recorded on this installation. Endpoints and worker instances you may not see are withheld.</span>
-        <a class="btn ghost" data-xml download="${esc(file)}.xml" title="ArchiMate Open Exchange document, for Archi and other architecture tools">ArchiMate (.xml)</a>
-        <a class="btn" data-svg download="${esc(file)}.svg" title="The sketch as a standalone image">Image (.svg)</a>
+        <span class="muted small">${esc(tr("deployments.architecture.foot"))}</span>
+        <a class="btn ghost" data-xml download="${esc(file)}.xml" title="${esc(tr("deployments.architecture.xmlTitle"))}">ArchiMate (.xml)</a>
+        <a class="btn" data-svg download="${esc(file)}.svg" title="${esc(tr("deployments.architecture.svgTitle"))}">${esc(tr("deployments.architecture.svg"))}</a>
       </div>
     </div>`;
   document.body.appendChild(ov);
@@ -4222,7 +4225,7 @@ async function openReleaseArchitecture(appID, appName, version) {
       const picked = [...ov.querySelectorAll("[data-layers] input")].filter((b) => b.checked).map((b) => b.value);
       if (!picked.length) {
         box.checked = true;
-        toast("A sketch needs at least one layer", "err");
+        toast(tr("deployments.architecture.needLayer"), "err");
         return;
       }
       shown = picked;
@@ -4244,36 +4247,36 @@ async function openReleaseArchitecture(appID, appName, version) {
 // peer is reported as that peer's, not as a failed action.
 async function promoteRelease(appID, version, targets) {
   const picked = await openPickModal({
-    title: `Promote v${version}`,
-    label: "Target",
+    title: tr("deployments.promote.title", { version }),
+    label: tr("deployments.promote.label"),
     options: targets.map((t) => ({ value: t.targetId, label: t.targetName })),
-    okLabel: "Promote",
-    hint: "The release is frozen, so this sends exactly what was published.",
+    okLabel: tr("deployments.promote.ok"),
+    hint: tr("deployments.promote.hint"),
   });
   if (!picked) return;
   const pick = targets.find((t) => t.targetId === picked.option.value);
-  if (!pick) { toast("No such target", "err"); return; }
+  if (!pick) { toast(tr("deployments.promote.noTarget"), "err"); return; }
 
   try {
     const res = await api("POST",
       `/api/v1/applications/${encodeURIComponent(appID)}/releases/${version}/promote`,
       { targetIds: [pick.targetId] });
     const r = (res.results || [])[0];
-    if (r && r.ok) toast(`Promoted v${version} to ${pick.targetName}`, "ok");
-    else toast(`${pick.targetName}: ${(r && r.error) || "promotion failed"}`, "err");
+    if (r && r.ok) toast(tr("deployments.promote.done", { version, target: pick.targetName }), "ok");
+    else toast(`${pick.targetName}: ${(r && r.error) || tr("deployments.promote.failedHere")}`, "err");
   } catch (e) {
-    toast("promotion failed: " + e.message, "err");
+    toast(tr("deployments.promote.failed", { error: e.message }), "err");
   }
   await renderAppDeployments(appID);
 }
 
 async function deleteDraft(processId, reload) {
-  if (!window.confirm(`Delete draft "${processId}"?`)) return;
+  if (!window.confirm(tr("artifact.draft.confirmDelete", { id: processId }))) return;
   try {
     await api("DELETE", `/api/v1/drafts/${encodeURIComponent(processId)}`);
-    toast(`Deleted draft "${processId}"`, "ok");
+    toast(tr("artifact.draft.deleted", { id: processId }), "ok");
   } catch (e) {
-    toast("could not delete draft: " + e.message, "err");
+    toast(tr("artifact.draft.deleteFailed", { error: e.message }), "err");
   }
   await reload();
 }
@@ -4287,7 +4290,7 @@ async function deleteProcess(processId, groups, reload) {
   const group = groups.find((g) => g.processId === processId);
   if (!group) return;
   const n = group.versions.length;
-  if (!window.confirm(`Delete process "${processId}"${n > 1 ? ` and all ${n} versions` : ""}? This cannot be undone.`)) return;
+  if (!window.confirm(tr(n > 1 ? "home.process.confirmDeleteAll" : "home.process.confirmDelete", { id: processId, n }))) return;
   let refused = [];
   for (const v of group.versions) {
     try { await api("DELETE", `/api/v1/processes/${v.key}`); }
@@ -4296,8 +4299,8 @@ async function deleteProcess(processId, groups, reload) {
   const forcible = refused.filter((r) => r.e.status === 409);
   if (forcible.length) {
     const reasons = [...new Set(forcible.map((r) => forceReason(r.e.message)))].join("\n\n");
-    const ask = `The server refused to delete ${forcible.length === 1 ? "a version" : `${forcible.length} versions`} of "${processId}":\n\n${reasons}\n\n` +
-      "Delete anyway? Its running instances are cancelled, and it is removed even if a catalogue product or an order still needs it. This cannot be undone.";
+    const ask = `${trPlural("home.process.refused", forcible.length, { id: processId })}\n\n${reasons}\n\n` +
+      tr("home.process.force");
     if (window.confirm(ask)) {
       const still = [];
       for (const r of forcible) {
@@ -4308,9 +4311,9 @@ async function deleteProcess(processId, groups, reload) {
     }
   }
   if (refused.length) {
-    toast(`Could not delete ${refused.length} version(s) of "${processId}": ${forceReason(refused[0].e.message)}`, "err");
+    toast(trPlural("home.process.deleteFailed", refused.length, { id: processId, error: forceReason(refused[0].e.message) }), "err");
   } else {
-    toast(`Deleted "${processId}"`, "ok");
+    toast(tr("home.process.deleted", { id: processId }), "ok");
   }
   await reload();
 }
@@ -4323,9 +4326,9 @@ async function toggleProcessActive(key, inactive, reload) {
   const activate = inactive; // clicking "Activate" on an inactive one activates it
   try {
     await api("PUT", `/api/v1/processes/${key}/active`, { active: activate });
-    toast(activate ? "Process activated" : "Process deactivated — automatic starts paused", "ok");
+    toast(tr(activate ? "home.process.activated" : "home.process.deactivated"), "ok");
   } catch (e) {
-    toast("could not change activation: " + e.message, "err");
+    toast(tr("home.process.toggleFailed", { error: e.message }), "err");
   }
   await reload();
 }
@@ -4336,26 +4339,26 @@ async function toggleProcessActive(key, inactive, reload) {
 // UI is on the new names. The artifact tag stays `projectId` — ADR-0128 renames
 // the API/UI boundary only, not the on-disk shape.
 async function createProject(reload) {
-  const name = window.prompt("Application name");
+  const name = window.prompt(tr("application.namePrompt"));
   if (name == null) return; // cancelled
   const trimmed = name.trim();
-  if (!trimmed) { toast("Application name is required", "err"); return; }
+  if (!trimmed) { toast(tr("application.nameRequired"), "err"); return; }
   try {
     await api("POST", "/api/v1/applications", { name: trimmed });
-    toast(`Created application "${trimmed}"`, "ok");
-  } catch (e) { toast("could not create application: " + e.message, "err"); }
+    toast(tr("application.created", { name: trimmed }), "ok");
+  } catch (e) { toast(tr("application.createFailed", { error: e.message }), "err"); }
   await reload();
 }
 
 async function renameProject(id, current, reload) {
-  const name = window.prompt("Rename application", current);
+  const name = window.prompt(tr("application.menu.rename"), current);
   if (name == null) return;
   const trimmed = name.trim();
-  if (!trimmed) { toast("Application name is required", "err"); return; }
+  if (!trimmed) { toast(tr("application.nameRequired"), "err"); return; }
   try {
     await api("PATCH", `/api/v1/applications/${encodeURIComponent(id)}`, { name: trimmed });
-    toast("Renamed application", "ok");
-  } catch (e) { toast("could not rename application: " + e.message, "err"); }
+    toast(tr("application.renamed"), "ok");
+  } catch (e) { toast(tr("application.renameFailed", { error: e.message }), "err"); }
   await reload();
 }
 
@@ -4372,8 +4375,8 @@ async function deleteProject(id, name, reload) {
   if (!mode) return;
   try {
     await api("DELETE", mode === "purge" ? `${path}?purge=true` : path);
-    toast(mode === "purge" ? `Deleted application "${name}" and everything in it` : `Deleted application "${name}"`, "ok");
-  } catch (e) { toast("could not delete application: " + e.message, "err"); }
+    toast(tr(mode === "purge" ? "application.deletedAll" : "application.deleted", { name }), "ok");
+  } catch (e) { toast(tr("application.deleteFailed", { error: e.message }), "err"); }
   await reload();
 }
 
@@ -4391,8 +4394,8 @@ function visBadge(p) {
   if (!AUTH.enabled) return "";
   const n = (p.members || []).length;
   if (p.visibility === "shared")
-    return `<span class="pill vis shared" title="Shared with ${n} ${n === 1 ? "person" : "people"}">Shared${n ? " · " + n : ""}</span>`;
-  return `<span class="pill vis" title="Only the owner can see this project">Private</span>`;
+    return `<span class="pill vis shared" title="${esc(trPlural("application.vis.sharedTitle", n))}">${esc(tr("application.vis.shared"))}${n ? " · " + n : ""}</span>`;
+  return `<span class="pill vis" title="${esc(tr("application.vis.privateTitle"))}">${esc(tr("application.vis.private"))}</span>`;
 }
 
 // shareProject loads the principals directory (to resolve member names and
@@ -4460,15 +4463,15 @@ function openShareModal(proj, users, degraded, reload) {
   const ov = document.createElement("div");
   ov.className = "modal-ov";
   ov.innerHTML = `
-    <div class="modal share-modal" role="dialog" aria-modal="true" aria-label="Share project">
+    <div class="modal share-modal" role="dialog" aria-modal="true" aria-label="${esc(tr("share.aria"))}">
       <div class="modal-head">
-        <h2>Share “${esc(p.name)}”</h2>
-        <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
+        <h2>${esc(tr("share.title", { name: p.name }))}</h2>
+        <button type="button" class="icon-btn" data-x aria-label="${esc(tr("common.close"))}" title="${esc(tr("common.close"))}">✕</button>
       </div>
       <div class="modal-body" id="share-body"></div>
       <div class="modal-foot">
-        <span class="muted small">Sharing controls who can view and edit this project’s diagrams. Running instances are not affected.</span>
-        <button type="button" class="btn" data-done title="Close this dialog">Done</button>
+        <span class="muted small">${esc(tr("share.foot"))}</span>
+        <button type="button" class="btn" data-done title="${esc(tr("share.doneTitle"))}">${esc(tr("share.done"))}</button>
       </div>
     </div>`;
   document.body.appendChild(ov);
@@ -4483,8 +4486,8 @@ function openShareModal(proj, users, degraded, reload) {
 
   const roleSelect = (value, attrs) =>
     `<select ${attrs} class="role-sel">
-       <option value="viewer"${value === "viewer" ? " selected" : ""}>Viewer</option>
-       <option value="editor"${value === "editor" ? " selected" : ""}>Editor</option>
+       <option value="viewer"${value === "viewer" ? " selected" : ""}>${esc(tr("share.role.viewer"))}</option>
+       <option value="editor"${value === "editor" ? " selected" : ""}>${esc(tr("share.role.editor"))}</option>
      </select>`;
 
   const renderBody = () => {
@@ -4495,38 +4498,38 @@ function openShareModal(proj, users, degraded, reload) {
     const personRow = (id, right, extra = "", isGroup = false) => `
       <div class="member-row"${extra}>
         <span class="avatar sm">${esc(initials(nameOf(id)))}</span>
-        <div class="member-id">${esc(nameOf(id))}${isGroup ? ' <span class="muted">· group</span>' : (id === me ? ' <span class="muted">(you)</span>' : "")}</div>
+        <div class="member-id">${esc(nameOf(id))}${isGroup ? ` <span class="muted">· ${esc(tr("share.group"))}</span>` : (id === me ? ` <span class="muted">(${esc(tr("share.you"))})</span>` : "")}</div>
         ${right}
       </div>`;
 
-    const ownerRow = personRow(p.ownerId, `<span class="muted">Owner</span>`);
+    const ownerRow = personRow(p.ownerId, `<span class="muted">${esc(tr("share.owner"))}</span>`);
     const memberRows = members.map((m) => personRow(
       m.ref.id,
       `${roleSelect(m.role, `data-role-for="${esc(m.ref.id)}"`)}
-       <button type="button" class="icon-btn danger" data-remove="${esc(m.ref.id)}" title="Remove access">✕</button>`,
+       <button type="button" class="icon-btn danger" data-remove="${esc(m.ref.id)}" title="${esc(tr("share.removeTitle"))}">✕</button>`,
       ` data-uid="${esc(m.ref.id)}"`,
       m.ref.type === "group",
     )).join("");
 
     const addControl = degraded
       ? `<div class="add-row">
-           <input class="field" id="add-uid" placeholder="User ID (usr_…)" autocomplete="off">
+           <input class="field" id="add-uid" placeholder="${esc(tr("share.userIdPlaceholder"))}" autocomplete="off">
            ${roleSelect("viewer", 'id="add-role"')}
-           <button type="button" class="btn" id="add-btn" title="Give this person access">Add</button>
+           <button type="button" class="btn" id="add-btn" title="${esc(tr("share.addTitle"))}">${esc(tr("share.add"))}</button>
          </div>
-         <p class="muted small">Could not load the directory — add by user ID for now.</p>`
+         <p class="muted small">${esc(tr("share.directoryFailed"))}</p>`
       : eligible.length
         ? `<div class="add-row">
              <select class="field" id="add-uid">
-               ${eligible.map((u) => `<option value="${esc(u.id)}">${esc(u.name)}${u.type === "group" ? " (group)" : ""}</option>`).join("")}
+               ${eligible.map((u) => `<option value="${esc(u.id)}">${esc(u.type === "group" ? tr("share.groupOption", { name: u.name }) : u.name)}</option>`).join("")}
              </select>
              ${roleSelect("viewer", 'id="add-role"')}
-             <button type="button" class="btn" id="add-btn" title="Give this person or group access">Add</button>
+             <button type="button" class="btn" id="add-btn" title="${esc(tr("share.addTitleGroup"))}">${esc(tr("share.add"))}</button>
            </div>`
-        : `<p class="muted small">Everyone already has access.</p>`;
+        : `<p class="muted small">${esc(tr("share.everyone"))}</p>`;
 
     const privateHint = p.visibility !== "shared" && members.length
-      ? `<p class="muted small">Members are kept but have no access while the project is private.</p>`
+      ? `<p class="muted small">${esc(tr("share.privateHint"))}</p>`
       : "";
 
     // Ownership can be handed to any other user (never a group — ownership is a
@@ -4536,31 +4539,31 @@ function openShareModal(proj, users, degraded, reload) {
     const canTransfer = p.myRole === "owner" && !degraded && xferTargets.length > 0;
     const transferSec = canTransfer
       ? `<div class="share-sec">
-           <div class="mlabel">Transfer ownership</div>
+           <div class="mlabel">${esc(tr("share.transfer.title"))}</div>
            <div class="add-row">
              <select class="field" id="xfer-uid">
                ${xferTargets.map((u) => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join("")}
              </select>
-             <button type="button" class="btn danger" id="xfer-btn" title="Hand this application over to another person">Transfer…</button>
+             <button type="button" class="btn danger" id="xfer-btn" title="${esc(tr("share.transfer.buttonTitle"))}">${esc(tr("share.transfer.button"))}</button>
            </div>
-           <p class="muted small">The new owner gains full control.${me === p.ownerId ? " You will lose owner access unless they share it back." : ""}</p>
+           <p class="muted small">${esc(tr("share.transfer.hint"))}${me === p.ownerId ? " " + esc(tr("share.transfer.hintSelf")) : ""}</p>
          </div>`
       : "";
 
     body.innerHTML = `
       <div class="share-sec">
-        <div class="seg" role="group" aria-label="Visibility">
-          <button type="button" data-vis="private" class="${p.visibility !== "shared" ? "active" : ""}" title="Keep this project private to its owner and members">Private</button>
-          <button type="button" data-vis="shared" class="${p.visibility === "shared" ? "active" : ""}" title="Make this project visible to the people you add below">Shared</button>
+        <div class="seg" role="group" aria-label="${esc(tr("share.visibility"))}">
+          <button type="button" data-vis="private" class="${p.visibility !== "shared" ? "active" : ""}" title="${esc(tr("share.privateTitle"))}">${esc(tr("application.vis.private"))}</button>
+          <button type="button" data-vis="shared" class="${p.visibility === "shared" ? "active" : ""}" title="${esc(tr("share.sharedTitle"))}">${esc(tr("application.vis.shared"))}</button>
         </div>
         ${privateHint}
       </div>
       <div class="share-sec">
-        <div class="mlabel">People with access</div>
+        <div class="mlabel">${esc(tr("share.people"))}</div>
         ${ownerRow}${memberRows}
       </div>
       <div class="share-sec">
-        <div class="mlabel">Add people</div>
+        <div class="mlabel">${esc(tr("share.addPeople"))}</div>
         ${addControl}
       </div>
       ${transferSec}
@@ -4574,14 +4577,20 @@ function openShareModal(proj, users, degraded, reload) {
   // fetched and shown only for an owner, and re-fetched after every mutation below so
   // a share/revoke/visibility change appears without reopening the dialog.
   const auditLine = (e) => {
-    const who = `<b>${esc(e.actorName || e.actorId || "someone")}</b>`;
+    const who = `<b>${esc(e.actorName || e.actorId || tr("share.audit.someone"))}</b>`;
     const subj = () => esc(nameOf(e.subjectId));
+    // The server records ids — a role, a visibility — and these are the words for them.
+    const word = (prefix, id) => {
+      const key = prefix + id;
+      const s = tr(key);
+      return esc(s === key ? id : s);
+    };
     switch (e.action) {
-      case "share": return `${who} shared with ${subj()} as ${esc(e.role)}`;
-      case "unshare": return `${who} removed ${subj()}`;
-      case "visibility": return `${who} set visibility to ${esc(e.to)}`;
-      case "transfer": return `${who} transferred ownership to ${esc(nameOf(e.to))}`;
-      default: return `${who} changed access`;
+      case "share": return tr("share.audit.share", { who, subject: subj(), role: word("share.role.", e.role) });
+      case "unshare": return tr("share.audit.unshare", { who, subject: subj() });
+      case "visibility": return tr("share.audit.visibility", { who, to: word("share.audit.vis.", e.to) });
+      case "transfer": return tr("share.audit.transfer", { who, to: esc(nameOf(e.to)) });
+      default: return tr("share.audit.changed", { who });
     }
   };
   const refreshActivity = async () => {
@@ -4594,13 +4603,13 @@ function openShareModal(proj, users, degraded, reload) {
     // constants is in the same history but belongs to the audit log, not here.
     events = (events || []).filter((e) => e.action !== "constants");
     if (!events || !events.length) {
-      host.innerHTML = `<div class="mlabel">Activity</div><p class="muted small">No access changes recorded yet.</p>`;
+      host.innerHTML = `<div class="mlabel">${esc(tr("share.activity"))}</div><p class="muted small">${esc(tr("share.activity.none"))}</p>`;
       return;
     }
     const rows = events.slice(0, 10).map((e) =>
       `<div class="audit-row"><span>${auditLine(e)}</span><span class="muted small">${esc(fmtTime(e.at))}</span></div>`).join("");
-    const more = events.length > 10 ? `<p class="muted small">Showing the 10 most recent of ${events.length} changes.</p>` : "";
-    host.innerHTML = `<div class="mlabel">Activity</div>${rows}${more}`;
+    const more = events.length > 10 ? `<p class="muted small">${esc(tr("share.activity.more", { n: events.length }))}</p>` : "";
+    host.innerHTML = `<div class="mlabel">${esc(tr("share.activity"))}</div>${rows}${more}`;
   };
 
   const apply = async (fn) => { try { p = await fn(); renderBody(); } catch (e) { toast(e.message, "err"); } };
@@ -4627,14 +4636,12 @@ function openShareModal(proj, users, degraded, reload) {
     if (!uid) return;
     const name = nameOf(uid);
     const iAmOwner = me === p.ownerId;
-    const msg = `Transfer ownership of “${p.name}” to ${name}?\n\n` +
-      (iAmOwner
-        ? "You will no longer be the owner and lose access unless the new owner shares it back."
-        : "This replaces the current owner.");
+    const msg = tr("share.transfer.confirm", { app: p.name, name }) + "\n\n" +
+      tr(iAmOwner ? "share.transfer.confirmSelf" : "share.transfer.confirmOther");
     if (!window.confirm(msg)) return;
     try {
       await api("PATCH", `/api/v1/applications/${encodeURIComponent(p.id)}`, { ownerId: uid });
-      toast(`Ownership transferred to ${name}`, "ok");
+      toast(tr("share.transfer.done", { name }), "ok");
       close();
     } catch (e) { toast(e.message, "err"); }
   };
@@ -4663,7 +4670,7 @@ function openShareModal(proj, users, degraded, reload) {
 async function moveDraft(processId, projectId, reload) {
   try {
     await api("PATCH", `/api/v1/drafts/${encodeURIComponent(processId)}`, { projectId });
-  } catch (e) { toast("could not move draft: " + e.message, "err"); }
+  } catch (e) { toast(tr("artifact.draft.moveFailed", { error: e.message }), "err"); }
   await reload();
 }
 
@@ -4694,8 +4701,8 @@ function pickFile(accept) {
 }
 
 // createDecision opens the decision editor on a seed model, filing what it saves
-// under the application. It is the decision counterpart of "BPMN diagram" in the
-// same menu — an application can be built out of decisions with no diagram in it at
+// under the application. It is the decision counterpart of the BPMN diagram entry in
+// the same menu — an application can be built out of decisions with no diagram in it at
 // all, and publishing it deploys them as runtime artifacts (ADR-0319).
 //
 // It navigates rather than opening a window over this one: a decision is edited on a
@@ -4720,22 +4727,22 @@ async function createDmnRef(projectId, reload) {
     const xml = await file.text();
     up = await api("POST", "/api/v1/dmn-models?name=" + encodeURIComponent(file.name), xml, true);
   } catch (e) {
-    const modelRef = window.prompt("Couldn't upload the file (models may be served by a remote temis service).\nReference an existing temis model by name instead:");
-    if (!modelRef || !modelRef.trim()) { toast("DMN model not added: " + e.message, "err"); return; }
-    const refName = (window.prompt("Reference name (how it shows in atlas)", modelRef.trim()) || modelRef).trim();
+    const modelRef = window.prompt(tr("artifact.model.uploadPrompt"));
+    if (!modelRef || !modelRef.trim()) { toast(tr("artifact.model.notAdded", { error: e.message }), "err"); return; }
+    const refName = (window.prompt(tr("artifact.ref.namePrompt"), modelRef.trim()) || modelRef).trim();
     try {
       await api("POST", "/api/v1/dmnrefs", { name: refName, modelRef: modelRef.trim(), projectId });
-      toast(`Added DMN reference "${refName}"`, "ok");
+      toast(tr("artifact.ref.added", { name: refName }), "ok");
       await reload();
-    } catch (e2) { toast("could not add DMN reference: " + e2.message, "err"); }
+    } catch (e2) { toast(tr("artifact.ref.addFailed", { error: e2.message }), "err"); }
     return;
   }
   const name = (up.modelName || file.name.replace(/\.(dmn|xml)$/i, "") || "Decision").trim();
   const n = (up.decisions || []).length;
   try {
     await api("POST", "/api/v1/dmnrefs", { name, modelRef: up.modelRef, projectId });
-    toast(`Added DMN model "${name}" — ${n} decision${n === 1 ? "" : "s"}`, "ok");
-  } catch (e) { toast("could not add DMN reference: " + e.message, "err"); return; }
+    toast(trPlural("artifact.model.added", n, { name }), "ok");
+  } catch (e) { toast(tr("artifact.ref.addFailed", { error: e.message }), "err"); return; }
   await reload();
 }
 
@@ -4777,14 +4784,14 @@ async function importArtifact(projectId, reload) {
   const ext = (file.name.split(".").pop() || "").toLowerCase();
   const base = file.name.replace(/\.[^.]+$/, "");
   let text;
-  try { text = await file.text(); } catch (e) { toast("Import failed: " + e.message, "err"); return; }
+  try { text = await file.text(); } catch (e) { toast(tr("import.failed", { error: e.message }), "err"); return; }
   try {
     // Form — a form-js JSON schema (.form, or a .json whose object carries components).
     if (ext === "form" || ext === "json") {
       let schema;
-      try { schema = JSON.parse(text); } catch { throw new Error("not valid JSON"); }
-      if (!schema || typeof schema !== "object" || Array.isArray(schema)) throw new Error("not a form (expected a JSON object)");
-      if (!Array.isArray(schema.components)) throw new Error("not a form-js form (no components array)");
+      try { schema = JSON.parse(text); } catch { throw new Error(tr("import.notJson")); }
+      if (!schema || typeof schema !== "object" || Array.isArray(schema)) throw new Error(tr("import.notForm"));
+      if (!Array.isArray(schema.components)) throw new Error(tr("import.notFormJs"));
       const id = (typeof schema.id === "string" && schema.id.trim()) || ("form-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
       const name = (typeof schema.name === "string" && schema.name.trim()) || base || id;
       // "from" empty says this is a new form, so an id something already holds comes
@@ -4795,9 +4802,9 @@ async function importArtifact(projectId, reload) {
       const savedForm = await saveOrConfirmOverwrite(
         (from) => api("POST", "/api/v1/forms",
           from === null ? { id, name, schema, projectId } : { id, name, schema, projectId, from }),
-        `A form with the id “${id}” already exists. Replace it with this file?`);
-      if (!savedForm) { toast(`Import cancelled — the form “${id}” you already had was kept`); return; }
-      toast(`Imported form “${name}”`, "ok");
+        tr("import.formExists", { id }));
+      if (!savedForm) { toast(tr("import.formKept", { id })); return; }
+      toast(tr("import.formDone", { name }), "ok");
       await reload();
       return;
     }
@@ -4809,7 +4816,7 @@ async function importArtifact(projectId, reload) {
       const name = (up.modelName || base || "Decision").trim();
       await api("POST", "/api/v1/dmnrefs", { name, modelRef: up.modelRef, projectId });
       const n = (up.decisions || []).length;
-      toast(`Imported DMN model “${name}” — ${n} decision${n === 1 ? "" : "s"}`, "ok");
+      toast(trPlural("import.dmnDone", n, { name }), "ok");
       await reload();
       return;
     }
@@ -4825,14 +4832,12 @@ async function importArtifact(projectId, reload) {
     };
     const d = await saveOrConfirmOverwrite(
       (from) => api("POST", draftPath(from), text, true),
-      "A draft with this diagram's process id already exists. Replace it with this file?");
-    if (!d) { toast("Import cancelled — the draft you already had was kept"); return; }
-    toast(d.layoutGenerated
-      ? `Imported diagram “${d.name || d.processId}” — the file carried no layout, so one was generated`
-      : `Imported diagram “${d.name || d.processId}”`, "ok");
+      tr("import.draftExists"));
+    if (!d) { toast(tr("import.draftKept")); return; }
+    toast(tr(d.layoutGenerated ? "import.diagramLaidOut" : "import.diagramDone", { name: d.name || d.processId }), "ok");
     await reload();
   } catch (e) {
-    toast("Import failed: " + e.message, "err");
+    toast(tr("import.failed", { error: e.message }), "err");
   }
 }
 
@@ -4851,7 +4856,7 @@ async function importMIM(projectId, reload) {
   const file = await pickFile(".xoml,.xml,application/xml,text/xml");
   if (!file) return;
   let text;
-  try { text = await file.text(); } catch (e) { toast("Import failed: " + e.message, "err"); return; }
+  try { text = await file.text(); } catch (e) { toast(tr("import.failed", { error: e.message }), "err"); return; }
   const base = file.name.replace(/\.[^.]+$/, "");
   const path = (overwrite) => "/api/v1/imports/mim?name=" + encodeURIComponent(base) +
     (projectId ? "&projectId=" + encodeURIComponent(projectId) : "") +
@@ -4862,15 +4867,15 @@ async function importMIM(projectId, reload) {
     res = await api("POST", path(false), text, true);
   } catch (e) {
     if (e.status !== 409 || !e.body || !Array.isArray(e.body.impacts)) {
-      toast("MIM import failed: " + e.message, "err");
+      toast(tr("import.mim.failed", { error: e.message }), "err");
       return;
     }
     if (!(await confirmMIMOverwrite(e.body, file.name))) {
-      toast("Import cancelled — nothing was changed", "");
+      toast(tr("import.mim.cancelled"), "");
       return;
     }
     try { res = await api("POST", path(true), text, true); }
-    catch (e2) { toast("MIM import failed: " + e2.message, "err"); return; }
+    catch (e2) { toast(tr("import.mim.failed", { error: e2.message }), "err"); return; }
   }
 
   const drafts = res.drafts || [];
@@ -4880,9 +4885,9 @@ async function importMIM(projectId, reload) {
     manualReview: a.manualReview + (d.report ? d.report.manualReview : 0),
   }), { native: 0, preserved: 0, manualReview: 0 });
   const what = drafts.length > 1
-    ? `${drafts.length} workflows`
-    : `“${res.name || res.processId}”`;
-  toast(`Imported ${what} — ${totals.native} native, ${totals.preserved} preserved, ${totals.manualReview} to review`, "ok");
+    ? tr("import.mim.workflows", { n: drafts.length })
+    : tr("import.mim.one", { name: res.name || res.processId });
+  toast(tr("import.mim.done", { what, native: totals.native, preserved: totals.preserved, review: totals.manualReview }), "ok");
   if (reload) await reload();
   showMIMReport(res);
 }
@@ -4899,15 +4904,15 @@ function confirmMIMOverwrite(conflict, fileName) {
     const ov = document.createElement("div");
     ov.className = "modal-ov";
     ov.innerHTML = `
-      <div class="modal" role="dialog" aria-modal="true" aria-label="Import would overwrite" style="max-width:760px">
-        <div class="modal-head"><h2>Already in atlas</h2></div>
+      <div class="modal" role="dialog" aria-modal="true" aria-label="${esc(tr("import.mim.overwrite.aria"))}" style="max-width:760px">
+        <div class="modal-head"><h2>${esc(tr("import.mim.overwrite.title"))}</h2></div>
         <div class="modal-body">
-          <p class="muted" style="margin:0 0 10px">Nothing has been imported yet. ${esc(fileName || "The file")} would be saved onto ${conflict.impacts.length === 1 ? "a process id that is" : "process ids that are"} already in use:</p>
+          <p class="muted" style="margin:0 0 10px">${esc(trPlural("import.mim.overwrite.intro", conflict.impacts.length, { file: fileName || tr("import.mim.overwrite.theFile") }))}</p>
           <div style="max-height:52vh; overflow:auto">${conflict.impacts.map(mimImpactCard).join("")}</div>
         </div>
         <div class="modal-foot">
-          <button class="btn neutral" data-cancel title="Leave what is there and import nothing">Cancel</button>
-          <button class="btn danger" data-ok title="Replace what is there with the imported model">Overwrite</button>
+          <button class="btn neutral" data-cancel title="${esc(tr("import.mim.overwrite.cancelTitle"))}">${esc(tr("common.cancel"))}</button>
+          <button class="btn danger" data-ok title="${esc(tr("import.mim.overwrite.okTitle"))}">${esc(tr("import.mim.overwrite.ok"))}</button>
         </div>
       </div>`;
     document.body.appendChild(ov);
@@ -4927,21 +4932,27 @@ function confirmMIMOverwrite(conflict, fileName) {
 function mimImpactCard(i) {
   const rows = [];
   if (i.draft) {
-    rows.push(`<li><b>A draft is here</b> — “${esc(i.draft.name || i.processId)}”, last saved ${esc(fmtTime(i.draft.savedAt))}${i.draft.projectId ? ` in project <code>${esc(i.draft.projectId)}</code>` : ""}. Importing replaces it; a draft has no version history to get it back from.</li>`);
+    const where = i.draft.projectId ? tr("import.mim.impact.inProject", { project: esc(i.draft.projectId) }) : "";
+    rows.push(`<li>${tr("import.mim.impact.draft", { name: esc(i.draft.name || i.processId), at: esc(fmtTime(i.draft.savedAt)), where })}</li>`);
   }
   const d = i.deployed;
   if (d) {
-    rows.push(`<li><b>Version ${d.version} is deployed</b> under this id (${esc(fmtTime(d.deployedAt))}), with ${d.activeInstances} running instance${d.activeInstances === 1 ? "" : "s"}. The import does not touch it — it writes the draft the next deploy of this process would use.</li>`);
+    rows.push(`<li>${trPlural("import.mim.impact.deployed", d.activeInstances, { version: d.version, at: esc(fmtTime(d.deployedAt)) })}</li>`);
     const dropped = d.droppedElements || [];
     if (dropped.length) {
-      rows.push(`<li>${d.keptElements} of ${d.keptElements + dropped.length} elements keep their id. These would be gone: ${dropped.slice(0, 12).map((e) => `<code>${esc(e)}</code>`).join(", ")}${dropped.length > 12 ? ` and ${dropped.length - 12} more` : ""}.</li>`);
+      rows.push(`<li>${tr("import.mim.impact.kept", {
+        kept: d.keptElements,
+        total: d.keptElements + dropped.length,
+        list: dropped.slice(0, 12).map((e) => `<code>${esc(e)}</code>`).join(", "),
+        more: dropped.length > 12 ? tr("import.mim.impact.more", { n: dropped.length - 12 }) : "",
+      })}</li>`);
     }
     if ((d.droppedDataObjects || []).length) {
-      rows.push(`<li>Data objects this model does not declare: ${d.droppedDataObjects.map((e) => `<code>${esc(e)}</code>`).join(", ")}.</li>`);
+      rows.push(`<li>${tr("import.mim.impact.dataObjects", { list: d.droppedDataObjects.map((e) => `<code>${esc(e)}</code>`).join(", ") })}</li>`);
     }
   }
   const risk = d && d.activeInstances > 0 && (d.droppedElements || []).length
-    ? `<div class="warn-note">Atlas migrates a running instance by matching element ids. ${d.activeInstances} instance${d.activeInstances === 1 ? " is" : "s are"} running on version ${d.version}, and ${(d.droppedElements || []).length} of its elements are not in this model — an instance standing on one of them could not be carried over to a deploy of it.</div>`
+    ? `<div class="warn-note">${esc(trPlural("import.mim.impact.risk", d.activeInstances, { version: d.version, dropped: (d.droppedElements || []).length }))}</div>`
     : "";
   return `<div style="margin:0 0 14px"><div style="font-weight:600"><code>${esc(i.processId)}</code>${i.name && i.name !== i.processId ? ` — ${esc(i.name)}` : ""}</div>
     <ul class="muted" style="margin:6px 0 0; padding-left:18px">${rows.join("")}</ul>${risk}</div>`;
@@ -4962,7 +4973,8 @@ function showMIMReport(res) {
     ? res.drafts
     : [{ processId: res.processId, name: res.name, report: res.report, impact: null }];
   const color = (s) => ({ "native": "#1a7f37", "preserved": "#6a737d", "manual-review": "#9a6700" }[s] || "#6a737d");
-  const badge = (s) => `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;color:#fff;white-space:nowrap;background:${color(s)}">${esc(s)}</span>`;
+  const statusLabel = { "native": "import.mim.status.native", "preserved": "import.mim.status.preserved", "manual-review": "import.mim.status.manualReview" };
+  const badge = (s) => `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;color:#fff;white-space:nowrap;background:${color(s)}">${esc(statusLabel[s] ? tr(statusLabel[s]) : s)}</span>`;
 
   const section = (d) => {
     const r = d.report || { native: 0, preserved: 0, manualReview: 0, notes: [] };
@@ -4973,33 +4985,33 @@ function showMIMReport(res) {
     // What MIM knows about the workflow and the XOML does not say.
     const src = d.source || {};
     const facts = [
-      src.requestPhase ? `Request phase: <b>${esc(src.requestPhase)}</b>` : "",
-      src.runOnPolicyUpdate ? `Runs on policy update: ${esc(src.runOnPolicyUpdate)}` : "",
+      src.requestPhase ? tr("import.mim.report.requestPhase", { value: esc(src.requestPhase) }) : "",
+      src.runOnPolicyUpdate ? tr("import.mim.report.policyUpdate", { value: esc(src.runOnPolicyUpdate) }) : "",
       src.description ? esc(src.description) : "",
     ].filter(Boolean).join(" · ");
     const replaced = d.impact && (d.impact.draft || d.impact.deployed)
-      ? `<p class="muted" style="margin:0 0 10px">Replaced what was on this id.</p>` : "";
+      ? `<p class="muted" style="margin:0 0 10px">${esc(tr("import.mim.report.replaced"))}</p>` : "";
     const rows = (r.notes || []).map((n) =>
       `<tr><td>${badge(n.status)}</td><td><code>${esc(n.nodeId)}</code></td><td>${esc(n.kind)}</td><td>${esc(n.activity)}</td><td class="muted">${esc(n.detail || "")}</td></tr>`).join("");
     return `<section style="margin:0 0 18px">
       <h3 style="margin:0 0 4px; font-size:14px">${esc(d.name || d.processId)} <code class="muted">${esc(d.processId)}</code></h3>
       ${facts ? `<p class="muted" style="margin:0 0 6px">${facts}</p>` : ""}
       ${replaced}
-      <p class="muted" style="margin:0 0 8px">${r.native} native · ${r.preserved} preserved · ${r.manualReview} to review — counted as items of work, so a node carrying a MIMWAL table contributes one per row. Preserved and review nodes keep their original XOML in the element's <b>atlas:mimSource</b>, and their decoded rows in <b>atlas:mimCollection</b> — check them before deploying.</p>
+      <p class="muted" style="margin:0 0 8px">${tr("import.mim.report.counts", { native: r.native, preserved: r.preserved, review: r.manualReview })}</p>
       ${warnings}
-      <table><thead><tr><th>Status</th><th>Node</th><th>Kind</th><th>Activity</th><th>Note</th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="5" class="muted">Nothing to report.</td></tr>`}</tbody></table>
-      <p style="margin:8px 0 0"><button class="btn neutral" data-open="${esc(d.processId)}" title="Open this draft in the Modeler">Open in Modeler</button></p>
+      <table><thead><tr><th>${esc(tr("import.mim.report.th.status"))}</th><th>${esc(tr("import.mim.report.th.node"))}</th><th>${esc(tr("import.mim.report.th.kind"))}</th><th>${esc(tr("import.mim.report.th.activity"))}</th><th>${esc(tr("import.mim.report.th.note"))}</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="5" class="muted">${esc(tr("import.mim.report.nothing"))}</td></tr>`}</tbody></table>
+      <p style="margin:8px 0 0"><button class="btn neutral" data-open="${esc(d.processId)}" title="${esc(tr("import.mim.report.openTitle"))}">${esc(tr("import.mim.report.open"))}</button></p>
     </section>`;
   };
 
   const ov = document.createElement("div");
   ov.className = "modal-ov";
   ov.innerHTML = `
-    <div class="modal" role="dialog" aria-modal="true" aria-label="MIM import report" style="max-width:860px">
-      <div class="modal-head"><h2>MIM import — ${drafts.length > 1 ? `${drafts.length} workflows` : esc(drafts[0].name || drafts[0].processId)}</h2></div>
+    <div class="modal" role="dialog" aria-modal="true" aria-label="${esc(tr("import.mim.report.aria"))}" style="max-width:860px">
+      <div class="modal-head"><h2>${esc(tr("import.mim.report.title", { what: drafts.length > 1 ? tr("import.mim.workflows", { n: drafts.length }) : drafts[0].name || drafts[0].processId }))}</h2></div>
       <div class="modal-body"><div style="max-height:62vh; overflow:auto">${drafts.map(section).join("")}</div></div>
-      <div class="modal-foot"><button class="btn" data-close title="Close this report">Close</button></div>
+      <div class="modal-foot"><button class="btn" data-close title="${esc(tr("import.mim.report.closeTitle"))}">${esc(tr("common.close"))}</button></div>
     </div>`;
   document.body.appendChild(ov);
   const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
@@ -6036,7 +6048,7 @@ function toggleSetSecret(row, name, workers, put, reload) {
 // rather than navigating to an editor that would only report the same thing.
 function editDmnRef(ref) {
   if (!ref.modelRef) {
-    toast("This decision has no locally editable model.", "err");
+    toast(tr("artifact.ref.notEditable"), "err");
     return;
   }
   location.hash = "#/modeler/dmn/e/" + encodeURIComponent(ref.id);
@@ -6046,7 +6058,7 @@ function editDmnRef(ref) {
 async function moveDmnRef(id, projectId, reload) {
   try {
     await api("PATCH", `/api/v1/dmnrefs/${encodeURIComponent(id)}`, { projectId });
-  } catch (e) { toast("could not move reference: " + e.message, "err"); }
+  } catch (e) { toast(tr("artifact.ref.moveFailed", { error: e.message }), "err"); }
   await reload();
 }
 
@@ -6056,12 +6068,12 @@ async function moveDmnRef(id, projectId, reload) {
 // handle rather than re-uploading, so the model is *recovered* rather than copied —
 // a re-upload would file a second model under a suffixed handle (ADR-0222).
 async function referenceStoredModel(handle, suggested, reload) {
-  const name = (window.prompt("Reference name (how it shows in atlas)", suggested || handle) || "").trim();
+  const name = (window.prompt(tr("artifact.ref.namePrompt"), suggested || handle) || "").trim();
   if (!name) return;
   try {
     await api("POST", "/api/v1/dmnrefs", { name, modelRef: handle, projectId: "" });
-    toast(`Added DMN reference "${name}"`, "ok");
-  } catch (e) { toast("could not add DMN reference: " + e.message, "err"); return; }
+    toast(tr("artifact.ref.added", { name }), "ok");
+  } catch (e) { toast(tr("artifact.ref.addFailed", { error: e.message }), "err"); return; }
   await reload();
 }
 
@@ -6074,11 +6086,11 @@ async function referenceStoredModel(handle, suggested, reload) {
 // decision already deployed from this model keeps evaluating, since its record
 // carries its own copy and never reads the file.
 async function deleteStoredModel(handle, reload) {
-  if (!window.confirm(`Delete the model file ${handle}.dmn? Decisions already deployed from it keep running — they carry their own copy. This cannot be undone.`)) return;
+  if (!window.confirm(tr("artifact.model.confirmDelete", { handle }))) return;
   try {
     await api("DELETE", `/api/v1/dmn-models/${encodeURIComponent(handle)}`);
-    toast(`Deleted the model ${handle}.dmn`, "ok");
-  } catch (e) { toast("could not delete the model: " + e.message, "err"); }
+    toast(tr("artifact.model.deleted", { handle }), "ok");
+  } catch (e) { toast(tr("artifact.model.deleteFailed", { error: e.message }), "err"); }
   await reload();
 }
 
@@ -6090,8 +6102,8 @@ async function deleteDmnRef(id, reload) {
   if (!window.confirm(refDeleteWarning(impact))) return;
   try {
     await api("DELETE", `/api/v1/dmnrefs/${encodeURIComponent(id)}`);
-    toast("Deleted DMN reference", "ok");
-  } catch (e) { toast("could not delete reference: " + e.message, "err"); }
+    toast(tr("artifact.ref.deleted"), "ok");
+  } catch (e) { toast(tr("artifact.ref.deleteFailed", { error: e.message }), "err"); }
   await reload();
 }
 
@@ -6100,20 +6112,20 @@ async function deleteDmnRef(id, reload) {
 // the same word on a decision that *is* in the model means only "throw away the
 // unsaved work".
 async function deleteDecisionDraft(id, reload) {
-  if (!window.confirm("Delete this decision draft? It has never been saved to the model, so nothing else has a copy.")) return;
+  if (!window.confirm(tr("artifact.decisionDraft.confirmDelete"))) return;
   try {
     await api("DELETE", `/api/v1/dmn-drafts/${encodeURIComponent(id)}`);
-    toast("Deleted decision draft", "ok");
-  } catch (e) { toast("could not delete draft: " + e.message, "err"); }
+    toast(tr("artifact.decisionDraft.deleted"), "ok");
+  } catch (e) { toast(tr("artifact.draft.deleteFailed", { error: e.message }), "err"); }
   await reload();
 }
 
 async function deleteForm(id, reload) {
-  if (!window.confirm("Delete this form? A user task still bound to it will show no form until it is re-linked.")) return;
+  if (!window.confirm(tr("artifact.form.confirmDelete"))) return;
   try {
     await api("DELETE", `/api/v1/forms/${encodeURIComponent(id)}`);
-    toast("Deleted form", "ok");
-  } catch (e) { toast("could not delete form: " + e.message, "err"); }
+    toast(tr("artifact.form.deleted"), "ok");
+  } catch (e) { toast(tr("artifact.form.deleteFailed", { error: e.message }), "err"); }
   await reload();
 }
 
@@ -6122,10 +6134,10 @@ async function deleteForm(id, reload) {
 function refStatusHTML(res) {
   if (res.valid) {
     const n = (res.decisions || []).length;
-    return `<span class="pill ok"><span class="dot"></span>valid</span>${n ? ` <span class="muted" style="font-size:12px">· ${n} decision${n === 1 ? "" : "s"}</span>` : ""}`;
+    return `<span class="pill ok"><span class="dot"></span>${esc(tr("application.ref.valid"))}</span>${n ? ` <span class="muted" style="font-size:12px">· ${esc(trPlural("application.ref.decisions", n))}</span>` : ""}`;
   }
-  if (res.resolved) return `<span class="pill err"><span class="dot"></span>invalid</span>`;
-  return `<span class="pill warn"><span class="dot"></span>unresolved</span>`;
+  if (res.resolved) return `<span class="pill err"><span class="dot"></span>${esc(tr("application.ref.invalid"))}</span>`;
+  return `<span class="pill warn"><span class="dot"></span>${esc(tr("application.ref.unresolved"))}</span>`;
 }
 
 // applyRefStatus writes a validation result into a reference row's status cell.
@@ -6142,12 +6154,12 @@ function applyRefStatus(id, res) {
 // deploy-time gate the server runs — and shows the outcome inline.
 async function validateDmnRef(id) {
   const el = document.querySelector(`[data-refstatus="${id}"]`);
-  if (el) { el.className = "muted"; el.textContent = "validating…"; }
+  if (el) { el.className = "muted"; el.textContent = tr("application.ref.validating"); }
   try {
     applyRefStatus(id, await api("POST", `/api/v1/dmnrefs/${encodeURIComponent(id)}/validate`));
   } catch (e) {
-    if (el) { el.className = "muted"; el.textContent = "not validated"; }
-    toast("could not validate: " + e.message, "err");
+    if (el) { el.className = "muted"; el.textContent = tr("application.ref.notValidated"); }
+    toast(tr("application.validate.failed", { error: e.message }), "err");
   }
 }
 
@@ -6157,9 +6169,9 @@ async function validateProject(projectId) {
   try {
     const rep = await api("POST", `/api/v1/applications/${encodeURIComponent(projectId)}/validate`);
     for (const r of rep.references) applyRefStatus(r.id, r);
-    toast(rep.ok ? "All DMN references are valid" : "Some DMN references are unresolved or invalid",
+    toast(tr(rep.ok ? "application.validate.allValid" : "application.validate.someInvalid"),
       rep.ok ? "ok" : "err");
-  } catch (e) { toast("could not validate application: " + e.message, "err"); }
+  } catch (e) { toast(tr("application.validate.appFailed", { error: e.message }), "err"); }
 }
 
 // deployProject publishes the whole application: the server validates its DMN
@@ -6239,7 +6251,7 @@ async function downloadApplicationSource(id) {
   try {
     info = await api("GET", `/api/v1/applications/${encodeURIComponent(id)}/needs`);
   } catch (e) {
-    toast("Could not read what the application needs: " + (e && e.message || e), "err");
+    toast(tr("transfer.needsFailed", { error: e && e.message || e }), "err");
     return;
   }
   const url = await openSourceDownload({ id, info, preview: (u) => api("GET", u) });
@@ -6282,21 +6294,20 @@ function importApplicationSource(reload) {
     const file = picker.files[0];
     if (!file) return;
     try {
-      const out = await importPackage(file, { call: packageCall, title: "Import application" });
+      const out = await importPackage(file, { call: packageCall, title: tr("package.title") });
       if (!out) return;
       const data = out.source;
       const shop = packageSummary(out);
-      toast(
-        `${data.created ? "Created" : "Imported"} ${data.name} — ${outcomeSummary(data.artifacts)}` +
-        (data.untracked && data.untracked.length
-          ? ` · ${data.untracked.length} local artifact${data.untracked.length === 1 ? "" : "s"} not in the tree, kept`
-          : "") + (shop ? ` · ${shop}` : ""),
-        "ok");
+      const parts = [tr(data.created ? "home.import.created" : "home.import.imported",
+        { name: data.name, summary: outcomeSummary(data.artifacts) })];
+      if (data.untracked && data.untracked.length) parts.push(trPlural("home.import.untracked", data.untracked.length));
+      if (shop) parts.push(shop);
+      toast(parts.join(" · "), "ok");
       await reload();
       const report = { ...data, warnings: out.warnings };
       if (needsReport(report)) await showImportNeeds(report);
     } catch (e) {
-      toast("Import failed: " + (e && e.message || e), "err");
+      toast(tr("import.failed", { error: e && e.message || e }), "err");
     }
   });
   picker.click();
@@ -6313,10 +6324,7 @@ async function publishApplication(id, reload) {
     if (releases.length) next = releases[0].version + 1;
   } catch { /* best-effort: fall back to "the next version" without a number */ }
 
-  const note = window.prompt(
-    `Publish this application as v${next}?\n\n` +
-    "Its DMN references are validated, then its artifacts are deployed together as " +
-    "one release.\n\nOptional note describing what changes:", "");
+  const note = window.prompt(tr("application.publish.prompt", { next }), "");
   if (note == null) return; // cancelled
 
   let rep;
@@ -6330,15 +6338,15 @@ async function publishApplication(id, reload) {
     if (res.ok && rep.deployed) {
       const n = (rep.definitions || []).length;
       const v = rep.release ? `v${rep.release.version}` : "";
-      toast(`Published ${v} — ${n} definition${n === 1 ? "" : "s"}`, "ok");
+      toast(trPlural("application.publish.done", n, { v }), "ok");
       await reload();
       return;
     }
   } catch (e) {
-    toast("publish failed: " + e.message, "err");
+    toast(tr("application.publish.failed", { error: e.message }), "err");
     return;
   }
-  toast(rep.reason || rep.error || "Publish refused", "err");
+  toast(rep.reason || rep.error || tr("application.publish.refused"), "err");
   for (const r of rep.references || []) applyRefStatus(r.id, r);
 }
 

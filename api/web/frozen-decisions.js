@@ -12,12 +12,14 @@
 // Pure functions of the listing, so a browser test drives them without the pages
 // around them — the split decision-cleanup.js already makes.
 
+import { t, plural } from "./i18n.js";
+
 // frozenLine says one frozen decision: what it runs, and what latest is now.
 export function frozenLine(d) {
-  const at = d.version ? `v${d.version}` : "the model deployed with the process";
-  if (!d.behind) return `${d.decisionId} runs ${at}, which is still the newest`;
-  const now = d.latestVersion ? `v${d.latestVersion}` : `deployment ${d.latestKey}`;
-  return `${d.decisionId} runs ${at}, the newest is ${now}`;
+  const at = d.version ? `v${d.version}` : t("frozen.deployedModel");
+  if (!d.behind) return t("frozen.line.current", { decision: d.decisionId, at });
+  const now = d.latestVersion ? `v${d.latestVersion}` : t("frozen.deployment", { key: d.latestKey });
+  return t("frozen.line.behind", { decision: d.decisionId, at, now });
 }
 
 // frozenMark is what to show on one deployed definition, or null when it follows
@@ -30,12 +32,8 @@ export function frozenMark(proc) {
   const behind = list.some((d) => d.behind);
   return {
     behind,
-    label: behind ? "Decision frozen · newer deployed" : "Decision frozen",
-    title: "Latest is frozen on this definition. It was deployed while latest meant the decision " +
-      "version that was newest at deploy time, and its business rule tasks keep evaluating that " +
-      `version: ${list.map(frozenLine).join("; ")}. ` +
-      "Deploy the process again to have it follow each new decision version; instances already " +
-      "running stay on this definition unless they are migrated.",
+    label: t(behind ? "frozen.labelBehind" : "frozen.label"),
+    title: t("frozen.title", { lines: list.map(frozenLine).join("; ") }),
   };
 }
 
@@ -67,10 +65,6 @@ export function frozenBehindOn(procs, decisionIds) {
 export function frozenDeployNotice(held) {
   if (!held || !held.length) return "";
   const names = held.map((h) => `${h.name} v${h.version} (${h.decisions.map(frozenLine).join("; ")})`);
-  const shown = names.slice(0, 5).join(", ") + (names.length > 5 ? ` and ${names.length - 5} more` : "");
-  const who = held.length === 1 ? "One deployed process does" : `${held.length} deployed processes do`;
-  const them = held.length === 1 ? "it" : "them";
-  return `${who} not follow this version: ${shown}. ` +
-    `${held.length === 1 ? "It was" : "They were"} deployed while latest was frozen at deploy time — ` +
-    `deploy ${them} again to have ${them} follow each new version.`;
+  const shown = names.slice(0, 5).join(", ") + (names.length > 5 ? t("frozen.more", { n: names.length - 5 }) : "");
+  return plural("frozen.notice", held.length, { list: shown });
 }

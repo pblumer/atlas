@@ -32,7 +32,7 @@ const writes = (page) => page.evaluate(() => window.__writes);
 test("the deploy panel names the start form instead of asking for JSON", async ({ page }) => {
   const body = page.locator("#deploy-body");
   await expect(body).toContainText("Account-Bestellung");
-  await expect(body).toContainText("Deploy & run");
+  await expect(body).toContainText("Deployen & starten");
   // The JSON textarea is what it replaces: entering these values by hand, untyped and
   // unlabelled, when a designed form for exactly them exists.
   await expect(body.locator(".sv-json")).toHaveCount(0);
@@ -43,7 +43,7 @@ test("Deploy & run opens the form in a modal with Send and Cancel", async ({ pag
   await page.locator("#deploy-run").click();
   const modal = page.locator(".startform-modal");
   await expect(modal).toBeVisible();
-  await expect(modal.locator(".modal-head h2")).toHaveText("Start values");
+  await expect(modal.locator(".modal-head h2")).toHaveText("Startwerte");
   // The real form, rendered by the same viewer the Tasks app uses — its labels, its
   // required marks, its field types.
   await expect(modal.locator(".startform-host")).toContainText("Vorname");
@@ -79,7 +79,7 @@ test("a required field left empty refuses the send, and deploys nothing", async 
 
   // Not "fix the highlighted fields" — that asks the author to go find a colour. The
   // refusal names the field, the way the form labels it.
-  await expect(page.locator("#sf-err")).toHaveText("Still to fill in: Vorname.");
+  await expect(page.locator("#sf-err")).toHaveText("Noch auszufüllen: Vorname.");
   await expect(page.locator(".startform-modal")).toBeVisible(); // still open, values kept
   expect(await writes(page)).toEqual([]);
   expect(page.__errors).toEqual([]);
@@ -95,7 +95,7 @@ test("Send deploys and starts the instance with what the form collected", async 
   await page.locator("[data-sf-send]").click();
 
   await expect(modal).toHaveCount(0);
-  await expect(page.locator(".deploy-success-msg")).toContainText("started an instance");
+  await expect(page.locator(".deploy-success-msg")).toContainText("eine Instanz mit");
 
   const w = await writes(page);
   expect(w.map((x) => x.method + " " + x.url.replace(/\?.*$/, ""))).toEqual([
@@ -112,7 +112,7 @@ test("Deploy only never opens the form", async ({ page }) => {
   // required field should not stand between an author and a plain deploy.
   await page.locator("#deploy-only").click();
   await expect(page.locator(".startform-modal")).toHaveCount(0);
-  await expect(page.locator(".deploy-success-msg")).toContainText("Deployed proc-sf v1");
+  await expect(page.locator(".deploy-success-msg")).toContainText("proc-sf v1 deployt");
   const w = await writes(page);
   expect(w).toHaveLength(1);
   expect(w[0].method).toBe("POST");

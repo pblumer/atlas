@@ -3,7 +3,8 @@
 //
 // The point of the feature is a sentence somebody reads instead of clicks
 // through, so the sentence is what these assert — not that a function returned
-// something truthy.
+// something truthy. The sentence comes from the catalogue (ADR-0267), so it is
+// read in the default locale, German.
 import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -31,8 +32,8 @@ test("nothing at risk reads as the plain sentence", async ({ page }) => {
   ]) {
     const text = await warn(page, impact);
     expect(text).toBe(
-      "Delete this DMN reference? The model file stays in the model store and appears under Not assigned, " +
-      "where a reference can be put back on it.");
+      "Diese DMN-Referenz löschen? Die Modelldatei bleibt im Modellspeicher und erscheint unter Nicht zugeordnet, " +
+      "wo sich wieder eine Referenz darauf setzen lässt.");
   }
 });
 
@@ -40,8 +41,8 @@ test("the last model for a decision is said so, even when nothing would break", 
   const text = await warn(page, {
     resolved: true, decisions: ["eligibility"], exclusive: ["eligibility"], blocked: [], blockedHidden: 0,
   });
-  expect(text).toContain("last model for the decision eligibility");
-  expect(text).toContain("Nothing would stop deploying today");
+  expect(text).toContain("letzte Modell für die Entscheidung eligibility");
+  expect(text).toContain("Heute würde nichts ein Deployment verhindern");
 });
 
 test("each blocked artefact is named with its binding", async ({ page }) => {
@@ -56,16 +57,16 @@ test("each blocked artefact is named with its binding", async ({ page }) => {
     blockedHidden: 0,
   });
 
-  expect(text).toContain("2 artefacts could then not be deployed:");
+  expect(text).toContain("2 Artefakte liessen sich danach nicht mehr deployen:");
   // A deployed definition says which version, so the reader can find it in Operations.
-  expect(text).toContain("Orders (deployed v2) — eligibility, binding deployment");
+  expect(text).toContain("Orders (deployt v2) — eligibility, Bindung deployment");
   // A draft with no name falls back to its process id rather than showing a blank.
-  expect(text).toContain("reise (draft) — eligibility, binding latest");
+  expect(text).toContain("reise (Entwurf) — eligibility, Bindung latest");
   // And the thing that is *not* at risk is said too, because that is the fear.
-  expect(text).toContain("Running instances are not affected");
+  expect(text).toContain("Laufende Instanzen sind nicht betroffen");
   // And where the model itself went, because "not affected" was the old sentence's
   // reassurance and it is what left the file unreachable.
-  expect(text).toContain("appears under Not assigned");
+  expect(text).toContain("erscheint unter Nicht zugeordnet");
 });
 
 test("artefacts in applications the reader cannot see are counted, not named", async ({ page }) => {
@@ -76,8 +77,8 @@ test("artefacts in applications the reader cannot see are counted, not named", a
     blocked: [],
     blockedHidden: 3,
   });
-  expect(text).toContain("3 artefacts could then not be deployed:");
-  expect(text).toContain("3 more in applications you cannot see");
+  expect(text).toContain("3 Artefakte liessen sich danach nicht mehr deployen:");
+  expect(text).toContain("3 weitere in Anwendungen, die du nicht sehen darfst");
 });
 
 test("the count covers what is named and what is only counted", async ({ page }) => {
@@ -88,9 +89,9 @@ test("the count covers what is named and what is only counted", async ({ page })
     blocked: [{ kind: "draft", processId: "reise", decisionId: "eligibility", binding: "deployment" }],
     blockedHidden: 1,
   });
-  expect(text).toContain("last model for the decisions eligibility, discount");
-  expect(text).toContain("2 artefacts could then not be deployed:");
-  expect(text).toContain("1 more in an application you cannot see");
+  expect(text).toContain("letzte Modell für die Entscheidungen eligibility, discount");
+  expect(text).toContain("2 Artefakte liessen sich danach nicht mehr deployen:");
+  expect(text).toContain("1 weiteres in einer Anwendung, die du nicht sehen darfst");
 });
 
 // Which deployed version of a decision the Console offers to remove

@@ -480,7 +480,7 @@ test("a form the server does not hold is said, not opened", async ({ page }) => 
   });
   await selectOnly(page, "Task_lost");
   await padEntry(page).click();
-  await expect(page.locator("#toast")).toContainText("no form “gone”");
+  await expect(page.locator("#toast")).toContainText("kein Formular «gone»");
   // Nothing was traded for a door that opens on nothing: no save, no navigation.
   expect(await hash(page)).toBe("#/modeler/draft/reise");
   expect(state.draftSaves).toHaveLength(0);

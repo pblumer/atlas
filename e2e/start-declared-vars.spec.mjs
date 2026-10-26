@@ -60,7 +60,7 @@ test.describe("Deploy & run", () => {
   });
 
   test("asks, beneath the form, for the declared variables the form does not bind", async ({ page }) => {
-    await expect(page.locator("#deploy-body")).toContainText("declared on the process");
+    await expect(page.locator("#deploy-body")).toContainText("auf dem Prozess deklarierten");
     await page.locator("#deploy-run").click();
     const modal = page.locator(".startform-modal");
     await expect(modal.locator(".startform-host")).toContainText("Strasse");
@@ -81,7 +81,7 @@ test.describe("Deploy & run", () => {
     await fillFormHalf(modal.locator(".startform-host"));
     await page.locator("[data-sf-send]").click();
 
-    await expect(page.locator("#sf-err")).toContainText("required: ApplicationId");
+    await expect(page.locator("#sf-err")).toContainText("Pflichtfeld: ApplicationId");
     await expect(modal).toBeVisible(); // still open, values kept
     expect(await writes(page)).toEqual([]);
     expect(page.__errors).toEqual([]);
@@ -110,7 +110,7 @@ test("without a declaration the modal is the form alone", async ({ page }) => {
   await openHarness(page, "?declared=0");
   await page.evaluate(() => window.__mountEditor());
   await page.locator("#deploy").click();
-  await expect(page.locator("#deploy-body")).not.toContainText("declared on the process");
+  await expect(page.locator("#deploy-body")).not.toContainText("auf dem Prozess deklarierten");
   await page.locator("#deploy-run").click();
   const modal = page.locator(".startform-modal");
   await expect(modal.locator(".startform-host")).toContainText("Strasse");
@@ -208,7 +208,7 @@ test.describe("Tasks app Start", () => {
   test("a required declared variable left empty stops the start", async ({ page }) => {
     await fillFormHalf(page.locator("#start-form"));
     await page.locator("#start-go").click();
-    await expect(page.locator("#toast")).toContainText("required: ApplicationId");
+    await expect(page.locator("#toast")).toContainText("Pflichtfeld: ApplicationId");
     expect(posted).toEqual([]);
     expect(page.__errors).toEqual([]);
   });

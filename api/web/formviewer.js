@@ -23,10 +23,15 @@ export const FORM_LOAD_TIMEOUT_MS = 20000;
 // not arrive so the message says which half stalled. It does not cancel the underlying
 // work — a module import cannot be cancelled — which is exactly why a retry is cheap:
 // whatever did arrive in the meantime is in the browser's cache.
+//
+// `what` may instead be a function of the seconds that words the whole sentence: the
+// console's editors say it in their catalogue's language (ADR-0267). This module does
+// not read the catalogue itself, because the shop loads it too.
 export function withLoadDeadline(p, what, ms = FORM_LOAD_TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
+    const seconds = Math.round(ms / 1000);
     const timer = setTimeout(
-      () => reject(new Error(`${what} did not arrive within ${Math.round(ms / 1000)} seconds`)),
+      () => reject(new Error(typeof what === "function" ? what(seconds) : `${what} did not arrive within ${seconds} seconds`)),
       ms);
     p.then(
       (v) => { clearTimeout(timer); resolve(v); },

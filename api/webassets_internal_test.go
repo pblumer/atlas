@@ -31,6 +31,14 @@ func TestEveryEmbeddedModuleImportResolves(t *testing.T) {
 	if len(files) == 0 {
 		t.Fatal("no embedded modules found; this guard would pass vacuously")
 	}
+	// The message files sit one level down, and their list imports each of them: a
+	// language named there without its file takes the console down like any other
+	// missing import.
+	locales, err := fs.Glob(webFS, "web/locales/*.js")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	files = append(files, locales...)
 	checked := 0
 	for _, file := range files {
 		body, err := fs.ReadFile(webFS, file)

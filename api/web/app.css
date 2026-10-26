@@ -1089,8 +1089,13 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 /* The bar is one row and its right-hand actions are the working end of it, so what
    gives when the window is narrow has to be the breadcrumb — not Deploy sliding off
    the edge. The crumb is the only variable-length thing here (it carries the diagram
-   name), and it is the one part a reader can reconstruct from the canvas. */
-.editor-bar > .crumbs { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+   name), and it is the one part a reader can reconstruct from the canvas.
+   It gives way the way the shown-version chip does: a zero basis, because a wrapping
+   flex line is broken on each item's basis before anything shrinks — with an auto basis
+   a crumb a few pixels too long started a second row instead of being cut, which the
+   longer German labels made the ordinary case on a narrow window. The large grow factor
+   gives it its whole text before the chip and the spacer share what is left. */
+.editor-bar > .crumbs { flex: 1000 1 0; min-width: 4em; max-width: max-content; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .editor-bar > .btn { flex: none; }
 /* The overflow menu at the end of the bar (ADR-0229). It borrows
    the .dropdown-menu look but not app.js's delegated machinery — see wireBarMenu — so it
@@ -1136,7 +1141,8 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .editor-bar nav.crumbs a { color: var(--muted); text-decoration: none; }
 .editor-bar nav.crumbs a:hover { color: var(--text); text-decoration: underline; }
 .editor-bar nav.crumbs .crumb-sep { color: var(--border); }
-.editor-bar nav.crumbs .crumb-current { color: var(--text); font-weight: 600; }
+.editor-bar nav.crumbs .crumb-current { color: var(--text); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.editor-bar nav.crumbs > a, .editor-bar nav.crumbs > .crumb-sep { flex: none; }
 .editor-body { flex: 1; display: flex; min-height: 0; }
 #canvas { flex: 1; min-width: 0; height: 100%; background: var(--diagram-bg); }
 /* The dot grid is an editing affordance — show it only in the Design/Modeler

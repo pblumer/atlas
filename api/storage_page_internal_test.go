@@ -19,10 +19,6 @@ func TestTheStorageCardHasWordsForEveryState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the storage module: %v", err)
 	}
-	catalogue, err := os.ReadFile("web/i18n.js")
-	if err != nil {
-		t.Fatalf("read the message catalogue: %v", err)
-	}
 	states := []storage.State{storage.StateOK, storage.StateWarn, storage.StateFrozen, storage.StateHalted, storage.StateUnknown}
 	m := regexp.MustCompile(`export const STATES = \[([^\]]*)\]`).FindSubmatch(module)
 	if m == nil {
@@ -42,12 +38,8 @@ func TestTheStorageCardHasWordsForEveryState(t *testing.T) {
 		want = append(want, "storage.alert."+string(st)+".title", "storage.alert."+string(st)+".text")
 	}
 	want = append(want, "storage.alert.frozen.hint", "storage.alert.halted.hint")
-	src := string(catalogue)
-	for _, locale := range []string{"de", "en"} {
-		block, ok := localeBlock(src, locale)
-		if !ok {
-			t.Fatalf("no %q block in web/i18n.js", locale)
-		}
+	for _, locale := range consoleLocales() {
+		block := localeCatalogue(t, locale)
 		for _, key := range want {
 			if !strings.Contains(block, `"`+key+`":`) {
 				t.Errorf("locale %q has no message %q", locale, key)
@@ -64,10 +56,6 @@ func TestEveryMessageTheStorageCardAsksForExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the storage module: %v", err)
 	}
-	catalogue, err := os.ReadFile("web/i18n.js")
-	if err != nil {
-		t.Fatalf("read the message catalogue: %v", err)
-	}
 	keys := map[string]bool{}
 	for _, m := range regexp.MustCompile(`\bt\("(storage\.[A-Za-z0-9.-]+)"`).FindAllStringSubmatch(string(module), -1) {
 		keys[m[1]] = true
@@ -78,12 +66,8 @@ func TestEveryMessageTheStorageCardAsksForExists(t *testing.T) {
 	if len(keys) < 20 {
 		t.Fatalf("found only %d message keys in web/storage.js; the scan no longer matches how the module looks them up", len(keys))
 	}
-	src := string(catalogue)
-	for _, locale := range []string{"de", "en"} {
-		block, ok := localeBlock(src, locale)
-		if !ok {
-			t.Fatalf("no %q block in web/i18n.js", locale)
-		}
+	for _, locale := range consoleLocales() {
+		block := localeCatalogue(t, locale)
 		for key := range keys {
 			if !strings.Contains(block, `"`+key+`":`) {
 				t.Errorf("web/storage.js asks for %q, which locale %q does not have", key, locale)

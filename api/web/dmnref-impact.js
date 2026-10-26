@@ -6,6 +6,8 @@
 // the whole Console — the same split process-doc.js makes for the documentation
 // export. app.js only fetches the impact and puts the text in front of the author.
 
+import { t, plural } from "./i18n.js";
+
 // refDeleteWarning composes the confirm from what the server says deleting this
 // reference would break. The generic sentence it replaces was true and useless:
 // what a reference decides is not the file on disk, it is whether anything can
@@ -16,7 +18,7 @@
 // decision another reference also provides all read as the plain sentence, because
 // in each of those cases nothing is actually at risk and a warning would be noise.
 export function refDeleteWarning(impact) {
-  const plain = "Delete this DMN reference? The model file stays in the model store and appears under Not assigned, where a reference can be put back on it.";
+  const plain = t("dmnref.delete.plain");
   if (!impact || !impact.resolved) return plain;
   const exclusive = impact.exclusive || [];
   if (!exclusive.length) return plain;
@@ -24,23 +26,23 @@ export function refDeleteWarning(impact) {
   const blocked = impact.blocked || [];
   const hidden = impact.blockedHidden || 0;
   const lines = [
-    `Delete this DMN reference? It is the last model for ${exclusive.length === 1 ? "the decision" : "the decisions"} ${exclusive.join(", ")}.`,
+    plural("dmnref.delete.last", exclusive.length, { decisions: exclusive.join(", ") }),
   ];
   if (!blocked.length && !hidden) {
-    lines.push("", "Nothing would stop deploying today. The model file stays in the model store and appears under Not assigned.");
+    lines.push("", t("dmnref.delete.nothingStops"));
     return lines.join("\n");
   }
   const total = blocked.length + hidden;
-  lines.push("", `${total} ${total === 1 ? "artefact" : "artefacts"} could then not be deployed:`);
+  lines.push("", plural("dmnref.delete.blocked", total));
   for (const b of blocked) {
     // Which artefact, and the binding that makes losing the model fatal to it —
     // "deployment" always, "latest" only while nothing is deployed for the decision.
-    const where = b.kind === "deployed" ? `deployed v${b.version}` : "draft";
-    lines.push(`  • ${b.name || b.processId} (${where}) — ${b.decisionId}, binding ${b.binding}`);
+    const where = b.kind === "deployed" ? t("dmnref.delete.deployed", { version: b.version }) : t("dmnref.delete.draft");
+    lines.push(t("dmnref.delete.line", { name: b.name || b.processId, where, decision: b.decisionId, binding: b.binding }));
   }
   if (hidden) {
-    lines.push(`  • ${hidden} more in ${hidden === 1 ? "an application" : "applications"} you cannot see`);
+    lines.push(plural("dmnref.delete.hidden", hidden));
   }
-  lines.push("", "Running instances are not affected. The model file stays in the model store and appears under Not assigned.");
+  lines.push("", t("dmnref.delete.running"));
   return lines.join("\n");
 }

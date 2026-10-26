@@ -13,17 +13,17 @@
 // It lives in its own module for the reason the pick dialog does: app.js boots the
 // whole console on import, so anything left inside it is only ever exercised by hand.
 
+import { t } from "./i18n.js";
+
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-// The statuses the dialog lists, in its order, with what each box starts as.
+// The statuses the dialog lists, in its order, with what each box starts as; title and
+// hint are catalogue keys.
 const GROUPS = [
-  { status: "changed", ticked: false, title: "Changed here and in the file",
-    hint: "Ticked, the file's version replaces the one changed here." },
-  { status: "behind", ticked: true, title: "Newer in the file, unchanged here",
-    hint: "Ticked, as they start, they are updated; untick one to keep this server's version." },
-  { status: "ahead", ticked: false, title: "Changed here only",
-    hint: "The file carries them as the last import did. Tick one to put the file's version back." },
+  { status: "changed", ticked: false, title: "choices.changed", hint: "choices.changedHint" },
+  { status: "behind", ticked: true, title: "choices.behind", hint: "choices.behindHint" },
+  { status: "ahead", ticked: false, title: "choices.ahead", hint: "choices.aheadHint" },
 ];
 
 // decisionQuery is the decisions as the import routes take them. Every changed
@@ -55,11 +55,11 @@ export function openImportChoices({ title, artifacts }) {
       const items = artifacts.filter((a) => a.status === g.status);
       if (!items.length) return "";
       return `<section class="import-group" data-status="${g.status}">
-          <h3>${esc(g.title)} <span class="muted">(${items.length})</span></h3>
-          <p class="muted small">${esc(g.hint)}</p>
+          <h3>${esc(t(g.title))} <span class="muted">(${items.length})</span></h3>
+          <p class="muted small">${esc(t(g.hint))}</p>
           <ul class="import-changed">${items.map((a) => `
             <li><label><input type="checkbox" class="import-pick" value="${esc(a.ref)}"
-              data-status="${g.status}"${g.ticked ? " checked" : ""}> Replace ${label(a)}</label></li>`).join("")}</ul>
+              data-status="${g.status}"${g.ticked ? " checked" : ""}> ${t("choices.replace", { label: label(a) })}</label></li>`).join("")}</ul>
         </section>`;
     };
     const ov = document.createElement("div");
@@ -68,25 +68,26 @@ export function openImportChoices({ title, artifacts }) {
       <div class="modal import-choices" role="dialog" aria-modal="true" aria-label="${esc(title)}">
         <div class="modal-head">
           <h2>${esc(title)}</h2>
-          <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
+          <button type="button" class="icon-btn" data-x aria-label="${esc(t("common.close"))}" title="${esc(t("common.close"))}">✕</button>
         </div>
         <div class="modal-body">
-          <p class="import-counts">${count("new")} new, ${count("unchanged")} unchanged,
-            ${count("behind")} newer in the file, ${count("ahead")} changed here only,
-            <b>${count("changed")} changed on both sides</b>.</p>
+          <p class="import-counts">${t("choices.counts", {
+            created: count("new"), unchanged: count("unchanged"), behind: count("behind"),
+            ahead: count("ahead"), changed: count("changed"),
+          })}</p>
           <div class="import-bulk">
-            <button type="button" class="btn ghost small" data-all title="Replace every one with the file's version">Tick all</button>
-            <button type="button" class="btn ghost small" data-none title="Keep every one as this server has it">Tick none</button>
+            <button type="button" class="btn ghost small" data-all title="${esc(t("choices.tickAllTitle"))}">${esc(t("choices.tickAll"))}</button>
+            <button type="button" class="btn ghost small" data-none title="${esc(t("choices.tickNoneTitle"))}">${esc(t("choices.tickNone"))}</button>
           </div>
           ${GROUPS.map(group).join("")}
-          ${fresh.length ? `<details class="import-new"><summary>${fresh.length} new</summary>
+          ${fresh.length ? `<details class="import-new"><summary>${esc(t("choices.fresh", { n: fresh.length }))}</summary>
             <ul>${fresh.map((a) => `<li>${label(a)}</li>`).join("")}</ul></details>` : ""}
         </div>
         <div class="modal-foot">
           <span></span>
           <span class="modal-actions">
-            <button type="button" class="btn ghost" data-cancel>Cancel</button>
-            <button type="button" class="btn" data-ok>Import</button>
+            <button type="button" class="btn ghost" data-cancel>${esc(t("common.cancel"))}</button>
+            <button type="button" class="btn" data-ok>${esc(t("choices.import"))}</button>
           </span>
         </div>
       </div>`;
@@ -138,8 +139,8 @@ export async function importAsking(send, { title }) {
 // outcomeSummary says in a few words what an import did with its artifacts.
 export function outcomeSummary(artifacts) {
   const n = (outcome) => (artifacts || []).filter((a) => a.outcome === outcome).length;
-  const parts = [`${n("created")} new`, `${n("updated")} replaced`];
-  if (n("kept")) parts.push(`${n("kept")} kept as they were`);
-  parts.push(`${n("unchanged")} unchanged`);
+  const parts = [t("choices.outcome.created", { n: n("created") }), t("choices.outcome.updated", { n: n("updated") })];
+  if (n("kept")) parts.push(t("choices.outcome.kept", { n: n("kept") }));
+  parts.push(t("choices.outcome.unchanged", { n: n("unchanged") }));
   return parts.join(", ");
 }

@@ -643,7 +643,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <li>
           <b data-l="de">Deployen &amp; starten in einem Schritt</b>
           <b data-l="en">Deploy &amp; run in one step</b>
-          <p data-l="de">Klicke im Editor auf <b>Deploy &amp; run</b>. Atlas macht das Modell lauffähig und
+          <p data-l="de">Klicke im Editor auf <b>Deployen</b> und dann <b>Deployen &amp; starten</b>. Atlas macht das Modell lauffähig und
             startet gleich eine <b>Instanz</b> – einen konkreten Durchlauf des Prozesses.</p>
           <p data-l="en">In the editor, click <b>Deploy &amp; run</b>. Atlas makes the model runnable and immediately
             starts an <b>instance</b> – one concrete run of the process.</p>
@@ -4489,7 +4489,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             wählt es über seinen Antragsteller aus – eine Erneuerung braucht in Atlas keine Änderung. Der Tenant ist
             eine <b>Serverkonstante</b> (<code>server.ENTRA_TENANT_ID</code>, gesetzt unter Admin → Engine → Server
             constants), Client-ID und Zertifikats-Antragsteller sind <b>Applikationskonstanten</b>
-            (<code>application.ENTRA_CLIENT_ID</code>, gesetzt im Tab <i>Constants</i> der Applikation) – jede
+            (<code>application.ENTRA_CLIENT_ID</code>, gesetzt im Tab <i>Konstanten</i> der Applikation) – jede
             Installation setzt ihre eigenen, und bis Tenant und Client-ID gesetzt sind, wird ein Start abgelehnt.</p>
           <p data-l="en">Beside it lies <code>entra-create-account.bpmn</code> – the same job as a PowerShell
             <code>jobScript</code>. The comparison is worth making: the script route can do everything PowerShell can,
@@ -5842,7 +5842,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <p data-l="en">People interact with the process through <b>forms</b>: as a <b>start form</b> (collects data when
         the instance is created) or at a <b>user task</b> (in the Tasks inbox). The Modeler has a form editor;
         submitted fields become process variables.</p>
-      <p data-l="de"><b>Eine gelesene Mail im Formular.</b> Die Komponente <b>E-mail view</b> zeigt eine Mail an, die
+      <p data-l="de"><b>Eine gelesene Mail im Formular.</b> Die Komponente <b>E-Mail-Anzeige</b> zeigt eine Mail an, die
         ein Mail-Task gelesen hat – Umschlag, Text und HTML-Fassung, externe Bilder erst auf Wunsch. Sie zeigt nur an
         und schickt nichts zurück. Wie du die HTML-Fassung liest, steht unter
         <a href="#runbook-mail">Mail</a>.</p>
@@ -5857,7 +5857,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         gehen). Der Zurück-Link oben links im Formular-Editor trägt dann den Namen des Prozesses und führt zum
         Diagramm zurück; das Element ist wieder ausgewählt, und ein unterwegs gespeichertes Formular ist mit ihm
         verknüpft &ndash; ein neu angelegtes ebenso wie eines, das unter einer neuen ID gespeichert wurde. Die
-        Verknüpfung ist eine gewöhnliche Änderung am Diagramm: rückgängig zu machen und mit <i>Save</i> zu sichern.
+        Verknüpfung ist eine gewöhnliche Änderung am Diagramm: rückgängig zu machen und mit <i>Speichern</i> zu sichern.
         Wurde die Verknüpfung des Elements in der Zwischenzeit anders gesetzt, bleibt sie, wie sie ist. Mit
         Strg- oder Mittelklick öffnet sich das Formular stattdessen in einem neuen Tab, und das Diagramm bleibt
         unverändert offen. Von einer deployten Version aus öffnet sich das Formular ohne Rückweg, weil es keinen
@@ -5875,8 +5875,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         diagram open as it was. From a deployed version the form opens without a way back, since there is no draft
         to return to. When the form has unsaved changes, the back link asks before it discards them.</p>
       <p data-l="de"><b>Dasselbe auf der Zeichenfläche.</b> Verknüpft ein Element ein Formular, steht in seinem
-        Kontextpad <b>Open form</b> (das Formular-Symbol neben Schraubenschlüssel und Papierkorb). In der Ansicht
-        <i>Implement</i> zeigen Start-Ereignisse und User-Tasks mit Formular ausserdem ein kleines Formular-Symbol;
+        Kontextpad ein Eintrag, der das Formular öffnet (das Formular-Symbol neben Schraubenschlüssel und Papierkorb). In der Ansicht
+        <i>Umsetzen</i> zeigen Start-Ereignisse und User-Tasks mit Formular ausserdem ein kleines Formular-Symbol;
         ein Klick darauf öffnet das Formular. Beides funktioniert wie der Knopf im Panel, und mit Strg- oder
         Mittelklick öffnet sich das Formular in einem neuen Tab. Gibt es das Formular auf dem Server nicht,
         erscheint eine Meldung, und das Diagramm wird weder gespeichert noch verlassen. Ein <i>Repair form</i>
@@ -5888,7 +5888,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         form, a message appears, and the diagram is neither saved nor left. A <i>Repair form</i> gets no symbol on
         the canvas, but the context pad and the panel reach it.</p>
       <p data-l="de"><b>Start-Formular und Startvariablen gemeinsam.</b> Deklariert der Prozess zusätzlich
-        Startvariablen (Prozess-Panel, Tab <i>Implement</i>, <i>Start variables</i>), fragen <i>Deploy &amp; run</i>,
+        Startvariablen (Prozess-Panel, Tab <i>Umsetzen</i>, <i>Start variables</i>), fragen <i>Deployen &amp; starten</i>,
         <i>Start instance</i> und der Start in der Tasks-App unter dem Formular nach denjenigen, die das Formular
         nicht selbst abfragt – mit Typ, Default und Pflichtmarkierung. Die Instanz startet mit beiden Teilen.</p>
       <p data-l="en"><b>Start form and start variables together.</b> When the process also declares start variables
@@ -5935,8 +5935,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         sich ein Wert zwischen DEV, INT und PROD – ein Tenant, eine App-ID –, steht er nicht im Modell. Die Konstante
         erhält im Panel die Quelle <i>application</i> oder <i>server</i> und wird dann unter diesem Namensraum
         gelesen: <code>application.TENANT_ID</code> ist die Konstante, die ihre Applikation auf der jeweiligen
-        Installation hält (gesetzt im Tab <i>Constants</i> der Applikation), <code>server.TENANT_ID</code> die, die die
-        Installation für alle Applikationen hält (gesetzt unter Admin → Engine → <i>Server constants</i>). In FEEL
+        Installation hält (gesetzt im Tab <i>Konstanten</i> der Applikation), <code>server.TENANT_ID</code> die, die die
+        Installation für alle Applikationen hält (gesetzt unter Admin → Engine → <i>Server-Konstanten</i>). In FEEL
         schreibt man <code>application.TENANT_ID</code>, in PowerShell <code>$application.TENANT_ID</code>, in Python
         <code>application["TENANT_ID"]</code>. Ein Wert im Modell ist nur noch der Fallback. Beide Seiten zeigen,
         welche Konstanten die deployten Prozesse lesen und welche hier fehlen; ein Deploy warnt, und ein Start aus
@@ -5948,7 +5948,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <code>server.environment</code>, <code>server.name</code> und <code>server.id</code> aus der Identität des
         Nodes, <code>application.name</code>, <code>application.key</code> und <code>application.id</code> aus der
         Applikation. Ein Prozess liest nur, was er deklariert – das Variables-Panel listet unter den Variablen, was
-        er lesen könnte, mit einem Knopf <i>Declare</i>, und die Vervollständigung bietet dasselbe an und deklariert
+        er lesen könnte, mit einem Knopf <i>Deklarieren</i>, und die Vervollständigung bietet dasselbe an und deklariert
         es beim Auswählen.</p>
       <p data-l="en"><b>Constants per environment: <code>application.</code> and <code>server.</code></b> A value that
         differs between DEV, INT and PROD – a tenant, an app id – does not belong in the model. Give the constant the
@@ -5973,7 +5973,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         so: im Modeler am <b>User-Task</b> (oder am <b>Start-Ereignis</b>) auf <b>＋ New form</b> drücken. Der
         Formular-Editor öffnet sich mit bereits geöffnetem Generator, der Prozess und Schritt schon kennt — dieser
         Klick war ja die Aussage, wofür das Formular da ist. Zu schreiben bleibt der Satz, wonach gefragt werden soll.
-        Derselbe Knopf <b>✨ Generate</b> sitzt in der Leiste des Editors, für ein Formular, das über die Formularliste
+        Derselbe Generator sitzt als Knopf <b>✨ Erzeugen</b> in der Leiste des Editors, für ein Formular, das über die Formularliste
         begonnen wurde; dort wählt man <b>Prozess</b> und <b>Schritt</b> selbst.</p>
       <p data-l="en">With an <b>AI Worker</b> configured (Console &rsaquo; Workers, kind <code>agent</code>), it goes
         like this: in the Modeler, press <b>＋ New form</b> on the <b>user task</b> (or on the <b>start
@@ -6008,7 +6008,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <p data-l="de">Eine Auswahlliste (Select) kann ihre Optionen statt aus einer festen Liste aus einer
         <b>Suche im Verzeichnis</b> beziehen: Im Formular-Editor wählst du bei der Auswahlliste unter
         <b>Options source ▸ Type</b> die Quelle <b>Remote data source</b> – neben Static, Input data und
-        Expression. Die Palette bietet dafür auch den <b>Directory picker</b> an, der eine solche Auswahlliste mit
+        Expression. Die Palette bietet dafür auch die <b>Verzeichnisauswahl</b> an, die eine solche Auswahlliste mit
         einem bereits für Formulare freigegebenen Worker anlegt. In derselben Gruppe legst du fest, welcher Worker
         sucht (heute ein Entra-Worker), worin gesucht wird (Anzeigename, E-Mail-Adresse, Benutzerprinzipalname …),
         ab wie vielen Zeichen gesucht wird und wie viele Treffer eine Seite hat; unter <b>Remote filters</b>, ob ein
@@ -8258,13 +8258,13 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
       <p class="lead" data-l="en">Three ways to deploy a process and start instances – pick what fits.</p>
 
       <h3 data-l="de">1 · Aus dem Modeler (empfohlen zum Start)</h3><h3 data-l="en">1 · From the Modeler (recommended to start)</h3>
-      <p data-l="de">Im Editor auf <b>Deploy</b> (nur deployen) oder <b>Deploy &amp; run</b> (deployen und eine Instanz
+      <p data-l="de">Im Editor auf <b>Deployen</b> und dort auf <b>Nur deployen</b> oder <b>Deployen &amp; starten</b> (deployen und eine Instanz
         starten). Am schnellsten für die ersten Runden.</p>
       <p data-l="en">In the editor, click <b>Deploy</b> (deploy only) or <b>Deploy &amp; run</b> (deploy and start one
         instance). Fastest for the first rounds.</p>
       <p data-l="de">Ist schon deployt und stört nur das <b>Bild</b> – ein Name unter einem Token-Zähler, ein Label
         auf einer Kante –, dann brauchst du dafür keine neue Version: öffne das Deployment im Modeler, schiebe
-        zurecht und wähle im <b>…</b>-Menü <b>Save layout to deployment</b>. Schlüssel, Version und laufende
+        zurecht und wähle im <b>…</b>-Menü <b>Layout ins Deployment speichern</b>. Schlüssel, Version und laufende
         Instanzen bleiben, wie sie sind; nur die Zeichnung ändert sich – auch für die Instanzen, die gerade laufen.
         Änderst du dabei versehentlich mehr als das Layout, wird das Speichern abgelehnt mit dem Hinweis, stattdessen
         zu deployen.</p>
@@ -8377,7 +8377,7 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
         <i>this</i> data". And a real deploy answers everything, at the price of filling the runtime with throwaway
         instances, firing real side effects, and running one instance at a time.</p>
       <p data-l="de">Der <b>Playground</b> ist der dritte Weg: ein eigener Tab im Modeler, neben <b>Design</b> und
-        <b>Implement</b>.</p>
+        <b>Umsetzen</b>.</p>
       <p data-l="en">The <b>Playground</b> is the third way: its own tab in the Modeler, beside <b>Design</b> and
         <b>Implement</b>.</p>
 
@@ -8404,7 +8404,7 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
           nächsten fälligen Timer &ndash; ein Prozess mit dreitägiger Eskalation ist in Millisekunden durch.</li>
         <li data-l="en">The run has its own simulated clock and does not follow real time. When nothing is runnable, time jumps to the
           next due timer &ndash; a process with a three-day escalation finishes in milliseconds.</li>
-        <li data-l="de">Ein Job, der auf einen Menschen wartet, wird zu einem <b>Complete</b>-Knopf; der
+        <li data-l="de">Ein Job, der auf einen Menschen wartet, wird zu einem <b>Abschliessen</b>-Knopf; der
           abgeschlossene Schritt wird zurück auf die Zeichenfläche gemalt.</li>
         <li data-l="en">A job waiting for a person becomes a <b>Complete</b> button; the completed step is painted
           back onto the canvas.</li>
@@ -8463,16 +8463,16 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
       <h3 data-l="en">From report to verdict: expectations</h3>
       <p data-l="de">Ein Bericht beantwortet «wie ist es gelaufen?» und braucht einen Menschen, der ihn beurteilt.
         <b>Erwartungen</b> machen daraus eine Antwort, auf die auch eine Maschine reagieren kann. Sie stehen im
-        Playground unter Schritt ③ <b>Expectations</b>: <i>every case finishes</i>, <i>no incidents</i>, eine
+        Playground unter Schritt ③ <b>Erwartungen</b>: <i>jeder Fall endet</i>, <i>keine Incidents</i>, eine
         Obergrenze für die p90-Dauer, die Elemente, die mindestens einmal erreicht werden müssen
-        (<i>Must reach</i>), und je Pool eine Obergrenze für die Warteschlange. Jede Erwartung ist freiwillig; was
+        (<i>Muss erreichen</i>), und je Pool eine Obergrenze für die Warteschlange. Jede Erwartung ist freiwillig; was
         leer bleibt, wird nicht geprüft.</p>
       <p data-l="en">A report answers "how did that go?" and needs a person to judge it. <b>Expectations</b> turn it
         into an answer a machine can act on too. They sit in the Playground under step ③ <b>Expectations</b>:
         <i>every case finishes</i>, <i>no incidents</i>, an upper bound for the p90 duration, the elements that
         have to be reached at least once (<i>Must reach</i>), and an upper bound for each pool's queue. Every
         expectation is optional; what stays empty is not checked.</p>
-      <p data-l="de"><i>Must reach</i> ist Abdeckung: Wer den Ablehnungszweig dort nennt, stellt sicher, dass der
+      <p data-l="de"><i>Muss erreichen</i> ist Abdeckung: Wer den Ablehnungszweig dort nennt, stellt sicher, dass der
         Datensatz ihn überhaupt erreicht. Ein Test, der nur den Happy Path durchläuft, prüft den Rest nicht – er
         schweigt über ihn.</p>
       <p data-l="en"><i>Must reach</i> is coverage: naming the rejection branch there makes sure the dataset reaches
@@ -8482,7 +8482,7 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
       <p data-l="de">«Der Median liegt unter vier Stunden» ist eine Aussage über den ganzen Lauf. «Jeder Antrag über
         30 Tage wird abgelehnt» ist eine Aussage über <i>jeden</i> Fall – und ein Lauf, in dem sie neun von zehn
         Mal gilt, ist nicht zu neun Zehnteln richtig, sondern für den zehnten falsch. Dafür gibt es unter
-        <b>Per case</b> Regeln: ein <code>when</code>, das die Fälle auswählt, und ein <code>then</code>, das sie
+        <b>Pro Fall</b> Regeln: ein <code>when</code>, das die Fälle auswählt, und ein <code>then</code>, das sie
         zeigen müssen – beides FEEL, dieselbe Sprache wie die Bedingungen im Diagramm.</p>
       <p data-l="en">"The median is under four hours" is a statement about the whole run. "Every request over 30
         days is rejected" is a statement about <i>every</i> case – and a run in which it holds nine times in ten is
@@ -8493,10 +8493,10 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
 then  end = "abgelehnt"</code></pre>
       <p data-l="de">Im Geltungsbereich stehen die Variablen des Falls, so wie der Lauf sie hinterlassen hat, dazu
         <code>end</code> – die BPMN-Id des letzten erreichten Elements – und <code>durationSeconds</code>. Die
-        Auswahl <i>ends at…</i> fügt die End-Events des Diagramms ein, statt sie abtippen zu lassen. Verstösst ein
+        Auswahl <i>endet bei …</i> fügt die End-Events des Diagramms ein, statt sie abtippen zu lassen. Verstösst ein
         Fall gegen eine Regel, nennt das Urteil ihn: mit seiner Nummer in der Ergebnistabelle, auf einige Fälle
         begrenzt. Ein Fall, der nicht zu Ende gelaufen ist, bleibt für eine Regel unentschieden; ob alle Fälle
-        fertig werden, sagt die Erwartung <i>every case finishes</i>.</p>
+        fertig werden, sagt die Erwartung <i>jeder Fall endet</i>.</p>
       <p data-l="en">In scope are the case's variables as the run left them, plus <code>end</code> – the BPMN id of
         the last element it reached – and <code>durationSeconds</code>. The <i>ends at…</i> picker inserts the
         diagram's end events instead of having them typed. When a case breaks a rule, the verdict names it: by its
@@ -8527,7 +8527,7 @@ then  end = "abgelehnt"</code></pre>
       <p data-l="de">Ein <b>Szenario</b> hält einen Lauf fest, damit ihn jemand wiederholen kann, der nicht dabei
         war: welches Modell mit welchem Seed, welche Antworten für Aufgaben und Umsysteme (Stubs), welche
         Kapazitäten (Pools), welcher Datensatz in welchem Takt, und was dabei gelten muss. Gespeichert wird es im Playground unter
-        <b>Scenario</b>, geöffnet unter <b>Saved scenarios</b>; es gehört zu seinem Diagramm.</p>
+        <b>Szenario</b>, geöffnet unter <b>Gespeicherte Szenarien</b>; es gehört zu seinem Diagramm.</p>
       <p data-l="en">A <b>scenario</b> records a run so that somebody who was not there can repeat it: which model
         with which seed, which answers for tasks and other systems (stubs), which capacities (pools), which dataset
         at which pace, and what has to hold. It is saved in the Playground under <b>Scenario</b> and opened under <b>Saved
@@ -8543,12 +8543,12 @@ then  end = "abgelehnt"</code></pre>
           and you are testing exactly that change.</li>
         <li data-l="de"><b>Nur ein beschriebener Datensatz lässt sich speichern.</b> Eine hochgeladene CSV-Datei
           wird auf dem Server gelesen und liegt nicht im Browser, der sie speichern könnte; dafür gibt es
-          <b>Generated</b>.</li>
+          <b>Generiert</b>.</li>
         <li data-l="en"><b>Only a described dataset can be saved.</b> An uploaded CSV file is read on the server and
           is not in the browser to store; that is what <b>Generated</b> is for.</li>
-        <li data-l="de"><b>Eine Baseline ist der Lauf, an dem der nächste gemessen wird.</b> <i>Keep as
-          baseline</i> nimmt nur einen bestandenen Lauf an – eine rote Baseline würde jeden Fehler danach
-          verdecken. Der nächste Lauf steht dann unter <i>Against the baseline</i> daneben, und zwar nur mit dem,
+        <li data-l="de"><b>Eine Baseline ist der Lauf, an dem der nächste gemessen wird.</b> <i>Als Baseline
+          behalten</i> nimmt nur einen bestandenen Lauf an – eine rote Baseline würde jeden Fehler danach
+          verdecken. Der nächste Lauf steht dann unter <i>Gegenüber der Baseline</i> daneben, und zwar nur mit dem,
           was sich bewegt hat.</li>
         <li data-l="en"><b>A baseline is the run the next one is measured against.</b> <i>Keep as baseline</i> only
           takes a run that passed – a failing baseline would hide every failure after it. The next run then
@@ -9133,8 +9133,8 @@ atlas worker --connector mssql</code></pre>
         einmal aus dem Namen ableitet und bei einer Umbenennung behält. Ausgeliefert wird sie als Ganzes. Beim
         Publizieren werden ihre BPMN-Entwürfe und die von ihnen gebundenen DMN-Referenzen zusammen deployt –
         alle oder keiner; <b>Formulare gehören zur Applikation, werden aber nicht deployt</b>. In der Konsole legt
-        man sie im Modeler unter <i>Create new › New application</i> an; ihr Detail hat die Reiter
-        <i>Artifacts</i> und <i>Deployments</i>.</p>
+        man sie im Modeler unter <i>Neu erstellen › Neue Anwendung</i> an; ihr Detail hat die Reiter
+        <i>Artefakte</i> und <i>Deployments</i>.</p>
       <p data-l="en">An <b>application</b> is the same thing as a project, only renamed (ADR-0128): it groups
         drafts, forms and decision references under one name and one <b>key</b> that atlas derives once from the
         name and keeps across a rename. It is delivered as a whole. Publishing deploys its BPMN drafts and the DMN
@@ -9143,10 +9143,10 @@ atlas worker --connector mssql</code></pre>
         <i>Artifacts</i> and <i>Deployments</i> tabs.</p>
 
       <h3 data-l="de">Publizieren: ein Release</h3><h3 data-l="en">Publish: a release</h3>
-      <p data-l="de">Der Knopf <b>Publish</b> deployt die Applikation und hält zugleich einen <b>Release</b> fest:
+      <p data-l="de">Der Knopf <b>Veröffentlichen</b> deployt die Applikation und hält zugleich einen <b>Release</b> fest:
         eine Momentaufnahme dessen, was zusammen ausgeliefert wurde, mit einer <b>Versionsnummer je Applikation</b>,
         die bei 1 beginnt und je Publikation um eins steigt – kein SemVer. (Ohne Release deployt dagegen der
-        Knopf <i>Deploy</i> im Editor, für einen einzelnen Prozess und schnelle Runden; <code>…/deploy</code> tut
+        Knopf <i>Deployen</i> im Editor, für einen einzelnen Prozess und schnelle Runden; <code>…/deploy</code> tut
         dasselbe für die ganze Applikation, hat aber keinen Knopf.) Ein Release ist <b>unveränderlich</b>: es gibt keine
         Route, die ihn ändert oder löscht, und keinen Rückrollen-Knopf – zurück geht es, indem man einen früheren
         Release erneut auf das Ziel bringt. Was er festhält, sind seine Prozess- und Entscheidungsmitglieder mit
@@ -9163,7 +9163,7 @@ atlas worker --connector mssql</code></pre>
 curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
   -H "Content-Type: application/json" -d '{"note":"Antrag prüfen"}'</code></pre>
       <p data-l="de">In der Applikation zeigt <i>Deployments</i> die publizierte Version, die laufenden Instanzen
-        und darunter die <b>Release history</b>. Publizieren und Promoten verlangen die Rolle <code>modeler</code>
+        und darunter den <b>Release-Verlauf</b>. Publizieren und Promoten verlangen die Rolle <code>modeler</code>
         und auf der Applikation die Stufe <i>editor</i>.</p>
       <p data-l="en">Inside the application, <i>Deployments</i> shows the published version, the running instances,
         and below them the <b>Release history</b>. Publishing and promoting need the <code>modeler</code> role and,
@@ -9171,8 +9171,8 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
       <p data-l="de">Jeder Release trägt eine <b>Architekturskizze</b> (ADR-0471): Beim Publizieren und beim Import
         eines promoteten Release hält atlas fest, welche Nachrichten seine Prozesse empfangen, welche Worker sie mit
         welchem Worker Type nennen, welche lokalen Entscheidungen sie auswerten und welche Prozesse anderer
-        Applikationen sie aufrufen – jeweils mit den Elementen, die es angeben. <i>Architecture</i> in der Release
-        history zeigt sie als Skizze und bietet sie als SVG und als ArchiMate-Open-Exchange-Dokument für Archi und
+        Applikationen sie aufrufen – jeweils mit den Elementen, die es angeben. <i>Architektur</i> im
+        Release-Verlauf zeigt sie als Skizze und bietet sie als SVG und als ArchiMate-Open-Exchange-Dokument für Archi und
         andere Werkzeuge an. Derselbe Release ergibt immer dieselben Bytes. Neben der logischen Sicht hält die Skizze
         fest, was die aufzeichnende Installation in diesem Moment bereitstellte: ihren Namen und ihre Umgebung, ihre
         externe Adresse, die öffentlichen Start-Links und pro Worker, ob atlas ihn selbst ausführt oder ein
@@ -9303,12 +9303,12 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/releases/1/
       <h3 data-l="de">Der Quellbaum: die Quelle bewegen, nicht das Deployment</h3>
       <h3 data-l="en">The source tree: moving the source, not the deployment</h3>
       <p data-l="de">Promotion bewegt, <i>was deployt ist</i>. Der <b>Quellbaum</b> bewegt, <i>was ein Mensch
-        bearbeitet</i>: Entwürfe, Formulare und Entscheidungsreferenzen als lesbare Dateien. <i>Export application…</i>
+        bearbeitet</i>: Entwürfe, Formulare und Entscheidungsreferenzen als lesbare Dateien. <i>Anwendung exportieren…</i>
         lädt ein <code>tar.gz</code> mit einem Manifest <code>atlas.json</code> (Format-Version, Schlüssel, Name)
         und je einer Datei unter <code>processes/</code> und <code>forms/</code>; Entscheidungen stehen als Verweis
         im Manifest, DMN-Modelle dieses Servers als Datei. Auf Wunsch kommen die Konstanten-Werte und die Kataloge
         mit, die die Applikation verkaufen (siehe Shop-Handbuch). Der Export ist <b>Byte für Byte reproduzierbar</b>.
-        Beim Import (<i>Import application…</i>) wird die Applikation über den <b>Schlüssel</b> gefunden; fehlt sie,
+        Beim Import (<i>Anwendung importieren…</i>) wird die Applikation über den <b>Schlüssel</b> gefunden; fehlt sie,
         wird sie angelegt. Der Import <b>ersetzt nichts ungefragt</b> und <b>löscht nie</b>; was hier anders ist,
         listet er zur Entscheidung auf. Ein eingebautes Git gibt es nicht – der Quellbaum ist ein Archiv, das man
         selbst versionieren kann.</p>
@@ -10509,7 +10509,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         deploy does not touch it. Only new instances run on the new version. That is the load-bearing fact of this
         chapter, and the most common wrong expectation.</p>
       <p data-l="de">Zwei Dinge ändern eine Version <i>nicht</i>: das Speichern eines korrigierten Layouts auf ein
-        Deployment (<i>Save layout to deployment</i>, siehe <a href="#laufen">Zum Laufen bringen</a>) und das
+        Deployment (<i>Layout ins Deployment speichern</i>, siehe <a href="#laufen">Zum Laufen bringen</a>) und das
         Pausieren (unten). Alles, was den Prozess selbst ändert, ist ein neuer Deploy und eine neue Version.</p>
       <p data-l="en">Two things do <i>not</i> change a version: saving a corrected layout onto a deployment
         (<i>Save layout to deployment</i>, see <a href="#laufen">Make it run</a>) and pausing (below). Anything that
@@ -10585,7 +10585,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         aus einem Zeit-, Nachrichten- oder Signal-Start-Event. Ein <b>ausdrücklicher</b> Start über die API oder die
         Oberfläche bleibt möglich, und laufende Instanzen laufen unberührt weiter. Es wirkt je Version, nicht je
         Prozess-Id; eine neue Version startet unabhängig davon aktiv. In der Konsole trägt die pausierte Version im
-        Modeler die Marke <i>Inactive</i> und einen Knopf <i>Activate</i> / <i>Deactivate</i>.</p>
+        Modeler die Marke <i>Inaktiv</i> und einen Knopf <i>Aktivieren</i> / <i>Deaktivieren</i>.</p>
       <p data-l="en">A deployed version can be <b>paused</b> without deleting it
         (<code>PUT /api/v1/processes/{key}/active</code> with <code>{"active":false}</code>, role
         <code>operator</code>). Paused means the version <b>no longer starts new instances on its own</b> – from a
@@ -10612,7 +10612,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         protected system process can never be deleted. In the Modeler, <i>Delete</i> shows the reason for a refusal
         and offers the forced delete.</p>
       <p data-l="de">Beim Löschen einer Applikation wählst du: Entweder bleibt ihr Inhalt erhalten und erscheint
-        unter <i>Not assigned</i>, oder alles, was ihr auf diesem Server gehört, wird mitgelöscht – deployte Versionen
+        unter <i>Nicht zugeordnet</i>, oder alles, was ihr auf diesem Server gehört, wird mitgelöscht – deployte Versionen
         samt laufenden Instanzen, Entscheidungs-Deployments, BPMN- und Entscheidungsentwürfe, DMN-Referenzen mit ihren
         gespeicherten Modellen, Formulare, Testszenarien, Panorama- und Informationsmodelle
         (<code>DELETE /api/v1/applications/{id}?purge=true</code>, nur für die Besitzerin oder den Besitzer der

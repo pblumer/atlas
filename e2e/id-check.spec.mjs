@@ -29,7 +29,7 @@ test("an id another draft holds turns the field red and names it", async ({ page
 test("a collision the author may not see is reported without naming it", async ({ page }) => {
   await page.evaluate(() => window.__type("hidden-one"));
   await expect(page.locator("#pid")).toHaveClass(/id-taken/);
-  await expect(page.locator(".id-check")).toContainText("another draft");
+  await expect(page.locator(".id-check")).toContainText("anderen Entwurf");
   expect(page.__errors).toEqual([]);
 });
 

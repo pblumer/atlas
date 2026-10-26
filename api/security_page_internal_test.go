@@ -70,10 +70,6 @@ func TestTheIdentityPagesAgreeWithTheServer(t *testing.T) {
 // both locales, including the ones built from a value (a connection's status, an
 // identity mode's hint). A missing key renders as the key.
 func TestEveryMessageTheIdentityPagesAskForExists(t *testing.T) {
-	catalogue, err := os.ReadFile("web/i18n.js")
-	if err != nil {
-		t.Fatalf("read the message catalogue: %v", err)
-	}
 	keys := map[string]bool{}
 	for _, page := range []string{"connections.js", "security.js"} {
 		src := readPage(t, page)
@@ -104,11 +100,8 @@ func TestEveryMessageTheIdentityPagesAskForExists(t *testing.T) {
 			keys[prefix+v] = true
 		}
 	}
-	for _, locale := range []string{"de", "en"} {
-		block, ok := localeBlock(string(catalogue), locale)
-		if !ok {
-			t.Fatalf("no %q block in web/i18n.js", locale)
-		}
+	for _, locale := range consoleLocales() {
+		block := localeCatalogue(t, locale)
 		for key := range keys {
 			if !strings.Contains(block, `"`+key+`":`) {
 				t.Errorf("the identity pages ask for %q, which locale %q does not have", key, locale)

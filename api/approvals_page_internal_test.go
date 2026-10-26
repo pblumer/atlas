@@ -1,7 +1,6 @@
 package api
 
 import (
-	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -38,10 +37,6 @@ func TestTheApprovalsPageSpeaksTheRoutesWords(t *testing.T) {
 // TestEveryMessageTheApprovalsPageAsksForExists: every key the page looks up is in
 // both locales, and the German is written the Swiss way.
 func TestEveryMessageTheApprovalsPageAsksForExists(t *testing.T) {
-	catalogue, err := os.ReadFile("web/i18n.js")
-	if err != nil {
-		t.Fatalf("read the message catalogue: %v", err)
-	}
 	src := readPage(t, "approvals.js")
 	keys := map[string]bool{}
 	for _, m := range regexp.MustCompile(`"(approvals\.[A-Za-z0-9._-]+)"`).FindAllStringSubmatch(src, -1) {
@@ -50,11 +45,8 @@ func TestEveryMessageTheApprovalsPageAsksForExists(t *testing.T) {
 	if len(keys) < 40 {
 		t.Fatalf("found only %d message keys; the scan no longer matches how the module looks them up", len(keys))
 	}
-	for _, locale := range []string{"de", "en"} {
-		block, ok := localeBlock(string(catalogue), locale)
-		if !ok {
-			t.Fatalf("no %q block in web/i18n.js", locale)
-		}
+	for _, locale := range consoleLocales() {
+		block := localeCatalogue(t, locale)
 		for key := range keys {
 			if !strings.Contains(block, `"`+key+`":`) {
 				t.Errorf("the approvals page asks for %q, which locale %q does not have", key, locale)

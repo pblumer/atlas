@@ -18,10 +18,6 @@ import (
 // would then title a card `ba.finding.stage.orphaned.title` — visibly broken by design,
 // but only to whoever has that finding. This makes it fail in CI instead.
 func TestTheBusinessArchitectureScreenHasWordsForEverythingTheServerSays(t *testing.T) {
-	catalogue, err := os.ReadFile("web/i18n.js")
-	if err != nil {
-		t.Fatalf("read the message catalogue: %v", err)
-	}
 	sub := capability.Subset()
 	var want []string
 	for _, kind := range sub.FindingKinds {
@@ -33,12 +29,8 @@ func TestTheBusinessArchitectureScreenHasWordsForEverythingTheServerSays(t *test
 	for _, kind := range sub.RealizationKinds {
 		want = append(want, "ba.realization."+kind)
 	}
-	src := string(catalogue)
-	for _, locale := range []string{"de", "en"} {
-		block, ok := localeBlock(src, locale)
-		if !ok {
-			t.Fatalf("no %q block in web/i18n.js", locale)
-		}
+	for _, locale := range consoleLocales() {
+		block := localeCatalogue(t, locale)
 		for _, key := range want {
 			if !strings.Contains(block, `"`+key+`":`) {
 				t.Errorf("locale %q has no message %q", locale, key)
@@ -55,10 +47,6 @@ func TestEveryMessageTheCapabilityScreenAsksForExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the capability module: %v", err)
 	}
-	catalogue, err := os.ReadFile("web/i18n.js")
-	if err != nil {
-		t.Fatalf("read the message catalogue: %v", err)
-	}
 	keys := map[string]bool{}
 	for _, m := range regexp.MustCompile(`\b(?:t|tx)\("(ba\.[A-Za-z0-9.-]+)"`).FindAllStringSubmatch(string(module), -1) {
 		keys[m[1]] = true
@@ -74,12 +62,8 @@ func TestEveryMessageTheCapabilityScreenAsksForExists(t *testing.T) {
 	if len(keys) < 50 {
 		t.Fatalf("found only %d message keys in web/capabilities.js; the scan no longer matches how the module looks them up", len(keys))
 	}
-	src := string(catalogue)
-	for _, locale := range []string{"de", "en"} {
-		block, ok := localeBlock(src, locale)
-		if !ok {
-			t.Fatalf("no %q block in web/i18n.js", locale)
-		}
+	for _, locale := range consoleLocales() {
+		block := localeCatalogue(t, locale)
 		for key := range keys {
 			if !strings.Contains(block, `"`+key+`":`) {
 				t.Errorf("web/capabilities.js asks for %q, which locale %q does not have", key, locale)

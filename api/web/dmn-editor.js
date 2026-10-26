@@ -31,6 +31,8 @@
 // Authoring the FEEL and the decision logic is still dmn-js's job; Atlas only
 // stores what it produces and evaluates it through temis.
 
+import { t as tr, plural as trPlural } from "./i18n.js";
+import { panelGroupsModule, translateModule } from "./lib-translate.js";
 import { renderTrace, fmtVal as traceValue } from "./dmn-trace.js";
 import { collectDecisionDocumentation, exportDecisionDocumentation } from "./decision-doc.js";
 import { attachCollab } from "./collab.js";
@@ -297,17 +299,14 @@ function firstDecisionId(xml) {
 // viewLabel names a dmn-js view for the tab strip: the DRG overview, or a
 // decision's own table/expression editor.
 function viewLabel(v) {
-  if (v.type === "drd") return "Overview (DRG)";
-  return (v.element && v.element.name) || (v.element && v.element.id) || "Decision";
+  if (v.type === "drd") return tr("dmn.view.overview");
+  return (v.element && v.element.name) || (v.element && v.element.id) || tr("dmn.view.decision");
 }
 
 // HINT_TAIL is the part of the hint that is the same under every view: the three
 // verbs on the bar. They mean what they mean regardless of how the logic on screen
 // is written (ADR-0321, ADR-0322).
-const HINT_TAIL = `<b>Save</b> keeps a draft only you see; <b>Save to model</b> writes the
-  decision every process resolves, and is what the next Publish ships; <b>Deploy</b> ships this
-  decision to the engine on its own, as a new version. <b>Test</b> runs it against sample inputs
-  and shows which rules fired — nothing is saved or deployed by asking.`;
+const hintTail = () => tr("dmn.hint.tail");
 
 // hintFor says what the view on screen is for. dmn-js opens four, and they are not
 // variations on one editor: the requirements graph, a decision's rule table, a
@@ -320,24 +319,15 @@ const HINT_TAIL = `<b>Save</b> keeps a draft only you see; <b>Save to model</b> 
 function hintFor(active) {
   const type = (active && active.type) || "decisionTable";
   if (type === "drd") {
-    return `Draw the decision requirements graph. An <b>Input Data</b> node is something this
-      model is given, a <b>Decision</b> holds logic, and a <b>Knowledge Model</b> is a reusable
-      function a decision can invoke. Open a decision's own tab to model its logic. ` + HINT_TAIL;
+    return tr("dmn.hint.drd") + " " + hintTail();
   }
   if (type === "literalExpression") {
-    return `This decision's logic is one FEEL expression: what it evaluates to is the decision's
-      result, under the variable named below it. Its inputs are whatever the requirements graph
-      gives it — both are adopted into a business rule task that calls this decision. ` + HINT_TAIL;
+    return tr("dmn.hint.literal") + " " + hintTail();
   }
   if (type === "boxedExpression") {
-    return `A <b>knowledge model</b> is a reusable FEEL function, not a decision: nothing calls it
-      from a process. <b>F</b> is the expression language, the list beside it is the parameters a
-      caller passes, the body is evaluated with them, and <b>Result</b> names the variable a
-      decision binds when it invokes this model. ` + HINT_TAIL;
+    return tr("dmn.hint.boxed") + " " + hintTail();
   }
-  return `Model the decision table. <b>Input Data</b> nodes become the decision's inputs and the
-    output column becomes its result variable — both are adopted into a business rule task that
-    calls this decision. ` + HINT_TAIL;
+  return tr("dmn.hint.table") + " " + hintTail();
 }
 
 // attachColumnSync keeps a decision's input columns in step with the requirements
@@ -418,8 +408,8 @@ function attachColumnSync(modeler, toast) {
         added = addInputColumn(modeling, target, decision, source.businessObject);
       } catch { /* a model shape this does not understand keeps its requirement anyway */ }
       if (added) {
-        toast && toast(`“${nameOf(source.businessObject)}” added as an input column of `
-          + `“${decision.name || decision.id}”.`, "ok");
+        toast && toast(tr("dmn.column.added",
+          { input: nameOf(source.businessObject), decision: decision.name || decision.id }), "ok");
       }
     };
 
@@ -545,27 +535,19 @@ function attachColumnSync(modeler, toast) {
       if (!pending.length) return;
 
       const total = pending.reduce((n, p) => n + p.columns.length, 0);
-      const many = total > 1;
-      const lines = pending.map((p) => `  • “${p.name}” in “${p.decision.name || p.decision.id}”`
-        + (p.columns.length > 1 ? ` (${p.columns.length} columns)` : ""));
+      const lines = pending.map((p) => tr("dmn.column.removeLine", { name: p.name, decision: p.decision.name || p.decision.id })
+        + (p.columns.length > 1 ? tr("dmn.column.removeLineCount", { n: p.columns.length }) : ""));
       const ok = window.confirm(
-        `Remove the input ${many ? "columns" : "column"} as well?\n\n`
+        trPlural("dmn.column.removeAsk", total) + "\n\n"
         + lines.join("\n")
-        + `\n\nNothing gives the decision ${many ? "those names" : "that name"} any more, so `
-        + `${many ? "these columns read names that do not resolve" : "this column reads a name "
-          + "that does not resolve"} and the model will not deploy.\n\n`
-        + `Removing ${many ? "a column" : "it"} also removes its cell in every rule, and those `
-        + `cells are logic somebody wrote — which is why this is a question and not something `
-        + `that just happens. Cancel keeps ${many ? "them" : "it"}; the findings below the `
-        + `canvas will point at ${many ? "each one" : "it"}.`);
+        + "\n\n" + trPlural("dmn.column.removeWhy", total));
       if (!ok) return;
 
       for (const p of pending) {
         for (const input of p.columns) removeInputColumn(modeling, p.shape, p.table, input);
       }
-      toast && toast(`${total} input ${many ? "columns" : "column"} removed with the `
-        + `${removed.length > 1 ? "requirements" : "requirement"} — Ctrl+Z takes `
-        + `${many ? "them" : "it"} back.`, "ok");
+      toast && toast(trPlural("dmn.column.removed", total,
+        { with: trPlural("dmn.column.withRequirement", removed.length) }), "ok");
     };
 
     // A followed rename says nothing. It is the author's own edit reaching the place
@@ -749,33 +731,31 @@ function attachDmnWarnings(modeler, strip, toast) {
       modeling = viewer.get("modeling");
       rules = viewer.get("rules");
     } catch {
-      toast && toast("This view cannot draw the requirement.", "err");
+      toast && toast(tr("dmn.draw.noView"), "err");
       return;
     }
     const source = registry.get(sourceId);
     const target = registry.get(targetId);
     if (!source || !target) {
-      toast && toast("One of the two elements is not on the requirements graph, so the "
-        + "requirement cannot be drawn here.", "err");
+      toast && toast(tr("dmn.draw.notOnGraph"), "err");
       return;
     }
     if (!rules.allowed("connection.create", { source, target })) {
-      toast && toast("dmn-js will not connect these two, so this has to be drawn by hand.", "err");
+      toast && toast(tr("dmn.draw.refused"), "err");
       return;
     }
     let connection;
     try {
       connection = modeling.connect(source, target);
     } catch (err) {
-      toast && toast("Could not draw the requirement: " + err.message, "err");
+      toast && toast(tr("dmn.draw.failed", { error: err.message }), "err");
       return;
     }
     // Selecting it is half the feature: it is both where the author looks to see what
     // was drawn, and the gesture that offers to remove it again.
     try { viewer.get("selection").select(connection); } catch { /* drawn either way */ }
     focusCanvas(viewer);
-    toast && toast("Knowledge requirement drawn — Ctrl+Z takes it back, or the bin in its "
-      + "context pad.", "ok");
+    toast && toast(tr("dmn.draw.done"), "ok");
   };
 
   // applyColumn writes the column a requirement implies into the decision's table:
@@ -791,23 +771,23 @@ function attachDmnWarnings(modeler, strip, toast) {
       registry = viewer.get("elementRegistry");
       modeling = viewer.get("modeling");
     } catch {
-      toast && toast("This view cannot add the column.", "err");
+      toast && toast(tr("dmn.addColumn.noView"), "err");
       return;
     }
     const decision = registry.get(decisionId);
     const provider = registry.get(providerId);
     if (!decision || !provider) {
-      toast && toast("One of the two elements is not on the requirements graph.", "err");
+      toast && toast(tr("dmn.addColumn.notOnGraph"), "err");
       return;
     }
     const added = addInputColumn(
       modeling, decision, decision.businessObject, provider.businessObject);
     focusCanvas(viewer);
     if (!added) {
-      toast && toast("There is no decision table to add a column to.", "err");
+      toast && toast(tr("dmn.addColumn.noTable"), "err");
       return;
     }
-    toast && toast(`Input column “${added}” added — Ctrl+Z takes it back.`, "ok");
+    toast && toast(tr("dmn.addColumn.done", { name: added }), "ok");
   };
 
   // freeSpotBelow picks where a created input data goes: under the decision that asked
@@ -853,12 +833,12 @@ function attachDmnWarnings(modeler, strip, toast) {
       canvas = viewer.get("canvas");
       eventBus = viewer.get("eventBus");
     } catch {
-      toast && toast("This view cannot add an input.", "err");
+      toast && toast(tr("dmn.addInput.noView"), "err");
       return;
     }
     const decision = registry.get(decisionId);
     if (!decision) {
-      toast && toast("That decision is not on the requirements graph.", "err");
+      toast && toast(tr("dmn.addInput.notOnGraph"), "err");
       return;
     }
 
@@ -875,7 +855,7 @@ function attachDmnWarnings(modeler, strip, toast) {
       });
       shape.businessObject.variable.$parent = shape.businessObject;
     } catch (err) {
-      toast && toast("Could not create the input: " + err.message, "err");
+      toast && toast(tr("dmn.addInput.failed", { error: err.message }), "err");
       return;
     }
 
@@ -887,13 +867,12 @@ function attachDmnWarnings(modeler, strip, toast) {
       modeling.createShape(shape, freeSpotBelow(decision, registry), canvas.getRootElement());
     } catch (err) {
       try { eventBus.off("commandStack.shape.create.postExecute", connect); } catch { /* never bound */ }
-      toast && toast("Could not create the input: " + err.message, "err");
+      toast && toast(tr("dmn.addInput.failed", { error: err.message }), "err");
       return;
     }
     try { viewer.get("selection").select(shape); } catch { /* created either way */ }
     focusCanvas(viewer);
-    toast && toast(`“${name}” added as input data and drawn to the decision — Ctrl+Z takes `
-      + `both back.`, "ok");
+    toast && toast(tr("dmn.addInput.done", { name }), "ok");
   };
 
   const onClick = (e) => {
@@ -1084,47 +1063,47 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   root.innerHTML = `
     <div class="editor dmn-editor">
       <div class="editor-bar">
-        <a class="crumbs" id="dmn-back" href="#/modeler">&larr; Modeler</a>
+        <a class="crumbs" id="dmn-back" href="#/modeler">${esc(tr("dmn.bar.back"))}</a>
         <div class="etabs" id="dmn-views"></div>
         <span class="chip" id="dmn-ref-chip" hidden></span>
-        <span class="chip draft-chip" id="dmn-draft-chip" hidden title="This decision has work that has not been written to the model yet — nothing else can see it">Draft</span>
+        <span class="chip draft-chip" id="dmn-draft-chip" hidden title="${esc(tr("dmn.chip.draftTitle"))}">${esc(tr("dmn.chip.draft"))}</span>
         <span class="chip deployed-chip" id="dmn-deployed-chip" hidden></span>
         <div style="flex:1"></div>
         <span class="muted" id="dmn-status"></span>
-        <button class="btn neutral" id="dmn-discard" hidden title="Throw away the draft and go back to the stored model">Discard draft</button>
-        <button class="btn neutral" id="dmn-save" title="Save this decision as a draft. Nothing that reads this decision changes until you save it to the model.">Save</button>
-        <button class="btn neutral toggle" id="dmn-test" type="button" aria-pressed="false" title="Run this decision against sample inputs and see which rules fired — nothing is saved or deployed">Test</button>
+        <button class="btn neutral" id="dmn-discard" hidden title="${esc(tr("dmn.discardTitle"))}">${esc(tr("dmn.discard"))}</button>
+        <button class="btn neutral" id="dmn-save" title="${esc(tr("dmn.saveTitle"))}">${esc(tr("dmn.save"))}</button>
+        <button class="btn neutral toggle" id="dmn-test" type="button" aria-pressed="false" title="${esc(tr("dmn.testTitle"))}">${esc(tr("dmn.test"))}</button>
         <span class="bar-div" aria-hidden="true"></span>
-        <button class="btn neutral" id="dmn-save-model" title="Write this into the decision model every process and application resolves — this is what the next Publish ships.">Save to model</button>
-        <button class="btn" id="dmn-deploy" title="Deploy this decision on its own, as a versioned runtime artifact the engine can evaluate now. To ship a whole application, use Publish on the application.">Deploy</button>
+        <button class="btn neutral" id="dmn-save-model" title="${esc(tr("dmn.saveModelTitle"))}">${esc(tr("dmn.saveModel"))}</button>
+        <button class="btn" id="dmn-deploy" title="${esc(tr("dmn.deployTitle"))}">${esc(tr("dmn.deploy"))}</button>
         <div class="dropdown">
-          <button class="icon-btn bar-more" id="dmn-more" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="Everything else this decision can do">&#8943;</button>
+          <button class="icon-btn bar-more" id="dmn-more" type="button" aria-haspopup="true" aria-expanded="false" aria-label="${esc(tr("dmn.more"))}" title="${esc(tr("dmn.moreTitle"))}">&#8943;</button>
           <div class="dropdown-menu" id="dmn-menu" hidden>
-            <button id="dmn-autolayout" type="button" title="Re-flow the decision requirements graph into a clean layout"><span class="mi-icon">&#8649;</span>Auto-layout</button>
-            <button id="dmn-export" type="button" title="Download this decision as DMN XML"><span class="mi-icon">&#8595;</span>Export XML</button>
-            <button id="dmn-xmlsource" type="button" title="Show this decision as DMN XML, and correct it in place"><span class="mi-icon mi-code">&lt;/&gt;</span>XML source</button>
-            <button id="dmn-docexport" type="button" title="Publish this decision as a structured PDF — the requirements graph plus every decision's prose and rule table — as a numbered version you can share"><span class="mi-icon">&#128196;</span>Documentation</button>
+            <button id="dmn-autolayout" type="button" title="${esc(tr("dmn.autolayoutTitle"))}"><span class="mi-icon">&#8649;</span>${esc(tr("dmn.autolayout"))}</button>
+            <button id="dmn-export" type="button" title="${esc(tr("dmn.exportTitle"))}"><span class="mi-icon">&#8595;</span>${esc(tr("dmn.export"))}</button>
+            <button id="dmn-xmlsource" type="button" title="${esc(tr("dmn.xmlSourceTitle"))}"><span class="mi-icon mi-code">&lt;/&gt;</span>${esc(tr("dmn.xmlSource"))}</button>
+            <button id="dmn-docexport" type="button" title="${esc(tr("dmn.docTitle"))}"><span class="mi-icon">&#128196;</span>${esc(tr("dmn.doc"))}</button>
           </div>
         </div>
       </div>
       <div class="start-panel dmn-test-panel" id="dmn-test-panel" hidden>
         <div class="row">
-          <label class="field"><span>Decision</span><select id="dmn-test-decision"></select></label>
-          <button class="btn" id="dmn-test-run" title="Evaluate this decision with the values below">Run</button>
-          <button class="btn neutral" id="dmn-test-close" title="Close the test panel">Close</button>
+          <label class="field"><span>${esc(tr("dmn.test.decision"))}</span><select id="dmn-test-decision"></select></label>
+          <button class="btn" id="dmn-test-run" title="${esc(tr("dmn.test.runTitle"))}">${esc(tr("dmn.test.run"))}</button>
+          <button class="btn neutral" id="dmn-test-close" title="${esc(tr("dmn.test.closeTitle"))}">${esc(tr("common.close"))}</button>
           <span class="err" id="dmn-test-err"></span>
         </div>
         <div class="dmn-test-inputs" id="dmn-test-inputs"></div>
         <div class="dmn-test-result" id="dmn-test-result"></div>
       </div>
       <div class="start-panel" id="dmn-doc-panel" hidden>
-        <label class="field"><span>Title</span>
-          <input id="dmn-doc-title" placeholder="Leave empty to use the model name"/></label>
-        <label class="field"><span>Note for this version</span>
-          <input id="dmn-doc-note" placeholder="What changed, or what this version was signed off for"/></label>
+        <label class="field"><span>${esc(tr("dmn.doc.title"))}</span>
+          <input id="dmn-doc-title" placeholder="${esc(tr("dmn.doc.titlePlaceholder"))}"/></label>
+        <label class="field"><span>${esc(tr("dmn.doc.note"))}</span>
+          <input id="dmn-doc-note" placeholder="${esc(tr("dmn.doc.notePlaceholder"))}"/></label>
         <div class="row">
-          <button class="btn" id="dmn-doc-publish" title="Publish a new documentation version as a PDF">Publish version</button>
-          <button class="btn neutral" id="dmn-doc-cancel" title="Close the documentation panel">Close</button>
+          <button class="btn" id="dmn-doc-publish" title="${esc(tr("dmn.doc.publishTitle"))}">${esc(tr("dmn.doc.publish"))}</button>
+          <button class="btn neutral" id="dmn-doc-cancel" title="${esc(tr("dmn.doc.closeTitle"))}">${esc(tr("common.close"))}</button>
           <span class="err" id="dmn-doc-err"></span>
         </div>
         <div class="doc-history" id="dmn-doc-history"></div>
@@ -1175,9 +1154,9 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
       ref = refs.find((r) => r.id === refId) || null;
     } catch { /* fall through: reported as "could not load" below */ }
     if (!ref || !ref.modelRef) {
-      root.innerHTML = `<div class="card empty"><h1>Decision not found</h1>` +
-        `<p class="muted">This decision reference no longer exists, or its model is not editable here.</p>` +
-        `<p><a class="btn" href="#/modeler">Back to the Modeler</a></p></div>`;
+      root.innerHTML = `<div class="card empty"><h1>${esc(tr("dmn.notFound"))}</h1>` +
+        `<p class="muted">${esc(tr("dmn.notFoundText"))}</p>` +
+        `<p><a class="btn" href="#/modeler">${esc(tr("dmn.backToModeler"))}</a></p></div>`;
       return;
     }
     modelRef = ref.modelRef;
@@ -1196,9 +1175,9 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
       draft = drafts.find((d) => d.id === wantDraft) || null;
     } catch { /* no draft listing is the same as no draft: the model still opens */ }
     if (draftId && !draft) {
-      root.innerHTML = `<div class="card empty"><h1>Decision draft not found</h1>` +
-        `<p class="muted">This decision draft no longer exists. It may have been written to the model, or discarded.</p>` +
-        `<p><a class="btn" href="#/modeler">Back to the Modeler</a></p></div>`;
+      root.innerHTML = `<div class="card empty"><h1>${esc(tr("dmn.draftNotFound"))}</h1>` +
+        `<p class="muted">${esc(tr("dmn.draftNotFoundText"))}</p>` +
+        `<p><a class="btn" href="#/modeler">${esc(tr("dmn.backToModeler"))}</a></p></div>`;
       return;
     }
     if (draft) {
@@ -1297,14 +1276,21 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
       // opened as 1.5 also *saves* as 1.5: dmn-js's writer emits whatever the
       // moddle was built with, so the author's version is not quietly downgraded.
       dmnVersion: (builtFor = dmnVersionOf(xml)),
+      // Every view gets the catalogue's translate service: dmn-js builds each view
+      // from its own options and does not carry `common.additionalModules` over.
       drd: {
         propertiesPanel: { parent: propsPanel },
         additionalModules: [
           AtlasDmn.DmnPropertiesPanelModule,
           AtlasDmn.DmnPropertiesProviderModule,
           AtlasDmn.CamundaPropertiesProviderModule,
+          translateModule,
+          panelGroupsModule,
         ],
       },
+      decisionTable: { additionalModules: [translateModule] },
+      literalExpression: { additionalModules: [translateModule] },
+      boxedExpression: { additionalModules: [translateModule] },
       moddleExtensions: { camunda: AtlasDmn.CamundaModdleDescriptor },
     });
 
@@ -1341,9 +1327,9 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     modeler.on("views.changed", () => { statusEl.textContent = ""; });
   } catch (e) {
     if (gen !== generation) return;
-    root.innerHTML = `<div class="card empty"><h1>Could not open the decision editor</h1>` +
+    root.innerHTML = `<div class="card empty"><h1>${esc(tr("dmn.openFailed"))}</h1>` +
       `<p class="muted">${esc(e.message)}</p>` +
-      `<p><a class="btn" href="#/modeler">Back to the Modeler</a></p></div>`;
+      `<p><a class="btn" href="#/modeler">${esc(tr("dmn.backToModeler"))}</a></p></div>`;
     return;
   }
 
@@ -1377,7 +1363,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   }
 
   async function saveDraft() {
-    await busy("Saving…", async () => {
+    await busy(tr("dmn.busy.saving"), async () => {
       try {
         const { xml, name } = await currentXml();
         const saved = await api("POST", "/api/v1/dmn-drafts", {
@@ -1401,12 +1387,12 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
           history.replaceState(null, "", "#/modeler/dmn/d/" + encodeURIComponent(saved.id) + forSuffix);
         }
         statusEl.textContent = forTask && forTask.elementId
-          ? "Draft saved — save to the model to wire the task"
-          : "Draft saved";
-        toast && toast(`Decision “${name}” saved as a draft`, "ok");
+          ? tr("dmn.status.draftSavedWire")
+          : tr("dmn.status.draftSaved");
+        toast && toast(tr("dmn.toast.draftSaved", { name }), "ok");
       } catch (e) {
         statusEl.textContent = "";
-        toast && toast("Save failed: " + e.message, "err");
+        toast && toast(tr("dmn.toast.saveFailed", { error: e.message }), "err");
       }
     });
   }
@@ -1416,7 +1402,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   // the URL onto the edit route, so the next save addresses this decision rather
   // than making a second one — the form editor's behaviour, for the same reason.
   async function saveToModel() {
-    await busy("Saving to the model…", async () => {
+    await busy(tr("dmn.busy.savingModel"), async () => {
       try {
         const { xml, name } = await currentXml();
         let up;
@@ -1427,7 +1413,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
           // forked into a second copy under a name nobody chose. Replacing it is the
           // author's to decide, so it is asked here and sent as a deliberate act.
           if (e.status !== 409) throw e;
-          if (!window.confirm(`${e.message}\n\nReplace that model with this decision?`)) {
+          if (!window.confirm(tr("dmn.confirm.replaceModel", { error: e.message }))) {
             statusEl.textContent = "";
             return;
           }
@@ -1449,11 +1435,11 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         await dropDraft();
         showHandle();
         stashAdoption(forTask, name, modelRef);
-        statusEl.textContent = "Saved to the model";
-        toast && toast(`Decision “${name}” saved to the model`, "ok");
+        statusEl.textContent = tr("dmn.status.savedModel");
+        toast && toast(tr("dmn.toast.savedModel", { name }), "ok");
       } catch (e) {
         statusEl.textContent = "";
-        toast && toast("Save failed: " + e.message, "err");
+        toast && toast(tr("dmn.toast.saveFailed", { error: e.message }), "err");
       }
     });
   }
@@ -1479,17 +1465,17 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
       await api("DELETE", "/api/v1/dmn-drafts/" + encodeURIComponent(draft.id));
       draft = null;
     } catch {
-      toast && toast("Saved to the model, but the draft could not be cleared — discard it when you can", "err");
+      toast && toast(tr("dmn.toast.draftNotCleared"), "err");
     }
   }
 
   async function discardDraft() {
     if (!draft) return;
     const gone = !modelRef
-      ? "This decision has never been saved to the model, so discarding the draft deletes it.\n\nContinue?"
-      : "Throw away this draft and go back to the model as it is stored?\n\nContinue?";
+      ? tr("dmn.confirm.discardNew")
+      : tr("dmn.confirm.discard");
     if (!window.confirm(gone)) return;
-    await busy("Discarding…", async () => {
+    await busy(tr("dmn.busy.discarding"), async () => {
       try {
         await api("DELETE", "/api/v1/dmn-drafts/" + encodeURIComponent(draft.id));
         draft = null;
@@ -1500,7 +1486,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
           : (project ? "#/modeler/p/" + encodeURIComponent(project) : "#/modeler");
       } catch (e) {
         statusEl.textContent = "";
-        toast && toast("Could not discard the draft: " + e.message, "err");
+        toast && toast(tr("dmn.toast.discardFailed", { error: e.message }), "err");
       }
     });
   }
@@ -1523,12 +1509,8 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   function showDeployed(id, row) {
     if (!row) { deployedChip.hidden = true; deployedChip.textContent = ""; return; }
     deployedChip.hidden = false;
-    deployedChip.textContent = `Deployed v${row.version} · key ${row.key}`;
-    deployedChip.title = `“${id}” is deployed as version ${row.version} under definition key ${row.key}`
-      + ` — what a business rule task bound to latest evaluates when it runs. Deploying again makes a`
-      + ` new version, which those tasks then evaluate; a task bound to a version keeps the one it`
-      + ` names, and a process deployed while latest was frozen at deploy time keeps the one it was`
-      + ` frozen on until it is deployed again.`;
+    deployedChip.textContent = tr("dmn.deployed", { version: row.version, key: row.key });
+    deployedChip.title = tr("dmn.deployedTitle", { id, version: row.version, key: row.key });
   }
 
   // refreshDeployed asks what the decision currently on screen is deployed at. It is
@@ -1562,7 +1544,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   // "Save to model", and conflating the two is what ADR-0321 just
   // separated.
   async function deployDecision() {
-    await busy("Deploying…", async () => {
+    await busy(tr("dmn.busy.deploying"), async () => {
       try {
         const { xml, name } = await currentXml();
         const q = [];
@@ -1576,15 +1558,15 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         const editedID = firstDecisionId(xml);
         const primary = rows.find((r) => r.decisionId === editedID) || rows[0] || {};
         await refreshDeployed(true);
-        statusEl.textContent = `Deployed v${primary.version} · key ${rep.key}`;
-        toast && toast(`Decision “${name}” deployed as version ${primary.version} (key ${rep.key})`, "ok");
+        statusEl.textContent = tr("dmn.deployed", { version: primary.version, key: rep.key });
+        toast && toast(tr("dmn.toast.deployed", { name, version: primary.version, key: rep.key }), "ok");
         // What this route still costs, said out loud where it happens. A
         // `latest`-bound task may name this decision — the deploy resolves it to the
         // record just written. A `deployment`-bound one evaluates the model bundled
         // with its own process, and there is no model to bundle
         // (ADR-0327).
         if (!modelRef) {
-          toast && toast("Deployed — but this decision is not in the model yet, so a business rule task bound to “deployment” cannot use it. Press “Save to model” to make it referenceable.", "warn");
+          toast && toast(tr("dmn.toast.deployedNotInModel"), "warn");
         }
         // The deploy is when the author expects every latest-bound task to change its
         // answer, so it is where the processes that will not are named: definitions
@@ -1597,7 +1579,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         } catch { /* the listing is not worth failing a deploy that succeeded */ }
       } catch (e) {
         statusEl.textContent = "";
-        toast && toast("Deploy failed: " + e.message, "err");
+        toast && toast(tr("dmn.toast.deployFailed", { error: e.message }), "err");
       }
     });
   }
@@ -1687,7 +1669,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     testInputs.innerHTML = fields.length
       ? fields.map((f) => `<label class="field"><span>${esc(f.name)}${f.type ? ` <span class="muted">${esc(f.type)}</span>` : ""}</span>`
           + testControl(f, kept[f.name]) + `</label>`).join("")
-      : `<p class="muted">This decision reads no input data, so there is nothing to fill in.</p>`;
+      : `<p class="muted">${esc(tr("dmn.test.noInputs"))}</p>`;
   }
 
   // describeModel asks the server what the model on screen offers. It runs when the
@@ -1722,20 +1704,20 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
       if (v !== null) inputs[el.dataset.in] = v;
     });
     testErr.textContent = "";
-    testResult.innerHTML = `<p class="muted">Running…</p>`;
+    testResult.innerHTML = `<p class="muted">${esc(tr("dmn.test.running"))}</p>`;
     try {
       const { xml } = await currentXml();
       const res = await api("POST", "/api/v1/decisions/evaluate", { xml, decisionId: testDecision.value, inputs });
       if (!res.ok) {
         testResult.innerHTML = "";
-        testErr.textContent = res.message || "this decision did not run";
+        testErr.textContent = res.message || tr("dmn.test.didNotRun");
         return;
       }
       const outs = Object.entries(res.outputs || {});
       const result = outs.length
         ? `<div class="res">${outs.map(([k, v]) =>
             `<div class="res-row"><span class="res-key">${esc(k)}</span><span class="res-val">${esc(traceValue(v))}</span></div>`).join("")}</div>`
-        : `<p class="muted">This decision returned nothing for those inputs — no rule matched.</p>`;
+        : `<p class="muted">${esc(tr("dmn.test.noMatch"))}</p>`;
       // A service is traced like a decision now, so this usually renders its rules.
       // When an older engine answers with no trace at all, the panel says which
       // silence that is rather than claiming the model has no table logic
@@ -1778,7 +1760,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (e) {
-      toast && toast("Export failed: " + e.message, "err");
+      toast && toast(tr("dmn.toast.exportFailed", { error: e.message }), "err");
     }
   }
 
@@ -1826,8 +1808,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   async function applySource(text) {
     const wants = dmnVersionOf(text);
     if (wants !== builtFor) {
-      throw new Error(`This XML is DMN ${wants}, and this editor opened the decision as DMN ${builtFor}: ` +
-        `the version is fixed when the page opens. Keep the DMN ${builtFor} namespace here.`);
+      throw new Error(tr("dmn.source.versionMismatch", { wants, built: builtFor }));
     }
     return importLocal(text);
   }
@@ -1845,7 +1826,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   // views.changed handler clears the status line by design, so a message left there
   // would be racing the thing that just put it there.
   async function autoLayout() {
-    await busy("Laying out…", async () => {
+    await busy(tr("dmn.busy.layingOut"), async () => {
       try {
         const { xml } = await currentXml();
         const relaid = await api("POST", "/api/v1/dmn-layout", xml, true);
@@ -1858,9 +1839,9 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         if (view && view.type === "drd") {
           try { modeler.getActiveViewer().get("canvas").zoom("fit-viewport"); } catch { /* nothing to fit */ }
         }
-        toast && toast("Decision requirements graph laid out", "ok");
+        toast && toast(tr("dmn.toast.laidOut"), "ok");
       } catch (e) {
-        toast && toast("Auto-layout failed: " + e.message, "err");
+        toast && toast(tr("dmn.toast.layoutFailed", { error: e.message }), "err");
       }
     });
   }
@@ -1883,7 +1864,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   // carries its own control.
   const renderDocHistory = (versions) => {
     if (!versions.length) {
-      docHistory.innerHTML = `<p class="muted doc-empty">No version published yet.</p>`;
+      docHistory.innerHTML = `<p class="muted doc-empty">${esc(tr("dmn.doc.none"))}</p>`;
       return;
     }
     docHistory.innerHTML = versions.map((v) => {
@@ -1891,9 +1872,9 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
       const by = v.createdBy ? " · " + esc(v.createdBy) : "";
       const note = v.note ? `<div class="doc-note">${esc(v.note)}</div>` : "";
       const share = v.shareUrl
-        ? `<a class="doc-link" href="${esc(v.shareUrl)}" target="_blank" rel="noopener">Public link</a>
-           <button class="btn neutral small" data-unshare="${esc(v.id)}" title="Revoke the shared link for this version">Revoke</button>`
-        : `<button class="btn neutral small" data-share="${esc(v.id)}" title="Share a link to this documentation version">Share…</button>`;
+        ? `<a class="doc-link" href="${esc(v.shareUrl)}" target="_blank" rel="noopener">${esc(tr("dmn.doc.publicLink"))}</a>
+           <button class="btn neutral small" data-unshare="${esc(v.id)}" title="${esc(tr("dmn.doc.revokeTitle"))}">${esc(tr("dmn.doc.revoke"))}</button>`
+        : `<button class="btn neutral small" data-share="${esc(v.id)}" title="${esc(tr("dmn.doc.shareTitle"))}">${esc(tr("dmn.doc.share"))}</button>`;
       return `<div class="doc-version">
         <div class="doc-version-head">
           <b>v${v.version}</b>
@@ -1901,9 +1882,9 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         </div>
         ${note}
         <div class="row">
-          <a class="doc-link" href="${esc(v.pdfUrl)}" target="_blank" rel="noopener">Open PDF</a>
+          <a class="doc-link" href="${esc(v.pdfUrl)}" target="_blank" rel="noopener">${esc(tr("dmn.doc.openPdf"))}</a>
           ${share}
-          <button class="btn neutral small" data-delete="${esc(v.id)}" data-version="${v.version}" title="Delete this version and its PDF">Delete</button>
+          <button class="btn neutral small" data-delete="${esc(v.id)}" data-version="${v.version}" title="${esc(tr("dmn.doc.deleteTitle"))}">${esc(tr("common.delete"))}</button>
         </div>
       </div>`;
     }).join("");
@@ -1911,9 +1892,9 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     // one-click prune when there is enough history to be worth trimming.
     if (versions.length > 1) {
       docHistory.innerHTML += `<div class="doc-prune row">
-        <span class="muted">Keep newest</span>
+        <span class="muted">${esc(tr("dmn.doc.keepNewest"))}</span>
         <input id="dmn-doc-keep" type="number" min="1" value="5" style="width:4em"/>
-        <button class="btn neutral small" id="dmn-doc-prune" title="Delete older documentation versions">Prune older versions</button>
+        <button class="btn neutral small" id="dmn-doc-prune" title="${esc(tr("dmn.doc.pruneTitle"))}">${esc(tr("dmn.doc.prune"))}</button>
       </div>`;
     }
   };
@@ -1946,7 +1927,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         titleField.value = name === DEFAULT_DECISION_NAME ? "" : name;
       } catch { /* the field simply stays empty */ }
     }
-    docHistory.innerHTML = `<p class="muted doc-empty">Loading…</p>`;
+    docHistory.innerHTML = `<p class="muted doc-empty">${esc(tr("dmn.doc.loading"))}</p>`;
     await loadDocHistory();
   };
 
@@ -1967,7 +1948,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         note: root.querySelector("#dmn-doc-note").value.trim(),
       });
       root.querySelector("#dmn-doc-note").value = "";
-      toast && toast("Documentation version published", "ok");
+      toast && toast(tr("dmn.toast.docPublished"), "ok");
       await loadDocHistory();
     } catch (e) {
       docErr.textContent = e.message;
@@ -2002,7 +1983,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
 
     // Deleting a version and pruning both destroy a published artifact and its
     // PDF, so both confirm first — this is not a click to make lightly.
-    if (deleteId && !window.confirm(`Delete documentation v${attr("data-version")}? This removes the version and its PDF for good.`)) return;
+    if (deleteId && !window.confirm(tr("dmn.doc.confirmDelete", { version: attr("data-version") }))) return;
     let keep = 0;
     let decisionId = "";
     if (prune) {
@@ -2010,7 +1991,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
       keep = Math.max(1, parseInt(keepField && keepField.value, 10) || 1);
       decisionId = await documentedDecisionId();
       if (!decisionId) return;
-      if (!window.confirm(`Keep the newest ${keep} version${keep === 1 ? "" : "s"} and delete the rest? The deleted versions and their PDFs are gone for good.`)) return;
+      if (!window.confirm(trPlural("dmn.doc.confirmPrune", keep))) return;
     }
 
     e.target.disabled = true;

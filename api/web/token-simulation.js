@@ -13,6 +13,8 @@
 // exposes the `atlasTokenSimulation` service; the editor toolbar drives it and listens
 // for `atlasSim.changed` on the eventBus to keep its controls in sync.
 
+import { t, plural } from "./i18n.js";
+
 // --- BPMN shape/flow helpers -------------------------------------------------------
 
 const isSequenceFlow = (c) => c && c.type === "bpmn:SequenceFlow";
@@ -1114,7 +1116,7 @@ TokenSimulation.prototype._render = function () {
       this._overlayIds.push(
         this._overlays.add(id, "atlas-sim-token", {
           position: { bottom: 6, right: 6 },
-          html: `<span class="atlas-sim-token" title="${n} token${n > 1 ? "s" : ""} here">${n}</span>`,
+          html: `<span class="atlas-sim-token" title="${plural("sim.tokens", n)}">${n}</span>`,
         }),
       );
     } catch {
@@ -1142,7 +1144,7 @@ TokenSimulation.prototype._render = function () {
       this._overlayIds.push(
         this._overlays.add(gwId, "atlas-sim-join", {
           position: { top: -8, left: -8 },
-          html: `<span class="atlas-sim-join" title="waiting to join">${arrived}/${inFlows(el).length}</span>`,
+          html: `<span class="atlas-sim-join" title="${t("sim.join")}">${arrived}/${inFlows(el).length}</span>`,
         }),
       );
     } catch {
@@ -1160,14 +1162,14 @@ TokenSimulation.prototype._render = function () {
     const seq = isSequentialMI(el);
     const modelled = literalCardinality(el) != null;
     const src = std
-      ? (modelled ? "modelled loop maximum" : "simulated — the loop condition is not evaluated")
-      : (modelled ? "modelled cardinality" : "simulated");
-    const what = std ? "loop" : (seq ? "sequential multi-instance" : "parallel multi-instance");
+      ? t(modelled ? "sim.mi.loopMax" : "sim.mi.loopSimulated")
+      : t(modelled ? "sim.mi.cardinality" : "sim.mi.simulated");
+    const what = t(std ? "sim.mi.loop" : (seq ? "sim.mi.sequential" : "sim.mi.parallel"));
     try {
       this._overlayIds.push(
         this._overlays.add(id, "atlas-sim-mi", {
           position: { bottom: 4, left: 4 },
-          html: `<span class="atlas-sim-mi" title="${what} — ${mi.left} of ${mi.total} left (${src})">${std ? "↻" : (seq ? "≡" : "‖")} ${mi.left}/${mi.total}</span>`,
+          html: `<span class="atlas-sim-mi" title="${t("sim.mi.title", { what, left: mi.left, total: mi.total, source: src })}">${std ? "↻" : (seq ? "≡" : "‖")} ${mi.left}/${mi.total}</span>`,
         }),
       );
     } catch {
@@ -1193,15 +1195,17 @@ TokenSimulation.prototype._triggerGlyph = function (el) {
 };
 
 TokenSimulation.prototype._boundaryTitle = function (b) {
-  const kind = isTimerEvent(b) ? "timer" : isMessageEvent(b) ? "message" : isSignalEvent(b) ? "signal" : "event";
-  const mode = b.businessObject.cancelActivity !== false ? "interrupting" : "non-interrupting";
-  return `Fire this ${mode} ${kind} boundary event`;
+  const kind = t(isTimerEvent(b) ? "sim.kind.timer" : isMessageEvent(b) ? "sim.kind.message" : isSignalEvent(b) ? "sim.kind.signal" : "sim.kind.event");
+  return b.businessObject.cancelActivity !== false
+    ? t("sim.fire.boundary.interrupting", { kind })
+    : t("sim.fire.boundary.nonInterrupting", { kind });
 };
 
 TokenSimulation.prototype._eventSubTitle = function (start) {
-  const kind = isTimerEvent(start) ? "timer" : isMessageEvent(start) ? "message" : isSignalEvent(start) ? "signal" : "event";
-  const mode = isInterruptingSub(start) ? "interrupting" : "non-interrupting";
-  return `Trigger this ${mode} ${kind} event subprocess`;
+  const kind = t(isTimerEvent(start) ? "sim.kind.timer" : isMessageEvent(start) ? "sim.kind.message" : isSignalEvent(start) ? "sim.kind.signal" : "sim.kind.event");
+  return isInterruptingSub(start)
+    ? t("sim.fire.eventSub.interrupting", { kind })
+    : t("sim.fire.eventSub.nonInterrupting", { kind });
 };
 
 // _drawFire adds a clickable "fire this event" affordance on an element. Like the spawn
@@ -1210,7 +1214,7 @@ TokenSimulation.prototype._eventSubTitle = function (start) {
 TokenSimulation.prototype._drawFire = function (el, glyph, onFire, title) {
   const btn = document.createElement("span");
   btn.className = "atlas-sim-fire";
-  btn.title = title || "Fire this event — release the waiting token";
+  btn.title = title || t("sim.fire");
   btn.innerHTML = glyph;
   btn.addEventListener("click", (ev) => {
     ev.stopPropagation();
@@ -1234,7 +1238,7 @@ TokenSimulation.prototype._drawStartAffordances = function () {
     if (!isProcessStart(el)) return;
     const btn = document.createElement("span");
     btn.className = "atlas-sim-spawn";
-    btn.title = "Spawn a token here";
+    btn.title = t("sim.spawn");
     btn.innerHTML = "&#9654;";
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();

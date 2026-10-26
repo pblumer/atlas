@@ -41,14 +41,14 @@ async function openModal(page, query = "") {
 
 test("a definition that never arrives is reported, and deploys nothing", async ({ page }) => {
   const modal = await openModal(page, "?stall=form");
-  await expect(modal.locator("#sf-host")).toContainText("Loading form"); // still waiting
+  await expect(modal.locator("#sf-host")).toContainText("Formular wird geladen"); // still waiting
 
-  await expect(modal.locator("#sf-host .err")).toContainText("The form definition did not arrive",
+  await expect(modal.locator("#sf-host .err")).toContainText("Die Formulardefinition kam nicht innerhalb",
     { timeout: 40000 });
   // Send would start an instance with nothing in it, so it stays out — but the way out
   // that still works is named, and the modal is still closable.
   await expect(modal.locator("[data-sf-send]")).toBeDisabled();
-  await expect(modal.locator("#sf-host")).toContainText("Deploy only still works");
+  await expect(modal.locator("#sf-host")).toContainText("«Nur deployen» funktioniert weiterhin");
   await expect(modal.locator("[data-sf-retry]")).toBeVisible();
   // Nothing was deployed: the form is asked before anything reaches the server.
   expect(await writes(page)).toEqual([]);

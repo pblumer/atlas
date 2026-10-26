@@ -54,7 +54,7 @@ test("the menu offers the source beside Export XML, and it is the diagram on scr
   await page.locator("#bar-more").click();
   const entry = page.locator("#bar-menu #xmlsource");
   await expect(entry).toBeVisible();
-  await expect(entry).toContainText("XML source");
+  await expect(entry).toContainText("XML-Quelltext");
   // It sits with the other acts on the document, right after Export XML.
   await expect(page.locator("#bar-menu #export + #xmlsource")).toHaveCount(1);
   await entry.click();
@@ -137,7 +137,7 @@ test("Apply puts a corrected source on the canvas", async ({ page }) => {
   await expect(page.locator(".xml-modal")).toHaveCount(0);
   expect(await taskName(page)).toBe("Freigeben");
   await expect(page.locator('[data-element-id="Task_1"]').first()).toContainText("Freigeben");
-  await expect.poll(() => page.evaluate(() => window.__toasts.map((t) => t.msg).join("\n"))).toContain("XML applied");
+  await expect.poll(() => page.evaluate(() => window.__toasts.map((t) => t.msg).join("\n"))).toContain("XML übernommen");
   expect(page.__errors).toEqual([]);
 });
 
@@ -157,15 +157,15 @@ test("malformed XML is refused with the line it breaks on, and the canvas keeps 
   // line at or after the break, not a particular one.
   const status = page.locator(".xml-modal .xml-status");
   await expect(status).toHaveClass(/\berr\b/);
-  await expect(status).toContainText(/line \d+/i);
-  const named = Number(/line (\d+)/i.exec(await status.textContent())[1]);
+  await expect(status).toContainText(/Zeile \d+/i);
+  const named = Number(/Zeile (\d+)/i.exec(await status.textContent())[1]);
   expect(named).toBeGreaterThanOrEqual(at + 1);
 
   await page.locator(".xml-modal [data-apply]").click();
   // Refused: still open, still the author's text to fix, and the diagram untouched —
   // and the text is scrolled to the line, which the gutter marks.
   await expect(page.locator(".xml-modal")).toBeVisible();
-  await expect(status).toContainText(/line \d+/i);
+  await expect(status).toContainText(/Zeile \d+/i);
   await expect(page.locator(".xml-modal .ce-ln.err")).toHaveText(String(named));
   expect(await ta.inputValue()).toBe(lines.join("\n"));
   expect(await taskName(page)).toBe("Pruefen");
@@ -191,7 +191,7 @@ for (const [what, doc] of [
 
     const status = page.locator(".xml-modal .xml-status");
     await expect(status).toHaveClass(/\berr\b/);
-    await expect(status).toContainText("unchanged");
+    await expect(status).toContainText("unverändert");
     await expect(page.locator(".xml-modal")).toBeVisible();
     // Not an empty canvas: whatever the import did to it was put back.
     expect(await taskName(page)).toBe("Pruefen");
@@ -219,7 +219,7 @@ test("closing with an unapplied edit asks first; closing an untouched source doe
   await ta.fill((await ta.inputValue()).replace('name="Pruefen"', 'name="Freigeben"'));
   await page.keyboard.press("Escape");
   await expect.poll(() => asked.length).toBe(1);
-  expect(asked[0]).toContain("Discard");
+  expect(asked[0]).toContain("verwerfen");
   await expect(page.locator(".xml-modal")).toBeVisible();
 
   answer = true;
@@ -277,7 +277,7 @@ test("an applied source counts as an edit: leaving a deployment asks first", asy
   const marker = await page.locator('[data-element-id="Call_1"] path[data-marker="sub-process"]').boundingBox();
   await page.mouse.dblclick(marker.x + marker.width / 2, marker.y + marker.height / 2);
   await expect.poll(() => asked.length).toBe(1);
-  expect(asked[0]).toContain("unsaved changes");
+  expect(asked[0]).toContain("ungespeicherte Änderungen");
   expect(await page.evaluate(() => location.hash)).toBe("");
   expect(page.__errors).toEqual([]);
 });
@@ -316,7 +316,7 @@ test("a collaborator's change does not overwrite an applied source", async ({ pa
   await page.evaluate(() => { window.__calls.length = 0; });
   await page.evaluate(() => window.__es.emit("change", { by: "peer", elementId: "End_1" }));
   await expect.poll(() => page.evaluate(() => window.__toasts.map((t) => t.msg).join("\n")))
-    .toContain("A collaborator changed the diagram");
+    .toContain("Jemand hat das Diagramm geändert");
   await page.waitForTimeout(600); // past the session's 300 ms coalescing window
   const fetched = await page.evaluate(() =>
     window.__calls.filter((c) => c.method === "GET" && /\/drafts\/[^/]+\/xml$/.test(c.url)).length);
@@ -332,7 +332,7 @@ test("a collaborator's change does not overwrite an applied source", async ({ pa
 async function autoLayout(page) {
   await page.locator("#bar-more").click();
   await page.locator("#bar-menu #autolayout").click();
-  await expect.poll(() => page.evaluate(() => window.__toasts.map((t) => t.msg).join("\n"))).toContain("auto-laid out");
+  await expect.poll(() => page.evaluate(() => window.__toasts.map((t) => t.msg).join("\n"))).toContain("automatisch angeordnet");
 }
 
 test("an auto-layout counts as an edit: leaving a deployment asks first", async ({ page }) => {
@@ -344,7 +344,7 @@ test("an auto-layout counts as an edit: leaving a deployment asks first", async 
   const marker = await page.locator('[data-element-id="Call_1"] path[data-marker="sub-process"]').boundingBox();
   await page.mouse.dblclick(marker.x + marker.width / 2, marker.y + marker.height / 2);
   await expect.poll(() => asked.length).toBe(1);
-  expect(asked[0]).toContain("unsaved changes");
+  expect(asked[0]).toContain("ungespeicherte Änderungen");
   expect(await page.evaluate(() => location.hash)).toBe("");
   expect(page.__errors).toEqual([]);
 });
@@ -357,7 +357,7 @@ test("a collaborator's change does not overwrite an auto-layout", async ({ page 
   await page.evaluate(() => { window.__calls.length = 0; });
   await page.evaluate(() => window.__es.emit("change", { by: "peer", elementId: "End_1" }));
   await expect.poll(() => page.evaluate(() => window.__toasts.map((t) => t.msg).join("\n")))
-    .toContain("A collaborator changed the diagram");
+    .toContain("Jemand hat das Diagramm geändert");
   await page.waitForTimeout(600);
   const fetched = await page.evaluate(() =>
     window.__calls.filter((c) => c.method === "GET" && /\/drafts\/[^/]+\/xml$/.test(c.url)).length);
@@ -381,7 +381,7 @@ test("an auto-layout the modeler cannot read leaves the diagram as it was", asyn
   }, EMPTY_BPMN);
   await page.locator("#bar-more").click();
   await page.locator("#bar-menu #autolayout").click();
-  await expect.poll(() => page.evaluate(() => window.__toasts.map((t) => t.msg).join("\n"))).toContain("auto-layout failed");
+  await expect.poll(() => page.evaluate(() => window.__toasts.map((t) => t.msg).join("\n"))).toContain("Automatisches Anordnen fehlgeschlagen");
   expect(await taskName(page)).toBe("Pruefen");
   await expect(page.locator('[data-element-id="Call_1"]').first()).toBeVisible();
   expect(page.__errors).toEqual([]);
@@ -392,7 +392,7 @@ test("Copy puts the source on the clipboard", async ({ page, context }) => {
   await mountBpmn(page);
   await openBpmnSource(page);
   await page.locator(".xml-modal [data-copy]").click();
-  await expect(page.locator(".xml-modal .xml-status")).toContainText("Copied");
+  await expect(page.locator(".xml-modal .xml-status")).toContainText("In die Zwischenablage kopiert");
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toBe(await page.locator(".xml-ta").inputValue());
   expect(page.__errors).toEqual([]);
@@ -486,7 +486,7 @@ async function peerChangesTheDraft(page, server) {
     const es = window.__streams.find((s) => s.url.includes("/dmn-drafts/"));
     es.emit("change", { by: "peer", elementId: "Decision_src" });
   });
-  await expect(page.locator("#toast")).toContainText("A collaborator changed the diagram");
+  await expect(page.locator("#toast")).toContainText("Jemand hat das Diagramm geändert");
   await page.waitForTimeout(600); // past the session's 300 ms coalescing window
   return server.draftReads.length - before;
 }
@@ -582,7 +582,7 @@ test("in the decision editor, a collaborator's change waits for an auto-layout",
 
   await page.locator("#dmn-more").click();
   await page.locator("#dmn-menu #dmn-autolayout").click();
-  await expect(page.locator("#toast")).toContainText("laid out");
+  await expect(page.locator("#toast")).toContainText("angeordnet");
 
   expect(await peerChangesTheDraft(page, server), "the peer's draft must wait for this one's Save").toBe(0);
   expect(page.__errors).toEqual([]);
@@ -601,7 +601,7 @@ test("the form editor's source is a tab that says so, and an edit there is what 
   await page.evaluate(() => window.__mountDivergent());
 
   const tab = page.locator('#form-tabs [data-ftab="editor"]');
-  await expect(tab).toHaveText("Source");
+  await expect(tab).toHaveText("Quelltext");
   await tab.click();
   const ta = page.locator("#fv-schema");
   await expect(ta).toBeVisible();

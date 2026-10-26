@@ -42,7 +42,7 @@ async function openArchitecture(page) {
   await page.evaluate((id) => { location.hash = "#/modeler/p/" + id; }, APP);
   await page.locator('#pd-tabs button[data-pane="deployments"]').click();
   await page.locator("button[data-architecture]").click();
-  await expect(page.locator('.modal[aria-label="Architecture of v2"]')).toBeVisible();
+  await expect(page.locator('.modal[aria-label="Architektur von v2"]')).toBeVisible();
 }
 
 test("each recorded layer is a checkbox, and the picture and the downloads follow it", async ({ page }) => {
@@ -76,7 +76,7 @@ test("the last ticked layer cannot be switched off", async ({ page }) => {
   const technology = page.locator('[data-layers] input[value="technology"]');
   await technology.click();
   await expect(technology).toBeChecked();
-  await expect(page.locator("#toast")).toContainText("at least one layer");
+  await expect(page.locator("#toast")).toContainText("mindestens eine Ebene");
   expect(svgRequests.at(-1)).toBe("technology");
 });
 

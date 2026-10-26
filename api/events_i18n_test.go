@@ -18,10 +18,6 @@ import (
 // rule would otherwise reach the screen as a raw `events.kind.…` key, visibly broken
 // by design but only to whoever has that event. This makes it fail in CI instead.
 func TestTheEventsPageHasWordsForEverythingTheServerSays(t *testing.T) {
-	catalogue, err := os.ReadFile("web/i18n.js")
-	if err != nil {
-		t.Fatalf("read the message catalogue: %v", err)
-	}
 	var want []string
 	for _, k := range []eventcatalog.Kind{eventcatalog.Domain, eventcatalog.Platform} {
 		want = append(want, "events.kind."+string(k))
@@ -46,12 +42,8 @@ func TestTheEventsPageHasWordsForEverythingTheServerSays(t *testing.T) {
 		findingSignalReservedName, findingMessageUnreceived, findingMessageCrossesProjects, findingMessageReservedName} {
 		want = append(want, "events.finding."+rule)
 	}
-	src := string(catalogue)
-	for _, locale := range []string{"de", "en"} {
-		block, ok := localeBlock(src, locale)
-		if !ok {
-			t.Fatalf("no %q block in web/i18n.js", locale)
-		}
+	for _, locale := range consoleLocales() {
+		block := localeCatalogue(t, locale)
 		for _, key := range want {
 			if !strings.Contains(block, `"`+key+`":`) {
 				t.Errorf("locale %q has no message %q", locale, key)
@@ -68,10 +60,6 @@ func TestEveryMessageTheEventsPageAsksForExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the events module: %v", err)
 	}
-	catalogue, err := os.ReadFile("web/i18n.js")
-	if err != nil {
-		t.Fatalf("read the message catalogue: %v", err)
-	}
 	keys := map[string]bool{}
 	for _, m := range regexp.MustCompile(`\b(?:t|tx)\("((?:events|common)\.[A-Za-z0-9.-]+)"`).FindAllStringSubmatch(string(module), -1) {
 		keys[m[1]] = true
@@ -87,12 +75,8 @@ func TestEveryMessageTheEventsPageAsksForExists(t *testing.T) {
 	if len(keys) < 80 {
 		t.Fatalf("found only %d message keys in web/events.js; the scan no longer matches how the module looks them up", len(keys))
 	}
-	src := string(catalogue)
-	for _, locale := range []string{"de", "en"} {
-		block, ok := localeBlock(src, locale)
-		if !ok {
-			t.Fatalf("no %q block in web/i18n.js", locale)
-		}
+	for _, locale := range consoleLocales() {
+		block := localeCatalogue(t, locale)
 		for key := range keys {
 			if !strings.Contains(block, `"`+key+`":`) {
 				t.Errorf("web/events.js asks for %q, which locale %q does not have", key, locale)

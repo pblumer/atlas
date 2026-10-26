@@ -13,26 +13,28 @@
 // It lives in its own module for the reason the pick dialog does: app.js boots the
 // whole console on import, so anything left inside it is only ever exercised by hand.
 
+import { t, plural } from "./i18n.js";
+
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 // KINDS are the kinds of need, in the order the dialogs list them, with where an
-// installation sets each up.
+// installation sets each up — both as catalogue keys.
 const KINDS = [
-  { kind: "server-constant", title: "Server constants", where: "Admin → Engine → Server constants" },
-  { kind: "application-constant", title: "Application constants", where: "the application's Constants tab" },
-  { kind: "worker", title: "Workers", where: "Workers, as a worker of this name and Worker Type" },
+  { kind: "server-constant", title: "transfer.kind.serverConstant", where: "transfer.kind.serverConstantWhere" },
+  { kind: "application-constant", title: "transfer.kind.applicationConstant", where: "transfer.kind.applicationConstantWhere" },
+  { kind: "worker", title: "transfer.kind.worker", where: "transfer.kind.workerWhere" },
 ];
 
-// STATES says what each state means where it is reported.
+// STATES says what each state means where it is reported, as a catalogue key.
 const STATES = {
-  set: "set",
-  missing: "missing",
-  fallback: "not set; the model's fallback applies",
-  "type-mismatch": "held with another type",
-  configured: "configured",
-  "other-type": "configured as another Worker Type",
-  unusable: "configured, but not usable",
+  set: "transfer.state.set",
+  missing: "transfer.state.missing",
+  fallback: "transfer.state.fallback",
+  "type-mismatch": "transfer.state.typeMismatch",
+  configured: "transfer.state.configured",
+  "other-type": "transfer.state.otherType",
+  unusable: "transfer.state.unusable",
 };
 
 // OPEN are the states that leave a need unanswered: an instance would run without
@@ -48,11 +50,11 @@ export function openNeeds(needs) {
 // state is given, how the installation in question answers it.
 function needLine(n, { state = true, note = "" } = {}) {
   const type = n.type ? ` <span class="muted">${esc(n.type)}</span>` : "";
-  const fallback = n.fallback && n.kind !== "worker" ? ` <span class="muted">(has a fallback)</span>` : "";
+  const fallback = n.fallback && n.kind !== "worker" ? ` <span class="muted">${esc(t("transfer.hasFallback"))}</span>` : "";
   const processes = (n.processes || []).length
     ? ` <span class="muted small">— ${esc(n.processes.join(", "))}</span>` : "";
   const st = state && n.state
-    ? ` <span class="need-state" data-state="${esc(n.state)}">${esc(STATES[n.state] || n.state)}${n.detail ? `: ${esc(n.detail)}` : ""}</span>`
+    ? ` <span class="need-state" data-state="${esc(n.state)}">${esc(STATES[n.state] ? t(STATES[n.state]) : n.state)}${n.detail ? `: ${esc(n.detail)}` : ""}</span>`
     : "";
   return `<li data-need="${esc(n.kind)}/${esc(n.name)}"><code>${esc(n.name)}</code>${type}${fallback}${processes}${st}${note}</li>`;
 }
@@ -63,8 +65,8 @@ function needGroups(needs, line) {
     const items = needs.filter((n) => n.kind === k.kind);
     if (!items.length) return "";
     return `<section class="need-group" data-kind="${k.kind}">
-        <h3>${esc(k.title)} <span class="muted">(${items.length})</span></h3>
-        <p class="muted small">Set up under ${esc(k.where)}.</p>
+        <h3>${esc(t(k.title))} <span class="muted">(${items.length})</span></h3>
+        <p class="muted small">${esc(t("transfer.setUpUnder", { where: t(k.where) }))}</p>
         <ul>${items.map(line).join("")}</ul>
       </section>`;
   }).join("");
@@ -80,7 +82,7 @@ function mountModal(className, title, body, foot) {
     <div class="modal ${className}" role="dialog" aria-modal="true" aria-label="${esc(title)}">
       <div class="modal-head">
         <h2>${esc(title)}</h2>
-        <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
+        <button type="button" class="icon-btn" data-x aria-label="${esc(t("common.close"))}" title="${esc(t("common.close"))}">✕</button>
       </div>
       <div class="modal-body">${body}</div>
       <div class="modal-foot"><span></span><span class="modal-actions">${foot}</span></div>
@@ -122,38 +124,34 @@ export function openSourceDownload({ id, info, preview }) {
   const appConstantNote = (n, carried) => {
     if (n.kind !== "application-constant") return "";
     return n.state === "set" && carried
-      ? ` <span class="need-carried">its value travels with the download</span>`
-      : ` <span class="need-carried">set it on the target</span>`;
+      ? ` <span class="need-carried">${esc(t("transfer.valueTravels"))}</span>`
+      : ` <span class="need-carried">${esc(t("transfer.setOnTarget"))}</span>`;
   };
   const list = (carried) => needs.length
     ? needGroups(needs, (n) => needLine(n, { state: false, note: appConstantNote(n, carried) }))
-    : `<p class="muted">The processes read nothing from the installation and name no worker.</p>`;
+    : `<p class="muted">${esc(t("transfer.readsNothing"))}</p>`;
   const catalogList = catalogs.length
     ? `<ul class="package-catalogs">${catalogs.map((c) => `
         <li><label><input type="checkbox" name="catalog" value="${esc(c.id)}"${c.bound ? " checked" : ""}>
           ${esc(catalogueLabel(c))} <code>${esc(c.id)}</code>${c.bound
-            ? ` <span class="need-carried">sells this application</span>` : ""}</label></li>`).join("")}</ul>`
-    : `<p class="muted small">No catalogue to choose: you maintain none here, or this server has none.</p>`;
+            ? ` <span class="need-carried">${esc(t("transfer.sellsThis"))}</span>` : ""}</label></li>`).join("")}</ul>`
+    : `<p class="muted small">${esc(t("transfer.noCatalogue"))}</p>`;
   const body = `
-    <p>The download carries the application's processes, forms and decisions.</p>
+    <p>${esc(t("transfer.carries"))}</p>
     <label class="source-constants"><input type="checkbox" name="withConstants"${held ? " checked" : " disabled"}>
-      ${held ? `Include the ${held} constant value${held === 1 ? "" : "s"} this application holds here`
-        : "This application holds no constant values here"}</label>
-    <p class="muted small">The target offers them like any other artifact: a value it lacks is set, one an
-      administrator set there is kept unless somebody ticks it. Leave this off for a tree kept in a
-      repository; the values belong to this installation.</p>
-    <h3 class="needs-title">Catalogues</h3>
-    <p class="muted small">Ticked ones travel with the application. Their groups and people travel by name,
-      and the target finds them in its own directory; it asks for any it cannot find.</p>
+      ${esc(held ? plural("transfer.withConstants", held) : t("transfer.noConstants"))}</label>
+    <p class="muted small">${esc(t("transfer.constantsHint"))}</p>
+    <h3 class="needs-title">${esc(t("transfer.catalogues"))}</h3>
+    <p class="muted small">${esc(t("transfer.cataloguesHint"))}</p>
     ${catalogList}
     <div class="package-warnings" hidden></div>
-    <h3 class="needs-title">What the target needs, and no download carries</h3>
+    <h3 class="needs-title">${esc(t("transfer.needsTitle"))}</h3>
     <div class="source-needs">${list(held > 0)}</div>
-    ${unread.length ? `<p class="muted small source-unread">Not read, because ${unread.length === 1 ? "it does" : "they do"} not compile yet:
+    ${unread.length ? `<p class="muted small source-unread">${esc(plural("transfer.unread", unread.length))}
       ${unread.map((u) => `<code>${esc(u)}</code>`).join(", ")}.</p>` : ""}`;
-  const foot = `<button type="button" class="btn ghost" data-cancel>Cancel</button>
-    <button type="button" class="btn" data-ok>Download</button>`;
-  const { ov, done, finish } = mountModal("source-download", "Export application", body, foot);
+  const foot = `<button type="button" class="btn ghost" data-cancel>${esc(t("common.cancel"))}</button>
+    <button type="button" class="btn" data-ok>${esc(t("transfer.download"))}</button>`;
+  const { ov, done, finish } = mountModal("source-download", t("transfer.exportTitle"), body, foot);
   const box = ov.querySelector('[name="withConstants"]');
   const ok = ov.querySelector("[data-ok]");
   const warnings = ov.querySelector(".package-warnings");
@@ -170,7 +168,7 @@ export function openSourceDownload({ id, info, preview }) {
   const reset = () => {
     warned = null;
     warnings.hidden = true;
-    ok.textContent = "Download";
+    ok.textContent = t("transfer.download");
   };
   box.addEventListener("change", () => {
     ov.querySelector(".source-needs").innerHTML = list(box.checked);
@@ -185,7 +183,7 @@ export function openSourceDownload({ id, info, preview }) {
       p = await preview(target + "&preview=true");
     } catch (e) {
       warnings.hidden = false;
-      warnings.innerHTML = `<div class="deploy-warnings"><b>&#9888; The package cannot be written:</b>
+      warnings.innerHTML = `<div class="deploy-warnings"><b>&#9888; ${esc(t("transfer.cannotWrite"))}</b>
         <ul><li>${esc((e && e.message) || e)}</li></ul></div>`;
       ok.disabled = false;
       return;
@@ -194,9 +192,9 @@ export function openSourceDownload({ id, info, preview }) {
     if (!(p.warnings || []).length) return finish(target);
     warned = target;
     warnings.hidden = false;
-    warnings.innerHTML = `<div class="deploy-warnings"><b>&#9888; On the target, this will not work as it does here:</b>
+    warnings.innerHTML = `<div class="deploy-warnings"><b>&#9888; ${esc(t("transfer.notAsHere"))}</b>
       <ul>${p.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>`;
-    ok.textContent = "Download anyway";
+    ok.textContent = t("transfer.downloadAnyway");
   });
   ok.focus();
   return done;
@@ -217,24 +215,22 @@ export function showImportNeeds(result) {
   const notSet = result.constantsNotSet || [];
   const unread = result.needsUnread || [];
   const body = `
-    <p>The application is in. Before it runs here as it does where it came from, this server needs:</p>
+    <p>${esc(t("transfer.import.intro"))}</p>
     ${needGroups(open, (n) => needLine(n))}
     ${notSet.length ? `<section class="need-group" data-kind="not-set">
-        <h3>Constants not set <span class="muted">(${notSet.length})</span></h3>
-        <p class="muted small">Setting a constant is an administrator's; an administrator sets these on the
-          application's Constants tab.</p>
+        <h3>${esc(t("transfer.import.notSet"))} <span class="muted">(${notSet.length})</span></h3>
+        <p class="muted small">${esc(t("transfer.import.notSetHint"))}</p>
         <ul>${notSet.map((n) => `<li><code>${esc(n)}</code></li>`).join("")}</ul>
       </section>` : ""}
-    ${unread.length ? `<p class="muted small source-unread">Not read, because ${unread.length === 1 ? "it does" : "they do"} not compile:
+    ${unread.length ? `<p class="muted small source-unread">${esc(plural("transfer.unreadNow", unread.length))}
       ${unread.map((u) => `<code>${esc(u)}</code>`).join(", ")}.</p>` : ""}
     ${(result.warnings || []).length ? `<section class="need-group" data-kind="warnings">
-        <h3>Warnings <span class="muted">(${result.warnings.length})</span></h3>
+        <h3>${esc(t("transfer.import.warnings"))} <span class="muted">(${result.warnings.length})</span></h3>
         <ul>${result.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>
       </section>` : ""}
-    <p class="muted small">Publishing does not wait for them; it warns about each, and an instance started
-      without them runs without the value or parks at the worker.</p>`;
-  const { ov, done, finish } = mountModal("import-needs", `Before ${result.name || "it"} runs here`, body,
-    `<button type="button" class="btn" data-done>Close</button>`);
+    <p class="muted small">${esc(t("transfer.import.publishHint"))}</p>`;
+  const { ov, done, finish } = mountModal("import-needs", t("transfer.import.title", { name: result.name || t("transfer.import.it") }), body,
+    `<button type="button" class="btn" data-done>${esc(t("common.close"))}</button>`);
   ov.querySelector("[data-done]").addEventListener("click", () => finish(true));
   ov.querySelector("[data-done]").focus();
   return done;
