@@ -171,6 +171,33 @@ What changes on disk, and going back:
 
 ### Added
 
+- **A product's description, keywords and picture can come from a wiki page.** An
+  administrator configures a content source (`/api/v1/content-sources`, admin-only): a
+  wikiwikibangbang base URL, https only, and a `credentialsRef` naming the vault secret that
+  holds a read-scope token of a technical account that is nothing but `viewer`. A product
+  manager then binds a product to one page per language its catalogue declares — searched,
+  pasted as an address or a key, and previewed with everything the rules drop — and linking
+  writes the binding and the fetched content in one draft save
+  (`/api/v1/catalog-products/{id}/content`). A page restricted for reading, or below a
+  restricted ancestor, held for a data protection review, not live, or in a space the account
+  does not hold exactly `viewer` in is refused; protected passages are removed by their mark
+  before the text is converted, child pages are taken depth first and a restricted one is
+  dropped with everything below it. While bound, those fields are read-only through the
+  ordinary save. A recheck follows the wiki's change feed and sweeps every fifteen minutes; a
+  page that becomes protected, unreadable or gone, a wrong account standing or an unreachable
+  wiki quarantines the product, which withholds its description, keywords and picture from the
+  shop, the approval page, the order views, the exports, the API and MCP at once, without a
+  publish. Only a refresh that passes every rule lifts it, and publishing refuses a quarantined
+  product or one without a passed recheck in the last fifteen minutes. Unlinking needs a reason
+  and is audited. Without a configured source nothing changes
+  ([ADR-draft](docs/adr/0491-service-content-from-an-external-source.md)). In the Console,
+  administrators configure and check sources under **Console › Administration › Content sources**; the
+  catalogue screen's product editor gains a **Content from the wiki** panel — search, preview
+  with every refusal and dropped passage, link, refresh, unlink with a reason, the recheck and
+  quarantine state — draws a bound product's description, keywords and picture read-only, and
+  offers **Refresh all wiki content** for a catalogue with bound products. The shop shows
+  **More in the wiki** under a description where the source allows it and only while the content
+  is shown.
 - **Technical capability contracts can be checked against complete JSON Schema Draft 2020-12 offline.** Design-time input and output validation now checks schema keywords with no remote schema loading, bounded payloads and positive/negative account/contact fixtures. Reports are deliberately schema-only: they do not certify a Worker Type, publish conformance evidence, authorize a job or change runtime routing (CDA2a, governed by ADR-0483).
 
 - **A process finds, keeps and labels the people in any CardDAV address book.** A new

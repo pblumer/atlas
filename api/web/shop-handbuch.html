@@ -79,6 +79,7 @@ th{color:var(--muted);font-weight:600}
   <a href="#produkte"><span data-l="de">Produkte und Services abbilden</span><span data-l="en">Modelling products and services</span></a>
   <a href="#genehmigung"><span data-l="de">Genehmigungen</span><span data-l="en">Approvals</span></a>
   <a href="#prozesse"><span data-l="de">Die Prozesse zum Produkt</span><span data-l="en">The product's processes</span></a>
+  <a href="#wiki-inhalt"><span data-l="de">Inhalt aus dem Wiki</span><span data-l="en">Content from the wiki</span></a>
   <a href="#betrieb"><span data-l="de">Im Betrieb</span><span data-l="en">In operation</span></a>
   <a href="#dokument"><span data-l="de">Ein Shop als Dokument</span><span data-l="en">A shop as a document</span></a>
   <a href="#loeschen"><span data-l="de">Ausprobieren und wieder löschen</span><span data-l="en">Trying out and deleting again</span></a>
@@ -324,6 +325,54 @@ th{color:var(--muted);font-weight:600}
     <code>atlas</code>. The value – an API token with the
     <code>operator</code> role – is stored by the installation in the vault under <code>atlas</code> or in
     <code>ATLAS_CONNECTOR_ATLAS_TOKEN</code>.</p>
+</section>
+
+<section id="wiki-inhalt">
+  <h2 data-l="de">Inhalt aus dem Wiki</h2><h2 data-l="en">Content from the wiki</h2>
+  <p data-l="de">Beschreibung, Suchwörter und Bild eines Services können aus dem Wiki kommen, in dem die
+    Product Owner ihre Services beschreiben – eine Seite pro Sprache. Atlas kopiert sie in den Entwurf und
+    friert sie mit der Veröffentlichung ein; Name, Preis, Genehmigung und Prozesse bleiben in atlas. Ohne
+    konfigurierte Quelle ändert sich an der Katalogpflege nichts.</p>
+  <p data-l="en">A service's description, keywords and picture can come from the wiki in which product owners
+    describe their services – one page per language. Atlas copies them into the draft and freezes them with the
+    publish; name, price, approval and processes stay in atlas. Without a configured source the catalogue
+    screen does not change.</p>
+  <ul>
+    <li data-l="de"><b>Quelle einrichten</b> (Rolle <code>admin</code>, <i>Console › Administration › Content sources</i>):
+      https-Adresse des Wikis, der Name des Vault-Secrets mit dem Lese-Token, das Bildfeld, die Labels, die keine
+      Suchwörter sind, und ob der Shop «Mehr im Wiki» verlinkt. <i>Prüfen</i> zeigt, ob das technische Konto nur
+      lesen darf und nur <code>viewer</code> ist; jedes genannte Problem stoppt das Lesen.</li>
+    <li data-l="en"><b>Setting up a source</b> (role <code>admin</code>, <i>Console › Administration › Content sources</i>): the
+      wiki's https address, the name of the vault secret holding the read token, the picture field, the labels
+      that are not keywords, and whether the shop links "More in the wiki". <i>Check</i> shows whether the
+      technical account may only read and is only <code>viewer</code>; every problem it names stops every fetch.</li>
+    <li data-l="de"><b>Verknüpfen</b>: Im Produkt-Editor sucht man im Panel <i>Inhalt aus dem Wiki</i> je
+      Sprache eine Seite oder fügt Adresse oder Schlüssel ein. Die Vorschau zeigt den Text, wie der Shop ihn
+      zeigen würde, und alles, was wegfällt oder abgelehnt wird: geschützte Passagen, gesperrte Unterseiten,
+      nicht übernommene Blöcke, eine Seite, die schon ein anderes Produkt beschreibt. Danach sind Beschreibung,
+      Suchwörter und Bild im Editor nur lesbar.</li>
+    <li data-l="en"><b>Linking</b>: in the product editor's <i>Content from the wiki</i> panel, search for a
+      page per language or paste its address or key. The preview shows the text as the shop would show it, and
+      everything left out or refused: protected passages, restricted child pages, blocks not taken, a page that
+      already describes another product. Afterwards the description, keywords and picture are read-only in the
+      editor.</li>
+    <li data-l="de"><b>Aktualisieren</b> holt die Seiten neu, für ein Produkt oder mit <i>Alle Wiki-Inhalte
+      aktualisieren</i> für den ganzen Katalog; jedes Produkt ganz oder gar nicht.</li>
+    <li data-l="en"><b>Refreshing</b> fetches the pages again, for one product or with <i>Refresh all wiki
+      content</i> for the whole catalogue; each product all or nothing.</li>
+    <li data-l="de"><b>Quarantäne</b>: Atlas prüft alle 15 Minuten, ob die Seiten noch gezeigt werden dürfen.
+      Wird eine Seite gesperrt, unlesbar oder ist das Wiki nicht erreichbar, hält atlas den Inhalt sofort überall
+      zurück, ohne Veröffentlichung. Nur ein Aktualisieren, das jede Regel besteht, hebt das auf; bis dahin lässt
+      sich der Katalog nicht veröffentlichen.</li>
+    <li data-l="en"><b>Quarantine</b>: atlas checks every 15 minutes whether the pages may still be shown. If a
+      page becomes restricted or unreadable, or the wiki cannot be reached, atlas withholds the content everywhere
+      at once, without a publish. Only a refresh that passes every rule lifts it; until then the catalogue cannot
+      be published.</li>
+    <li data-l="de"><b>Lösen</b> einer Seite oder der ganzen Verknüpfung braucht einen Grund und wird im
+      Audit-Log festgehalten.</li>
+    <li data-l="en"><b>Unlinking</b> one page or the whole binding needs a reason and is recorded in the audit
+      log.</li>
+  </ul>
 </section>
 
 <section id="betrieb">
