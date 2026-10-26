@@ -133,7 +133,7 @@ var wantAdminRoutes = []string{
 	"PUT /api/v1/secrets/{name}",
 	"DELETE /api/v1/secrets/{name}",
 	// Which wiki a product's content may come from, and with which credential
-	// reference (ADR-draft-service-content-from-an-external-source § 3): installation
+	// reference (ADR-0491 § 3): installation
 	// configuration naming a secret, like a Worker. A product manager chooses among
 	// the configured sources through the product's own content route, which shows
 	// no credential.

@@ -149,7 +149,7 @@ func (s *Service) HandleGetPicture(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// A quarantined product's picture is withheld like its description
-		// (ADR-draft-service-content-from-an-external-source, § 9), and answers
+		// (ADR-0491, § 9), and answers
 		// exactly as a product without one does.
 		st, stFound, e := s.store.ContentState(id)
 		if opErr = e; opErr != nil || !pictureShown(it, st, stFound, s.now()) {

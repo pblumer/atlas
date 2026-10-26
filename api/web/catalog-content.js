@@ -1,5 +1,5 @@
 // A product's content from the wiki, on the catalogue screen
-// (ADR-draft-service-content-from-an-external-source, § 5–§ 9).
+// (ADR-0491, § 5–§ 9).
 //
 // The backend binds a product to one wiki page per catalogue language, copies the
 // description, keywords and picture into the draft, rechecks the pages' protection

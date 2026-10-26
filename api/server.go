@@ -376,7 +376,7 @@ type Server struct {
 	orderStore   *order.Store
 	// contentSources configures the external sources a product's content may
 	// come from, and contentRunner rechecks what was copied from them
-	// (ADR-draft-service-content-from-an-external-source). With no source
+	// (ADR-0491). With no source
 	// configured the runner follows nothing and nothing else changes.
 	contentSources *contentsource.Service
 	contentRunner  *contentsource.Runner
@@ -1027,7 +1027,7 @@ func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
 func WithMCP(h http.Handler) Option { return func(s *Server) { s.mcpHandler = h } }
 
 // WithContentTransport sets the HTTP transport the content-source adapters reach
-// their sources with (ADR-draft-service-content-from-an-external-source). The
+// their sources with (ADR-0491). The
 // default is the process-wide transport, which carries the outbound proxy; a test
 // passes its TLS test server's.
 func WithContentTransport(rt http.RoundTripper) Option {
@@ -2507,7 +2507,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.wg.Add(1)
 		go s.feedPusher(s.feedPush)
 	}
-	// The content recheck (ADR-draft-service-content-from-an-external-source §
+	// The content recheck (ADR-0491 §
 	// 9): a goroutine per content source, its network I/O off the run loop and
 	// only its findings written through it. Not on a server that serves no
 	// catalogue — there is nothing to show content in.

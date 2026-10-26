@@ -6,7 +6,7 @@ import (
 )
 
 // The content binding of a product
-// (ADR-draft-service-content-from-an-external-source): an agent maintaining a catalogue as a product manager (ADR-0376) reads
+// (ADR-0491): an agent maintaining a catalogue as a product manager (ADR-0376) reads
 // what a product is bound to, searches and previews pages, links, refreshes and
 // unlinks — the same routes and the same gate a person meets. Configuring a source
 // is an administrator's and names a credential, so it has no tool.

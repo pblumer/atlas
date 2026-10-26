@@ -19,7 +19,7 @@ import (
 // shop's task list and the export. Each is read after a recheck quarantined the
 // product, as the person who would read it, and none may carry the description
 // or a keyword. The name and the price stay.
-// (ADR-draft-service-content-from-an-external-source, § 9.)
+// (ADR-0491, § 9.)
 
 const (
 	wikiText    = "Sicherer Zugang"

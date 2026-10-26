@@ -729,7 +729,7 @@ const TOPNAV = {
       { name: "Security", route: "#/console/security", role: "admin" },
       { name: "Audit log", route: "#/console/audit", role: "admin" },
       // Where a product's description may come from outside Atlas
-      // (ADR-draft-service-content-from-an-external-source § 3): installation
+      // (ADR-0491 § 3): installation
       // configuration naming a vault secret, so it is the administrator's, beside the
       // other installation settings. The catalogue's, so it goes with the switch.
       { name: "Content sources", route: "#/console/content-sources", role: "admin", feature: "catalogue" },

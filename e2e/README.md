@@ -667,7 +667,7 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   the clear; the warnings survive the reload every publish does, and a publish without warnings
   shows none.
 - **`catalog-wiki-content.spec.mjs`**
-  ([ADR-draft](../docs/adr/draft-service-content-from-an-external-source.md)): a catalogue
+  ([ADR-draft](../docs/adr/0491-service-content-from-an-external-source.md)): a catalogue
   without a content source looks as it did; a wiki page's title and text arrive as text even when
   they look like markup; a preview and a refused link show every refusal, dropped passage and
   `boundTo`; a bound product shows its pages, quarantine and read-only fields, its wiki link opens

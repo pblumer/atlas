@@ -1,5 +1,5 @@
 // A product's content from the wiki
-// (ADR-draft-service-content-from-an-external-source), as the three screens show it.
+// (ADR-0491), as the three screens show it.
 //
 // The Go suite decides every rule — what refuses a page, when content is withheld,
 // what a release exposes. This drives the REAL pages against a mocked /api/v1 and

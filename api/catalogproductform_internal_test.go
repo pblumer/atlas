@@ -287,7 +287,7 @@ var productFieldsWithNoControl = map[string]string{
 	"createdAt": "carried from what was read; a replace would otherwise reset it",
 	"updatedAt": "the server stamps it on every write",
 	"contentSource": "written by the content routes alone — link, refresh, unlink " +
-		"(ADR-draft-service-content-from-an-external-source); a save carries the stored binding " +
+		"(ADR-0491); a save carries the stored binding " +
 		"whatever the body says, so the form must not send one",
 }
 

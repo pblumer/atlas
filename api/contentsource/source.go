@@ -1,6 +1,6 @@
 // Package contentsource reads a service's content — its description, its
 // keywords, its picture — from a system outside Atlas, and decides whether any
-// of it may reach the shop (ADR-draft-service-content-from-an-external-source).
+// of it may reach the shop (ADR-0491).
 //
 // Nothing here is engine state. A source is design-time configuration, a fetch is
 // a catalogue-service request made before any command and outside the processor,

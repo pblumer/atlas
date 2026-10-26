@@ -62,7 +62,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_catalog_product_deletion":  "GET /api/v1/catalog-products/{id}/deletion",
 	"atlas_delete_catalog_product":    "DELETE /api/v1/catalog-products/{id}",
 	// A product's content from an external source
-	// (ADR-draft-service-content-from-an-external-source), maintained like the
+	// (ADR-0491), maintained like the
 	// rest of the product.
 	"atlas_catalog_product_content":         "GET /api/v1/catalog-products/{id}/content",
 	"atlas_search_content_source":           "GET /api/v1/catalog-products/{id}/content/search",

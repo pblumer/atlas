@@ -1,5 +1,5 @@
 // The content sources a product's description may come from, as an administrator
-// configures them (ADR-draft-service-content-from-an-external-source, § 3 and § 4).
+// configures them (ADR-0491, § 3 and § 4).
 //
 // A source is installation configuration beside the Workers and the vault: a base
 // URL, the vault secret holding the technical account's read token, the picture

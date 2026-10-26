@@ -37,7 +37,7 @@ const CATALOGS = {
     "common.edit": "Bearbeiten",
     "common.close": "Schliessen",
 
-    // A product's content from the wiki (ADR-draft-service-content-from-an-external-source):
+    // A product's content from the wiki (ADR-0491):
     // the panel on the catalogue screen (catalog-content.js) and the administrator's
     // content sources (content-sources.js). Wiki text itself is never a message here.
     "content.title": "Inhalt aus dem Wiki",
@@ -1148,7 +1148,7 @@ const CATALOGS = {
     "common.edit": "Edit",
     "common.close": "Close",
 
-    // A product's content from the wiki (ADR-draft-service-content-from-an-external-source).
+    // A product's content from the wiki (ADR-0491).
     "content.title": "Content from the wiki",
     "content.intro": "This product's description, keywords and picture can come from one wiki page per language. Atlas copies them into the draft when you link and when you refresh; the next publish freezes them. Whether the pages may still be shown, Atlas checks on its own every 15 minutes.",
     "content.loadFailed": "The wiki content could not be read: {error}",

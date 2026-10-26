@@ -175,7 +175,7 @@ What changes on disk, and going back:
   publish. Only a refresh that passes every rule lifts it, and publishing refuses a quarantined
   product or one without a passed recheck in the last fifteen minutes. Unlinking needs a reason
   and is audited. Without a configured source nothing changes
-  ([ADR-draft](docs/adr/draft-service-content-from-an-external-source.md)). In the Console,
+  ([ADR-draft](docs/adr/0491-service-content-from-an-external-source.md)). In the Console,
   administrators configure and check sources under **Console › Administration › Content sources**; the
   catalogue screen's product editor gains a **Content from the wiki** panel — search, preview
   with every refusal and dropped passage, link, refresh, unlink with a reason, the recheck and

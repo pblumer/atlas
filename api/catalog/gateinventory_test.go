@@ -115,7 +115,7 @@ var catalogGates = []handlerGate{
 		contentType: "image/png", body: "\x89PNG\r\n\x1a\n" + "body", id: true, product: true},
 	{name: "HandleDeletePicture", kind: gated, want: http.StatusNotFound, method: "DELETE",
 		id: true, product: true},
-	// The content binding (ADR-draft-service-content-from-an-external-source):
+	// The content binding (ADR-0491):
 	// every route is gated on the product's home catalogue — or, for the
 	// catalogue's refresh, on the catalogue — before it asks whether any source is
 	// configured, so an outsider learns nothing from the answer.

@@ -40,7 +40,7 @@ type Store struct {
 	// (contentstate.go): its quarantine and when it last passed. Beside the
 	// items rather than in them, because it is consulted when a *release* is
 	// read — the one thing that may change what an already published release
-	// shows (§ 9 of ADR-draft-service-content-from-an-external-source).
+	// shows (§ 9 of ADR-0491).
 	contents *sidecar.Store[ContentState]
 }
 

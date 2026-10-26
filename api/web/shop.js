@@ -884,7 +884,7 @@ function descriptionOf(item) {
 }
 
 // wikiLinkOf is "more in the wiki" under a description that came from one
-// (ADR-draft-service-content-from-an-external-source § 3).
+// (ADR-0491 § 3).
 //
 // It reads the binding the release listing hands the shop, and the server decides
 // everything about it: the binding is there only where the source lets the shop link

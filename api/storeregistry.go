@@ -110,7 +110,7 @@ var persistentStores = []storeEntry{
 	{name: "dmn-drafts", class: classDesignTime, why: "decision work in progress in the Modeler, before it is written to the model every reference resolves"},
 	{name: "public-links", class: classDesignTime, why: "shared links to forms"},
 	{name: "connectors", class: classDesignTime, why: "worker definitions"},
-	{name: "contentsources", class: classInstance, why: "the external sources a product's content may come from, each with the reference to its read credential in the vault — never the credential (ADR-draft-service-content-from-an-external-source). Which wiki this installation reads is this installation's, so it travels with a snapshot and not with a portable export"},
+	{name: "contentsources", class: classInstance, why: "the external sources a product's content may come from, each with the reference to its read credential in the vault — never the credential (ADR-0491). Which wiki this installation reads is this installation's, so it travels with a snapshot and not with a portable export"},
 	{name: "catalog", class: classDesignTime, why: "the shop's catalogues, the products in them, and the releases orders are placed against"},
 	{name: "orders", class: classInstance, why: "what somebody asked for, and how far each line got"},
 	{name: "favourites", class: classInstance, why: "the products each account marked to find again (ADR-0348). A convenience and not a right — nothing here decides what anybody may order — but it is one person's own arrangement of a catalogue they use, and restoring an estate without it hands everybody back a shop they have to set up again"},

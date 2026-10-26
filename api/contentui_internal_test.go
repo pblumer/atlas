@@ -7,7 +7,7 @@ import (
 )
 
 // The screens of a product's content from the wiki
-// (ADR-draft-service-content-from-an-external-source): the administrator's content
+// (ADR-0491): the administrator's content
 // sources in the Console, the product manager's panel on the catalogue screen, and
 // "more in the wiki" in the shop. The backend decides every rule; these hold the
 // pages to the few things they can still get wrong — being reachable, asking for

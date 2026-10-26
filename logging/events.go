@@ -586,7 +586,7 @@ var (
 )
 
 // Content from an external source
-// (ADR-draft-service-content-from-an-external-source).
+// (ADR-0491).
 var (
 	// ContentUnlinked: a product manager removed a product's page binding, or one
 	// language page of it, with the reason they had to give (§ 6). It is the audit

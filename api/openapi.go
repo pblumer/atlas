@@ -1327,7 +1327,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/catalog-products/{id}/picture", s.catalogs.HandleDeletePicture, apiOp{
 			summary: "Remove a product's picture, so the shop falls back to showing none. Same gate as setting one", tag: "Catalogue", role: RoleProductManager, status: http.StatusNoContent}},
 		// A product's content from an external source
-		// (ADR-draft-service-content-from-an-external-source). Every route is gated on
+		// (ADR-0491). Every route is gated on
 		// the product's home catalogue before it asks whether a source is configured;
 		// with none, each answers 404 and nothing else changes.
 		{"GET", "/api/v1/catalog-products/{id}/content", s.catalogs.HandleContentStatus, apiOp{

@@ -5,7 +5,7 @@ import (
 )
 
 // What the recheck found about a bound product, and the one exception to a frozen
-// release (§ 9 of ADR-draft-service-content-from-an-external-source).
+// release (§ 9 of ADR-0491).
 //
 // A release is frozen, and a page can be restricted after its content was copied.
 // So the content a release holds is shown only while the recheck says it may be,

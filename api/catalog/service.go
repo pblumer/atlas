@@ -96,7 +96,7 @@ type Service struct {
 	Remainders RemainderLookup
 
 	// Content reaches the configured content sources
-	// (ADR-draft-service-content-from-an-external-source). Nil is an
+	// (ADR-0491). Nil is an
 	// installation with none, and it is the ordinary state: every route of the
 	// binding then answers that none is configured, and nothing else changes.
 	Content ContentSources
@@ -648,7 +648,7 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// While bound, the fields a source supplies are the source's
-		// (ADR-draft-service-content-from-an-external-source, § 1).
+		// (ADR-0491, § 1).
 		if in, bound = boundSave(prev, prevOK, in); bound != "" {
 			return
 		}

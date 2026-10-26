@@ -11,7 +11,7 @@ import (
 
 // The content tools, driven as an agent maintaining a catalogue would, and the
 // quarantine read back through MCP: the release an agent reads withholds what the
-// shop withholds (ADR-draft-service-content-from-an-external-source, § 9).
+// shop withholds (ADR-0491, § 9).
 
 func put(t *testing.T, ts string, method, path, body string) {
 	t.Helper()

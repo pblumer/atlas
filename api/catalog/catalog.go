@@ -448,7 +448,7 @@ type Item struct {
 	ProductGroupTexts map[string]string `json:"productGroupTexts,omitempty"`
 	// ContentSource binds this product's description, keywords and picture to
 	// one page per language of an external source
-	// (ADR-draft-service-content-from-an-external-source). Nil — the ordinary
+	// (ADR-0491). Nil — the ordinary
 	// state, and the only one on an installation with no source configured — means
 	// the product manager writes them, exactly as before.
 	//

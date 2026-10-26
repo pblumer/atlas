@@ -356,7 +356,7 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 @media (max-width: 760px) { .product-form, .form-group-body { grid-template-columns: 1fr; } }
 
 /* ---------- A product's content from the wiki ----------
-   (catalog-content.js; ADR-draft-service-content-from-an-external-source). The panel
+   (catalog-content.js; ADR-0491). The panel
    sits above the product form; its text is somebody else's and is drawn as text, so
    the converted description keeps its line breaks through pre-wrap rather than
    through markup. */

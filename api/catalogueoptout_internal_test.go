@@ -29,7 +29,7 @@ var catalogueSegments = map[string]bool{
 	"catalogs":         true,
 	"catalog-products": true,
 	// Where a product's content may come from: configuration of the catalogue's,
-	// served only with it (ADR-draft-service-content-from-an-external-source).
+	// served only with it (ADR-0491).
 	"content-sources": true,
 	"shop":            true,
 	"orders":          true,

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A service's content may come from an external source, copied into the draft and frozen with the release
+# ADR-0491: A service's content may come from an external source, copied into the draft and frozen with the release
 
 - **Status:** Accepted
 - **Implementation:** Partial

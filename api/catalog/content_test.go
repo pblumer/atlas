@@ -20,7 +20,7 @@ import (
 // A product's content from an external source, end to end through the
 // catalogue: linking, the read-only fields, the recheck and its quarantine, the
 // withholding on every surface this package serves, and the publish gate
-// (ADR-draft-service-content-from-an-external-source).
+// (ADR-0491).
 
 const minute = int64(60e9)
 

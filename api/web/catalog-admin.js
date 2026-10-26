@@ -31,7 +31,7 @@ import { openPickModal } from "./pickmodal.js";
 import { importAsking } from "./importchoices.js";
 import { mappingsCard, wireMappings } from "./packagemappings.js";
 import { fmtDateTime } from "./datefmt.js";
-// A product's content from the wiki (ADR-draft-service-content-from-an-external-source):
+// A product's content from the wiki (ADR-0491):
 // the panel, the catalogue's refresh, and the words the read-only fields use.
 import { mountContentPanel, mountCatalogRefresh } from "./catalog-content.js";
 import { t } from "./i18n.js";
@@ -1076,7 +1076,7 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
   const cg = headingFrom(f, "cat", langs, was.categoryTexts);
   const pg = headingFrom(f, "grp", langs, was.productGroupTexts);
   // A product bound to a content source takes its descriptions and keywords from
-  // there (ADR-draft-service-content-from-an-external-source § 1): the form draws
+  // there (ADR-0491 § 1): the form draws
   // them read-only and without a name, so they are sent back exactly as stored —
   // which is what the server's save accepts for a bound product, and the only
   // thing it accepts.

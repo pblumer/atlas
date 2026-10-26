@@ -16,7 +16,7 @@ import (
 )
 
 // Binding a product's content to its pages in an external source
-// (ADR-draft-service-content-from-an-external-source, § 5–§ 7).
+// (ADR-0491, § 5–§ 7).
 //
 // Every route here is a write or a read on one product — or, for the catalogue's
 // refresh, on the products of one catalogue — under the gate that changing the
