@@ -579,6 +579,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0491](0491-service-content-from-an-external-source.md) | A service's content may come from an external source, copied into the draft and frozen with the release | Accepted (amended) | Partial |
 | [0492](0492-controlled-worker-rebinding.md) | Controlled configured-Worker rebinding without process redeployment | Proposed | Not started |
 | [0493](0493-diagrams-scope.md) | A diagrams scope for systems that show processes elsewhere | Proposed (amended) | Partial |
+| [0494](0494-delegated-form-lookups.md) | A form looks up the asking person's own address book through their linked account | Proposed | Not started |
 
 ## The two states of a record
 

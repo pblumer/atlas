@@ -2048,7 +2048,7 @@ function infoPanel(rel, item) {
   // two fields for everything, which is why the panel stays one thing.
   const carried = namesOf(rel, (((rel || {}).includes || {})[item.id]) || []);
   const offered = namesOf(rel, (((rel || {}).options || {})[item.id]) || []);
-  // A market offering — a product with parts — opens as its fact sheet instead.
+  // A product with parts opens as its fact sheet instead.
   if (carried.length || offered.length) return factsheet(rel, item);
   return el('div', { class: 'card' },
     el('h3', {}, textOf(item.texts, item.id)),
