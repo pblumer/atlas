@@ -215,6 +215,31 @@ function loadFeatures() {
   return featuresAsked;
 }
 
+// LINKING is whether the account menu offers "Connected accounts". The page earns
+// its place when the server can link an account, or when the person already has an
+// account linked or a connection on record — then it is where they withdraw it, even
+// after an administrator switched linking off. Everybody else would find a page that
+// only says there is nothing to do. Until the server has answered, the entry is
+// offered, the stance FEATURES takes; a server without the vault answers 503 and has
+// nothing to link and nothing linked. It is asked once per signed-in person, and
+// again when an administrator changes the setup (security.js).
+const LINKING = { offered: true, user: null };
+let linkingAsked = null;
+function loadLinking(force) {
+  const who = AUTH.user && AUTH.user.id;
+  if (!who) return Promise.resolve();
+  if (!force && LINKING.user === who && linkingAsked) return linkingAsked;
+  LINKING.user = who;
+  linkingAsked = api("GET", "/api/v1/me/connections").then((m) => {
+    LINKING.offered = !!(m && ((m.linkable || []).length || (m.identities || []).length || (m.connections || []).length));
+  }, (e) => {
+    // Anything but 503 is no answer: keep the entry and ask on the next navigation.
+    if (e && e.status === 503) LINKING.offered = false;
+    else LINKING.user = null;
+  }).then(() => updateAccount());
+  return linkingAsked;
+}
+
 // offered is the one predicate both menus filter by: the person holds the role, and
 // the server serves the part of Atlas the entry opens. One predicate and not a second
 // condition beside each role check, because the next menu would be the one that
@@ -246,7 +271,7 @@ function updateAccount() {
     if (menu) menu.innerHTML =
       `<div class="mlabel">Signed in as <b>${esc(AUTH.user.username)}</b></div>` +
       `<a href="#/console/settings" title="Number format, time zone and language — yours, not this server's">Display settings</a>` +
-      `<a href="#/console/connections" title="The external accounts you linked, and which Workers may act as you">Connected accounts</a>` +
+      (LINKING.offered ? `<a href="#/console/connections" title="The external accounts you linked, and which Workers may act as you">Connected accounts</a>` : "") +
       `<a href="#/console/approvals" title="The actions waiting for your approval, and the ones asked on your behalf">Approvals</a>` +
       `<button type="button" data-act="logout" title="Sign out of atlas">Log out</button>`;
   } else {
@@ -11578,6 +11603,7 @@ async function route() {
 
   startPresence(); // signed in, so this tab is somebody being here (presence.go)
   if (!FEATURES.loaded) await loadFeatures(); // before the menus are painted from it
+  if (AUTH.user) loadLinking(); // not awaited: it only decides one entry of a closed menu
   setChrome(appId, path);
   setTitle(routeTitle(path));
   // A mark and a visit belong to an account, so both wait for somebody signed in.
@@ -11606,7 +11632,7 @@ async function route() {
     if (path === "#/console/connections") {
       const gen = navGen;
       const { viewConnections } = await import("./connections.js");
-      return await viewConnections({ api, toast, view, isSuperseded: () => superseded(gen) });
+      return await viewConnections({ api, toast, view, isSuperseded: () => superseded(gen), canConfigure: mayUse("admin") });
     }
     if (path === "#/console/approvals") {
       const gen = navGen;
@@ -11617,7 +11643,8 @@ async function route() {
     if (path === "#/console/security") {
       const gen = navGen;
       const { viewSecurity } = await import("./security.js");
-      return await viewSecurity({ api, toast, view, isSuperseded: () => superseded(gen) });
+      return await viewSecurity({ api, toast, view, isSuperseded: () => superseded(gen),
+        onLinkingChanged: () => loadLinking(true) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
     if (path === "#/console/content-sources") {

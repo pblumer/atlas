@@ -24,6 +24,10 @@ import (
 type fakeTenant struct {
 	*httptest.Server
 	key signingKey
+	// tenant and client are the directory and application ids the tenant answers
+	// for; newFakeTenant's are short words, newFakeTenantFor takes GUIDs as Entra
+	// writes them.
+	tenant, client string
 
 	mu      sync.Mutex
 	nonce   string
@@ -34,26 +38,28 @@ type fakeTenant struct {
 	refresh []url.Values
 }
 
-func newFakeTenant(t *testing.T) *fakeTenant {
+func newFakeTenant(t *testing.T) *fakeTenant { return newFakeTenantFor(t, "tid-1", "atlas-ms") }
+
+func newFakeTenantFor(t *testing.T, tenant, client string) *fakeTenant {
 	t.Helper()
-	f := &fakeTenant{key: newSigningKey(t, "ms1"), issued: map[string]string{}}
+	f := &fakeTenant{key: newSigningKey(t, "ms1"), issued: map[string]string{}, tenant: tenant, client: client}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /tid-1/v2.0/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /"+tenant+"/v2.0/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"issuer":                 f.URL + "/tid-1/v2.0",
-			"authorization_endpoint": f.URL + "/tid-1/oauth2/v2.0/authorize",
-			"token_endpoint":         f.URL + "/tid-1/oauth2/v2.0/token",
-			"jwks_uri":               f.URL + "/tid-1/discovery/v2.0/keys",
+			"issuer":                 f.URL + "/" + tenant + "/v2.0",
+			"authorization_endpoint": f.URL + "/" + tenant + "/oauth2/v2.0/authorize",
+			"token_endpoint":         f.URL + "/" + tenant + "/oauth2/v2.0/token",
+			"jwks_uri":               f.URL + "/" + tenant + "/discovery/v2.0/keys",
 		})
 	})
-	mux.HandleFunc("GET /tid-1/discovery/v2.0/keys", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /"+tenant+"/discovery/v2.0/keys", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write(f.key.jwks())
 	})
-	mux.HandleFunc("POST /tid-1/oauth2/v2.0/token", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /"+tenant+"/oauth2/v2.0/token", func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		if r.PostForm.Get("client_secret") != "shh" || r.PostForm.Get("client_id") != "atlas-ms" {
+		if r.PostForm.Get("client_secret") != "shh" || r.PostForm.Get("client_id") != client {
 			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = w.Write([]byte(`{"error":"invalid_client"}`))
 			return
@@ -75,9 +81,9 @@ func newFakeTenant(t *testing.T) *fakeTenant {
 			_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
 			return
 		}
-		want := oidcExpect{issuer: f.URL + "/tid-1/v2.0", clientID: "atlas-ms", nonce: f.nonce, now: time.Now()}
+		want := oidcExpect{issuer: f.URL + "/" + tenant + "/v2.0", clientID: client, nonce: f.nonce, now: time.Now()}
 		token := f.key.tokenFor(t, want, func(_, claims map[string]any) {
-			claims["tid"], claims["oid"], claims["sub"] = "tid-1", "oid-ada", "pairwise-sub"
+			claims["tid"], claims["oid"], claims["sub"] = tenant, "oid-ada", "pairwise-sub"
 			if f.mutate != nil {
 				f.mutate(claims)
 			}
@@ -353,7 +359,7 @@ func TestEveryBrokenCallbackFailsTheSameWay(t *testing.T) {
 
 func TestLinkingIsOffUntilItIsConfigured(t *testing.T) {
 	srv := newServerWithOptions(t, WithMicrosoftLinking(MicrosoftLinkConfig{TenantID: "tid-1"}))
-	if srv.msLink != nil {
+	if srv.msLink.Load() != nil {
 		t.Fatal("a configuration without a client id and scopes turned linking on")
 	}
 	for _, h := range []http.HandlerFunc{srv.handleLinkMicrosoftStart, srv.handleLinkMicrosoftCallback} {

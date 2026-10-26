@@ -559,6 +559,17 @@ var (
 	// ConnectionCredentialRefused is an attempt to reach a connection's credential
 	// through an operator surface.
 	ConnectionCredentialRefused = newEvent("identity.connection_credential_refused")
+	// LinkingSetUp is an administrator setting up, or changing, in the Console the app
+	// registration people link accounts through: the tenant, the client id, and
+	// whether the client secret was replaced — never the secret.
+	LinkingSetUp = newEvent("identity.linking_set_up")
+	// LinkingRemoved is an administrator removing the Console's linking setup;
+	// linking is off until somebody sets it up again.
+	LinkingRemoved = newEvent("identity.linking_removed")
+	// LinkingSetupUnreadable is a stored linking setup the server could not read at
+	// start. Linking stays off rather than half on, until an administrator sets it up
+	// again.
+	LinkingSetupUnreadable = newEvent("identity.linking_setup_unreadable")
 	// PolicyPublished is an administrator publishing a new version of a policy, or
 	// switching one on or off.
 	PolicyPublished = newEvent("authz.policy_published")

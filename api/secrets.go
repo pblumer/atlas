@@ -140,9 +140,19 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 // did. A data key has its own refusal above, with its own route to name; a connection's
 // refresh token is a person's consent, managed by revoking the connection, and an
 // operator overwriting it would make the broker act on a token nobody consented to.
+//
+// The client secret accounts are linked through is refused here too: it is set and
+// replaced with the rest of the linking setup, where the tenant and client id it
+// belongs to are checked beside it.
 func refuseReservedSecret(w http.ResponseWriter, r *http.Request, name string) bool {
 	if !vault.IsReservedName(name) || vault.IsDataKeyName(name) {
 		return false
+	}
+	if vault.IsLinkClientSecretName(name) {
+		auditRefusal(r, logging.ConnectionCredentialRefused, "refused an attempt to reach the account-linking client secret through the secrets API",
+			slog.String("name", name))
+		httpapi.Error(w, http.StatusForbidden, "that name holds the client secret accounts are linked through; set or replace it with the linking setup, PUT "+linkMicrosoftSetupPath)
+		return true
 	}
 	auditRefusal(r, logging.ConnectionCredentialRefused, "refused an attempt to reach a connection's credential through the secrets API",
 		slog.String("name", name))
